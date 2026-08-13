@@ -9,7 +9,10 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
-from sqlalchemy import Engine, create_engine, event, select
+from alembic import command
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from sqlalchemy import Engine, create_engine, event, inspect, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import ConnectionPoolEntry
@@ -25,7 +28,7 @@ from quantbot.storage.schema import (
 class UnsupportedSchemaVersionError(RuntimeError):
     """Raised when a database was written by an unsupported schema version."""
 
-    def __init__(self, actual: int, supported: int = SCHEMA_VERSION) -> None:
+    def __init__(self, actual: int | str, supported: int = SCHEMA_VERSION) -> None:
         self.actual = actual
         self.supported = supported
         super().__init__(f"Unsupported schema version {actual}; this build supports {supported}")
@@ -106,16 +109,34 @@ class Database:
 
     def _initialize_schema(self) -> None:
         with self.engine.begin() as connection:
-            if self._has_schema_version(connection):
+            table_names = set(inspect(connection).get_table_names())
+            has_schema_marker = schema_version.name in table_names
+            has_alembic_table = "alembic_version" in table_names
+            alembic_revision = (
+                MigrationContext.configure(connection).get_current_revision()
+                if has_alembic_table
+                else None
+            )
+            user_tables = table_names - {"alembic_version"}
+
+            if user_tables and not has_schema_marker and alembic_revision is None:
+                raise UnsupportedSchemaVersionError("unversioned nonempty database")
+
+            if has_schema_marker:
                 actual = connection.execute(select(schema_version.c.version)).scalar_one()
                 if actual != SCHEMA_VERSION:
                     raise UnsupportedSchemaVersionError(actual)
 
-            metadata.create_all(connection)
-            actual = connection.execute(select(schema_version.c.version)).scalar_one_or_none()
-            if actual is None:
-                connection.execute(schema_version.insert().values(id=1, version=SCHEMA_VERSION))
-            elif actual != SCHEMA_VERSION:
+            config = self._alembic_config(connection)
+            if has_schema_marker and alembic_revision is None:
+                expected_tables = set(metadata.tables)
+                if not expected_tables <= table_names:
+                    raise UnsupportedSchemaVersionError("incomplete versioned database")
+                command.stamp(config, "head")
+            command.upgrade(config, "head")
+
+            actual = connection.execute(select(schema_version.c.version)).scalar_one()
+            if actual != SCHEMA_VERSION:
                 raise UnsupportedSchemaVersionError(actual)
 
             if connection.execute(select(kill_switch_state.c.id)).scalar_one_or_none() is None:
@@ -129,8 +150,12 @@ class Database:
                 )
 
     @staticmethod
-    def _has_schema_version(connection: Connection) -> bool:
-        return connection.dialect.has_table(connection, schema_version.name)
+    def _alembic_config(connection: Connection) -> Config:
+        config = Config()
+        migrations = Path(__file__).resolve().parent / "migrations"
+        config.set_main_option("script_location", str(migrations))
+        config.attributes["connection"] = connection
+        return config
 
     @contextmanager
     def transaction(self) -> Iterator[Session]:

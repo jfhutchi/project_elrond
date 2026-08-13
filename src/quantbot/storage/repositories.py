@@ -82,6 +82,44 @@ class RunRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class SignalRecord:
+    signal_id: str
+    run_id: str
+    strategy_id: str
+    symbol: str
+    occurred_at: datetime
+    payload: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class OrderEventRecord:
+    event_id: str
+    intent_id: str | None
+    broker_order_id: str | None
+    event_type: str
+    occurred_at: datetime
+    detail: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
+class EquitySnapshotRecord:
+    snapshot_id: str
+    account_snapshot_id: str
+    account_id: str
+    captured_at: datetime
+    equity: Decimal
+    cash: Decimal
+
+
+@dataclass(frozen=True, slots=True)
+class QualificationDayRecord:
+    strategy_id: str
+    trading_date: date
+    qualified: bool
+    detail: dict[str, object]
+
+
+@dataclass(frozen=True, slots=True)
 class AccountSnapshotRecord:
     snapshot_id: str
     run_id: str | None
@@ -404,6 +442,46 @@ class StorageRepository:
             return False
         raise StateConflictError(f"signal {signal_id} conflicts with stored data")
 
+    def get_signal(self, signal_id: str) -> SignalRecord | None:
+        row = (
+            self._session.execute(select(signals).where(signals.c.signal_id == signal_id))
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._signal_from_row(row)
+
+    def list_signals(
+        self,
+        *,
+        run_id: str | None = None,
+        strategy_id: str | None = None,
+        symbol: str | None = None,
+    ) -> list[SignalRecord]:
+        statement = select(signals)
+        if run_id is not None:
+            statement = statement.where(signals.c.run_id == run_id)
+        if strategy_id is not None:
+            statement = statement.where(signals.c.strategy_id == strategy_id)
+        if symbol is not None:
+            statement = statement.where(signals.c.symbol == symbol)
+        rows = (
+            self._session.execute(statement.order_by(signals.c.occurred_at, signals.c.signal_id))
+            .mappings()
+            .all()
+        )
+        return [self._signal_from_row(row) for row in rows]
+
+    @staticmethod
+    def _signal_from_row(row: RowMapping) -> SignalRecord:
+        return SignalRecord(
+            signal_id=str(row["signal_id"]),
+            run_id=str(row["run_id"]),
+            strategy_id=str(row["strategy_id"]),
+            symbol=str(row["symbol"]),
+            occurred_at=decode_utc(str(row["occurred_at"])),
+            payload=_decode_json(row["payload_json"]),
+        )
+
     def create_order_intent(self, intent: OrderIntent) -> bool:
         payload = self._intent_payload(intent)
         row = (
@@ -537,40 +615,11 @@ class StorageRepository:
             .one_or_none()
         )
         if existing is not None:
-            if existing["client_order_id"] != order.client_order_id:
-                raise StateConflictError(
-                    f"broker order {order.broker_order_id} has conflicting client_order_id"
-                )
-            immutable = (
-                "broker_order_id",
-                "client_order_id",
-                "symbol",
-                "side",
-                "order_type",
-                "time_in_force",
-                "quantity",
-                "submitted_at",
-            )
-            if any(existing[key] != payload[key] for key in immutable):
-                raise StateConflictError(
-                    f"broker order {order.broker_order_id} has conflicting immutable fields"
-                )
             if _row_matches(existing, payload):
                 return False
-            if order.filled_quantity < decode_decimal(str(existing["filled_quantity"])):
-                raise StateConflictError(
-                    f"broker order {order.broker_order_id} filled quantity cannot decrease"
-                )
-            self._session.execute(
-                update(broker_orders)
-                .where(broker_orders.c.broker_order_id == order.broker_order_id)
-                .values(
-                    filled_quantity=payload["filled_quantity"],
-                    filled_average_price=payload["filled_average_price"],
-                    status=payload["status"],
-                )
+            raise StateConflictError(
+                f"broker order {order.broker_order_id} conflicts with stored data"
             )
-            return True
 
         intent_id = self._session.execute(
             select(order_intents.c.intent_id).where(
@@ -671,6 +720,38 @@ class StorageRepository:
         self._session.execute(fills.insert().values(**payload))
         return True
 
+    def get_fill(self, fill_id: str) -> Fill | None:
+        row = (
+            self._session.execute(select(fills).where(fills.c.fill_id == fill_id))
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._fill_from_row(row)
+
+    def list_fills(self, *, broker_order_id: str | None = None) -> list[Fill]:
+        statement = select(fills)
+        if broker_order_id is not None:
+            statement = statement.where(fills.c.broker_order_id == broker_order_id)
+        rows = (
+            self._session.execute(statement.order_by(fills.c.occurred_at, fills.c.fill_id))
+            .mappings()
+            .all()
+        )
+        return [self._fill_from_row(row) for row in rows]
+
+    @staticmethod
+    def _fill_from_row(row: RowMapping) -> Fill:
+        return Fill(
+            fill_id=str(row["fill_id"]),
+            broker_order_id=str(row["broker_order_id"]),
+            symbol=str(row["symbol"]),
+            side=OrderSide(str(row["side"])),
+            quantity=decode_decimal(str(row["quantity"])),
+            price=decode_decimal(str(row["price"])),
+            occurred_at=decode_utc(str(row["occurred_at"])),
+            fee=decode_decimal(str(row["fee"])),
+        )
+
     def record_order_event(
         self,
         event_id: str,
@@ -700,6 +781,47 @@ class StorageRepository:
         if _row_matches(row, payload):
             return False
         raise StateConflictError(f"order event {event_id} conflicts with stored data")
+
+    def get_order_event(self, event_id: str) -> OrderEventRecord | None:
+        row = (
+            self._session.execute(select(order_events).where(order_events.c.event_id == event_id))
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._order_event_from_row(row)
+
+    def list_order_events(
+        self,
+        *,
+        intent_id: str | None = None,
+        broker_order_id: str | None = None,
+    ) -> list[OrderEventRecord]:
+        statement = select(order_events)
+        if intent_id is not None:
+            statement = statement.where(order_events.c.intent_id == intent_id)
+        if broker_order_id is not None:
+            statement = statement.where(order_events.c.broker_order_id == broker_order_id)
+        rows = (
+            self._session.execute(
+                statement.order_by(order_events.c.occurred_at, order_events.c.event_id)
+            )
+            .mappings()
+            .all()
+        )
+        return [self._order_event_from_row(row) for row in rows]
+
+    @staticmethod
+    def _order_event_from_row(row: RowMapping) -> OrderEventRecord:
+        intent_raw = row["intent_id"]
+        broker_raw = row["broker_order_id"]
+        return OrderEventRecord(
+            event_id=str(row["event_id"]),
+            intent_id=str(intent_raw) if intent_raw is not None else None,
+            broker_order_id=str(broker_raw) if broker_raw is not None else None,
+            event_type=str(row["event_type"]),
+            occurred_at=decode_utc(str(row["occurred_at"])),
+            detail=_decode_json(row["detail_json"]),
+        )
 
     def save_account_snapshot(
         self,
@@ -819,6 +941,47 @@ class StorageRepository:
             captured_at=decode_utc(str(row["captured_at"])),
             account=account,
             positions=restored_positions,
+        )
+
+    def get_equity_snapshot(self, snapshot_id: str) -> EquitySnapshotRecord | None:
+        row = (
+            self._session.execute(
+                select(equity_snapshots).where(equity_snapshots.c.snapshot_id == snapshot_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._equity_snapshot_from_row(row)
+
+    def list_equity_snapshots(
+        self,
+        *,
+        account_id: str | None = None,
+    ) -> list[EquitySnapshotRecord]:
+        statement = select(equity_snapshots)
+        if account_id is not None:
+            statement = statement.where(equity_snapshots.c.account_id == account_id)
+        rows = (
+            self._session.execute(
+                statement.order_by(
+                    equity_snapshots.c.captured_at,
+                    equity_snapshots.c.snapshot_id,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [self._equity_snapshot_from_row(row) for row in rows]
+
+    @staticmethod
+    def _equity_snapshot_from_row(row: RowMapping) -> EquitySnapshotRecord:
+        return EquitySnapshotRecord(
+            snapshot_id=str(row["snapshot_id"]),
+            account_snapshot_id=str(row["account_snapshot_id"]),
+            account_id=str(row["account_id"]),
+            captured_at=decode_utc(str(row["captured_at"])),
+            equity=decode_decimal(str(row["equity"])),
+            cash=decode_decimal(str(row["cash"])),
         )
 
     def save_reconciliation(
@@ -1069,6 +1232,50 @@ class StorageRepository:
             return False
         raise StateConflictError(
             f"qualification day {strategy_id}:{payload['trading_date']} conflicts with stored data"
+        )
+
+    def get_qualification_day(
+        self,
+        strategy_id: str,
+        trading_date: date,
+    ) -> QualificationDayRecord | None:
+        row = (
+            self._session.execute(
+                select(qualification_days).where(
+                    qualification_days.c.strategy_id == strategy_id,
+                    qualification_days.c.trading_date == trading_date.isoformat(),
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._qualification_day_from_row(row)
+
+    def list_qualification_days(
+        self,
+        strategy_id: str,
+        *,
+        qualified: bool | None = None,
+    ) -> list[QualificationDayRecord]:
+        statement = select(qualification_days).where(
+            qualification_days.c.strategy_id == strategy_id
+        )
+        if qualified is not None:
+            statement = statement.where(qualification_days.c.qualified.is_(qualified))
+        rows = (
+            self._session.execute(statement.order_by(qualification_days.c.trading_date))
+            .mappings()
+            .all()
+        )
+        return [self._qualification_day_from_row(row) for row in rows]
+
+    @staticmethod
+    def _qualification_day_from_row(row: RowMapping) -> QualificationDayRecord:
+        return QualificationDayRecord(
+            strategy_id=str(row["strategy_id"]),
+            trading_date=date.fromisoformat(str(row["trading_date"])),
+            qualified=bool(row["qualified"]),
+            detail=_decode_json(row["detail_json"]),
         )
 
     def count_qualification_days(self, strategy_id: str) -> int:

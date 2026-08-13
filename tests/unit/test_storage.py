@@ -6,6 +6,10 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from alembic import command
+from alembic.config import Config
+from alembic.runtime.migration import MigrationContext
+from sqlalchemy import create_engine, inspect
 
 from quantbot.domain import (
     Account,
@@ -33,7 +37,12 @@ from quantbot.storage import (
     encode_decimal,
     encode_utc,
 )
-from quantbot.storage.schema import SCHEMA_VERSION, metadata
+from quantbot.storage.schema import (
+    SCHEMA_VERSION,
+    kill_switch_state,
+    metadata,
+    schema_version,
+)
 
 NOW = datetime(2026, 8, 13, 14, 30, tzinfo=UTC)
 
@@ -190,6 +199,90 @@ def test_database_rejects_unsupported_schema_version(tmp_path: Path) -> None:
         Database(path)
 
 
+def test_alembic_upgrade_head_creates_complete_versioned_schema(tmp_path: Path) -> None:
+    path = tmp_path / "alembic.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+    try:
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+
+            assert set(metadata.tables) <= set(inspect(connection).get_table_names())
+            assert MigrationContext.configure(connection).get_current_revision() == "0001"
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT version FROM schema_version WHERE id = 1"
+                ).scalar_one()
+                == SCHEMA_VERSION
+            )
+    finally:
+        engine.dispose()
+
+
+@pytest.mark.parametrize("with_empty_alembic_table", [False, True])
+def test_database_rejects_unversioned_nonempty_database_without_mutation(
+    tmp_path: Path,
+    with_empty_alembic_table: bool,
+) -> None:
+    path = tmp_path / "legacy.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql("CREATE TABLE legacy_orders (id INTEGER PRIMARY KEY)")
+        connection.exec_driver_sql("INSERT INTO legacy_orders (id) VALUES (7)")
+        if with_empty_alembic_table:
+            connection.exec_driver_sql(
+                "CREATE TABLE alembic_version (version_num VARCHAR(32) PRIMARY KEY)"
+            )
+    engine.dispose()
+
+    with pytest.raises(UnsupportedSchemaVersionError, match="unversioned"):
+        Database(path)
+
+    check_engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    try:
+        with check_engine.connect() as connection:
+            expected_tables = (
+                ["alembic_version", "legacy_orders"]
+                if with_empty_alembic_table
+                else ["legacy_orders"]
+            )
+            assert inspect(connection).get_table_names() == expected_tables
+            assert connection.exec_driver_sql("SELECT id FROM legacy_orders").scalar_one() == 7
+    finally:
+        check_engine.dispose()
+
+
+def test_database_stamps_supported_pre_alembic_schema_at_head(tmp_path: Path) -> None:
+    path = tmp_path / "supported-v1.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    with engine.begin() as connection:
+        metadata.create_all(connection)
+        connection.execute(schema_version.insert().values(id=1, version=SCHEMA_VERSION))
+        connection.execute(
+            kill_switch_state.insert().values(
+                id=1,
+                engaged=True,
+                reason="pre-alembic V1",
+                updated_at=encode_utc(NOW),
+            )
+        )
+    engine.dispose()
+
+    database = Database(path)
+    try:
+        with database.engine.connect() as connection:
+            assert MigrationContext.configure(connection).get_current_revision() == "0001"
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT reason FROM kill_switch_state WHERE id = 1"
+                ).scalar_one()
+                == "pre-alembic V1"
+            )
+    finally:
+        database.close()
+
+
 def test_deployments_runs_and_failed_transaction_rollback(database: Database) -> None:
     identity = make_identity()
     with database.transaction() as session:
@@ -282,14 +375,7 @@ def test_broker_orders_fills_and_events_enforce_stable_identity(database: Databa
         repository.create_order_intent(make_intent())
         assert repository.save_broker_order(make_broker_order()) is True
         assert repository.save_broker_order(make_broker_order()) is False
-
-        updated = make_broker_order(status="partially_filled").model_copy(
-            update={"filled_quantity": Decimal("1.25"), "filled_average_price": Decimal("100.25")}
-        )
-        assert repository.save_broker_order(updated) is True
-        assert repository.get_broker_order("broker-1") == updated
-
-        with pytest.raises(StateConflictError, match="client_order_id"):
+        with pytest.raises(StateConflictError, match="broker order"):
             repository.save_broker_order(make_broker_order(client_order_id="other-client"))
 
         assert repository.record_fill(make_fill()) is True
@@ -319,6 +405,32 @@ def test_broker_orders_fills_and_events_enforce_stable_identity(database: Databa
             )
             is False
         )
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"status": "partially_filled"},
+        {"filled_quantity": Decimal("1.25")},
+        {"filled_average_price": Decimal("100.25")},
+    ],
+)
+def test_broker_order_duplicate_payload_conflicts_leave_original_unchanged(
+    database: Database,
+    changes: dict[str, object],
+) -> None:
+    original = make_broker_order()
+    conflicting = original.model_copy(update=changes)
+
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(make_intent())
+        assert repository.save_broker_order(original) is True
+
+        with pytest.raises(StateConflictError, match="broker order"):
+            repository.save_broker_order(conflicting)
+
+        assert repository.get_broker_order(original.broker_order_id) == original
 
 
 def test_snapshots_reconciliation_incidents_and_qualification(database: Database) -> None:
@@ -391,6 +503,142 @@ def test_snapshots_reconciliation_incidents_and_qualification(database: Database
             is False
         )
         assert repository.count_qualification_days("mean-reversion") == 1
+
+
+def test_signal_fill_event_equity_and_qualification_records_round_trip(database: Database) -> None:
+    identity = make_identity()
+    account = Account(
+        account_id="paper-account",
+        cash="1000.50",
+        buying_power="2001",
+        equity="1500.25",
+        currency="USD",
+    )
+    fill = make_fill()
+    signal_payload = {"score": Decimal("0.75"), "window_end": NOW}
+    event_detail = {"source": "websocket", "sequence": 12}
+    qualification_detail = {"reason": "passed", "equity": Decimal("1500.25")}
+
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_run("run-1", identity, started_at=NOW)
+        repository.create_order_intent(make_intent())
+        repository.save_broker_order(make_broker_order())
+
+        assert (
+            repository.record_signal(
+                "signal-1",
+                run_id="run-1",
+                strategy_id=identity.strategy_id,
+                symbol="AAPL",
+                occurred_at=NOW,
+                payload=signal_payload,
+            )
+            is True
+        )
+        assert (
+            repository.record_signal(
+                "signal-1",
+                run_id="run-1",
+                strategy_id=identity.strategy_id,
+                symbol="AAPL",
+                occurred_at=NOW,
+                payload=signal_payload,
+            )
+            is False
+        )
+        with pytest.raises(StateConflictError, match="signal"):
+            repository.record_signal(
+                "signal-1",
+                run_id="run-1",
+                strategy_id=identity.strategy_id,
+                symbol="AAPL",
+                occurred_at=NOW,
+                payload={"score": Decimal("0.80")},
+            )
+
+        repository.record_fill(fill)
+        repository.record_order_event(
+            "event-1",
+            event_type="accepted",
+            occurred_at=NOW,
+            intent_id="intent-1",
+            broker_order_id="broker-1",
+            detail=event_detail,
+        )
+        repository.save_account_snapshot("snapshot-1", account, [], captured_at=NOW)
+        repository.record_qualification_day(
+            identity.strategy_id,
+            date(2026, 8, 13),
+            qualified=True,
+            detail=qualification_detail,
+        )
+
+        signal = repository.get_signal("signal-1")
+        assert signal is not None
+        assert signal.signal_id == "signal-1"
+        assert signal.run_id == "run-1"
+        assert signal.strategy_id == identity.strategy_id
+        assert signal.symbol == "AAPL"
+        assert signal.occurred_at == NOW
+        assert signal.payload == {"score": "0.75", "window_end": encode_utc(NOW)}
+        assert repository.list_signals(run_id="run-1") == [signal]
+
+        assert repository.get_fill(fill.fill_id) == fill
+        assert repository.list_fills(broker_order_id="broker-1") == [fill]
+
+        event = repository.get_order_event("event-1")
+        assert event is not None
+        assert event.event_id == "event-1"
+        assert event.intent_id == "intent-1"
+        assert event.broker_order_id == "broker-1"
+        assert event.event_type == "accepted"
+        assert event.occurred_at == NOW
+        assert event.detail == event_detail
+        assert repository.list_order_events(intent_id="intent-1") == [event]
+
+        equity = repository.get_equity_snapshot("snapshot-1")
+        assert equity is not None
+        assert equity.snapshot_id == "snapshot-1"
+        assert equity.account_snapshot_id == "snapshot-1"
+        assert equity.account_id == account.account_id
+        assert equity.captured_at == NOW
+        assert equity.equity == Decimal("1500.25")
+        assert equity.cash == Decimal("1000.5")
+        assert repository.list_equity_snapshots(account_id=account.account_id) == [equity]
+
+        qualification = repository.get_qualification_day(identity.strategy_id, date(2026, 8, 13))
+        assert qualification is not None
+        assert qualification.strategy_id == identity.strategy_id
+        assert qualification.trading_date == date(2026, 8, 13)
+        assert qualification.qualified is True
+        assert qualification.detail == {"equity": "1500.25", "reason": "passed"}
+        assert repository.list_qualification_days(identity.strategy_id) == [qualification]
+
+
+def test_order_event_duplicate_conflicts(database: Database) -> None:
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(make_intent())
+        repository.save_broker_order(make_broker_order())
+        repository.record_order_event(
+            "event-1",
+            event_type="accepted",
+            occurred_at=NOW,
+            intent_id="intent-1",
+            broker_order_id="broker-1",
+            detail={"source": "websocket"},
+        )
+
+        with pytest.raises(StateConflictError, match="order event"):
+            repository.record_order_event(
+                "event-1",
+                event_type="rejected",
+                occurred_at=NOW,
+                intent_id="intent-1",
+                broker_order_id="broker-1",
+                detail={"source": "websocket"},
+            )
 
 
 def test_kill_switch_defaults_engaged_and_persists_explicit_state(database: Database) -> None:
