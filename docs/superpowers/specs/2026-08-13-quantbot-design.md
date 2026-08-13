@@ -90,10 +90,10 @@ The formulas below are proposed V1 defaults because the user specified the strat
 
 ### Universe and schedule
 
-- Static diversified ETF universe: `SPY, QQQ, IWM, EFA, EEM, TLT, IEF, GLD, VNQ, DBC`.
-- `SPY` is the regime instrument and benchmark. A static inception-pinned universe avoids point-in-time constituent reconstruction in V1.
+- Static diversified ETF universe: `SPY, QQQ, IWM, MDY, EFA, EEM, VNQ, XLB, XLE, XLF, XLI, XLK, XLP, XLU, XLV, XLY, DBC, GLD, TLT, IEF, TIP, LQD, HYG`.
+- `SPY` is the regime instrument and benchmark. A static version-pinned ETF universe avoids retrospective constituent changes in V1, but is explicitly not represented as a survivorship-bias-free institutional universe.
 - Signals are evaluated after a completed regular-session daily bar is available and fresh.
-- Exits are evaluated each session. Momentum ranks and new-entry eligibility are refreshed on the final trading session of each week, using only data available at that close.
+- Exits are evaluated each session. On each month's final broker-calendar trading session, positive-momentum symbols that pass the long-term trend filter are ranked and the top 10 form the roster effective next session. There is no mid-month backfill.
 - Orders generated from session T data become eligible during the next broker-confirmed regular session. Extended hours remains false.
 
 ### Indicators
@@ -105,13 +105,13 @@ The formulas below are proposed V1 defaults because the user specified the strat
 - **Donchian exit:** `close[t] < min(low[t-20:t-1])`, also excluding the current bar.
 - **ATR:** Wilder ATR(20), seeded with the arithmetic mean of the first 20 true ranges. True range is the maximum of high-low, absolute high-previous-close, and absolute low-previous-close.
 - **Initial stop distance:** `2 * ATR20` at the signal close.
-- **Trailing exit:** the greater of the initial stop and `highest_close_since_entry - 3 * current_ATR20`; a next-session exit intent is generated when the completed close is below it.
+- **Trailing exit:** the greater of the prior active stop and `highest_high_since_entry - 3 * current_ATR20`; the stop never loosens, and a next-session exit intent is generated when the completed close is below it.
 
 ### Selection and exits
 
-Positive-momentum symbols are ranked descending by 12-1 momentum, then symbol ascending as a deterministic tie-break. A new long candidate must be in the highest-ranked eligible names, pass instrument trend, market regime, and Donchian entry, and fit all risk limits. At most 20 positions are allowed; the default universe naturally caps this at 10.
+Positive-momentum symbols are ranked descending by 12-1 momentum, then symbol ascending as a deterministic tie-break. A new long candidate must be in the active top-10 monthly roster, pass instrument trend, market regime, and Donchian entry, and fit all risk limits. At most 20 positions are allowed globally; the V1 roster caps this strategy at 10.
 
-An exit is generated when any of these is true: Donchian exit, instrument trend failure, trailing/initial stop breach on completed close, or the instrument leaves the configured universe in a new strategy version. Regime failure prevents entries but does not force immediate liquidation; this distinction is fixed for V1 and testable through ablation.
+An exit is generated when any of these is true: Donchian exit, instrument trend failure, trailing/initial stop breach on completed close, the instrument leaves the newly effective monthly roster, or it leaves the configured universe in a new strategy version. Regime failure prevents entries but does not force immediate liquidation; this distinction is fixed for V1 and testable through ablation.
 
 ### Position sizing and portfolio risk
 
@@ -119,6 +119,7 @@ For a candidate, whole-share quantity is the nonnegative floor of the minimum of
 
 ```text
 (equity * effective_risk_fraction) / stop_distance
+(remaining allowed portfolio open risk) / stop_distance
 (equity * 10%) / reference_price
 remaining_gross_exposure / reference_price
 available_buying_power / reference_price
