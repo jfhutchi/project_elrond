@@ -310,6 +310,124 @@ def test_database_stamps_supported_pre_alembic_schema_at_head(tmp_path: Path) ->
         database.close()
 
 
+@pytest.mark.parametrize(
+    "corruption_sql",
+    [
+        ("ALTER TABLE incidents DROP COLUMN detail_json",),
+        ("DROP INDEX ix_broker_orders_status",),
+        (
+            "PRAGMA foreign_keys=OFF",
+            "DROP TABLE incidents",
+            """CREATE TABLE incidents (
+                incident_id VARCHAR(128) NOT NULL PRIMARY KEY,
+                run_id VARCHAR(128),
+                severity VARCHAR(32) NOT NULL,
+                kind VARCHAR(64) NOT NULL,
+                message TEXT NOT NULL,
+                occurred_at VARCHAR(40) NOT NULL,
+                resolved_at VARCHAR(40),
+                detail_json INTEGER NOT NULL,
+                FOREIGN KEY(run_id) REFERENCES runs (run_id)
+            )""",
+            "CREATE INDEX ix_incidents_occurred ON incidents (occurred_at)",
+        ),
+        (
+            "PRAGMA foreign_keys=OFF",
+            "DROP TABLE incidents",
+            """CREATE TABLE incidents (
+                incident_id VARCHAR(128) NOT NULL PRIMARY KEY,
+                run_id VARCHAR(128),
+                severity VARCHAR(32) NOT NULL,
+                kind VARCHAR(64) NOT NULL,
+                message TEXT NOT NULL,
+                occurred_at VARCHAR(40) NOT NULL,
+                resolved_at VARCHAR(40),
+                detail_json TEXT NOT NULL
+            )""",
+            "CREATE INDEX ix_incidents_occurred ON incidents (occurred_at)",
+        ),
+        (
+            "PRAGMA foreign_keys=OFF",
+            "DROP TABLE broker_orders",
+            """CREATE TABLE broker_orders (
+                broker_order_id VARCHAR(128) NOT NULL PRIMARY KEY,
+                client_order_id VARCHAR(128) NOT NULL,
+                symbol VARCHAR(32) NOT NULL,
+                side VARCHAR(8) NOT NULL,
+                order_type VARCHAR(16) NOT NULL,
+                time_in_force VARCHAR(8) NOT NULL,
+                quantity TEXT NOT NULL,
+                filled_quantity TEXT NOT NULL,
+                status VARCHAR(64) NOT NULL,
+                submitted_at VARCHAR(40) NOT NULL,
+                filled_average_price TEXT,
+                FOREIGN KEY(client_order_id) REFERENCES order_intents (client_order_id)
+            )""",
+            "CREATE INDEX ix_broker_orders_status ON broker_orders (status)",
+        ),
+    ],
+    ids=["missing-column", "missing-index", "altered-type", "missing-fk", "missing-unique"],
+)
+def test_database_rejects_corrupt_supported_pre_alembic_schema_without_mutation(
+    tmp_path: Path,
+    corruption_sql: tuple[str, ...],
+) -> None:
+    path = tmp_path / "corrupt-supported-v1.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    with engine.begin() as connection:
+        metadata.create_all(connection)
+        connection.execute(schema_version.insert().values(id=1, version=SCHEMA_VERSION))
+        connection.execute(
+            kill_switch_state.insert().values(
+                id=1,
+                engaged=True,
+                reason="must survive rejected preflight",
+                updated_at=encode_utc(NOW),
+            )
+        )
+        for statement in corruption_sql:
+            connection.exec_driver_sql(statement)
+    engine.dispose()
+
+    raw_connection = sqlite3.connect(path)
+    try:
+        original_journal_mode = raw_connection.execute("PRAGMA journal_mode").fetchone()[0]
+        original_schema = raw_connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master "
+            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        ).fetchall()
+        original_reason = raw_connection.execute(
+            "SELECT reason FROM kill_switch_state WHERE id = 1"
+        ).fetchone()
+    finally:
+        raw_connection.close()
+
+    with pytest.raises(UnsupportedSchemaVersionError, match="incompatible schema"):
+        Database(path)
+
+    raw_connection = sqlite3.connect(path)
+    try:
+        assert (
+            raw_connection.execute("PRAGMA journal_mode").fetchone()[0]
+            == original_journal_mode
+        )
+        assert raw_connection.execute(
+            "SELECT type, name, tbl_name, sql FROM sqlite_master "
+            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+        ).fetchall() == original_schema
+        assert raw_connection.execute(
+            "SELECT reason FROM kill_switch_state WHERE id = 1"
+        ).fetchone() == original_reason
+        assert "alembic_version" not in {
+            row[0]
+            for row in raw_connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'"
+            )
+        }
+    finally:
+        raw_connection.close()
+
+
 def test_deployments_runs_and_failed_transaction_rollback(database: Database) -> None:
     identity = make_identity()
     with database.transaction() as session:

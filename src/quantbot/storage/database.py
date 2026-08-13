@@ -10,7 +10,9 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 
 from alembic import command
+from alembic.autogenerate import compare_metadata
 from alembic.config import Config
+from alembic.migration import MigrationContext
 from sqlalchemy import Engine, create_engine, event, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
@@ -90,6 +92,8 @@ class Database:
         if not self.path.exists() or self.path.stat().st_size == 0:
             return False
 
+        requires_alembic_stamp = False
+        validate_metadata = False
         connection = sqlite3.connect(self.path)
         try:
             connection.execute("PRAGMA query_only=ON")
@@ -102,6 +106,11 @@ class Database:
             }
             has_schema_marker = schema_version.name in table_names
             has_alembic_table = "alembic_version" in table_names
+            if has_alembic_table and "version_num" not in {
+                str(row[1])
+                for row in connection.execute('PRAGMA table_info("alembic_version")')
+            }:
+                raise UnsupportedSchemaVersionError("invalid Alembic version marker")
             alembic_rows = (
                 connection.execute("SELECT version_num FROM alembic_version").fetchall()
                 if has_alembic_table
@@ -118,18 +127,48 @@ class Database:
                 raise UnsupportedSchemaVersionError("incomplete versioned database")
 
             if has_schema_marker:
+                if {"id", "version"} - {
+                    str(row[1])
+                    for row in connection.execute('PRAGMA table_info("schema_version")')
+                }:
+                    raise UnsupportedSchemaVersionError("incompatible schema")
                 schema_rows = connection.execute("SELECT version FROM schema_version").fetchall()
                 if len(schema_rows) != 1:
                     raise UnsupportedSchemaVersionError("invalid schema version marker")
-                actual = int(schema_rows[0][0])
+                try:
+                    actual = int(schema_rows[0][0])
+                except (TypeError, ValueError) as exc:
+                    raise UnsupportedSchemaVersionError(
+                        "invalid schema version marker"
+                    ) from exc
                 if actual != SCHEMA_VERSION:
                     raise UnsupportedSchemaVersionError(actual)
                 if not set(metadata.tables) <= table_names:
                     raise UnsupportedSchemaVersionError("incomplete versioned database")
+                validate_metadata = True
 
-            return has_schema_marker and alembic_revision is None
+            requires_alembic_stamp = has_schema_marker and alembic_revision is None
         finally:
             connection.close()
+
+        if validate_metadata:
+            self._validate_metadata_compatibility()
+        return requires_alembic_stamp
+
+    def _validate_metadata_compatibility(self) -> None:
+        """Require a zero-diff schema using a read-only, non-operational engine."""
+        preflight_engine = create_engine(f"sqlite+pysqlite:///{self.path.as_posix()}")
+        try:
+            with preflight_engine.connect() as connection:
+                connection.exec_driver_sql("PRAGMA query_only=ON")
+                context = MigrationContext.configure(
+                    connection,
+                    opts={"compare_type": True, "compare_server_default": True},
+                )
+                if compare_metadata(context, metadata):
+                    raise UnsupportedSchemaVersionError("incompatible schema")
+        finally:
+            preflight_engine.dispose()
 
     def _configure_connection(
         self,

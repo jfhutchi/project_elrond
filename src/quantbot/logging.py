@@ -21,9 +21,17 @@ SECRET_KEYS = frozenset(
 )
 
 
-def _redact_value(value: object, registered_secrets: frozenset[str]) -> object:
-    if isinstance(value, str) and value in registered_secrets:
-        return REDACTED
+def _redact_text(value: str, registered_secrets: tuple[str, ...]) -> str:
+    for secret in registered_secrets:
+        value = value.replace(secret, REDACTED)
+    return value
+
+
+def _redact_value(value: object, registered_secrets: tuple[str, ...]) -> object:
+    if isinstance(value, str):
+        return _redact_text(value, registered_secrets)
+    if isinstance(value, BaseException):
+        return _redact_text(str(value), registered_secrets)
     if isinstance(value, Mapping):
         return {
             key: (
@@ -48,7 +56,9 @@ def redact_secrets(
     registered_secrets: Collection[str] = (),
 ) -> EventDict:
     """Return a deeply copied event dictionary with sensitive values removed."""
-    secrets = frozenset(secret for secret in registered_secrets if secret)
+    secrets = tuple(
+        sorted({secret for secret in registered_secrets if secret}, key=len, reverse=True)
+    )
     redacted = _redact_value(event_dict, secrets)
     if not isinstance(redacted, dict):
         raise TypeError("structlog event dictionary must be a dictionary")
