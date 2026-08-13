@@ -137,7 +137,7 @@ def test_domain_models_reject_naive_datetimes_and_are_frozen() -> None:
         currency="USD",
     )
     with pytest.raises(ValidationError):
-        account.cash = Decimal("0")
+        account.cash = Decimal("0")  # type: ignore[misc]
 
 
 def test_account_position_and_fill_constraints() -> None:
@@ -383,6 +383,20 @@ def test_client_order_id_is_canonical_bounded_and_deterministic() -> None:
     assert first == "qb-9ff3803455bec3551ab1859bc9baff62e6d69903"
     assert second == first
     assert len(first) <= 128
+
+
+@pytest.mark.parametrize("strategy_version", [" 1.2.3", "1.2.3 "])
+def test_client_order_id_rejects_strategy_version_surrounding_whitespace(
+    strategy_version: str,
+) -> None:
+    with pytest.raises(ValueError, match="surrounding whitespace"):
+        build_client_order_id(
+            strategy_version,
+            "AAPL",
+            date(2026, 8, 13),
+            OrderSide.BUY,
+            0,
+        )
 
 
 def test_client_order_id_changes_with_payload_and_rejects_negative_sequence() -> None:

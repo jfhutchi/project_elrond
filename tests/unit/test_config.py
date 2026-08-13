@@ -127,7 +127,7 @@ def test_paper_safety_allows_orders_only_when_all_gates_pass() -> None:
     assert result.environment_label == "PAPER"
 
     with pytest.raises(ValidationError):
-        result.allowed = False
+        result.allowed = False  # type: ignore[misc]
 
 
 @pytest.mark.parametrize("reported_account_id", [None, "", "   "])

@@ -17,8 +17,11 @@ def build_client_order_id(
     """Build a stable broker-safe identifier from canonical intent fields."""
     if sequence < 0:
         raise ValueError("sequence must be nonnegative")
-    if not strategy_version.strip():
+    normalized_strategy_version = strategy_version.strip()
+    if not normalized_strategy_version:
         raise ValueError("strategy_version must not be empty")
+    if normalized_strategy_version != strategy_version:
+        raise ValueError("strategy_version must not contain surrounding whitespace")
 
     normalized_symbol = symbol.strip()
     if not normalized_symbol:
@@ -27,7 +30,7 @@ def build_client_order_id(
         raise ValueError("symbol must be uppercase")
 
     payload = {
-        "strategy_version": strategy_version,
+        "strategy_version": normalized_strategy_version,
         "symbol": normalized_symbol,
         "signal_date": signal_date.isoformat(),
         "side": side.value,
