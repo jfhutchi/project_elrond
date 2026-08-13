@@ -108,10 +108,10 @@ def validate_trading_safety(
 
     if settings.EXPECTED_ACCOUNT_ID is None:
         reasons.append("EXPECTED_ACCOUNT_ID_MISSING")
-    elif reported_account_id is not None:
-        normalized_reported_id = reported_account_id.strip()
-        if normalized_reported_id != settings.EXPECTED_ACCOUNT_ID:
-            reasons.append("ACCOUNT_MISMATCH")
+    elif reported_account_id is None or not reported_account_id.strip():
+        reasons.append("ACCOUNT_VERIFICATION_UNAVAILABLE")
+    elif reported_account_id.strip() != settings.EXPECTED_ACCOUNT_ID:
+        reasons.append("ACCOUNT_MISMATCH")
 
     if not _selected_credentials_complete(settings):
         reasons.append("CREDENTIALS_INCOMPLETE")

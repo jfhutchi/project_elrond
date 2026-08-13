@@ -107,6 +107,17 @@ def test_bar_validates_ohlc_symbol_and_normalizes_timestamp_to_utc() -> None:
             volume=1000,
             adjustment=1,
         )
+    with pytest.raises(ValidationError):
+        Bar(
+            symbol="AAPL",
+            timestamp=NOW,
+            open=100,
+            high=110,
+            low=95,
+            close=105,
+            volume=0,
+            adjustment=1,
+        )
 
 
 def test_domain_models_reject_naive_datetimes_and_are_frozen() -> None:
@@ -223,6 +234,79 @@ def test_order_intent_defaults_and_positive_order_values() -> None:
             quantity=1,
             limit_price=0,
             created_at=NOW,
+        )
+
+
+@pytest.mark.parametrize(
+    ("order_type", "price_fields"),
+    [
+        (OrderType.MARKET, {}),
+        (OrderType.LIMIT, {"limit_price": "100.25"}),
+        (OrderType.STOP, {"stop_price": "99.75"}),
+        (
+            OrderType.STOP_LIMIT,
+            {"limit_price": "100.25", "stop_price": "99.75"},
+        ),
+    ],
+)
+def test_order_intent_accepts_only_the_prices_required_by_order_type(
+    order_type: OrderType,
+    price_fields: dict[str, str],
+) -> None:
+    intent = OrderIntent(
+        intent_id="intent-1",
+        client_order_id="client-1",
+        strategy_id="strategy-1",
+        symbol="AAPL",
+        signal_date=date(2026, 8, 13),
+        side=OrderSide.BUY,
+        order_type=order_type,
+        time_in_force=TimeInForce.DAY,
+        quantity="5",
+        created_at=NOW,
+        **price_fields,
+    )
+
+    assert intent.order_type is order_type
+
+
+@pytest.mark.parametrize(
+    ("order_type", "price_fields"),
+    [
+        (OrderType.MARKET, {"limit_price": "100.25"}),
+        (OrderType.MARKET, {"stop_price": "99.75"}),
+        (OrderType.LIMIT, {}),
+        (
+            OrderType.LIMIT,
+            {"limit_price": "100.25", "stop_price": "99.75"},
+        ),
+        (OrderType.STOP, {}),
+        (
+            OrderType.STOP,
+            {"limit_price": "100.25", "stop_price": "99.75"},
+        ),
+        (OrderType.STOP_LIMIT, {}),
+        (OrderType.STOP_LIMIT, {"limit_price": "100.25"}),
+        (OrderType.STOP_LIMIT, {"stop_price": "99.75"}),
+    ],
+)
+def test_order_intent_rejects_prices_incompatible_with_order_type(
+    order_type: OrderType,
+    price_fields: dict[str, str],
+) -> None:
+    with pytest.raises(ValidationError, match="price"):
+        OrderIntent(
+            intent_id="intent-1",
+            client_order_id="client-1",
+            strategy_id="strategy-1",
+            symbol="AAPL",
+            signal_date=date(2026, 8, 13),
+            side=OrderSide.BUY,
+            order_type=order_type,
+            time_in_force=TimeInForce.DAY,
+            quantity="5",
+            created_at=NOW,
+            **price_fields,
         )
 
 

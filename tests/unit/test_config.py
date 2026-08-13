@@ -119,7 +119,7 @@ def test_settings_secrets_are_excluded_from_repr_dump_and_safe_summary() -> None
 
 
 def test_paper_safety_allows_orders_only_when_all_gates_pass() -> None:
-    result = validate_trading_safety(safe_settings(), reported_account_id="paper-account")
+    result = validate_trading_safety(safe_settings(), reported_account_id="  paper-account  ")
 
     assert result.allowed is True
     assert result.reasons == ()
@@ -128,6 +128,34 @@ def test_paper_safety_allows_orders_only_when_all_gates_pass() -> None:
 
     with pytest.raises(ValidationError):
         result.allowed = False
+
+
+@pytest.mark.parametrize("reported_account_id", [None, "", "   "])
+@pytest.mark.parametrize(
+    "mode_overrides",
+    [
+        {},
+        {
+            "TRADING_MODE": TradingMode.LIVE,
+            "BROKER_ENVIRONMENT": BrokerEnvironment.LIVE,
+            "ALPACA_LIVE_API_KEY": "live-key",
+            "ALPACA_LIVE_API_SECRET": "live-secret",
+            "LIVE_TRADING_ACKNOWLEDGED": True,
+        },
+    ],
+    ids=["paper", "live"],
+)
+def test_safety_rejects_unavailable_broker_account_verification(
+    mode_overrides: dict[str, Any],
+    reported_account_id: str | None,
+) -> None:
+    result = validate_trading_safety(
+        safe_settings(**mode_overrides),
+        reported_account_id=reported_account_id,
+    )
+
+    assert result.allowed is False
+    assert "ACCOUNT_VERIFICATION_UNAVAILABLE" in result.reasons
 
 
 @pytest.mark.parametrize(

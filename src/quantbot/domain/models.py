@@ -56,7 +56,7 @@ class Bar(SymbolModel):
     high: PositiveDecimal
     low: PositiveDecimal
     close: PositiveDecimal
-    volume: NonNegativeDecimal
+    volume: PositiveDecimal
     adjustment: PositiveDecimal
 
     @model_validator(mode="after")
@@ -107,6 +107,25 @@ class OrderIntent(SymbolModel):
     extended_hours: bool = False
     state: IntentState = IntentState.RISK_APPROVED
     created_at: datetime
+
+    @model_validator(mode="after")
+    def validate_order_prices(self) -> Self:
+        if self.order_type is OrderType.MARKET:
+            valid_prices = self.limit_price is None and self.stop_price is None
+            requirement = "MARKET orders cannot specify limit_price or stop_price"
+        elif self.order_type is OrderType.LIMIT:
+            valid_prices = self.limit_price is not None and self.stop_price is None
+            requirement = "LIMIT orders require limit_price and cannot specify stop_price"
+        elif self.order_type is OrderType.STOP:
+            valid_prices = self.limit_price is None and self.stop_price is not None
+            requirement = "STOP orders require stop_price and cannot specify limit_price"
+        else:
+            valid_prices = self.limit_price is not None and self.stop_price is not None
+            requirement = "STOP_LIMIT orders require both limit_price and stop_price"
+
+        if not valid_prices:
+            raise ValueError(requirement)
+        return self
 
 
 class BrokerOrder(SymbolModel):
