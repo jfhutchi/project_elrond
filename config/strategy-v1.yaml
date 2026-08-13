@@ -1,0 +1,45 @@
+# Proposed versioned defaults for adaptive-momentum V1.
+strategy_name: adaptive-momentum
+version: 1.0.0
+
+# Proposed versioned universe and benchmark defaults.
+universe:
+  - SPY
+  - QQQ
+  - IWM
+  - MDY
+  - EFA
+  - EEM
+  - VNQ
+  - XLB
+  - XLE
+  - XLF
+  - XLI
+  - XLK
+  - XLP
+  - XLU
+  - XLV
+  - XLY
+  - DBC
+  - GLD
+  - TLT
+  - IEF
+  - TIP
+  - LQD
+  - HYG
+benchmark_symbol: SPY
+regime_symbol: SPY
+roster_size: 10
+
+# Proposed versioned signal and risk defaults.
+momentum_long: 252
+momentum_skip: 21
+trend_period: 200
+entry_period: 55
+exit_period: 20
+atr_period: 20
+initial_stop_atr: 2
+trailing_stop_atr: 3
+rotation_frequency: monthly
+positive_momentum_required: true
+market_regime_blocks_entries_only: true

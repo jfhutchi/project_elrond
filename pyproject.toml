@@ -11,6 +11,7 @@ dependencies = [
     "alembic>=1.16,<2",
     "pydantic>=2.12,<3",
     "pydantic-settings>=2.11,<3",
+    "pyyaml>=6.0,<7",
     "sqlalchemy>=2.0,<3",
     "structlog>=25.4,<26",
 ]
@@ -22,6 +23,7 @@ dev = [
     "pytest>=8.4,<10",
     "pytest-asyncio>=1.2,<2",
     "ruff>=0.13,<1",
+    "types-pyyaml>=6.0,<7",
 ]
 
 [tool.hatch.build.targets.wheel]
