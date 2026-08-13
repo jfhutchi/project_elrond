@@ -11,8 +11,7 @@ from pathlib import Path
 
 from alembic import command
 from alembic.config import Config
-from alembic.runtime.migration import MigrationContext
-from sqlalchemy import Engine, create_engine, event, inspect, select
+from sqlalchemy import Engine, create_engine, event, select
 from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import ConnectionPoolEntry
@@ -81,9 +80,56 @@ class Database:
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.busy_timeout_ms = busy_timeout_ms
+        self._requires_alembic_stamp = self._preflight_schema()
         self.engine: Engine = create_engine(f"sqlite+pysqlite:///{self.path.as_posix()}")
         event.listen(self.engine, "connect", self._configure_connection)
         self._initialize_schema()
+
+    def _preflight_schema(self) -> bool:
+        """Validate an existing file without changing persistent SQLite settings."""
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            return False
+
+        connection = sqlite3.connect(self.path)
+        try:
+            connection.execute("PRAGMA query_only=ON")
+            table_names = {
+                str(row[0])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master "
+                    "WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
+                )
+            }
+            has_schema_marker = schema_version.name in table_names
+            has_alembic_table = "alembic_version" in table_names
+            alembic_rows = (
+                connection.execute("SELECT version_num FROM alembic_version").fetchall()
+                if has_alembic_table
+                else []
+            )
+            if len(alembic_rows) > 1:
+                raise UnsupportedSchemaVersionError("invalid Alembic version marker")
+            alembic_revision = str(alembic_rows[0][0]) if alembic_rows else None
+            user_tables = table_names - {"alembic_version"}
+
+            if user_tables and not has_schema_marker and alembic_revision is None:
+                raise UnsupportedSchemaVersionError("unversioned nonempty database")
+            if alembic_revision is not None and not has_schema_marker:
+                raise UnsupportedSchemaVersionError("incomplete versioned database")
+
+            if has_schema_marker:
+                schema_rows = connection.execute("SELECT version FROM schema_version").fetchall()
+                if len(schema_rows) != 1:
+                    raise UnsupportedSchemaVersionError("invalid schema version marker")
+                actual = int(schema_rows[0][0])
+                if actual != SCHEMA_VERSION:
+                    raise UnsupportedSchemaVersionError(actual)
+                if not set(metadata.tables) <= table_names:
+                    raise UnsupportedSchemaVersionError("incomplete versioned database")
+
+            return has_schema_marker and alembic_revision is None
+        finally:
+            connection.close()
 
     def _configure_connection(
         self,
@@ -109,29 +155,8 @@ class Database:
 
     def _initialize_schema(self) -> None:
         with self.engine.begin() as connection:
-            table_names = set(inspect(connection).get_table_names())
-            has_schema_marker = schema_version.name in table_names
-            has_alembic_table = "alembic_version" in table_names
-            alembic_revision = (
-                MigrationContext.configure(connection).get_current_revision()
-                if has_alembic_table
-                else None
-            )
-            user_tables = table_names - {"alembic_version"}
-
-            if user_tables and not has_schema_marker and alembic_revision is None:
-                raise UnsupportedSchemaVersionError("unversioned nonempty database")
-
-            if has_schema_marker:
-                actual = connection.execute(select(schema_version.c.version)).scalar_one()
-                if actual != SCHEMA_VERSION:
-                    raise UnsupportedSchemaVersionError(actual)
-
             config = self._alembic_config(connection)
-            if has_schema_marker and alembic_revision is None:
-                expected_tables = set(metadata.tables)
-                if not expected_tables <= table_names:
-                    raise UnsupportedSchemaVersionError("incomplete versioned database")
+            if self._requires_alembic_stamp:
                 command.stamp(config, "head")
             command.upgrade(config, "head")
 

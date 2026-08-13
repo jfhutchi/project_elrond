@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
@@ -251,6 +252,32 @@ def test_database_rejects_unversioned_nonempty_database_without_mutation(
             assert connection.exec_driver_sql("SELECT id FROM legacy_orders").scalar_one() == 7
     finally:
         check_engine.dispose()
+
+
+def test_rejected_legacy_database_preserves_journal_mode_and_contents(tmp_path: Path) -> None:
+    path = tmp_path / "legacy-delete-journal.db"
+    connection = sqlite3.connect(path)
+    try:
+        connection.execute("CREATE TABLE legacy_orders (id INTEGER PRIMARY KEY)")
+        connection.execute("INSERT INTO legacy_orders (id) VALUES (7)")
+        connection.commit()
+        original_journal_mode = connection.execute("PRAGMA journal_mode").fetchone()[0]
+    finally:
+        connection.close()
+
+    assert original_journal_mode == "delete"
+    with pytest.raises(UnsupportedSchemaVersionError, match="unversioned"):
+        Database(path)
+
+    connection = sqlite3.connect(path)
+    try:
+        assert connection.execute("PRAGMA journal_mode").fetchone()[0] == original_journal_mode
+        assert connection.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name"
+        ).fetchall() == [("legacy_orders",)]
+        assert connection.execute("SELECT id FROM legacy_orders").fetchall() == [(7,)]
+    finally:
+        connection.close()
 
 
 def test_database_stamps_supported_pre_alembic_schema_at_head(tmp_path: Path) -> None:
