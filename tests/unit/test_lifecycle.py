@@ -19,6 +19,7 @@ from quantbot.domain import (
         (IntentState.SUBMITTING, IntentState.REJECTED),
         (IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN),
         (IntentState.SUBMITTING, IntentState.ERROR),
+        (IntentState.SUBMISSION_UNKNOWN, IntentState.SUBMITTING),
         (IntentState.SUBMISSION_UNKNOWN, IntentState.BROKER_ACCEPTED),
         (IntentState.SUBMISSION_UNKNOWN, IntentState.REJECTED),
         (IntentState.SUBMISSION_UNKNOWN, IntentState.ERROR),

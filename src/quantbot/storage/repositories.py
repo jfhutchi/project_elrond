@@ -673,6 +673,24 @@ class StorageRepository:
         )
         if row is None:
             return None
+        return self._broker_order_from_row(row)
+
+    def list_broker_orders(self) -> list[BrokerOrder]:
+        """Return every immutable broker observation in deterministic order."""
+        rows = (
+            self._session.execute(
+                select(broker_orders).order_by(
+                    broker_orders.c.submitted_at,
+                    broker_orders.c.broker_order_id,
+                )
+            )
+            .mappings()
+            .all()
+        )
+        return [self._broker_order_from_row(row) for row in rows]
+
+    @staticmethod
+    def _broker_order_from_row(row: RowMapping) -> BrokerOrder:
         average_raw = row["filled_average_price"]
         return BrokerOrder(
             broker_order_id=str(row["broker_order_id"]),
@@ -1105,6 +1123,20 @@ class StorageRepository:
             summary=_decode_json(row["summary_json"]),
             diffs=restored_diffs,
         )
+
+    def get_latest_reconciliation(self) -> ReconciliationRecord | None:
+        """Return the most recently completed durable reconciliation run."""
+        reconciliation_id = self._session.execute(
+            select(reconciliation_runs.c.reconciliation_id)
+            .order_by(
+                reconciliation_runs.c.completed_at.desc(),
+                reconciliation_runs.c.reconciliation_id.desc(),
+            )
+            .limit(1)
+        ).scalar_one_or_none()
+        if reconciliation_id is None:
+            return None
+        return self.get_reconciliation(str(reconciliation_id))
 
     def create_incident(
         self,

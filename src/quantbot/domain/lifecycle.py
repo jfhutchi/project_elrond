@@ -60,6 +60,7 @@ ALLOWED_TRANSITIONS: Mapping[IntentState, frozenset[IntentState]] = MappingProxy
         ),
         IntentState.SUBMISSION_UNKNOWN: frozenset(
             {
+                IntentState.SUBMITTING,
                 IntentState.BROKER_ACCEPTED,
                 IntentState.REJECTED,
                 IntentState.ERROR,
