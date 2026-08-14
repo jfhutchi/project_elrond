@@ -35,6 +35,7 @@ ALLOWED_TRANSITIONS: Mapping[IntentState, frozenset[IntentState]] = MappingProxy
                 IntentState.FILLED,
                 IntentState.REJECTED,
                 IntentState.CANCEL_PENDING,
+                IntentState.CANCELLED,
                 IntentState.EXPIRED,
                 IntentState.ERROR,
             }

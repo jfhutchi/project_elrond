@@ -1,11 +1,17 @@
 from __future__ import annotations
 
+from collections.abc import Awaitable
 from decimal import Decimal
 
 import httpx
 import pytest
 
-from quantbot.brokers import BrokerTransportError, HttpxBrokerTransport
+from quantbot.brokers import (
+    BrokerTransportError,
+    HttpxBrokerTransport,
+    TradeStreamDisconnected,
+    WebsocketsTradeConnector,
+)
 
 
 @pytest.mark.asyncio
@@ -76,3 +82,56 @@ async def test_httpx_broker_transport_rejects_nonpositive_timeout() -> None:
             timeout_seconds=Decimal("0"),
         )
     await transport.aclose()
+
+
+class RawTradeSocket:
+    def __init__(self) -> None:
+        self.sent: list[str] = []
+        self.closed = False
+
+    async def recv(self) -> str | bytes:
+        return b"{}"
+
+    async def send(self, message: str) -> None:
+        self.sent.append(message)
+
+    async def close(self) -> None:
+        self.closed = True
+
+
+@pytest.mark.asyncio
+async def test_websockets_trade_connector_wraps_send_receive_and_close() -> None:
+    raw = RawTradeSocket()
+    urls: list[str] = []
+
+    def opener(url: str) -> Awaitable[RawTradeSocket]:
+        urls.append(url)
+
+        async def opened() -> RawTradeSocket:
+            return raw
+
+        return opened()
+
+    connector = WebsocketsTradeConnector(opener=opener)
+    connection = await connector.open("wss://paper-api.alpaca.markets/stream")
+    assert await connection.receive() == b"{}"
+    await connection.send('{"action":"listen"}')
+    await connection.close()
+
+    assert urls == ["wss://paper-api.alpaca.markets/stream"]
+    assert raw.sent == ['{"action":"listen"}']
+    assert raw.closed is True
+
+
+@pytest.mark.asyncio
+async def test_websockets_trade_connector_normalizes_open_failure() -> None:
+    def opener(_url: str) -> Awaitable[RawTradeSocket]:
+        async def failed() -> RawTradeSocket:
+            raise OSError("offline")
+
+        return failed()
+
+    with pytest.raises(TradeStreamDisconnected, match="connection failed") as captured:
+        await WebsocketsTradeConnector(opener=opener).open("wss://paper-api.alpaca.markets/stream")
+
+    assert "offline" not in str(captured.value)

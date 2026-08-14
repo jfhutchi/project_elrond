@@ -26,6 +26,7 @@ from quantbot.domain import (
         (IntentState.BROKER_ACCEPTED, IntentState.FILLED),
         (IntentState.BROKER_ACCEPTED, IntentState.REJECTED),
         (IntentState.BROKER_ACCEPTED, IntentState.CANCEL_PENDING),
+        (IntentState.BROKER_ACCEPTED, IntentState.CANCELLED),
         (IntentState.BROKER_ACCEPTED, IntentState.EXPIRED),
         (IntentState.BROKER_ACCEPTED, IntentState.ERROR),
         (IntentState.PARTIALLY_FILLED, IntentState.PARTIALLY_FILLED),

@@ -1,6 +1,22 @@
 """Public broker-adapter API."""
 
 from quantbot.brokers.alpaca import ALPACA_PAPER_BASE_URL, AlpacaPaperBrokerAdapter
+from quantbot.brokers.alpaca_stream import (
+    ALPACA_PAPER_TRADE_STREAM_URL,
+    AlpacaPaperTradeStream,
+    TradeStreamConnection,
+    TradeStreamConnector,
+    TradeStreamDisconnected,
+    TradeStreamError,
+    TradeStreamIncident,
+    TradeStreamIncidentRecorder,
+    TradeStreamProtocolError,
+    TradeStreamReconciler,
+    TradeStreamSleeper,
+    TradeStreamStaleError,
+    TradeUpdate,
+    TradeUpdateEvent,
+)
 from quantbot.brokers.base import (
     BrokerAccountSnapshot,
     BrokerAdapter,
@@ -14,10 +30,12 @@ from quantbot.brokers.base import (
     BrokerTransportResponse,
     SubmissionUncertainError,
 )
-from quantbot.brokers.transports import HttpxBrokerTransport
+from quantbot.brokers.transports import HttpxBrokerTransport, WebsocketsTradeConnector
 
 __all__ = [
     "ALPACA_PAPER_BASE_URL",
+    "ALPACA_PAPER_TRADE_STREAM_URL",
+    "AlpacaPaperTradeStream",
     "AlpacaPaperBrokerAdapter",
     "BrokerAccountSnapshot",
     "BrokerAdapter",
@@ -31,4 +49,17 @@ __all__ = [
     "BrokerTransportResponse",
     "HttpxBrokerTransport",
     "SubmissionUncertainError",
+    "TradeStreamConnection",
+    "TradeStreamConnector",
+    "TradeStreamDisconnected",
+    "TradeStreamError",
+    "TradeStreamIncident",
+    "TradeStreamIncidentRecorder",
+    "TradeStreamProtocolError",
+    "TradeStreamReconciler",
+    "TradeStreamSleeper",
+    "TradeStreamStaleError",
+    "TradeUpdate",
+    "TradeUpdateEvent",
+    "WebsocketsTradeConnector",
 ]
