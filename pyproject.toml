@@ -18,6 +18,9 @@ dependencies = [
     "websockets>=15,<16",
 ]
 
+[project.scripts]
+quantbot = "quantbot.cli:main"
+
 [dependency-groups]
 dev = [
     "hypothesis>=6.140,<7",
