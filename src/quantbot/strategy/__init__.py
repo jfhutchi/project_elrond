@@ -6,6 +6,8 @@ from quantbot.strategy.adaptive_momentum import (
     Ranking,
     SignalAction,
     SignalDecision,
+    XNYSSession,
+    XNYSSessionSequence,
     build_monthly_roster,
     evaluate_symbol,
 )
@@ -15,6 +17,8 @@ from quantbot.strategy.identity import (
     build_strategy_identity,
     canonical_configuration,
     configuration_hash,
+    strategy_id_for,
+    validate_strategy_identity,
 )
 from quantbot.strategy.indicators import (
     IndicatorInputError,
@@ -36,6 +40,8 @@ __all__ = [
     "SignalAction",
     "SignalDecision",
     "StrategyConfig",
+    "XNYSSession",
+    "XNYSSessionSequence",
     "bar_set_hash",
     "build_monthly_roster",
     "build_strategy_identity",
@@ -48,6 +54,8 @@ __all__ = [
     "load_strategy_config",
     "momentum_12_1",
     "sma",
+    "strategy_id_for",
     "true_ranges",
+    "validate_strategy_identity",
     "wilder_atr",
 ]

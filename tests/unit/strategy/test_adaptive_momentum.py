@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -16,6 +16,8 @@ from quantbot.strategy.adaptive_momentum import (
     MonthlyRoster,
     PositionContext,
     SignalAction,
+    XNYSSession,
+    XNYSSessionSequence,
     build_monthly_roster,
     evaluate_symbol,
 )
@@ -32,7 +34,51 @@ ROOT = Path(__file__).parents[3]
 CONFIG_PATH = ROOT / "config" / "strategy-v1.yaml"
 EVALUATION = datetime(2026, 8, 31, 20, tzinfo=UTC)
 NEXT_SESSION = datetime(2026, 9, 1, 13, 30, tzinfo=UTC)
-GOLDEN_CONFIGURATION_HASH = "5224ee716e702594ae59ca091708de1ba6524bd780cc4934e4985a694e929b44"
+ROSTER_EXPIRES = datetime(2026, 10, 1, 13, 30, tzinfo=UTC)
+GOLDEN_CONFIGURATION_HASH = "7d04bc9cc0cb20e6d879831a5ba48f152e8ab23b93f7a4ce94f3c0d7114981f1"
+
+XNYS_DATES = (
+    date(2026, 8, 28),
+    date(2026, 8, 31),
+    date(2026, 9, 1),
+    date(2026, 9, 2),
+    date(2026, 9, 3),
+    date(2026, 9, 4),
+    date(2026, 9, 8),
+    date(2026, 9, 9),
+    date(2026, 9, 10),
+    date(2026, 9, 11),
+    date(2026, 9, 14),
+    date(2026, 9, 15),
+    date(2026, 9, 16),
+    date(2026, 9, 17),
+    date(2026, 9, 18),
+    date(2026, 9, 21),
+    date(2026, 9, 22),
+    date(2026, 9, 23),
+    date(2026, 9, 24),
+    date(2026, 9, 25),
+    date(2026, 9, 28),
+    date(2026, 9, 29),
+    date(2026, 9, 30),
+    date(2026, 10, 1),
+)
+
+
+def session_for(session_date: date) -> XNYSSession:
+    return XNYSSession(
+        session_date=session_date,
+        open_at=datetime.combine(session_date, datetime.min.time(), tzinfo=UTC)
+        + timedelta(hours=13, minutes=30),
+        close_at=datetime.combine(session_date, datetime.min.time(), tzinfo=UTC)
+        + timedelta(hours=20),
+    )
+
+
+XNYS_SESSIONS = XNYSSessionSequence(
+    calendar="XNYS",
+    sessions=tuple(session_for(session_date) for session_date in XNYS_DATES),
+)
 
 
 def strategy_config(**updates: Any) -> StrategyConfig:
@@ -82,13 +128,29 @@ def replace_last(history: list[Bar], close: Decimal) -> list[Bar]:
     return [*history[:-1], replacement]
 
 
-def roster_for(symbols: tuple[str, ...], *, effective_at: datetime = EVALUATION) -> MonthlyRoster:
+def roster_for(
+    symbols: tuple[str, ...],
+    *,
+    effective_at: datetime = NEXT_SESSION,
+    expires_at: datetime = ROSTER_EXPIRES,
+) -> MonthlyRoster:
     return MonthlyRoster(
-        evaluated_at=effective_at - timedelta(days=1),
+        calendar="XNYS",
+        evaluated_at=EVALUATION,
         effective_at=effective_at,
+        expires_at=expires_at,
         symbols=symbols,
         rankings=(),
     )
+
+
+def complete_histories(
+    config: StrategyConfig,
+    overrides: dict[str, list[Bar]] | None = None,
+) -> dict[str, list[Bar]]:
+    histories = {symbol: make_history(symbol, step=Decimal("0")) for symbol in config.universe}
+    histories.update(overrides or {})
+    return histories
 
 
 def identity_for(config: StrategyConfig) -> StrategyIdentity:
@@ -99,6 +161,22 @@ def identity_for(config: StrategyConfig) -> StrategyIdentity:
     )
 
 
+def history_from_closes(symbol: str, closes: list[Decimal]) -> list[Bar]:
+    return [
+        Bar(
+            symbol=symbol,
+            timestamp=EVALUATION - timedelta(days=len(closes) - index - 1),
+            open=close,
+            high=close + Decimal("0.5"),
+            low=close - Decimal("1"),
+            close=close,
+            volume=1000 + index,
+            adjustment=1,
+        )
+        for index, close in enumerate(closes)
+    ]
+
+
 def constant_segments(
     symbol: str,
     old_close: Decimal,
@@ -106,21 +184,7 @@ def constant_segments(
     current_close: Decimal,
 ) -> list[Bar]:
     closes = [old_close] * 232 + [recent_close] * 20 + [current_close]
-    bars: list[Bar] = []
-    for index, close in enumerate(closes):
-        bars.append(
-            Bar(
-                symbol=symbol,
-                timestamp=EVALUATION - timedelta(days=252 - index),
-                open=close,
-                high=close + Decimal("0.5"),
-                low=close - Decimal("1"),
-                close=close,
-                volume=1000 + index,
-                adjustment=1,
-            )
-        )
-    return bars
+    return history_from_closes(symbol, closes)
 
 
 def test_versioned_yaml_loads_all_proposed_defaults_and_is_frozen() -> None:
@@ -128,6 +192,7 @@ def test_versioned_yaml_loads_all_proposed_defaults_and_is_frozen() -> None:
 
     assert config.strategy_name == "adaptive-momentum"
     assert config.version == "1.0.0"
+    assert config.calendar == "XNYS"
     assert config.universe == DEFAULT_UNIVERSE
     assert config.benchmark_symbol == config.regime_symbol == "SPY"
     assert config.roster_size == 10
@@ -139,6 +204,18 @@ def test_versioned_yaml_loads_all_proposed_defaults_and_is_frozen() -> None:
     assert config.rotation_frequency == "monthly"
     assert config.positive_momentum_required is True
     assert config.market_regime_blocks_entries_only is True
+    assert config.risk_per_trade_bps == 50
+    assert config.max_open_risk_bps == 500
+    assert config.max_position_value_bps == 1000
+    assert config.max_gross_exposure_bps == 10000
+    assert config.max_positions == 20
+    assert config.drawdown_thresholds_bps == (500, 1000, 1500, 2000)
+    assert config.drawdown_multipliers_bps == (10000, 7500, 5000, 0, 0)
+    assert config.slippage_bps == 5
+    assert config.commission_per_order == Decimal("0")
+    assert config.idle_cash_rate_bps == 0
+    assert config.allow_fractional_shares is False
+    assert config.allow_pyramiding is False
 
     with pytest.raises(ValidationError):
         config.roster_size = 9  # type: ignore[misc]
@@ -160,19 +237,40 @@ def test_config_rejects_missing_unknown_and_invalid_values() -> None:
         {**payload, "universe": (*DEFAULT_UNIVERSE, "SPY")},
         {
             **payload,
-            "universe": tuple(
-                "spy" if item == "SPY" else item for item in DEFAULT_UNIVERSE
-            ),
+            "universe": tuple("spy" if item == "SPY" else item for item in DEFAULT_UNIVERSE),
         },
         {**payload, "universe": tuple(item for item in DEFAULT_UNIVERSE if item != "SPY")},
         {**payload, "roster_size": len(DEFAULT_UNIVERSE) + 1},
         {**payload, "momentum_skip": payload["momentum_long"]},
         {**payload, "entry_period": payload["exit_period"]},
         {**payload, "trailing_stop_atr": Decimal("1")},
+        {**payload, "risk_per_trade_bps": 0},
+        {**payload, "max_open_risk_bps": 49},
+        {**payload, "max_position_value_bps": 10001},
+        {**payload, "drawdown_thresholds_bps": (500, 500, 1500, 2000)},
+        {**payload, "drawdown_multipliers_bps": (10000, 7500, 8000, 2500, 0)},
+        {**payload, "commission_per_order": Decimal("-0.01")},
     )
     for invalid in invalid_payloads:
         with pytest.raises(ValidationError):
             StrategyConfig.model_validate(invalid)
+
+
+def test_numeric_parameters_remain_configurable_and_identity_bound() -> None:
+    baseline = load_strategy_config(CONFIG_PATH)
+    changed = strategy_config(
+        roster_size=9,
+        momentum_long=260,
+        risk_per_trade_bps=60,
+        slippage_bps=7,
+    )
+
+    assert changed.roster_size == 9
+    assert changed.momentum_long == 260
+    assert changed.risk_per_trade_bps == 60
+    assert changed.slippage_bps == 7
+    assert configuration_hash(changed) != configuration_hash(baseline)
+    assert identity_for(changed).strategy_id != identity_for(baseline).strategy_id
 
 
 def test_yaml_loader_uses_safe_loading_and_rejects_object_tags(tmp_path: Path) -> None:
@@ -189,11 +287,11 @@ def test_identity_uses_golden_canonical_configuration_and_changes_with_config() 
     config = load_strategy_config(CONFIG_PATH)
     identity = identity_for(config)
 
-    assert canonical_configuration(config).startswith('{"atr_period":20,')
+    assert canonical_configuration(config).startswith('{"allow_fractional_shares":false,')
     assert " " not in canonical_configuration(config)
     assert configuration_hash(config) == GOLDEN_CONFIGURATION_HASH
     assert identity.configuration_hash == GOLDEN_CONFIGURATION_HASH
-    assert identity.strategy_id == "adaptive-momentum-v1-5224ee716e702594"
+    assert identity.strategy_id == "adaptive-momentum-v1-7d04bc9cc0cb20e6"
     assert identity.version == "1.0.0"
 
     semantically_equal = StrategyConfig.model_validate(
@@ -217,18 +315,20 @@ def test_identity_rejects_naive_deployment_timestamp() -> None:
 def test_monthly_roster_ranks_descending_with_symbol_tiebreak_and_limits_to_ten() -> None:
     config = load_strategy_config(CONFIG_PATH)
     candidates = config.universe[1:13]
-    histories = {
+    candidate_histories = {
         symbol: make_history(symbol, step=Decimal(index) / Decimal("10"))
         for index, symbol in enumerate(candidates, start=1)
     }
-    histories["QQQ"] = make_history("QQQ", step=Decimal("2"))
-    histories["IWM"] = make_history("IWM", step=Decimal("2"))
+    candidate_histories["QQQ"] = make_history("QQQ", step=Decimal("2"))
+    candidate_histories["IWM"] = make_history("IWM", step=Decimal("2"))
+    histories = complete_histories(config, candidate_histories)
 
     roster = build_monthly_roster(
         histories,
         evaluation_at=EVALUATION,
         effective_at=NEXT_SESSION,
         config=config,
+        session_sequence=XNYS_SESSIONS,
     )
 
     assert roster.evaluated_at == EVALUATION
@@ -246,14 +346,18 @@ def test_monthly_roster_ranks_descending_with_symbol_tiebreak_and_limits_to_ten(
 def test_monthly_roster_excludes_nonpositive_momentum_and_trend_equality() -> None:
     config = load_strategy_config(CONFIG_PATH)
     roster = build_monthly_roster(
-        {
-            "QQQ": make_history("QQQ", step=Decimal("1")),
-            "IWM": make_history("IWM", step=Decimal("0")),
-            "MDY": make_history("MDY", start=Decimal("400"), step=Decimal("-1")),
-        },
+        complete_histories(
+            config,
+            {
+                "QQQ": make_history("QQQ", step=Decimal("1")),
+                "IWM": make_history("IWM", step=Decimal("0")),
+                "MDY": make_history("MDY", start=Decimal("400"), step=Decimal("-1")),
+            },
+        ),
         EVALUATION,
         NEXT_SESSION,
         config,
+        session_sequence=XNYS_SESSIONS,
     )
 
     assert roster.symbols == ("QQQ",)
@@ -263,15 +367,28 @@ def test_monthly_roster_validates_cutoffs_and_unknown_symbols() -> None:
     config = load_strategy_config(CONFIG_PATH)
 
     with pytest.raises(ValueError, match="effective_at"):
-        build_monthly_roster({}, EVALUATION, EVALUATION, config)
+        build_monthly_roster(
+            complete_histories(config),
+            EVALUATION,
+            EVALUATION,
+            config,
+            session_sequence=XNYS_SESSIONS,
+        )
     with pytest.raises(ValueError, match="timezone-aware"):
-        build_monthly_roster({}, datetime(2026, 8, 31), NEXT_SESSION, config)
-    with pytest.raises(ValueError, match="not in strategy universe"):
+        build_monthly_roster(
+            complete_histories(config),
+            datetime(2026, 8, 31),
+            NEXT_SESSION,
+            config,
+            session_sequence=XNYS_SESSIONS,
+        )
+    with pytest.raises(ValueError, match="exactly match"):
         build_monthly_roster(
             {"AAPL": make_history("AAPL")},
             EVALUATION,
             NEXT_SESSION,
             config,
+            session_sequence=XNYS_SESSIONS,
         )
 
 
@@ -281,10 +398,81 @@ def test_monthly_roster_rejects_nonmonotonic_history_before_cutoff() -> None:
 
     with pytest.raises(ValueError, match="strictly increasing"):
         build_monthly_roster(
-            {"QQQ": [history[1], history[0], *history[2:]]},
+            complete_histories(
+                config,
+                {"QQQ": [history[1], history[0], *history[2:]]},
+            ),
             EVALUATION,
             NEXT_SESSION,
             config,
+            session_sequence=XNYS_SESSIONS,
+        )
+
+
+def test_monthly_roster_rejects_partial_stale_and_midmonth_inputs() -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    partial = complete_histories(config)
+    partial.pop("HYG")
+    stale = complete_histories(
+        config,
+        {"HYG": make_history("HYG", end=EVALUATION - timedelta(days=1))},
+    )
+
+    with pytest.raises(ValueError, match="exactly match"):
+        build_monthly_roster(
+            partial,
+            EVALUATION,
+            NEXT_SESSION,
+            config,
+            session_sequence=XNYS_SESSIONS,
+        )
+    with pytest.raises(ValueError, match="fresh through evaluation_at"):
+        build_monthly_roster(
+            stale,
+            EVALUATION,
+            NEXT_SESSION,
+            config,
+            session_sequence=XNYS_SESSIONS,
+        )
+
+    midmonth_evaluation = datetime(2026, 9, 15, 20, tzinfo=UTC)
+    midmonth_next = datetime(2026, 9, 16, 13, 30, tzinfo=UTC)
+    with pytest.raises(ValueError, match="final XNYS session"):
+        build_monthly_roster(
+            {symbol: make_history(symbol, end=midmonth_evaluation) for symbol in config.universe},
+            midmonth_evaluation,
+            midmonth_next,
+            config,
+            session_sequence=XNYS_SESSIONS,
+        )
+
+
+def test_monthly_roster_rejects_non_xnys_session_context() -> None:
+    with pytest.raises(ValidationError, match="XNYS"):
+        XNYSSessionSequence.model_validate(
+            {
+                "calendar": "XNAS",
+                "sessions": [session.model_dump() for session in XNYS_SESSIONS.sessions],
+            }
+        )
+
+
+def test_xnys_session_sequence_rejects_unsorted_duplicate_and_bad_boundaries() -> None:
+    august_session = session_for(date(2026, 8, 31))
+    september_session = session_for(date(2026, 9, 1))
+
+    for sessions in (
+        (september_session, august_session),
+        (august_session, august_session),
+    ):
+        with pytest.raises(ValidationError, match="strictly increasing"):
+            XNYSSessionSequence(calendar="XNYS", sessions=sessions)
+
+    with pytest.raises(ValidationError, match="session_date"):
+        XNYSSession(
+            session_date=date(2026, 8, 31),
+            open_at=datetime(2026, 9, 1, 13, 30, tzinfo=UTC),
+            close_at=datetime(2026, 9, 1, 20, tzinfo=UTC),
         )
 
 
@@ -302,6 +490,7 @@ def test_entry_decision_populates_all_audit_fields_and_exact_stop_distance() -> 
         NEXT_SESSION,
         config,
         identity,
+        session_sequence=XNYS_SESSIONS,
     )
 
     assert decision.symbol == "QQQ"
@@ -322,6 +511,136 @@ def test_entry_decision_populates_all_audit_fields_and_exact_stop_distance() -> 
     assert decision.atr is not None
     assert decision.initial_stop_distance == config.initial_stop_atr * decision.atr
     assert decision.trailing_stop is None
+    assert decision.asset_close == asset[-1].close
+    assert decision.spy_close == spy[-1].close
+    assert decision.spy_sma200 is not None
+    assert decision.high_water_since_entry is None
+    assert decision.prior_active_stop is None
+
+
+def test_month_end_roster_is_effective_for_next_session_entry_and_held_exit() -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    asset = make_history("QQQ")
+    histories = complete_histories(config, {"QQQ": asset})
+    roster = build_monthly_roster(
+        histories,
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        session_sequence=XNYS_SESSIONS,
+    )
+
+    entry = evaluate_symbol(
+        asset,
+        make_history("SPY"),
+        roster,
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        identity_for(config),
+        session_sequence=XNYS_SESSIONS,
+    )
+    held_exit = evaluate_symbol(
+        make_history("HYG"),
+        make_history("SPY"),
+        roster,
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        identity_for(config),
+        PositionContext(
+            symbol="HYG",
+            entered_at=EVALUATION,
+            initial_stop=Decimal("1"),
+            active_stop=Decimal("1"),
+        ),
+        session_sequence=XNYS_SESSIONS,
+    )
+
+    assert roster.effective_at == NEXT_SESSION
+    assert roster.expires_at == ROSTER_EXPIRES
+    assert entry.active_roster is True
+    assert entry.action is SignalAction.ENTER
+    assert held_exit.action is SignalAction.EXIT
+    assert held_exit.reasons == ("ROSTER_EXIT",)
+
+
+def test_evaluation_rejects_stale_future_and_arbitrary_roster_windows() -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    asset = make_history("QQQ")
+    spy = make_history("SPY")
+    stale = MonthlyRoster(
+        calendar="XNYS",
+        evaluated_at=datetime(2026, 7, 31, 20, tzinfo=UTC),
+        effective_at=datetime(2026, 8, 28, 13, 30, tzinfo=UTC),
+        expires_at=NEXT_SESSION,
+        symbols=("QQQ",),
+        rankings=(),
+    )
+    future = roster_for(
+        ("QQQ",),
+        effective_at=datetime(2026, 9, 2, 13, 30, tzinfo=UTC),
+    )
+    arbitrary = roster_for(
+        ("QQQ",),
+        expires_at=datetime(2026, 9, 30, 13, 30, tzinfo=UTC),
+    )
+
+    for roster in (stale, future, arbitrary):
+        with pytest.raises(ValueError, match="roster.*next_session_at|roster schedule"):
+            evaluate_symbol(
+                asset,
+                spy,
+                roster,
+                EVALUATION,
+                NEXT_SESSION,
+                config,
+                identity_for(config),
+                session_sequence=XNYS_SESSIONS,
+            )
+
+
+def test_evaluation_rejects_non_session_transition() -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    with pytest.raises(ValueError, match="immediate next XNYS session"):
+        evaluate_symbol(
+            make_history("QQQ"),
+            make_history("SPY"),
+            roster_for(("QQQ",)),
+            EVALUATION,
+            datetime(2026, 9, 2, 13, 30, tzinfo=UTC),
+            config,
+            identity_for(config),
+            session_sequence=XNYS_SESSIONS,
+        )
+
+
+@pytest.mark.parametrize(
+    "identity_update",
+    [
+        {"configuration_hash": "0" * 64},
+        {"version": "9.9.9"},
+        {"strategy_id": "adaptive-momentum-v9-invalid"},
+    ],
+    ids=["configuration-hash", "version", "strategy-id"],
+)
+def test_evaluation_rejects_identity_not_bound_to_config(
+    identity_update: dict[str, str],
+) -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    mismatched = identity_for(config).model_copy(update=identity_update)
+
+    with pytest.raises(ValueError, match="strategy identity does not match configuration"):
+        evaluate_symbol(
+            make_history("QQQ"),
+            make_history("SPY"),
+            roster_for(("QQQ",)),
+            EVALUATION,
+            NEXT_SESSION,
+            config,
+            mismatched,
+            session_sequence=XNYS_SESSIONS,
+        )
 
 
 def test_entry_requires_strict_breakout_and_reports_every_failed_gate() -> None:
@@ -340,6 +659,7 @@ def test_entry_requires_strict_breakout_and_reports_every_failed_gate() -> None:
         NEXT_SESSION,
         config,
         identity,
+        session_sequence=XNYS_SESSIONS,
     )
     assert equality.action is SignalAction.HOLD
     assert equality.reasons == ("ENTRY_CHANNEL_NOT_BROKEN",)
@@ -352,6 +672,7 @@ def test_entry_requires_strict_breakout_and_reports_every_failed_gate() -> None:
         NEXT_SESSION,
         config,
         identity,
+        session_sequence=XNYS_SESSIONS,
     )
     assert all_off.action is SignalAction.HOLD
     assert all_off.reasons == (
@@ -376,6 +697,7 @@ def test_missing_current_bar_and_indicator_warmup_are_ineligible() -> None:
         NEXT_SESSION,
         config,
         identity,
+        session_sequence=XNYS_SESSIONS,
     )
     warmup_decision = evaluate_symbol(
         make_history("QQQ", count=252),
@@ -385,6 +707,7 @@ def test_missing_current_bar_and_indicator_warmup_are_ineligible() -> None:
         NEXT_SESSION,
         config,
         identity,
+        session_sequence=XNYS_SESSIONS,
     )
 
     assert stale_decision.action is SignalAction.INELIGIBLE
@@ -414,6 +737,7 @@ def test_position_exits_for_roster_trend_donchian_and_trailing_rules() -> None:
         config,
         identity,
         normal_position,
+        session_sequence=XNYS_SESSIONS,
     )
     trend_exit = evaluate_symbol(
         make_history("QQQ", step=Decimal("0")),
@@ -424,6 +748,7 @@ def test_position_exits_for_roster_trend_donchian_and_trailing_rules() -> None:
         config,
         identity,
         normal_position,
+        session_sequence=XNYS_SESSIONS,
     )
     donchian_exit = evaluate_symbol(
         constant_segments("QQQ", Decimal("80"), Decimal("100"), Decimal("98.5")),
@@ -434,6 +759,7 @@ def test_position_exits_for_roster_trend_donchian_and_trailing_rules() -> None:
         config,
         identity,
         normal_position,
+        session_sequence=XNYS_SESSIONS,
     )
     trailing_position = PositionContext(
         symbol="QQQ",
@@ -450,6 +776,7 @@ def test_position_exits_for_roster_trend_donchian_and_trailing_rules() -> None:
         config,
         identity,
         trailing_position,
+        session_sequence=XNYS_SESSIONS,
     )
 
     assert roster_exit.reasons == ("ROSTER_EXIT",)
@@ -482,6 +809,7 @@ def test_position_combines_exit_reasons_in_stable_order() -> None:
         config,
         identity_for(config),
         position,
+        session_sequence=XNYS_SESSIONS,
     )
 
     assert decision.action is SignalAction.EXIT
@@ -494,6 +822,153 @@ def test_position_combines_exit_reasons_in_stable_order() -> None:
     assert decision.trailing_stop is not None
     assert decision.trailing_stop >= position.initial_stop
     assert decision.trailing_stop >= position.active_stop
+
+
+@pytest.mark.parametrize("count", [200, 252])
+def test_position_trend_exit_does_not_require_entry_momentum(count: int) -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    asset = make_history("QQQ", count=count, step=Decimal("0"))
+    decision = evaluate_symbol(
+        asset,
+        make_history("SPY", count=count),
+        roster_for(("QQQ",)),
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        identity_for(config),
+        PositionContext(
+            symbol="QQQ",
+            entered_at=EVALUATION,
+            initial_stop=Decimal("1"),
+            active_stop=Decimal("1"),
+        ),
+        session_sequence=XNYS_SESSIONS,
+    )
+
+    assert decision.action is SignalAction.EXIT
+    assert decision.reasons == ("TREND_EXIT",)
+    assert decision.momentum is None
+
+
+def test_position_donchian_and_trailing_exits_work_at_200_bars() -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    donchian_asset = history_from_closes(
+        "QQQ",
+        [Decimal("80")] * 179 + [Decimal("100")] * 20 + [Decimal("98.5")],
+    )
+    trending = make_history("QQQ", count=200)
+    common = (
+        make_history("SPY", count=200),
+        roster_for(("QQQ",)),
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        identity_for(config),
+    )
+
+    donchian = evaluate_symbol(
+        donchian_asset,
+        *common,
+        PositionContext(
+            symbol="QQQ",
+            entered_at=EVALUATION,
+            initial_stop=Decimal("1"),
+            active_stop=Decimal("1"),
+        ),
+        session_sequence=XNYS_SESSIONS,
+    )
+    trailing = evaluate_symbol(
+        trending,
+        *common,
+        PositionContext(
+            symbol="QQQ",
+            entered_at=EVALUATION,
+            initial_stop=Decimal("1"),
+            active_stop=trending[-1].close,
+        ),
+        session_sequence=XNYS_SESSIONS,
+    )
+
+    assert donchian.action is SignalAction.EXIT
+    assert donchian.reasons == ("DONCHIAN_EXIT",)
+    assert donchian.momentum is None
+    assert trailing.action is SignalAction.EXIT
+    assert trailing.reasons == ("TRAILING_STOP_EXIT",)
+    assert trailing.momentum is None
+
+
+def test_position_without_momentum_holds_when_no_exit_rule_fires() -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    asset = make_history("QQQ", count=252)
+    position = PositionContext(
+        symbol="QQQ",
+        entered_at=EVALUATION,
+        initial_stop=Decimal("1"),
+        active_stop=Decimal("1"),
+    )
+    decision = evaluate_symbol(
+        asset,
+        make_history("SPY", count=252),
+        roster_for(("QQQ",)),
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        identity_for(config),
+        position,
+        session_sequence=XNYS_SESSIONS,
+    )
+
+    assert decision.action is SignalAction.HOLD
+    assert decision.reasons == ("POSITION_HELD",)
+    assert decision.momentum is None
+    assert decision.asset_close == asset[-1].close
+    assert decision.spy_close is not None
+    assert decision.spy_sma200 is not None
+    assert decision.high_water_since_entry == asset[-1].high
+    assert decision.prior_active_stop == position.active_stop
+
+
+def test_position_fail_closed_does_not_suppress_available_exit_predicates() -> None:
+    config = load_strategy_config(CONFIG_PATH)
+    incomplete = make_history("QQQ", count=199)
+    available_donchian = history_from_closes(
+        "QQQ",
+        [Decimal("100")] * 20 + [Decimal("98")],
+    )
+    position = PositionContext(
+        symbol="QQQ",
+        entered_at=EVALUATION,
+        initial_stop=Decimal("1"),
+        active_stop=Decimal("1"),
+    )
+
+    unavailable = evaluate_symbol(
+        incomplete,
+        make_history("SPY", count=200),
+        roster_for(("QQQ",)),
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        identity_for(config),
+        position,
+        session_sequence=XNYS_SESSIONS,
+    )
+    available = evaluate_symbol(
+        available_donchian,
+        make_history("SPY", count=200),
+        roster_for(("QQQ",)),
+        EVALUATION,
+        NEXT_SESSION,
+        config,
+        identity_for(config),
+        position,
+        session_sequence=XNYS_SESSIONS,
+    )
+
+    assert unavailable.action is SignalAction.INELIGIBLE
+    assert unavailable.reasons == ("EXIT_WARMUP_INCOMPLETE",)
+    assert available.action is SignalAction.EXIT
+    assert available.reasons == ("DONCHIAN_EXIT", "EXIT_WARMUP_INCOMPLETE")
 
 
 def test_regime_off_alone_does_not_force_position_exit() -> None:
@@ -512,6 +987,7 @@ def test_regime_off_alone_does_not_force_position_exit() -> None:
             initial_stop=Decimal("1"),
             active_stop=Decimal("1"),
         ),
+        session_sequence=XNYS_SESSIONS,
     )
 
     assert decision.action is SignalAction.HOLD
@@ -540,6 +1016,7 @@ def test_evaluation_validates_position_symbol_and_next_session() -> None:
                 initial_stop=1,
                 active_stop=1,
             ),
+            session_sequence=XNYS_SESSIONS,
         )
     with pytest.raises(ValueError, match="next_session_at"):
         evaluate_symbol(
@@ -550,6 +1027,7 @@ def test_evaluation_validates_position_symbol_and_next_session() -> None:
             EVALUATION,
             config,
             identity,
+            session_sequence=XNYS_SESSIONS,
         )
     with pytest.raises(ValidationError, match="timezone-aware"):
         PositionContext(
@@ -568,4 +1046,5 @@ def test_evaluation_validates_position_symbol_and_next_session() -> None:
             NEXT_SESSION,
             config,
             identity,
+            session_sequence=XNYS_SESSIONS,
         )

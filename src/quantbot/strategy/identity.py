@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
@@ -51,6 +51,24 @@ def configuration_hash(config: StrategyConfig) -> str:
     return hashlib.sha256(canonical_configuration(config).encode("utf-8")).hexdigest()
 
 
+def strategy_id_for(config: StrategyConfig) -> str:
+    """Return the exact strategy identifier implied by a configuration."""
+    digest = configuration_hash(config)
+    major_version = config.version.split(".", 1)[0]
+    return f"{config.strategy_name}-v{major_version}-{digest[:16]}"
+
+
+def validate_strategy_identity(config: StrategyConfig, identity: StrategyIdentity) -> None:
+    """Reject a deployment identity that is not bound to the supplied config."""
+    digest = configuration_hash(config)
+    if (
+        identity.configuration_hash != digest
+        or identity.version != config.version
+        or identity.strategy_id != strategy_id_for(config)
+    ):
+        raise ValueError("strategy identity does not match configuration")
+
+
 def build_strategy_identity(
     config: StrategyConfig,
     *,
@@ -61,9 +79,8 @@ def build_strategy_identity(
     if deployment_timestamp.tzinfo is None or deployment_timestamp.utcoffset() is None:
         raise ValueError("deployment_timestamp must be timezone-aware")
     digest = configuration_hash(config)
-    major_version = config.version.split(".", 1)[0]
     return StrategyIdentity(
-        strategy_id=f"{config.strategy_name}-v{major_version}-{digest[:16]}",
+        strategy_id=strategy_id_for(config),
         version=config.version,
         git_commit=git_commit,
         configuration_hash=digest,
@@ -78,10 +95,11 @@ def bar_set_hash(
     """Hash symbol-sorted, time-sorted bars through an optional inclusive cutoff."""
     if cutoff is not None and (cutoff.tzinfo is None or cutoff.utcoffset() is None):
         raise ValueError("cutoff must be timezone-aware")
+    normalized_cutoff = cutoff.astimezone(UTC) if cutoff is not None else None
     records: list[dict[str, str]] = []
     for symbol in sorted(histories):
         for bar in sorted(histories[symbol], key=lambda item: item.timestamp):
-            if cutoff is not None and bar.timestamp > cutoff:
+            if normalized_cutoff is not None and bar.timestamp > normalized_cutoff:
                 continue
             records.append(
                 {
@@ -95,4 +113,8 @@ def bar_set_hash(
                     "adjustment": _decimal_string(bar.adjustment),
                 }
             )
-    return hashlib.sha256(_canonical_json(records).encode("utf-8")).hexdigest()
+    payload = {
+        "cutoff": normalized_cutoff.isoformat() if normalized_cutoff is not None else None,
+        "bars": records,
+    }
+    return hashlib.sha256(_canonical_json(payload).encode("utf-8")).hexdigest()

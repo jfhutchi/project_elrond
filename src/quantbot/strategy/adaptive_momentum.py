@@ -3,15 +3,16 @@
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from quantbot.domain import Bar, StrategyIdentity
 from quantbot.strategy.config import StrategyConfig
-from quantbot.strategy.identity import bar_set_hash
+from quantbot.strategy.identity import bar_set_hash, validate_strategy_identity
 from quantbot.strategy.indicators import (
     donchian_entry_level,
     donchian_exit_level,
@@ -49,9 +50,92 @@ class Ranking(StrategyModel):
         return value
 
 
+class XNYSSession(StrategyModel):
+    """One authoritative XNYS regular trading session."""
+
+    session_date: date
+    open_at: datetime
+    close_at: datetime
+
+    @model_validator(mode="after")
+    def validate_bounds(self) -> XNYSSession:
+        if self.close_at <= self.open_at:
+            raise ValueError("session close_at must be after open_at")
+        if self.open_at.date() != self.session_date or self.close_at.date() != self.session_date:
+            raise ValueError("session boundaries must match session_date")
+        return self
+
+
+class XNYSSessionSequence(StrategyModel):
+    """Caller-supplied contiguous session sequence from an XNYS calendar provider."""
+
+    calendar: Literal["XNYS"]
+    sessions: tuple[XNYSSession, ...]
+
+    @model_validator(mode="after")
+    def validate_order(self) -> XNYSSessionSequence:
+        if len(self.sessions) < 2:
+            raise ValueError("XNYS session sequence must contain at least two sessions")
+        for previous, current in zip(self.sessions, self.sessions[1:], strict=False):
+            dates_not_increasing = current.session_date <= previous.session_date
+            sessions_overlap = current.open_at <= previous.close_at
+            if dates_not_increasing or sessions_overlap:
+                raise ValueError("XNYS sessions must be strictly increasing and nonoverlapping")
+        return self
+
+    def transition_index(self, evaluation_at: datetime, next_session_at: datetime) -> int:
+        """Return the evaluation-session index for an immediate close-to-open transition."""
+        for index, session in enumerate(self.sessions[:-1]):
+            if session.close_at != evaluation_at:
+                continue
+            if self.sessions[index + 1].open_at != next_session_at:
+                raise ValueError("next_session_at must be the immediate next XNYS session")
+            return index
+        raise ValueError("evaluation_at must be an XNYS session close")
+
+    def roster_expiry_after(self, effective_index: int) -> datetime:
+        """Return the first XNYS open after the effective session's calendar month."""
+        effective_month = self.sessions[effective_index].session_date.strftime("%Y-%m")
+        for session in self.sessions[effective_index + 1 :]:
+            if session.session_date.strftime("%Y-%m") != effective_month:
+                return session.open_at
+        raise ValueError("session sequence must include the first session after effective month")
+
+    def validate_roster_window(
+        self,
+        roster: MonthlyRoster,
+        next_session_at: datetime,
+    ) -> None:
+        """Prove the roster is the month-bound roster governing the target session."""
+        if roster.calendar != self.calendar:
+            raise ValueError("roster schedule calendar does not match session sequence")
+        effective_index = next(
+            (
+                index
+                for index, session in enumerate(self.sessions)
+                if session.open_at == roster.effective_at
+            ),
+            None,
+        )
+        if effective_index is None or effective_index == 0:
+            raise ValueError("roster schedule is not represented by the session sequence")
+        prior_session = self.sessions[effective_index - 1]
+        effective_session = self.sessions[effective_index]
+        prior_month = prior_session.session_date.strftime("%Y-%m")
+        effective_month = effective_session.session_date.strftime("%Y-%m")
+        if prior_month == effective_month or prior_session.close_at != roster.evaluated_at:
+            raise ValueError("roster schedule must start at the first XNYS session of a month")
+        if roster.expires_at != self.roster_expiry_after(effective_index):
+            raise ValueError("roster schedule expires_at does not match the XNYS month boundary")
+        if not (roster.effective_at <= next_session_at < roster.expires_at):
+            raise ValueError("roster is not effective for next_session_at")
+
+
 class MonthlyRoster(StrategyModel):
+    calendar: Literal["XNYS"]
     evaluated_at: datetime
     effective_at: datetime
+    expires_at: datetime
     symbols: tuple[str, ...]
     rankings: tuple[Ranking, ...]
 
@@ -71,6 +155,8 @@ class MonthlyRoster(StrategyModel):
     def validate_times(self) -> MonthlyRoster:
         if self.effective_at <= self.evaluated_at:
             raise ValueError("effective_at must be after evaluated_at")
+        if self.expires_at <= self.effective_at:
+            raise ValueError("expires_at must be after effective_at")
         return self
 
 
@@ -98,6 +184,11 @@ class SignalDecision(StrategyModel):
     configuration_hash: str
     input_cutoff: datetime
     bar_set_hash: str
+    asset_close: Decimal | None
+    spy_close: Decimal | None
+    spy_sma200: Decimal | None
+    high_water_since_entry: Decimal | None
+    prior_active_stop: Decimal | None
     initial_stop_distance: Decimal | None = None
     trailing_stop: Decimal | None = None
 
@@ -140,35 +231,56 @@ def build_monthly_roster(
     evaluation_at: datetime,
     effective_at: datetime,
     config: StrategyConfig,
+    *,
+    session_sequence: XNYSSessionSequence,
 ) -> MonthlyRoster:
     """Rank eligible symbols using only bars available at evaluation time."""
     _aware("evaluation_at", evaluation_at)
     _aware("effective_at", effective_at)
     if effective_at <= evaluation_at:
         raise ValueError("effective_at must be after evaluation_at")
-    unknown = sorted(set(histories) - set(config.universe))
-    if unknown:
-        raise ValueError(f"symbols not in strategy universe: {', '.join(unknown)}")
+    if session_sequence.calendar != config.calendar:
+        raise ValueError("session calendar must match strategy configuration")
+    evaluation_index = session_sequence.transition_index(evaluation_at, effective_at)
+    evaluation_session = session_sequence.sessions[evaluation_index]
+    effective_index = evaluation_index + 1
+    effective_session = session_sequence.sessions[effective_index]
+    if evaluation_session.session_date.strftime("%Y-%m") == effective_session.session_date.strftime(
+        "%Y-%m"
+    ):
+        raise ValueError("evaluation_at must be the final XNYS session of its month")
+    expires_at = session_sequence.roster_expiry_after(effective_index)
+
+    expected_symbols = set(config.universe)
+    provided_symbols = set(histories)
+    if provided_symbols != expected_symbols:
+        missing = sorted(expected_symbols - provided_symbols)
+        unexpected = sorted(provided_symbols - expected_symbols)
+        detail = f"missing={missing}, unexpected={unexpected}"
+        raise ValueError(f"histories must exactly match strategy universe: {detail}")
 
     rankings: list[Ranking] = []
-    for symbol, history in histories.items():
+    for symbol in config.universe:
+        history = histories[symbol]
         _validate_history(history, symbol)
         sliced = _sliced(history, evaluation_at)
+        if not sliced or sliced[-1].timestamp != evaluation_at:
+            raise ValueError(f"history for {symbol} must be fresh through evaluation_at")
         momentum = momentum_12_1(sliced, config.momentum_long, config.momentum_skip)
         trend = sma(sliced, config.trend_period)
-        if momentum is None or trend is None or not sliced:
+        if momentum is None or trend is None:
             continue
         close = sliced[-1].close
-        if momentum <= 0 or close <= trend:
+        if (config.positive_momentum_required and momentum <= 0) or close <= trend:
             continue
         rankings.append(Ranking(symbol=symbol, momentum=momentum, close=close, sma200=trend))
 
-    ranked = sorted(rankings, key=lambda item: (-item.momentum, item.symbol))[
-        : config.roster_size
-    ]
+    ranked = sorted(rankings, key=lambda item: (-item.momentum, item.symbol))[: config.roster_size]
     return MonthlyRoster(
+        calendar=config.calendar,
         evaluated_at=evaluation_at,
         effective_at=effective_at,
+        expires_at=expires_at,
         symbols=tuple(item.symbol for item in ranked),
         rankings=tuple(ranked),
     )
@@ -183,15 +295,26 @@ def evaluate_symbol(
     config: StrategyConfig,
     identity: StrategyIdentity,
     position: PositionContext | None = None,
+    *,
+    session_sequence: XNYSSessionSequence,
 ) -> SignalDecision:
     """Evaluate one symbol at a strict cutoff for action at the next session."""
     _aware("evaluation_at", evaluation_at)
     _aware("next_session_at", next_session_at)
     if next_session_at <= evaluation_at:
         raise ValueError("next_session_at must be after evaluation_at")
+    validate_strategy_identity(config, identity)
+    if session_sequence.calendar != config.calendar:
+        raise ValueError("session calendar must match strategy configuration")
+    session_sequence.transition_index(evaluation_at, next_session_at)
+    session_sequence.validate_roster_window(roster, next_session_at)
     if not symbol_history:
         raise ValueError("symbol_history must not be empty")
     symbol = symbol_history[0].symbol
+    if symbol not in config.universe:
+        raise ValueError("evaluated symbol must be in strategy universe")
+    if any(roster_symbol not in config.universe for roster_symbol in roster.symbols):
+        raise ValueError("roster symbols must be in strategy universe")
     _validate_history(symbol_history, symbol)
     _validate_history(spy_history, config.regime_symbol)
     if position is not None and position.symbol != symbol:
@@ -199,115 +322,142 @@ def evaluate_symbol(
 
     bars = _sliced(symbol_history, evaluation_at)
     spy_bars = _sliced(spy_history, evaluation_at)
-    active_roster = symbol in roster.symbols and roster.effective_at <= evaluation_at
+    active_roster = symbol in roster.symbols
     inputs_hash = bar_set_hash({symbol: bars, config.regime_symbol: spy_bars}, evaluation_at)
 
-    common = {
-        "symbol": symbol,
-        "evaluated_at": evaluation_at,
-        "eligible_from": next_session_at,
-        "active_roster": active_roster,
-        "strategy_id": identity.strategy_id,
-        "configuration_hash": identity.configuration_hash,
-        "input_cutoff": evaluation_at,
-        "bar_set_hash": inputs_hash,
-    }
-    current_bars_available = (
-        bars
-        and spy_bars
-        and bars[-1].timestamp == evaluation_at
-        and spy_bars[-1].timestamp == evaluation_at
-    )
-    if not current_bars_available:
-        return SignalDecision(
-            action=SignalAction.INELIGIBLE,
-            reasons=("STALE_OR_MISSING_BAR",),
-            momentum=None,
-            sma200=None,
-            entry_channel=None,
-            exit_channel=None,
-            atr=None,
-            regime_on=False,
-            **common,
-        )
+    asset_current = bars[-1] if bars and bars[-1].timestamp == evaluation_at else None
+    spy_current = spy_bars[-1] if spy_bars and spy_bars[-1].timestamp == evaluation_at else None
+    spy_trend = sma(spy_bars, config.trend_period) if spy_current is not None else None
 
-    momentum = momentum_12_1(bars, config.momentum_long, config.momentum_skip)
-    trend = sma(bars, config.trend_period)
-    spy_trend = sma(spy_bars, config.trend_period)
-    entry_channel = donchian_entry_level(bars, config.entry_period)
-    exit_channel = donchian_exit_level(bars, config.exit_period)
-    atr = wilder_atr(bars, config.atr_period)
-    if None in (momentum, trend, spy_trend, entry_channel, exit_channel, atr):
+    def make_decision(
+        action: SignalAction,
+        reasons: tuple[str, ...],
+        *,
+        momentum: Decimal | None = None,
+        trend: Decimal | None = None,
+        entry_channel: Decimal | None = None,
+        exit_channel: Decimal | None = None,
+        atr: Decimal | None = None,
+        regime_on: bool = False,
+        high_water: Decimal | None = None,
+        initial_stop_distance: Decimal | None = None,
+        trailing_stop: Decimal | None = None,
+    ) -> SignalDecision:
         return SignalDecision(
-            action=SignalAction.INELIGIBLE,
-            reasons=("WARMUP_INCOMPLETE",),
-            momentum=momentum,
-            sma200=trend,
-            entry_channel=entry_channel,
-            exit_channel=exit_channel,
-            atr=atr,
-            regime_on=False,
-            **common,
-        )
-
-    assert momentum is not None
-    assert trend is not None
-    assert spy_trend is not None
-    assert entry_channel is not None
-    assert exit_channel is not None
-    assert atr is not None
-    close = bars[-1].close
-    regime_on = spy_bars[-1].close > spy_trend
-
-    if position is None:
-        failed: list[str] = []
-        if not active_roster:
-            failed.append("NOT_IN_ACTIVE_ROSTER")
-        if not regime_on:
-            failed.append("REGIME_OFF")
-        if close <= trend:
-            failed.append("TREND_FILTER_FAILED")
-        if momentum <= 0:
-            failed.append("NON_POSITIVE_MOMENTUM")
-        if close <= entry_channel:
-            failed.append("ENTRY_CHANNEL_NOT_BROKEN")
-        action = SignalAction.HOLD if failed else SignalAction.ENTER
-        return SignalDecision(
+            symbol=symbol,
             action=action,
-            reasons=tuple(failed) if failed else ("ENTRY_BREAKOUT",),
+            reasons=reasons,
+            evaluated_at=evaluation_at,
+            eligible_from=next_session_at,
             momentum=momentum,
             sma200=trend,
             entry_channel=entry_channel,
             exit_channel=exit_channel,
             atr=atr,
             regime_on=regime_on,
+            active_roster=active_roster,
+            strategy_id=identity.strategy_id,
+            configuration_hash=identity.configuration_hash,
+            input_cutoff=evaluation_at,
+            bar_set_hash=inputs_hash,
+            asset_close=asset_current.close if asset_current is not None else None,
+            spy_close=spy_current.close if spy_current is not None else None,
+            spy_sma200=spy_trend,
+            high_water_since_entry=high_water,
+            prior_active_stop=position.active_stop if position is not None else None,
+            initial_stop_distance=initial_stop_distance,
+            trailing_stop=trailing_stop,
+        )
+
+    if asset_current is None or spy_current is None:
+        return make_decision(SignalAction.INELIGIBLE, ("STALE_OR_MISSING_BAR",))
+
+    momentum = momentum_12_1(bars, config.momentum_long, config.momentum_skip)
+    trend = sma(bars, config.trend_period)
+    entry_channel = donchian_entry_level(bars, config.entry_period)
+    exit_channel = donchian_exit_level(bars, config.exit_period)
+    atr = wilder_atr(bars, config.atr_period)
+    close = asset_current.close
+    regime_on = spy_trend is not None and spy_current.close > spy_trend
+
+    if position is None:
+        if None in (momentum, trend, spy_trend, entry_channel, exit_channel, atr):
+            return make_decision(
+                SignalAction.INELIGIBLE,
+                ("WARMUP_INCOMPLETE",),
+                momentum=momentum,
+                trend=trend,
+                entry_channel=entry_channel,
+                exit_channel=exit_channel,
+                atr=atr,
+                regime_on=regime_on,
+            )
+        assert momentum is not None
+        assert trend is not None
+        assert entry_channel is not None
+        assert exit_channel is not None
+        assert atr is not None
+        failed: list[str] = []
+        if not active_roster:
+            failed.append("NOT_IN_ACTIVE_ROSTER")
+        if config.market_regime_blocks_entries_only and not regime_on:
+            failed.append("REGIME_OFF")
+        if close <= trend:
+            failed.append("TREND_FILTER_FAILED")
+        if config.positive_momentum_required and momentum <= 0:
+            failed.append("NON_POSITIVE_MOMENTUM")
+        if close <= entry_channel:
+            failed.append("ENTRY_CHANNEL_NOT_BROKEN")
+        action = SignalAction.HOLD if failed else SignalAction.ENTER
+        return make_decision(
+            action,
+            tuple(failed) if failed else ("ENTRY_BREAKOUT",),
+            momentum=momentum,
+            trend=trend,
+            entry_channel=entry_channel,
+            exit_channel=exit_channel,
+            atr=atr,
+            regime_on=regime_on,
             initial_stop_distance=config.initial_stop_atr * atr if not failed else None,
-            **common,
         )
 
     high_water = highest_high_since(bars, position.entered_at)
     calculated_trail = position.initial_stop
-    if high_water is not None:
+    if high_water is not None and atr is not None:
         calculated_trail = high_water - config.trailing_stop_atr * atr
     trailing_stop = max(position.initial_stop, position.active_stop, calculated_trail)
     exit_reasons: list[str] = []
     if not active_roster:
         exit_reasons.append("ROSTER_EXIT")
-    if close <= trend:
+    if trend is not None and close <= trend:
         exit_reasons.append("TREND_EXIT")
-    if close < exit_channel:
+    if exit_channel is not None and close < exit_channel:
         exit_reasons.append("DONCHIAN_EXIT")
     if close <= trailing_stop:
         exit_reasons.append("TRAILING_STOP_EXIT")
-    return SignalDecision(
-        action=SignalAction.EXIT if exit_reasons else SignalAction.HOLD,
-        reasons=tuple(exit_reasons) if exit_reasons else ("POSITION_HELD",),
+
+    exit_warmup_incomplete = trend is None or exit_channel is None or atr is None
+    if exit_warmup_incomplete:
+        if exit_reasons:
+            exit_reasons.append("EXIT_WARMUP_INCOMPLETE")
+            action = SignalAction.EXIT
+            reasons = tuple(exit_reasons)
+        else:
+            action = SignalAction.INELIGIBLE
+            reasons = ("EXIT_WARMUP_INCOMPLETE",)
+    else:
+        action = SignalAction.EXIT if exit_reasons else SignalAction.HOLD
+        reasons = tuple(exit_reasons) if exit_reasons else ("POSITION_HELD",)
+
+    return make_decision(
+        action,
+        reasons,
         momentum=momentum,
-        sma200=trend,
+        trend=trend,
         entry_channel=entry_channel,
         exit_channel=exit_channel,
         atr=atr,
         regime_on=regime_on,
+        high_water=high_water,
         trailing_stop=trailing_stop,
-        **common,
     )
