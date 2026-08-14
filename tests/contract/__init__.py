@@ -1,0 +1,1 @@
+"""External protocol contract tests."""
