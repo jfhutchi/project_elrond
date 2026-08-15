@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import sys
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time
 from pathlib import Path
 
 from quantbot.config import Settings
@@ -83,7 +83,9 @@ async def main() -> int:
         batch = await client.get_historical_bars(query)
         aligned = align_daily_bars_to_session_closes(batch, sessions=closes)
         expected = tuple(session.close_at for session in window)
-        in_window = tuple(bar for bar in aligned.bars if expected[0] <= bar.timestamp <= expected[-1])
+        in_window = tuple(
+            bar for bar in aligned.bars if expected[0] <= bar.timestamp <= expected[-1]
+        )
         report = validate_bar_batch(
             aligned.model_copy(update={"bars": in_window}),
             expected_timestamps=expected,
