@@ -17,6 +17,13 @@ from quantbot.market_data.base import (
     TransportResponse,
 )
 from quantbot.market_data.cache import MarketDataCache
+from quantbot.market_data.calendar import (
+    ALPACA_PAPER_CALENDAR_URL,
+    AlpacaMarketCalendar,
+    latest_completed_session,
+    session_closes,
+    session_sequence,
+)
 from quantbot.market_data.stream import (
     AlpacaStockDataStream,
     StreamDisconnected,
@@ -41,7 +48,9 @@ from quantbot.market_data.validation import (
 )
 
 __all__ = [
+    "ALPACA_PAPER_CALENDAR_URL",
     "AdjustmentMode",
+    "AlpacaMarketCalendar",
     "AlpacaMarketDataClient",
     "AlpacaStockDataStream",
     "AsyncMarketDataTransport",
@@ -71,5 +80,8 @@ __all__ = [
     "WebsocketsConnection",
     "WebsocketsConnector",
     "align_daily_bars_to_session_closes",
+    "latest_completed_session",
+    "session_closes",
+    "session_sequence",
     "validate_bar_batch",
 ]

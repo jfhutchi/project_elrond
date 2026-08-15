@@ -1369,9 +1369,21 @@ class StorageRepository:
             return True
         if _row_matches(row, payload):
             return False
-        raise StateConflictError(
-            f"qualification day {strategy_id}:{payload['trading_date']} conflicts with stored data"
+        # A trading date can be observed by more than one run (a retry after a transient
+        # halt). That is the same observed day, not a conflict: the day stays qualified
+        # once any run qualified it, and the most recent run's detail is retained.
+        self._session.execute(
+            qualification_days.update()
+            .where(
+                qualification_days.c.strategy_id == strategy_id,
+                qualification_days.c.trading_date == payload["trading_date"],
+            )
+            .values(
+                qualified=bool(row["qualified"]) or qualified,
+                detail_json=payload["detail_json"],
+            )
         )
+        return False
 
     def get_qualification_day(
         self,
