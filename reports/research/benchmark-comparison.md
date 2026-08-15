@@ -1,5 +1,11 @@
 # Benchmark Comparison
 
+> SUPERSEDED. This is cycle 1, run over 5 years of IEX data (2020-07 → 2026-08). Cycle 2
+> repeated it over 10.6 years of SIP data covering two bear markets — see
+> [cycle-2-findings.md](cycle-2-findings.md). Numbers here are post-bugfix and correct for
+> their window, but the window is half the size and almost entirely a bull market.
+
+
 Generated at: 2026-08-15T14:01:41Z
 Strategy: adaptive-momentum 1.1.0 (config hash `b73083b817f76b8f`)
 Sessions: 1520 from 2020-07-27 to 2026-08-14 (273 of them consumed by warmup)

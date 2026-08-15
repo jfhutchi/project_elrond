@@ -302,8 +302,14 @@ def write_project_status(runtime: Runtime, *, next_priority: str) -> Path:
             known_limitations=(
                 "Fills are ingested from the broker REST ledger once per cycle; "
                 "the push trade stream is not held open between cycles",
+                "Four research cycles found no configuration of this strategy family that "
+                "beats SPY buy-and-hold on risk-adjusted return; see docs/agent-runbook.md",
+                "No untouched historical holdout remains; this account is now the only "
+                "clean out-of-sample data available",
             ),
-            research_underway=(),
+            research_underway=(
+                "Exposure normalisation for asset-class sleeves (not yet pre-registered)",
+            ),
             next_priority=next_priority,
             generated_at=datetime.now(UTC),
         ),

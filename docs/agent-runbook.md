@@ -189,6 +189,41 @@ Promoting any ablation-derived design requires threading component switches into
 `StrategyConfig` and `evaluate_symbol` first, as a new strategy version. Deliberately not
 built yet: it is only worth doing once a design actually passes its holdout.
 
+## Research conclusions to date — read before starting a new cycle
+
+Four cycles are complete. Re-running any of them is wasted effort; the findings are durable
+and the reports carry the numbers.
+
+**Nothing has been promoted.** No configuration of this strategy family has passed its
+pre-registered criteria, across 10.6 years, two bear markets and 31+ candidates.
+
+1. **The shipped strategy is the worst version of itself.** Its components fight each other:
+   the Donchian entry gate and ATR trailing stop hold exposure near 19%, and removing the
+   trailing stop was the single largest improvement found. Two components — `donchian_exit`
+   and `atr_risk` — are inert under the shipped config, because the trailing stop fires
+   before a channel exit can and the 10% position cap binds before ATR sizing does.
+2. **Single-strategy results here are statistically undetectable.** D7's holdout Sharpe of
+   1.223 carried a 95% interval of [-0.128, 2.574]. Separating its 0.074 margin over SPY
+   needs roughly 700 years of daily data. Any single-strategy Sharpe claim on 2 years of
+   daily bars is noise; compute the interval before believing one.
+3. **Correlation structure, not signal design, drives ensembles.** Momentum and short-horizon
+   reversal correlate 0.75 — long-only equity strategies share one beta and cannot diversify
+   each other. Confining the same signal to asset-class sleeves drops correlations to
+   0.05–0.22 and does produce a real, production-confirmed benefit: ensemble Sharpe 0.82
+   against its best sleeve's 0.69, drawdown 3.93% against 9.19%.
+4. **The ensemble still loses to buy-and-hold on risk-adjusted return** (0.82 vs 0.90), which
+   is why cycle 4 was not promoted. Note the sleeves run far below full exposure because of
+   the ATR and position caps; exposure normalisation is an open, unpre-registered hypothesis.
+
+**No untouched historical holdout remains.** The 2024-07 → 2026-08 window was consumed in
+cycle 2, and SIP history starts 2016-01-04. The live paper account is now the only clean
+out-of-sample data this project can obtain, which is the strongest reason to keep it running.
+
+Published context worth knowing: roughly half of an anomaly's alpha disappears after
+publication, momentum's premium has fallen from about 10% annually in the 1990s to about 2%,
+and trend systems structurally lag in bull markets. A negative result here is the expected
+outcome, not evidence of a defect.
+
 ## Known gaps / next work
 
 1. **No credentials, so zero elapsed paper observation.** This is the only thing standing

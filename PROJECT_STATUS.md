@@ -1,6 +1,6 @@
 # QuantBot Project Status
 
-Generated at: 2026-08-15T13:38:14Z
+Generated at: 2026-08-15T18:16:20Z
 
 | Field | Verified value |
 |---|---|
@@ -14,8 +14,8 @@ Generated at: 2026-08-15T13:38:14Z
 | Completed trades | 0 |
 | Current drawdown | 0.0000% |
 | Open bugs | NONE_OBSERVED |
-| Known limitations | Fills are ingested from the broker REST ledger once per cycle; the push trade stream is not held open between cycles |
-| Research underway | NONE |
+| Known limitations | Fills are ingested from the broker REST ledger once per cycle; the push trade stream is not held open between cycles; Four research cycles found no configuration of this strategy family that beats SPY buy-and-hold on risk-adjusted return; see docs/agent-runbook.md; No untouched historical holdout remains; this account is now the only clean out-of-sample data available |
+| Research underway | Exposure normalisation for asset-class sleeves (not yet pre-registered) |
 | Next highest-priority task | Resolve outstanding doctor reasons |
 
 Evidence policy: NOT_YET_OBSERVED is used whenever the durable ledger does not contain authentic forward evidence. Historical backtests never count as paper-trading observations.
