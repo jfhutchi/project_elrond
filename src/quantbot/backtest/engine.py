@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import ROUND_FLOOR, Decimal
+from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -33,7 +33,7 @@ from quantbot.backtest.metrics import (
     calculate_metrics,
 )
 from quantbot.domain import Bar, OrderSide
-from quantbot.risk import calculate_drawdown
+from quantbot.risk import calculate_drawdown, quantize_quantity
 from quantbot.strategy import (
     StrategyConfig,
     bar_set_hash,
@@ -342,9 +342,10 @@ class BacktestEngine:
                     target_bar = bars_by_symbol.get(symbol, {}).get(timestamp)
                     if target_bar is None:
                         continue
-                    target_quantities[symbol] = (
-                        open_equity * weight / target_bar.open
-                    ).to_integral_value(rounding=ROUND_FLOOR)
+                    target_quantities[symbol] = quantize_quantity(
+                        open_equity * weight / target_bar.open,
+                        self._config,
+                    )
                 for symbol in sorted(tuple(positions)):
                     target = target_quantities.get(symbol, Decimal("0"))
                     current = positions[symbol].quantity
@@ -502,7 +503,8 @@ class BacktestEngine:
                             )
                             / adverse_entry_price,
                             max(Decimal("0"), cash) / adverse_entry_price,
-                        ).to_integral_value(rounding=ROUND_FLOOR)
+                        )
+                        quantity = quantize_quantity(quantity, self._config)
                         if (
                             candidate.stop_distance is not None
                             and adverse_entry_price <= candidate.stop_distance

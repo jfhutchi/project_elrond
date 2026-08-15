@@ -14,6 +14,22 @@ from quantbot.strategy.config import StrategyConfig
 
 RiskSizingResult = RiskApproval | RiskRejection
 
+#: Brokers that support fractional shares still refuse orders below a small notional.
+MINIMUM_FRACTIONAL_NOTIONAL = Decimal("1")
+
+#: Alpaca accepts nine decimal places on ``qty``; six is ample and keeps values legible.
+FRACTIONAL_QUANTITY_EXPONENT = Decimal("0.000001")
+
+
+def quantize_quantity(quantity: Decimal, config: StrategyConfig) -> Decimal:
+    """Round an unconstrained share count down to a quantity the broker will accept.
+
+    Always rounds down, so quantization can only ever reduce exposure below a cap.
+    """
+    if config.allow_fractional_shares:
+        return quantity.quantize(FRACTIONAL_QUANTITY_EXPONENT, rounding=ROUND_FLOOR)
+    return quantity.to_integral_value(rounding=ROUND_FLOOR)
+
 
 def _rejection(
     request: EntrySizingRequest,
@@ -109,7 +125,7 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
         (SizingCapName.BUYING_POWER, caps.buying_power),
     )
     minimum = min(value for _, value in ordered_caps)
-    quantity = minimum.to_integral_value(rounding=ROUND_FLOOR)
+    quantity = quantize_quantity(minimum, config)
 
     exhausted_reasons = {
         SizingCapName.PER_TRADE_RISK: "TRADE_RISK_BUDGET_EXHAUSTED",
@@ -119,7 +135,10 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
         SizingCapName.BUYING_POWER: "BUYING_POWER_EXHAUSTED",
     }
     reasons = [exhausted_reasons[name] for name, value in ordered_caps if value <= 0]
-    if quantity < 1:
+    if config.allow_fractional_shares:
+        if quantity * request.reference_price < MINIMUM_FRACTIONAL_NOTIONAL:
+            reasons.append("NOTIONAL_BELOW_MINIMUM")
+    elif quantity < 1:
         reasons.append("QUANTITY_BELOW_ONE_SHARE")
     if reasons:
         return _rejection(request, reasons, caps)
@@ -129,6 +148,7 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
     return RiskApproval(
         symbol=request.symbol,
         quantity=quantity,
+        fractional_shares=config.allow_fractional_shares,
         stop_distance=request.stop_distance,
         drawdown_fraction=request.drawdown.drawdown_fraction,
         new_risk_multiplier=request.drawdown.new_risk_multiplier,

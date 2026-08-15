@@ -10,9 +10,23 @@ Adaptive Momentum V1: momentum rotation + long-term trend filter + market regime
 Donchian breakout + ATR risk management, trading through Alpaca **paper** only.
 `LIVE_TRADING` is disabled and only a human operator may ever change that.
 
-Strategy parameters live in `config/strategy-v1.yaml` and are immutable for the running
-version. Any material change is a NEW strategy version with a new `configuration_hash` and
-a new `strategy_id`; historical results are never overwritten.
+Strategy parameters live in `config/` and are immutable for the running version. Any
+material change is a NEW strategy version with a new `configuration_hash` and a new
+`strategy_id`; historical results are never overwritten.
+
+| Version | Config | strategy_id | Difference |
+|---|---|---|---|
+| 1.0.0 | `config/strategy-v1.yaml` | `adaptive-momentum-v1-7d04bc9cc0cb20e6` | Whole shares only |
+| 1.1.0 | `config/strategy-v1-1.yaml` | `adaptive-momentum-v1-b73083b817f76b8f` | Fractional shares enabled |
+
+The two configs differ in exactly two fields (`version`, `allow_fractional_shares`); every
+signal parameter is identical. 1.1.0 exists because whole-share sizing rejects every entry
+below roughly $3,000 of equity — the cheapest universe member needs $619 for one share
+under the 10% position cap. Point `QUANTBOT_CONFIG` at the version you intend to run.
+
+Sizing note: for this universe the `POSITION_VALUE` cap binds, not the ATR risk cap, so
+positions are effectively equal-weight 10%. The 0.5% ATR risk cap only becomes the binding
+constraint when 2×ATR exceeds 5% of price. That is scale-invariant and by design.
 
 ## Current state (2026-08-15)
 

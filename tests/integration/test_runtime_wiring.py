@@ -435,6 +435,9 @@ def test_build_runtime_fails_closed_without_paper_credentials(
 ) -> None:
     monkeypatch.setenv("QUANTBOT_CONFIG", str(_write_config(tmp_path)))
     monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
+    # Keep the test hermetic: a developer machine may have real credentials exported.
+    monkeypatch.delenv("ALPACA_PAPER_API_KEY", raising=False)
+    monkeypatch.delenv("ALPACA_PAPER_API_SECRET", raising=False)
 
     with pytest.raises(RuntimeConfigurationError, match="PAPER_CREDENTIALS_NOT_CONFIGURED"):
         build_runtime(Settings())

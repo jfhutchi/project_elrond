@@ -18,9 +18,15 @@ from quantbot.risk.models import (
     SizingCaps,
 )
 from quantbot.risk.portfolio import build_liquidation_plan, build_portfolio_risk_state
-from quantbot.risk.sizing import RiskSizingResult, size_entry
+from quantbot.risk.sizing import (
+    MINIMUM_FRACTIONAL_NOTIONAL,
+    RiskSizingResult,
+    quantize_quantity,
+    size_entry,
+)
 
 __all__ = [
+    "MINIMUM_FRACTIONAL_NOTIONAL",
     "DrawdownInputError",
     "DrawdownState",
     "EntrySizingRequest",
@@ -40,5 +46,6 @@ __all__ = [
     "build_portfolio_risk_state",
     "calculate_drawdown",
     "evaluate_order_gate",
+    "quantize_quantity",
     "size_entry",
 ]

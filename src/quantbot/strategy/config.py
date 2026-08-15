@@ -42,7 +42,8 @@ class StrategyConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     strategy_name: Literal["adaptive-momentum"]
-    version: Literal["1.0.0"]
+    # 1.0.0 is whole-share only; 1.1.0 is the same signal logic with fractional shares.
+    version: Literal["1.0.0", "1.1.0"]
     calendar: Literal["XNYS"]
     universe: tuple[str, ...]
     benchmark_symbol: str

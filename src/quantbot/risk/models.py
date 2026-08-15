@@ -159,10 +159,11 @@ class RiskApproval(RiskModel):
     projected_position_value: NonNegativeDecimal
     projected_gross_exposure: NonNegativeDecimal
     projected_open_risk: NonNegativeDecimal
+    fractional_shares: bool = False
 
     @model_validator(mode="after")
     def validate_whole_share_quantity(self) -> RiskApproval:
-        if self.quantity != self.quantity.to_integral_value():
+        if not self.fractional_shares and self.quantity != self.quantity.to_integral_value():
             raise ValueError("approved quantity must be a whole number of shares")
         return self
 
