@@ -344,6 +344,33 @@ class StorageRepository:
             detail=_decode_json(row["detail_json"]),
         )
 
+    def list_runs(self, *, strategy_id: str | None = None) -> list[RunRecord]:
+        statement = select(runs)
+        if strategy_id is not None:
+            statement = statement.where(runs.c.strategy_id == strategy_id)
+        rows = (
+            self._session.execute(statement.order_by(runs.c.started_at, runs.c.run_id))
+            .mappings()
+            .all()
+        )
+        records: list[RunRecord] = []
+        for row in rows:
+            finished_raw = row["finished_at"]
+            records.append(
+                RunRecord(
+                    run_id=str(row["run_id"]),
+                    strategy_id=str(row["strategy_id"]),
+                    strategy_version=str(row["strategy_version"]),
+                    status=str(row["status"]),
+                    started_at=decode_utc(str(row["started_at"])),
+                    finished_at=(
+                        decode_utc(str(finished_raw)) if finished_raw is not None else None
+                    ),
+                    detail=_decode_json(row["detail_json"]),
+                )
+            )
+        return records
+
     def save_bars(
         self,
         observations: Sequence[Bar],
@@ -961,6 +988,69 @@ class StorageRepository:
             positions=restored_positions,
         )
 
+    def list_account_snapshots(
+        self,
+        *,
+        account_id: str | None = None,
+    ) -> list[AccountSnapshotRecord]:
+        statement = select(account_snapshots.c.snapshot_id)
+        if account_id is not None:
+            statement = statement.where(account_snapshots.c.account_id == account_id)
+        snapshot_ids = self._session.execute(
+            statement.order_by(
+                account_snapshots.c.captured_at,
+                account_snapshots.c.snapshot_id,
+            )
+        ).scalars()
+        records: list[AccountSnapshotRecord] = []
+        for snapshot_id in snapshot_ids:
+            row = (
+                self._session.execute(
+                    select(account_snapshots).where(
+                        account_snapshots.c.snapshot_id == snapshot_id
+                    )
+                )
+                .mappings()
+                .one()
+            )
+            position_rows = (
+                self._session.execute(
+                    select(positions)
+                    .where(positions.c.snapshot_id == snapshot_id)
+                    .order_by(positions.c.symbol)
+                )
+                .mappings()
+                .all()
+            )
+            account = Account(
+                account_id=str(row["account_id"]),
+                cash=decode_decimal(str(row["cash"])),
+                buying_power=decode_decimal(str(row["buying_power"])),
+                equity=decode_decimal(str(row["equity"])),
+                currency=str(row["currency"]),
+            )
+            records.append(
+                AccountSnapshotRecord(
+                    snapshot_id=str(row["snapshot_id"]),
+                    run_id=str(row["run_id"]) if row["run_id"] is not None else None,
+                    captured_at=decode_utc(str(row["captured_at"])),
+                    account=account,
+                    positions=tuple(
+                        Position(
+                            symbol=str(position["symbol"]),
+                            quantity=decode_decimal(str(position["quantity"])),
+                            market_price=decode_decimal(str(position["market_price"])),
+                            market_value=decode_decimal(str(position["market_value"])),
+                            average_entry_price=decode_decimal(
+                                str(position["average_entry_price"])
+                            ),
+                        )
+                        for position in position_rows
+                    ),
+                )
+            )
+        return records
+
     def get_equity_snapshot(self, snapshot_id: str) -> EquitySnapshotRecord | None:
         row = (
             self._session.execute(
@@ -1137,6 +1227,23 @@ class StorageRepository:
         if reconciliation_id is None:
             return None
         return self.get_reconciliation(str(reconciliation_id))
+
+    def list_reconciliations(self) -> list[ReconciliationRecord]:
+        identifiers = self._session.execute(
+            select(reconciliation_runs.c.reconciliation_id).order_by(
+                reconciliation_runs.c.completed_at,
+                reconciliation_runs.c.reconciliation_id,
+            )
+        ).scalars()
+        records: list[ReconciliationRecord] = []
+        for identifier in identifiers:
+            record = self.get_reconciliation(str(identifier))
+            if record is None:
+                raise RecordNotFoundError(
+                    f"reconciliation disappeared while listing: {identifier}"
+                )
+            records.append(record)
+        return records
 
     def create_incident(
         self,
