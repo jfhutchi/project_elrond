@@ -187,6 +187,20 @@ class BacktestEngine:
             commission_per_order=config.commission_per_order,
         )
 
+    def _affordable(self, quantity: Decimal, unit_cost: Decimal, cash: Decimal) -> Decimal:
+        """Largest acceptable quantity whose estimated cost fits the available cash.
+
+        Solved directly rather than by decrementing: a whole-share decrement drives any
+        sub-one-share order negative, which silently skipped every cash-bound trade once
+        quantities became fractional.
+        """
+        if unit_cost <= 0:
+            return Decimal("0")
+        budget = cash - self._costs.commission_per_order
+        if budget <= 0:
+            return Decimal("0")
+        return min(quantity, quantize_quantity(budget / unit_cost, self._config))
+
     def run(
         self,
         histories: Mapping[str, Sequence[Bar]],
@@ -279,14 +293,18 @@ class BacktestEngine:
             allocated_entry_costs = position.entry_costs * fraction
             exit_costs = fill.commission + fill.slippage_cost
             gross_pnl = (fill.base_price - position.average_base_price) * fill.quantity
+            # Derive net from the same total the trade reports. Subtracting the two cost
+            # components separately associates differently and, once quantities are
+            # fractional, disagrees with gross - costs in the last decimal place.
+            total_costs = allocated_entry_costs + exit_costs
             trades.append(
                 TradeOutcome(
                     symbol=fill.symbol,
                     opened_at=position.entered_at,
                     closed_at=fill.occurred_at,
                     gross_pnl=gross_pnl,
-                    net_pnl=gross_pnl - allocated_entry_costs - exit_costs,
-                    costs=allocated_entry_costs + exit_costs,
+                    net_pnl=gross_pnl - total_costs,
+                    costs=total_costs,
                     notional=position.average_base_price * fill.quantity,
                 )
             )
@@ -378,16 +396,10 @@ class BacktestEngine:
                     if quantity <= 0:
                         continue
                     bar = current_bar(symbol, timestamp)
-                    while quantity > 0:
-                        estimated = (
-                            quantity
-                            * bar.open
-                            * (Decimal("1") + Decimal(self._costs.slippage_bps) / Decimal("10000"))
-                            + self._costs.commission_per_order
-                        )
-                        if estimated <= cash:
-                            break
-                        quantity -= 1
+                    unit_cost = bar.open * (
+                        Decimal("1") + Decimal(self._costs.slippage_bps) / Decimal("10000")
+                    )
+                    quantity = self._affordable(quantity, unit_cost, cash)
                     if quantity <= 0:
                         continue
                     order = SimulatedOrder(
@@ -510,14 +522,8 @@ class BacktestEngine:
                             and adverse_entry_price <= candidate.stop_distance
                         ):
                             continue
-                        while quantity > 0:
-                            estimated = (
-                                quantity * adverse_entry_price + self._costs.commission_per_order
-                            )
-                            if estimated <= cash:
-                                break
-                            quantity -= 1
-                        if quantity < 1:
+                        quantity = self._affordable(quantity, adverse_entry_price, cash)
+                        if quantity <= 0:
                             continue
                         order = SimulatedOrder(
                             order_id=next_order_id(timestamp, candidate.symbol, "ENTRY"),
