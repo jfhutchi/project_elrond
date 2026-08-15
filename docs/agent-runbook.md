@@ -159,6 +159,36 @@ quantbot backtest --variant FULL_STRATEGY
 Runs against the durable bar cache, so `sync-data` must have run first. Omit `--variant` to
 run all six required comparison variants.
 
+## Research
+
+Two databases, deliberately separate. `quantbot.db` is the operational ledger and its bar
+cache feeds the `bar_set_hash` recorded against live signals. `research/bars.db` holds long
+history and must never be merged into it, or live audit provenance changes retroactively.
+
+```bash
+QUANTBOT_MARKET_DATA_FEED=sip uv run python scripts/fetch_research_bars.py 2016-01-01 research/bars.db
+```
+
+```bash
+QUANTBOT_MARKET_DATA_FEED=sip uv run python -u scripts/run_research_experiment.py research/bars.db 100 5
+```
+
+The `sip` feed reaches 2016-01-04 for all 23 symbols; `iex` is only usable from 2020-07-27.
+Live trading stays on `iex` (measured divergence in daily OHLC on these ETFs is 0.003–0.04%
+median, so it does not affect signals). Use `-u`: the harness buffers output otherwise and
+a long run appears to hang.
+
+Findings are recorded in `reports/research/`, with each study pinned by an immutable
+`ExperimentManifest` hashing the config, the bar set and the git commit.
+
+**Promotion blocker to know about before designing a research cycle:** `ComponentSwitches`
+exists only in the backtest engine. The live `evaluate_symbol` hardcodes every filter — the
+Donchian entry gate, the trend filter, the regime filter and the trailing stop are always
+applied. The backtester can therefore simulate designs the live system cannot execute.
+Promoting any ablation-derived design requires threading component switches into
+`StrategyConfig` and `evaluate_symbol` first, as a new strategy version. Deliberately not
+built yet: it is only worth doing once a design actually passes its holdout.
+
 ## Known gaps / next work
 
 1. **No credentials, so zero elapsed paper observation.** This is the only thing standing
