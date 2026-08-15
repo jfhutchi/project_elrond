@@ -177,6 +177,7 @@ def main() -> int:
     db_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_DB
     initial_cash = Decimal(sys.argv[2]) if len(sys.argv) > 2 else Decimal("100")
     folds_requested = int(sys.argv[3]) if len(sys.argv) > 3 else DEFAULT_FOLDS
+    label = sys.argv[4] if len(sys.argv) > 4 else "walkforward"
 
     base_config = load_strategy_config(runtime_paths().config)
     feed = market_data_settings()
@@ -343,13 +344,16 @@ def main() -> int:
     )
     print()
     print("HOLDOUT (evaluated once, never used for selection)")
-    for label, metrics in (("selected", holdout_metrics), ("SPY buy & hold", holdout_benchmark)):
+    for row_label, metrics in (
+        ("selected", holdout_metrics),
+        ("SPY buy & hold", holdout_benchmark),
+    ):
         if metrics is None:
-            print(f"  {label:16} insufficient data")
+            print(f"  {row_label:16} insufficient data")
             continue
         trades = metrics.winners + metrics.losers
         print(
-            f"  {label:16} return {_fmt(metrics.total_return, percent=True):>9}"
+            f"  {row_label:16} return {_fmt(metrics.total_return, percent=True):>9}"
             f"  maxDD {_fmt(metrics.maximum_drawdown, percent=True):>8}"
             f"  Sharpe {_fmt(metrics.sharpe):>6}  trades {trades:>4}"
         )
@@ -377,7 +381,7 @@ def main() -> int:
         }
 
     manifest = ExperimentManifest(
-        experiment_id=f"walkforward-{sessions[-1].date().isoformat()}",
+        experiment_id=f"{label}-{sessions[-1].date().isoformat()}",
         git_commit=commit or "unknown",
         data_hash=bar_set_hash(histories),
         configuration_hash=configuration_hash(base_config),
