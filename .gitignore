@@ -19,3 +19,4 @@ htmlcov/
 *.db*
 logs/*
 !logs/.gitkeep
+quantbot.lock
