@@ -45,7 +45,7 @@ from quantbot.strategy import StrategyConfig, bar_set_hash, configuration_hash, 
 
 DEFAULT_DB = Path("research") / "bars.db"
 HOLDOUT_FRACTION = Decimal("0.20")
-FOLDS = 3
+DEFAULT_FOLDS = 3
 
 #: Components switched off one at a time, from the full strategy.
 ABLATIONS = (
@@ -57,6 +57,56 @@ ABLATIONS = (
     "trailing_stop",
     "roster_exit",
 )
+
+#: Cycle-2 pre-registered whole designs. See reports/research/cycle-2-hypotheses.md.
+#: Cycle 1 varied components one at a time, which measures marginal contribution but
+#: cannot see interactions: the entry gate and the trailing stop both push toward cash,
+#: so removing either alone leaves the other still suppressing exposure.
+_OFF = dict.fromkeys(
+    (
+        "momentum",
+        "asset_trend",
+        "market_regime",
+        "donchian_entry",
+        "donchian_exit",
+        "atr_risk",
+        "trailing_stop",
+        "roster_exit",
+    ),
+    False,
+)
+DESIGNS: dict[str, ComponentSwitches] = {
+    "D1-dual-momentum": ComponentSwitches(
+        **{**_OFF, "momentum": True, "market_regime": True, "roster_exit": True}
+    ),
+    "D2-relative-only": ComponentSwitches(**{**_OFF, "momentum": True, "roster_exit": True}),
+    "D3-momentum-trend": ComponentSwitches(
+        **{**_OFF, "momentum": True, "asset_trend": True, "roster_exit": True}
+    ),
+    "D4-both-filters": ComponentSwitches(
+        **{
+            **_OFF,
+            "momentum": True,
+            "asset_trend": True,
+            "market_regime": True,
+            "roster_exit": True,
+        }
+    ),
+    "D5-no-trailing-stop": ComponentSwitches.full().model_copy(update={"trailing_stop": False}),
+    "D6-no-gate-no-stop": ComponentSwitches.full().model_copy(
+        update={"donchian_entry": False, "trailing_stop": False}
+    ),
+    "D7-dual-plus-atr": ComponentSwitches(
+        **{
+            **_OFF,
+            "momentum": True,
+            "market_regime": True,
+            "roster_exit": True,
+            "atr_risk": True,
+        }
+    ),
+    "D8-full": ComponentSwitches.full(),
+}
 
 #: One-at-a-time parameter neighbourhood around the shipped values.
 NEIGHBOURHOOD: dict[str, tuple[int, ...]] = {
@@ -126,6 +176,7 @@ def _fmt(value: Decimal | None, places: int = 2, percent: bool = False) -> str:
 def main() -> int:
     db_path = Path(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_DB
     initial_cash = Decimal(sys.argv[2]) if len(sys.argv) > 2 else Decimal("100")
+    folds_requested = int(sys.argv[3]) if len(sys.argv) > 3 else DEFAULT_FOLDS
 
     base_config = load_strategy_config(runtime_paths().config)
     feed = market_data_settings()
@@ -150,17 +201,18 @@ def main() -> int:
     }
     sessions = sorted(common)
     warmup = base_config.momentum_long + base_config.momentum_skip
-    if len(sessions) <= warmup + FOLDS * 30:
+    folds_count = folds_requested
+    if len(sessions) <= warmup + folds_count * 30:
         print("not enough research history for a walk-forward study")
         return 1
 
     holdout_count = int(len(sessions) * HOLDOUT_FRACTION)
     holdout_start = sessions[-holdout_count]
     selection = sessions[warmup:-holdout_count]
-    fold_size = len(selection) // FOLDS
+    fold_size = len(selection) // folds_count
     folds = [
         (selection[index * fold_size], selection[(index + 1) * fold_size - 1])
-        for index in range(FOLDS)
+        for index in range(folds_count)
     ]
 
     print(f"sessions        {len(sessions)}  {sessions[0].date()} .. {sessions[-1].date()}")
@@ -182,6 +234,8 @@ def main() -> int:
                 variant,
             )
         )
+    for name, switches in DESIGNS.items():
+        candidates.append(Candidate(f"design:{name}", base_config, switches))
     for component in ABLATIONS:
         candidates.append(
             Candidate(
@@ -208,10 +262,8 @@ def main() -> int:
         candidate.equity = result.equity_curve
         candidate.trades = result.trades
 
-    header = (
-        f"{'candidate':34}{'fold1 Sh':>10}{'fold2 Sh':>10}{'fold3 Sh':>10}"
-        f"{'med Sh':>9}{'med DD':>9}{'med ret':>9}"
-    )
+    fold_headers = "".join(f"{'f' + str(i) + ' Sh':>8}" for i in range(1, folds_count + 1))
+    header = f"{'candidate':34}{fold_headers}{'med Sh':>9}{'med DD':>9}{'med ret':>9}"
     print()
     print(header)
     print("-" * len(header))
@@ -223,13 +275,13 @@ def main() -> int:
         sharpes = [m.sharpe for m in fold_metrics if m is not None and m.sharpe is not None]
         drawdowns = [m.maximum_drawdown for m in fold_metrics if m is not None]
         returns = [m.total_return for m in fold_metrics if m is not None]
-        if len(sharpes) < FOLDS or len(drawdowns) < FOLDS:
+        if len(sharpes) < folds_count or len(drawdowns) < folds_count:
             print(f"{candidate.name:34}{'insufficient window coverage':>48}")
             continue
         median_sharpe = statistics.median(sharpes)
         median_drawdown = statistics.median(drawdowns)
         median_return = statistics.median(returns)
-        cells = "".join(f"{_fmt(value):>10}" for value in sharpes)
+        cells = "".join(f"{_fmt(value):>8}" for value in sharpes)
         print(
             f"{candidate.name:34}{cells}{_fmt(median_sharpe):>9}"
             f"{_fmt(median_drawdown, percent=True):>9}{_fmt(median_return, percent=True):>9}"
@@ -245,6 +297,42 @@ def main() -> int:
     print()
     print("selection rule: highest median fold Sharpe, then lower median drawdown")
     print(f"selected: {winner.name}")
+
+    # Promotion criterion 4: a design that only works at one parameter setting is a curve
+    # fit. Move the winner one step in each direction and require it to keep beating the
+    # shipped strategy, which is the last row of the reference set.
+    shipped = next(
+        (row[0] for row in scored if row[2] in {"design:D8-full", "benchmark:FULL_STRATEGY"}),
+        Decimal("0"),
+    )
+    print()
+    print(f"robustness of {winner.name} (must stay above shipped median Sharpe {_fmt(shipped)})")
+    robust = True
+    for parameter in ("momentum_long", "roster_size"):
+        for value in NEIGHBOURHOOD[parameter]:
+            if getattr(winner.config, parameter) == value:
+                continue
+            varied = _config_with(winner.config, **{parameter: value})
+            if varied is None:
+                continue
+            probe = BacktestEngine(varied, initial_cash=initial_cash).run(
+                histories, winner.variant, component_switches=winner.switches
+            )
+            probe_sharpes = [
+                m.sharpe
+                for m in (
+                    _window_metrics(probe.equity_curve, probe.trades, start, end)
+                    for start, end in folds
+                )
+                if m is not None and m.sharpe is not None
+            ]
+            if len(probe_sharpes) < folds_count:
+                continue
+            median = statistics.median(probe_sharpes)
+            verdict = "ok" if median > shipped else "FAILS"
+            robust = robust and median > shipped
+            print(f"  {parameter}={value:<6} median Sharpe {_fmt(median):>7}  {verdict}")
+    print(f"  neighbourhood verdict: {'ROBUST' if robust else 'KNIFE-EDGE'}")
 
     holdout_metrics = _window_metrics(
         winner.equity, winner.trades, holdout_start, sessions[-1]
