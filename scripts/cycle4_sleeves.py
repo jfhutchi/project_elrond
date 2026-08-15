@@ -24,6 +24,8 @@ from quantbot.strategy import StrategyConfig, load_strategy_config
 
 PERIODS_PER_YEAR = 252
 
+NORMALISE_EXPOSURE = "--normalise" in sys.argv  # cycle 5: raise caps to full investment
+
 SLEEVES: dict[str, tuple[tuple[str, ...], int]] = {
     "equity": (
         ("SPY", "QQQ", "IWM", "MDY", "EFA", "EEM", "XLB", "XLE", "XLF",
@@ -76,11 +78,15 @@ def _drawdown(equity: list[float]) -> float:
 def _sleeve_config(base: StrategyConfig, universe: tuple[str, ...], hold: int) -> StrategyConfig:
     payload = base.model_dump(mode="python")
     payload.update({"version": "1.2.0", "universe": universe, "roster_size": hold})
+    if NORMALISE_EXPOSURE:
+        # Full investment for a sleeve holding `hold` names, so cash drag is removed.
+        payload["max_position_value_bps"] = 10000 // hold
     return StrategyConfig.model_validate(payload)
 
 
 def main() -> int:
-    db_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("research") / "bars.db"
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    db_path = Path(args[0]) if args else Path("research") / "bars.db"
     base = load_strategy_config(runtime_paths().config)
     feed = market_data_settings()
     key = MarketDataCache.provider_key(feed.provider, feed.feed, feed.adjustment, feed.timeframe)
@@ -118,7 +124,8 @@ def main() -> int:
     for value in ensemble:
         ensemble_equity.append(ensemble_equity[-1] * (1 + value))
 
-    print("PRODUCTION ENGINE — sleeves and ensemble")
+    label = "EXPOSURE-NORMALISED" if NORMALISE_EXPOSURE else "CAPPED (cycle 4)"
+    print(f"PRODUCTION ENGINE — sleeves and ensemble [{label}]")
     print(f"  {'series':18}{'final':>10}{'Sharpe':>8}{'maxDD':>9}   {'95% CI':>18}")
     rows: dict[str, tuple[float, float, float]] = {}
     for name in [*sleeve_names, "SPY buy & hold"]:
