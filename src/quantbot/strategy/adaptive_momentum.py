@@ -397,16 +397,17 @@ def evaluate_symbol(
         assert entry_channel is not None
         assert exit_channel is not None
         assert atr is not None
+        components = config.components
         failed: list[str] = []
-        if not active_roster:
+        if components.momentum and not active_roster:
             failed.append("NOT_IN_ACTIVE_ROSTER")
-        if config.market_regime_blocks_entries_only and not regime_on:
+        if components.market_regime and config.market_regime_blocks_entries_only and not regime_on:
             failed.append("REGIME_OFF")
-        if close <= trend:
+        if components.asset_trend and close <= trend:
             failed.append("TREND_FILTER_FAILED")
-        if config.positive_momentum_required and momentum <= 0:
+        if components.momentum and config.positive_momentum_required and momentum <= 0:
             failed.append("NON_POSITIVE_MOMENTUM")
-        if close <= entry_channel:
+        if components.donchian_entry and close <= entry_channel:
             failed.append("ENTRY_CHANNEL_NOT_BROKEN")
         action = SignalAction.HOLD if failed else SignalAction.ENTER
         return make_decision(
@@ -426,14 +427,15 @@ def evaluate_symbol(
     if high_water is not None and atr is not None:
         calculated_trail = high_water - config.trailing_stop_atr * atr
     trailing_stop = max(position.initial_stop, position.active_stop, calculated_trail)
+    components = config.components
     exit_reasons: list[str] = []
-    if not active_roster:
+    if components.roster_exit and not active_roster:
         exit_reasons.append("ROSTER_EXIT")
-    if trend is not None and close <= trend:
+    if components.asset_trend and trend is not None and close <= trend:
         exit_reasons.append("TREND_EXIT")
-    if exit_channel is not None and close < exit_channel:
+    if components.donchian_exit and exit_channel is not None and close < exit_channel:
         exit_reasons.append("DONCHIAN_EXIT")
-    if close <= trailing_stop:
+    if components.trailing_stop and close <= trailing_stop:
         exit_reasons.append("TRAILING_STOP_EXIT")
 
     exit_warmup_incomplete = trend is None or exit_channel is None or atr is None

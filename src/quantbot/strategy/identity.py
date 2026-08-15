@@ -10,7 +10,7 @@ from decimal import Decimal
 from typing import Any
 
 from quantbot.domain import Bar, StrategyIdentity
-from quantbot.strategy.config import StrategyConfig
+from quantbot.strategy.config import StrategyComponents, StrategyConfig
 
 
 def _decimal_string(value: Decimal) -> str:
@@ -42,8 +42,18 @@ def _canonical_json(value: Any) -> str:
 
 
 def canonical_configuration(config: StrategyConfig) -> str:
-    """Serialize a strategy config with semantic Decimal normalization."""
-    return _canonical_json(config.model_dump(mode="python"))
+    """Serialize a strategy config with semantic Decimal normalization.
+
+    Component switches are omitted while they hold their defaults. They were added after
+    1.0.0 and 1.1.0 were deployed, and defaults reproduce the behaviour those versions
+    already had, so omitting them keeps their identity byte-identical. Adding the
+    capability therefore cannot silently re-version a strategy that is already running,
+    while a configuration that actually changes a component does get a new identity.
+    """
+    payload = config.model_dump(mode="python")
+    if payload.get("components") == StrategyComponents().model_dump(mode="python"):
+        payload.pop("components", None)
+    return _canonical_json(payload)
 
 
 def configuration_hash(config: StrategyConfig) -> str:

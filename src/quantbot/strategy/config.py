@@ -36,6 +36,25 @@ DEFAULT_UNIVERSE = (
 )
 
 
+class StrategyComponents(BaseModel):
+    """Which signal gates are active.
+
+    The backtest engine has always been able to switch these; the live strategy could not,
+    so research could recommend a configuration the account was unable to trade. Every
+    field defaults to enabled, so an existing configuration behaves exactly as before.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    momentum: bool = True
+    asset_trend: bool = True
+    market_regime: bool = True
+    donchian_entry: bool = True
+    donchian_exit: bool = True
+    trailing_stop: bool = True
+    roster_exit: bool = True
+
+
 class StrategyConfig(BaseModel):
     """Immutable adaptive-momentum V1 configuration."""
 
@@ -73,6 +92,7 @@ class StrategyConfig(BaseModel):
     idle_cash_rate_bps: int = Field(ge=0)
     allow_fractional_shares: bool
     allow_pyramiding: bool
+    components: StrategyComponents = StrategyComponents()
 
     @field_validator("universe")
     @classmethod
