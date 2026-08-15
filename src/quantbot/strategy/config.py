@@ -42,8 +42,9 @@ class StrategyConfig(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     strategy_name: Literal["adaptive-momentum"]
-    # 1.0.0 is whole-share only; 1.1.0 is the same signal logic with fractional shares.
-    version: Literal["1.0.0", "1.1.0"]
+    # 1.0.0 whole-share only; 1.1.0 adds fractional shares; 1.2.0 allows the regime symbol
+    # to sit outside the tradeable universe, which is what an asset-class sleeve needs.
+    version: Literal["1.0.0", "1.1.0", "1.2.0"]
     calendar: Literal["XNYS"]
     universe: tuple[str, ...]
     benchmark_symbol: str
@@ -85,8 +86,6 @@ class StrategyConfig(BaseModel):
             raise ValueError("universe symbols must be nonempty uppercase values")
         if len(set(value)) != len(value):
             raise ValueError("universe symbols must be unique")
-        if "SPY" not in value:
-            raise ValueError("universe must include SPY")
         return value
 
     @field_validator("benchmark_symbol", "regime_symbol")
@@ -100,7 +99,10 @@ class StrategyConfig(BaseModel):
     def validate_relationships(self) -> Self:
         if self.benchmark_symbol != "SPY" or self.regime_symbol != "SPY":
             raise ValueError("benchmark_symbol and regime_symbol must both be SPY for V1")
-        if self.benchmark_symbol not in self.universe or self.regime_symbol not in self.universe:
+        # Before 1.2.0 the regime symbol had to be tradeable, which made an asset-class
+        # sleeve inexpressible: a bond sleeve measures the equity regime without holding it.
+        # Callers must supply regime history separately when it is outside the universe.
+        if self.version in {"1.0.0", "1.1.0"} and self.regime_symbol not in self.universe:
             raise ValueError("benchmark and regime symbols must be in universe")
         if self.roster_size > len(self.universe):
             raise ValueError("roster_size cannot exceed universe size")
