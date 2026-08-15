@@ -1,0 +1,77 @@
+# Adaptive-momentum V1.2: fractional shares, plus the component set measured best
+# among live-expressible configurations whose historical drawdown stays inside the
+# configured 20% halt threshold. Momentum ranking + asset trend filter + roster exit.
+# The Donchian entry gate and ATR trailing stop are disabled: cycles 1-5 measured
+# them holding exposure near 19% and destroying the momentum signal.
+strategy_name: adaptive-momentum
+version: 1.2.0
+calendar: XNYS
+
+# Proposed versioned universe and benchmark defaults.
+universe:
+  - SPY
+  - QQQ
+  - IWM
+  - MDY
+  - EFA
+  - EEM
+  - VNQ
+  - XLB
+  - XLE
+  - XLF
+  - XLI
+  - XLK
+  - XLP
+  - XLU
+  - XLV
+  - XLY
+  - DBC
+  - GLD
+  - TLT
+  - IEF
+  - TIP
+  - LQD
+  - HYG
+benchmark_symbol: SPY
+regime_symbol: SPY
+roster_size: 10
+
+# Proposed versioned signal and risk defaults.
+momentum_long: 252
+momentum_skip: 21
+trend_period: 200
+entry_period: 55
+exit_period: 20
+atr_period: 20
+initial_stop_atr: 2
+trailing_stop_atr: 3
+rotation_frequency: monthly
+positive_momentum_required: true
+market_regime_blocks_entries_only: true
+
+# Proposed versioned portfolio-risk defaults, expressed in basis points.
+risk_per_trade_bps: 50
+max_open_risk_bps: 500
+max_position_value_bps: 1000
+max_gross_exposure_bps: 10000
+max_positions: 20
+drawdown_thresholds_bps: [500, 1000, 1500, 2000]
+drawdown_multipliers_bps: [10000, 7500, 5000, 0, 0]
+
+# Proposed versioned execution and accounting assumptions.
+slippage_bps: 5  # Applied on each side.
+commission_per_order: 0
+idle_cash_rate_bps: 0
+allow_fractional_shares: true
+allow_pyramiding: false
+
+# Which signal gates are active. Defaults are all-enabled; this version deliberately
+# disables the two that research measured as harmful.
+components:
+  momentum: true
+  asset_trend: true
+  market_regime: false
+  donchian_entry: false
+  donchian_exit: false
+  trailing_stop: false
+  roster_exit: true
