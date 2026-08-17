@@ -38,7 +38,9 @@ from quantbot.domain import (
 from quantbot.domain.ids import build_client_order_id
 from quantbot.execution import ExecutionCoordinator, StartupRecovery
 from quantbot.market_data import (
+    CRYPTO_ADJUSTMENT,
     AdjustmentMode,
+    AlpacaCryptoDataClient,
     AlpacaMarketCalendar,
     AlpacaMarketDataClient,
     HttpxMarketDataTransport,
@@ -49,6 +51,7 @@ from quantbot.market_data import (
 from quantbot.operations import (
     AdaptiveMomentumRunner,
     CachedSessionCalendar,
+    CryptoSessionCalendar,
     DaemonRunner,
     DataFreshness,
     HealthInputs,
@@ -59,6 +62,7 @@ from quantbot.operations import (
     QualificationTracker,
     ReadinessEvidence,
     RunOnceCycle,
+    SessionCalendar,
     StrategyDataError,
     evaluate_operational_health,
 )
@@ -187,8 +191,8 @@ class Runtime:
     paths: RuntimePaths
     database: Database
     broker: AlpacaPaperBrokerAdapter
-    market_data: AlpacaMarketDataClient
-    sessions: CachedSessionCalendar
+    market_data: AlpacaMarketDataClient | AlpacaCryptoDataClient
+    sessions: SessionCalendar
     data_sync: MarketDataSync
     strategy: AdaptiveMomentumRunner
     recovery: LedgerSyncingRecovery
@@ -240,15 +244,27 @@ def build_runtime(
         api_secret=secret,
         transport=broker_transport,
     )
-    market_data = AlpacaMarketDataClient(
-        api_key=key,
-        api_secret=secret,
-        transport=data_transport,
-    )
-    sessions = CachedSessionCalendar(
-        AlpacaMarketCalendar(api_key=key, api_secret=secret, transport=data_transport)
-    )
-    settings_for_data = market_data_settings()
+    # The calendar the strategy declares selects both its data source and its session model.
+    # Crypto has no calendar to fetch and no feed or adjustment to choose, so pairing them
+    # here keeps the provider key that identifies cached bars truthful for either market.
+    if config.calendar == "CRYPTO24":
+        market_data: AlpacaMarketDataClient | AlpacaCryptoDataClient = AlpacaCryptoDataClient(
+            api_key=key, api_secret=secret, transport=data_transport
+        )
+        sessions: SessionCalendar = CryptoSessionCalendar()
+        settings_for_data = MarketDataSettings(
+            feed=MarketDataFeed.CRYPTO,
+            adjustment=CRYPTO_ADJUSTMENT,
+            provider=AlpacaCryptoDataClient.provider,
+        )
+    else:
+        market_data = AlpacaMarketDataClient(
+            api_key=key, api_secret=secret, transport=data_transport
+        )
+        sessions = CachedSessionCalendar(
+            AlpacaMarketCalendar(api_key=key, api_secret=secret, transport=data_transport)
+        )
+        settings_for_data = market_data_settings()
     return Runtime(
         settings=active_settings,
         config=config,

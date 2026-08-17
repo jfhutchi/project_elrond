@@ -168,6 +168,17 @@ class AsyncMarketDataTransport(Protocol):
 Sleeper = Callable[[Decimal], Awaitable[None]]
 
 
+class BarSource(Protocol):
+    """Anything that can return completed bars for a query.
+
+    Narrower than HistoricalMarketDataClient on purpose: the daily cycle only fetches
+    bars, and depending on the wider interface would exclude the crypto client for
+    methods nothing calls.
+    """
+
+    async def get_historical_bars(self, query: BarQuery) -> MarketDataBatch: ...
+
+
 class HistoricalMarketDataClient(Protocol):
     async def get_historical_bars(self, query: BarQuery) -> MarketDataBatch: ...
 

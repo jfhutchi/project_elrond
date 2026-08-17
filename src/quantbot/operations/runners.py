@@ -29,8 +29,8 @@ from quantbot.execution import StartupRecovery, StartupRecoveryResult
 from quantbot.execution.recovery import is_open_order
 from quantbot.market_data import (
     AdjustmentMode,
-    AlpacaMarketDataClient,
     BarQuery,
+    BarSource,
     MarketDataCache,
     MarketDataFeed,
     align_daily_bars_to_session_closes,
@@ -38,6 +38,8 @@ from quantbot.market_data import (
 )
 from quantbot.market_data.calendar import (
     AlpacaMarketCalendar,
+    crypto_session_sequence,
+    crypto_sessions,
     latest_completed_session,
     session_closes,
     session_sequence,
@@ -61,6 +63,7 @@ from quantbot.strategy import (
     SignalAction,
     StrategyConfig,
     XNYSSession,
+    XNYSSessionSequence,
     build_monthly_roster,
     evaluate_symbol,
     wilder_atr,
@@ -130,6 +133,52 @@ class CachedSessionCalendar:
             )
             self._cached_on = today
         return self._sessions
+
+
+class CryptoSessionCalendar:
+    """Synthesise 24/7 sessions, satisfying the same interface as the broker calendar.
+
+    A 24/7 market has no calendar to fetch: every UTC day is a session. Presenting that
+    through the same `sessions()` coroutine lets the cycle runners stay identical for both
+    markets rather than branching internally on which calendar they are trading.
+    """
+
+    def __init__(
+        self,
+        *,
+        lookback_days: int = 900,
+        lookahead_days: int = 60,
+        clock: Clock = _utcnow,
+    ) -> None:
+        if lookback_days <= 0 or lookahead_days <= 0:
+            raise ValueError("calendar windows must be positive")
+        self._lookback_days = lookback_days
+        self._lookahead_days = lookahead_days
+        self._clock = clock
+
+    async def sessions(self) -> tuple[XNYSSession, ...]:
+        today = self._clock().astimezone(UTC).date()
+        return crypto_sessions(
+            today - timedelta(days=self._lookback_days),
+            today + timedelta(days=self._lookahead_days),
+        )
+
+
+SessionCalendar = CachedSessionCalendar | CryptoSessionCalendar
+
+
+def sequence_for(
+    config: StrategyConfig, sessions: tuple[XNYSSession, ...]
+) -> XNYSSessionSequence:
+    """Build the session sequence stamped with the config's own calendar.
+
+    The sequence carries a calendar label that the roster validates against, so an XNYS
+    builder used on a 24/7 strategy fails at roster-window validation rather than anywhere
+    informative. Selecting on the config keeps that impossible.
+    """
+    if config.calendar == "CRYPTO24":
+        return crypto_session_sequence(sessions)
+    return session_sequence(sessions)
 
 
 def _fill_ledger_positions(fills: Sequence[Fill]) -> dict[str, Decimal]:
@@ -266,8 +315,8 @@ class MarketDataSync:
         self,
         *,
         database: Database,
-        client: AlpacaMarketDataClient,
-        sessions: CachedSessionCalendar,
+        client: BarSource,
+        sessions: SessionCalendar,
         config: StrategyConfig,
         market_data: MarketDataSettings | None = None,
         clock: Clock = _utcnow,
@@ -307,7 +356,9 @@ class MarketDataSync:
         batch = await self._client.get_historical_bars(query)
         aligned = align_daily_bars_to_session_closes(
             batch,
-            sessions=session_closes(tuple(calendar_sessions)),
+            sessions=session_closes(
+                tuple(calendar_sessions), calendar=self._config.calendar
+            ),
         )
         expected = tuple(session.close_at for session in window)
         in_window = tuple(bar for bar in aligned.bars if bar.timestamp >= expected[0])
@@ -346,7 +397,7 @@ class AdaptiveMomentumRunner:
         broker: BrokerAdapter,
         config: StrategyConfig,
         identity: StrategyIdentity,
-        sessions: CachedSessionCalendar,
+        sessions: SessionCalendar,
         market_data: MarketDataSettings | None = None,
         clock: Clock = _utcnow,
     ) -> None:
@@ -412,7 +463,7 @@ class AdaptiveMomentumRunner:
             evaluation_at,
             calendar_sessions[effective_index].open_at,
             self._config,
-            session_sequence=session_sequence(calendar_sessions),
+            session_sequence=sequence_for(self._config, calendar_sessions),
         )
 
     def _prior_position_state(
@@ -508,7 +559,7 @@ class AdaptiveMomentumRunner:
         histories = self._load_histories()
         sliced = self._slice(histories, evaluation_at)
         roster = self._roster(histories, calendar_sessions, evaluation_index + 1)
-        sequence = session_sequence(calendar_sessions)
+        sequence = sequence_for(self._config, calendar_sessions)
 
         account_snapshot = await self._broker.get_account()
         positions = {

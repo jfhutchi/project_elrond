@@ -12,6 +12,7 @@ from zoneinfo import ZoneInfo
 
 from pydantic import SecretStr, ValidationError
 
+from quantbot.domain import TradingCalendar
 from quantbot.market_data.base import (
     AsyncMarketDataTransport,
     MarketDataProtocolError,
@@ -63,11 +64,13 @@ def _session_from_payload(payload: Mapping[str, object]) -> XNYSSession:
         raise MarketDataProtocolError("calendar session failed domain validation") from error
 
 
-def session_closes(sessions: tuple[XNYSSession, ...]) -> tuple[MarketSessionClose, ...]:
+def session_closes(
+    sessions: tuple[XNYSSession, ...], *, calendar: TradingCalendar = "XNYS"
+) -> tuple[MarketSessionClose, ...]:
     """Project sessions onto the market-data alignment contract."""
     return tuple(
         MarketSessionClose(
-            calendar="XNYS",
+            calendar=calendar,
             session_date=session.session_date,
             close_at=session.close_at,
         )
