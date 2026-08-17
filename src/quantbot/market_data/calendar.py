@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import Mapping
-from datetime import UTC, date, datetime, time
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
 from typing import cast
 from zoneinfo import ZoneInfo
@@ -206,3 +206,43 @@ class AlpacaMarketCalendar:
         if len(dates) != len(set(dates)):
             raise MarketDataProtocolError("calendar contains duplicate session dates")
         return ordered
+
+
+CRYPTO_DAY_CLOSE = time(23, 59, 59, 999999)
+
+
+def crypto_sessions(start: date, end: date) -> tuple[XNYSSession, ...]:
+    """Synthesise one session per UTC day for a market that never closes.
+
+    A 24/7 market has no close, but the strategy is defined on completed sessions: it
+    evaluates at a close using finished bars and acts at the next open. Treating each UTC
+    day as a session preserves that contract exactly — the day's close is the last instant
+    of the day, and the next day's open is the first — so the same deterministic machinery
+    applies without a parallel code path. Consecutive sessions are one microsecond apart,
+    which satisfies the strictly-increasing, non-overlapping requirement.
+
+    Daily crypto bars are stamped 00:00:00Z for the day they cover, so a bar's date maps to
+    that day's session.
+    """
+    if end < start:
+        raise ValueError("end must be on or after start")
+    sessions: list[XNYSSession] = []
+    cursor = start
+    while cursor <= end:
+        sessions.append(
+            XNYSSession(
+                session_date=cursor,
+                open_at=datetime.combine(cursor, time.min, tzinfo=UTC),
+                close_at=datetime.combine(cursor, CRYPTO_DAY_CLOSE, tzinfo=UTC),
+            )
+        )
+        cursor += timedelta(days=1)
+    return tuple(sessions)
+
+
+def crypto_session_sequence(sessions: tuple[XNYSSession, ...]) -> XNYSSessionSequence:
+    """Wrap 24/7 sessions in the sequence the strategy requires."""
+    try:
+        return XNYSSessionSequence(calendar="CRYPTO24", sessions=sessions)
+    except ValidationError as error:
+        raise MarketDataProtocolError("crypto sessions are not strictly increasing") from error
