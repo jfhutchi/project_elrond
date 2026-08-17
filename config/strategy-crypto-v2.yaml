@@ -1,0 +1,71 @@
+# Adaptive-momentum 2.0.0 on a 24/7 crypto calendar.
+#
+# Built for DATA VELOCITY, not for expected return. Cycle 5 measured crypto momentum at
+# -79.9% and BTC trend at Sharpe 0.53 with a confidence interval spanning zero; the blend
+# study put a crypto sleeve's contribution at 0.23 sigma, p~0.82. Nothing here predicts
+# profit. What it buys is 365 observations a year instead of 252, against a live paper
+# account that is the only uncontaminated out-of-sample data this project will ever get.
+#
+# Periods are stated in CALENDAR days because this calendar has no weekends. 252 XNYS
+# sessions span roughly a year; 252 crypto days span eight months, so the equity numbers
+# would silently shorten every window.
+strategy_name: adaptive-momentum
+version: 2.0.0
+calendar: CRYPTO24
+
+universe:
+  - BTC/USD
+  - ETH/USD
+  - SOL/USD
+  - LTC/USD
+  - BCH/USD
+  - LINK/USD
+  - AVAX/USD
+  - DOT/USD
+  - UNI/USD
+  - AAVE/USD
+# BTC is to crypto what SPY is to US equities: the regime the rest trades against.
+benchmark_symbol: BTC/USD
+regime_symbol: BTC/USD
+roster_size: 3
+
+# Calendar-day equivalents of the equity windows.
+momentum_long: 365
+momentum_skip: 30
+trend_period: 200
+entry_period: 55
+exit_period: 20
+atr_period: 20
+initial_stop_atr: 2
+trailing_stop_atr: 3
+rotation_frequency: monthly
+positive_momentum_required: true
+market_regime_blocks_entries_only: true
+
+# Crypto realises 3-5x equity volatility, so per-trade risk is halved and the position cap
+# tightened. Gross exposure is capped well below full investment for the same reason.
+risk_per_trade_bps: 25
+max_open_risk_bps: 300
+max_position_value_bps: 700
+max_gross_exposure_bps: 5000
+max_positions: 5
+drawdown_thresholds_bps: [500, 1000, 1500, 2000]
+drawdown_multipliers_bps: [10000, 7500, 5000, 0, 0]
+
+# Crypto spreads are far wider than the 5bps used for liquid ETFs.
+slippage_bps: 25
+commission_per_order: 0
+idle_cash_rate_bps: 0
+allow_fractional_shares: true
+allow_pyramiding: false
+
+# The entry gate and trailing stop were measured as the main sources of cash drag on
+# equities; the same removal is carried over rather than re-fitted here.
+components:
+  momentum: true
+  asset_trend: true
+  market_regime: false
+  donchian_entry: false
+  donchian_exit: false
+  trailing_stop: false
+  roster_exit: true

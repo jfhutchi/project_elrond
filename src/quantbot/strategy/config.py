@@ -64,8 +64,9 @@ class StrategyConfig(BaseModel):
 
     strategy_name: Literal["adaptive-momentum"]
     # 1.0.0 whole-share only; 1.1.0 adds fractional shares; 1.2.0 allows the regime symbol
-    # to sit outside the tradeable universe, which is what an asset-class sleeve needs.
-    version: Literal["1.0.0", "1.1.0", "1.2.0"]
+    # to sit outside the tradeable universe, which is what an asset-class sleeve needs;
+    # 2.0.0 lifts the SPY-only benchmark so a non-equity market can define its own regime.
+    version: Literal["1.0.0", "1.1.0", "1.2.0", "2.0.0"]
     calendar: TradingCalendar
     universe: tuple[str, ...]
     benchmark_symbol: str
@@ -119,8 +120,16 @@ class StrategyConfig(BaseModel):
 
     @model_validator(mode="after")
     def validate_relationships(self) -> Self:
-        if self.benchmark_symbol != "SPY" or self.regime_symbol != "SPY":
+        # V1 pinned the benchmark to SPY, which makes a non-equity market inexpressible:
+        # evaluate_symbol always requires regime-symbol bars, so a crypto sleeve forced to
+        # use SPY would have to mix a 24/7 calendar with XNYS sessions. 2.0.0 lets a market
+        # define its own regime instead, and the calendar constrains which is sensible.
+        if self.version != "2.0.0" and (
+            self.benchmark_symbol != "SPY" or self.regime_symbol != "SPY"
+        ):
             raise ValueError("benchmark_symbol and regime_symbol must both be SPY for V1")
+        if self.version == "2.0.0" and self.calendar == "XNYS" and self.regime_symbol != "SPY":
+            raise ValueError("an XNYS strategy must use SPY as its regime symbol")
         # Before 1.2.0 the regime symbol had to be tradeable, which made an asset-class
         # sleeve inexpressible: a bond sleeve measures the equity regime without holding it.
         # Callers must supply regime history separately when it is outside the universe.
