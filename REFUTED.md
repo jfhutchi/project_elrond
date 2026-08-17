@@ -26,6 +26,7 @@ Last updated 2026-08-17.
 | 11 | Energy is more predictable via geopolitics | REFUTED | Cycle 9. Energy trend **persistence 21.2d < equities 26.5d** — trends are shorter, not longer. −22.0% return, 78.3% drawdown. Geopolitical events are shocks; shocks mean-revert |
 | 12 | FX diversification | REFUTED | Cycle 9. Lowest correlation in the study (0.02) and unusable — Sharpe −0.14. A losing stream cannot diversify |
 | 13 | Reddit / social sentiment | REFUTED (literature) | Long-minus-short WSB portfolios produce alpha indistinguishable from zero; higher return with worse Sharpe |
+| 15 | Cross-sectional breadth (whole-market momentum) | REFUTED | Cycle 10, **survivorship-free**: 511 names incl. 241 delisted. Sharpe 0.63 v SPY 0.80, −0.54 sigma, p≈0.59. Higher raw return, worse risk-adjusted |
 | 14 | Coinbase for paper trading | IMPOSSIBLE | Advanced Trade sandbox returns static fixtures, no P&L tracking. Coinbase for Agents is **real money only**, explicitly no paper/testnet |
 
 ## Not refuted — measured as genuinely working
@@ -52,6 +53,12 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
 * **Holdout exhausted.** Cycles 2-7 consumed every out-of-sample window and SIP data begins
   2016-01-04. **The live paper account is now the only uncontaminated data this project will
   ever get.**
+* **Breadth does not rescue it.** Grinold's law predicts information ratio scales with
+  the square root of breadth, so ranking hundreds of names should beat ranking 23 ETFs.
+  Tested without survivorship bias, it produced more return and less Sharpe. Alpaca
+  lists 19,194 delisted US equities against 14,233 live, and serves history for the
+  delisted ones that terminates at each delisting date — so this bias is avoidable and
+  was avoided.
 * **Execution cost, not prediction, is usually binding.** #8 and #9 both died on spread, not
   on signal quality.
 
