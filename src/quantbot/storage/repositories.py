@@ -691,6 +691,10 @@ class StorageRepository:
         if row is None:
             raise RecordNotFoundError(f"broker order not found: {order.broker_order_id}")
         payload = self._broker_order_payload(order)
+        # What economically identifies an order. submitted_at is deliberately excluded:
+        # Alpaca re-stamps it when an order accepted while the market is closed is released
+        # into the next session, so treating it as identity rejects every queued order the
+        # moment it actually reaches the market.
         immutable = (
             "client_order_id",
             "symbol",
@@ -698,13 +702,12 @@ class StorageRepository:
             "order_type",
             "time_in_force",
             "quantity",
-            "submitted_at",
         )
         if any(row[field] != payload[field] for field in immutable):
             raise StateConflictError(
                 f"broker order {order.broker_order_id} identity conflicts with stored data"
             )
-        lifecycle = ("status", "filled_quantity", "filled_average_price")
+        lifecycle = ("status", "filled_quantity", "filled_average_price", "submitted_at")
         if all(row[field] == payload[field] for field in lifecycle):
             return False
         self._session.execute(

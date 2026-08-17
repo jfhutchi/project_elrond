@@ -139,6 +139,34 @@ def test_identity_change_is_rejected_as_a_conflict(tmp_path: Path) -> None:
     database.close()
 
 
+def test_a_restamped_submitted_at_is_accepted_not_treated_as_identity(
+    tmp_path: Path,
+) -> None:
+    """Observed live: Alpaca re-stamps submitted_at when a queued order reaches the market.
+
+    An order accepted on Saturday carried 2026-08-15T13:37; once Monday's session released
+    it, the broker reported 2026-08-17T13:23. Treating that as identity rejected every
+    queued order at the exact moment it filled.
+    """
+    database = Database(tmp_path / "quantbot.db")
+    _seed(database)
+    released = _order("filled", "0.161511", "61.92").model_copy(
+        update={"submitted_at": datetime(2026, 8, 17, 13, 23, 1, tzinfo=UTC)}
+    )
+
+    with database.transaction() as session:
+        assert StorageRepository(session).update_broker_order_lifecycle(released) is True
+
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        stored = repository.get_broker_order("broker-1")
+        assert [o for o in repository.list_broker_orders() if is_open_order(o)] == []
+    assert stored is not None
+    assert stored.status == "filled"
+    assert stored.submitted_at == datetime(2026, 8, 17, 13, 23, 1, tzinfo=UTC)
+    database.close()
+
+
 def test_updating_an_unknown_order_is_rejected(tmp_path: Path) -> None:
     database = Database(tmp_path / "quantbot.db")
 

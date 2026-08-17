@@ -225,7 +225,11 @@ class LedgerSyncingRecovery:
         if derived != reported:
             return ("POSITION_LEDGER_MISMATCH",)
 
-        snapshot_id = f"{run_id or 'reconcile'}:account"
+        # A snapshot is a point-in-time record, so its identity must include the capture
+        # time. A fixed id per run label meant a second manual reconcile conflicted with the
+        # first the moment account state had legitimately moved.
+        stamp = captured_at.astimezone(UTC).strftime("%Y%m%dT%H%M%S%f")
+        snapshot_id = f"{run_id or 'reconcile'}-{stamp}:account"
         with self._database.transaction() as session:
             StorageRepository(session).save_account_snapshot(
                 snapshot_id,
