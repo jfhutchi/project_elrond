@@ -6,11 +6,10 @@ from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from quantbot.domain import Bar, StrategyIdentity
+from quantbot.domain import Bar, StrategyIdentity, TradingCalendar
 from quantbot.strategy.config import StrategyConfig
 from quantbot.strategy.identity import bar_set_hash, validate_strategy_identity
 from quantbot.strategy.indicators import (
@@ -69,7 +68,7 @@ class XNYSSession(StrategyModel):
 class XNYSSessionSequence(StrategyModel):
     """Caller-supplied contiguous session sequence from an XNYS calendar provider."""
 
-    calendar: Literal["XNYS"]
+    calendar: TradingCalendar
     sessions: tuple[XNYSSession, ...]
 
     @model_validator(mode="after")
@@ -132,7 +131,7 @@ class XNYSSessionSequence(StrategyModel):
 
 
 class MonthlyRoster(StrategyModel):
-    calendar: Literal["XNYS"]
+    calendar: TradingCalendar
     evaluated_at: datetime
     effective_at: datetime
     expires_at: datetime

@@ -6,11 +6,11 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal, Protocol, Self
+from typing import Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from quantbot.domain import Bar
+from quantbot.domain import Bar, TradingCalendar
 
 
 class MarketDataError(RuntimeError):
@@ -133,7 +133,7 @@ class MarketDataBatch(MarketDataModel):
 
 
 class MarketSessionClose(MarketDataModel):
-    calendar: Literal["XNYS"]
+    calendar: TradingCalendar
     session_date: date
     close_at: datetime
 

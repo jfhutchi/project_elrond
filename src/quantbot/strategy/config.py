@@ -9,6 +9,8 @@ from typing import Any, Literal, Self
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from quantbot.domain import TradingCalendar
+
 DEFAULT_UNIVERSE = (
     "SPY",
     "QQQ",
@@ -64,7 +66,7 @@ class StrategyConfig(BaseModel):
     # 1.0.0 whole-share only; 1.1.0 adds fractional shares; 1.2.0 allows the regime symbol
     # to sit outside the tradeable universe, which is what an asset-class sleeve needs.
     version: Literal["1.0.0", "1.1.0", "1.2.0"]
-    calendar: Literal["XNYS"]
+    calendar: TradingCalendar
     universe: tuple[str, ...]
     benchmark_symbol: str
     regime_symbol: str
