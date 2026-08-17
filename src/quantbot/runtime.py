@@ -192,6 +192,10 @@ class Runtime:
     database: Database
     broker: AlpacaPaperBrokerAdapter
     market_data: AlpacaMarketDataClient | AlpacaCryptoDataClient
+    #: The data identity this runtime was actually wired with. Deriving the provider key
+    #: from the environment instead would resolve a crypto runtime to the equity key and
+    #: silently find no bars.
+    market_data_config: MarketDataSettings
     sessions: SessionCalendar
     data_sync: MarketDataSync
     strategy: AdaptiveMomentumRunner
@@ -273,6 +277,7 @@ def build_runtime(
         database=active_database,
         broker=broker,
         market_data=market_data,
+        market_data_config=settings_for_data,
         sessions=sessions,
         data_sync=MarketDataSync(
             database=active_database,
@@ -381,8 +386,9 @@ async def _doctor(runtime: Runtime) -> dict[str, object]:
     }
 
 
-def _provider_key() -> str:
-    settings_for_data = market_data_settings()
+def _provider_key(runtime: Runtime) -> str:
+    """The key identifying this runtime's cached bars, from what it was built with."""
+    settings_for_data = runtime.market_data_config
     return MarketDataCache.provider_key(
         settings_for_data.provider,
         settings_for_data.feed,
@@ -395,7 +401,7 @@ def _durable_regime_bars(runtime: Runtime) -> list[Bar]:
     with runtime.database.transaction() as session:
         return StorageRepository(session).list_bars(
             symbol=runtime.config.regime_symbol,
-            provider=_provider_key(),
+            provider=_provider_key(runtime),
         )
 
 
@@ -492,7 +498,7 @@ async def _daemon(runtime: Runtime) -> dict[str, object]:
 
 
 def _backtest(runtime: Runtime, args: argparse.Namespace) -> dict[str, object]:
-    provider_key = _provider_key()
+    provider_key = _provider_key(runtime)
     with runtime.database.transaction() as session:
         repository = StorageRepository(session)
         histories = {

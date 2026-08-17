@@ -62,10 +62,10 @@ async def main() -> int:
     print(f"evaluates at {evaluation_at.isoformat()} -> acts {next_open.isoformat()}")
     print("NOTE: tonight the completed session will be today's close, not this one.\n")
 
-    key = MarketDataCache.provider_key("alpaca", *(
-        (runtime.data_sync._market_data.feed, runtime.data_sync._market_data.adjustment,
-         runtime.data_sync._market_data.timeframe)
-    ))
+    feed = runtime.market_data_config
+    key = MarketDataCache.provider_key(
+        feed.provider, feed.feed, feed.adjustment, feed.timeframe
+    )
     with runtime.database.transaction() as session:
         repository = StorageRepository(session)
         histories = {s: repository.list_bars(symbol=s, provider=key) for s in config.universe}

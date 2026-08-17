@@ -22,3 +22,5 @@ logs/*
 quantbot.lock
 crypto.db
 crypto.lock
+crypto-probe.db
+crypto-probe.lock
