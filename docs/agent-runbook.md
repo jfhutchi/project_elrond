@@ -248,3 +248,90 @@ outcome, not evidence of a defect.
 - Never enable live trading. Never add live credentials.
 - Never raise risk to recover losses; never average down outside the researched policy.
 - Zero valid signals for a week is a legitimate outcome — record `NO_VALID_SIGNALS`.
+
+---
+
+# Session update: 2026-08-17
+
+State at the end of this session. Supersedes anything above that conflicts with it.
+
+## What is deployed and running
+
+| | |
+|---|---|
+| Strategy | **1.2.0**, `adaptive-momentum-v1-309894d8d8a5296e`, `config/strategy-v1-2.yaml` |
+| Account | Alpaca paper `PA3N9DB5S23G`, started at $100 |
+| Daemon | detached process holding the writer lock, fires at each close + 5 min |
+| Supervisor | `scripts/supervisor.py --watch`, 5-minute interval |
+| Startup | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\quantbot-daemon.cmd`, restart loop |
+
+Positions were entered by 1.1.0 on 2026-08-15 and are managed by 1.2.0 from
+2026-08-17. Attribution for the first three entries belongs to the earlier version.
+
+## Traps that cost time today — read before debugging
+
+**This shell's `QUANTBOT_CONFIG` may be stale.** A Claude Code session inherits the
+environment from when it started, so after switching config the shell still reports the old
+one. Pass `QUANTBOT_CONFIG` explicitly, and confirm what the *daemon* loaded by looking for
+its deployment record in the ledger, not by reading your own environment.
+
+**Liveness means the lock, not the process table.** A `quantbot.exe` can exist while holding
+nothing. Reading the process list produced a confident wrong diagnosis that the system was
+healthy when it was dying. `scripts/supervisor.py` checks the lock for this reason.
+
+**A daemon started from a background shell task gets reaped** when the harness cleans up. Use
+`Start-Process` detached, or the startup entry.
+
+**`doctor` reporting `MARKET_DATA_STALE` before a cycle is expected**, not a fault. The cache
+holds the last synced session; the cycle order is recovery → kill switch → data sync →
+staleness gate, so the gate reads post-sync freshness.
+
+## Defects fixed today, all found on live data
+
+1. **Broker order status was frozen at acknowledgement.** The only `.update()` in the whole
+   repository layer was one added the same day. Once an order filled, the broker stopped
+   listing it as open while local state still said `accepted`, so reconciliation would have
+   halted every subsequent cycle. Would have fired on the first fill.
+2. **`submitted_at` treated as identity.** Alpaca re-stamps it when an order accepted while
+   the market is closed is released into the next session — 08-15T13:37 became 08-17T13:23.
+   Fixed in both `update_broker_order_lifecycle` and `_stable_order_fields`.
+3. **Account snapshot ids were fixed per run label**, so a second manual reconcile conflicted
+   with the first. Snapshots now include the capture timestamp.
+
+## Crypto sleeve — built, composes, not started
+
+`config/strategy-crypto-v2.yaml` runs strategy 2.0.0 on a synthesised 24/7 calendar.
+Verified to compose: `AlpacaCryptoDataClient`, `CryptoSessionCalendar`, a constructed cycle.
+
+```bash
+QUANTBOT_CONFIG=config/strategy-crypto-v2.yaml QUANTBOT_DB_PATH=crypto.db QUANTBOT_LOCK_PATH=crypto.lock uv run quantbot doctor
+```
+
+**Starting it needs a second Alpaca paper account** — a human must create it; the instance
+itself is pure configuration since every path is environment-parameterised. Two writers must
+never share a database or lock.
+
+Built for data velocity (365 observations a year against 252), **not** for return. Cycle 5
+measured crypto momentum at −79.9% and BTC trend at Sharpe 0.53 with a CI spanning zero; the
+blend study put a crypto sleeve at 0.23 sigma, p≈0.82.
+
+## Research state
+
+Ten cycles, **fifteen hypotheses refuted with measurement** — see `REFUTED.md`, and read it
+in full before proposing anything. Cycle 10 tested cross-sectional breadth without
+survivorship bias (511 names, 241 delisted) and it also failed: Sharpe 0.63 against SPY's
+0.80.
+
+Cumulative trials are near 45, so the expected-best-by-luck threshold is now above t≈2.22.
+Any new result must be deflated by the cumulative count, not the current cycle's.
+
+**Nothing built here has beaten SPY buy-and-hold.** The deployed configuration is the best
+the live system can express, not one with a demonstrated edge.
+
+## Dashboard
+
+```bash
+uv run python scripts/dashboard.py reports/dashboard.html
+```
+
+Read-only, safe while the daemon holds the lock.
