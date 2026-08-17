@@ -24,6 +24,11 @@ from quantbot.market_data.calendar import (
     session_closes,
     session_sequence,
 )
+from quantbot.market_data.crypto import (
+    ALPACA_CRYPTO_BARS_URL,
+    CRYPTO_ADJUSTMENT,
+    AlpacaCryptoDataClient,
+)
 from quantbot.market_data.stream import (
     AlpacaStockDataStream,
     StreamDisconnected,
@@ -49,11 +54,14 @@ from quantbot.market_data.validation import (
 
 __all__ = [
     "ALPACA_PAPER_CALENDAR_URL",
+    "ALPACA_CRYPTO_BARS_URL",
     "AdjustmentMode",
+    "AlpacaCryptoDataClient",
     "AlpacaMarketCalendar",
     "AlpacaMarketDataClient",
     "AlpacaStockDataStream",
     "AsyncMarketDataTransport",
+    "CRYPTO_ADJUSTMENT",
     "BarQuery",
     "BarValidationReport",
     "DataGap",

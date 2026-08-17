@@ -36,6 +36,9 @@ class MarketDataFeed(StrEnum):
     BOATS = "boats"
     OVERNIGHT = "overnight"
     OTC = "otc"
+    #: Crypto has no consolidated tape to choose between; this names the source so the
+    #: provider key identifying cached bars stays truthful.
+    CRYPTO = "crypto"
 
 
 class AdjustmentMode(StrEnum):
