@@ -103,16 +103,16 @@ footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge);
     <h1>QuantBot Instrument Panel</h1>
     <span class="sub mono">adaptive-momentum-v1-309894d8d8a5296e</span>
   </header>
-  <div class="pills"><span class="pill pill--good">Armed</span><span class="pill pill--good">Reconciled</span><span class="pill pill--accent">Market open</span><span class="pill pill--quiet">Strategy 1.2.0</span></div>
+  <div class="pills"><span class="pill pill--good">Armed</span><span class="pill pill--good">Reconciled</span><span class="pill pill--accent">Market open</span><span class="pill pill--quiet">Strategy 1.2.0</span><span class="pill pill--good">Watchdog checked 4m ago</span></div>
 
   <div class="readouts">
-    <div class="readout"><div class="k">Equity</div><div class="v">$99.98</div>
+    <div class="readout"><div class="k">Equity</div><div class="v">$100.05</div>
       <div class="note">cash $70.01</div></div>
     <div class="readout"><div class="k">Open P&amp;L</div>
-      <div class="v down">$-0.0153</div>
+      <div class="v up">$0.0458</div>
       <div class="note">3 positions</div></div>
     <div class="readout"><div class="k">Exposure</div><div class="v">30.0%</div>
-      <div class="note">$29.97 deployed</div></div>
+      <div class="note">$30.04 deployed</div></div>
     <div class="readout"><div class="k">Cycles</div><div class="v">1</div>
       <div class="note">3 fills recorded</div></div>
     <div class="readout"><div class="k">Completed trades</div><div class="v">0</div>
@@ -120,6 +120,9 @@ footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge);
     <div class="readout"><div class="k">Trades / cycle</div>
       <div class="v">0.00</div>
       <div class="note">target sample: 30</div></div>
+    <div class="readout"><div class="k">Watchdog</div>
+      <div class="v" style="font-size:15px">checked 4m ago</div>
+      <div class="note">restarts a dead daemon; never lifts a halt</div></div>
   </div>
 
   <section>
@@ -128,7 +131,7 @@ footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge);
       <thead><tr><th>Symbol</th><th class="num">Quantity</th><th class="num">Entry</th>
         <th class="num">Last</th><th class="num">Value</th><th class="num">P&amp;L</th>
         <th class="num">P&amp;L %</th></tr></thead>
-      <tbody><tr><td class='sym'>IWM</td><td class='num'>0.032777</td><td class='num'>$303.95</td><td class='num'>$303.98</td><td class='num'>$9.96</td><td class='num up'>$0.0010</td><td class='num up'>+0.01%</td></tr><tr><td class='sym'>MDY</td><td class='num'>0.013948</td><td class='num'>$715.60</td><td class='num'>$715.82</td><td class='num'>$9.98</td><td class='num up'>$0.0031</td><td class='num up'>+0.03%</td></tr><tr><td class='sym'>XLE</td><td class='num'>0.161511</td><td class='num'>$62.20</td><td class='num'>$62.08</td><td class='num'>$10.03</td><td class='num down'>$-0.0194</td><td class='num down'>-0.19%</td></tr></tbody>
+      <tbody><tr><td class='sym'>IWM</td><td class='num'>0.032777</td><td class='num'>$303.95</td><td class='num'>$303.47</td><td class='num'>$9.95</td><td class='num down'>$-0.0157</td><td class='num down'>-0.16%</td></tr><tr><td class='sym'>MDY</td><td class='num'>0.013948</td><td class='num'>$715.60</td><td class='num'>$715.96</td><td class='num'>$9.99</td><td class='num up'>$0.0050</td><td class='num up'>+0.05%</td></tr><tr><td class='sym'>XLE</td><td class='num'>0.161511</td><td class='num'>$62.20</td><td class='num'>$62.55</td><td class='num'>$10.10</td><td class='num up'>$0.0565</td><td class='num up'>+0.56%</td></tr></tbody>
     </table></div>
   </section>
 
@@ -164,6 +167,15 @@ footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge);
   </section>
 
   <section>
+    <h2>Watchdog log — most recent checks</h2>
+    <div class="scroll"><table>
+      <tbody><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] daemon                 alive and holding the writer lock</td></tr><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] kill-switch            clear</td></tr><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] reconciliation         reconciled, no diffs</td></tr><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] last-cycle             run-20260815T133708Z 52.3h ago</td></tr></tbody>
+    </table></div>
+    <p class="caveat">Liveness is read from the writer lock, not the process table: a process
+      can exist while holding nothing, which is how a dying daemon once read as healthy.</p>
+  </section>
+
+  <section>
     <h2>Research ledger — hypotheses tested and killed</h2>
     <div class="scroll"><table>
       <thead><tr><th>Cycle</th><th>Hypothesis</th><th>Verdict</th><th>Evidence</th></tr></thead>
@@ -176,7 +188,7 @@ footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge);
   </section>
 
   <footer>
-    Generated 2026-08-17 15:04:46 UTC · strategy 1.2.0 · universe 23 symbols,
+    Generated 2026-08-17 18:00:47 UTC · strategy 1.2.0 · universe 23 symbols,
     roster 10 · durable ledger and a live broker read, no synthesised values.
   </footer>
 </div>

@@ -160,6 +160,32 @@ def _durable() -> dict[str, object]:
     }
 
 
+def _supervisor_state() -> tuple[str, str, list[str]]:
+    """Freshness of the watchdog, from the timestamps it writes.
+
+    Reading the log rather than the process table keeps this honest and portable: a stale
+    last-check means the watchdog is not watching, whatever the process list claims. An
+    unmonitored daemon died twice unnoticed, so its absence belongs on the panel.
+    """
+    log = Path("logs") / "supervisor.log"
+    if not log.exists():
+        return "never run", "critical", []
+    lines = [ln for ln in log.read_text(encoding="utf-8").splitlines() if ln.strip()]
+    if not lines:
+        return "no entries", "critical", []
+    stamp = lines[-1][:19]
+    try:
+        last = datetime.strptime(stamp, "%Y-%m-%d %H:%M:%S").replace(tzinfo=UTC)
+    except ValueError:
+        return "unreadable", "critical", lines[-4:]
+    minutes = (datetime.now(UTC) - last).total_seconds() / 60
+    recent = lines[-4:]
+    if minutes > 20:
+        return f"stale, {minutes:.0f}m ago", "critical", recent
+    critical = any("CRITICAL" in ln for ln in recent)
+    return f"checked {minutes:.0f}m ago", "critical" if critical else "good", recent
+
+
 def _pill(label: str, tone: str) -> str:
     return f'<span class="pill pill--{tone}">{_esc(label)}</span>'
 
@@ -275,6 +301,8 @@ def build(out: Path) -> None:
         status_pills.append(_pill("Market open" if market_open else "Market closed",
                                   "accent" if market_open else "quiet"))
     status_pills.append(_pill(f"Strategy {version}", "quiet"))
+    supervisor_detail, supervisor_tone, supervisor_lines = _supervisor_state()
+    status_pills.append(_pill(f"Watchdog {supervisor_detail}", supervisor_tone))
 
     position_rows = "".join(_position_row(p) for p in positions) or _empty(7, "No open positions")
     run_rows = "".join(
@@ -284,6 +312,10 @@ def build(out: Path) -> None:
         _fill_row(f) for f in sorted(fills, key=lambda x: x.occurred_at, reverse=True)[:12]
     ) or _empty(5, "No fills yet")
     research_rows = "".join(_research_row(*row) for row in RESEARCH)
+    supervisor_rows = "".join(
+        f"<tr><td class='mono quiet-text'>{_esc(line)}</td></tr>"
+        for line in supervisor_lines
+    ) or _empty(1, "No watchdog output yet")
     bench_rows = "".join(_bench_row(*row) for row in BENCHMARKS)
 
     trades_per_day = len(completed) / max(len(runs), 1)
@@ -415,6 +447,9 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
     <div class="readout"><div class="k">Trades / cycle</div>
       <div class="v">{trades_per_day:.2f}</div>
       <div class="note">target sample: 30</div></div>
+    <div class="readout"><div class="k">Watchdog</div>
+      <div class="v" style="font-size:15px">{_esc(supervisor_detail)}</div>
+      <div class="note">restarts a dead daemon; never lifts a halt</div></div>
   </div>
 
   <section>
@@ -456,6 +491,15 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
     <p class="caveat">Nothing built here beat buying and holding the index. The deployed
       configuration is the best of those the live system can express, not a strategy with a
       demonstrated edge — it loses to SPY on risk-adjusted return.</p>
+  </section>
+
+  <section>
+    <h2>Watchdog log — most recent checks</h2>
+    <div class="scroll"><table>
+      <tbody>{supervisor_rows}</tbody>
+    </table></div>
+    <p class="caveat">Liveness is read from the writer lock, not the process table: a process
+      can exist while holding nothing, which is how a dying daemon once read as healthy.</p>
   </section>
 
   <section>
