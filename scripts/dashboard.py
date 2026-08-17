@@ -361,8 +361,9 @@ h1 {{ font-size: 21px; letter-spacing: -.01em; margin: 0; font-weight: 620; }}
   font-size: 22px;
   margin-top: 5px;
   font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
 }}
-  font-variant-numeric: tabular-nums; letter-spacing: -.02em; }}
 .readout .note {{ font-size: 11.5px; color: var(--ink-quiet); margin-top: 3px; }}
 .up {{ color: var(--good); }} .down {{ color: var(--bad); }}
 section {{ margin-bottom: 30px; }}
