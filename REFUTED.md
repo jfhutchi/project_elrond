@@ -1,0 +1,68 @@
+# Tested and Refuted
+
+Single authoritative index of every hypothesis tested, so no session re-tests a dead idea or
+trusts a stale summary. Read this file **in full** before proposing research. It is short by
+design; if it stops being short, split it rather than skimming it.
+
+Rule: nothing is listed here without a measurement behind it. "It seemed unlikely" is not a
+refutation.
+
+Last updated 2026-08-17.
+
+## Refuted with measurement
+
+| # | Hypothesis | Verdict | Evidence |
+|---|---|---|---|
+| 1 | Momentum parameter tuning finds an edge | REFUTED | Cycle 1-2. 31 candidates over 10.6y. Best (D7) beat SPY on holdout Sharpe 1.22 v 1.15, then failed parameter robustness — edge existed only at `momentum_long=252` exactly |
+| 2 | The full shipped strategy is worth running | REFUTED | Ranks **6 of 6**. CAGR 0.50%, Sharpe 0.15, $105.41 from $100 over 10.6y. SPY buy-and-hold: $454.70 |
+| 3 | Signal-family ensembles help | REFUTED | Cycle 3. Component signals correlate 0.75+; no diversification available |
+| 4 | Exposure normalisation helps | REFUTED | Cycle 5. Sharpe is scale-invariant; the ensemble's low drawdown was under-risk, not skill |
+| 5 | Crypto momentum | REFUTED | Cycle 5. −79.9%, Sharpe −0.45, 80.6% drawdown |
+| 6 | BTC trend standalone | REFUTED | Cycle 5. Sharpe 0.53, 95% CI [−0.55, 1.61] spans zero |
+| 7 | BTC as a portfolio diversifier | REFUTED | Correlation is genuinely low (+0.152) and blend improvement is **0.23 sigma, p≈0.82**, inside the luck band for 7 weight trials |
+| 8 | Shorter horizons | REFUTED | 1-day reversal has the **strongest raw edge measured** (+427.9% gross) and nets −28.8% at 5bps. Never beats the slow signal at any cost level, including an unachievable 0.5bps |
+| 9 | Options as a route to faster gains | REFUTED | Affordable contracts at $100 are 0DTE at **10–18% spreads** (1,000–1,800bps). The 5bps that killed #8 applies here 200–370x harder |
+| 10 | Machine learning / meta-labelling | REFUTED | Cycle 8. Looked strong (PF 2.29 v 1.06) and failed: n=39, t=1.72, p=0.085, CI [−0.104%, +1.598%] spans zero, luck threshold for 43 cumulative trials is 2.22 |
+| 11 | Energy is more predictable via geopolitics | REFUTED | Cycle 9. Energy trend **persistence 21.2d < equities 26.5d** — trends are shorter, not longer. −22.0% return, 78.3% drawdown. Geopolitical events are shocks; shocks mean-revert |
+| 12 | FX diversification | REFUTED | Cycle 9. Lowest correlation in the study (0.02) and unusable — Sharpe −0.14. A losing stream cannot diversify |
+| 13 | Reddit / social sentiment | REFUTED (literature) | Long-minus-short WSB portfolios produce alpha indistinguishable from zero; higher return with worse Sharpe |
+| 14 | Coinbase for paper trading | IMPOSSIBLE | Advanced Trade sandbox returns static fixtures, no P&L tracking. Coinbase for Agents is **real money only**, explicitly no paper/testnet |
+
+## Not refuted — measured as genuinely working
+
+| Mechanism | Effect | Cost |
+|---|---|---|
+| SPY buy-and-hold | 15.36% CAGR, Sharpe 0.90, $454.70 per $100 over 10.6y | 33.79% drawdown. **Beat everything built here** |
+| SPY 200-day trend | 10.34% CAGR, **Sharpe 0.91** (highest measured) | 19.50% drawdown |
+| Leverage on a high-Sharpe strategy | 2x SPY: 21.48% CAGR, doubles in 3.6y v 4.9y | 58.8% drawdown; breaches the 20% halt; Reg T liquidates before recovery |
+| More capital | Perfectly linear — verified $100/$1k/$10k give identical CAGR and Sharpe | Requires capital |
+| More time | Compounding | Requires time |
+
+Leverage helps a *good* strategy only. At 2x it added 0.75% CAGR to momentum+trend and was
+worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.49%**.
+
+## Structural limits that bound all future work
+
+* **Statistical.** Separating a true Sharpe of 1.0 from zero needs ~3.8 years of daily data;
+  0.5 from zero needs ~15 years. Resolving the D7-vs-SPY gap of 0.074 would need **~700
+  years**. Most differences this project can measure are inside the noise.
+* **Multiple testing.** ~43 candidate evaluations against the same dataset raise the
+  expected-best-by-luck threshold to t≈2.22. Every new result must be deflated by the
+  cumulative count, not this cycle's count.
+* **Holdout exhausted.** Cycles 2-7 consumed every out-of-sample window and SIP data begins
+  2016-01-04. **The live paper account is now the only uncontaminated data this project will
+  ever get.**
+* **Execution cost, not prediction, is usually binding.** #8 and #9 both died on spread, not
+  on signal quality.
+
+## Defects found in this project's own analysis
+
+Listed because the error rate matters when judging any result here. Eight found in one day:
+two whole-share decrement loops that silently zeroed four backtest variants; a decimal
+associativity bug tripping the trade P&L invariant; a stale-lock misdiagnosis; a duplicated
+feature vector omitting momentum; a verdict function declaring success with no significance
+test; a paginated API response misread as missing data; and a false claim that the daemon was
+running when it had never started.
+
+Every apparent winner in this project evaporated under a test. That is the strongest single
+finding here.
