@@ -670,6 +670,50 @@ class StorageRepository:
         self._session.execute(broker_orders.insert().values(**payload))
         return True
 
+    def update_broker_order_lifecycle(self, order: BrokerOrder) -> bool:
+        """Advance the mutable lifecycle fields of an already-stored broker order.
+
+        Identity is immutable and any mismatch is a conflict. Status, filled quantity and
+        average fill price are lifecycle state that necessarily changes as the broker works
+        an order. Storing them once at acknowledgement and never updating them left local
+        open-order state permanently stale the moment anything filled, which reconciliation
+        then reported as a mismatch against the broker forever.
+        """
+        row = (
+            self._session.execute(
+                select(broker_orders).where(
+                    broker_orders.c.broker_order_id == order.broker_order_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFoundError(f"broker order not found: {order.broker_order_id}")
+        payload = self._broker_order_payload(order)
+        immutable = (
+            "client_order_id",
+            "symbol",
+            "side",
+            "order_type",
+            "time_in_force",
+            "quantity",
+            "submitted_at",
+        )
+        if any(row[field] != payload[field] for field in immutable):
+            raise StateConflictError(
+                f"broker order {order.broker_order_id} identity conflicts with stored data"
+            )
+        lifecycle = ("status", "filled_quantity", "filled_average_price")
+        if all(row[field] == payload[field] for field in lifecycle):
+            return False
+        self._session.execute(
+            broker_orders.update()
+            .where(broker_orders.c.broker_order_id == order.broker_order_id)
+            .values(**{field: payload[field] for field in lifecycle})
+        )
+        return True
+
     @staticmethod
     def _broker_order_payload(order: BrokerOrder) -> dict[str, object]:
         return {

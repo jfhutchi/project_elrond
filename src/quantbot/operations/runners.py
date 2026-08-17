@@ -26,6 +26,7 @@ from quantbot.domain import (
 )
 from quantbot.domain.ids import build_client_order_id
 from quantbot.execution import StartupRecovery, StartupRecoveryResult
+from quantbot.execution.recovery import is_open_order
 from quantbot.market_data import (
     AdjustmentMode,
     AlpacaMarketDataClient,
@@ -192,7 +193,29 @@ class LedgerSyncingRecovery:
             for fill in fills:
                 repository.record_fill(fill)
             for order in orders:
-                repository.save_broker_order(order)
+                if repository.get_broker_order(order.broker_order_id) is None:
+                    repository.save_broker_order(order)
+                else:
+                    repository.update_broker_order_lifecycle(order)
+            working = [
+                stored for stored in repository.list_broker_orders() if is_open_order(stored)
+            ]
+
+        # An order the broker no longer lists as open has reached a terminal state. Its stored
+        # status is still whatever it was at acknowledgement, so local open-order state would
+        # disagree with the broker forever and halt every subsequent cycle. Fetch the final
+        # state for each and record the transition.
+        still_open = {order.broker_order_id for order in orders}
+        settled = [
+            await self._broker.get_order(stored.broker_order_id)
+            for stored in working
+            if stored.broker_order_id not in still_open
+        ]
+
+        with self._database.transaction() as session:
+            repository = StorageRepository(session)
+            for order in settled:
+                repository.update_broker_order_lifecycle(order)
             durable_fills = tuple(repository.list_fills())
 
         derived = _fill_ledger_positions(durable_fills)

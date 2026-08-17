@@ -33,8 +33,12 @@ class StartupRecoveryResult(BrokerModel):
     broker_health: BrokerHealth
 
 
-def _is_open_order(order: BrokerOrder) -> bool:
+def is_open_order(order: BrokerOrder) -> bool:
+    """Whether a stored order is still working, by its last recorded status."""
     return order.status.strip().lower() not in _TERMINAL_ORDER_STATUSES
+
+
+_is_open_order = is_open_order
 
 
 class StartupRecovery:
