@@ -8,7 +8,7 @@ from collections.abc import Mapping
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -66,6 +66,14 @@ class ExperimentManifest(BaseModel):
     ablations: tuple[str, ...]
     results: dict[str, dict[str, str]]
 
+    #: Confirmatory runs must name the registration they were frozen against (#5). The default
+    #: is deliberately the weaker claim: a run that forgets to declare one is exploratory, and
+    #: therefore cannot be cited as evidence, rather than silently passing as confirmatory.
+    mode: Literal["CONFIRMATORY", "EXPLORATORY"] = "EXPLORATORY"
+    hypothesis_id: str | None = None
+    hypothesis_version: int | None = None
+    registration_hash: str | None = None
+
     @field_validator("experiment_id", "git_commit", "data_hash", "configuration_hash")
     @classmethod
     def validate_identity(cls, value: str) -> str:
@@ -91,6 +99,18 @@ class ExperimentManifest(BaseModel):
             raise ValueError("experiment ablations must be unique")
         if not self.results:
             raise ValueError("experiment manifest requires result summaries")
+
+        registration = (self.hypothesis_id, self.hypothesis_version, self.registration_hash)
+        if self.mode == "CONFIRMATORY":
+            if any(field is None for field in registration):
+                raise ValueError(
+                    "a confirmatory experiment must name the hypothesis, version, and "
+                    "registration hash it was frozen against"
+                )
+            if len(self.registration_hash or "") != 64:
+                raise ValueError("registration_hash must be a SHA-256 hex digest")
+        elif any(field is not None for field in registration):
+            raise ValueError("an exploratory experiment cannot claim a registration")
         return self
 
     def canonical_json(self) -> str:

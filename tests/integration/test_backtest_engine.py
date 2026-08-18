@@ -189,3 +189,54 @@ def test_experiment_manifest_binds_research_inputs_without_mutating_config(
     assert destination.read_text(encoding="utf-8") == encoded_once + "\n"
     assert config.slippage_bps == 0
     assert (repo_root / "config" / "strategy-v1.yaml").read_bytes() == before
+
+
+def _manifest(**overrides: object) -> ExperimentManifest:
+    fields: dict[str, object] = {
+        "experiment_id": "experiment-1",
+        "git_commit": "abc123",
+        "data_hash": "data-hash",
+        "configuration_hash": "config-hash",
+        "costs": {"slippage_bps": "5", "commission_per_order": "0"},
+        "periods": (ExperimentPeriod(name="train", start="2020-01-01", end="2022-12-31"),),
+        "walk_forward_splits": (
+            ExperimentPeriod(name="walk-1", start="2020-01-01", end="2020-12-31"),
+        ),
+        "holdout": ExperimentPeriod(name="holdout", start="2023-01-01", end="2024-12-31"),
+        "neighborhood_grid": {"trend_period": (190, 200, 210)},
+        "ablations": ("without_market_regime",),
+        "results": {"FULL_STRATEGY": {"total_return": "0.12"}},
+    }
+    fields.update(overrides)
+    return ExperimentManifest(**fields)
+
+
+def test_an_experiment_is_exploratory_until_it_names_a_registration() -> None:
+    """The default is the weaker claim, so a forgotten field cannot pass as evidence (#5)."""
+    assert _manifest().mode == "EXPLORATORY"
+
+
+def test_a_confirmatory_experiment_must_name_the_registration_it_was_frozen_against() -> None:
+    with pytest.raises(ValueError, match="registration hash"):
+        _manifest(mode="CONFIRMATORY")
+
+    with pytest.raises(ValueError, match="SHA-256"):
+        _manifest(
+            mode="CONFIRMATORY",
+            hypothesis_id="H-2026-001",
+            hypothesis_version=1,
+            registration_hash="not-a-digest",
+        )
+
+    confirmatory = _manifest(
+        mode="CONFIRMATORY",
+        hypothesis_id="H-2026-001",
+        hypothesis_version=1,
+        registration_hash="a" * 64,
+    )
+    assert confirmatory.registration_hash == "a" * 64
+
+
+def test_an_exploratory_experiment_cannot_borrow_a_registration() -> None:
+    with pytest.raises(ValueError, match="cannot claim a registration"):
+        _manifest(hypothesis_id="H-2026-001", hypothesis_version=1, registration_hash="a" * 64)
