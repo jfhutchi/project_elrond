@@ -255,6 +255,29 @@ For every meaningful change:
 
 When instrumentation produces suspiciously identical or implausibly favorable results, validate the instrumentation before interpreting the research result.
 
+### A test must assert the specific protection it claims
+
+A test that passes because of a timeout, a wall-clock termination, a generic exception, or any
+other unrelated failure mode does **not** demonstrate the property it names. Permissiveness in an
+assertion is indistinguishable from the feature working, and is therefore worse than no test:
+the suite reports green while the protection is absent.
+
+This rule comes from a real defect found in #12. The sandbox's memory-limit test accepted either
+`memory` or `wall-clock` termination. That leniency hid a broken monitor for a full run — it was
+measuring a ~5MB venv trampoline while the experiment allocated 600MB, so the ceiling never
+fired and the wall clock killed the process at 60s. The test passed the whole time and proved
+nothing. It now asserts `memory` specifically, against a deliberately generous wall clock, so a
+regression fails loudly instead of being masked.
+
+Concretely:
+
+- Assert the **named** failure mode, not a set that includes it.
+- When a limit is under test, set the unrelated limits generously so they cannot cover for it.
+- Prefer an assertion that fails if the mechanism is removed. If deleting the feature still
+  leaves the test green, the test is measuring something else.
+- This is the failure class Elrond exists to be resistant to. It appearing in the code meant to
+  enforce safety is the reason it is written down here rather than left as a habit.
+
 ## GitHub Attribution
 
 All GitHub comments authored by you must begin:
