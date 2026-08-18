@@ -104,6 +104,15 @@ class StrategyConfig(BaseModel):
     #: drawdown rule would otherwise forbid. Unconstrained it costs ~1.83 CAGR points a year.
     volatility_target_bps: int = Field(default=0, ge=0)
     volatility_lookback_days: int = Field(default=20, gt=1)
+    #: Staggered rebalance tranches. 1 is month-end rebalancing, which is what every version
+    #: through 1.2.0 deployed, so the default keeps their configuration hashes byte-identical.
+    #:
+    #: Cycle 13 measured the cost of leaving this at 1: running the identical strategy on a
+    #: different day of the month produced terminal wealth from $246.38 to $307.61 per $100, a
+    #: $61.24 spread decided by nothing but the calendar. Tranching does not raise the expected
+    #: return, it removes that gamble. 5 removes 88% of the dispersion; 21 removes all of it but
+    #: needs $0.48 orders at a $100 account, below the broker minimum.
+    rebalance_tranches: int = Field(default=1, ge=1, le=21)
     components: StrategyComponents = StrategyComponents()
 
     @field_validator("universe")

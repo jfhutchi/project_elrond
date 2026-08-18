@@ -124,3 +124,34 @@ def test_a_degenerate_account_still_yields_a_usable_tranche_count() -> None:
     assert max_supportable_tranches(Decimal("0"), full) == 1
     assert max_supportable_tranches(Decimal("100"), Decimal("0")) == 1
     assert max_supportable_tranches(Decimal("5"), full) == 1, "never returns zero"
+
+
+def test_the_config_default_does_not_reversion_any_deployed_strategy() -> None:
+    """Adding rebalance_tranches must not move a hash of a strategy already trading.
+
+    Same guarantee volatility_target_bps has, and it matters for the same reason: v1.2.0 is
+    live, and a silently re-versioned strategy invalidates the qualification window it is
+    accumulating.
+    """
+    from quantbot.strategy import load_strategy_config, strategy_id_for
+
+    expected = {
+        "config/strategy-v1.yaml": "adaptive-momentum-v1-7d04bc9cc0cb20e6",
+        "config/strategy-v1-1.yaml": "adaptive-momentum-v1-b73083b817f76b8f",
+        "config/strategy-v1-2.yaml": "adaptive-momentum-v1-309894d8d8a5296e",
+        "config/strategy-crypto-v2.yaml": "adaptive-momentum-v2-f4ede5cd70bab7ca",
+    }
+    for path, identity in expected.items():
+        config = load_strategy_config(path)
+        assert config.rebalance_tranches == 1, path
+        assert strategy_id_for(config) == identity, path
+
+
+def test_enabling_tranching_does_produce_a_new_identity() -> None:
+    """A real behaviour change must not hide inside an existing version."""
+    from quantbot.strategy import load_strategy_config, strategy_id_for
+
+    base = load_strategy_config("config/strategy-v1-2.yaml")
+    tranched = base.model_copy(update={"rebalance_tranches": 5})
+
+    assert strategy_id_for(tranched) != strategy_id_for(base)

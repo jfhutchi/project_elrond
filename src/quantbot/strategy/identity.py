@@ -59,6 +59,8 @@ def canonical_configuration(config: StrategyConfig) -> str:
     if payload.get("volatility_target_bps") == 0:
         payload.pop("volatility_target_bps", None)
         payload.pop("volatility_lookback_days", None)
+    if payload.get("rebalance_tranches") == 1:
+        payload.pop("rebalance_tranches", None)
     return _canonical_json(payload)
 
 
