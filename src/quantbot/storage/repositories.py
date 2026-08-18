@@ -1326,6 +1326,24 @@ class StorageRepository:
             return False
         raise StateConflictError(f"incident {incident_id} conflicts with stored data")
 
+    def resolve_incident(self, incident_id: str, *, resolved_at: datetime) -> None:
+        """Close an incident whose cause is actually fixed.
+
+        Without this the schema's resolved_at was never written, so every incident stayed
+        unresolved forever and the supervisor reported a permanent warning. An alert that
+        cannot clear is an alert people learn to ignore.
+        """
+        existing = self._session.execute(
+            select(incidents.c.incident_id).where(incidents.c.incident_id == incident_id)
+        ).first()
+        if existing is None:
+            raise StateConflictError(f"incident {incident_id} does not exist")
+        self._session.execute(
+            incidents.update()
+            .where(incidents.c.incident_id == incident_id)
+            .values(resolved_at=encode_utc(resolved_at))
+        )
+
     def list_incidents(self, *, unresolved_only: bool = False) -> list[IncidentRecord]:
         statement = select(incidents)
         if unresolved_only:

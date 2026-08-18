@@ -79,6 +79,16 @@ Orders are evaluated at a **completed** session close and submitted as DAY order
    `_pending_reservations` now seeds the budget from open broker orders, and the
    duplicate-intent check runs *before* sizing so the reported reason stays truthful.
    The two bug-produced orders (QQQ, EFA) were cancelled; buying power went $9.80 → $29.83.
+3. **Incidents could never be closed.** The schema had `resolved_at` but nothing wrote it, so
+   every incident stayed unresolved forever and the supervisor reported a permanent warning.
+   `resolve_incident` closes that.
+
+### The kill switch fired, and that was correct
+The 403 halted the system with `UNHANDLED_OPERATIONAL_EXCEPTION`, and the supervisor
+reported it without clearing it — exactly the designed behaviour, now proven in production.
+It was cleared only after the root cause was fixed, against six empirically verified
+readiness checks (paper mode, account id, broker health, data freshness, risk, reconciliation).
+**Never clear it by asserting the evidence flags — verify each one.**
 
 ## 6. How to check state
 
