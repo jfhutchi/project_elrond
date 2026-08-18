@@ -8,6 +8,7 @@ from quantbot.domain.enums import (
     OrderType,
     ReconciliationStatus,
     TimeInForce,
+    TradingCalendar,
     TradingMode,
 )
 from quantbot.domain.errors import InvalidOrderTransition
@@ -42,6 +43,7 @@ __all__ = [
     "ReconciliationStatus",
     "StrategyIdentity",
     "TimeInForce",
+    "TradingCalendar",
     "TradingMode",
     "build_client_order_id",
     "transition_order",

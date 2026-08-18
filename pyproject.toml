@@ -15,6 +15,7 @@ dependencies = [
     "pyyaml>=6.0,<7",
     "sqlalchemy>=2.0,<3",
     "structlog>=25.4,<26",
+    "tzdata>=2025.1",
     "websockets>=15,<16",
 ]
 

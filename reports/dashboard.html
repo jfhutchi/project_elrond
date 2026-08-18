@@ -1,0 +1,194 @@
+<title>QuantBot Instrument Panel</title>
+<style>
+:root {
+  --ground: #F2F4F6; --panel: #FFFFFF; --edge: #D5DCE2; --ink: #1A2027;
+  --ink-quiet: #5D6B77; --accent: #2D6E8E; --accent-soft: #E4EDF2;
+  --good: #2F7D5B; --bad: #B04A3F; --warn: #9A7B2E;
+  --grid: rgba(45,110,142,.10);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #12171C; --panel: #1A2128; --edge: #2C3742; --ink: #E3E8ED;
+    --ink-quiet: #8B9AA7; --accent: #5FA8C9; --accent-soft: #1E2C36;
+    --good: #55A87E; --bad: #D2705F; --warn: #C2A04D;
+    --grid: rgba(95,168,201,.12);
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #12171C; --panel: #1A2128; --edge: #2C3742; --ink: #E3E8ED;
+  --ink-quiet: #8B9AA7; --accent: #5FA8C9; --accent-soft: #1E2C36;
+  --good: #55A87E; --bad: #D2705F; --warn: #C2A04D;
+  --grid: rgba(95,168,201,.12);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--ground); color: var(--ink);
+  font-family: ui-sans-serif, -apple-system, "Segoe UI Variable Text",
+    "Segoe UI", system-ui, sans-serif;
+  font-size: 14px; line-height: 1.5;
+}
+.mono, .num, .sym, .cycle {
+  font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+.wrap { max-width: 1180px; margin: 0 auto; padding: 28px 22px 64px; }
+header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; margin-bottom: 6px; }
+h1 { font-size: 21px; letter-spacing: -.01em; margin: 0; font-weight: 620; }
+.sub { color: var(--ink-quiet); font-size: 12.5px; }
+.pills { display: flex; flex-wrap: wrap; gap: 7px; margin: 16px 0 26px; }
+.pill {
+  font-size: 11px; letter-spacing: .05em; text-transform: uppercase; font-weight: 600;
+  padding: 4px 9px; border-radius: 3px; border: 1px solid var(--edge); white-space: nowrap;
+}
+.pill--good {
+  color: var(--good);
+  border-color: color-mix(in srgb, var(--good) 40%, transparent);
+}
+.pill--critical {
+  color: var(--bad);
+  border-color: color-mix(in srgb, var(--bad) 45%, transparent);
+}
+.pill--warning {
+  color: var(--warn);
+  border-color: color-mix(in srgb, var(--warn) 45%, transparent);
+}
+.pill--accent {
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.pill--quiet { color: var(--ink-quiet); }
+.readouts { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 1px;
+  background: var(--edge); border: 1px solid var(--edge); margin-bottom: 30px; }
+.readout { background: var(--panel); padding: 14px 16px 15px; }
+.readout .k { font-size: 10.5px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--ink-quiet); font-weight: 600; }
+.readout .v {
+  font-size: 22px;
+  margin-top: 5px;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.02em;
+}
+.readout .note { font-size: 11.5px; color: var(--ink-quiet); margin-top: 3px; }
+.up { color: var(--good); } .down { color: var(--bad); }
+section { margin-bottom: 30px; }
+h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--ink-quiet);
+  margin: 0 0 10px; font-weight: 650; }
+.scroll { overflow-x: auto; border: 1px solid var(--edge); background: var(--panel); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; font-size: 10.5px; text-transform: uppercase; letter-spacing: .06em;
+  color: var(--ink-quiet); font-weight: 650; padding: 9px 12px;
+  border-bottom: 1px solid var(--edge); white-space: nowrap; }
+td { padding: 9px 12px; border-bottom: 1px solid var(--grid); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+.num, th.num { text-align: right; }
+.sym { font-weight: 650; }
+.cycle { color: var(--accent); font-weight: 650; }
+.quiet-text { color: var(--ink-quiet); font-size: 12.5px; }
+.empty { color: var(--ink-quiet); text-align: center; padding: 22px; font-style: italic; }
+.is-live { background: var(--accent-soft); }
+.tag { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent);
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); padding: 1px 5px;
+  border-radius: 2px; margin-left: 6px; }
+.cols { display: grid; gap: 30px; grid-template-columns: 1fr; }
+@media (min-width: 880px) { .cols { grid-template-columns: 1.15fr 1fr; } }
+.caveat { border-left: 2px solid var(--warn); padding: 10px 0 10px 14px; margin-top: 12px;
+  color: var(--ink-quiet); font-size: 12.5px; max-width: 66ch; }
+footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge);
+  color: var(--ink-quiet); font-size: 11.5px; }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>QuantBot Instrument Panel</h1>
+    <span class="sub mono">adaptive-momentum-v1-309894d8d8a5296e</span>
+  </header>
+  <div class="pills"><span class="pill pill--good">Armed</span><span class="pill pill--good">Reconciled</span><span class="pill pill--accent">Market open</span><span class="pill pill--quiet">Strategy 1.2.0</span><span class="pill pill--good">Watchdog checked 4m ago</span></div>
+
+  <div class="readouts">
+    <div class="readout"><div class="k">Equity</div><div class="v">$100.05</div>
+      <div class="note">cash $70.01</div></div>
+    <div class="readout"><div class="k">Open P&amp;L</div>
+      <div class="v up">$0.0458</div>
+      <div class="note">3 positions</div></div>
+    <div class="readout"><div class="k">Exposure</div><div class="v">30.0%</div>
+      <div class="note">$30.04 deployed</div></div>
+    <div class="readout"><div class="k">Cycles</div><div class="v">1</div>
+      <div class="note">3 fills recorded</div></div>
+    <div class="readout"><div class="k">Completed trades</div><div class="v">0</div>
+      <div class="note">none closed yet</div></div>
+    <div class="readout"><div class="k">Trades / cycle</div>
+      <div class="v">0.00</div>
+      <div class="note">target sample: 30</div></div>
+    <div class="readout"><div class="k">Watchdog</div>
+      <div class="v" style="font-size:15px">checked 4m ago</div>
+      <div class="note">restarts a dead daemon; never lifts a halt</div></div>
+  </div>
+
+  <section>
+    <h2>Open positions</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Symbol</th><th class="num">Quantity</th><th class="num">Entry</th>
+        <th class="num">Last</th><th class="num">Value</th><th class="num">P&amp;L</th>
+        <th class="num">P&amp;L %</th></tr></thead>
+      <tbody><tr><td class='sym'>IWM</td><td class='num'>0.032777</td><td class='num'>$303.95</td><td class='num'>$303.47</td><td class='num'>$9.95</td><td class='num down'>$-0.0157</td><td class='num down'>-0.16%</td></tr><tr><td class='sym'>MDY</td><td class='num'>0.013948</td><td class='num'>$715.60</td><td class='num'>$715.96</td><td class='num'>$9.99</td><td class='num up'>$0.0050</td><td class='num up'>+0.05%</td></tr><tr><td class='sym'>XLE</td><td class='num'>0.161511</td><td class='num'>$62.20</td><td class='num'>$62.55</td><td class='num'>$10.10</td><td class='num up'>$0.0565</td><td class='num up'>+0.56%</td></tr></tbody>
+    </table></div>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>Cycle log</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Run</th><th>Status</th><th class="num">Signals</th>
+          <th>Finished</th></tr></thead>
+        <tbody><tr><td class='mono'>run-20260815T133708Z</td><td><span class="pill pill--good">SUCCEEDED</span></td><td class='num'>23</td><td class='mono quiet-text'>2026-08-15 13:37</td></tr></tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>Recent fills</h2>
+      <div class="scroll"><table>
+        <thead><tr><th>Symbol</th><th>Side</th><th class="num">Qty</th><th class="num">Price</th>
+          <th>Time</th></tr></thead>
+        <tbody><tr><td class='sym'>MDY</td><td>BUY</td><td class='num'>0.013948</td><td class='num'>$715.60</td><td class='mono quiet-text'>2026-08-17 13:30</td></tr><tr><td class='sym'>XLE</td><td>BUY</td><td class='num'>0.161511</td><td class='num'>$62.20</td><td class='mono quiet-text'>2026-08-17 13:30</td></tr><tr><td class='sym'>IWM</td><td>BUY</td><td class='num'>0.032777</td><td class='num'>$303.95</td><td class='mono quiet-text'>2026-08-17 13:30</td></tr></tbody>
+      </table></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>Measured over 10.6 years — $100 start, costs applied</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Configuration</th><th class="num">Final</th><th class="num">CAGR</th>
+        <th class="num">Sharpe</th></tr></thead>
+      <tbody><tr class=''><td>SPY buy &amp; hold </td><td class='num'>$454.70</td><td class='num'>15.36%</td><td class='num'>0.90</td></tr><tr class=''><td>SPY 200-day trend </td><td class='num'>$283.50</td><td class='num'>10.34%</td><td class='num'>0.91</td></tr><tr class=''><td>Pure 12-1 momentum </td><td class='num'>$282.24</td><td class='num'>10.30%</td><td class='num'>0.77</td></tr><tr class='is-live'><td>Momentum + trend (deployed) <span class='tag'>deployed</span></td><td class='num'>$232.78</td><td class='num'>8.31%</td><td class='num'>0.76</td></tr><tr class=''><td>Sleeve ensemble </td><td class='num'>$120.51</td><td class='num'>1.78%</td><td class='num'>0.82</td></tr><tr class=''><td>Full strategy (retired) </td><td class='num'>$105.41</td><td class='num'>0.50%</td><td class='num'>0.15</td></tr></tbody>
+    </table></div>
+    <p class="caveat">Nothing built here beat buying and holding the index. The deployed
+      configuration is the best of those the live system can express, not a strategy with a
+      demonstrated edge — it loses to SPY on risk-adjusted return.</p>
+  </section>
+
+  <section>
+    <h2>Watchdog log — most recent checks</h2>
+    <div class="scroll"><table>
+      <tbody><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] daemon                 alive and holding the writer lock</td></tr><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] kill-switch            clear</td></tr><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] reconciliation         reconciled, no diffs</td></tr><tr><td class='mono quiet-text'>2026-08-17 17:57:14  [INFO    ] last-cycle             run-20260815T133708Z 52.3h ago</td></tr></tbody>
+    </table></div>
+    <p class="caveat">Liveness is read from the writer lock, not the process table: a process
+      can exist while holding nothing, which is how a dying daemon once read as healthy.</p>
+  </section>
+
+  <section>
+    <h2>Research ledger — hypotheses tested and killed</h2>
+    <div class="scroll"><table>
+      <thead><tr><th>Cycle</th><th>Hypothesis</th><th>Verdict</th><th>Evidence</th></tr></thead>
+      <tbody><tr><td class='cycle'>1</td><td>Momentum parameter tuning</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>31 candidates; winner&#x27;s edge existed only at momentum_long=252</td></tr><tr><td class='cycle'>2</td><td>Full shipped strategy worth running</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Ranked 6 of 6. CAGR 0.50%, Sharpe 0.15</td></tr><tr><td class='cycle'>3</td><td>Signal-family ensembles</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Components correlate 0.75+; no diversification available</td></tr><tr><td class='cycle'>4</td><td>Exposure normalisation</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Sharpe is scale-invariant; low drawdown was under-risk</td></tr><tr><td class='cycle'>5</td><td>Crypto momentum</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>-79.9%, Sharpe -0.45, 80.6% drawdown</td></tr><tr><td class='cycle'>5</td><td>BTC trend standalone</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Sharpe 0.53, 95% CI [-0.55, 1.61] spans zero</td></tr><tr><td class='cycle'>6</td><td>Shorter horizons</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>1d reversal: strongest raw edge (+427.9% gross), -28.8% net</td></tr><tr><td class='cycle'>7</td><td>Options for faster gains</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Affordable contracts are 0DTE at 10-18% spreads</td></tr><tr><td class='cycle'>8</td><td>Machine learning / meta-labelling</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>PF 2.29 looked strong; p=0.085, luck threshold 2.22</td></tr><tr><td class='cycle'>9</td><td>Energy predictable via geopolitics</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Trend persistence 21.2d &lt; equities 26.5d</td></tr><tr><td class='cycle'>9</td><td>FX diversification</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Lowest correlation (0.02) and Sharpe -0.14</td></tr><tr><td class='cycle'>—</td><td>BTC as portfolio diversifier</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Blend improvement 0.23 sigma, p~0.82</td></tr><tr><td class='cycle'>—</td><td>Reddit / social sentiment</td><td><span class="pill pill--critical">refuted</span></td><td class='quiet-text'>Literature: alpha indistinguishable from zero</td></tr><tr><td class='cycle'>—</td><td>Coinbase paper trading</td><td><span class="pill pill--warning">impossible</span></td><td class='quiet-text'>Sandbox is static fixtures; Agents is real money only</td></tr></tbody>
+    </table></div>
+    <p class="caveat">Every apparent winner evaporated under a significance test. Fourteen
+      hypotheses refuted with measurement; ~43 candidate evaluations against one dataset now
+      put the luck threshold at t&nbsp;≈&nbsp;2.22, so each new result needs deflating by the
+      cumulative count rather than the current cycle's.</p>
+  </section>
+
+  <footer>
+    Generated 2026-08-17 18:00:47 UTC · strategy 1.2.0 · universe 23 symbols,
+    roster 10 · durable ledger and a live broker read, no synthesised values.
+  </footer>
+</div>

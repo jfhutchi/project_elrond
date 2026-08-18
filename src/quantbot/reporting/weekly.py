@@ -118,8 +118,9 @@ class WeeklyReport(WeeklyModel):
             ("Bugs discovered", _items(self.bugs_discovered, empty="NONE_OBSERVED")),
             ("Conclusions", _items(self.conclusions, empty=NOT_YET_OBSERVED)),
         )
+        week_label = f"{self.request.iso_year}-W{self.request.iso_week:02d}"
         lines = [
-            f"# QuantBot Weekly Performance Review - {self.request.iso_year}-W{self.request.iso_week:02d}",
+            f"# QuantBot Weekly Performance Review - {week_label}",
             "",
             f"Generated at: {_timestamp(self.request.generated_at)}",
             f"Strategy: {_markdown(self.request.strategy_id)}",

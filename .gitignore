@@ -19,3 +19,9 @@ htmlcov/
 *.db*
 logs/*
 !logs/.gitkeep
+quantbot.lock
+crypto.db
+crypto.lock
+crypto-probe.db
+crypto-probe.lock
+research/stocks.db
