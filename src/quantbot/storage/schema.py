@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 metadata = MetaData(
     naming_convention={
@@ -289,4 +289,66 @@ kill_switch_state = Table(
     Column("reason", Text, nullable=False),
     Column("updated_at", String(40), nullable=False),
     CheckConstraint("id = 1", name="singleton"),
+)
+
+# --- Research: hypothesis registry (#5) -------------------------------------------------
+#
+# A registration is frozen at insert. `document_json` holds the whole canonical registration
+# and `content_hash` is its SHA-256, so immutability covers every field rather than only the
+# ones promoted to columns. Columns exist for what the gates query: lineage, family, and the
+# multiple-testing/power numbers that must be recomputed before a confirmatory run.
+
+hypotheses = Table(
+    "hypotheses",
+    metadata,
+    Column("hypothesis_id", String(128), primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("family_id", String(128), nullable=False),
+    Column("parent_hypothesis_id", String(128)),
+    Column("parent_version", Integer),
+    Column("registered_at", String(40), nullable=False),
+    Column("content_hash", String(64), nullable=False, unique=True),
+    # Declared: only the registrant knows how many candidates it inspected to pick this one.
+    Column("search_cardinality", Integer, nullable=False),
+    # Computed at registration from durable state, never declared. See research/registry.py.
+    Column("cumulative_trials", Integer, nullable=False),
+    Column("luck_threshold_z", Text, nullable=False),
+    Column("expected_sharpe", Text, nullable=False),
+    Column("required_sessions", Integer, nullable=False),
+    Column("available_sessions", Integer, nullable=False),
+    Column("document_json", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["parent_hypothesis_id", "parent_version"],
+        ["hypotheses.hypothesis_id", "hypotheses.version"],
+    ),
+    CheckConstraint("version >= 1", name="version_positive"),
+    CheckConstraint(
+        "(parent_hypothesis_id IS NULL) = (parent_version IS NULL)",
+        name="parent_is_whole",
+    ),
+)
+Index("ix_hypotheses_family_id", hypotheses.c.family_id)
+
+# One contiguous range per (registration, dataset, role). The primary key enforces that
+# deliberately: a claim spread over disjoint ranges hides which parts were actually inspected.
+hypothesis_data_windows = Table(
+    "hypothesis_data_windows",
+    metadata,
+    Column("hypothesis_id", String(128), primary_key=True),
+    Column("version", Integer, primary_key=True),
+    Column("dataset", String(128), primary_key=True),
+    Column("role", String(32), primary_key=True),
+    Column("start_date", String(10), nullable=False),
+    Column("end_date", String(10), nullable=False),
+    ForeignKeyConstraint(
+        ["hypothesis_id", "version"],
+        ["hypotheses.hypothesis_id", "hypotheses.version"],
+        ondelete="CASCADE",
+    ),
+    CheckConstraint("end_date >= start_date", name="range_ordered"),
+)
+Index(
+    "ix_hypothesis_data_windows_dataset",
+    hypothesis_data_windows.c.dataset,
+    hypothesis_data_windows.c.start_date,
 )

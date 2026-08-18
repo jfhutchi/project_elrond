@@ -6,6 +6,7 @@ from pathlib import Path
 
 from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType, TimeInForce
 from quantbot.storage import Database, StorageRepository
+from quantbot.storage.schema import SCHEMA_VERSION
 
 NOW = datetime(2026, 8, 13, 14, 30, tzinfo=UTC)
 
@@ -61,7 +62,8 @@ def test_restart_restores_unresolved_intents_and_safety_state(tmp_path: Path) ->
         with reopened.engine.connect() as connection:
             assert connection.exec_driver_sql("PRAGMA integrity_check").scalar_one() == "ok"
             assert (
-                connection.exec_driver_sql("SELECT version FROM schema_version").scalar_one() == 1
+                connection.exec_driver_sql("SELECT version FROM schema_version").scalar_one()
+                == SCHEMA_VERSION
             )
     finally:
         reopened.close()

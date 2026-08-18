@@ -4,6 +4,7 @@ import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
+from importlib import import_module
 from pathlib import Path
 
 import pytest
@@ -38,14 +39,18 @@ from quantbot.storage import (
     encode_decimal,
     encode_utc,
 )
+from quantbot.storage.database import REVISION_FOR_SCHEMA_VERSION
 from quantbot.storage.schema import (
     SCHEMA_VERSION,
     kill_switch_state,
     metadata,
+    runs,
     schema_version,
+    strategy_deployments,
 )
 
 NOW = datetime(2026, 8, 13, 14, 30, tzinfo=UTC)
+HEAD_REVISION = REVISION_FOR_SCHEMA_VERSION[SCHEMA_VERSION]
 
 
 def make_identity() -> StrategyIdentity:
@@ -210,7 +215,7 @@ def test_alembic_upgrade_head_creates_complete_versioned_schema(tmp_path: Path) 
             command.upgrade(config, "head")
 
             assert set(metadata.tables) <= set(inspect(connection).get_table_names())
-            assert MigrationContext.configure(connection).get_current_revision() == "0001"
+            assert MigrationContext.configure(connection).get_current_revision() == HEAD_REVISION
             assert (
                 connection.exec_driver_sql(
                     "SELECT version FROM schema_version WHERE id = 1"
@@ -299,7 +304,7 @@ def test_database_stamps_supported_pre_alembic_schema_at_head(tmp_path: Path) ->
     database = Database(path)
     try:
         with database.engine.connect() as connection:
-            assert MigrationContext.configure(connection).get_current_revision() == "0001"
+            assert MigrationContext.configure(connection).get_current_revision() == HEAD_REVISION
             assert (
                 connection.exec_driver_sql(
                     "SELECT reason FROM kill_switch_state WHERE id = 1"
@@ -814,3 +819,83 @@ def test_single_writer_lock_rejects_second_owner_and_can_be_reacquired(tmp_path:
     with second:
         assert second.is_acquired is True
     assert second.is_acquired is False
+
+
+def test_a_v1_database_upgrades_to_head_and_carries_its_ledger_across(tmp_path: Path) -> None:
+    """The point of wiring Alembic in: an existing paper store gains tables, loses nothing.
+
+    Pinned to the table list revision 0001 actually creates, so this stays a V1 database even
+    after later revisions extend `metadata`.
+    """
+    v1_migration = import_module("quantbot.storage.migrations.versions.0001_initial_schema")
+    v1_tables = [metadata.tables[name] for name in v1_migration.V1_TABLES]
+
+    path = tmp_path / "v1-with-history.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    with engine.begin() as connection:
+        metadata.create_all(connection, tables=v1_tables)
+        connection.execute(schema_version.insert().values(id=1, version=1))
+        connection.execute(
+            kill_switch_state.insert().values(
+                id=1, engaged=True, reason="engaged before the upgrade", updated_at=encode_utc(NOW)
+            )
+        )
+        connection.execute(
+            strategy_deployments.insert().values(
+                strategy_id="mean-reversion",
+                version="1.2.3",
+                git_commit="abc1234",
+                configuration_hash="def5678",
+                deployment_timestamp=encode_utc(NOW),
+            )
+        )
+        connection.execute(
+            runs.insert().values(
+                run_id="run-1",
+                strategy_id="mean-reversion",
+                strategy_version="1.2.3",
+                status="COMPLETED",
+                started_at=encode_utc(NOW),
+            )
+        )
+        connection.exec_driver_sql(
+            "CREATE TABLE alembic_version (version_num VARCHAR(32) NOT NULL PRIMARY KEY)"
+        )
+        connection.exec_driver_sql("INSERT INTO alembic_version (version_num) VALUES ('0001')")
+    engine.dispose()
+
+    database = Database(path)
+    try:
+        with database.engine.connect() as connection:
+            assert (
+                connection.exec_driver_sql("SELECT version FROM schema_version").scalar_one()
+                == SCHEMA_VERSION
+            )
+            assert MigrationContext.configure(connection).get_current_revision() == HEAD_REVISION
+            assert set(metadata.tables) <= set(inspect(connection).get_table_names())
+            assert (
+                connection.exec_driver_sql(
+                    "SELECT reason FROM kill_switch_state WHERE id = 1"
+                ).scalar_one()
+                == "engaged before the upgrade"
+            )
+            assert [
+                tuple(row)
+                for row in connection.exec_driver_sql("SELECT run_id, status FROM runs")
+            ] == [("run-1", "COMPLETED")]
+    finally:
+        database.close()
+
+
+def test_a_database_one_version_ahead_of_this_build_is_refused(tmp_path: Path) -> None:
+    """Older is upgradable, newer is fatal. Asserted at the boundary, not at an absurd value."""
+    path = tmp_path / "from-the-future.db"
+    db = Database(path)
+    with db.engine.begin() as connection:
+        connection.exec_driver_sql(
+            f"UPDATE schema_version SET version = {SCHEMA_VERSION + 1} WHERE id = 1"
+        )
+    db.close()
+
+    with pytest.raises(UnsupportedSchemaVersionError, match=str(SCHEMA_VERSION + 1)):
+        Database(path)
