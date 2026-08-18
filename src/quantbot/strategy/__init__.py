@@ -32,7 +32,9 @@ from quantbot.strategy.indicators import (
     wilder_atr,
 )
 from quantbot.strategy.tranches import (
+    active_tranche_rosters,
     max_supportable_tranches,
+    next_rebalance_index,
     tranche_schedule,
     tranche_weights,
 )
@@ -64,7 +66,9 @@ __all__ = [
     "true_ranges",
     "validate_strategy_identity",
     "realized_volatility",
+    "active_tranche_rosters",
     "max_supportable_tranches",
+    "next_rebalance_index",
     "tranche_schedule",
     "tranche_weights",
     "wilder_atr",

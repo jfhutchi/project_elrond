@@ -12,7 +12,9 @@ from decimal import Decimal
 import pytest
 
 from quantbot.strategy.tranches import (
+    active_tranche_rosters,
     max_supportable_tranches,
+    next_rebalance_index,
     tranche_schedule,
     tranche_weights,
 )
@@ -155,3 +157,53 @@ def test_enabling_tranching_does_produce_a_new_identity() -> None:
     tranched = base.model_copy(update={"rebalance_tranches": 5})
 
     assert strategy_id_for(tranched) != strategy_id_for(base)
+
+
+def test_single_tranche_expiry_is_exactly_the_month_boundary() -> None:
+    """The existing month-end expiry must fall out of the general rule, not sit beside it."""
+    months = _months(("2026-01", 20), ("2026-02", 19))
+    schedule = tranche_schedule(months, 1)
+
+    # Tranche 0 rebalances at index 19 (Jan end); its roster expires when it next
+    # rebalances, at index 38 (Feb end).
+    assert next_rebalance_index(schedule, 19, 0) == 38
+
+
+def test_a_tranche_expires_at_its_own_next_turn_not_the_month_end() -> None:
+    months = _months(("2026-01", 21), ("2026-02", 21))
+    schedule = tranche_schedule(months, 5)
+
+    # Tranche 0 rebalances at index 3 in January and 24 in February.
+    assert next_rebalance_index(schedule, 3, 0) == 24
+    # Tranche 2 sits mid-month in both.
+    assert next_rebalance_index(schedule, 12, 2) == 33
+
+
+def test_running_out_of_sessions_returns_none_rather_than_guessing() -> None:
+    months = _months(("2026-01", 21))
+    schedule = tranche_schedule(months, 5)
+
+    assert next_rebalance_index(schedule, 20, 4) is None
+
+
+def test_unstarted_tranches_are_reported_as_none_not_as_empty() -> None:
+    """During the first partial month some tranches genuinely have no ranking yet."""
+    months = _months(("2026-01", 21))
+    schedule = tranche_schedule(months, 5)
+
+    active = active_tranche_rosters(schedule, 5, 5)
+
+    assert active[0] == 3, "tranche 0 rebalanced on session 3"
+    assert active[1] is None, "tranche 1 does not rebalance until session 7"
+    assert active[4] is None
+
+
+def test_every_tranche_is_active_once_a_full_month_has_passed() -> None:
+    months = _months(("2026-01", 21), ("2026-02", 21))
+    schedule = tranche_schedule(months, 5)
+
+    active = active_tranche_rosters(schedule, 25, 5)
+
+    assert all(index is not None for index in active.values())
+    assert active[0] == 24, "tranche 0 refreshed in February"
+    assert active[4] == 20, "tranche 4 still trades its January ranking"

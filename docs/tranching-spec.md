@@ -24,23 +24,42 @@ Tranching does not raise the expected return. It removes the gamble.
 That last row is the important one. It rules out the implementation that would have required no
 changes to the roster machinery, so the invasive version is the only one that works.
 
+## Built so far
+
+`src/quantbot/strategy/tranches.py`, pure and covered by 18 tests:
+
+* `tranche_schedule` — which session each tranche rebalances on. **A single tranche returns
+  exactly the final session of each month**, so today's behaviour is the degenerate case rather
+  than a separate code path.
+* `next_rebalance_index` — replaces month-end expiry. A roster expires when its own tranche next
+  rebalances; for one tranche that *is* the month boundary.
+* `active_tranche_rosters` — which ranking each tranche is currently trading, returning `None`
+  for tranches that have not had a first rebalance rather than pretending they hold nothing.
+* `tranche_weights` — fractional membership: held by 3 of 5 tranches means three fifths of a
+  position.
+* `max_supportable_tranches` — derived from equity, not hardcoded, so tranching widens itself as
+  the account grows past the broker minimum.
+
+`rebalance_tranches` is wired into `StrategyConfig`, omitted from the canonical configuration at
+its default so all four deployed identities stay byte-identical (pinned by test).
+
 ## What has to change
 
 `build_monthly_roster` currently enforces `evaluation_at` being the final XNYS session of its
 month (`adaptive_momentum.py:250`). Tranching needs **5 independent rosters evaluated on 5
 staggered sessions**, so:
 
-1. **Roster identity.** A roster gains a tranche index. Five live rosters at once, each with its
-   own evaluation date and expiry.
-2. **Scheduling.** Tranche *k* evaluates on session `round(k * sessions_in_month / 5)`. The
-   month-end constraint becomes "the scheduled session for this tranche".
-3. **Target weights.** A symbol's target is `max_position_value_bps * (tranches holding it) / 5`.
-   Membership stops being binary.
-4. **Durable state.** Roster state must record which tranche opened what, or exits cannot be
-   attributed. This is the part most likely to produce a reconciliation defect.
-5. **Config.** `rebalance_tranches: int = 1`, omitted from `canonical_configuration` at the
-   default so deployed identities stay byte-identical — the same pattern
-   `volatility_target_bps` uses.
+Remaining, in dependency order:
+
+1. **Roster identity.** `MonthlyRoster` gains a tranche index, and `build_monthly_roster` stops
+   rejecting non-month-end evaluation dates (`adaptive_momentum.py:250`), accepting instead any
+   session the schedule assigns to that tranche. `roster_expiry_after` delegates to
+   `next_rebalance_index`.
+2. **Durable state.** Roster state must record which tranche opened what, or exits cannot be
+   attributed. **This is the part most likely to produce a reconciliation defect** and deserves
+   the most care — a mis-attributed exit shows up as a position diff that halts trading.
+3. **Runner and sizing.** Build one roster per tranche, blend with `tranche_weights`, and scale
+   the position-value cap by the resulting fraction.
 
 ## Constraints to respect
 

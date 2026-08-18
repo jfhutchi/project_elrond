@@ -90,3 +90,43 @@ def max_supportable_tranches(
         return 1
     supportable = int(position_value / MINIMUM_ORDER_NOTIONAL)
     return max(1, min(ceiling, supportable))
+
+
+def next_rebalance_index(
+    schedule: dict[int, int], after_index: int, tranche: int
+) -> int | None:
+    """The next session index on which `tranche` rebalances, strictly after `after_index`.
+
+    This is what replaces month-end expiry. A single-tranche roster expires at the end of its
+    calendar month because that is when tranche 0 next rebalances, so the existing behaviour is
+    the degenerate case of this rule rather than a separate path. Returns None when the session
+    sequence does not extend far enough, which callers must treat as "cannot build a roster
+    yet" rather than defaulting to some arbitrary horizon.
+    """
+    candidates = [
+        index for index, owner in schedule.items() if owner == tranche and index > after_index
+    ]
+    return min(candidates) if candidates else None
+
+
+def active_tranche_rosters(
+    schedule: dict[int, int],
+    session_index: int,
+    tranches: int,
+) -> dict[int, int | None]:
+    """For each tranche, the session index whose ranking it is currently trading.
+
+    None means a tranche has not had its first rebalance yet, which is the real state during
+    the first partial month after deployment. Reporting it honestly matters: treating an
+    unstarted tranche as holding nothing understates exposure, while treating it as holding the
+    full roster would front-run a decision that has not been made.
+    """
+    active: dict[int, int | None] = {}
+    for tranche in range(tranches):
+        past = [
+            index
+            for index, owner in schedule.items()
+            if owner == tranche and index <= session_index
+        ]
+        active[tranche] = max(past) if past else None
+    return active
