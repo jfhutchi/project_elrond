@@ -7,7 +7,7 @@ design; if it stops being short, split it rather than skimming it.
 Rule: nothing is listed here without a measurement behind it. "It seemed unlikely" is not a
 refutation.
 
-Last updated 2026-08-18 (cycle 11).
+Last updated 2026-08-18 (cycles 11-12).
 
 ## Refuted with measurement
 
@@ -31,6 +31,7 @@ Last updated 2026-08-18 (cycle 11).
 | 16 | Volatility targeting as an **alpha** source | REFUTED | Cycle 11. Looked like the best result yet (Sharpe 0.92→1.09, all 12 parameter sets winning, break-even 113x real cost) and died: Jobson-Korkie/Memmel **z=1.01, p=0.31**, wins 6 of 12 assets, loses 2025-26. See #S2 for what did survive |
 | 17 | Overnight (close-to-open) premium | REFUTED | Cycle 11. An error in this project's own batch-2 analysis inflated it: one-sample t-tests instead of **paired**. Corrected, SPY falls t=2.74→0.63 and 1 of 18 assets clears the bar. Overnight-only beats buy-and-hold on CAGR on **1 of 18** — buy-and-hold collects both sessions. SPY premium decayed 7.93%/yr (2016-18) → −0.44% (2022-24) |
 | 18 | Turn-of-month effect | REFUTED | Cycle 11. Positive on 4 of 7 assets, largest t=1.57 (GLD) against a 2.82 bar |
+| 19 | Any strategy here beats SPY at its own growth-optimal leverage | REFUTED | Cycle 12. Vol-targeted SPY at 4.25x appeared to turn $100 into $2,475 v SPY's $954. Stationary bootstrap (2000 draws, 21d blocks): 95% CI on the gap **[−$173.90, +$432.04]**, spans zero; loses in **22.8%** of resamples. Rests on the Sharpe difference already refuted as #16 — leverage amplifies an edge that is not there |
 
 ## Not refuted — measured as genuinely working
 
@@ -45,6 +46,8 @@ Last updated 2026-08-18 (cycle 11).
 | **Vol targeting as drawdown control** | Max drawdown reduced on **16 of 18 assets, p=0.0007**. SPY 33.8% → 20.1% | Cycle 11. Costs a median **1.83 CAGR points/yr**. Not alpha — see refuted #16 |
 | **Real execution cost is ~1bp, not 5bps** | Measured NBBO: SPY 0.26, QQQ 0.41, IWM 0.66, median ~1.1bps | Cycle 11. Does not revive #8, already tested at 0.5bps. Means the deployed cost model is miscalibrated |
 | **Fast halt resumption** | Delay is the whole cost of the halt: 5d $479, 21d $413, 63d $364 per $100 | Cycle 11. Direction is robust; the 5d row beating no-halt is one path and inside noise |
+| **Vol targeting as constraint relief** | Under the 20% drawdown rule it carries 0.75x v SPY's 0.50x and ends at **$403.67 v $281.02, +44%** | Cycle 12. This is the honest form of the vol-targeting claim: not alpha (#16), but more exposure affordable under a fixed drawdown cap |
+| **An interior growth optimum exists** | SPY peaks at 3.25x ($954/$100) with margin charged at 5.75%; free borrowing puts it past 5x | Cycle 12. Implies a **79.2% drawdown** and is unreachable. Constant leverage above ~3.5x goes to **zero** |
 
 Leverage helps a *good* strategy only. At 2x it added 0.75% CAGR to momentum+trend and was
 worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.49%**.
@@ -68,6 +71,13 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   was avoided.
 * **Execution cost, not prediction, is usually binding.** #8 and #9 both died on spread, not
   on signal quality.
+* **The 20% drawdown halt is the true limit on wealth, not the signal.** SPY buy-and-hold draws
+  down 33.8%, so the project's own rule forbids holding the benchmark that beats everything
+  built here. Every strategy must be sized down to fit, and that sizing decision dominates
+  every signal question cycles 1-11 asked. Cycle 12.
+* **Leverage above 2x is unavailable regardless of the mathematics.** Reg T caps initial
+  leverage at 2x for equities; the drawdown rule caps it near 1x; and constant leverage above
+  ~3.5x is not merely worse but bankrupt. Cycle 12.
 
 ## Defects found in this project's own analysis
 
@@ -78,12 +88,17 @@ feature vector omitting momentum; a verdict function declaring success with no s
 test; a paginated API response misread as missing data; and a false claim that the daemon was
 running when it had never started.
 
-Cycle 11 added four more: a non-reentrant lock that meant the daemon could never have run a
+Cycles 11-12 added six: a non-reentrant lock that meant the daemon could never have run a
 cycle; unfilled orders consuming no risk budget, which double-spent capital and took a broker
 403; a Corwin-Schultz spread estimate wrong by two orders of magnitude, caught only by pulling
 real quotes; and **an unpaired t-test that made the overnight effect look significant when it
-is not**. The last one is the instructive one: it was found by attacking this cycle's own
-result rather than by publishing it.
+is not**; and two in one leverage function — debt held fixed instead of leverage, so high
+leverage looked survivable; then a monthly-rebalanced margin path compared against a
+daily-rebalanced baseline, which appeared to show that margin calls *create* wealth.
+
+**Every one of these errors flattered the result.** None was caught by the code looking wrong;
+each was caught by the number being implausible. That asymmetry is the single most useful thing
+to know when reading any figure in this repository.
 
 Every apparent winner in this project evaporated under a test. That is the strongest single
 finding here.
