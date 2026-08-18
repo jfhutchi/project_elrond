@@ -231,6 +231,21 @@ is an artefact, not a finding:
 It vanishes *exactly* above $20 and is negative everywhere at 200bps, which is realistic for
 distressed small caps. Data cached at `research/stocks.db` so no future cycle re-pays for it.
 
+## 6h. The architectural finding (cycle 16)
+
+**This engine cannot express the one rule measured to beat the market.**
+
+| | CAGR | Sharpe | exposure |
+|---|---|---|---|
+| `SPY_SMA200` benchmark (hold SPY above its 200d average) | **10.34%** | **0.91** | 77% |
+| `strategy-index-v3.yaml` | 0.98% | 0.21 | 30% |
+| `strategy-trend-v4.yaml` (stops effectively disabled) | 2.52% | 0.30 | 43% |
+
+Not a tuning problem. ATR-derived sizing, monthly roster rotation and entry/exit gating impose
+a shape that an always-in-while-above-trend rule does not have. **Deploying that rule requires a
+different execution path, not different config values** — that is the highest-value engineering
+task left in this project.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
@@ -238,6 +253,8 @@ distressed small caps. Data cached at `research/stocks.db` so no future cycle re
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
+- [ ] **Build an execution path that can express SPY_SMA200** — see 6h. Highest-value
+      remaining work: the rule is measured, the engine cannot run it.
 - [ ] **Tranche the rebalance date** — $61.24 of terminal-wealth spread per $100 decided by the
       calendar alone, the largest free effect found in 13 cycles. Design settled in
       `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against

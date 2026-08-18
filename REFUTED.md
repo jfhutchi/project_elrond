@@ -80,6 +80,13 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   lives. The ranking sorts backwards, and the effect dies **exactly** at a $20 price floor
   (t=0.00) and dies on cost below it. A result that disappears when penny stocks are excluded
   was never a signal.
+* **The strategy engine cannot express the only rule that beats the market.** SPY_SMA200
+  (10.34% CAGR, Sharpe 0.91, 77% exposure) is the highest-Sharpe mechanism measured here. Two
+  configs tried to reproduce it — `strategy-index-v3.yaml` reached 30% exposure and 0.98%
+  CAGR, `strategy-trend-v4.yaml` with stops effectively disabled reached 43% and 2.52%. The
+  limit is architectural: ATR-derived sizing, monthly rotation and entry/exit gating impose a
+  shape that an always-in-while-above-trend rule does not have. Deploying that rule needs a
+  different execution path, not different config values. Cycle 16.
 * **There was never a signal to tune.** Cycle 15 tested the premise underneath cycles 1-10 and
   it fails: the momentum ranking does not separate winners from losers (top-minus-bottom
   t=0.77), selection does not beat not-selecting (t=0.84), and alpha against SPY is 0.10%/yr
