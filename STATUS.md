@@ -2,7 +2,7 @@
 
 ## START HERE
 
-### ⚠ SEVERITY-1: the drawdown halt is a trap, and it affects the live account
+### ⚠ SEVERITY-1 (FIX BUILT, NOT DEPLOYED): the drawdown halt is a trap
 
 Measured: the halt blocks entry on **70.8% of sessions** in backtest. Once equity is 15% below
 its high-water mark, `entry_halted` stops new positions — but a strategy that cannot take
@@ -12,7 +12,22 @@ positions cannot earn back the drawdown. **The halt has no exit.**
 **If the live account reaches -15%, it stops trading and cannot recover by trading.** Only a
 deposit or manual intervention releases it.
 
-Fix options and evidence: `docs/per-session-trend-spec.md`, final section. Not yet fixed.
+**Fixed in code, off by default, not yet deployed.** `drawdown_halt_floor_bps` trades at reduced
+size instead of stopping. All four candidate fixes were measured in
+`scripts/halt_policy_study.py`; a floor of 2500bps was chosen and verified through the real
+engine, where it releases the trap (6 → 25 trades, 19.2% → 50.3% exposure).
+
+**It does not improve returns, and that is the honest result.** On `strategy-trend-v4` the
+released strategy scores Sharpe 0.21 against the halted 0.36, with drawdown 32.7% against 15.6%.
+The hard halt's flattering Sharpe was achieved by not trading. Releasing a strategy with no edge
+simply exposes more capital to it. The justification for the fix is capital safety — without it a
+15% drawdown locks the live account out permanently — **not** performance.
+
+**Hysteresis is refuted, structurally.** A halted account holds nothing, so equity is frozen, so
+drawdown is frozen, so no drawdown-based release can ever fire. Measured byte-identical to the
+broken policy at every resume threshold.
+
+Deploying it to the live config is an operator decision: it restarts the qualification window.
 
 
 Run these two first. They take a minute and tell you whether anything is on fire:

@@ -103,6 +103,16 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   available. Caveat worth keeping: these are US-listed ETFs, so currency exposure is unhedged
   and local small caps are absent. A test on native exchanges could differ but Alpaca cannot
   reach them.
+* **A halt that removes all exposure cannot be escaped by any drawdown-based rule.** At zero
+  exposure equity is frozen, so the drawdown is frozen, so hysteresis, resume thresholds, and
+  every other release condition expressed in terms of drawdown are structurally incapable of
+  firing — not mistuned. Measured byte-identical to the broken policy at resume levels of 10%,
+  5% and 1%. Only keeping some exposure, or ageing the high-water mark out on a rolling window,
+  can release it. Cycle 18, `scripts/halt_policy_study.py`.
+* **Releasing the halt does not make a worthless strategy profitable — it exposes it.** The hard
+  halt scored Sharpe 0.36 on `strategy-trend-v4` by blocking entry on 65.6% of sessions. With a
+  2500bps floor it trades 25 times instead of 6, and scores 0.21 at double the drawdown. A halt
+  that suppresses trading will always flatter a strategy with no edge. Cycle 18.
 * **There was never a signal to tune.** Cycle 15 tested the premise underneath cycles 1-10 and
   it fails: the momentum ranking does not separate winners from losers (top-minus-bottom
   t=0.77), selection does not beat not-selecting (t=0.84), and alpha against SPY is 0.10%/yr

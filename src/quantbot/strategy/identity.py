@@ -67,6 +67,8 @@ def canonical_configuration(config: StrategyConfig) -> str:
         payload.pop("trend_gate_per_session", None)
     if payload.get("drawdown_lookback_sessions") == 0:
         payload.pop("drawdown_lookback_sessions", None)
+    if payload.get("drawdown_halt_floor_bps") == 0:
+        payload.pop("drawdown_halt_floor_bps", None)
     return _canonical_json(payload)
 
 
