@@ -163,7 +163,11 @@ operator decision, not an agent one.**
       calendar alone, the largest free effect found in 13 cycles. Design settled in
       `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against
       Alpaca's $1 floor). The cheap weight-ramp shortcut is measured and refuted, so the roster
-      machinery genuinely has to change. Not yet implemented.
+      machinery genuinely has to change.
+      **Scheduling and weighting are now built and tested** in `src/quantbot/strategy/tranches.py`
+      (11 tests, including the guarantee that 1 tranche reproduces month-end exactly, and that
+      the tranche count is derived from equity so it widens as the account grows).
+      Remaining: roster identity, durable state, and config wiring — see the spec.
 - [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
 - [ ] **Recalibrate the cost model** from 5bps to the measured ~1bp (cycle 11 S3)

@@ -31,6 +31,11 @@ from quantbot.strategy.indicators import (
     true_ranges,
     wilder_atr,
 )
+from quantbot.strategy.tranches import (
+    max_supportable_tranches,
+    tranche_schedule,
+    tranche_weights,
+)
 
 __all__ = [
     "DEFAULT_UNIVERSE",
@@ -59,5 +64,8 @@ __all__ = [
     "true_ranges",
     "validate_strategy_identity",
     "realized_volatility",
+    "max_supportable_tranches",
+    "tranche_schedule",
+    "tranche_weights",
     "wilder_atr",
 ]
