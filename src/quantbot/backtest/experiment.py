@@ -73,6 +73,12 @@ class ExperimentManifest(BaseModel):
     hypothesis_id: str | None = None
     hypothesis_version: int | None = None
     registration_hash: str | None = None
+    #: Carried into the bundle rather than left behind a hash lookup, so a null result reads
+    #: "no effect larger than X" instead of the far weaker "no effect found" (#19).
+    minimum_detectable_effect: str | None = None
+    #: POWERED or OVERRIDDEN. An overridden experiment stays labelled underpowered everywhere
+    #: its result is displayed.
+    power_verdict: Literal["POWERED", "OVERRIDDEN"] | None = None
 
     @field_validator("experiment_id", "git_commit", "data_hash", "configuration_hash")
     @classmethod
@@ -100,12 +106,19 @@ class ExperimentManifest(BaseModel):
         if not self.results:
             raise ValueError("experiment manifest requires result summaries")
 
-        registration = (self.hypothesis_id, self.hypothesis_version, self.registration_hash)
+        registration = (
+            self.hypothesis_id,
+            self.hypothesis_version,
+            self.registration_hash,
+            self.minimum_detectable_effect,
+            self.power_verdict,
+        )
         if self.mode == "CONFIRMATORY":
             if any(field is None for field in registration):
                 raise ValueError(
                     "a confirmatory experiment must name the hypothesis, version, and "
-                    "registration hash it was frozen against"
+                    "registration hash it was frozen against, and carry the minimum "
+                    "detectable effect and power verdict it cleared"
                 )
             if len(self.registration_hash or "") != 64:
                 raise ValueError("registration_hash must be a SHA-256 hex digest")

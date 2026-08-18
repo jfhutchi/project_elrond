@@ -220,12 +220,23 @@ def test_a_confirmatory_experiment_must_name_the_registration_it_was_frozen_agai
     with pytest.raises(ValueError, match="registration hash"):
         _manifest(mode="CONFIRMATORY")
 
+    # Naming the registration is not enough: the bundle must carry what the gate concluded.
+    with pytest.raises(ValueError, match="minimum "):
+        _manifest(
+            mode="CONFIRMATORY",
+            hypothesis_id="H-2026-001",
+            hypothesis_version=1,
+            registration_hash="a" * 64,
+        )
+
     with pytest.raises(ValueError, match="SHA-256"):
         _manifest(
             mode="CONFIRMATORY",
             hypothesis_id="H-2026-001",
             hypothesis_version=1,
             registration_hash="not-a-digest",
+            minimum_detectable_effect="0.920229",
+            power_verdict="POWERED",
         )
 
     confirmatory = _manifest(
@@ -233,10 +244,16 @@ def test_a_confirmatory_experiment_must_name_the_registration_it_was_frozen_agai
         hypothesis_id="H-2026-001",
         hypothesis_version=1,
         registration_hash="a" * 64,
+        minimum_detectable_effect="0.920229",
+        power_verdict="POWERED",
     )
     assert confirmatory.registration_hash == "a" * 64
+    # A null result reads "no effect larger than X" only because X travels with it (#19).
+    assert confirmatory.minimum_detectable_effect == "0.920229"
 
 
 def test_an_exploratory_experiment_cannot_borrow_a_registration() -> None:
     with pytest.raises(ValueError, match="cannot claim a registration"):
         _manifest(hypothesis_id="H-2026-001", hypothesis_version=1, registration_hash="a" * 64)
+    with pytest.raises(ValueError, match="cannot claim a registration"):
+        _manifest(power_verdict="OVERRIDDEN")

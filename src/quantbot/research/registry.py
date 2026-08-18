@@ -1,11 +1,11 @@
-"""Frozen, machine-readable hypothesis registrations (#5).
+"""Frozen, machine-readable hypothesis registrations (#5) behind the power gate (#19).
 
 A registration is a prediction written down *before* the measurement, hashed, and stored so it
 cannot be restated afterwards. Cycle 12 is the worked example: "the growth-optimal leverage is
 below 2x" measured 3.25x. Because the prediction was frozen it is logged as a miss. Unfrozen it
 would have become "an interior optimum exists" -- true, unfalsifiable, and worthless.
 
-Three things are refused here rather than left to judgement, because software can prove them:
+Four things are refused here rather than left to judgement, because software can prove them:
 
 1. **A false holdout claim.** A `PROTECTED_EVALUATION` window may not overlap any date range a
    previous registration already recorded on the same dataset, nor this registration's own
@@ -13,30 +13,32 @@ Three things are refused here rather than left to judgement, because software ca
    visible instead of leaving it in a paragraph: SIP data begins 2016-01-04 and cycles 2-10
    consumed all of it, so any confirmatory claim on that window is in-sample whatever the
    schema says.
-2. **An unresolvable question.** Detecting an annualised Sharpe of `SR` at threshold `z` needs
-   `(z / SR)^2` years. At the current bar that is ~93 years for SR 0.30 and ~8.4 for SR 1.00.
-   A registration whose available sample is shorter than its own claimed effect requires is
-   refused as `UNDERPOWERED`, which is not the same verdict as `REFUTED`.
-3. **A declared rather than counted multiple-testing burden.** The trial count is computed from
-   durable state -- every prior registration plus this one's own search cardinality -- not taken
-   from the registrant. Deflating against one cycle's trials instead of the project's is the
-   standard way this goes wrong.
+2. **An unresolvable question.** `UNDERPOWERED`, computed by `power.py` from the declared
+   estimand and its dependence structure. Not the same verdict as `REFUTED`.
+3. **A question not worth resolving.** `UNECONOMIC`: the smallest effect worth acting on cannot
+   pay its own annual trading cost.
+4. **A declared rather than counted multiple-testing burden.** The trial count is computed from
+   durable state -- everything this project has ever spent, seeded at what cycles 1-17 used --
+   not taken from the registrant. Deflating against one cycle's trials instead of the project's
+   is the standard way this goes wrong.
 
-Scope boundary. #19 owns power *policy* (estimands beyond Sharpe, and `UNDERPOWERED` as a
-first-class research-memory state); this module implements the Sharpe arithmetic it needs, so
-that the "recompute at execution" guarantee has something real to recompute. #6 owns refutation
-memory and the structured migration of `REFUTED.md`; nothing here rewrites that record.
+Every one of those decisions is recorded as a `PowerAssessment`, at registration and again
+before each confirmatory run, so a later agent can tell "we could not test this" from "we
+tested this and it failed". An operator may override an underpowered registration; the override
+is audited and the verdict stays `OVERRIDDEN` rather than becoming `POWERED`.
+
+Scope boundary. #6 owns refutation memory and the structured migration of `REFUTED.md`; nothing
+here rewrites that record.
 """
 
 from __future__ import annotations
 
 import hashlib
-import math
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, datetime
-from decimal import ROUND_HALF_EVEN, Decimal
 from enum import StrEnum
-from typing import Annotated, Literal, Self
+from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 from sqlalchemy import func, select
@@ -44,19 +46,28 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
 from quantbot.backtest.experiment import canonical_result_json
+from quantbot.research.power import (
+    EffectSpecification,
+    PowerAssessment,
+    PowerOverride,
+    PowerVerdict,
+    assess,
+    explain,
+    luck_threshold,
+)
 from quantbot.storage.database import encode_utc
-from quantbot.storage.schema import hypotheses, hypothesis_data_windows
+from quantbot.storage.schema import hypotheses, hypothesis_data_windows, power_assessments
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-#: Statistics are stored as text like every other number here, so the content hash is stable.
-PRECISION = Decimal("0.000001")
 
 #: Candidate evaluations this project ran before the registry existed. Derived from the bar
 #: cycle 17 applied (2.90 = sqrt(2 ln N), so N ~= 67) and consistent with `REFUTED.md`'s
 #: "~43 candidate evaluations" at cycle 10. Seeded rather than assumed zero: a registry that
 #: started counting from one would hand back a luck bar the project has already spent.
 PRIOR_TRIALS = 68
+
+REGISTRATION = "REGISTRATION"
+EXECUTION = "EXECUTION"
 
 
 class DataRole(StrEnum):
@@ -78,61 +89,39 @@ class EpistemicStatus(StrEnum):
 class RefusalReason(StrEnum):
     CONTAMINATED_WINDOW = "CONTAMINATED_WINDOW"
     UNDERPOWERED = "UNDERPOWERED"
+    UNECONOMIC = "UNECONOMIC"
     ALREADY_REGISTERED = "ALREADY_REGISTERED"
     NOT_REGISTERED = "NOT_REGISTERED"
     TAMPERED = "TAMPERED"
 
 
-class RegistrationRefused(ValueError):
-    """Raised when a hypothesis may not be registered, or may not proceed to execution."""
+#: A blocking power verdict, mapped to the refusal it becomes.
+_POWER_REFUSALS = {
+    PowerVerdict.UNDERPOWERED: RefusalReason.UNDERPOWERED,
+    PowerVerdict.UNECONOMIC: RefusalReason.UNECONOMIC,
+}
 
-    def __init__(self, reason: RefusalReason, detail: str) -> None:
+
+class RegistrationRefused(ValueError):
+    """Raised when a hypothesis may not be registered, or may not proceed to execution.
+
+    Carries the `PowerAssessment` when one was produced. The transaction that raised this has
+    already rolled back by the time anyone sees it, so the registry cannot have persisted the
+    refusal itself -- the caller records it in its own transaction via `record_assessment`,
+    which is how an `UNDERPOWERED` outcome survives as research memory rather than vanishing.
+    """
+
+    def __init__(
+        self,
+        reason: RefusalReason,
+        detail: str,
+        *,
+        assessment: PowerAssessment | None = None,
+    ) -> None:
         self.reason = reason
         self.detail = detail
+        self.assessment = assessment
         super().__init__(f"{reason.value}: {detail}")
-
-
-def luck_threshold(trials: int) -> Decimal:
-    """The t-statistic the best of `trials` skill-free candidates is expected to reach.
-
-    `sqrt(2 ln N)`, the asymptotic maximum of N standard normals. It over-states the finite-N
-    expectation, deliberately: in a project where every defect found so far flattered the
-    result, a bar that errs high is the safe direction.
-
-    Recorded rather than reconciled: cycles 15-17 quote this bar (62 trials -> 2.87, 68 -> 2.90)
-    but cycle 10 quotes 2.22 for 43 trials, which is Bailey & Lopez de Prado's finite-N expected
-    maximum -- about 0.5 lower at comparable N. Bars quoted before cycle 15 are therefore not
-    comparable with bars quoted after it, and neither number is retro-fitted here.
-    """
-    if trials < 2:
-        # No selection happened, so there is nothing to deflate: plain two-sided 5%.
-        return Decimal("1.96")
-    return _quantize(math.sqrt(2 * math.log(trials)))
-
-
-def required_sessions(expected_sharpe: Decimal, threshold: Decimal, per_year: int) -> int:
-    """Sessions needed for an annualised Sharpe of `expected_sharpe` to clear `threshold`.
-
-    From t = SR * sqrt(years): years = (z / SR)^2.
-    """
-    if expected_sharpe <= 0:
-        raise ValueError("expected_sharpe must be positive")
-    if per_year <= 0:
-        raise ValueError("per_year must be positive")
-    return math.ceil(float(threshold / expected_sharpe) ** 2 * per_year)
-
-
-def minimum_detectable_sharpe(sessions: int, threshold: Decimal, per_year: int) -> Decimal:
-    """The smallest annualised Sharpe that `sessions` of data could separate from zero."""
-    if sessions <= 0:
-        raise ValueError("sessions must be positive")
-    if per_year <= 0:
-        raise ValueError("per_year must be positive")
-    return _quantize(float(threshold) / math.sqrt(sessions / per_year))
-
-
-def _quantize(value: float) -> Decimal:
-    return Decimal(repr(value)).quantize(PRECISION, rounding=ROUND_HALF_EVEN)
 
 
 class FrozenModel(BaseModel):
@@ -178,28 +167,21 @@ class HypothesisDraft(FrozenModel):
     universe: tuple[Text, ...] = Field(min_length=1)
     features: tuple[Text, ...] = Field(min_length=1)
     target: Text
-    horizon_sessions: int = Field(ge=1)
     portfolio_interpretation: str | None = None
 
     windows: tuple[DataWindow, ...] = Field(min_length=1)
 
     primary_estimand: Text
     secondary_diagnostics: tuple[Text, ...] = ()
-    #: Annualised Sharpe the registrant expects, and the smallest one worth acting on.
-    expected_sharpe: Decimal = Field(gt=0, allow_inf_nan=False)
-    minimum_practical_sharpe: Decimal = Field(gt=0, allow_inf_nan=False)
-    effect_justification: Text
-    available_sessions: int = Field(ge=1)
-    sessions_per_year: int = Field(default=252, ge=1)
-    #: Picks the correct test. Cycle 11 used unpaired t-tests on paired data and the overnight
-    #: effect looked significant when it is not.
-    comparison_structure: Literal["PAIRED", "UNPAIRED", "SINGLE_SAMPLE"]
+    #: The claimed effect, its units, its dependence structure, and its costs. See `power.py`.
+    effect: EffectSpecification
+    #: Observations the requested windows actually supply, in the estimand's sampling unit.
+    available_observations: int = Field(ge=1)
     #: How many candidates were inspected to arrive at this one, counting itself. 1 when the
     #: candidate came from theory or literature rather than from mining data. This is the
     #: registration's whole cost against the project's multiple-testing budget.
     search_cardinality: int = Field(default=1, ge=1)
 
-    costs: dict[str, str]
     confounders: tuple[Text, ...] = Field(min_length=1)
     epistemic_status: EpistemicStatus = EpistemicStatus.UNTESTED
     proposed_by: Text
@@ -209,13 +191,9 @@ class HypothesisDraft(FrozenModel):
     def validate_draft(self) -> Self:
         if (self.parent_hypothesis_id is None) != (self.parent_version is None):
             raise ValueError("a parent reference needs both id and version")
-        if not {"slippage_bps", "commission_per_order"} <= set(self.costs):
-            raise ValueError("costs must state slippage_bps and commission_per_order")
         seen = {(window.dataset, window.role) for window in self.windows}
         if len(seen) != len(self.windows):
             raise ValueError("declare one contiguous window per dataset and role")
-        if self.minimum_practical_sharpe > self.expected_sharpe:
-            raise ValueError("expected effect cannot be below the minimum worth acting on")
         return self
 
     def windows_for(self, *roles: DataRole) -> tuple[DataWindow, ...]:
@@ -223,15 +201,13 @@ class HypothesisDraft(FrozenModel):
 
 
 class Registration(FrozenModel):
-    """A draft plus what the registry computed, frozen together under one hash."""
+    """A draft plus the power decision that let it through, frozen together under one hash."""
 
     draft: HypothesisDraft
     registered_at: datetime
-    #: Prior registrations plus this one's search cardinality. Counted, not declared.
+    #: Prior spend plus this one's search cardinality. Counted, not declared.
     cumulative_trials: int
-    luck_threshold_z: Decimal
-    required_sessions: int
-    minimum_detectable_sharpe: Decimal
+    power: PowerAssessment
 
     @property
     def content_hash(self) -> str:
@@ -246,10 +222,7 @@ class ExecutionClearance:
     version: int
     registration_hash: str
     registered_trials: int
-    current_trials: int
-    current_luck_threshold_z: Decimal
-    current_required_sessions: int
-    available_sessions: int
+    power: PowerAssessment
 
 
 class HypothesisRegistry:
@@ -259,8 +232,20 @@ class HypothesisRegistry:
         self._session = session
         self._prior_trials = prior_trials
 
-    def register(self, draft: HypothesisDraft, *, now: datetime) -> Registration:
-        """Freeze a hypothesis, or refuse it. Refusal is the useful half."""
+    def register(
+        self,
+        draft: HypothesisDraft,
+        *,
+        now: datetime,
+        override: PowerOverride | None = None,
+    ) -> Registration:
+        """Freeze a hypothesis, or refuse it. Refusal is the useful half.
+
+        `override` lets an operator accept an underpowered hypothesis. It is audited in the
+        assessment record and leaves the verdict at `OVERRIDDEN`, so the evidence stays
+        labelled wherever it is displayed. It cannot rescue an `UNECONOMIC` verdict: an effect
+        that cannot pay its own costs is not a measurement problem.
+        """
         existing = self.get(draft.hypothesis_id, draft.version)
         if existing is not None:
             raise RegistrationRefused(
@@ -277,27 +262,31 @@ class HypothesisRegistry:
             )
 
         trials = self._cumulative_trials(draft.search_cardinality)
-        threshold = luck_threshold(trials)
-        needed = required_sessions(draft.expected_sharpe, threshold, draft.sessions_per_year)
-        if draft.available_sessions < needed:
+        assessment = assess(
+            hypothesis_id=draft.hypothesis_id,
+            version=draft.version,
+            stage=REGISTRATION,
+            specification=draft.effect,
+            observations_available=draft.available_observations,
+            cumulative_trials=trials,
+            assessed_at=now,
+            override=override,
+        )
+        if not assessment.cleared:
             raise RegistrationRefused(
-                RefusalReason.UNDERPOWERED,
-                f"a Sharpe of {draft.expected_sharpe} needs {needed} sessions to clear the"
-                f" t={threshold} bar for {trials} cumulative trials, and only"
-                f" {draft.available_sessions} are available",
+                _POWER_REFUSALS[assessment.verdict],
+                explain(assessment),
+                assessment=assessment,
             )
 
         registration = Registration(
             draft=draft,
             registered_at=now,
             cumulative_trials=trials,
-            luck_threshold_z=threshold,
-            required_sessions=needed,
-            minimum_detectable_sharpe=minimum_detectable_sharpe(
-                draft.available_sessions, threshold, draft.sessions_per_year
-            ),
+            power=assessment,
         )
         self._insert(registration)
+        self.record_assessment(assessment)
         return registration
 
     def get(self, hypothesis_id: str, version: int) -> Registration | None:
@@ -315,18 +304,60 @@ class HypothesisRegistry:
             for row in self._session.execute(statement).mappings()
         ]
 
+    def record_assessment(self, assessment: PowerAssessment) -> None:
+        """Persist one power decision, whether it passed or refused.
+
+        Append-only. A refusal recorded here is what stops a later agent from reading an
+        untestable hypothesis as a tested-and-failed one.
+        """
+        override = assessment.override
+        self._session.execute(
+            power_assessments.insert().values(
+                hypothesis_id=assessment.hypothesis_id,
+                version=assessment.version,
+                stage=assessment.stage,
+                assessed_at=encode_utc(assessment.assessed_at),
+                verdict=assessment.verdict.value,
+                estimand=assessment.estimand.value,
+                cumulative_trials=assessment.cumulative_trials,
+                luck_threshold_z=str(assessment.luck_threshold_z),
+                observations_required=assessment.observations_required,
+                observations_available=assessment.observations_available,
+                minimum_detectable_effect=str(assessment.minimum_detectable_effect),
+                overridden_by=None if override is None else override.authorized_by,
+                document_json=assessment.model_dump_json(),
+            )
+        )
+
+    def list_assessments(
+        self, hypothesis_id: str, version: int | None = None
+    ) -> list[PowerAssessment]:
+        statement = (
+            select(power_assessments)
+            .where(power_assessments.c.hypothesis_id == hypothesis_id)
+            .order_by(power_assessments.c.assessment_id)
+        )
+        if version is not None:
+            statement = statement.where(power_assessments.c.version == version)
+        return [
+            PowerAssessment.model_validate_json(str(row["document_json"]))
+            for row in self._session.execute(statement).mappings()
+        ]
+
     def verify_for_execution(
         self,
         hypothesis_id: str,
         version: int,
         *,
-        available_sessions: int | None = None,
+        now: datetime,
+        available_observations: int | None = None,
     ) -> ExecutionClearance:
         """Re-check a frozen registration against current state before a confirmatory run.
 
         The registered numbers are not trusted: every registration since raises the bar, so a
         hypothesis that was adequately powered when frozen can be underpowered by the time it
-        runs. Refuses rather than downgrades.
+        runs. Refuses rather than downgrades. An override recorded at registration is carried
+        forward, because the operator accepted the shortfall, not one particular number.
         """
         row = self._row(hypothesis_id, version)
         if row is None:
@@ -344,33 +375,37 @@ class HypothesisRegistry:
                 f" but was frozen as {stored_hash}",
             )
 
-        sessions = (
-            registration.draft.available_sessions
-            if available_sessions is None
-            else available_sessions
+        observations = (
+            registration.draft.available_observations
+            if available_observations is None
+            else available_observations
         )
-        # This registration is already counted, so its own search is not added a second time.
-        trials = self._cumulative_trials(0)
-        threshold = luck_threshold(trials)
-        needed = required_sessions(
-            registration.draft.expected_sharpe, threshold, registration.draft.sessions_per_year
+        assessment = assess(
+            hypothesis_id=hypothesis_id,
+            version=version,
+            stage=EXECUTION,
+            specification=registration.draft.effect,
+            observations_available=observations,
+            # This registration is already counted, so its own search is not added again.
+            cumulative_trials=self._cumulative_trials(0),
+            assessed_at=now,
+            override=registration.power.override,
         )
-        if sessions < needed:
+        if not assessment.cleared:
             raise RegistrationRefused(
-                RefusalReason.UNDERPOWERED,
-                f"{hypothesis_id} v{version} needed {registration.required_sessions} sessions at"
-                f" registration and needs {needed} now that {trials} trials have accumulated;"
-                f" {sessions} are available",
+                _POWER_REFUSALS[assessment.verdict],
+                f"{hypothesis_id} v{version} needed "
+                f"{registration.power.observations_required} observations at registration; "
+                + explain(assessment),
+                assessment=assessment,
             )
+        self.record_assessment(assessment)
         return ExecutionClearance(
             hypothesis_id=hypothesis_id,
             version=version,
             registration_hash=stored_hash,
             registered_trials=registration.cumulative_trials,
-            current_trials=trials,
-            current_luck_threshold_z=threshold,
-            current_required_sessions=needed,
-            available_sessions=sessions,
+            power=assessment,
         )
 
     def _row(self, hypothesis_id: str, version: int) -> RowMapping | None:
@@ -434,10 +469,12 @@ class HypothesisRegistry:
                 content_hash=registration.content_hash,
                 search_cardinality=draft.search_cardinality,
                 cumulative_trials=registration.cumulative_trials,
-                luck_threshold_z=str(registration.luck_threshold_z),
-                expected_sharpe=str(draft.expected_sharpe),
-                required_sessions=registration.required_sessions,
-                available_sessions=draft.available_sessions,
+                luck_threshold_z=str(registration.power.luck_threshold_z),
+                estimand=draft.effect.estimand.value,
+                expected_effect=str(draft.effect.expected),
+                power_verdict=registration.power.verdict.value,
+                required_observations=registration.power.observations_required,
+                available_observations=draft.available_observations,
                 document_json=registration.model_dump_json(),
             )
         )
@@ -457,6 +494,7 @@ class HypothesisRegistry:
 def summarize(registration: Registration) -> dict[str, object]:
     """Flat operator-facing view: what was claimed, and what bar it has to clear."""
     draft = registration.draft
+    power = registration.power
     return {
         "hypothesis_id": draft.hypothesis_id,
         "version": draft.version,
@@ -466,13 +504,45 @@ def summarize(registration: Registration) -> dict[str, object]:
         "registered_at": encode_utc(registration.registered_at),
         "content_hash": registration.content_hash,
         "cumulative_trials": registration.cumulative_trials,
-        "luck_threshold_z": str(registration.luck_threshold_z),
-        "expected_sharpe": str(draft.expected_sharpe),
-        "required_sessions": registration.required_sessions,
-        "available_sessions": draft.available_sessions,
-        "minimum_detectable_sharpe": str(registration.minimum_detectable_sharpe),
+        "luck_threshold_z": str(power.luck_threshold_z),
+        "estimand": power.estimand.value,
+        "power_verdict": power.verdict.value,
+        "overridden_by": None if power.override is None else power.override.authorized_by,
+        "expected_effect": str(power.expected_effect),
+        "minimum_detectable_effect": str(power.minimum_detectable_effect),
+        "required_observations": power.observations_required,
+        "available_observations": power.observations_available,
+        "variance_inflation": str(power.variance_inflation),
         "windows": [
             f"{w.dataset}@{w.snapshot} {w.role.value} {w.start.isoformat()}..{w.end.isoformat()}"
             for w in draft.windows
         ],
     }
+
+
+def unresolved_questions(assessments: Sequence[PowerAssessment]) -> list[PowerAssessment]:
+    """Everything this project declined to test, and why. Distinct from what it refuted."""
+    return [
+        assessment
+        for assessment in assessments
+        if assessment.verdict in (PowerVerdict.UNDERPOWERED, PowerVerdict.UNECONOMIC)
+    ]
+
+
+__all__ = [
+    "EXECUTION",
+    "PRIOR_TRIALS",
+    "REGISTRATION",
+    "DataRole",
+    "DataWindow",
+    "EpistemicStatus",
+    "ExecutionClearance",
+    "HypothesisDraft",
+    "HypothesisRegistry",
+    "RefusalReason",
+    "Registration",
+    "RegistrationRefused",
+    "luck_threshold",
+    "summarize",
+    "unresolved_questions",
+]

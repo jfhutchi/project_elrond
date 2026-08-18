@@ -174,6 +174,16 @@ is not**; and two in one leverage function — debt held fixed instead of levera
 leverage looked survivable; then a monthly-rebalanced margin path compared against a
 daily-rebalanced baseline, which appeared to show that margin calls *create* wealth.
 
+Found while building the migration path for #5 and #19: **three of the four Alembic revisions
+built their tables from live metadata rather than from their own definitions**, so each stopped
+describing the schema it actually produced as soon as the next revision landed. Revision 0002
+created V3 column names on a fresh database and 0003's rename then failed on a column that had
+never existed. A second instance in the same pair of revisions left a backfill `server_default`
+attached, which diverged the migrated schema from head metadata. Both were caught by the
+post-upgrade schema comparison rather than by reading the code -- the same asymmetry as every
+entry below. Each revision now names its own tables. Neither flattered a research result; they
+are recorded because the migration path is what will carry every future result.
+
 Found while building the hypothesis registry (#5): **this project has used two different
 luck bars.** Cycle 10 quotes t=2.22 for 43 trials, which is Bailey & Lopez de Prado's finite-N
 expected maximum. Cycles 15-17 quote 2.87/2.89/2.90, which is `sqrt(2 ln N)` — about 0.5 higher

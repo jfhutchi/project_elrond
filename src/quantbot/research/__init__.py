@@ -1,11 +1,30 @@
-"""Research-side state: hypotheses frozen before measurement.
+"""Research-side state: hypotheses frozen before measurement, behind a power gate.
 
 Kept separate from `quantbot.domain` on purpose. This package holds evidence, not trading
 state, and nothing in it has authority over the broker, the risk engine, or the kill switch.
 """
 
+from quantbot.research.power import (
+    MEASURED_MEDIAN_ROUND_TRIP_BPS,
+    ComparisonStructure,
+    DependenceAssumptions,
+    EconomicProfile,
+    EffectSpecification,
+    Estimand,
+    PowerAssessment,
+    PowerOverride,
+    PowerVerdict,
+    Sampling,
+    assess,
+    explain,
+    luck_threshold,
+    minimum_detectable_effect,
+    observations_required,
+)
 from quantbot.research.registry import (
+    EXECUTION,
     PRIOR_TRIALS,
+    REGISTRATION,
     DataRole,
     DataWindow,
     EpistemicStatus,
@@ -15,25 +34,38 @@ from quantbot.research.registry import (
     RefusalReason,
     Registration,
     RegistrationRefused,
-    luck_threshold,
-    minimum_detectable_sharpe,
-    required_sessions,
     summarize,
+    unresolved_questions,
 )
 
 __all__ = [
+    "EXECUTION",
+    "MEASURED_MEDIAN_ROUND_TRIP_BPS",
     "PRIOR_TRIALS",
+    "REGISTRATION",
+    "ComparisonStructure",
     "DataRole",
     "DataWindow",
+    "DependenceAssumptions",
+    "EconomicProfile",
+    "EffectSpecification",
     "EpistemicStatus",
+    "Estimand",
     "ExecutionClearance",
     "HypothesisDraft",
     "HypothesisRegistry",
+    "PowerAssessment",
+    "PowerOverride",
+    "PowerVerdict",
     "RefusalReason",
     "Registration",
     "RegistrationRefused",
+    "Sampling",
+    "assess",
+    "explain",
     "luck_threshold",
-    "minimum_detectable_sharpe",
-    "required_sessions",
+    "minimum_detectable_effect",
+    "observations_required",
     "summarize",
+    "unresolved_questions",
 ]

@@ -352,8 +352,51 @@ Experiment manifests now carry `mode`, defaulting to `EXPLORATORY`. Only a run n
 registration hash is `CONFIRMATORY`; anything else is not evidence. `quantbot hypotheses` lists
 what is registered.
 
-Deliberately left to their own issues: power policy beyond the Sharpe case (#19), refutation
-memory and the structured `REFUTED.md` migration (#6).
+Deliberately left to its own issue: refutation memory and the structured `REFUTED.md`
+migration (#6).
+
+## 6j. The power gate refuses questions the data cannot answer (#19)
+
+`quantbot.research.power`. Two arithmetic questions, asked before any compute is spent and
+answerable without touching the data.
+
+**Can this sample detect this effect?** `t = d*sqrt(n)`, so `n = (z/d)^2`. Five estimands over
+one core: Sharpe is a standardised mean difference with `d = SR/sqrt(252)`, so it cannot drift
+from `MEAN_DIFFERENCE` or `CROSS_SECTIONAL_SPREAD`. `HIT_RATE` uses the proportion form and
+`INFORMATION_COEFFICIENT` uses Fisher's transform.
+
+**Would it survive its own costs?** A minimum practical effect that cannot pay its annual
+trading drag is `UNECONOMIC` -- a different fact from `UNDERPOWERED`. This is `REFUTED.md` #8
+made mechanical: 1-day reversal had the strongest raw edge ever measured here and netted
+-28.8% at 5bps.
+
+**Variance inflation is mandatory, and it is the term that matters most here.** 2,669 daily
+observations of a 252-day forward return are not 2,669 independent draws, they are closer to
+ten. Three declared sources are applied and recorded with every power number: AR(1)
+`(1+rho)/(1-rho)`, clustering `1+(m-1)*ICC`, and horizon overlap `h`. An unpaired comparison
+costs 2x a paired one -- cycle 11 used the wrong one and the overnight premium looked
+significant when it is not.
+
+| refusal | rule |
+|---|---|
+| `UNDERPOWERED` | the requested sample cannot resolve the claimed effect at the current bar |
+| `UNECONOMIC` | the smallest effect worth acting on cannot pay its own annual trading cost |
+| `OVERRIDDEN` | underpowered, and an operator authorised it. Never becomes `POWERED` |
+
+Every decision is written to `power_assessments` at registration and again before each
+confirmatory run. A refusal travels out on the exception so the caller can record it after the
+rollback: `UNDERPOWERED` must survive as its own outcome, because recording an untestable
+hypothesis as refuted teaches a later agent that a mechanism was tested and failed when it was
+never tested at all.
+
+An override is audited, carries into execution (the operator accepted the shortfall, not one
+sample count), and travels into the result bundle beside the minimum detectable effect so a
+null result reads "no effect larger than X". It cannot rescue `UNECONOMIC`.
+
+**No Monte Carlo, deliberately.** The gate runs before the data is read. At that point only
+declared parameters exist, so simulating a null from them converges to the closed form with
+noise added; the version that would add information needs the window the gate exists to
+protect. Deferred until an estimand with no analytic form is actually registered.
 
 ## 7. Open items
 

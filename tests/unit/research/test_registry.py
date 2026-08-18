@@ -18,15 +18,22 @@ from sqlalchemy import select, update
 
 from quantbot.research import (
     PRIOR_TRIALS,
+    ComparisonStructure,
     DataRole,
     DataWindow,
+    DependenceAssumptions,
+    EconomicProfile,
+    EffectSpecification,
+    Estimand,
     HypothesisDraft,
     HypothesisRegistry,
+    PowerOverride,
+    PowerVerdict,
     RefusalReason,
     RegistrationRefused,
-    luck_threshold,
-    minimum_detectable_sharpe,
-    required_sessions,
+    Sampling,
+    summarize,
+    unresolved_questions,
 )
 from quantbot.storage import Database
 from quantbot.storage.schema import hypotheses
@@ -60,6 +67,25 @@ def window(
     )
 
 
+def sharpe_effect(**overrides: object) -> EffectSpecification:
+    expected = overrides.pop("expected", Decimal("1.0"))
+    assert isinstance(expected, Decimal)
+    fields: dict[str, object] = {
+        "estimand": Estimand.SHARPE,
+        "expected": expected,
+        "minimum_practical": expected / 2,
+        "justification": "Cycle 16 measured SPY_SMA200 at Sharpe 0.91 in-sample.",
+        "comparison": ComparisonStructure.PAIRED,
+        "economics": EconomicProfile(
+            annual_rebalances=12,
+            expected_annual_volatility_bps=1500,
+            round_trip_cost_bps=Decimal("1.1"),
+        ),
+    }
+    fields.update(overrides)
+    return EffectSpecification(**fields)
+
+
 def make_draft(**overrides: object) -> HypothesisDraft:
     """A registrable draft: powered, uncontaminated, and falsifiable unless overridden."""
     fields: dict[str, object] = {
@@ -72,39 +98,15 @@ def make_draft(**overrides: object) -> HypothesisDraft:
         "universe": ("SPY",),
         "features": ("close_sma_200",),
         "target": "next-session excess return",
-        "horizon_sessions": 1,
         "windows": (window(DataRole.PROTECTED_EVALUATION, "2016-01-04", "2026-08-18"),),
         "primary_estimand": "annualised Sharpe difference against SPY buy-and-hold",
-        "expected_sharpe": Decimal("1.0"),
-        "minimum_practical_sharpe": Decimal("0.5"),
-        "effect_justification": "Cycle 16 measured SPY_SMA200 at Sharpe 0.91 in-sample.",
-        "available_sessions": SIP_SESSIONS,
-        "comparison_structure": "PAIRED",
-        "costs": {"slippage_bps": "1.1", "commission_per_order": "0"},
+        "effect": sharpe_effect(),
+        "available_observations": SIP_SESSIONS,
         "confounders": ("regime dependence", "the 2020 crash dominating the sample"),
         "proposed_by": "claude-opus-5",
     }
     fields.update(overrides)
     return HypothesisDraft(**fields)
-
-
-def test_luck_bar_and_power_reproduce_the_figures_already_recorded_in_refuted_md() -> None:
-    # Cycles 15-17 quote these bars; the registry must not quietly move them.
-    assert str(luck_threshold(62)) == "2.873024"
-    assert str(luck_threshold(68)) == "2.904998"
-
-    # Claude's review table on issue #5: years of daily data needed at t=2.9.
-    years = {
-        sharpe: required_sessions(Decimal(sharpe), Decimal("2.9"), 252) / 252
-        for sharpe in ("0.30", "0.50", "0.80", "1.00")
-    }
-    assert round(years["0.30"]) == 93
-    assert round(years["0.50"]) == 34
-    assert round(years["0.80"]) == 13
-    assert round(years["1.00"], 1) == 8.4
-
-    # The whole SIP history cannot separate a Sharpe below ~0.9 from zero.
-    assert minimum_detectable_sharpe(SIP_SESSIONS, Decimal("2.9"), 252) > Decimal("0.89")
 
 
 def test_registration_freezes_the_prediction_under_a_content_hash(database: Database) -> None:
@@ -222,16 +224,15 @@ def test_an_effect_too_small_for_the_available_data_is_refused_as_underpowered(
     """
     with database.transaction() as session:
         strong = HypothesisRegistry(session).register(
-            make_draft(expected_sharpe=Decimal("1.0")), now=NOW
+            make_draft(effect=sharpe_effect(expected=Decimal("1.0"))), now=NOW
         )
-    assert strong.required_sessions <= SIP_SESSIONS
+    assert strong.power.observations_required <= SIP_SESSIONS
 
     # A different dataset, so nothing this project has touched is involved and the
     # contamination gate has nothing to say about it.
     weak = make_draft(
         hypothesis_id="H-2026-002",
-        expected_sharpe=Decimal("0.5"),
-        minimum_practical_sharpe=Decimal("0.5"),
+        effect=sharpe_effect(expected=Decimal("0.5")),
         windows=(
             window(
                 DataRole.PROTECTED_EVALUATION,
@@ -264,29 +265,31 @@ def test_the_trial_count_is_the_project_history_not_this_cycle(database: Databas
         )
     # 68 already spent by cycles 1-17, plus 12 mined for the first, plus 5 for this one.
     assert second.cumulative_trials == PRIOR_TRIALS + 12 + 5
-    assert second.luck_threshold_z > first.luck_threshold_z
+    assert second.power.luck_threshold_z > first.power.luck_threshold_z
 
 
 def test_execution_recomputes_power_against_trials_accumulated_since_registration(
     database: Database,
 ) -> None:
     """The registered numbers are not trusted at execution time; the bar moves under them."""
-    registrable = make_draft(expected_sharpe=Decimal("1.0"), available_sessions=2200)
+    registrable = make_draft(
+        effect=sharpe_effect(expected=Decimal("1.0")), available_observations=2200
+    )
     with database.transaction() as session:
         registered = HypothesisRegistry(session).register(registrable, now=NOW)
-    assert registered.required_sessions <= 2200
+    assert registered.power.observations_required <= 2200
 
     with database.transaction() as session:
-        clearance = HypothesisRegistry(session).verify_for_execution("H-2026-001", 1)
+        clearance = HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
     assert clearance.registration_hash == registered.content_hash
-    assert clearance.current_required_sessions <= clearance.available_sessions
+    assert clearance.power.observations_required <= clearance.power.observations_available
 
     # A later, unrelated search raises the luck bar for everything that follows it.
     with database.transaction() as session:
         HypothesisRegistry(session).register(
             make_draft(
                 hypothesis_id="H-2026-002",
-                expected_sharpe=Decimal("3.0"),
+                effect=sharpe_effect(expected=Decimal("3.0")),
                 search_cardinality=10,
                 windows=(window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19"),),
             ),
@@ -294,14 +297,14 @@ def test_execution_recomputes_power_against_trials_accumulated_since_registratio
         )
 
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1)
+        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
     assert error.value.reason is RefusalReason.UNDERPOWERED
-    assert str(registered.required_sessions) in error.value.detail
+    assert str(registered.power.observations_required) in error.value.detail
 
 
 def test_execution_refuses_a_hypothesis_that_was_never_registered(database: Database) -> None:
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).verify_for_execution("H-DOES-NOT-EXIST", 1)
+        HypothesisRegistry(session).verify_for_execution("H-DOES-NOT-EXIST", 1, now=NOW)
     assert error.value.reason is RefusalReason.NOT_REGISTERED
 
 
@@ -316,7 +319,7 @@ def test_editing_the_stored_registration_is_detected_at_execution(database: Data
         session.execute(update(hypotheses).values(document_json=json.dumps(document)))
 
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1)
+        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
     assert error.value.reason is RefusalReason.TAMPERED
 
 
@@ -333,3 +336,128 @@ def test_a_draft_cannot_split_one_dataset_role_across_ranges() -> None:
                 window(DataRole.DISCOVERY, "2020-01-02", "2021-12-31"),
             )
         )
+
+
+def test_an_underpowered_refusal_survives_as_research_memory(database: Database) -> None:
+    """The distinction #19 exists to protect: declined to test is not tested and failed.
+
+    The transaction that refused has already rolled back, so the refusal reaches durable state
+    only because it travels out on the exception for the caller to record.
+    """
+    weak = make_draft(effect=sharpe_effect(expected=Decimal("0.3")))
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).register(weak, now=NOW)
+    refusal = error.value.assessment
+    assert refusal is not None
+    assert refusal.verdict is PowerVerdict.UNDERPOWERED
+
+    with database.transaction() as session:
+        HypothesisRegistry(session).record_assessment(refusal)
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        assert registry.get("H-2026-001", 1) is None
+        recorded = registry.list_assessments("H-2026-001")
+
+    assert [entry.verdict for entry in recorded] == [PowerVerdict.UNDERPOWERED]
+    assert unresolved_questions(recorded) == recorded
+    assert recorded[0].shortfall_observations > 0
+
+
+def test_an_operator_override_registers_and_stays_labelled_underpowered(
+    database: Database,
+) -> None:
+    weak = make_draft(effect=sharpe_effect(expected=Decimal("0.3")))
+    override = PowerOverride(authorized_by="hutch", reason="precursor to a forward-paper test")
+
+    with database.transaction() as session:
+        registration = HypothesisRegistry(session).register(weak, now=NOW, override=override)
+    assert registration.power.verdict is PowerVerdict.OVERRIDDEN
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        stored = registry.get("H-2026-001", 1)
+        assessments = registry.list_assessments("H-2026-001")
+        verdict_column = session.execute(select(hypotheses.c.power_verdict)).scalar_one()
+
+    assert stored is not None
+    assert stored.power.verdict is PowerVerdict.OVERRIDDEN
+    assert stored.power.override == override
+    assert verdict_column == "OVERRIDDEN"
+    assert summarize(stored)["overridden_by"] == "hutch"
+    assert [entry.override for entry in assessments] == [override]
+
+
+def test_an_override_carries_into_execution_rather_than_expiring(database: Database) -> None:
+    """The operator accepted the shortfall, not one particular sample count."""
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(
+            make_draft(effect=sharpe_effect(expected=Decimal("0.3"))),
+            now=NOW,
+            override=PowerOverride(authorized_by="hutch", reason="accepted"),
+        )
+    with database.transaction() as session:
+        clearance = HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+    assert clearance.power.verdict is PowerVerdict.OVERRIDDEN
+    assert clearance.power.stage == "EXECUTION"
+
+
+def test_an_edge_that_cannot_pay_its_costs_is_refused_as_uneconomic(database: Database) -> None:
+    """Distinct from underpowered: the sample is enormous, so only the cost floor can fire."""
+    churn = make_draft(
+        available_observations=1_000_000,
+        effect=sharpe_effect(
+            expected=Decimal("2.0"),
+            minimum_practical=Decimal("0.2"),
+            economics=EconomicProfile(
+                annual_rebalances=252,
+                expected_annual_volatility_bps=1500,
+                round_trip_cost_bps=Decimal("5"),
+            ),
+        ),
+    )
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).register(churn, now=NOW)
+
+    assert error.value.reason is RefusalReason.UNECONOMIC
+    assert error.value.assessment is not None
+    assert error.value.assessment.verdict is PowerVerdict.UNECONOMIC
+    assert "1260" in error.value.detail
+
+
+def test_every_execution_check_is_recorded_not_only_the_registration(
+    database: Database,
+) -> None:
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(make_draft(), now=NOW)
+    with database.transaction() as session:
+        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+
+    with database.transaction() as session:
+        stages = [
+            entry.stage for entry in HypothesisRegistry(session).list_assessments("H-2026-001")
+        ]
+    assert stages == ["REGISTRATION", "EXECUTION"]
+
+
+def test_a_registration_records_the_dependence_assumptions_behind_its_power_number(
+    database: Database,
+) -> None:
+    """A minimum detectable effect quoted without its assumptions is false precision."""
+    overlapping = make_draft(
+        # Deliberately generous, so the power gate cannot fire and the assumptions themselves
+        # are what is under test.
+        available_observations=20_000,
+        effect=sharpe_effect(
+            expected=Decimal("2.0"),
+            dependence=DependenceAssumptions(
+                sampling=Sampling.OVERLAPPING, horizon_observations=21
+            ),
+        )
+    )
+    with database.transaction() as session:
+        registration = HypothesisRegistry(session).register(overlapping, now=NOW)
+
+    assert registration.power.variance_inflation == Decimal("21")
+    assert registration.power.dependence.horizon_observations == 21
+    assert summarize(registration)["variance_inflation"] == "21.000000"

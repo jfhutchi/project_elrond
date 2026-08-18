@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 metadata = MetaData(
     naming_convention={
@@ -313,9 +313,14 @@ hypotheses = Table(
     # Computed at registration from durable state, never declared. See research/registry.py.
     Column("cumulative_trials", Integer, nullable=False),
     Column("luck_threshold_z", Text, nullable=False),
-    Column("expected_sharpe", Text, nullable=False),
-    Column("required_sessions", Integer, nullable=False),
-    Column("available_sessions", Integer, nullable=False),
+    # The estimand fixes the units of every effect figure beside it: an annualised Sharpe, a
+    # Cohen's d, a proportion, or a correlation. A single "expected_sharpe" column would be a
+    # lie for four of the five. See research/power.py.
+    Column("estimand", String(32), nullable=False),
+    Column("expected_effect", Text, nullable=False),
+    Column("power_verdict", String(32), nullable=False),
+    Column("required_observations", Integer, nullable=False),
+    Column("available_observations", Integer, nullable=False),
     Column("document_json", Text, nullable=False),
     ForeignKeyConstraint(
         ["parent_hypothesis_id", "parent_version"],
@@ -352,3 +357,38 @@ Index(
     hypothesis_data_windows.c.dataset,
     hypothesis_data_windows.c.start_date,
 )
+
+
+# --- Research: power assessments (#19) ---------------------------------------------------
+#
+# Append-only, and deliberately not foreign-keyed to `hypotheses`: the assessments worth
+# keeping include the ones that refused a registration, which therefore has no row. Recording
+# an untestable hypothesis as refuted would teach a later agent that a mechanism was tested and
+# failed when it was never tested at all, so `UNDERPOWERED` is preserved as its own outcome.
+
+power_assessments = Table(
+    "power_assessments",
+    metadata,
+    Column("assessment_id", Integer, primary_key=True, autoincrement=True),
+    Column("hypothesis_id", String(128), nullable=False),
+    Column("version", Integer, nullable=False),
+    # REGISTRATION or EXECUTION. The bar moves between them, so both are kept.
+    Column("stage", String(16), nullable=False),
+    Column("assessed_at", String(40), nullable=False),
+    Column("verdict", String(32), nullable=False),
+    Column("estimand", String(32), nullable=False),
+    Column("cumulative_trials", Integer, nullable=False),
+    Column("luck_threshold_z", Text, nullable=False),
+    Column("observations_required", Integer, nullable=False),
+    Column("observations_available", Integer, nullable=False),
+    Column("minimum_detectable_effect", Text, nullable=False),
+    # Present only on an operator override, which is the audit trail for one.
+    Column("overridden_by", String(128)),
+    Column("document_json", Text, nullable=False),
+)
+Index(
+    "ix_power_assessments_hypothesis",
+    power_assessments.c.hypothesis_id,
+    power_assessments.c.version,
+)
+Index("ix_power_assessments_verdict", power_assessments.c.verdict)
