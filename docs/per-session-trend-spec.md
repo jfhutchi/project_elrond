@@ -211,3 +211,35 @@ trend and cannot re-enter until the next month end, which is precisely the behav
 **Do not act on that paragraph.** Read `engine.py:600-680` and identify the enclosing condition
 first. This is the fourth diagnosis on this question; the previous three were all confidently
 wrong, and every one of them was reasoning from partial reads rather than from the code.
+
+
+## Both structural hypotheses REFUTED — the block, read properly
+
+`engine.py:617-626` sits at 16 spaces, **outside** `if is_month_end:`, so it runs every session.
+Exits (`627`) run every session. Entry is at `663`:
+
+```python
+if not drawdown.entry_halted and not drawdown.liquidation_required:   # 16 spaces
+    ...
+    for symbol in active_roster:                                       # 20 spaces
+```
+
+So **entry runs every session**, not at month end. Only `active_roster` is monthly, and entry
+iterates it each session. The month-end hypothesis in the previous section is wrong.
+
+That leaves one gate not yet examined, and it is the one the entry block is literally wrapped
+in: **the drawdown state**. Thresholds are `[500, 1000, 1500, 2000]` bps, so
+`new_risk_multiplier` cuts sizing to 0.75 at a 5% drawdown and 0.50 at 10%, and
+`entry_halted` blocks entry entirely at 15%.
+
+That would produce exactly the observed signature. Sizing shrinks as drawdown deepens, entries
+stop altogether past 15%, and re-entry waits for recovery — which suppresses trade count and
+exposure together while leaving every component switch and sizing knob looking inert, because
+none of them are what is refusing.
+
+**Check this before anything else:** count sessions where SPY is above trend, no position is
+held, and `entry_halted` is true. If that is most of the missing exposure, the fix is in the
+drawdown policy, not in components, sizing, or the roster.
+
+Five diagnoses now. Three refuted by measurement, two by reading. The pattern throughout has
+been assuming the cause sits in the thing recently changed rather than in the code path.
