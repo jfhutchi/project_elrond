@@ -45,11 +45,11 @@ def test_liveness_is_the_lock_not_the_process_table(
 ) -> None:
     """The distinction that produced a wrong diagnosis: a process can hold nothing."""
     supervisor = _supervisor()
-    lock = tmp_path / "probe.lock"
-    monkeypatch.setenv("QUANTBOT_LOCK_PATH", str(lock))
+    monkeypatch.setenv("QUANTBOT_LOCK_PATH", str(tmp_path / "probe.lock"))
+    daemon_lock = tmp_path / "probe.daemon.lock"
 
     assert supervisor.daemon_holds_lock() is False
-    with SingleWriterLock(lock):
+    with SingleWriterLock(daemon_lock):
         assert supervisor.daemon_holds_lock() is True
     assert supervisor.daemon_holds_lock() is False
 

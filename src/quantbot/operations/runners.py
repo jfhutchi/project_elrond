@@ -16,6 +16,7 @@ from quantbot.brokers import BrokerAdapter
 from quantbot.domain import (
     Account,
     Bar,
+    BrokerOrder,
     Fill,
     OrderIntent,
     OrderSide,
@@ -582,7 +583,11 @@ class AdaptiveMomentumRunner:
         opened_at = _position_open_times(fills)
 
         submissions: list[SubmissionRequest] = []
-        reservations: list[RiskReservation] = []
+        reservations = self._pending_reservations(
+            tuple(await self._broker.get_open_orders()),
+            sliced,
+            account_snapshot.account.equity,
+        )
         evaluated = 0
         with self._database.transaction() as session:
             repository = StorageRepository(session)
@@ -632,19 +637,23 @@ class AdaptiveMomentumRunner:
                         risk_approved=None,
                     )
                 elif decision.action is SignalAction.ENTER and position is None:
-                    request, rejection = self._size_entry(
-                        repository,
-                        symbol=symbol,
-                        decision_price=decision.asset_close,
-                        stop_distance=decision.initial_stop_distance,
-                        account=account_snapshot.account,
-                        broker_positions=positions,
-                        reservations=reservations,
-                        drawdown=drawdown,
-                        signal_date=evaluation_at.date(),
-                        created_at=now,
-                        opened_at=opened_at,
-                    )
+                    if self._already_ordered(repository, symbol, evaluation_at.date()):
+                        skip_reason = ("DUPLICATE_INTENT_ALREADY_DURABLE",)
+                        request = None
+                    else:
+                        request, rejection = self._size_entry(
+                            repository,
+                            symbol=symbol,
+                            decision_price=decision.asset_close,
+                            stop_distance=decision.initial_stop_distance,
+                            account=account_snapshot.account,
+                            broker_positions=positions,
+                            reservations=reservations,
+                            drawdown=drawdown,
+                            signal_date=evaluation_at.date(),
+                            created_at=now,
+                            opened_at=opened_at,
+                        )
 
                 if request is not None and repository.get_order_intent(
                     request.intent.intent_id
@@ -685,6 +694,54 @@ class AdaptiveMomentumRunner:
                     submissions.append(request)
 
         return CycleStrategyResult(submissions=tuple(submissions), signal_count=evaluated)
+
+    def _already_ordered(
+        self, repository: StorageRepository, symbol: str, signal_date: date
+    ) -> bool:
+        """Whether this signal day already minted a buy order identity for this symbol."""
+        client_order_id = build_client_order_id(
+            self._config.version, symbol, signal_date, OrderSide.BUY, 0
+        )
+        return repository.get_order_intent(f"intent-{client_order_id}") is not None
+
+    def _pending_reservations(
+        self,
+        open_orders: Sequence[BrokerOrder],
+        sliced: Mapping[str, Sequence[Bar]],
+        equity: Decimal,
+    ) -> list[RiskReservation]:
+        """Capital committed by unfilled orders must bind the next run's budget.
+
+        A submitted-but-unfilled order is neither a broker position nor an in-run
+        reservation, so without this it is invisible to sizing: a second run before the
+        fills land sizes every entry against a budget that was already spent. Not
+        hypothetical — a re-run deployed a further 20% of equity and then exhausted buying
+        power mid-submission, leaving the account unable to act on the next signal.
+        """
+        reserved: list[RiskReservation] = []
+        for order in open_orders:
+            if order.side is not OrderSide.BUY:
+                continue
+            bars = sliced.get(order.symbol)
+            remaining = order.quantity - order.filled_quantity
+            if not bars or remaining <= 0:
+                continue
+            value = remaining * bars[-1].close
+            reserved.append(
+                RiskReservation(
+                    reservation_id=f"pending:{order.client_order_id}",
+                    symbol=order.symbol,
+                    position_value=value,
+                    gross_exposure=value,
+                    # ponytail: BrokerOrder does not carry the stop distance it was sized
+                    # against, so reserve the per-trade risk budget instead. Over-reserves
+                    # when a value cap bound the size; less exposure is the safe direction.
+                    # Carry the stop on the durable intent if this blocks a real entry.
+                    open_risk=equity * Decimal(self._config.risk_per_trade_bps) / Decimal(10000),
+                    reserves_position_slot=True,
+                )
+            )
+        return reserved
 
     def _size_entry(
         self,

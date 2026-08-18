@@ -98,6 +98,9 @@ class RuntimePaths:
     config: Path
     database: Path
     lock: Path
+    #: Separate from the writer lock: this excludes a second scheduler, while the
+    #: writer lock excludes a second writer and is held only during a cycle.
+    daemon_lock: Path
     reports: Path
 
 
@@ -110,6 +113,9 @@ def runtime_paths() -> RuntimePaths:
         config=_env_path("QUANTBOT_CONFIG", DEFAULT_CONFIG_PATH),
         database=_env_path("QUANTBOT_DB_PATH", DEFAULT_DATABASE_PATH),
         lock=_env_path("QUANTBOT_LOCK_PATH", DEFAULT_LOCK_PATH),
+        daemon_lock=_env_path("QUANTBOT_LOCK_PATH", DEFAULT_LOCK_PATH).with_suffix(
+            ".daemon.lock"
+        ),
         reports=_env_path("QUANTBOT_REPORTS_DIR", DEFAULT_REPORTS_DIR),
     )
 
@@ -488,7 +494,7 @@ async def _daemon(runtime: Runtime) -> dict[str, object]:
         cycle=cycle,
         sleeper=sleeper,
         metrics=runtime.metrics,
-        lock_path=runtime.paths.lock,
+        lock_path=runtime.paths.daemon_lock,
     ).run(_SignalStop(), now=lambda: datetime.now(UTC))
     return {
         "ok": result.stopped_cleanly,

@@ -51,7 +51,14 @@ class Finding:
 
 
 def _lock_path() -> Path:
-    return Path(os.environ.get("QUANTBOT_LOCK_PATH", "quantbot.lock"))
+    """The DAEMON lock, not the writer lock.
+
+    They are different exclusions. The writer lock is held only while a cycle runs, so
+    testing it would report a healthy sleeping daemon as dead for all but a few seconds
+    a day. The daemon lock is held for the scheduler's whole lifetime.
+    """
+    writer = Path(os.environ.get("QUANTBOT_LOCK_PATH", "quantbot.lock"))
+    return writer.with_suffix(".daemon.lock")
 
 
 def daemon_holds_lock() -> bool:
