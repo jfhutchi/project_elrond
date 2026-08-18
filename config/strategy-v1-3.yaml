@@ -2,11 +2,16 @@
 #
 # Why this version exists, stated precisely because the wider claim would be false.
 #
-# V1.2's historical max drawdown is 26.4%. Its own halt fires at 20%. The deployed
-# configuration is therefore inconsistent with its own risk rule: it is expected to
-# trip the halt, and cycle 11 measured that a halt with a human-speed resumption
-# delay costs 8-20% of terminal wealth. Volatility targeting at a 1.5% per-position
-# target brings the drawdown to 17.1%, inside the rule.
+# V1.2's historical max drawdown is 26.4%. The configured thresholds are
+# [500, 1000, 1500, 2000] bps, which means entries halt at 15% and LIQUIDATION is
+# required at 20%. The deployed configuration would therefore have been liquidated
+# historically, not merely halted. That is the incoherence this version fixes.
+#
+# Volatility targeting at a 100bps per-position target brings the drawdown to 14.4%,
+# inside BOTH thresholds. 150bps was tried first and rejected: at 17.1% it clears
+# liquidation but still trips the 15% entry halt, and it produces less wealth under
+# the constraint ($200.31 against $203.92 per $100). Below 100bps over-damps and
+# gives back return without buying any further headroom.
 #
 # What is established: volatility targeting reduces drawdown. Cycle 11 measured this
 # across 18 assets, 16 of 18 reduced, p=0.0007.
@@ -85,11 +90,14 @@ allow_pyramiding: false
 # Volatility-targeted sizing. Exposure per name scales as target/realised volatility,
 # still capped by max_position_value_bps.
 #
-# 150bps is a deliberate choice and the sweep matters: at a 1500bps (15%) target this
-# NEVER binds, because min(10% weight cap, 0.15/vol) only prefers the vol term above
-# 150% annualised volatility, which these ETFs never reach. A 15% target would ship a
-# silent no-op. 150bps binds; 100bps over-damps and gives back return.
-volatility_target_bps: 150
+# The sweep matters: at a 1500bps (15%) target this NEVER binds, because
+# min(10% weight cap, 0.15/vol) only prefers the vol term above 150% annualised
+# volatility, which these ETFs never reach. A 15% target would ship a silent no-op.
+#
+# 100bps is the only setting whose historical drawdown (14.4%) sits inside both the
+# 15% entry halt and the 20% liquidation threshold, and it is also the best performer
+# under that constraint.
+volatility_target_bps: 100
 volatility_lookback_days: 20
 
 # Which signal gates are active. Defaults are all-enabled; this version deliberately

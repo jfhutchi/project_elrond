@@ -131,8 +131,15 @@ identities are unchanged and a regression test pins them:
 | strategy-v1-2.yaml | `...309894d8d8a5296e` | **DEPLOYED, unchanged** |
 | strategy-v1-3.yaml | `...f785a11dc906265f` | built, **not deployed** |
 
-Why v1.3.0 exists: **v1.2.0's historical max drawdown is 26.4% against its own 20% halt** — it
-is expected to trip the rule it ships with. Vol targeting at 150bps brings it to 17.1%.
+Why v1.3.0 exists: the configured thresholds are `[500, 1000, 1500, 2000]` bps, so **entries
+halt at 15% and LIQUIDATION is required at 20%**. V1.2.0's historical max drawdown is **26.4%**
+— the live strategy would have been *liquidated* historically, not merely halted. Vol targeting
+at 100bps brings it to **14.4%, inside both thresholds**.
+
+Correction worth knowing: an earlier version of this section said the halt was at 20% and that
+150bps (17.1%) was inside it. Both were wrong — 17.1% still trips the 15% entry halt. The
+drawdown halt is also **stateless**, recomputed each cycle, so it self-clears with no resumption
+delay; cycle 11's 8-20% delay cost applies to the **kill switch**, which does need a human.
 
 Established: vol targeting reduces drawdown (16/18 assets, p=0.0007).
 **Not established: that it makes more money** — bootstrap CI [−$86.76, +$76.79], loses in 36.8%
