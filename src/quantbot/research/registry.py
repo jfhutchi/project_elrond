@@ -45,7 +45,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
-from quantbot.backtest.experiment import canonical_result_json
+from quantbot.research.manifest import canonical_result_json
 from quantbot.research.power import (
     EffectSpecification,
     PowerAssessment,

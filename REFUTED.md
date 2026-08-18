@@ -174,6 +174,13 @@ is not**; and two in one leverage function — debt held fixed instead of levera
 leverage looked survivable; then a monthly-rebalanced margin path compared against a
 daily-rebalanced baseline, which appeared to show that margin calls *create* wealth.
 
+The defects in this section are now partly mechanical. #18 turned four of them into invariants
+that run on every result bundle: a statistical test that does not match the dependence structure
+of its data, costs that improve a return, forced liquidation that ends richer than no
+liquidation, and a significance claim below the luck bar frozen for its own trial count. The
+harness-not-connected failure — three of the entries below — is caught by a bundle comparison
+that flags identical results across differing inputs.
+
 Found while building the migration path for #5 and #19: **three of the four Alembic revisions
 built their tables from live metadata rather than from their own definitions**, so each stopped
 describing the schema it actually produced as soon as the next revision landed. Revision 0002

@@ -4,6 +4,23 @@ Kept separate from `quantbot.domain` on purpose. This package holds evidence, no
 state, and nothing in it has authority over the broker, the risk engine, or the kill switch.
 """
 
+from quantbot.research.manifest import (
+    CodeProvenance,
+    DatasetSnapshot,
+    EnvironmentFingerprint,
+    ExecutionPath,
+    ExperimentManifest,
+    ExperimentPeriod,
+    ModelProvenance,
+    ResourceUsage,
+    StatisticalPlan,
+    StatisticalTest,
+    WorkerProvenance,
+    canonical_result_json,
+    content_id,
+    redact,
+    write_experiment_manifest,
+)
 from quantbot.research.power import (
     MEASURED_MEDIAN_ROUND_TRIP_BPS,
     ComparisonStructure,
@@ -37,8 +54,39 @@ from quantbot.research.registry import (
     summarize,
     unresolved_questions,
 )
+from quantbot.research.reproducibility import (
+    Difference,
+    InvariantReport,
+    Violation,
+    capture_environment,
+    capture_git_state,
+    check_invariants,
+    compare,
+)
 
 __all__ = [
+    "CodeProvenance",
+    "DatasetSnapshot",
+    "Difference",
+    "EnvironmentFingerprint",
+    "ExecutionPath",
+    "ExperimentManifest",
+    "ExperimentPeriod",
+    "InvariantReport",
+    "ModelProvenance",
+    "ResourceUsage",
+    "StatisticalPlan",
+    "StatisticalTest",
+    "Violation",
+    "WorkerProvenance",
+    "canonical_result_json",
+    "capture_environment",
+    "capture_git_state",
+    "check_invariants",
+    "compare",
+    "content_id",
+    "redact",
+    "write_experiment_manifest",
     "EXECUTION",
     "MEASURED_MEDIAN_ROUND_TRIP_BPS",
     "PRIOR_TRIALS",

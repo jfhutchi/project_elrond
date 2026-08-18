@@ -398,6 +398,47 @@ declared parameters exist, so simulating a null from them converges to the close
 noise added; the version that would add information needs the window the gate exists to
 protect. Deferred until an estimand with no analytic form is actually registered.
 
+## 6k. Result bundles carry what produced them, and get attacked (#18)
+
+`quantbot.research.manifest` and `quantbot.research.reproducibility`. The manifest moved out of
+`quantbot.backtest.experiment` (which is now a re-export shim, so scripts keep working) because
+the registry needs its canonical JSON and the provenance tooling needs its types.
+
+A **confirmatory** bundle now cannot be built without code provenance (commit *and* dirty flag,
+config hash, execution path), an environment fingerprint (interpreter, platform, dependency-lock
+hash, seed), dataset snapshots with vintages and roles, a statistical plan, and resource usage.
+Exploratory bundles stay unencumbered — they make no evidential claim.
+
+**Faithful reproduction of a wrong number is not the goal.** The statistical plan records the
+test *and* the dependence structure of the data, and `check_invariants` refuses the combination
+when they disagree. That is cycle 11's actual error made mechanical: a one-sample test on paired
+data put the overnight premium at t=2.74 where paired gives 0.63, and an independent-samples
+comparison of two Sharpes of the same asset gave 1.09 v 0.92 where Jobson-Korkie-Memmel gives
+z=1.01.
+
+Invariants, each encoding a defect that already happened here:
+
+| invariant | the defect it encodes |
+|---|---|
+| `statistical-test-matches-dependence` | cycle 11, twice |
+| `costs-never-improve-returns` | a margin path that appeared to create wealth |
+| `forced-liquidation-never-creates-wealth` | cycle 12, monthly-vs-daily rebalance mismatch |
+| `significance-clears-the-frozen-bar` | a verdict function declaring success with no test |
+
+`InvariantReport` names what it **could not** check as well as what failed. A check that
+silently does nothing because the result did not report the figure it needs looks exactly like a
+check that passed, and this project has been burned by that shape of false assurance.
+
+`compare()` answers both directions. The one that matters most is the reverse: three of this
+project's recorded analysis errors came from a harness that was not connected to the code under
+test, and the tell was byte-identical output across runs that should have differed. A bundle
+whose results match another's while `inputs_hash` differs is reported as
+"identical despite different inputs -- the run may not exercise what changed".
+
+**Secrets are refused, not merely redacted.** The manifest scans every string it would serialise
+against credential shapes and raises. A redaction bug now fails loudly instead of publishing a
+key.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
