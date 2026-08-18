@@ -179,6 +179,22 @@ both breach liquidation unlevered, so that comparison is not the decision.
 takes $100 to $100,000 in **69 years**. The worst takes 130. The choice between these is worth a
 few percent a year; the choice of how much capital enters is worth multiples.
 
+## 6e. Three configs now exist. Only one is deployed.
+
+| config | identity | what it is |
+|---|---|---|
+| `strategy-v1-2.yaml` | `...309894d8d8a5296e` | **DEPLOYED**. 10-name momentum rotation. Worst of the measured options under the risk rules; 26.4% historical drawdown breaches the 20% liquidation threshold. |
+| `strategy-v1-3.yaml` | `...358c3bd691239575` | v1.2 plus vol targeting at 100bps. Drawdown 14.4%, inside both thresholds. |
+| `strategy-index-v3.yaml` | `...5e14d03a647f4e6b` | Hold SPY, size by volatility. Best measured option under the rules ($288.33 v deployed $175.99), and **abandons the momentum signal entirely**. |
+
+The third is the real strategic question and it is the operator's, not an agent's: fourteen
+cycles found no configuration of the momentum signal that beats holding the index, so that
+config stops paying for a prediction and pays only for exposure management. The evidence is
+suggestive (loses in 5.3% of resamples) but the bootstrap CI spans zero, which is why it is
+built and not deployed.
+
+Any switch restarts the 30-day qualification window.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
