@@ -22,6 +22,10 @@ uv run python scripts/supervisor.py
 QUANTBOT_CONFIG=config/strategy-trend-v4.yaml QUANTBOT_MARKET_DATA_FEED=sip uv run python scripts/backtest_config.py
 ```
 
+**Momentum fails in every universe tested** — US ETFs (t=0.77), US single stocks (t=-2.08, a
+price artefact), and global country indices (t=-0.78). Do not propose a new universe; three
+structurally different ones have now come back null.
+
 **The single most useful fact in this file:** the deployed momentum strategy is measurably
 worthless — beta 0.71, alpha 0.10%/yr at t=0.05, and the ranking does not separate winners from
 losers (t=0.77 on ETFs, confirmed on 595 single stocks). It is a fractional SPY position with

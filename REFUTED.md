@@ -7,7 +7,7 @@ design; if it stops being short, split it rather than skimming it.
 Rule: nothing is listed here without a measurement behind it. "It seemed unlikely" is not a
 refutation.
 
-Last updated 2026-08-18 (cycles 11-16).
+Last updated 2026-08-18 (cycles 11-17).
 
 ## Refuted with measurement
 
@@ -31,6 +31,7 @@ Last updated 2026-08-18 (cycles 11-16).
 | 16 | Volatility targeting as an **alpha** source | REFUTED | Cycle 11. Looked like the best result yet (Sharpe 0.92→1.09, all 12 parameter sets winning, break-even 113x real cost) and died: Jobson-Korkie/Memmel **z=1.01, p=0.31**, wins 6 of 12 assets, loses 2025-26. See #S2 for what did survive |
 | 17 | Overnight (close-to-open) premium | REFUTED | Cycle 11. An error in this project's own batch-2 analysis inflated it: one-sample t-tests instead of **paired**. Corrected, SPY falls t=2.74→0.63 and 1 of 18 assets clears the bar. Overnight-only beats buy-and-hold on CAGR on **1 of 18** — buy-and-hold collects both sessions. SPY premium decayed 7.93%/yr (2016-18) → −0.44% (2022-24) |
 | 18 | Turn-of-month effect | REFUTED | Cycle 11. Positive on 4 of 7 assets, largest t=1.57 (GLD) against a 2.82 bar |
+| 24 | Momentum sorts GLOBAL country indices | REFUTED | Cycle 17, asked by Hutch and the right question to ask — country indices have far wider dispersion than US sectors, which was the standing excuse for why the ranking failed. 22 indices (Japan, Germany, UK, Brazil, India, China, Korea, Taiwan, Australia, Canada, Mexico, South Africa, Israel, Turkey, Poland...) 2016-2026. Top third 6.54% CAGR, bottom third **8.96%** — backwards again. Top minus bottom **-2.47%/yr, t=-0.78** against a 2.90 bar |
 | 23 | Momentum sorts individual stocks, even though it fails on ETFs | REFUTED | Cycle 16, survivorship-free: 595 names, 260 of which stopped trading. The ranking sorts **backwards** — bottom decile 36.04% CAGR against top decile 4.46%, t=-2.08 against a 2.89 bar. It is entirely a low-price artefact: at a $10 floor the spread halves (t=-1.32) and at a **$20 floor it vanishes exactly** (top 8.07% v bottom 8.10%, **t=0.00**). At 200bps, realistic for distressed small caps, every arm is negative |
 | 22 | **The momentum ranking carries information at all** | REFUTED | Cycle 15, and this one subsumes most of the others. Alpha against SPY is **0.10%/yr, t=0.05**. Selecting the top 10 beats holding all 23 by 1.43%/yr at **t=0.84** against a 2.87 bar. Top-decile minus bottom-decile is **t=0.77** — the ranking does not separate winners from losers. The rotation is beta 0.71 with no alpha, and SPY held at 0.71x reproduces it to within **0.05 CAGR points** with no trading at all |
 | 21 | Weight-ramping is a cheap substitute for tranching | REFUTED | Cycle 13. Ramping toward target over 5 or 10 sessions changed outcome dispersion by **-9%** and **-6%** - slightly worse than jumping. Dispersion comes from *which date the ranking is evaluated on*, not transition speed. Rules out the only non-invasive implementation |
@@ -88,6 +89,20 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   `target_weight_sizing` changed nothing. The engine is invested on 43% of sessions against the
   benchmark's 77% using the same 200-day condition, because it only acts at month end and so
   misses every mid-month re-entry. The fix is a per-session evaluation path. Cycle 16.
+* **The momentum ranking carries no information in ANY universe tested.** Three independent
+  structures, three nulls, and this is the strongest form of the finding:
+
+  | universe | top - bottom | t | bar |
+  |---|---|---|---|
+  | 23 US sector/asset ETFs | +2.60%/yr | 0.77 | 2.87 |
+  | 595 US single stocks (survivorship-free) | -32.19%/yr | -2.08 | 2.89 |
+  | 22 global country indices | -2.47%/yr | -0.78 | 2.90 |
+
+  The US-ETF null had a standing excuse — correlated slices of one market, nothing to sort.
+  Single stocks killed that, and country indices kill it again with the widest dispersion
+  available. Caveat worth keeping: these are US-listed ETFs, so currency exposure is unhedged
+  and local small caps are absent. A test on native exchanges could differ but Alpaca cannot
+  reach them.
 * **There was never a signal to tune.** Cycle 15 tested the premise underneath cycles 1-10 and
   it fails: the momentum ranking does not separate winners from losers (top-minus-bottom
   t=0.77), selection does not beat not-selecting (t=0.84), and alpha against SPY is 0.10%/yr
