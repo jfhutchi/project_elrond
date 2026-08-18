@@ -1,14 +1,8 @@
 # Benchmark Comparison
 
-> SUPERSEDED. This is cycle 1, run over 5 years of IEX data (2020-07 → 2026-08). Cycle 2
-> repeated it over 10.6 years of SIP data covering two bear markets — see
-> [cycle-2-findings.md](cycle-2-findings.md). Numbers here are post-bugfix and correct for
-> their window, but the window is half the size and almost entirely a bull market.
-
-
-Generated at: 2026-08-15T14:01:41Z
-Strategy: adaptive-momentum 1.1.0 (config hash `b73083b817f76b8f`)
-Sessions: 1520 from 2020-07-27 to 2026-08-14 (273 of them consumed by warmup)
+Generated at: 2026-08-18T10:43:37Z
+Strategy: adaptive-momentum 1.3.0 (config hash `5e14d03a647f4e6b`)
+Sessions: 2669 from 2016-01-04 to 2026-08-14 (273 of them consumed by warmup)
 Initial cash: $100
 Costs applied: 5bps per side, $0 per order
 
@@ -16,10 +10,10 @@ Data: Alpaca IEX daily bars, dividend and split adjusted. IEX is a partial-volum
 
 | Variant | Total | CAGR | Max DD | Sharpe | Sortino | Profit factor | Win rate | Trades | Exposure | Costs |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| SPY_BUY_AND_HOLD | 161.98% | 17.31% | 24.51% | 1.05 | 1.52 | n/a | n/a | 0 | 100.00% | $0.05 |
-| SPY_SMA200 | 76.54% | 9.88% | 19.49% | 0.94 | 1.33 | 4.51 | 46.67% | 15 | 68.82% | $1.72 |
-| SPY_DONCHIAN | 21.00% | 3.21% | 24.57% | 0.40 | 0.54 | 1.66 | 62.50% | 16 | 55.13% | $1.76 |
-| PURE_MOMENTUM_12_1 | 83.40% | 10.58% | 16.66% | 0.84 | 1.21 | 4.26 | 82.76% | 319 | 83.22% | $1.20 |
-| MOMENTUM_TREND | 49.36% | 6.88% | 17.23% | 0.66 | 0.92 | 2.13 | 75.77% | 326 | 75.15% | $1.30 |
-| FULL_STRATEGY | 1.84% | 0.30% | 5.33% | 0.11 | 0.14 | 1.05 | 37.82% | 193 | 18.66% | $1.97 |
+| SPY_BUY_AND_HOLD | 354.70% | 15.37% | 33.79% | 0.90 | 1.27 | n/a | n/a | 0 | 100.00% | $0.05 |
+| SPY_SMA200 | 183.50% | 10.34% | 19.50% | 0.91 | 1.23 | 4.20 | 44.00% | 25 | 77.37% | $3.97 |
+| SPY_DONCHIAN | 52.35% | 4.05% | 24.55% | 0.49 | 0.65 | 2.16 | 65.38% | 26 | 55.75% | $3.28 |
+| PURE_MOMENTUM_12_1 | 16.06% | 1.42% | 3.69% | 0.85 | 1.19 | n/a | 100.00% | 80 | 9.03% | $0.03 |
+| MOMENTUM_TREND | 8.60% | 0.78% | 2.87% | 0.66 | 0.90 | 3.68 | 94.59% | 74 | 7.44% | $0.12 |
+| FULL_STRATEGY | 4.72% | 0.44% | 3.64% | 0.31 | 0.41 | 1.48 | 46.67% | 45 | 8.79% | $1.26 |
 

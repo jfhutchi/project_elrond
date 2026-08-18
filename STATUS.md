@@ -185,7 +185,7 @@ few percent a year; the choice of how much capital enters is worth multiples.
 |---|---|---|
 | `strategy-v1-2.yaml` | `...309894d8d8a5296e` | **DEPLOYED**. 10-name momentum rotation. Worst of the measured options under the risk rules; 26.4% historical drawdown breaches the 20% liquidation threshold. |
 | `strategy-v1-3.yaml` | `...358c3bd691239575` | v1.2 plus vol targeting at 100bps. Drawdown 14.4%, inside both thresholds. |
-| `strategy-index-v3.yaml` | `...5e14d03a647f4e6b` | Hold SPY, size by volatility. Best measured option under the rules ($288.33 v deployed $175.99), and **abandons the momentum signal entirely**. |
+| `strategy-index-v3.yaml` | `...5e14d03a647f4e6b` | Hold SPY, size by volatility. **HAS A KNOWN DEFECT** — runs at ~9% invested, not the 62.5% designed, because `risk_per_trade_bps: 50` against a 2xATR stop binds before the volatility target. Needs ~190 and a re-measure. Do not deploy as-is. |
 
 The third is the real strategic question and it is the operator's, not an agent's: fourteen
 cycles found no configuration of the momentum signal that beats holding the index, so that

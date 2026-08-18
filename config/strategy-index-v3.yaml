@@ -1,4 +1,14 @@
-# Index-vol-target V3.0: hold SPY, size it by volatility. NOT DEPLOYED.
+# Index-vol-target V3.0: hold SPY, size it by volatility. NOT DEPLOYED, AND NOT YET CORRECT.
+#
+# KNOWN DEFECT, measured in the production engine: this config runs at about 9% of
+# equity invested, not the 62.5% it was designed for. risk_per_trade_bps of 50 against
+# a 2xATR stop caps the position near 8-17% of equity, so the volatility target never
+# gets to act. That is the same silent no-op shape cycle 13 found and it means the
+# backtest numbers below, which came from a research script that modelled exposure
+# directly, DO NOT describe what this file actually does.
+#
+# To fix: raise risk_per_trade_bps to roughly 190 so the volatility target becomes the
+# binding cap, then re-measure. Do not deploy before that is done and verified.
 #
 # This exists because cycle 14 measured it as the best option available under this
 # project's own risk rules, and an option that only exists as a backtest series is
