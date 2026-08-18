@@ -228,6 +228,12 @@ class PositionContext(StrategyModel):
     entered_at: datetime
     initial_stop: Decimal = Field(gt=0, allow_inf_nan=False)
     active_stop: Decimal = Field(gt=0, allow_inf_nan=False)
+    #: Which tranche opened this position. Under tranching the same symbol can be held by
+    #: several tranches at once with different entry dates and different stops, so an exit has
+    #: to name the tranche it belongs to. Mis-attributing one shows up as a broker position
+    #: diff, which fails reconciliation and halts trading — the expensive failure this field
+    #: exists to prevent. 0 is the untranched case and is what every deployed version means.
+    tranche: int = Field(default=0, ge=0)
 
     @field_validator("symbol")
     @classmethod

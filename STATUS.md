@@ -338,10 +338,15 @@ unattributed.** First task is a harness that runs a real config through `Backtes
       `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against
       Alpaca's $1 floor). The cheap weight-ramp shortcut is measured and refuted, so the roster
       machinery genuinely has to change.
-      **Scheduling and weighting are now built and tested** in `src/quantbot/strategy/tranches.py`
-      (11 tests, including the guarantee that 1 tranche reproduces month-end exactly, and that
-      the tranche count is derived from equity so it widens as the account grows).
-      Remaining: roster identity, durable state, and config wiring — see the spec.
+      **Steps 1 and 2 are now built.** Scheduling and weighting in
+      `src/quantbot/strategy/tranches.py`; roster identity and tranche-aware expiry on
+      `MonthlyRoster`/`XNYSSessionSequence`; durable tranche attribution on `PositionContext`
+      and in `position_state`. The single-tranche equivalence to month-end is pinned
+      month-by-month against the calendar, and state written before tranching existed still
+      loads as tranche 0 — the live account is holding positions in exactly that shape.
+      **Remaining: step 3, runner and sizing** — build one roster per tranche, blend with
+      `tranche_weights`, scale the position-value cap by the resulting fraction. Nothing is
+      switched on; `rebalance_tranches` is still at its default.
 - [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
 - [ ] **Recalibrate the cost model** from 5bps — deliberately NOT done yet. Two independent

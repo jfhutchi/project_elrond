@@ -473,15 +473,24 @@ class AdaptiveMomentumRunner:
         repository: StorageRepository,
         symbol: str,
         entered_at: datetime,
-    ) -> tuple[Decimal, Decimal] | None:
-        """Return the (initial_stop, active_stop) already durable for this position run."""
+    ) -> tuple[Decimal, Decimal, int] | None:
+        """Return the (initial_stop, active_stop, tranche) already durable for this position.
+
+        The tranche defaults to 0 when absent so state written before tranching existed still
+        loads. Treating a missing tranche as an error would strand every position opened by a
+        prior version, including the ones the live account is holding right now.
+        """
         for record in reversed(repository.list_signals(symbol=symbol)):
             state = record.payload.get("position_state")
             if not isinstance(state, dict):
                 continue
             if str(state.get("entered_at")) != entered_at.isoformat():
                 continue
-            return Decimal(str(state["initial_stop"])), Decimal(str(state["active_stop"]))
+            return (
+                Decimal(str(state["initial_stop"])),
+                Decimal(str(state["active_stop"])),
+                int(state.get("tranche", 0)),
+            )
         return None
 
     def _position_context(
@@ -492,8 +501,9 @@ class AdaptiveMomentumRunner:
         atr: Decimal | None,
     ) -> PositionContext:
         stored = self._prior_position_state(repository, position.symbol, entered_at)
+        tranche = 0
         if stored is not None:
-            initial_stop, active_stop = stored
+            initial_stop, active_stop, tranche = stored
         else:
             if atr is None:
                 raise StrategyDataError(
@@ -508,6 +518,7 @@ class AdaptiveMomentumRunner:
             entered_at=entered_at,
             initial_stop=initial_stop,
             active_stop=active_stop,
+            tranche=tranche,
         )
 
     def _intent(
@@ -697,6 +708,9 @@ class AdaptiveMomentumRunner:
                         "entered_at": context.entered_at.isoformat(),
                         "initial_stop": str(context.initial_stop),
                         "active_stop": str(max(context.active_stop, active_stop)),
+                        # Written unconditionally, including the untranched 0, so state is
+                        # self-describing rather than relying on absence to mean anything.
+                        "tranche": context.tranche,
                     }
                 repository.record_signal(
                     f"{run_id}:{symbol}",
