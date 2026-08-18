@@ -105,3 +105,29 @@ somewhere monthly.
 Note what this is and is not. It does not create alpha — cycles 15 and 16 established the
 momentum ranking carries none. It lets the engine express a rule that was already measured to
 work and which it currently cannot run.
+
+
+## Next step, narrowed further
+
+The entry gates are **not** the cause. `engine.py:686-696` applies, in order: ATR availability,
+`market_regime`, `asset_trend`, `momentum`, `donchian_entry`. With trend-v4's components only
+`asset_trend` is active, so entry requires SPY above its 200-day average — true on ~77% of
+sessions, which is exactly the target exposure.
+
+Exits are also correct: `roster_exit` is off, and `engine.py:644` exits on the same trend
+condition.
+
+So entries are permitted and exits are appropriate, yet the config trades 6 times and holds 27%
+exposure. The loss is therefore **between candidate selection and a filled position** — most
+likely roster interaction (`engine.py:601-605` builds the roster with `use_momentum=False`,
+which may produce an empty or degenerate ranking) or sizing rejecting the order.
+
+Two concrete places to look, in order:
+1. Whether `build_monthly_roster` returns anything at all when `use_momentum` is False and the
+   universe has one name. An empty roster with `roster_exit` disabled would permit entry but
+   might still starve candidate construction.
+2. Whether `size_entry` rejects: at `$100` with one name it must clear `MINIMUM_FRACTIONAL_
+   NOTIONAL` and every cap. `RiskRejection.reasons` names the cap, so this is observable.
+
+Do NOT guess between them. Instrument one run and read the reason codes — this document has
+already been wrong twice by reasoning ahead of measurement.
