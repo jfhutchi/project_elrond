@@ -174,6 +174,16 @@ is not**; and two in one leverage function — debt held fixed instead of levera
 leverage looked survivable; then a monthly-rebalanced margin path compared against a
 daily-rebalanced baseline, which appeared to show that margin calls *create* wealth.
 
+Found while building the hypothesis registry (#5): **this project has used two different
+luck bars.** Cycle 10 quotes t=2.22 for 43 trials, which is Bailey & Lopez de Prado's finite-N
+expected maximum. Cycles 15-17 quote 2.87/2.89/2.90, which is `sqrt(2 ln N)` — about 0.5 higher
+at comparable N. Bars quoted before cycle 15 are therefore not comparable with bars quoted
+after it. **No verdict changes:** every refuted result failed by a wide margin under either
+convention (cycle 8's metalabelling t=1.72 misses both 2.22 and 2.74). The registry uses the
+stricter `sqrt(2 ln N)` going forward and does not retro-fit either historical number. Unlike
+the defects below, this one did not flatter a result — it is recorded because a bar that moves
+silently is the mechanism by which one eventually would.
+
 **Every one of these errors flattered the result.** None was caught by the code looking wrong;
 each was caught by the number being implausible. That asymmetry is the single most useful thing
 to know when reading any figure in this repository.

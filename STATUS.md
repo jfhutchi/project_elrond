@@ -324,6 +324,37 @@ code under test. **The 43%-vs-77% exposure diagnosis came from that runner and i
 unattributed.** First task is a harness that runs a real config through `BacktestEngine` with
 `component_switches=config.components`; everything downstream needs re-measuring through it.
 
+## 6i. Hypotheses are now frozen before measurement (#5)
+
+`quantbot.research.HypothesisRegistry` replaces the hand-written pre-registration markdown in
+`reports/research/`. A registration is hashed at insert, so a prediction cannot be restated
+after the number arrives — which is the only reason cycle 12's "growth-optimal leverage is
+below 2x" counts as a miss against the 3.25x it measured.
+
+Three things it refuses, mechanically:
+
+| refusal | rule |
+|---|---|
+| `CONTAMINATED_WINDOW` | a `PROTECTED_EVALUATION` range may not overlap any range an earlier registration recorded on that dataset, nor its own discovery/validation ranges |
+| `UNDERPOWERED` | detecting an annualised Sharpe of `SR` at bar `z` needs `(z/SR)^2` years; ~93 for 0.30, ~8.4 for 1.00. Not the same verdict as `REFUTED` |
+| `TAMPERED` | the stored document is rehashed before every confirmatory run |
+
+`FORWARD_PAPER` windows are deliberately exempt from the overlap block and carried by the trial
+count instead. Blocking them would retire the paper account after one hypothesis, and it is the
+only uncontaminated data this project will ever get.
+
+The multiple-testing burden is counted, never declared: seeded at **68**, what cycles 1-17
+already spent. `verify_for_execution` recomputes it before a run, because every registration
+since raises the bar — a hypothesis adequately powered when frozen can be underpowered by the
+time it executes.
+
+Experiment manifests now carry `mode`, defaulting to `EXPLORATORY`. Only a run naming a
+registration hash is `CONFIRMATORY`; anything else is not evidence. `quantbot hypotheses` lists
+what is registered.
+
+Deliberately left to their own issues: power policy beyond the Sharpe case (#19), refutation
+memory and the structured `REFUTED.md` migration (#6).
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
