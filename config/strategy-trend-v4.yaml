@@ -10,11 +10,19 @@
 # It reaches 43.36% exposure and 2.52% CAGR. Better than the 30% and 0.98% of
 # strategy-index-v3.yaml, and still a quarter of the benchmark it is imitating.
 #
-# The conclusion is architectural, not a tuning problem: this strategy engine cannot
-# express the only rule measured to beat the market. Its structure — ATR-derived
-# position sizing, monthly roster rotation, entry and exit gating — imposes a shape
-# that a simple always-in-while-above-trend rule does not have. Reproducing
-# SPY_SMA200 needs a different execution path, not different numbers in this file.
+# The cause is now pinned precisely, and it is NOT position sizing. Adding
+# target_weight_sizing (which removes the ATR risk cap entirely) changed nothing:
+# still 43.36% exposure, still 2.52% CAGR.
+#
+# The gap is TIME IN MARKET, not position size. This config is invested on 43% of
+# sessions; SPY_SMA200 is invested on 77%. Both use the same 200-day trend condition.
+# The difference is that this engine only acts on monthly rebalance dates, so when SPY
+# dips below its average and recovers mid-month, the benchmark re-enters the next
+# session and this config waits until month end. Over 10.6 years those missed
+# re-entries are most of the return.
+#
+# So the fix is a rebalance-frequency change, not a sizing one: the execution path
+# needs to re-evaluate a hold-while-true condition every session rather than monthly.
 #
 # Kept as a record of a tested failure so the next reader does not retry the tuning.
 strategy_name: adaptive-momentum
@@ -47,6 +55,7 @@ market_regime_blocks_entries_only: true
 risk_per_trade_bps: 5000
 max_open_risk_bps: 10000
 max_position_value_bps: 10000
+target_weight_sizing: true
 max_gross_exposure_bps: 10000
 max_positions: 1
 drawdown_thresholds_bps: [500, 1000, 1500, 2000]

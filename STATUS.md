@@ -241,10 +241,15 @@ distressed small caps. Data cached at `research/stocks.db` so no future cycle re
 | `strategy-index-v3.yaml` | 0.98% | 0.21 | 30% |
 | `strategy-trend-v4.yaml` (stops effectively disabled) | 2.52% | 0.30 | 43% |
 
-Not a tuning problem. ATR-derived sizing, monthly roster rotation and entry/exit gating impose
-a shape that an always-in-while-above-trend rule does not have. **Deploying that rule requires a
-different execution path, not different config values** — that is the highest-value engineering
-task left in this project.
+**Cause pinned: it is time in market, not position size.** Adding `target_weight_sizing` to
+remove the ATR risk cap entirely changed nothing — still 43% exposure, still 2.52% CAGR. This
+engine is invested on 43% of sessions against the benchmark's 77%, using the *same* 200-day
+condition. The difference is that it only acts on **monthly rebalance dates**: when SPY dips
+below its average and recovers mid-month, the benchmark re-enters the next session while this
+config waits until month end. Those missed re-entries are most of the return.
+
+**The fix is rebalance frequency, not sizing** — the execution path must re-evaluate a
+hold-while-true condition every session. That is the highest-value engineering task left.
 
 ## 7. Open items
 

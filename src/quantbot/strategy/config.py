@@ -113,6 +113,17 @@ class StrategyConfig(BaseModel):
     #: return, it removes that gamble. 5 removes 88% of the dispersion; 21 removes all of it but
     #: needs $0.48 orders at a $100 account, below the broker minimum.
     rebalance_tranches: int = Field(default=1, ge=1, le=21)
+    #: Size positions to a target weight instead of to an ATR-derived risk budget.
+    #: False is what every version through 1.3.0 deployed, so the default keeps their
+    #: configuration hashes byte-identical.
+    #:
+    #: Cycle 16 established why this is needed and it is architectural, not a preference.
+    #: The highest-Sharpe mechanism measured in this project is "hold SPY while it is above
+    #: its 200-day average" (10.34% CAGR, Sharpe 0.91, 77% exposure). Two configs failed to
+    #: reproduce it because ATR-derived sizing always bound first, capping exposure at 30%
+    #: and 43%. A rule that holds a fixed weight while a condition is true cannot be
+    #: expressed through a risk budget divided by a stop distance.
+    target_weight_sizing: bool = False
     components: StrategyComponents = StrategyComponents()
 
     @field_validator("universe")

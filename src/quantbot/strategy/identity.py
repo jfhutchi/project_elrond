@@ -61,6 +61,8 @@ def canonical_configuration(config: StrategyConfig) -> str:
         payload.pop("volatility_lookback_days", None)
     if payload.get("rebalance_tranches") == 1:
         payload.pop("rebalance_tranches", None)
+    if payload.get("target_weight_sizing") is False:
+        payload.pop("target_weight_sizing", None)
     return _canonical_json(payload)
 
 

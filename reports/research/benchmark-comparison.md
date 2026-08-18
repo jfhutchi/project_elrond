@@ -1,7 +1,7 @@
 # Benchmark Comparison
 
-Generated at: 2026-08-18T10:47:08Z
-Strategy: adaptive-momentum 1.3.0 (config hash `f56434b1f9ad0a8a`)
+Generated at: 2026-08-18T10:49:01Z
+Strategy: adaptive-momentum 1.3.0 (config hash `10b4d7ca49d6d018`)
 Sessions: 2669 from 2016-01-04 to 2026-08-14 (273 of them consumed by warmup)
 Initial cash: $100
 Costs applied: 5bps per side, $0 per order

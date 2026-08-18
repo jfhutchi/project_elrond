@@ -132,7 +132,17 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
         ),
     )
     ordered_caps: tuple[tuple[SizingCapName, Decimal], ...] = (
-        (SizingCapName.PER_TRADE_RISK, caps.per_trade_risk),
+        # Target-weight sizing deliberately omits the per-trade risk cap. That cap is
+        # risk_budget / stop_distance, which ties position size to a stop, and a rule that
+        # holds a fixed weight while a condition is true has no stop to divide by. Leaving it
+        # in is what held two attempts at SPY_SMA200 to 30% and 43% of the exposure they
+        # needed. The position-value, gross-exposure and buying-power caps all still apply,
+        # so this loosens one constraint rather than removing risk control.
+        *(
+            ()
+            if config.target_weight_sizing
+            else ((SizingCapName.PER_TRADE_RISK, caps.per_trade_risk),)
+        ),
         (SizingCapName.PORTFOLIO_OPEN_RISK, caps.portfolio_open_risk),
         (SizingCapName.POSITION_VALUE, caps.position_value),
         (SizingCapName.GROSS_EXPOSURE, caps.gross_exposure),

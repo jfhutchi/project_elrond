@@ -84,9 +84,10 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   (10.34% CAGR, Sharpe 0.91, 77% exposure) is the highest-Sharpe mechanism measured here. Two
   configs tried to reproduce it — `strategy-index-v3.yaml` reached 30% exposure and 0.98%
   CAGR, `strategy-trend-v4.yaml` with stops effectively disabled reached 43% and 2.52%. The
-  limit is architectural: ATR-derived sizing, monthly rotation and entry/exit gating impose a
-  shape that an always-in-while-above-trend rule does not have. Deploying that rule needs a
-  different execution path, not different config values. Cycle 16.
+  cause is monthly rebalance granularity, not sizing: removing the ATR risk cap entirely via
+  `target_weight_sizing` changed nothing. The engine is invested on 43% of sessions against the
+  benchmark's 77% using the same 200-day condition, because it only acts at month end and so
+  misses every mid-month re-entry. The fix is a per-session evaluation path. Cycle 16.
 * **There was never a signal to tune.** Cycle 15 tested the premise underneath cycles 1-10 and
   it fails: the momentum ranking does not separate winners from losers (top-minus-bottom
   t=0.77), selection does not beat not-selecting (t=0.84), and alpha against SPY is 0.10%/yr
