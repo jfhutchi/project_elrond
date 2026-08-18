@@ -598,7 +598,13 @@ class BacktestEngine:
                     rankings = rank_assets(
                         sliced,
                         self._config,
-                        require_trend=switches.asset_trend,
+                        # Roster construction runs monthly, so filtering on trend here locks a
+                        # symbol out for a whole month over one month-end close. With
+                        # trend_gate_per_session the condition is re-checked every session at
+                        # engine.py:689 instead, which is where a hold-while-true rule belongs.
+                        require_trend=(
+                            switches.asset_trend and not self._config.trend_gate_per_session
+                        ),
                         require_positive=(
                             switches.momentum and self._config.positive_momentum_required
                         ),

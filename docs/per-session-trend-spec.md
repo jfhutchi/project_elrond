@@ -131,3 +131,32 @@ Two concrete places to look, in order:
 
 Do NOT guess between them. Instrument one run and read the reason codes — this document has
 already been wrong twice by reasoning ahead of measurement.
+
+
+## The invariant that should drive the next attempt
+
+`trend_gate_per_session` is now also wired into the backtest engine's roster construction
+(`engine.py:601`) — the earlier fix only touched `build_monthly_roster` in
+`adaptive_momentum.py`, which the backtest never calls. That was a real bug and worth fixing.
+
+**It did not help.** Exposure moved 27.28% -> 19.24% and CAGR 1.66% -> 1.65%.
+
+The number that has not moved is **6 trades**, across every change tried:
+
+| change | trades | exposure |
+|---|---|---|
+| baseline | 6 | 43.36%* |
+| `target_weight_sizing` | 6 | 27.28% |
+| `trend_gate_per_session` (wrong path) | 6 | 27.28% |
+| `trend_gate_per_session` (engine path) | 6 | 19.24% |
+
+\* from the invalid runner; the others are from `backtest_config.py`.
+
+Six entries in 2,669 sessions is roughly one every two years. Sizing changes move *how much* is
+held, and gate changes move *how long*, but neither moves *how often*. Something admits a
+candidate only six times in a decade, and until that is identified every other knob is
+rearranging the consequences of it.
+
+**Instrument this specifically:** log every session where SPY is above its 200-day average but
+no position is opened, and record which branch skipped it. Do not tune anything further first.
+This document has now been wrong three times by reasoning ahead of measurement.
