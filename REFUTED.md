@@ -7,7 +7,7 @@ design; if it stops being short, split it rather than skimming it.
 Rule: nothing is listed here without a measurement behind it. "It seemed unlikely" is not a
 refutation.
 
-Last updated 2026-08-17.
+Last updated 2026-08-18 (cycle 11).
 
 ## Refuted with measurement
 
@@ -28,6 +28,9 @@ Last updated 2026-08-17.
 | 13 | Reddit / social sentiment | REFUTED (literature) | Long-minus-short WSB portfolios produce alpha indistinguishable from zero; higher return with worse Sharpe |
 | 14 | Coinbase for paper trading | IMPOSSIBLE | Advanced Trade sandbox returns static fixtures, no P&L tracking. Coinbase for Agents is **real money only**, explicitly no paper/testnet |
 | 15 | Cross-sectional breadth (whole-market momentum) | REFUTED | Cycle 10, **survivorship-free**: 511 names incl. 241 delisted. Sharpe 0.63 v SPY 0.80, −0.54 sigma, p≈0.59. Higher raw return, worse risk-adjusted |
+| 16 | Volatility targeting as an **alpha** source | REFUTED | Cycle 11. Looked like the best result yet (Sharpe 0.92→1.09, all 12 parameter sets winning, break-even 113x real cost) and died: Jobson-Korkie/Memmel **z=1.01, p=0.31**, wins 6 of 12 assets, loses 2025-26. See #S2 for what did survive |
+| 17 | Overnight (close-to-open) premium | REFUTED | Cycle 11. An error in this project's own batch-2 analysis inflated it: one-sample t-tests instead of **paired**. Corrected, SPY falls t=2.74→0.63 and 1 of 18 assets clears the bar. Overnight-only beats buy-and-hold on CAGR on **1 of 18** — buy-and-hold collects both sessions. SPY premium decayed 7.93%/yr (2016-18) → −0.44% (2022-24) |
+| 18 | Turn-of-month effect | REFUTED | Cycle 11. Positive on 4 of 7 assets, largest t=1.57 (GLD) against a 2.82 bar |
 
 ## Not refuted — measured as genuinely working
 
@@ -38,6 +41,10 @@ Last updated 2026-08-17.
 | Leverage on a high-Sharpe strategy | 2x SPY: 21.48% CAGR, doubles in 3.6y v 4.9y | 58.8% drawdown; breaches the 20% halt; Reg T liquidates before recovery |
 | More capital | Perfectly linear — verified $100/$1k/$10k give identical CAGR and Sharpe | Requires capital |
 | More time | Compounding | Requires time |
+| **Tranching the rebalance date** | Removes **2.31 CAGR points** of dispersion driven by nothing but which day of the month the rotation runs (best offset 11.20%, worst 8.89%, identical strategy) | Cycle 11. Converts a gamble to its expected value; does not raise the mean |
+| **Vol targeting as drawdown control** | Max drawdown reduced on **16 of 18 assets, p=0.0007**. SPY 33.8% → 20.1% | Cycle 11. Costs a median **1.83 CAGR points/yr**. Not alpha — see refuted #16 |
+| **Real execution cost is ~1bp, not 5bps** | Measured NBBO: SPY 0.26, QQQ 0.41, IWM 0.66, median ~1.1bps | Cycle 11. Does not revive #8, already tested at 0.5bps. Means the deployed cost model is miscalibrated |
+| **Fast halt resumption** | Delay is the whole cost of the halt: 5d $479, 21d $413, 63d $364 per $100 | Cycle 11. Direction is robust; the 5d row beating no-halt is one path and inside noise |
 
 Leverage helps a *good* strategy only. At 2x it added 0.75% CAGR to momentum+trend and was
 worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.49%**.
@@ -70,6 +77,13 @@ associativity bug tripping the trade P&L invariant; a stale-lock misdiagnosis; a
 feature vector omitting momentum; a verdict function declaring success with no significance
 test; a paginated API response misread as missing data; and a false claim that the daemon was
 running when it had never started.
+
+Cycle 11 added four more: a non-reentrant lock that meant the daemon could never have run a
+cycle; unfilled orders consuming no risk budget, which double-spent capital and took a broker
+403; a Corwin-Schultz spread estimate wrong by two orders of magnitude, caught only by pulling
+real quotes; and **an unpaired t-test that made the overnight effect look significant when it
+is not**. The last one is the instructive one: it was found by attacking this cycle's own
+result rather than by publishing it.
 
 Every apparent winner in this project evaporated under a test. That is the strongest single
 finding here.

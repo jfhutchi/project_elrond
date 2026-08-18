@@ -102,6 +102,25 @@ uv run python scripts/dashboard.py           # equity, positions, watchdog healt
 Set `QUANTBOT_CONFIG` to `config/strategy-v1-2.yaml` for any manual command, or you will
 silently operate the wrong strategy identity.
 
+## 6b. Cycle 11 research (2026-08-18) — four survivors, none of them alpha
+
+Full detail: `reports/research/cycle11-results.md`. Pre-registered before measurement.
+
+**The core finding is unchanged — nothing beats SPY buy-and-hold on return.** What survived is
+about risk, cost and mechanics, which is what is left once an exhausted holdout rules out
+signal discovery:
+
+| # | Survived | Effect |
+|---|---|---|
+| S1 | **Timing luck** | 2.31 CAGR points decided by which day of the month the rotation runs. Removable by tranching. The deployed strategy currently holds this bet. |
+| S2 | **Vol targeting as drawdown control** | maxDD reduced on 16 of 18 assets, p=0.0007. Costs ~1.83 CAGR pts/yr. **Not alpha.** |
+| S3 | **Real spread is ~1bp, not 5bps** | SPY 0.26bps measured. The deployed cost model is miscalibrated. |
+| S4 | **Halt resumption delay** | The halt is cheap; the delay costs 8-20% of terminal wealth. |
+
+Killed: vol targeting as alpha (z=1.01, p=0.31), the overnight effect, turn-of-month.
+
+**Read `REFUTED.md` before proposing anything** — it now lists 18 refuted hypotheses.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
@@ -109,6 +128,9 @@ silently operate the wrong strategy identity.
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
+- [ ] **Tranche the rebalance date** (cycle 11 S1) — highest-value, lowest-risk change found
+- [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
+- [ ] **Recalibrate the cost model** from 5bps to the measured ~1bp (cycle 11 S3)
 
 ## 8. If you are about to change the strategy
 
