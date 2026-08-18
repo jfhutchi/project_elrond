@@ -61,7 +61,10 @@ exists for this.
 | Process | Role |
 |---|---|
 | `quantbot daemon` | Broker-clock driven. Sleeps to each session close + 5 min, runs one cycle. Auto-starts via `%APPDATA%\...\Startup\quantbot-daemon.cmd`. |
-| `scripts/supervisor.py --watch` | Watchdog. Restarts a *dead* daemon. **Never** clears the kill switch or resolves a reconciliation failure. |
+| `scripts/supervisor.py --watch` | Watchdog. Restarts a *dead* daemon. **Never** clears the kill switch or resolves a reconciliation failure. Launched by the startup entry, which is version-controlled at `scripts/quantbot-watchdog.cmd` and installed to the Windows Startup folder. |
+
+Verify both are alive with `scripts/supervisor.py`. `logs/watchdog-stderr.log` should stay
+**empty** — anything in it means the watchdog itself is crashing.
 
 Orders are evaluated at a **completed** session close and submitted as DAY orders for the
 **next** open. That is deliberate — evaluating before the close would be look-ahead.
