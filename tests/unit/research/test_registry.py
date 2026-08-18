@@ -150,6 +150,7 @@ def test_a_protected_window_another_registration_consumed_is_refused(
     # Same dataset, overlapping range, now claimed as an untouched holdout.
     later = make_draft(
         hypothesis_id="H-2026-002",
+        materially_different="a deliberate second look, on a different dataset or window",
         windows=(window(DataRole.PROTECTED_EVALUATION, "2020-01-02", "2026-08-18"),),
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
@@ -189,6 +190,7 @@ def test_a_disjoint_protected_window_on_a_consumed_dataset_still_registers(
         registration = HypothesisRegistry(session).register(
             make_draft(
                 hypothesis_id="H-2026-002",
+                materially_different="a deliberate second look, on a different dataset or window",
                 windows=(window(DataRole.PROTECTED_EVALUATION, "2022-01-03", "2026-08-18"),),
             ),
             now=NOW,
@@ -209,7 +211,12 @@ def test_forward_paper_windows_may_overlap_because_the_account_runs_once(
         registry = HypothesisRegistry(session)
         registry.register(make_draft(windows=forward), now=NOW)
         second = registry.register(
-            make_draft(hypothesis_id="H-2026-002", windows=forward), now=NOW
+            make_draft(
+                hypothesis_id="H-2026-002",
+                materially_different="a deliberate second look, on a different dataset or window",
+                windows=forward,
+            ),
+            now=NOW,
         )
     assert second.cumulative_trials > PRIOR_TRIALS + 1
 
@@ -232,6 +239,7 @@ def test_an_effect_too_small_for_the_available_data_is_refused_as_underpowered(
     # contamination gate has nothing to say about it.
     weak = make_draft(
         hypothesis_id="H-2026-002",
+        materially_different="a deliberate second look, on a different dataset or window",
         effect=sharpe_effect(expected=Decimal("0.5")),
         windows=(
             window(
@@ -258,6 +266,7 @@ def test_the_trial_count_is_the_project_history_not_this_cycle(database: Databas
         second = HypothesisRegistry(session).register(
             make_draft(
                 hypothesis_id="H-2026-002",
+                materially_different="a deliberate second look, on a different dataset or window",
                 search_cardinality=5,
                 windows=(window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19"),),
             ),
@@ -289,6 +298,7 @@ def test_execution_recomputes_power_against_trials_accumulated_since_registratio
         HypothesisRegistry(session).register(
             make_draft(
                 hypothesis_id="H-2026-002",
+                materially_different="a deliberate second look, on a different dataset or window",
                 effect=sharpe_effect(expected=Decimal("3.0")),
                 search_cardinality=10,
                 windows=(window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19"),),
@@ -461,3 +471,122 @@ def test_a_registration_records_the_dependence_assumptions_behind_its_power_numb
     assert registration.power.variance_inflation == Decimal("21")
     assert registration.power.dependence.horizon_observations == 21
     assert summarize(registration)["variance_inflation"] == "21.000000"
+
+
+def test_a_repeat_of_an_existing_idea_is_refused_unless_the_difference_is_written_down(
+    database: Database,
+) -> None:
+    """Momentum returned null on three universes because each new one had a plausible excuse.
+
+    Writing the excuse down is the whole gate: cheap when the difference is real, and
+    impossible to fill in honestly when it is not.
+    """
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(make_draft(), now=NOW)
+
+    repeat = make_draft(
+        hypothesis_id="H-2026-002",
+        windows=(window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19", dataset="paper"),),
+    )
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).register(repeat, now=NOW)
+    assert error.value.reason is RefusalReason.DUPLICATE
+    assert "H-2026-001 v1" in error.value.detail
+
+    with database.transaction() as session:
+        accepted = HypothesisRegistry(session).register(
+            repeat.model_copy(
+                update={"materially_different": "same signal, but on forward paper evidence"}
+            ),
+            now=NOW,
+        )
+    assert accepted.draft.hypothesis_id == "H-2026-002"
+
+
+def test_a_genuinely_different_universe_is_not_treated_as_a_repeat(database: Database) -> None:
+    """The gate is overlap, not similarity of wording. A new universe is a new question."""
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(make_draft(), now=NOW)
+
+    elsewhere = make_draft(
+        hypothesis_id="H-2026-002",
+        universe=("EWJ", "EWG", "EWU", "EWZ", "INDA"),
+        features=("country_index_momentum_252",),
+        windows=(
+            window(
+                DataRole.PROTECTED_EVALUATION,
+                "2016-01-04",
+                "2026-08-18",
+                dataset="global-country-indices-daily",
+            ),
+        ),
+    )
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        report = registry.novelty_report(elsewhere)
+        registry.register(elsewhere, now=NOW)
+    assert report.novel
+    assert report.highest_overlap == 0.0
+
+
+def test_window_consumption_answers_untouched_partial_and_exhausted(database: Database) -> None:
+    """The structural limit REFUTED.md states in prose, made queryable."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        virgin = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+    assert virgin.status == "UNTOUCHED"
+    assert virgin.trials == 0
+    assert virgin.usable
+
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(make_draft(search_cardinality=5), now=NOW)
+    with database.transaction() as session:
+        partial = HypothesisRegistry(session).window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+    assert partial.status == "PARTIALLY_CONSUMED"
+    assert partial.trials == 5
+    assert partial.consumers == ("H-2026-001 v1",)
+
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(
+            make_draft(
+                hypothesis_id="H-2026-002",
+                materially_different="a second family against the same window",
+                search_cardinality=40,
+                # Validation rather than protected evaluation, so it consumes the window
+                # without tripping the contamination gate this test is not about.
+                windows=(window(DataRole.VALIDATION, "2016-01-04", "2026-08-18"),),
+            ),
+            now=NOW,
+        )
+    with database.transaction() as session:
+        spent = HypothesisRegistry(session).window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+    assert spent.status == "EXHAUSTED"
+    assert not spent.usable
+
+
+def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Database) -> None:
+    """Consumption is per range, not per dataset. Otherwise one run retires a data source."""
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(
+            make_draft(
+                windows=(window(DataRole.VALIDATION, "2016-01-04", "2020-12-31"),),
+                search_cardinality=40,
+            ),
+            now=NOW,
+        )
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        old = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2020, 12, 31)
+        )
+        later = registry.window_consumption(
+            "sip-us-equities-daily", date(2021, 1, 4), date(2026, 8, 18)
+        )
+    assert old.status == "EXHAUSTED"
+    assert later.status == "UNTOUCHED"

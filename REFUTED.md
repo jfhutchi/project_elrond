@@ -174,6 +174,11 @@ is not**; and two in one leverage function — debt held fixed instead of levera
 leverage looked survivable; then a monthly-rebalanced margin path compared against a
 daily-rebalanced baseline, which appeared to show that margin calls *create* wealth.
 
+This file is now also loaded into structured research memory (#6) by
+`quantbot.research.memory.import_refuted_markdown`, verbatim. The records are additional to this
+file, not a replacement for it: every statement is carried as written, and the import is
+idempotent. Edit here; the records follow.
+
 The defects in this section are now partly mechanical. #18 turned four of them into invariants
 that run on every result bundle: a statistical test that does not match the dependence structure
 of its data, costs that improve a return, forced liquidation that ends richer than no

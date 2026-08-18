@@ -21,6 +21,16 @@ from quantbot.research.manifest import (
     redact,
     write_experiment_manifest,
 )
+from quantbot.research.memory import (
+    NOT_TESTED,
+    MemoryError_,
+    RecordKind,
+    Relation,
+    ResearchMemory,
+    ResearchRecord,
+    Verdict,
+    import_refuted_markdown,
+)
 from quantbot.research.power import (
     MEASURED_MEDIAN_ROUND_TRIP_BPS,
     ComparisonStructure,
@@ -39,7 +49,9 @@ from quantbot.research.power import (
     observations_required,
 )
 from quantbot.research.registry import (
+    DUPLICATE_OVERLAP,
     EXECUTION,
+    EXHAUSTED_TRIALS,
     PRIOR_TRIALS,
     REGISTRATION,
     DataRole,
@@ -48,9 +60,11 @@ from quantbot.research.registry import (
     ExecutionClearance,
     HypothesisDraft,
     HypothesisRegistry,
+    NoveltyReport,
     RefusalReason,
     Registration,
     RegistrationRefused,
+    WindowConsumption,
     summarize,
     unresolved_questions,
 )
@@ -65,6 +79,18 @@ from quantbot.research.reproducibility import (
 )
 
 __all__ = [
+    "DUPLICATE_OVERLAP",
+    "EXHAUSTED_TRIALS",
+    "NOT_TESTED",
+    "MemoryError_",
+    "NoveltyReport",
+    "RecordKind",
+    "Relation",
+    "ResearchMemory",
+    "ResearchRecord",
+    "Verdict",
+    "WindowConsumption",
+    "import_refuted_markdown",
     "CodeProvenance",
     "DatasetSnapshot",
     "Difference",

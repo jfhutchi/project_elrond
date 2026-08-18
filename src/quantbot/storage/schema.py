@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 metadata = MetaData(
     naming_convention={
@@ -392,3 +392,58 @@ Index(
     power_assessments.c.version,
 )
 Index("ix_power_assessments_verdict", power_assessments.c.verdict)
+
+
+# --- Research memory (#6) ------------------------------------------------------------------
+#
+# One table for every durable research record, discriminated by `kind`. Findings, structural
+# limits and analysis defects have different meanings but the same shape: a statement, the
+# evidence behind it, and when it was recorded. A generated summary is just another record and
+# deleting one cannot destroy what it summarised, because the underlying records are separate
+# rows rather than fields inside it.
+
+research_records = Table(
+    "research_records",
+    metadata,
+    Column("record_id", String(128), primary_key=True),
+    # FINDING, STRUCTURAL_LIMIT, ANALYSIS_DEFECT, SUMMARY.
+    Column("kind", String(32), nullable=False),
+    # REFUTED, SURVIVED, UNDERPOWERED, EXPLORATORY_ONLY, LITERATURE_SUPPORTED,
+    # LITERATURE_REFUTED, IMPOSSIBLE. Null for records that are not verdicts.
+    Column("verdict", String(32)),
+    # Free-text topic the record is about, so "what do we know about momentum" is a query.
+    Column("subject", Text, nullable=False),
+    Column("statement", Text, nullable=False),
+    Column("hypothesis_id", String(128)),
+    Column("hypothesis_version", Integer),
+    # Manifest hash of the bundle that evidences this, when there is one.
+    Column("evidence_hash", String(64)),
+    Column("source", Text, nullable=False),
+    # True when a human wrote it. Structural limits are curated on purpose: an LLM summariser
+    # produces "momentum did not work" and loses the part that changes future decisions.
+    Column("curated", Boolean, nullable=False),
+    Column("recorded_at", String(40), nullable=False),
+    Column("document_json", Text, nullable=False),
+    CheckConstraint(
+        "(hypothesis_id IS NULL) = (hypothesis_version IS NULL)",
+        name="hypothesis_reference_is_whole",
+    ),
+)
+Index("ix_research_records_kind", research_records.c.kind, research_records.c.recorded_at)
+Index("ix_research_records_hypothesis_id", research_records.c.hypothesis_id)
+
+# Edges between records and hypotheses. Deliberately not foreign-keyed to either: a relationship
+# may point at a hypothesis that was refused registration, which is exactly the case worth
+# keeping.
+research_relationships = Table(
+    "research_relationships",
+    metadata,
+    Column("source_id", String(128), primary_key=True),
+    # REFUTES, SUPPORTS, UNDERPOWERED_FOR, DUPLICATES, MUTATES, CONTRADICTS, DEPENDS_ON,
+    # USES_DATASET, CONSUMES_WINDOW, INVALIDATED_BY_DEFECT.
+    Column("relation", String(32), primary_key=True),
+    Column("target_id", String(128), primary_key=True),
+    Column("recorded_at", String(40), nullable=False),
+    Column("note", Text, nullable=False, server_default=text("''")),
+)
+Index("ix_research_relationships_target_id", research_relationships.c.target_id)

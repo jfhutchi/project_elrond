@@ -439,6 +439,43 @@ whose results match another's while `inputs_hash` differs is reported as
 against credential shapes and raises. A redaction bug now fails loudly instead of publishing a
 key.
 
+## 6l. Research memory: what we know, as records not recollection (#6)
+
+`quantbot.research.memory`. `REFUTED.md` made queryable, without rewriting what any of it meant.
+
+`import_refuted_markdown` loads the real file — 24 refuted findings, the survivor table, the
+structural limits, and the defect log — carrying every statement **verbatim**. Nothing is
+paraphrased or re-judged, and `IMPOSSIBLE` is not flattened into `REFUTED` because they are
+different facts. Each section is read in the shape it is actually written in (tables as rows,
+limits as bullets, the defect log as paragraphs), because a parser handling only one shape would
+silently drop the defect log — the section that is the calibration prior on every number here.
+
+Four things are enforced rather than encouraged:
+
+| rule | why |
+|---|---|
+| `UNDERPOWERED` cannot be filed as `REFUTED` | recording an untestable hypothesis as refuted teaches a later agent the mechanism failed when it was never tested |
+| a `STRUCTURAL_LIMIT` must be curated | a generated one becomes "momentum did not work" and loses the part that changes decisions |
+| a `SUMMARY` carries no verdict | it is derived; deleting it destroys nothing because the evidence is separate rows |
+| a conflicting rewrite of a record is refused | an exact repeat is idempotent, a changed one is an error |
+
+**Novelty is now a registration gate.** A candidate overlapping a prior hypothesis by ≥0.80
+Jaccard on universe + features is refused as `DUPLICATE` unless the registrant writes down what
+is materially different. Momentum returned null on three structurally independent universes
+because each new one had a plausible excuse; writing the excuse down is cheap when the
+difference is real and impossible to fill in honestly when it is not.
+
+**Window consumption is queryable.** `window_consumption(dataset, start, end)` returns
+`UNTOUCHED`, `PARTIALLY_CONSUMED`, or `EXHAUSTED` with the trial count and the hypotheses that
+spent it. That is the constraint `REFUTED.md` states in prose — "cycles 2-10 consumed every
+out-of-sample window and SIP data begins 2016-01-04" — made machine-checkable. Consumption is
+per range, not per dataset, so one run cannot retire a whole data source.
+
+`recall(topic)` answers "what have we learned about momentum" with evidence-linked records.
+Relational and keyword-based on purpose: at tens-to-hundreds of hypotheses a wrong semantic
+neighbour is worse than a missed one when the answer decides whether to spend a holdout.
+Embeddings and a graph database stay out until evidence demands them.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

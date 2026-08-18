@@ -17,6 +17,10 @@ Four things are refused here rather than left to judgement, because software can
    estimand and its dependence structure. Not the same verdict as `REFUTED`.
 3. **A question not worth resolving.** `UNECONOMIC`: the smallest effect worth acting on cannot
    pay its own annual trading cost.
+3b. **A question already asked.** `DUPLICATE`: a candidate overlapping a prior hypothesis on
+   universe and features, unless the registrant writes down what is materially different.
+   Momentum has now returned null on three structurally independent universes because each new
+   one had a plausible excuse; without a written record, universe four gets proposed next week.
 4. **A declared rather than counted multiple-testing burden.** The trial count is computed from
    durable state -- everything this project has ever spent, seeded at what cycles 1-17 used --
    not taken from the registrant. Deflating against one cycle's trials instead of the project's
@@ -69,6 +73,15 @@ PRIOR_TRIALS = 68
 REGISTRATION = "REGISTRATION"
 EXECUTION = "EXECUTION"
 
+#: Jaccard overlap on universe + features at or above which a candidate is treated as a repeat
+#: of something already asked. Set so swapping one symbol does not read as a new idea.
+DUPLICATE_OVERLAP = 0.8
+
+#: Trials against one dataset range beyond which it is treated as spent. Cycles 2-10 put roughly
+#: 68 candidate evaluations against 2016-2026 US equities, which is why that window is exhausted
+#: and why the number sits here.
+EXHAUSTED_TRIALS = 40
+
 
 class DataRole(StrEnum):
     """What a dataset is allowed to be used for, per the v0.2 protected-data model."""
@@ -88,6 +101,7 @@ class EpistemicStatus(StrEnum):
 
 class RefusalReason(StrEnum):
     CONTAMINATED_WINDOW = "CONTAMINATED_WINDOW"
+    DUPLICATE = "DUPLICATE"
     UNDERPOWERED = "UNDERPOWERED"
     UNECONOMIC = "UNECONOMIC"
     ALREADY_REGISTERED = "ALREADY_REGISTERED"
@@ -183,6 +197,10 @@ class HypothesisDraft(FrozenModel):
     search_cardinality: int = Field(default=1, ge=1)
 
     confounders: tuple[Text, ...] = Field(min_length=1)
+    #: Required only when this candidate overlaps a prior hypothesis. Writing down what is
+    #: different is the whole gate: it is cheap when the difference is real and impossible to
+    #: fill in honestly when it is not.
+    materially_different: str | None = None
     epistemic_status: EpistemicStatus = EpistemicStatus.UNTESTED
     proposed_by: Text
     prompt_version: str | None = None
@@ -212,6 +230,44 @@ class Registration(FrozenModel):
     @property
     def content_hash(self) -> str:
         return hashlib.sha256(canonical_result_json(self).encode("utf-8")).hexdigest()
+
+
+@dataclass(frozen=True, slots=True)
+class WindowConsumption:
+    """How much of one dataset range has already been searched, and by whom."""
+
+    dataset: str
+    #: UNTOUCHED, PARTIALLY_CONSUMED, or EXHAUSTED for the requested range.
+    status: str
+    trials: int
+    consumers: tuple[str, ...]
+
+    @property
+    def usable(self) -> bool:
+        return self.status != "EXHAUSTED"
+
+
+@dataclass(frozen=True, slots=True)
+class NoveltyReport:
+    """Both questions at once: is the idea new, and is there data left to test it on.
+
+    Novelty detection that compares only ideas misses the scarcer resource. A genuinely novel
+    hypothesis tested against a window already searched 68 times is not new evidence.
+    """
+
+    hypothesis_id: str
+    #: Highest Jaccard overlap with any prior hypothesis, over universe and features together.
+    highest_overlap: float
+    nearest: tuple[str, ...]
+    consumption: tuple[WindowConsumption, ...]
+
+    @property
+    def novel(self) -> bool:
+        return self.highest_overlap < DUPLICATE_OVERLAP
+
+    @property
+    def has_usable_data(self) -> bool:
+        return all(entry.usable for entry in self.consumption)
 
 
 @dataclass(frozen=True, slots=True)
@@ -259,6 +315,15 @@ class HypothesisRegistry:
             raise RegistrationRefused(
                 RefusalReason.CONTAMINATED_WINDOW,
                 "protected evaluation window was already consumed by " + "; ".join(contamination),
+            )
+
+        novelty = self.novelty_report(draft)
+        if not novelty.novel and draft.materially_different is None:
+            raise RegistrationRefused(
+                RefusalReason.DUPLICATE,
+                f"{draft.hypothesis_id} overlaps {', '.join(novelty.nearest)} by "
+                f"{novelty.highest_overlap:.2f} on universe and features; state what is "
+                "materially different or register it as a new version of that hypothesis",
             )
 
         trials = self._cumulative_trials(draft.search_cardinality)
@@ -408,6 +473,69 @@ class HypothesisRegistry:
             power=assessment,
         )
 
+    def novelty_report(self, draft: HypothesisDraft) -> NoveltyReport:
+        """Is the idea new, and is there untouched data left to test it on."""
+        signature = _signature(draft.universe, draft.features)
+        overlaps: list[tuple[float, str]] = []
+        for row in self._session.execute(select(hypotheses)).mappings():
+            if str(row["hypothesis_id"]) == draft.hypothesis_id:
+                continue
+            prior = Registration.model_validate_json(str(row["document_json"])).draft
+            overlaps.append(
+                (
+                    _jaccard(signature, _signature(prior.universe, prior.features)),
+                    f"{prior.hypothesis_id} v{prior.version}",
+                )
+            )
+        highest = max(overlaps, default=(0.0, ""))[0]
+        nearest = tuple(
+            name for score, name in sorted(overlaps, reverse=True) if score == highest and name
+        )
+        return NoveltyReport(
+            hypothesis_id=draft.hypothesis_id,
+            highest_overlap=highest,
+            nearest=nearest,
+            consumption=tuple(
+                self.window_consumption(window.dataset, window.start, window.end)
+                for window in draft.windows
+            ),
+        )
+
+    def window_consumption(self, dataset: str, start: date, end: date) -> WindowConsumption:
+        """Whether a dataset range is untouched, partially consumed, or spent.
+
+        This is the question `REFUTED.md` answers in a paragraph -- "cycles 2-10 consumed every
+        out-of-sample window and SIP data begins 2016-01-04" -- made queryable, because a
+        constraint that only exists in prose is one an agent may or may not read.
+        """
+        rows = self._session.execute(
+            select(hypothesis_data_windows, hypotheses.c.search_cardinality)
+            .join(
+                hypotheses,
+                (hypothesis_data_windows.c.hypothesis_id == hypotheses.c.hypothesis_id)
+                & (hypothesis_data_windows.c.version == hypotheses.c.version),
+            )
+            .where(
+                hypothesis_data_windows.c.dataset == dataset,
+                hypothesis_data_windows.c.start_date <= end.isoformat(),
+                hypothesis_data_windows.c.end_date >= start.isoformat(),
+            )
+        ).mappings()
+        consumers: list[str] = []
+        trials = 0
+        for row in rows:
+            consumers.append(f"{row['hypothesis_id']} v{row['version']}")
+            trials += int(row["search_cardinality"])
+        if trials >= EXHAUSTED_TRIALS:
+            status = "EXHAUSTED"
+        elif trials:
+            status = "PARTIALLY_CONSUMED"
+        else:
+            status = "UNTOUCHED"
+        return WindowConsumption(
+            dataset=dataset, status=status, trials=trials, consumers=tuple(sorted(set(consumers)))
+        )
+
     def _row(self, hypothesis_id: str, version: int) -> RowMapping | None:
         return (
             self._session.execute(
@@ -520,6 +648,19 @@ def summarize(registration: Registration) -> dict[str, object]:
     }
 
 
+def _signature(universe: Sequence[str], features: Sequence[str]) -> frozenset[str]:
+    """What two hypotheses are compared on: the things they look at and what they measure."""
+    return frozenset(
+        [f"universe:{item.upper()}" for item in universe]
+        + [f"feature:{item.lower()}" for item in features]
+    )
+
+
+def _jaccard(left: frozenset[str], right: frozenset[str]) -> float:
+    union = left | right
+    return len(left & right) / len(union) if union else 0.0
+
+
 def unresolved_questions(assessments: Sequence[PowerAssessment]) -> list[PowerAssessment]:
     """Everything this project declined to test, and why. Distinct from what it refuted."""
     return [
@@ -530,7 +671,9 @@ def unresolved_questions(assessments: Sequence[PowerAssessment]) -> list[PowerAs
 
 
 __all__ = [
+    "DUPLICATE_OVERLAP",
     "EXECUTION",
+    "EXHAUSTED_TRIALS",
     "PRIOR_TRIALS",
     "REGISTRATION",
     "DataRole",
@@ -539,9 +682,11 @@ __all__ = [
     "ExecutionClearance",
     "HypothesisDraft",
     "HypothesisRegistry",
+    "NoveltyReport",
     "RefusalReason",
     "Registration",
     "RegistrationRefused",
+    "WindowConsumption",
     "luck_threshold",
     "summarize",
     "unresolved_questions",
