@@ -20,6 +20,7 @@ from quantbot.strategy.indicators import (
     sma,
     wilder_atr,
 )
+from quantbot.strategy.tranches import next_rebalance_index, tranche_schedule
 
 
 class StrategyModel(BaseModel):
@@ -92,6 +93,31 @@ class XNYSSessionSequence(StrategyModel):
             return index
         raise ValueError("evaluation_at must be an XNYS session close")
 
+    def tranche_schedule_map(self, tranches: int) -> dict[int, int]:
+        """Which tranche rebalances on each session index.
+
+        With one tranche this is exactly the final session of every month, so today's
+        month-end rule is the degenerate case rather than a separate code path.
+        """
+        return tranche_schedule(
+            [session.session_date.strftime("%Y-%m") for session in self.sessions], tranches
+        )
+
+    def tranche_expiry_after(
+        self, evaluation_index: int, *, tranche: int, tranches: int
+    ) -> datetime:
+        """When a roster built at `evaluation_index` for `tranche` stops governing.
+
+        A roster lives until its own tranche next rebalances. For a single tranche that is the
+        month boundary, so this returns exactly what `roster_expiry_after` does — verified by
+        test rather than asserted.
+        """
+        schedule = self.tranche_schedule_map(tranches)
+        next_index = next_rebalance_index(schedule, evaluation_index, tranche)
+        if next_index is None or next_index + 1 >= len(self.sessions):
+            raise ValueError("session sequence must extend past this tranche's next rebalance")
+        return self.sessions[next_index + 1].open_at
+
     def roster_expiry_after(self, effective_index: int) -> datetime:
         """Return the first XNYS open after the effective session's calendar month."""
         effective_month = self.sessions[effective_index].session_date.strftime("%Y-%m")
@@ -137,6 +163,11 @@ class MonthlyRoster(StrategyModel):
     expires_at: datetime
     symbols: tuple[str, ...]
     rankings: tuple[Ranking, ...]
+    #: Which tranche produced this roster, and how many are running. The defaults describe an
+    #: untranched strategy, which is every deployed version. Exits cannot be attributed without
+    #: this, and a mis-attributed exit surfaces as a position diff that halts trading.
+    tranche: int = 0
+    tranche_count: int = 1
 
     @field_validator("symbols")
     @classmethod
