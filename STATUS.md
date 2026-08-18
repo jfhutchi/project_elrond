@@ -1,5 +1,34 @@
 # QuantBot — Agent Orientation
 
+## START HERE
+
+Run these two first. They take a minute and tell you whether anything is on fire:
+
+```
+uv run python scripts/supervisor.py
+QUANTBOT_CONFIG=config/strategy-trend-v4.yaml QUANTBOT_MARKET_DATA_FEED=sip uv run python scripts/backtest_config.py
+```
+
+**The single most useful fact in this file:** the deployed momentum strategy is measurably
+worthless — beta 0.71, alpha 0.10%/yr at t=0.05, and the ranking does not separate winners from
+losers (t=0.77 on ETFs, confirmed on 595 single stocks). It is a fractional SPY position with
+extra steps. Do not spend a cycle improving it; that has been done sixteen times.
+
+**The one thing measured to work:** hold SPY while it is above its 200-day average. 10.34%
+CAGR, Sharpe 0.91, the highest measured here. The engine cannot yet run it.
+
+**Next concrete task:** `strategy-trend-v4.yaml` makes only 6 trades in 10.6 years against the
+benchmark's 25, so it is barely entering the market. `evaluate_symbol` records a reason code on
+every signal — read those to find which gate rejects entry. That is a lookup, not a hypothesis.
+
+**Before trusting any number here:** nine analysis errors were caught in one session and every
+one of them flattered the result. Three came from a harness that was not connected to the code
+under test. If a change produces byte-identical output, suspect the instrument before
+concluding the hypothesis failed. `REFUTED.md` has the full list.
+
+---
+
+
 **Read this first if you are an agent picking up this project.**
 Last hand-updated: 2026-08-18. Branch: `claude/quantbot-trading-system-2bbc25`.
 
