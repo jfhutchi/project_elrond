@@ -254,9 +254,14 @@ whole following month, and a symbol absent from the roster cannot be entered at 
 which is why every sizing knob looked inert. The trend gate is a hold-while-true predicate and
 belongs in the per-session `evaluate_symbol` path, where it already exists.
 
-Full spec: `docs/per-session-trend-spec.md`. Target: reproduce SPY_SMA200's 77% exposure and
-~10.34% CAGR with `universe: [SPY]`. This creates no alpha — it lets the engine run a rule
-already measured to work.
+Full spec: `docs/per-session-trend-spec.md`.
+
+**CAUTION, added after the fact:** `run_research_backtest.py` runs FIXED benchmark variants
+(`engine.py:212` uses `component_switches_for(variant)`), so it ignores a config's component
+selection entirely. Three config changes produced identical output because none reached the
+code under test. **The 43%-vs-77% exposure diagnosis came from that runner and is therefore
+unattributed.** First task is a harness that runs a real config through `BacktestEngine` with
+`component_switches=config.components`; everything downstream needs re-measuring through it.
 
 ## 7. Open items
 

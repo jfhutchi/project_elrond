@@ -60,6 +60,28 @@ Care required, in order of risk:
 3. **Turnover rises.** Re-entering mid-month costs spread. Measured spreads are ~1bp
    (`REFUTED.md`), so this is unlikely to bind, but it must be charged in the backtest.
 
+## Status: implemented, NOT YET VALIDATED
+
+`trend_gate_per_session` is implemented and gated off by default; deployed identities are
+unchanged and pinned by test. **Its effect is unmeasured.**
+
+The attempt to measure it was invalid and that is worth recording. `run_research_backtest.py`
+runs the six fixed benchmark variants through `component_switches_for(variant)`
+(`engine.py:212`), so `FULL_STRATEGY` enables every component regardless of what the config
+file says. Three separate config changes — `target_weight_sizing`, `trend_gate_per_session`,
+and the component switches themselves — all produced byte-identical output because **none of
+them ever reached the code under test.**
+
+That also retroactively weakens the earlier "43% vs 77% exposure" diagnosis: that number came
+from the same runner and describes the fixed FULL_STRATEGY variant, not any config written
+here. The exposure gap is real, but the attribution to roster-level trend filtering was not
+established.
+
+**Before continuing: build a harness that runs an actual config through the engine.**
+`BacktestEngine` accepts `component_switches` explicitly (`engine.py:212`), so the fix is to
+pass `config.components` rather than let the variant decide. Every conclusion in this document
+below this line needs re-measuring through that harness.
+
 ## The target
 
 Success is the engine reproducing SPY_SMA200's 77% exposure and ~10.34% CAGR on the research

@@ -270,7 +270,13 @@ def build_monthly_roster(
         if momentum is None or trend is None:
             continue
         close = sliced[-1].close
-        if (config.positive_momentum_required and momentum <= 0) or close <= trend:
+        below_trend = close <= trend
+        if config.trend_gate_per_session:
+            # Eligibility only. The trend condition is re-checked every session by the
+            # asset_trend component, so excluding here would lock a symbol out for a whole
+            # month over one month-end close and cost most of the return (cycle 16).
+            below_trend = False
+        if (config.positive_momentum_required and momentum <= 0) or below_trend:
             continue
         rankings.append(Ranking(symbol=symbol, momentum=momentum, close=close, sma200=trend))
 

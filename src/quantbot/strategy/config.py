@@ -124,6 +124,15 @@ class StrategyConfig(BaseModel):
     #: and 43%. A rule that holds a fixed weight while a condition is true cannot be
     #: expressed through a risk budget divided by a stop distance.
     target_weight_sizing: bool = False
+    #: Evaluate the trend condition per session instead of only when the roster is built.
+    #: False is what every deployed version does, so the default keeps their hashes identical.
+    #:
+    #: Cycle 16: the trend filter at roster construction locks a below-trend symbol out for a
+    #: whole month, so the engine is invested on 43% of sessions where SPY_SMA200 is invested
+    #: on 77% using the same condition. Selection by momentum rank is legitimately monthly; a
+    #: trend condition is a hold-while-true predicate and belongs in the per-session path,
+    #: where the asset_trend component already runs.
+    trend_gate_per_session: bool = False
     components: StrategyComponents = StrategyComponents()
 
     @field_validator("universe")

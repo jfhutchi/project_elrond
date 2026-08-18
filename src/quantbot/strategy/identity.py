@@ -63,6 +63,8 @@ def canonical_configuration(config: StrategyConfig) -> str:
         payload.pop("rebalance_tranches", None)
     if payload.get("target_weight_sizing") is False:
         payload.pop("target_weight_sizing", None)
+    if payload.get("trend_gate_per_session") is False:
+        payload.pop("trend_gate_per_session", None)
     return _canonical_json(payload)
 
 
