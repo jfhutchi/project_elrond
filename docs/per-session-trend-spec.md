@@ -243,3 +243,41 @@ drawdown policy, not in components, sizing, or the roster.
 
 Five diagnoses now. Three refuted by measurement, two by reading. The pattern throughout has
 been assuming the cause sits in the thing recently changed rather than in the code path.
+
+
+## ANSWERED — measured, after five wrong diagnoses
+
+The drawdown gate blocks entry on **70.8% of sessions** (1,890 of 2,669). A further 5.2% run at
+reduced size. That is the cause of the 6-trade invariant, the suppressed exposure, and why no
+component switch or sizing knob moved anything: none of them were what refused.
+
+### The design flaw this exposes: the halt is ABSORBING
+
+The gate creates a trap. Once equity falls 15% below its high-water mark, `entry_halted` blocks
+new positions — but a strategy that cannot take positions cannot generate the returns that
+would recover the drawdown. **The halt has no exit.** It is triggered by a loss and then
+prevents the only mechanism that could undo it.
+
+That is why the equity curve sits in halt for 70.8% of its life. An early loss locked it out
+permanently, and everything measured afterwards was a strategy that was structurally forbidden
+from trading.
+
+### This applies to the DEPLOYED strategy
+
+`config/strategy-v1-2.yaml` carries the same `drawdown_thresholds_bps: [500, 1000, 1500, 2000]`.
+Its historical max drawdown is 26.4%. **If the live account reaches a 15% drawdown, it stops
+entering and cannot recover by trading.** Only a deposit or a manual reset would release it.
+
+This should be treated as a severity-1 design defect, not a research finding.
+
+### Fixes to consider, none yet tested
+
+1. **Make the halt recover on its own terms** — resume at a lower threshold than it triggers
+   (hysteresis), so a partial recovery re-enables trading.
+2. **Reset the high-water mark on halt**, so the drawdown is measured from the halt point rather
+   than from an unreachable peak.
+3. **Scale exposure down rather than to zero** — the risk multiplier already does this at 5% and
+   10%; a hard zero at 15% is what makes the trap absorbing.
+
+Option 2 is closest to what the existing `halt_simulation` in `cycle11_batch2.py` models, which
+found the resumption delay dominates the cost. Measure before choosing.

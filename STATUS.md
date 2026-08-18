@@ -2,6 +2,19 @@
 
 ## START HERE
 
+### ⚠ SEVERITY-1: the drawdown halt is a trap, and it affects the live account
+
+Measured: the halt blocks entry on **70.8% of sessions** in backtest. Once equity is 15% below
+its high-water mark, `entry_halted` stops new positions — but a strategy that cannot take
+positions cannot earn back the drawdown. **The halt has no exit.**
+
+`strategy-v1-2.yaml` (DEPLOYED) uses the same thresholds and has a 26.4% historical drawdown.
+**If the live account reaches -15%, it stops trading and cannot recover by trading.** Only a
+deposit or manual intervention releases it.
+
+Fix options and evidence: `docs/per-session-trend-spec.md`, final section. Not yet fixed.
+
+
 Run these two first. They take a minute and tell you whether anything is on fire:
 
 ```
