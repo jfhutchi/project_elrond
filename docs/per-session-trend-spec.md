@@ -77,10 +77,24 @@ from the same runner and describes the fixed FULL_STRATEGY variant, not any conf
 here. The exposure gap is real, but the attribution to roster-level trend filtering was not
 established.
 
-**Before continuing: build a harness that runs an actual config through the engine.**
-`BacktestEngine` accepts `component_switches` explicitly (`engine.py:212`), so the fix is to
-pass `config.components` rather than let the variant decide. Every conclusion in this document
-below this line needs re-measuring through that harness.
+**The harness now exists**: `scripts/backtest_config.py`. It passes the config's own components
+to `BacktestEngine`, so a run finally reflects the file. Building it exposed a second seam worth
+knowing about: `StrategyComponents` (config) and `ComponentSwitches` (backtest) are *different
+types* — the latter carries `atr_risk`, which the config cannot express — so they need explicit
+conversion rather than being passed through.
+
+**First valid measurement**, `strategy-trend-v4.yaml` with per-session trend gating,
+target-weight sizing, and only `asset_trend` enabled:
+
+| | exposure | CAGR | Sharpe | trades |
+|---|---|---|---|---|
+| SPY_SMA200 target | 77.37% | 10.34% | 0.91 | 25 |
+| this config, measured properly | **27.28%** | 1.66% | 0.29 | **6** |
+
+Six trades in 10.6 years against the benchmark's twenty-five. The config is not being held out
+of the market by the roster trend filter — that is now disabled — it is barely *entering*. The
+next question is which gate rejects entry, and `evaluate_symbol`'s reason codes are recorded per
+signal, so the answer is available rather than needing to be guessed.
 
 ## The target
 
