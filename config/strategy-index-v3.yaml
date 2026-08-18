@@ -7,8 +7,19 @@
 # backtest numbers below, which came from a research script that modelled exposure
 # directly, DO NOT describe what this file actually does.
 #
-# To fix: raise risk_per_trade_bps to roughly 190 so the volatility target becomes the
-# binding cap, then re-measure. Do not deploy before that is done and verified.
+# The proposed fix DID NOT WORK, and that is worth recording rather than deleting.
+# Raising risk_per_trade_bps to 190 and then 300 moved exposure only to 26% and 30%,
+# never near 62.5%, and the strategy still returned 0.98% CAGR over 10.6 years. The
+# ATR stop-and-exit machinery keeps cutting the position regardless of the caps.
+#
+# The comparison that matters came out of the same run. The engine's own SPY_SMA200
+# benchmark — hold SPY while it is above its 200-day average, nothing else — returns
+# 10.34% CAGR at Sharpe 0.91 with a 19.5% drawdown, on 77% average exposure. That is
+# the highest Sharpe measured anywhere in this project, it beats this config tenfold,
+# and it needs none of this file's machinery.
+#
+# Conclusion: this config is a dead end. The thing worth deploying, if anything is,
+# is the plain 200-day trend rule. Left here as a record of a tested failure.
 #
 # This exists because cycle 14 measured it as the best option available under this
 # project's own risk rules, and an option that only exists as a backtest series is

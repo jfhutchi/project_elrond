@@ -51,6 +51,7 @@ Last updated 2026-08-18 (cycles 11-16).
 | **Real execution cost is ~1bp, not 5bps** | Measured NBBO: SPY 0.26, QQQ 0.41, IWM 0.66, median ~1.1bps | Cycle 11. Does not revive #8, already tested at 0.5bps. Means the deployed cost model is miscalibrated |
 | **Fast halt resumption** | Delay is the whole cost of the halt: 5d $479, 21d $413, 63d $364 per $100 | Cycle 11. Direction is robust; the 5d row beating no-halt is one path and inside noise |
 | **Vol targeting as constraint relief** | Under the 20% drawdown rule it carries 0.75x v SPY's 0.50x and ends at **$403.67 v $281.02, +44%** | Cycle 12. This is the honest form of the vol-targeting claim: not alpha (#16), but more exposure affordable under a fixed drawdown cap |
+| **SPY 200-day trend, and nothing else** | 10.34% CAGR, **Sharpe 0.91 — the highest measured in this project**, 19.5% drawdown, 77% average exposure | Cycle 16 re-confirmed it in the production engine. Beats the hand-built index config tenfold (0.98% CAGR) using none of its machinery. Its 19.5% drawdown clears the 20% liquidation threshold but not the 15% entry halt |
 | **An interior growth optimum exists** | SPY peaks at 3.25x ($954/$100) with margin charged at 5.75%; free borrowing puts it past 5x | Cycle 12. Implies a **79.2% drawdown** and is unreachable. Constant leverage above ~3.5x goes to **zero** |
 
 Leverage helps a *good* strategy only. At 2x it added 0.75% CAGR to momentum+trend and was
