@@ -43,13 +43,11 @@ changes to the roster machinery, so the invasive version is the only one that wo
 `rebalance_tranches` is wired into `StrategyConfig`, omitted from the canonical configuration at
 its default so all four deployed identities stay byte-identical (pinned by test).
 
-## What has to change
+## What remains
 
-`build_monthly_roster` currently enforces `evaluation_at` being the final XNYS session of its
-month (`adaptive_momentum.py:250`). Tranching needs **5 independent rosters evaluated on 5
-staggered sessions**, so:
-
-Remaining, in dependency order:
+`build_monthly_roster` still enforces `evaluation_at` being the final XNYS session of its month
+(`adaptive_momentum.py:250`). Tranching needs **5 independent rosters evaluated on 5 staggered
+sessions**. In dependency order:
 
 1. **Roster identity.** `MonthlyRoster` gains a tranche index, and `build_monthly_roster` stops
    rejecting non-month-end evaluation dates (`adaptive_momentum.py:250`), accepting instead any
