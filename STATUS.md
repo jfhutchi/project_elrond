@@ -195,6 +195,25 @@ built and not deployed.
 
 Any switch restarts the 30-day qualification window.
 
+## 6f. Cycle 15 — the finding that subsumes the rest
+
+**The momentum ranking carries no measurable information.** Tested three ways:
+
+| test | result | luck bar |
+|---|---|---|
+| alpha against SPY | 0.10%/yr, **t=0.05** | 2.87 |
+| top 10 vs all 23 (does selecting beat not selecting?) | +1.43%/yr, **t=0.84** | 2.87 |
+| top 10 vs bottom 10 (does the ranking sort at all?) | +2.60%/yr, **t=0.77** | 2.87 |
+
+The third is the damning one: if momentum worked, the best-ranked names should beat the
+worst-ranked decisively. They do not.
+
+The deployed rotation is **beta 0.71 with zero alpha**. SPY held at 0.71x reproduces it to
+within **0.05 CAGR points** — with no ranking, no rotation, no roster exits and no turnover.
+
+**This explains every null result in cycles 1-10: they were tuning the parameters of a signal
+that carries no information.** It should have been the first test run, not the fifteenth.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
