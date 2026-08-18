@@ -160,3 +160,29 @@ rearranging the consequences of it.
 **Instrument this specifically:** log every session where SPY is above its 200-day average but
 no position is opened, and record which branch skipped it. Do not tune anything further first.
 This document has now been wrong three times by reasoning ahead of measurement.
+
+
+## The specific thing to check first
+
+`engine.py:677` is `for symbol in active_roster:` — entry can only ever consider names in the
+roster, and `active_roster` is rebuilt **only when `is_month_end`** (`engine.py:597`). So an
+empty roster means zero entries for the whole following month, whatever the gates allow.
+
+trend-v4 sets `momentum: false`, which reaches `rank_assets` as `use_momentum=False`.
+
+**Hypothesis, untested:** `rank_assets` produces no rankings when `use_momentum=False`, leaving
+`active_roster` empty most months and capping entries at the handful of months where something
+slips through. That would explain a 6-trade count that no sizing or gating change has moved.
+
+It is one assertion to check:
+
+```python
+rank_assets(sliced, config, require_trend=False, require_positive=False,
+            use_momentum=False, as_of=timestamp)
+```
+
+If that returns an empty tuple for a single-name universe, this is the whole answer and the fix
+is in `rank_assets`, not in any config field.
+
+Stated as a hypothesis on purpose. This document has been wrong three times by reasoning ahead
+of measurement, and the correct next action is to run that one call, not to act on this.
