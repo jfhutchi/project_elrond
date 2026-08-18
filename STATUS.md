@@ -152,8 +152,11 @@ operator decision, not an agent one.**
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
-- [ ] **Tranche the rebalance date** (cycle 11 S1) — $61 of terminal-wealth spread per $100
-      on the real rotation, decided by the calendar alone
+- [ ] **Tranche the rebalance date** — $61.24 of terminal-wealth spread per $100 decided by the
+      calendar alone, the largest free effect found in 13 cycles. Design settled in
+      `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against
+      Alpaca's $1 floor). The cheap weight-ramp shortcut is measured and refuted, so the roster
+      machinery genuinely has to change. Not yet implemented.
 - [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
 - [ ] **Recalibrate the cost model** from 5bps to the measured ~1bp (cycle 11 S3)
