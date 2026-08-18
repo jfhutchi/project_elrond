@@ -344,7 +344,15 @@ unattributed.** First task is a harness that runs a real config through `Backtes
       Remaining: roster identity, durable state, and config wiring — see the spec.
 - [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
-- [ ] **Recalibrate the cost model** from 5bps to the measured ~1bp (cycle 11 S3)
+- [ ] **Recalibrate the cost model** from 5bps — deliberately NOT done yet. Two independent
+      estimates say the assumption is 5-20x too high (quoted NBBO 0.26-3.31bps; realised fills
+      -0.3bps against the opening auction), and there is a structural reason to believe them:
+      DAY orders submitted after the close execute in the opening auction, where a single
+      clearing price means no spread to cross. But n=3. Lowering an assumed cost improves every
+      historical result at once, so it needs a real sample.
+      `scripts/slippage_report.py` accumulates the evidence and refuses to endorse a change
+      below n=30. Re-run it as fills accrue; when it clears, do the recalibration as a
+      pre-registered change with a new strategy version, not by editing the constant.
 
 ## 8. If you are about to change the strategy
 
