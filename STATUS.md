@@ -155,6 +155,30 @@ per-position sizing.
 **Deploying v1.3.0 restarts the 30-day qualification window (currently day 1) and is an
 operator decision, not an agent one.**
 
+## 6d. Cycle 14 — what the money should actually be in
+
+`scripts/cycle14_what_to_hold.py`. Sized so max drawdown respects the **15% entry halt**
+(entries stop at 15%, liquidation at 20% — both thresholds are real and were mis-stated as a
+single 20% rule earlier in this session):
+
+| option | max scale | $100 becomes |
+|---|---|---|
+| SPY + vol target | 0.625x | **$288.33** |
+| rotation + vol target | 1.000x | $203.92 |
+| SPY buy-and-hold | 0.375x | $178.06 |
+| **DEPLOYED: 10-name rotation** | 0.500x | **$175.99** ← worst of the four |
+
+**+63.8% is available** relative to what is deployed. Caveat that matters: the bootstrap 95% CI
+on that gap is **[−$25.08, +$341.56]** — it spans zero, though the alternative loses in only
+5.3% of resamples. Suggestive, not established.
+
+Unconstrained the deployed rotation returns $293.91 against SPY's $422.52, **−30.4%** — but
+both breach liquidation unlevered, so that comparison is not the decision.
+
+**The frame that matters more than the ranking:** the best option compounds at 10.51%/yr, which
+takes $100 to $100,000 in **69 years**. The worst takes 130. The choice between these is worth a
+few percent a year; the choice of how much capital enters is worth multiples.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

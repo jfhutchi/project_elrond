@@ -71,6 +71,11 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   lists 19,194 delisted US equities against 14,233 live, and serves history for the
   delisted ones that terminates at each delisting date — so this bias is avoidable and
   was avoided.
+* **The deployed configuration is the worst available option under the real risk rules.**
+  Sized to the 15% entry halt: SPY+vol-target $288.33, rotation+vol-target $203.92, SPY
+  buy-and-hold $178.06, deployed rotation $175.99. Bootstrap CI on the best-versus-deployed gap
+  is [-$25.08, +$341.56], spanning zero but losing in only 5.3% of resamples — suggestive, not
+  established. Cycle 14.
 * **Realising a gain does not compound it.** Position size is a percentage of equity, so a
   gain already enlarges the next position while the position is simply held. Selling and
   rebuying produces identical exposure minus the spread: round-tripping SPY daily for a year
