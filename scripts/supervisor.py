@@ -152,9 +152,9 @@ def run_once(*, repair: bool = True) -> list[Finding]:
     now = datetime.now(UTC)
     findings: list[Finding] = []
     if daemon_holds_lock():
-        findings.append(Finding("INFO", "daemon", "alive and holding the writer lock"))
+        findings.append(Finding("INFO", "daemon", "alive and holding the daemon lock"))
     else:
-        findings.append(Finding("CRITICAL", "daemon", "not running — no writer holds the lock"))
+        findings.append(Finding("CRITICAL", "daemon", "not running — nothing holds the daemon lock"))
         if repair:
             findings.append(restart_daemon())
     findings.extend(inspect_durable(now))
