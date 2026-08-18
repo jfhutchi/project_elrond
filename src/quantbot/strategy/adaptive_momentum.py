@@ -269,8 +269,14 @@ def build_monthly_roster(
     config: StrategyConfig,
     *,
     session_sequence: XNYSSessionSequence,
+    tranche: int = 0,
 ) -> MonthlyRoster:
-    """Rank eligible symbols using only bars available at evaluation time."""
+    """Rank eligible symbols using only bars available at evaluation time.
+
+    `tranche` selects which rebalance schedule the evaluation date must belong to. At the
+    default single tranche the schedule is exactly the month-end sessions, so the guard below
+    is the same rule it has always been, expressed once instead of twice.
+    """
     _aware("evaluation_at", evaluation_at)
     _aware("effective_at", effective_at)
     if effective_at <= evaluation_at:
@@ -281,11 +287,24 @@ def build_monthly_roster(
     evaluation_session = session_sequence.sessions[evaluation_index]
     effective_index = evaluation_index + 1
     effective_session = session_sequence.sessions[effective_index]
-    if evaluation_session.session_date.strftime("%Y-%m") == effective_session.session_date.strftime(
-        "%Y-%m"
-    ):
-        raise ValueError("evaluation_at must be the final XNYS session of its month")
-    expires_at = session_sequence.roster_expiry_after(effective_index)
+    tranches = config.rebalance_tranches
+    if tranches == 1:
+        # Kept as an explicit branch rather than folded into the schedule check so the error
+        # message every deployed version can raise stays byte-identical.
+        if evaluation_session.session_date.strftime(
+            "%Y-%m"
+        ) == effective_session.session_date.strftime("%Y-%m"):
+            raise ValueError("evaluation_at must be the final XNYS session of its month")
+        expires_at = session_sequence.roster_expiry_after(effective_index)
+    else:
+        schedule = session_sequence.tranche_schedule_map(tranches)
+        if schedule.get(evaluation_index) != tranche:
+            raise ValueError(
+                f"evaluation_at is not tranche {tranche}'s rebalance session"
+            )
+        expires_at = session_sequence.tranche_expiry_after(
+            evaluation_index, tranche=tranche, tranches=tranches
+        )
 
     expected_symbols = set(config.universe)
     provided_symbols = set(histories)

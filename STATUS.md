@@ -344,9 +344,16 @@ unattributed.** First task is a harness that runs a real config through `Backtes
       and in `position_state`. The single-tranche equivalence to month-end is pinned
       month-by-month against the calendar, and state written before tranching existed still
       loads as tranche 0 — the live account is holding positions in exactly that shape.
-      **Remaining: step 3, runner and sizing** — build one roster per tranche, blend with
-      `tranche_weights`, scale the position-value cap by the resulting fraction. Nothing is
-      switched on; `rebalance_tranches` is still at its default.
+      **Step 3 is half done.** `build_monthly_roster` takes a tranche and validates against the
+      schedule instead of insisting on month-end; `_tranche_rosters` builds one roster per
+      tranche; `_target_fractions` blends them. Unstarted tranches are omitted rather than
+      passed as empty rosters — an empty roster and an unstarted one differ, and conflating
+      them would divide every weight by the full tranche count and under-invest the account
+      through the ramp-up month.
+      **Remaining: wire the blended fraction into position sizing** — `size_entry` still caps
+      at the full `max_position_value_bps` regardless of how many tranches hold the name. That
+      is a change to the risk path and deserves a fresh session rather than a tired one.
+      Nothing is switched on; `rebalance_tranches` is still at its default of 1.
 - [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
 - [ ] **Recalibrate the cost model** from 5bps — deliberately NOT done yet. Two independent

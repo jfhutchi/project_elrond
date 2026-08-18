@@ -68,6 +68,7 @@ from quantbot.strategy import (
     build_monthly_roster,
     evaluate_symbol,
     realized_volatility,
+    tranche_weights,
     wilder_atr,
 )
 
@@ -442,6 +443,63 @@ class AdaptiveMomentumRunner:
                 )
             sliced[symbol] = kept
         return sliced
+
+    def _tranche_rosters(
+        self,
+        histories: Mapping[str, list[Bar]],
+        calendar_sessions: tuple[XNYSSession, ...],
+        acting_index: int,
+    ) -> tuple[MonthlyRoster, ...]:
+        """One roster per tranche, each evaluated on that tranche's own rebalance session.
+
+        With a single tranche this returns exactly what `_roster` returns, because tranche 0's
+        rebalance session is the final session of the month. That equivalence is what lets the
+        capability land while switched off.
+
+        Tranches whose first rebalance has not happened yet are omitted rather than represented
+        as empty. An empty roster and an unstarted one mean different things — the first says
+        "hold nothing", the second says "no opinion yet" — and blending them together would
+        quietly dilute every weight during the ramp-up month.
+        """
+        tranches = self._config.rebalance_tranches
+        if tranches == 1:
+            return (self._roster(histories, calendar_sessions, acting_index),)
+
+        sequence = sequence_for(self._config, calendar_sessions)
+        schedule = sequence.tranche_schedule_map(tranches)
+        rosters: list[MonthlyRoster] = []
+        for tranche in range(tranches):
+            owned = [
+                index
+                for index, owner in schedule.items()
+                if owner == tranche and index < acting_index
+            ]
+            if not owned:
+                continue  # this tranche has not had its first rebalance
+            evaluation_index = max(owned)
+            evaluation_at = calendar_sessions[evaluation_index].close_at
+            rosters.append(
+                build_monthly_roster(
+                    self._slice(histories, evaluation_at),
+                    evaluation_at,
+                    calendar_sessions[evaluation_index + 1].open_at,
+                    self._config,
+                    session_sequence=sequence,
+                    tranche=tranche,
+                )
+            )
+        if not rosters:
+            raise StrategyDataError("no tranche has reached its first rebalance session")
+        return tuple(rosters)
+
+    def _target_fractions(self, rosters: tuple[MonthlyRoster, ...]) -> dict[str, Decimal]:
+        """Fractional membership across tranches: held by 3 of 5 means three fifths of a size.
+
+        This is the whole mechanism. Membership stops being binary, which is what averages away
+        the arbitrary choice of rebalance date — worth $61.24 of terminal wealth per $100 in
+        dispersion that carries no information.
+        """
+        return tranche_weights([roster.symbols for roster in rosters], Decimal(1))
 
     def _roster(
         self,
