@@ -7,7 +7,7 @@ design; if it stops being short, split it rather than skimming it.
 Rule: nothing is listed here without a measurement behind it. "It seemed unlikely" is not a
 refutation.
 
-Last updated 2026-08-18 (cycles 11-12).
+Last updated 2026-08-18 (cycles 11-13).
 
 ## Refuted with measurement
 
@@ -31,6 +31,7 @@ Last updated 2026-08-18 (cycles 11-12).
 | 16 | Volatility targeting as an **alpha** source | REFUTED | Cycle 11. Looked like the best result yet (Sharpe 0.92→1.09, all 12 parameter sets winning, break-even 113x real cost) and died: Jobson-Korkie/Memmel **z=1.01, p=0.31**, wins 6 of 12 assets, loses 2025-26. See #S2 for what did survive |
 | 17 | Overnight (close-to-open) premium | REFUTED | Cycle 11. An error in this project's own batch-2 analysis inflated it: one-sample t-tests instead of **paired**. Corrected, SPY falls t=2.74→0.63 and 1 of 18 assets clears the bar. Overnight-only beats buy-and-hold on CAGR on **1 of 18** — buy-and-hold collects both sessions. SPY premium decayed 7.93%/yr (2016-18) → −0.44% (2022-24) |
 | 18 | Turn-of-month effect | REFUTED | Cycle 11. Positive on 4 of 7 assets, largest t=1.57 (GLD) against a 2.82 bar |
+| 20 | Per-position vol targeting makes more money than flat weights | REFUTED | Cycle 13. At matched 1.0x exposure with the halt enforced at a realistic 21-day resumption it gains $15.88/$100, and the bootstrap 95% CI is **[−$86.76, +$76.79]**, losing in **36.8%** of resamples. Its drawdown reduction is established (#S2); its wealth effect is not |
 | 19 | Any strategy here beats SPY at its own growth-optimal leverage | REFUTED | Cycle 12. Vol-targeted SPY at 4.25x appeared to turn $100 into $2,475 v SPY's $954. Stationary bootstrap (2000 draws, 21d blocks): 95% CI on the gap **[−$173.90, +$432.04]**, spans zero; loses in **22.8%** of resamples. Rests on the Sharpe difference already refuted as #16 — leverage amplifies an edge that is not there |
 
 ## Not refuted — measured as genuinely working
@@ -71,6 +72,13 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   was avoided.
 * **Execution cost, not prediction, is usually binding.** #8 and #9 both died on spread, not
   on signal quality.
+* **The deployed strategy violates its own risk rule.** V1.2.0's historical max drawdown is
+  26.4% against a 20% halt, so it is expected to trip the halt it ships with. This is a design
+  incoherence, not a returns question, and is the sole justification for v1.3.0. Cycle 13.
+* **A plausible feature can be a silent no-op.** Per-position vol targeting at a 15% target
+  never binds against a 10% weight cap — it would need 150% annualised volatility, which these
+  ETFs never reach. The first implementation produced byte-identical results to no feature at
+  all and only a sweep revealed it. Cycle 13.
 * **The 20% drawdown halt is the true limit on wealth, not the signal.** SPY buy-and-hold draws
   down 33.8%, so the project's own rule forbids holding the benchmark that beats everything
   built here. Every strategy must be sized down to fit, and that sizing decision dominates

@@ -44,15 +44,21 @@ def _canonical_json(value: Any) -> str:
 def canonical_configuration(config: StrategyConfig) -> str:
     """Serialize a strategy config with semantic Decimal normalization.
 
-    Component switches are omitted while they hold their defaults. They were added after
-    1.0.0 and 1.1.0 were deployed, and defaults reproduce the behaviour those versions
-    already had, so omitting them keeps their identity byte-identical. Adding the
-    capability therefore cannot silently re-version a strategy that is already running,
-    while a configuration that actually changes a component does get a new identity.
+    Fields added after a version shipped are omitted while they hold their defaults, because
+    those defaults reproduce the behaviour the running versions already had. Omitting them
+    keeps deployed identities byte-identical, so adding a capability cannot silently
+    re-version a strategy that is already live, while a configuration that actually turns the
+    capability on does get a new identity.
     """
     payload = config.model_dump(mode="python")
     if payload.get("components") == StrategyComponents().model_dump(mode="python"):
         payload.pop("components", None)
+    # Same reasoning for volatility targeting, added after 1.2.0 was already running. A
+    # disabled target reproduces pre-1.3.0 behaviour exactly, so omitting it at the default
+    # keeps those identities byte-identical; enabling it does produce a new identity.
+    if payload.get("volatility_target_bps") == 0:
+        payload.pop("volatility_target_bps", None)
+        payload.pop("volatility_lookback_days", None)
     return _canonical_json(payload)
 
 

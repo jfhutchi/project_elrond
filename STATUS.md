@@ -121,6 +121,30 @@ Killed: vol targeting as alpha (z=1.01, p=0.31), the overnight effect, turn-of-m
 
 **Read `REFUTED.md` before proposing anything** — it now lists 18 refuted hypotheses.
 
+## 6c. Cycle 13 + v1.3.0 built (2026-08-18)
+
+**Volatility-targeted sizing is implemented, tested, and DISABLED by default.** Deployed
+identities are unchanged and a regression test pins them:
+
+| config | identity | status |
+|---|---|---|
+| strategy-v1-2.yaml | `...309894d8d8a5296e` | **DEPLOYED, unchanged** |
+| strategy-v1-3.yaml | `...f785a11dc906265f` | built, **not deployed** |
+
+Why v1.3.0 exists: **v1.2.0's historical max drawdown is 26.4% against its own 20% halt** — it
+is expected to trip the rule it ships with. Vol targeting at 150bps brings it to 17.1%.
+
+Established: vol targeting reduces drawdown (16/18 assets, p=0.0007).
+**Not established: that it makes more money** — bootstrap CI [−$86.76, +$76.79], loses in 36.8%
+of resamples. Do not justify v1.3.0 by returns.
+
+Two traps found while building it, both recorded in REFUTED.md: a 15% target is a **silent
+no-op** against a 10% weight cap, and cycle 12's portfolio-level result does **not** transfer to
+per-position sizing.
+
+**Deploying v1.3.0 restarts the 30-day qualification window (currently day 1) and is an
+operator decision, not an agent one.**
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
@@ -128,7 +152,9 @@ Killed: vol targeting as alpha (z=1.01, p=0.31), the overnight effect, turn-of-m
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
-- [ ] **Tranche the rebalance date** (cycle 11 S1) — highest-value, lowest-risk change found
+- [ ] **Tranche the rebalance date** (cycle 11 S1) — $61 of terminal-wealth spread per $100
+      on the real rotation, decided by the calendar alone
+- [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
 - [ ] **Recalibrate the cost model** from 5bps to the measured ~1bp (cycle 11 S3)
 

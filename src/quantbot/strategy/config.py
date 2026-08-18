@@ -66,7 +66,7 @@ class StrategyConfig(BaseModel):
     # 1.0.0 whole-share only; 1.1.0 adds fractional shares; 1.2.0 allows the regime symbol
     # to sit outside the tradeable universe, which is what an asset-class sleeve needs;
     # 2.0.0 lifts the SPY-only benchmark so a non-equity market can define its own regime.
-    version: Literal["1.0.0", "1.1.0", "1.2.0", "2.0.0"]
+    version: Literal["1.0.0", "1.1.0", "1.2.0", "1.3.0", "2.0.0"]
     calendar: TradingCalendar
     universe: tuple[str, ...]
     benchmark_symbol: str
@@ -95,6 +95,15 @@ class StrategyConfig(BaseModel):
     idle_cash_rate_bps: int = Field(ge=0)
     allow_fractional_shares: bool
     allow_pyramiding: bool
+    #: Volatility-targeted sizing. 0 disables it, which is what every version through 1.2.0
+    #: deployed with, so the default keeps their configuration hashes byte-identical.
+    #:
+    #: Cycle 12 measured why this is worth having, and it is NOT alpha: under this project's
+    #: 20% drawdown halt, vol targeting carries 0.75x exposure where raw SPY affords only
+    #: 0.50x, ending at $403.67 against $281.02 per $100. It buys back exposure that the
+    #: drawdown rule would otherwise forbid. Unconstrained it costs ~1.83 CAGR points a year.
+    volatility_target_bps: int = Field(default=0, ge=0)
+    volatility_lookback_days: int = Field(default=20, gt=1)
     components: StrategyComponents = StrategyComponents()
 
     @field_validator("universe")

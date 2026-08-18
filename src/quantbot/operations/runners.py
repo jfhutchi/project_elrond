@@ -67,6 +67,7 @@ from quantbot.strategy import (
     XNYSSessionSequence,
     build_monthly_roster,
     evaluate_symbol,
+    realized_volatility,
     wilder_atr,
 )
 
@@ -644,6 +645,13 @@ class AdaptiveMomentumRunner:
                         request, rejection = self._size_entry(
                             repository,
                             symbol=symbol,
+                            realized_vol=(
+                                realized_volatility(
+                                    sliced[symbol], self._config.volatility_lookback_days
+                                )
+                                if self._config.volatility_target_bps > 0
+                                else None
+                            ),
                             decision_price=decision.asset_close,
                             stop_distance=decision.initial_stop_distance,
                             account=account_snapshot.account,
@@ -748,6 +756,7 @@ class AdaptiveMomentumRunner:
         repository: StorageRepository,
         *,
         symbol: str,
+        realized_vol: Decimal | None,
         decision_price: Decimal | None,
         stop_distance: Decimal | None,
         account: Account,
@@ -781,6 +790,7 @@ class AdaptiveMomentumRunner:
                 stop_distance=stop_distance,
                 portfolio=portfolio,
                 drawdown=drawdown,
+                realized_volatility=realized_vol,
             ),
             self._config,
         )

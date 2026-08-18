@@ -27,7 +27,9 @@ def _bar(symbol: str, close: str) -> Bar:
     )
 
 
-def _order(symbol: str, qty: str, *, side: OrderSide = OrderSide.BUY, filled: str = "0") -> BrokerOrder:
+def _order(
+    symbol: str, qty: str, *, side: OrderSide = OrderSide.BUY, filled: str = "0"
+) -> BrokerOrder:
     return BrokerOrder(
         broker_order_id=f"b-{symbol}", client_order_id=f"qb-{symbol}", symbol=symbol,
         side=side, order_type=OrderType.MARKET, time_in_force=TimeInForce.DAY,

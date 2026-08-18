@@ -108,6 +108,7 @@ class SizingCapName(StrEnum):
     POSITION_VALUE = "POSITION_VALUE"
     GROSS_EXPOSURE = "GROSS_EXPOSURE"
     BUYING_POWER = "BUYING_POWER"
+    VOLATILITY_TARGET = "VOLATILITY_TARGET"
 
 
 class OrderPurpose(StrEnum):
@@ -122,6 +123,8 @@ class SizingCaps(RiskModel):
     position_value: NonNegativeDecimal
     gross_exposure: NonNegativeDecimal
     buying_power: NonNegativeDecimal
+    #: Absent when volatility targeting is disabled, which is every version through 1.2.0.
+    volatility_target: NonNegativeDecimal | None = None
 
 
 class EntrySizingRequest(RiskModel):
@@ -130,6 +133,10 @@ class EntrySizingRequest(RiskModel):
     stop_distance: FiniteDecimal
     portfolio: PortfolioRiskState
     drawdown: DrawdownState
+    #: Annualised realised volatility of the symbol, as a fraction. Required only when the
+    #: config enables volatility targeting; sizing fails closed if it is then missing, because
+    #: silently skipping the cap would size as though the feature were off.
+    realized_volatility: FiniteDecimal | None = None
 
     @field_validator("symbol")
     @classmethod

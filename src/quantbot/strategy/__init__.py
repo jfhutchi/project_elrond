@@ -26,6 +26,7 @@ from quantbot.strategy.indicators import (
     donchian_exit_level,
     highest_high_since,
     momentum_12_1,
+    realized_volatility,
     sma,
     true_ranges,
     wilder_atr,
@@ -57,5 +58,6 @@ __all__ = [
     "strategy_id_for",
     "true_ranges",
     "validate_strategy_identity",
+    "realized_volatility",
     "wilder_atr",
 ]

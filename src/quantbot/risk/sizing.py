@@ -110,20 +110,36 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
         Decimal("0"),
         portfolio.equity * max_gross_fraction - portfolio.committed_gross_exposure,
     )
+    volatility_cap: Decimal | None = None
+    if config.volatility_target_bps > 0:
+        if request.realized_volatility is None or request.realized_volatility <= 0:
+            return _rejection(request, ["REALIZED_VOLATILITY_UNAVAILABLE"])
+        # Exposure that makes this position contribute the target volatility. Scaling by
+        # target/realised is the whole mechanism: it cuts size when a symbol is turbulent,
+        # which is when losses cluster, and restores it when the symbol calms down.
+        target = Decimal(config.volatility_target_bps) / BASIS_POINTS
+        scaled = portfolio.equity * (target / request.realized_volatility)
+        volatility_cap = max(Decimal("0"), scaled - portfolio.committed_symbol_market_value)
+
     caps = SizingCaps(
         per_trade_risk=risk_budget / request.stop_distance,
         portfolio_open_risk=open_risk_remaining / request.stop_distance,
         position_value=position_value_remaining / request.reference_price,
         gross_exposure=gross_remaining / request.reference_price,
         buying_power=max(Decimal("0"), portfolio.buying_power) / request.reference_price,
+        volatility_target=(
+            None if volatility_cap is None else volatility_cap / request.reference_price
+        ),
     )
-    ordered_caps = (
+    ordered_caps: tuple[tuple[SizingCapName, Decimal], ...] = (
         (SizingCapName.PER_TRADE_RISK, caps.per_trade_risk),
         (SizingCapName.PORTFOLIO_OPEN_RISK, caps.portfolio_open_risk),
         (SizingCapName.POSITION_VALUE, caps.position_value),
         (SizingCapName.GROSS_EXPOSURE, caps.gross_exposure),
         (SizingCapName.BUYING_POWER, caps.buying_power),
     )
+    if caps.volatility_target is not None:
+        ordered_caps = (*ordered_caps, (SizingCapName.VOLATILITY_TARGET, caps.volatility_target))
     minimum = min(value for _, value in ordered_caps)
     quantity = quantize_quantity(minimum, config)
 
@@ -133,6 +149,7 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
         SizingCapName.POSITION_VALUE: "POSITION_VALUE_LIMIT_REACHED",
         SizingCapName.GROSS_EXPOSURE: "GROSS_EXPOSURE_LIMIT_REACHED",
         SizingCapName.BUYING_POWER: "BUYING_POWER_EXHAUSTED",
+        SizingCapName.VOLATILITY_TARGET: "VOLATILITY_TARGET_REACHED",
     }
     reasons = [exhausted_reasons[name] for name, value in ordered_caps if value <= 0]
     if config.allow_fractional_shares:
