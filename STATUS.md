@@ -248,8 +248,15 @@ condition. The difference is that it only acts on **monthly rebalance dates**: w
 below its average and recovers mid-month, the benchmark re-enters the next session while this
 config waits until month end. Those missed re-entries are most of the return.
 
-**The fix is rebalance frequency, not sizing** — the execution path must re-evaluate a
-hold-while-true condition every session. That is the highest-value engineering task left.
+**Narrowed to one line.** `adaptive_momentum.py:273` applies the trend filter when the roster
+is *built* (monthly). A symbol below its 200-day average at month end is locked out for the
+whole following month, and a symbol absent from the roster cannot be entered at any size —
+which is why every sizing knob looked inert. The trend gate is a hold-while-true predicate and
+belongs in the per-session `evaluate_symbol` path, where it already exists.
+
+Full spec: `docs/per-session-trend-spec.md`. Target: reproduce SPY_SMA200's 77% exposure and
+~10.34% CAGR with `universe: [SPY]`. This creates no alpha — it lets the engine run a rule
+already measured to work.
 
 ## 7. Open items
 
@@ -258,8 +265,8 @@ hold-while-true condition every session. That is the highest-value engineering t
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
-- [ ] **Build an execution path that can express SPY_SMA200** — see 6h. Highest-value
-      remaining work: the rule is measured, the engine cannot run it.
+- [ ] **Move the trend gate out of roster construction** (`adaptive_momentum.py:273`) —
+      spec in `docs/per-session-trend-spec.md`. Highest-value remaining work.
 - [ ] **Tranche the rebalance date** — $61.24 of terminal-wealth spread per $100 decided by the
       calendar alone, the largest free effect found in 13 cycles. Design settled in
       `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against
