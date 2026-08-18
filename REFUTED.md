@@ -71,6 +71,17 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   lists 19,194 delisted US equities against 14,233 live, and serves history for the
   delisted ones that terminates at each delisting date — so this bias is avoidable and
   was avoided.
+* **Realising a gain does not compound it.** Position size is a percentage of equity, so a
+  gain already enlarges the next position while the position is simply held. Selling and
+  rebuying produces identical exposure minus the spread: round-tripping SPY daily for a year
+  costs 0.66% and buys nothing. The snowball is automatic and already running; what varies is
+  only how often capital is *reallocated*, which is a separate question from realisation.
+* **More trades do compound faster, but cost scales with certainty and edge only on average.**
+  Break-even per trade is fixed at the spread (0.26bps SPY, ~1.1bps universe median), but
+  annual drag scales with frequency: 252 trades/yr costs 0.66-2.77%, 5,040 costs 13.1-55.4%,
+  25,200 costs 65-277%. Doubling every 3 days needs 25.99% net per session — 1.16% net per
+  trade even at 20 trades a session. The strongest per-trade edge this project ever measured
+  (#8, +427.9% gross) nets -28.8% at 5bps. `scripts/snowball_math.py`.
 * **Execution cost, not prediction, is usually binding.** #8 and #9 both died on spread, not
   on signal quality.
 * **The deployed strategy violates its own risk rule.** V1.2.0's historical max drawdown is
