@@ -186,3 +186,28 @@ is in `rank_assets`, not in any config field.
 
 Stated as a hypothesis on purpose. This document has been wrong three times by reasoning ahead
 of measurement, and the correct next action is to run that one call, not to act on this.
+
+
+## That hypothesis is REFUTED — checked, not assumed
+
+`rank_assets` (`benchmarks.py:94-124`) handles `use_momentum=False` correctly. Line 116 skips a
+symbol only when momentum is *required* and missing (`if use_momentum and momentum is None`),
+and line 118 assigns a score of zero otherwise. With `require_positive=False` and
+`require_trend=False` a single-name universe returns SPY every month. **The roster is not
+empty**, so that is not the cause of the 6-trade invariant.
+
+## What is left, stated as structure rather than a guess
+
+The entry loop is `engine.py:677`, `for symbol in active_roster:`, at 20-space indentation —
+the same depth as the body of `if is_month_end:` at line 597, whose own body starts at line 598.
+Meanwhile `drawdown = calculate_drawdown(...)` sits at 16 spaces, i.e. back outside that block.
+
+So entry is nested under *some* 16-space condition rather than running unconditionally each
+session. If that condition is month-end, entries are limited to ~127 opportunities across the
+history and a 6-trade count stops being mysterious: SPY exits mid-month when it falls below
+trend and cannot re-enter until the next month end, which is precisely the behaviour
+`SPY_SMA200` does not have.
+
+**Do not act on that paragraph.** Read `engine.py:600-680` and identify the enclosing condition
+first. This is the fourth diagnosis on this question; the previous three were all confidently
+wrong, and every one of them was reasoning from partial reads rather than from the code.
