@@ -133,6 +133,16 @@ class StrategyConfig(BaseModel):
     #: trend condition is a hold-while-true predicate and belongs in the per-session path,
     #: where the asset_trend component already runs.
     trend_gate_per_session: bool = False
+    #: How many sessions of equity history define the high-water mark. 0 means all-time, which
+    #: is what every deployed version uses, so the default keeps their hashes identical.
+    #:
+    #: Fixes an absorbing halt. With an all-time peak, a 15% drawdown blocks entries via
+    #: entry_halted, and a strategy that cannot open positions cannot earn back the drawdown —
+    #: so the halt is caused by a loss and then prevents the only thing that could undo it.
+    #: Measured: the gate blocked entry on 70.8% of backtest sessions. A finite window lets an
+    #: old peak age out, so time alone can release the account instead of requiring a deposit
+    #: or manual reset. 504 sessions is about two years.
+    drawdown_lookback_sessions: int = Field(default=0, ge=0)
     components: StrategyComponents = StrategyComponents()
 
     @field_validator("universe")

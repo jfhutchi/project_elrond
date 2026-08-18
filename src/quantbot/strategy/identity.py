@@ -65,6 +65,8 @@ def canonical_configuration(config: StrategyConfig) -> str:
         payload.pop("target_weight_sizing", None)
     if payload.get("trend_gate_per_session") is False:
         payload.pop("trend_gate_per_session", None)
+    if payload.get("drawdown_lookback_sessions") == 0:
+        payload.pop("drawdown_lookback_sessions", None)
     return _canonical_json(payload)
 
 

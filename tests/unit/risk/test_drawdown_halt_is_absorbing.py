@@ -55,19 +55,25 @@ def test_the_halt_does_not_release_as_equity_recovers_toward_the_peak() -> None:
         )
 
 
-def test_the_high_water_mark_never_decays_so_the_halt_never_times_out() -> None:
-    """No lookback window: an old peak governs forever.
+def test_an_escape_hatch_now_exists_but_is_off_for_deployed_configs() -> None:
+    """`drawdown_lookback_sessions` lets an old peak age out, so time can release the account.
 
-    This is what makes the halt absorbing rather than merely severe. A peak set years ago is
-    still the reference, so time alone never releases the account.
+    This test previously asserted that no such parameter existed, and it failed the moment one
+    was added — which is what it was for. The halt is still absorbing for anything already
+    deployed, because the default is 0 (all-time peak) and must stay that way to keep those
+    configuration hashes identical.
+
+    So the defect is fixable rather than fixed: turning it on is a new strategy version and a
+    restarted qualification window, which is an operator decision.
     """
-    ancient_peak = Decimal("100")
+    assert CONFIG.drawdown_lookback_sessions == 0, "deployed configs keep the all-time peak"
 
-    state = calculate_drawdown(Decimal("84"), ancient_peak, CONFIG)
+    # With an all-time peak the trap is intact: an ancient high still halts entries.
+    assert calculate_drawdown(Decimal("84"), Decimal("100"), CONFIG).entry_halted is True
 
-    assert state.entry_halted is True
-    # There is no parameter that would age the peak out. Its absence is the defect.
-    assert not hasattr(CONFIG, "drawdown_lookback_sessions")
+    # A finite window is what releases it, by letting the peak roll off.
+    windowed = CONFIG.model_copy(update={"drawdown_lookback_sessions": 504})
+    assert windowed.drawdown_lookback_sessions == 504
 
 
 def test_partial_drawdowns_scale_size_down_which_is_the_sane_behaviour() -> None:

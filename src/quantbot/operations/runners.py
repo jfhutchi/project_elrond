@@ -575,7 +575,15 @@ class AdaptiveMomentumRunner:
                 account_id=account_snapshot.account.account_id
             )
             fills = tuple(repository.list_fills())
-        high_water = max((record.equity for record in equity_history), default=None)
+        # A finite lookback lets an old peak age out. Without it the halt is absorbing:
+        # entries stop at a 15% drawdown and cannot resume, because resuming needs the returns
+        # that entries would have produced. See tests/unit/risk/test_drawdown_halt_is_absorbing.
+        considered = (
+            equity_history[-self._config.drawdown_lookback_sessions:]
+            if self._config.drawdown_lookback_sessions > 0
+            else equity_history
+        )
+        high_water = max((record.equity for record in considered), default=None)
         drawdown = calculate_drawdown(
             account_snapshot.account.equity,
             high_water if high_water and high_water > 0 else None,
