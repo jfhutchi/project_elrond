@@ -214,6 +214,23 @@ within **0.05 CAGR points** — with no ranking, no rotation, no roster exits an
 **This explains every null result in cycles 1-10: they were tuning the parameters of a signal
 that carries no information.** It should have been the first test run, not the fifteenth.
 
+## 6g. Cycle 16 — momentum fails on single stocks too
+
+Cycle 15 left one defence open: 23 correlated ETFs may have nothing to sort. Cycle 16 tested
+595 survivorship-free single names (260 delisted), where the literature says momentum lives.
+
+The ranking sorts **backwards** — bottom decile 36.04% CAGR against top decile 4.46% — and that
+is an artefact, not a finding:
+
+| price floor | top | bottom | t |
+|---|---|---|---|
+| $5 | 4.46% | 36.04% | −2.08 |
+| $10 | 3.13% | 20.52% | −1.32 |
+| **$20** | **8.07%** | **8.10%** | **0.00** |
+
+It vanishes *exactly* above $20 and is negative everywhere at 200bps, which is realistic for
+distressed small caps. Data cached at `research/stocks.db` so no future cycle re-pays for it.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
