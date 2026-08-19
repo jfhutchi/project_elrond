@@ -4,6 +4,18 @@ Kept separate from `quantbot.domain` on purpose. This package holds evidence, no
 state, and nothing in it has authority over the broker, the risk engine, or the kill switch.
 """
 
+from quantbot.research.budget import (
+    RENEWABLE,
+    Admission,
+    BudgetExceeded,
+    BudgetGovernor,
+    BudgetOverride,
+    Cap,
+    LoopBound,
+    Resource,
+    dataset_key,
+    family_key,
+)
 from quantbot.research.builder import (
     GENERALITY_PROBE,
     REQUIRED_PROBES,
@@ -110,6 +122,16 @@ from quantbot.research.reproducibility import (
 )
 
 __all__ = [
+    "RENEWABLE",
+    "Admission",
+    "BudgetExceeded",
+    "BudgetGovernor",
+    "BudgetOverride",
+    "Cap",
+    "LoopBound",
+    "Resource",
+    "dataset_key",
+    "family_key",
     "GENERALITY_PROBE",
     "REQUIRED_PROBES",
     "CompilationRefused",

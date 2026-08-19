@@ -179,6 +179,12 @@ This file is now also loaded into structured research memory (#6) by
 file, not a replacement for it: every statement is carried as written, and the import is
 idempotent. Edit here; the records follow.
 
+An eleventh, also from this session and also found by a guard rather than by review: `cli.py`
+imported research code at module scope, so a failure anywhere in the research package would have
+broken the kill switch, which lives in the same file. Found by the #14 import-graph test on its
+first run. No incident resulted; it is recorded because the kill switch is the last control and
+it had acquired a dependency nobody chose.
+
 A tenth defect, found in this session and in this project's own test suite rather than in its
 analysis: the first version of the point-in-time feature test (#17) passed with the
 slowest-input rule deleted. Its late-published input was still not the *latest available* one,

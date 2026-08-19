@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 metadata = MetaData(
     naming_convention={
@@ -447,3 +447,29 @@ research_relationships = Table(
     Column("note", Text, nullable=False, server_default=text("''")),
 )
 Index("ix_research_relationships_target_id", research_relationships.c.target_id)
+
+
+# --- Budget governor (#14) -----------------------------------------------------------------
+#
+# Append-only spend, keyed by budget rather than by task, so a cap is a query. Statistical
+# spend and compute spend share the table because they share the shape; they do not share the
+# arithmetic, because CPU refills overnight and a consumed holdout never does.
+
+budget_spend = Table(
+    "budget_spend",
+    metadata,
+    Column("spend_id", Integer, primary_key=True, autoincrement=True),
+    # e.g. "family:trend-following", "dataset:sip-us-equities-daily", "global".
+    Column("budget_key", String(256), nullable=False),
+    # TRIALS, WALL_SECONDS, TOKENS, REQUESTS, DOLLARS, ROUNDS.
+    Column("category", String(32), nullable=False),
+    Column("amount", Text, nullable=False),
+    Column("task", Text, nullable=False),
+    Column("recorded_at", String(40), nullable=False),
+    # Present only when an operator raised a cap to allow this. Raising a statistical cap is a
+    # permanent evidence decision, so it is recorded as one rather than logged.
+    Column("override_by", String(128)),
+    Column("note", Text, nullable=False, server_default=text("''")),
+)
+Index("ix_budget_spend_budget_key", budget_spend.c.budget_key, budget_spend.c.category)
+Index("ix_budget_spend_override_by", budget_spend.c.override_by)

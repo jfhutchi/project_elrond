@@ -19,7 +19,6 @@ from quantbot.operations import (
     ReadinessEvidence,
     authorize_paper_smoke,
 )
-from quantbot.research import HypothesisRegistry, summarize
 from quantbot.storage import Database, StorageRepository
 
 CommandHandler = Callable[[argparse.Namespace], Mapping[str, object]]
@@ -150,6 +149,10 @@ def main(
                 )
             result = {"ok": True, "engaged": state.engaged, "reason": state.reason}
         elif args.command == "hypotheses":
+            # Imported here, not at module scope. The kill switch lives in this file, and it
+            # must not stop working because research code failed to import.
+            from quantbot.research import HypothesisRegistry, summarize
+
             with active.database.transaction() as session:
                 registry = HypothesisRegistry(session)
                 registrations = registry.list_registrations(family_id=args.family)

@@ -590,6 +590,48 @@ A survivor must also clear the bar frozen for its own trial count, have no faili
 report the statistic it cleared with. `FAILED` and `UNDERPOWERED` are recordable outcomes:
 a failure is not an absence, and #6 needs to tell them apart.
 
+## 6p. The budget governor, and the boundary around the daemon (#14)
+
+`quantbot.research.budget`. Wall time, CPU, tokens and dollars refill. **Untouched data does
+not**, and it is the only budget in this project with permanent consequences:
+
+| cumulative trials | luck bar | minimum Sharpe detectable over 10.6y |
+|---|---|---|
+| 24 | 2.52 | 0.77 |
+| 100 | 3.03 | 0.93 |
+| 1,000 | 3.72 | 1.14 |
+
+SPY scores 0.90 on that window. Spend enough trials and the project can no longer demonstrate
+anything, and no amount of compute buys the budget back. So `TRIALS` gets the same machinery as
+tokens — caps, admission control, audited overrides — and a different attitude. `RENEWABLE`
+names the distinction and a test asserts it rather than leaving it to the docstring.
+
+**Statistical budget is keyed per dataset and per family**, never as one global number: a single
+figure hides the difference between having used up US equities and having used up everything.
+
+**Estimated before admission, not counted after.** An external miner that evaluates 1,000
+candidates and returns one has spent 1,000 trials; discovering that afterwards is discovering it
+too late. `worth_spending()` is the Research Director's deferral — a family near its cap declines
+a low-value question even when compute is free.
+
+Fail closed throughout: a resource nobody capped is a resource nobody may spend. Spend is
+append-only, so a budget cannot be quietly rewound. `LoopBound` is a hard stop on debate and
+retry rounds, because a loop that can always try once more does not terminate.
+
+### The boundary, tested rather than assumed
+
+Both reviews asked that research starvation never reach the trading daemon. The paper account is
+the only genuinely uncontaminated evidence this project will ever get.
+`test_research_budgets_cannot_starve_the_trading_daemon` walks the AST of every module in
+`runtime`, `cli`, `operations`, `execution`, `brokers` and `risk` and fails on any **top-level**
+import of `quantbot.research`.
+
+It found one on its first run. `cli.py` imported the registry at module scope for the
+`hypotheses` command — so a research import failure would have broken the kill switch, which
+lives in the same file. That import is now function-local, matching how `cli.py` already defers
+`runtime`. The property enforced is precise: research is not a load-time dependency of the
+trading path.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

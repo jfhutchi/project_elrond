@@ -29,7 +29,13 @@ from quantbot.storage.schema import (
 #: Alembic was introduced carry only the `schema_version` marker, so they are stamped at the
 #: revision matching their observed layout and then upgraded normally. Extend when
 #: `SCHEMA_VERSION` is bumped; a version absent here cannot be opened.
-REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {1: "0001", 2: "0002", 3: "0003", 4: "0004"}
+REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {
+    1: "0001",
+    2: "0002",
+    3: "0003",
+    4: "0004",
+    5: "0005",
+}
 
 
 class UnsupportedSchemaVersionError(RuntimeError):
