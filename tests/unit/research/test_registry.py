@@ -99,6 +99,13 @@ def window(
 
 
 def sharpe_effect(**overrides: object) -> EffectSpecification:
+    """A standalone Sharpe against a null of zero.
+
+    This used to declare `comparison=PAIRED` while feeding an *absolute* Sharpe of 1.0, which is
+    the mismatch reported in #25: the compiler selected Jobson-Korkie-Memmel for the pair while
+    the gate sized a one-sample test. `SINGLE_SAMPLE` is what the arithmetic was always doing.
+    Comparative registrations use `sharpe_difference_effect` and must declare a benchmark.
+    """
     expected = overrides.pop("expected", Decimal("1.0"))
     assert isinstance(expected, Decimal)
     fields: dict[str, object] = {
@@ -106,7 +113,29 @@ def sharpe_effect(**overrides: object) -> EffectSpecification:
         "expected": expected,
         "minimum_practical": expected / 2,
         "justification": "Cycle 16 measured SPY_SMA200 at Sharpe 0.91 in-sample.",
+        "comparison": ComparisonStructure.SINGLE_SAMPLE,
+        "economics": EconomicProfile(
+            annual_rebalances=12,
+            expected_annual_volatility_bps=1500,
+            round_trip_cost_bps=Decimal("1.1"),
+        ),
+    }
+    fields.update(overrides)
+    return EffectSpecification(**fields)
+
+
+def sharpe_difference_effect(**overrides: object) -> EffectSpecification:
+    """A Sharpe *difference* against a correlated benchmark, sized by Jobson-Korkie-Memmel."""
+    expected = overrides.pop("expected", Decimal("0.55"))
+    assert isinstance(expected, Decimal)
+    fields: dict[str, object] = {
+        "estimand": Estimand.SHARPE,
+        "expected": expected,
+        "minimum_practical": expected / 2,
+        "justification": "A trend filter should improve risk-adjusted return over buy-and-hold.",
         "comparison": ComparisonStructure.PAIRED,
+        "benchmark_sharpe": Decimal("0.90"),
+        "benchmark_correlation": Decimal("0.95"),
         "economics": EconomicProfile(
             annual_rebalances=12,
             expected_annual_volatility_bps=1500,
@@ -134,15 +163,15 @@ def make_draft(**overrides: object) -> HypothesisDraft:
     fields: dict[str, object] = {
         "hypothesis_id": "H-2026-001",
         "family_id": "trend-following",
-        "question": "Does a 200-day trend filter on SPY beat buy-and-hold on Sharpe?",
-        "prediction": "Sharpe is higher by at least 0.10 with lower maximum drawdown.",
-        "null_hypothesis": "The Sharpe difference is zero.",
-        "falsified_if": "The paired Sharpe difference fails to clear the luck bar.",
+        "question": "Does a 200-day trend filter on SPY earn a positive risk-adjusted return?",
+        "prediction": "Annualised Sharpe is at least 1.0.",
+        "null_hypothesis": "The Sharpe is zero.",
+        "falsified_if": "The Sharpe fails to clear the luck bar.",
         "universe": ("SPY",),
         "features": ("close_sma_200",),
         "target": "next-session excess return",
         "windows": (window(DataRole.PROTECTED_EVALUATION, "2016-01-04", "2026-08-18"),),
-        "primary_estimand": "annualised Sharpe difference against SPY buy-and-hold",
+        "primary_estimand": "annualised Sharpe against a null of zero",
         "effect": sharpe_effect(),
         "available_observations": SIP_SESSIONS,
         "confounders": ("regime dependence", "the 2020 crash dominating the sample"),

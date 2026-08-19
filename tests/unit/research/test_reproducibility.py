@@ -160,9 +160,7 @@ def test_a_wrong_statistical_test_for_the_dependence_structure_is_flagged() -> N
     # samples, where Jobson-Korkie-Memmel gives z=1.01.
     welch = check_invariants(manifest(statistics=plan(test=StatisticalTest.WELCH_T)))
     assert not welch.ok
-    assert check_invariants(
-        manifest(statistics=plan(test=StatisticalTest.JOBSON_KORKIE_MEMMEL))
-    ).ok
+    assert check_invariants(manifest(statistics=plan(test=StatisticalTest.JOBSON_KORKIE_MEMMEL))).ok
 
 
 def test_costs_that_improve_a_return_are_flagged() -> None:
@@ -320,7 +318,7 @@ def test_an_exploratory_experiment_cannot_borrow_a_registration() -> None:
         exploratory(power_verdict="OVERRIDDEN")
 
 
-def test_a_confirmatory_dataset_must_name_its_provider_and_availability(  ) -> None:
+def test_a_confirmatory_dataset_must_name_its_provider_and_availability() -> None:
     """Lineage (#17). Without an availability timestamp a bundle can only assert it avoided
     look-ahead, never show it."""
     for missing in ("retrieved_at", "earliest_available_at"):
@@ -343,6 +341,7 @@ def test_a_changed_transformation_version_is_a_different_experiment() -> None:
         )
     ]
     assert reasons
-    assert manifest().inputs_hash != manifest(
-        datasets=(snapshot(transformation_version="adjust-v2"),)
-    ).inputs_hash
+    assert (
+        manifest().inputs_hash
+        != manifest(datasets=(snapshot(transformation_version="adjust-v2"),)).inputs_hash
+    )

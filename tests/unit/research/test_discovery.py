@@ -52,9 +52,7 @@ def candidate(**overrides: object) -> Candidate:
         "search_cardinality": 1,
         "confounders": ("skew correlates with realised volatility",),
         "simplest_refutation": "Sort on skew and measure the top-minus-bottom spread.",
-        "basis": EvidenceBasis(
-            citations=(), status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE
-        ),
+        "basis": EvidenceBasis(citations=(), status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE),
         "estimated_trials": 1,
         "proposed_by": "literature-gap-miner",
         "proposed_at": NOW,

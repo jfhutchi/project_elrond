@@ -41,6 +41,8 @@ def effect(**overrides: object) -> EffectSpecification:
         "minimum_practical": Decimal("0.5"),
         "justification": "Cycle 16 measured SPY_SMA200 at Sharpe 0.91 in-sample.",
         "comparison": ComparisonStructure.PAIRED,
+        "benchmark_sharpe": Decimal("0.90"),
+        "benchmark_correlation": Decimal("0.95"),
         "economics": EconomicProfile(
             annual_rebalances=12,
             expected_annual_volatility_bps=1500,
@@ -217,9 +219,7 @@ def test_a_plan_that_drops_a_required_probe_cannot_be_built() -> None:
 
 def test_a_dataset_the_registration_declared_must_actually_be_supplied() -> None:
     with pytest.raises(CompilationRefused) as error:
-        compile_experiment(
-            registration(), datasets=[snapshot(dataset="some-other-dataset")]
-        )
+        compile_experiment(registration(), datasets=[snapshot(dataset="some-other-dataset")])
     assert error.value.reason == "MISSING_DATASET"
     assert "sip-us-equities-daily" in error.value.detail
 
@@ -252,9 +252,7 @@ def test_the_plan_records_the_dependence_assumptions_it_selected_the_test_from()
     plan = compile_experiment(
         registration(
             effect=effect(
-                dependence=DependenceAssumptions(
-                    sampling="OVERLAPPING", horizon_observations=21
-                )
+                dependence=DependenceAssumptions(sampling="OVERLAPPING", horizon_observations=21)
             )
         ),
         datasets=[snapshot()],
@@ -329,5 +327,8 @@ def test_every_outcome_carries_its_minimum_detectable_effect() -> None:
     null = outcome(verdict=OutcomeVerdict.REFUTED, test_statistic=Decimal("0.4"))
     # The whole SIP history at 69 cumulative trials cannot separate a Sharpe below 0.894 from
     # zero, so "no effect found" would be a much weaker and more misleading statement.
-    assert null.minimum_detectable_effect == Decimal("0.894174")
+    # Sized by Jobson-Korkie-Memmel now that this fixture declares its benchmark (#25). The
+    # one-sample value was 0.894174; the comparative one is smaller because a correlation of
+    # 0.95 shrinks the 2(1-rho) term far below the independent-series case.
+    assert null.minimum_detectable_effect == Decimal("0.782964")
     assert not null.citable

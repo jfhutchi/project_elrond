@@ -146,13 +146,11 @@ def test_a_citation_cannot_claim_elrond_measured_something() -> None:
 
 
 def test_a_hypothesis_must_cite_something_or_say_it_cites_nothing() -> None:
-    """"We did not look" and "we looked and there is nothing" are different facts."""
+    """ "We did not look" and "we looked and there is nothing" are different facts."""
     with pytest.raises(ValueError, match="DATA_DRIVEN_NO_EXTERNAL_SOURCE"):
         EvidenceBasis(citations=(), status=EpistemicStatus.LITERATURE_SUPPORTED)
 
-    mined = EvidenceBasis(
-        citations=(), status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE
-    )
+    mined = EvidenceBasis(citations=(), status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE)
     assert not mined.gates_promotion
 
     with pytest.raises(ValueError, match="pick the one that is true"):
@@ -207,9 +205,7 @@ def test_the_same_work_is_stored_once_however_it_arrives() -> None:
     assert index.add(source(source_id="mirror", uri="https://mirror.example/p.pdf")) is False
     # Same work, different PDF build, so a different hash but the same title and publisher.
     assert (
-        index.add(
-            source(source_id="preprint", content_hash="c" * 64, uri="https://arxiv.org/x")
-        )
+        index.add(source(source_id="preprint", content_hash="c" * 64, uri="https://arxiv.org/x"))
         is False
     )
     # A genuinely different work is stored.

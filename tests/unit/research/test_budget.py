@@ -151,9 +151,7 @@ def test_low_value_work_is_declined_even_when_compute_is_free(database: Database
             SIP, Decimal("30"), expected_information_gain=Decimal("0.1")
         )
         # The same spend for a question worth a lot is admitted.
-        assert governor.worth_spending(
-            SIP, Decimal("30"), expected_information_gain=Decimal("0.5")
-        )
+        assert governor.worth_spending(SIP, Decimal("30"), expected_information_gain=Decimal("0.5"))
         # And nothing beyond the remaining allowance is affordable at any value.
         assert not governor.worth_spending(
             SIP, Decimal("60"), expected_information_gain=Decimal("1.0")
@@ -181,9 +179,7 @@ def test_renewable_and_permanent_resources_are_distinguished() -> None:
     assert Resource.TRIALS not in RENEWABLE
     assert {Resource.TOKENS, Resource.WALL_SECONDS, Resource.DOLLARS} <= RENEWABLE
 
-    admission_permanence = {
-        resource: resource not in RENEWABLE for resource in Resource
-    }
+    admission_permanence = {resource: resource not in RENEWABLE for resource in Resource}
     assert admission_permanence[Resource.TRIALS] is True
     assert admission_permanence[Resource.TOKENS] is False
 

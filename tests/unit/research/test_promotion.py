@@ -132,9 +132,7 @@ def test_passing_a_pre_registered_test_is_not_enough_to_survive() -> None:
 
 def test_a_standalone_study_cannot_make_a_survivor() -> None:
     standalone = outcome(
-        plan=outcome().plan.model_copy(
-            update={"execution_path": ExecutionPath.RESEARCH_SCRIPT}
-        ),
+        plan=outcome().plan.model_copy(update={"execution_path": ExecutionPath.RESEARCH_SCRIPT}),
         verdict=OutcomeVerdict.INCONCLUSIVE,
     )
     assert any("standalone model" in item for item in survivor_objections(standalone))
@@ -198,9 +196,7 @@ def test_a_material_change_restarts_the_window_by_excluding_the_old_days() -> No
     )
     assert (days, trades) == (30, 30)
 
-    after, _ = count_forward_days(
-        collected, strategy_version="1.4.0", configuration_hash="cfg-abc"
-    )
+    after, _ = count_forward_days(collected, strategy_version="1.4.0", configuration_hash="cfg-abc")
     assert after == 0
 
     changed = material_change(
@@ -212,12 +208,15 @@ def test_a_material_change_restarts_the_window_by_excluding_the_old_days() -> No
     assert changed.stage is Stage.RESEARCH_SURVIVOR
     assert "restarted" in changed.reason
     # An unchanged identity leaves the state exactly as it was.
-    assert material_change(
-        state(Stage.PAPER_QUALIFIED),
-        strategy_version="1.3.0",
-        configuration_hash="cfg-abc",
-        now=NOW,
-    ).stage is Stage.PAPER_QUALIFIED
+    assert (
+        material_change(
+            state(Stage.PAPER_QUALIFIED),
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+            now=NOW,
+        ).stage
+        is Stage.PAPER_QUALIFIED
+    )
 
 
 def test_an_unresolved_integrity_violation_blocks_every_promotion() -> None:

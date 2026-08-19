@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
+from pydantic import ValidationError
 
 from quantbot.research.power import (
     ComparisonStructure,
@@ -53,7 +54,7 @@ def sharpe_effect(**overrides: object) -> EffectSpecification:
         # Halved by default so overriding the expected effect stays valid on its own.
         "minimum_practical": expected / 2,
         "justification": "Cycle 16 measured SPY_SMA200 at Sharpe 0.91 in-sample.",
-        "comparison": ComparisonStructure.PAIRED,
+        "comparison": ComparisonStructure.SINGLE_SAMPLE,
         "economics": economics(),
     }
     fields.update(overrides)
@@ -99,7 +100,7 @@ def test_each_estimand_uses_its_own_closed_form_not_the_sharpe_one() -> None:
         expected=Decimal("0.2"),
         minimum_practical=Decimal("0.1"),
         justification="A tenth of a standard deviation per session.",
-        comparison=ComparisonStructure.PAIRED,
+        comparison=ComparisonStructure.SINGLE_SAMPLE,
         economics=economics(),
     )
     assert observations_required(mean_difference, threshold) == math.ceil((z / 0.2) ** 2)
@@ -135,9 +136,7 @@ def test_overlapping_horizons_are_charged_for_rather_than_counted_as_independent
     """
     independent = sharpe_effect()
     overlapping = sharpe_effect(
-        dependence=DependenceAssumptions(
-            sampling=Sampling.OVERLAPPING, horizon_observations=252
-        )
+        dependence=DependenceAssumptions(sampling=Sampling.OVERLAPPING, horizon_observations=252)
     )
     assert overlapping.dependence.variance_inflation() == Decimal("252")
     inflated = observations_required(overlapping, Decimal("2.9"))
@@ -152,22 +151,35 @@ def test_autocorrelation_and_clustering_inflate_the_sample_they_each_describe() 
     serial = DependenceAssumptions(lag_one_autocorrelation=Decimal("0.5"))
     assert serial.variance_inflation() == Decimal("3")  # (1+0.5)/(1-0.5)
 
-    clustered = DependenceAssumptions(
-        cluster_size=23, intra_cluster_correlation=Decimal("0.5")
-    )
+    clustered = DependenceAssumptions(cluster_size=23, intra_cluster_correlation=Decimal("0.5"))
     assert clustered.variance_inflation() == Decimal("12")  # 1 + 22*0.5
 
     assert DependenceAssumptions().variance_inflation() == Decimal("1")
 
 
 def test_an_unpaired_comparison_needs_twice_the_observations_of_a_paired_one() -> None:
-    """Cycle 11 used the wrong one and the overnight premium looked significant."""
-    paired = observations_required(
-        sharpe_effect(comparison=ComparisonStructure.PAIRED), Decimal("2.9")
-    )
-    unpaired = observations_required(
-        sharpe_effect(comparison=ComparisonStructure.UNPAIRED), Decimal("2.9")
-    )
+    """Cycle 11 used the wrong one and the overnight premium looked significant.
+
+    Stated on `MEAN_DIFFERENCE`, which is where the arm factor genuinely applies. A comparative
+    `SHARPE` no longer doubles: it is sized by Jobson-Korkie-Memmel, where the paired and unpaired
+    cases differ through the correlation term rather than a factor of two, and that is asserted
+    separately.
+    """
+
+    def difference(comparison: ComparisonStructure) -> EffectSpecification:
+        return EffectSpecification(
+            estimand=Estimand.MEAN_DIFFERENCE,
+            # Small enough that the ceiling rounding is negligible against the ratio: at
+            # d=0.2 the counts are 211 and 421, and 421/211 is 1.9953, not 2.
+            expected=Decimal("0.02"),
+            minimum_practical=Decimal("0.01"),
+            justification="Two hundredths of a standard deviation per session.",
+            comparison=comparison,
+            economics=economics(),
+        )
+
+    paired = observations_required(difference(ComparisonStructure.PAIRED), Decimal("2.9"))
+    unpaired = observations_required(difference(ComparisonStructure.UNPAIRED), Decimal("2.9"))
     assert 1.999 < unpaired / paired < 2.001
 
 
@@ -322,3 +334,110 @@ def test_statistical_power_follows_years_not_observation_count() -> None:
     # And the advantage survives the autocorrelation a macro series actually carries, which is
     # where an over-optimistic reading of the above would come unstuck.
     assert annualised(420, 12, rho="0.30") < annualised(2669, 252, rho="0.05")
+
+
+def jkm_effect(**overrides: object) -> EffectSpecification:
+    fields: dict[str, object] = {
+        "estimand": Estimand.SHARPE,
+        "expected": Decimal("0.55"),
+        "minimum_practical": Decimal("0.25"),
+        "justification": "A trend filter should improve risk-adjusted return over buy-and-hold.",
+        "comparison": ComparisonStructure.PAIRED,
+        "benchmark_sharpe": Decimal("0.90"),
+        "benchmark_correlation": Decimal("0.95"),
+        "economics": economics(),
+    }
+    fields.update(overrides)
+    return EffectSpecification(**fields)
+
+
+def test_a_comparative_sharpe_cannot_be_registered_without_its_benchmark() -> None:
+    """The #25 defect made constructible-proof.
+
+    `builder.py` maps (SHARPE, PAIRED) to Jobson-Korkie-Memmel, whose variance depends on both
+    Sharpes and their correlation. The gate sized the same registration as a one-sample Sharpe
+    against zero, so the compiler and the gate described different experiments. A spec that omits
+    the benchmark can no longer be built, which is what makes the two agree by construction rather
+    than by discipline.
+    """
+    with pytest.raises(ValidationError, match="Sharpe \*difference\*"):
+        jkm_effect(benchmark_sharpe=None, benchmark_correlation=None)
+    with pytest.raises(ValidationError, match="Sharpe \*difference\*"):
+        jkm_effect(benchmark_correlation=None)
+
+
+def test_a_standalone_sharpe_may_not_carry_a_benchmark() -> None:
+    """The mismatch is refused in both directions, so the fields cannot become decorative."""
+    with pytest.raises(ValidationError, match="do not apply"):
+        jkm_effect(comparison=ComparisonStructure.SINGLE_SAMPLE)
+
+
+def test_the_absolute_sharpe_gate_overstated_the_projects_own_example_1738_fold() -> None:
+    """Measured on SPY_SMA200 vs SPY buy-and-hold, SIP 2016-2026, 2,667 sessions.
+
+    Sharpes 0.929 and 0.903, correlation 0.6531, difference +0.026. The old gate was fed the
+    *absolute* Sharpe of 1.0 for a question whose registered estimand was the difference, and
+    reported that 8.4 years sufficed. Under the test the compiler actually selects, the same
+    comparison needs roughly 14,671 years.
+
+    This asserts the direction and the order of magnitude rather than a fragile exact figure: the
+    claim under test is that the comparative sizing is enormously larger, not that it equals any
+    particular constant.
+    """
+    threshold = luck_threshold(68)
+    absolute = observations_required(
+        EffectSpecification(
+            estimand=Estimand.SHARPE,
+            expected=Decimal("1.0"),
+            minimum_practical=Decimal("0.5"),
+            justification="the standalone Sharpe the old gate was fed",
+            comparison=ComparisonStructure.SINGLE_SAMPLE,
+            economics=economics(),
+        ),
+        threshold,
+    )
+    comparative = observations_required(
+        jkm_effect(
+            expected=Decimal("0.026"),
+            minimum_practical=Decimal("0.01"),
+            benchmark_sharpe=Decimal("0.903"),
+            benchmark_correlation=Decimal("0.6531"),
+        ),
+        threshold,
+    )
+    assert absolute / 252 < 10, "the old sizing cleared inside the available history"
+    assert comparative / 252 > 10_000, "the real comparison is not resolvable by this project"
+    assert comparative / absolute > 1_000
+
+
+def test_correlation_decides_whether_a_sharpe_comparison_is_cheap_or_impossible() -> None:
+    """The `2(1 - rho)` term, which is why the correlation is not allowed a default.
+
+    Near-identical strategies are *easy* to separate on Sharpe and independent ones are hard, so a
+    defaulted correlation would silently pick a verdict rather than measure one — the same
+    fail-open shape as the defaulted sample size in #24.
+    """
+    threshold = luck_threshold(68)
+    near_identical = observations_required(
+        jkm_effect(benchmark_correlation=Decimal("0.99")), threshold
+    )
+    independent = observations_required(jkm_effect(benchmark_correlation=Decimal("0")), threshold)
+    assert near_identical < independent
+    assert independent / near_identical > 3
+
+
+def test_the_detectable_sharpe_difference_shrinks_with_correlation_too() -> None:
+    """`minimum_detectable_effect` must use the same variance as `observations_required`.
+
+    They were separate code paths before, and a null result reported through the one-sample
+    formula would understate what the experiment had actually ruled out.
+    """
+    sessions = 2669
+    threshold = luck_threshold(68)
+    tight = minimum_detectable_effect(
+        jkm_effect(benchmark_correlation=Decimal("0.99")), sessions, threshold
+    )
+    loose = minimum_detectable_effect(
+        jkm_effect(benchmark_correlation=Decimal("0")), sessions, threshold
+    )
+    assert tight < loose

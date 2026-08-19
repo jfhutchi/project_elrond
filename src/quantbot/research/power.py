@@ -161,9 +161,7 @@ class DependenceAssumptions(FrozenModel):
         rho = float(self.lag_one_autocorrelation)
         serial = (1 + rho) / (1 - rho)
         clustering = 1 + (self.cluster_size - 1) * float(self.intra_cluster_correlation)
-        overlap = (
-            self.horizon_observations if self.sampling is Sampling.OVERLAPPING else 1
-        )
+        overlap = self.horizon_observations if self.sampling is Sampling.OVERLAPPING else 1
         return quantize(serial * clustering * overlap)
 
     def independent_observations(self, observations: int) -> Decimal:
@@ -202,6 +200,14 @@ class EffectSpecification(FrozenModel):
     comparison: ComparisonStructure
     dependence: DependenceAssumptions = DependenceAssumptions()
     economics: EconomicProfile | None = None
+    #: The benchmark's own annualised Sharpe. Required for a comparative SHARPE registration,
+    #: forbidden otherwise. Jobson-Korkie-Memmel needs both Sharpes, not only the difference:
+    #: the variance of a Sharpe difference depends on the levels as well as the gap.
+    benchmark_sharpe: Decimal | None = Field(default=None, allow_inf_nan=False)
+    #: Correlation between the candidate's returns and the benchmark's. Not defaulted, because a
+    #: defaulted correlation is the same fail-open pattern as a defaulted sample size (#24), and
+    #: it is the term that decides whether the comparison is cheap or impossible.
+    benchmark_correlation: Decimal | None = Field(default=None, ge=-1, le=1)
 
     @model_validator(mode="after")
     def validate_effect(self) -> Self:
@@ -211,6 +217,23 @@ class EffectSpecification(FrozenModel):
             raise ValueError("the minimum practical effect must exceed the null")
         if self.minimum_practical > self.expected:
             raise ValueError("expected effect cannot be below the minimum worth acting on")
+        comparative = self.comparison is not ComparisonStructure.SINGLE_SAMPLE
+        benchmark = (self.benchmark_sharpe, self.benchmark_correlation)
+        if self.estimand is Estimand.SHARPE and comparative:
+            # builder.py maps (SHARPE, PAIRED) to Jobson-Korkie-Memmel. Sizing it as a one-sample
+            # Sharpe against zero made the gate and the compiler describe different experiments,
+            # and on this project's own example hypothesis that overstated power 1,738-fold.
+            if any(value is None for value in benchmark):
+                raise ValueError(
+                    "a comparative Sharpe registration is a Sharpe *difference*: declare the "
+                    "benchmark's own Sharpe and its correlation with the candidate, because the "
+                    "variance of the difference depends on both"
+                )
+        elif any(value is not None for value in benchmark):
+            raise ValueError(
+                "benchmark_sharpe and benchmark_correlation describe a Sharpe difference; they "
+                "do not apply to this estimand or comparison structure"
+            )
         if self.estimand is Estimand.HIT_RATE:
             if not Decimal("0") < self.null_value < Decimal("1"):
                 raise ValueError("a hit-rate null must be a proportion strictly inside (0, 1)")
@@ -241,6 +264,40 @@ class EffectSpecification(FrozenModel):
         return quantize(float(effect) * math.sqrt(self.dependence.observations_per_year))
 
 
+def jobson_korkie_memmel_variance(specification: EffectSpecification) -> float:
+    """Variance factor for the difference of two correlated Sharpe ratios, in annual units.
+
+    Memmel's correction to Jobson-Korkie:
+
+        Var(S_a - S_b) ~ (1/T) * [ 2(1 - rho) + 0.5*(S_a^2 + S_b^2 - 2*rho^2*S_a*S_b) ]
+
+    with T in years and the Sharpes annualised. This returns the bracketed factor.
+
+    `builder.py` already selects this test for a paired Sharpe comparison. The power gate sized
+    the same registration as a one-sample Sharpe against zero, so the compiler and the gate
+    described different experiments. On this project's own example -- SPY_SMA200 against SPY
+    buy-and-hold, Sharpes 0.929 and 0.903, correlation 0.6531 -- the gate reported that 8.4 years
+    sufficed for a comparison that needs roughly 14,671. A 1,738-fold overstatement.
+
+    Note the `2(1 - rho)` term: at high correlation it collapses, and a comparison that looks
+    hopeless between independent series can become cheap between near-identical ones. That is the
+    whole reason the correlation cannot be defaulted.
+    """
+    if specification.benchmark_sharpe is None or specification.benchmark_correlation is None:
+        raise ValueError("a Sharpe difference needs the benchmark's Sharpe and correlation")
+    candidate = float(specification.expected) + float(specification.benchmark_sharpe)
+    benchmark = float(specification.benchmark_sharpe)
+    rho = float(specification.benchmark_correlation)
+    return 2 * (1 - rho) + 0.5 * (candidate**2 + benchmark**2 - 2 * rho**2 * candidate * benchmark)
+
+
+def _is_sharpe_difference(specification: EffectSpecification) -> bool:
+    return (
+        specification.estimand is Estimand.SHARPE
+        and specification.comparison is not ComparisonStructure.SINGLE_SAMPLE
+    )
+
+
 def _standardised_effect(specification: EffectSpecification, effect: Decimal) -> float:
     """Per-observation standardised effect: the `d` in `t = d*sqrt(n)`."""
     estimand = specification.estimand
@@ -267,6 +324,13 @@ def observations_required(specification: EffectSpecification, threshold: Decimal
     The minimum practical effect is what the cost floor is judged against instead.
     """
     dependence = specification.dependence
+    if _is_sharpe_difference(specification):
+        # Years, not sessions: JKM is expressed in annual units because the Sharpes are.
+        years = (float(threshold) / float(specification.expected)) ** 2 * (
+            jobson_korkie_memmel_variance(specification)
+        )
+        independent = years * dependence.observations_per_year
+        return math.ceil(independent * float(dependence.variance_inflation()))
     standardised = _standardised_effect(specification, specification.expected)
     independent = (float(threshold) / standardised) ** 2 * _arm_factor(specification.comparison)
     if specification.estimand is Estimand.INFORMATION_COEFFICIENT:
@@ -295,6 +359,13 @@ def minimum_detectable_effect(
             raise ValueError("an information coefficient needs more than three observations")
         return quantize(math.tanh(float(threshold) / math.sqrt(independent - 3)))
 
+    if _is_sharpe_difference(specification):
+        years = independent / dependence.observations_per_year
+        if years <= 0:
+            raise ValueError("a Sharpe difference needs at least one year of observations")
+        return quantize(
+            float(threshold) * math.sqrt(jobson_korkie_memmel_variance(specification) / years)
+        )
     standardised = float(threshold) / math.sqrt(independent)
     if estimand is Estimand.SHARPE:
         return quantize(standardised * math.sqrt(dependence.observations_per_year))

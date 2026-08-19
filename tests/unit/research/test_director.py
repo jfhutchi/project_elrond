@@ -55,15 +55,13 @@ def task(**overrides: object) -> ResearchTask:
     return ResearchTask(**fields)
 
 
-def power(
-    sharpe: str = "1.0", *, observations: int = 2669, trials: int = 69
-) -> PowerAssessment:
+def power(sharpe: str = "1.0", *, observations: int = 2669, trials: int = 69) -> PowerAssessment:
     specification = EffectSpecification(
         estimand=Estimand.SHARPE,
         expected=Decimal(sharpe),
         minimum_practical=Decimal(sharpe) / 2,
         justification="Cycle 16 measured SPY_SMA200 at Sharpe 0.91 in-sample.",
-        comparison=ComparisonStructure.PAIRED,
+        comparison=ComparisonStructure.SINGLE_SAMPLE,
         dependence=DependenceAssumptions(),
         economics=EconomicProfile(
             annual_rebalances=12,
@@ -232,30 +230,40 @@ def test_an_underpowered_experiment_is_worth_nothing_however_interesting() -> No
     """Expected confirmatory information gain of zero, and the scorer returns exactly that."""
     underpowered = power("0.3")
     assert expected_information_gain(
-        underpowered, novelty_overlap=0.0, trials_remaining=Decimal("100"),
+        underpowered,
+        novelty_overlap=0.0,
+        trials_remaining=Decimal("100"),
         trials_required=Decimal("1"),
     ) == Decimal("0")
 
     powered = power("1.0")
     gain = expected_information_gain(
-        powered, novelty_overlap=0.0, trials_remaining=Decimal("100"),
+        powered,
+        novelty_overlap=0.0,
+        trials_remaining=Decimal("100"),
         trials_required=Decimal("1"),
     )
     assert gain > Decimal("0")
 
     # Overlap with prior work discounts it; an exact repeat is worth nothing.
     assert expected_information_gain(
-        powered, novelty_overlap=0.5, trials_remaining=Decimal("100"),
+        powered,
+        novelty_overlap=0.5,
+        trials_remaining=Decimal("100"),
         trials_required=Decimal("1"),
     ) == (gain / 2).quantize(Decimal("0.0001"))
     assert expected_information_gain(
-        powered, novelty_overlap=1.0, trials_remaining=Decimal("100"),
+        powered,
+        novelty_overlap=1.0,
+        trials_remaining=Decimal("100"),
         trials_required=Decimal("1"),
     ) == Decimal("0")
 
     # And a question the budget cannot afford is worth nothing to schedule.
     assert expected_information_gain(
-        powered, novelty_overlap=0.0, trials_remaining=Decimal("1"),
+        powered,
+        novelty_overlap=0.0,
+        trials_remaining=Decimal("1"),
         trials_required=Decimal("40"),
     ) == Decimal("0")
 
@@ -271,7 +279,7 @@ def test_an_overridden_underpowered_task_still_scores_above_zero() -> None:
             expected=Decimal("0.3"),
             minimum_practical=Decimal("0.15"),
             justification="A small but real effect.",
-            comparison=ComparisonStructure.PAIRED,
+            comparison=ComparisonStructure.SINGLE_SAMPLE,
             economics=EconomicProfile(
                 annual_rebalances=12,
                 expected_annual_volatility_bps=1500,
@@ -284,7 +292,9 @@ def test_an_overridden_underpowered_task_still_scores_above_zero() -> None:
         override=PowerOverride(authorized_by="hutch", reason="precursor"),
     )
     assert expected_information_gain(
-        overridden, novelty_overlap=0.0, trials_remaining=Decimal("100"),
+        overridden,
+        novelty_overlap=0.0,
+        trials_remaining=Decimal("100"),
         trials_required=Decimal("1"),
     ) > Decimal("0")
 

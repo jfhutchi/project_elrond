@@ -69,9 +69,7 @@ def test_the_critic_cannot_share_a_model_with_the_generator_it_reviews() -> None
     """The same model asked to critique its own proposal tends to find it sound."""
     shared = spec("qwen2.5-32b")
     with pytest.raises(RoutingError, match="must not share a model identity"):
-        RoleRouting(
-            chains={ModelRole.GENERATOR: (shared,), ModelRole.CRITIC: (shared,)}
-        )
+        RoleRouting(chains={ModelRole.GENERATOR: (shared,), ModelRole.CRITIC: (shared,)})
 
     # A different version is a different identity, and is accepted.
     routing = RoleRouting(

@@ -74,7 +74,6 @@ def register(
     return registry.register(candidate, **kwargs)  # type: ignore[arg-type]
 
 
-
 def draft(**overrides: object) -> HypothesisDraft:
     fields: dict[str, object] = {
         "hypothesis_id": "H-2026-001",
@@ -101,7 +100,7 @@ def draft(**overrides: object) -> HypothesisDraft:
             expected=Decimal("1.0"),
             minimum_practical=Decimal("0.5"),
             justification="Cycle 16 measured SPY_SMA200 at Sharpe 0.91 in-sample.",
-            comparison=ComparisonStructure.PAIRED,
+            comparison=ComparisonStructure.SINGLE_SAMPLE,
             economics=EconomicProfile(
                 annual_rebalances=12,
                 expected_annual_volatility_bps=1500,
@@ -146,7 +145,7 @@ def test_an_underpowered_hypothesis_cannot_be_filed_as_refuted(database: Databas
             expected=Decimal("0.3"),
             minimum_practical=Decimal("0.15"),
             justification="A small but real effect.",
-            comparison=ComparisonStructure.PAIRED,
+            comparison=ComparisonStructure.SINGLE_SAMPLE,
             economics=EconomicProfile(
                 annual_rebalances=12,
                 expected_annual_volatility_bps=1500,
@@ -192,7 +191,7 @@ def test_an_overridden_hypothesis_still_cannot_be_refuted(database: Database) ->
             expected=Decimal("0.3"),
             minimum_practical=Decimal("0.15"),
             justification="A small but real effect.",
-            comparison=ComparisonStructure.PAIRED,
+            comparison=ComparisonStructure.SINGLE_SAMPLE,
             economics=EconomicProfile(
                 annual_rebalances=12,
                 expected_annual_volatility_bps=1500,
@@ -201,7 +200,8 @@ def test_an_overridden_hypothesis_still_cannot_be_refuted(database: Database) ->
         )
     )
     with database.transaction() as session:
-        register(HypothesisRegistry(session), 
+        register(
+            HypothesisRegistry(session),
             underpowered,
             now=NOW,
             override=PowerOverride(authorized_by="hutch", reason="accepted"),

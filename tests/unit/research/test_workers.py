@@ -121,8 +121,9 @@ def test_an_imported_result_carries_its_trust_and_its_search_with_the_numbers() 
     assert imported["metric.sharpe"] == "1.31"
     assert imported["artifact.factors.parquet"] == "d" * 64
 
-    opaque = import_result(result(worker=spec(discloses_search_cardinality=False),
-                                  search_cardinality=None))
+    opaque = import_result(
+        result(worker=spec(discloses_search_cardinality=False), search_cardinality=None)
+    )
     assert opaque["trust"] == "EXPLORATORY_ONLY"
     assert opaque["search_cardinality"] == "undisclosed"
     assert opaque["trials_charged"] == "1000"
@@ -136,9 +137,7 @@ def test_a_null_calibration_gives_a_bar_the_procedure_earned() -> None:
     """
     generator = random.Random(17)
     # 200 runs of a search that picks the best of 50 skill-free candidates.
-    null_statistics = [
-        max(generator.gauss(0.0, 1.0) for _ in range(50)) for _ in range(200)
-    ]
+    null_statistics = [max(generator.gauss(0.0, 1.0) for _ in range(50)) for _ in range(200)]
 
     bar = empirical_luck_threshold(null_statistics)
     # sqrt(2 ln 50) = 2.80 is the asymptotic expectation; the empirical 95th percentile of the
