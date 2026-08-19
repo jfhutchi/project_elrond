@@ -865,6 +865,32 @@ stage drops to `RESEARCH_SURVIVOR`.
 Demotion is deliberately not gated. A system slow to stop trusting something is worse than one
 occasionally too quick.
 
+## 6w. Research dashboard: what changed, what is blocked, what is left (#15)
+
+`quantbot.research.dashboard` — the data behind the view, not the view. `scripts/dashboard.py`
+remains the single truth source for the operations panels; this adds the research panels beside
+it rather than a second place to look.
+
+**Forward evidence always carries its denominator.** `1 of 30 days, 0 of 30 trades`, never
+`1 day`. Forward evidence and research volume live in separate fields with separate evidence
+states, and there is deliberately no property combining them. Seventeen cycles is a bigger
+number than one day; the panel makes that impossible to read as progress.
+
+**Statistical budget shows what spending it would cost, before it is spent.** Trials, the bar
+now, and the bar *if the budget is fully spent* — at 1,000 trials that is t=3.72, above SPY's own
+Sharpe on this window. Renewable spend is shown beside it so the difference is visible rather
+than implied.
+
+**A generated number can never be displayed as a measurement.** `Provenance.MODEL_NARRATIVE`
+cannot carry `OBSERVED` or `BACKTEST`, and `OBSERVED` accepts only the durable ledger — forward
+evidence has exactly one source. Both are validators, not review habits.
+
+**The default view is what is blocked, not what ran.** `attention()` returns halts, failed
+reconciliations, exhausted budgets, blocked and stuck tasks, and survivors. Routine activity is
+**dropped entirely** rather than ranked lower, because a research loop generates a large volume
+of uninteresting activity by design and including it is how the signal gets lost. A quiet system
+returns no alerts at all.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

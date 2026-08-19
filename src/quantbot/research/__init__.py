@@ -47,6 +47,18 @@ from quantbot.research.critic import (
     regime_split,
     shifted_feature_probe,
 )
+from quantbot.research.dashboard import (
+    Alert,
+    BudgetPanel,
+    EvidencePanel,
+    EvidenceState,
+    Metric,
+    Provenance,
+    active_count,
+    attention,
+    luck_bar_at,
+    pipeline_counts,
+)
 from quantbot.research.director import (
     ACTIVE,
     TERMINAL,
@@ -204,6 +216,16 @@ from quantbot.research.workers import (
 )
 
 __all__ = [
+    "Alert",
+    "BudgetPanel",
+    "EvidencePanel",
+    "EvidenceState",
+    "Metric",
+    "Provenance",
+    "active_count",
+    "attention",
+    "luck_bar_at",
+    "pipeline_counts",
     "ALLOWED_PROMOTIONS",
     "MINIMUM_FORWARD_DAYS",
     "MINIMUM_FORWARD_TRADES",
