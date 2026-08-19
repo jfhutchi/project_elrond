@@ -134,26 +134,50 @@ def luck_threshold(trials: int) -> Decimal:
 class DependenceAssumptions(FrozenModel):
     """What was assumed to turn a count of observations into a count of independent ones.
 
-    Recorded with every power number. A minimum detectable effect quoted without these is false
-    precision, and the overlap term in particular is the difference between 2,669 observations
-    and 10.
+    Recorded with every power number, because a minimum detectable effect quoted without them is
+    false precision.
+
+    **Overlap is a property of the target, never of the features** (#26). A 252-day forward return
+    sampled daily really does reduce 2,669 observations to about 10; a 252-day *feature lookback*
+    predicting the next session does not. The two are separate mechanisms and they are paid for in
+    separate terms:
+
+    * a reused **outcome** window is `horizon_observations` under `OVERLAPPING` sampling;
+    * a persistent **signal** is `lag_one_autocorrelation`, because a slow feature produces
+      serially correlated positions rather than overlapping outcomes.
+
+    Putting a feature lookback in the overlap slot therefore double-counts one mechanism while
+    leaving the other at zero. `feature_lookback_observations` is recorded so that mistake is
+    auditable, and it is deliberately not an input to `variance_inflation()`.
     """
 
     #: AR(1) coefficient of the estimand's own series. Inflates variance by (1+rho)/(1-rho).
+    #: This is where a slow-moving feature is paid for, not the overlap term.
     lag_one_autocorrelation: Decimal = Field(default=Decimal("0"), gt=-1, lt=1)
     #: Correlated units observed together, e.g. 23 ETFs ranked on the same day.
     cluster_size: int = Field(default=1, ge=1)
     intra_cluster_correlation: Decimal = Field(default=Decimal("0"), ge=0, le=1)
     #: Whether an h-observation forward target is sampled every observation.
     sampling: Sampling = Sampling.NON_OVERLAPPING
-    #: Length of the forward target, in observations. Only bites when sampling overlaps.
+    #: Length of the forward **target**, in observations. Only bites when sampling overlaps.
+    #: Not the feature lookback -- see the class docstring.
     horizon_observations: int = Field(default=1, ge=1)
+    #: How much history the signal consumes. Provenance only: it never enters the variance, and a
+    #: test asserts that it cannot. Required when sampling overlaps, so that copying the lookback
+    #: into the horizon is a visible recorded act rather than an invisible default.
+    feature_lookback_observations: int | None = Field(default=None, ge=1)
     observations_per_year: int = Field(default=252, ge=1)
 
     @model_validator(mode="after")
     def validate_assumptions(self) -> Self:
-        if self.sampling is Sampling.OVERLAPPING and self.horizon_observations == 1:
-            raise ValueError("a 1-observation horizon cannot overlap; state the horizon")
+        if self.sampling is Sampling.OVERLAPPING:
+            if self.horizon_observations == 1:
+                raise ValueError("a 1-observation horizon cannot overlap; state the horizon")
+            if self.feature_lookback_observations is None:
+                raise ValueError(
+                    "overlapping sampling must state the feature lookback alongside the target "
+                    "horizon, so the two are recorded as the separate quantities they are"
+                )
         return self
 
     def variance_inflation(self) -> Decimal:

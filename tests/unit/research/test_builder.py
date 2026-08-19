@@ -252,7 +252,11 @@ def test_the_plan_records_the_dependence_assumptions_it_selected_the_test_from()
     plan = compile_experiment(
         registration(
             effect=effect(
-                dependence=DependenceAssumptions(sampling="OVERLAPPING", horizon_observations=21)
+                dependence=DependenceAssumptions(
+                    sampling="OVERLAPPING",
+                    horizon_observations=21,
+                    feature_lookback_observations=200,
+                )
             )
         ),
         datasets=[snapshot()],

@@ -556,7 +556,9 @@ def test_a_registration_records_the_dependence_assumptions_behind_its_power_numb
         effect=sharpe_effect(
             expected=Decimal("2.0"),
             dependence=DependenceAssumptions(
-                sampling=Sampling.OVERLAPPING, horizon_observations=21
+                sampling=Sampling.OVERLAPPING,
+                horizon_observations=21,
+                feature_lookback_observations=200,
             ),
         ),
     )

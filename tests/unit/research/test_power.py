@@ -136,7 +136,13 @@ def test_overlapping_horizons_are_charged_for_rather_than_counted_as_independent
     """
     independent = sharpe_effect()
     overlapping = sharpe_effect(
-        dependence=DependenceAssumptions(sampling=Sampling.OVERLAPPING, horizon_observations=252)
+        dependence=DependenceAssumptions(
+            sampling=Sampling.OVERLAPPING,
+            # A genuine 252-session forward target, which is what overlap means. The feature
+            # lookback is stated separately and must not affect the number (#26).
+            horizon_observations=252,
+            feature_lookback_observations=200,
+        )
     )
     assert overlapping.dependence.variance_inflation() == Decimal("252")
     inflated = observations_required(overlapping, Decimal("2.9"))
@@ -441,3 +447,63 @@ def test_the_detectable_sharpe_difference_shrinks_with_correlation_too() -> None
         jkm_effect(benchmark_correlation=Decimal("0")), sessions, threshold
     )
     assert tight < loose
+
+
+def test_feature_lookback_cannot_change_the_variance_no_matter_what_it_is() -> None:
+    """`#26`: overlap is a property of the target, never of the features.
+
+    A 252-day forward return sampled daily really does reduce 2,669 observations to about 10. A
+    252-day feature *lookback* predicting the next session does not, and the module docstring
+    previously used the second while quoting the arithmetic of the first.
+
+    Provenance that is only documented as unused eventually gets used. This is the assertion that
+    keeps it true: the field is recorded and it cannot move the number.
+    """
+    base = DependenceAssumptions(
+        sampling=Sampling.OVERLAPPING,
+        horizon_observations=21,
+        feature_lookback_observations=1,
+    )
+    for lookback in (1, 50, 200, 252, 5000):
+        varied = base.model_copy(update={"feature_lookback_observations": lookback})
+        assert varied.variance_inflation() == base.variance_inflation()
+        assert varied.independent_observations(2669) == base.independent_observations(2669)
+
+
+def test_the_target_horizon_does_change_the_variance() -> None:
+    """The other half of the pair, so the test above cannot pass by everything being inert."""
+
+    def assumptions(horizon: int) -> DependenceAssumptions:
+        return DependenceAssumptions(
+            sampling=Sampling.OVERLAPPING,
+            horizon_observations=horizon,
+            feature_lookback_observations=200,
+        )
+
+    assert assumptions(252).variance_inflation() == Decimal("252")
+    assert assumptions(21).variance_inflation() == Decimal("21")
+    assert assumptions(252).independent_observations(2669) < Decimal("11")
+
+
+def test_a_slow_feature_is_paid_for_through_autocorrelation_not_overlap() -> None:
+    """Where a 200-day lookback legitimately costs something: serially correlated positions.
+
+    Stating this as a test rather than a comment because the two mechanisms were merged for long
+    enough to reach the documentation, and the distinction is the whole content of #26.
+    """
+    persistent_signal = DependenceAssumptions(lag_one_autocorrelation=Decimal("0.98"))
+    overlapping_target = DependenceAssumptions(
+        sampling=Sampling.OVERLAPPING,
+        horizon_observations=99,
+        feature_lookback_observations=1,
+    )
+    # (1 + 0.98)/(1 - 0.98) = 99, reached with no overlap at all.
+    assert persistent_signal.variance_inflation() == Decimal("99")
+    assert overlapping_target.variance_inflation() == Decimal("99")
+    assert persistent_signal.sampling is Sampling.NON_OVERLAPPING
+
+
+def test_overlapping_sampling_must_state_both_quantities() -> None:
+    """Copying the lookback into the horizon becomes a recorded act rather than a default."""
+    with pytest.raises(ValidationError, match="feature lookback"):
+        DependenceAssumptions(sampling=Sampling.OVERLAPPING, horizon_observations=252)
