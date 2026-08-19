@@ -74,6 +74,23 @@ from quantbot.research.memory import (
     Verdict,
     import_refuted_markdown,
 )
+from quantbot.research.models import (
+    ChatTransport,
+    CircuitBreaker,
+    CostClass,
+    CredentialInPrompt,
+    ModelCapabilities,
+    ModelError,
+    ModelResponse,
+    ModelRole,
+    ModelRuntime,
+    ModelSpec,
+    ModelUnavailable,
+    OpenAICompatibleTransport,
+    PromptTemplate,
+    RoleRouting,
+    RoutingError,
+)
 from quantbot.research.power import (
     MEASURED_MEDIAN_ROUND_TRIP_BPS,
     ComparisonStructure,
@@ -122,6 +139,21 @@ from quantbot.research.reproducibility import (
 )
 
 __all__ = [
+    "ChatTransport",
+    "CircuitBreaker",
+    "CostClass",
+    "CredentialInPrompt",
+    "ModelCapabilities",
+    "ModelError",
+    "ModelResponse",
+    "ModelRole",
+    "ModelRuntime",
+    "ModelSpec",
+    "ModelUnavailable",
+    "OpenAICompatibleTransport",
+    "PromptTemplate",
+    "RoleRouting",
+    "RoutingError",
     "RENEWABLE",
     "Admission",
     "BudgetExceeded",

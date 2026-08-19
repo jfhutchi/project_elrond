@@ -632,6 +632,32 @@ lives in the same file. That import is now function-local, matching how `cli.py`
 `runtime`. The property enforced is precise: research is not a load-time dependency of the
 trading path.
 
+## 6q. Model runtime: replaceable, except for one rule (#9)
+
+`quantbot.research.models`. Mostly ordinary provider-neutrality — a role names a model, a chain
+names its fallbacks, and swapping either is configuration. Two things are not ordinary.
+
+**A critic may not share a model identity with the generator it reviews.** Enforced in
+`RoleRouting`, not left to whoever writes the config, and checked across the whole chain rather
+than the primary. Not because another vendor is smarter: the same model asked to critique its
+own proposal tends to find it sound. #7 already refuses to let agreement outvote an objection;
+this refuses to let the agreement be an artefact of asking one model twice. It can be waived,
+but only by setting `require_distinct_critic=False` explicitly — forgetting cannot waive it.
+
+**Provenance is produced, not reconstructed.** `ModelResponse.provenance()` returns exactly the
+`ModelProvenance` #18's manifest requires: provider, model@version, prompt-template hash,
+parameter hash. A conclusion whose reasoning came from a since-updated model is not
+reproducible, and without the hash there is no way to know that happened.
+
+Also: fail-closed by default (a silent downgrade to a weaker critic is the failure nobody
+notices), a circuit breaker with cooldown, and a prompt carrying a credential is **refused**
+rather than redacted — a prompt leaves this machine, and stripping the key hides whatever
+assembled it.
+
+Transport is injected the way `market_data.transports` does it, so an OpenAI-compatible
+endpoint — Ollama, LM Studio, vLLM, llama.cpp — is exercised end to end in tests with no network
+and no vendor SDK.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
