@@ -15,7 +15,12 @@ from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
 
-from quantbot.backtest import BacktestEngine, BacktestResult, BenchmarkVariant
+from quantbot.backtest import (
+    BacktestEngine,
+    BacktestResult,
+    BenchmarkVariant,
+    switches_for_config,
+)
 from quantbot.market_data import MarketDataCache
 from quantbot.runtime import market_data_settings, runtime_paths
 from quantbot.storage import Database, StorageRepository
@@ -74,12 +79,24 @@ def main() -> int:
     print(f"initial cash  ${initial_cash}")
     print(f"dropped bars  {dropped} (outside the common session series)")
     print(f"costs         {config.slippage_bps}bps/side, ${config.commission_per_order}/order")
+    print(f"components    {switches_for_config(config.components)}")
     print()
 
     engine = BacktestEngine(config, initial_cash=initial_cash)
     results: dict[str, BacktestResult] = {}
     for variant in BenchmarkVariant:
+        # Fixed comparators. These deliberately ignore the config's component selection --
+        # that is what makes them comparators.
         results[variant.value] = engine.run(histories, variant)
+
+    # The config under test, which the loop above does NOT measure. Omitting this row is the
+    # defect recorded in REFUTED.md: three config changes produced byte-identical output
+    # because every row was a fixed variant and none reached the code being changed.
+    results["CONFIGURED_STRATEGY"] = engine.run(
+        histories,
+        BenchmarkVariant.FULL_STRATEGY,
+        component_switches=switches_for_config(config.components),
+    )
 
     header = (
         f"{'variant':22}{'total':>9}{'CAGR':>8}{'maxDD':>8}{'Sharpe':>8}"
@@ -113,6 +130,10 @@ def main() -> int:
         f"Initial cash: ${initial_cash}",
         f"Costs applied: {config.slippage_bps}bps per side, "
         f"${config.commission_per_order} per order",
+        "",
+        "`CONFIGURED_STRATEGY` is the only row applying this config's component selection. "
+        "Every other row is a fixed comparator and ignores it by design; a runner reporting "
+        "only those rows is why three config changes once produced identical output.",
         "",
         "Data: Alpaca IEX daily bars, dividend and split adjusted. IEX is a partial-volume "
         "feed; daily OHLC on liquid ETFs tracks the consolidated tape closely but is not "

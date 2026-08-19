@@ -179,6 +179,12 @@ This file is now also loaded into structured research memory (#6) by
 file, not a replacement for it: every statement is carried as written, and the import is
 idempotent. Edit here; the records follow.
 
+The harness-not-connected defect below is now mechanically guarded.
+`switches_for_config()` maps a configuration's components onto the engine's switches, and
+`test_changing_the_config_changes_the_result` fails if a harness produces identical output for
+different configs. The three results it produced remain unattributed until re-measured; the
+guard stops a fourth.
+
 An eleventh, also from this session and also found by a guard rather than by review: `cli.py`
 imported research code at module scope, so a failure anywhere in the research package would have
 broken the kill switch, which lives in the same file. Found by the #14 import-graph test on its

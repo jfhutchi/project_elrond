@@ -11,6 +11,7 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 from quantbot.domain import Bar
 from quantbot.strategy import (
+    StrategyComponents,
     StrategyConfig,
     donchian_entry_level,
     donchian_exit_level,
@@ -43,6 +44,30 @@ class ComponentSwitches(BaseModel):
     @classmethod
     def full(cls) -> ComponentSwitches:
         return cls()
+
+
+def switches_for_config(components: StrategyComponents) -> ComponentSwitches:
+    """Map a configuration's component selection onto the engine's switches.
+
+    This exists because a runner that omits it silently measures a fixed benchmark variant
+    instead of the config under test. `REFUTED.md` records the result: three config changes
+    produced byte-identical output, because none of them reached the code being changed, and
+    the 43%-vs-77% exposure diagnosis drawn from that runner is unattributed as a consequence.
+
+    `atr_risk` has no configuration counterpart -- the engine can switch it, the strategy
+    cannot -- so it stays enabled and is named here rather than left as an invisible default.
+    """
+    return ComponentSwitches(
+        momentum=components.momentum,
+        asset_trend=components.asset_trend,
+        market_regime=components.market_regime,
+        donchian_entry=components.donchian_entry,
+        donchian_exit=components.donchian_exit,
+        # No configuration field exists for this one. Enabled, deliberately and visibly.
+        atr_risk=True,
+        trailing_stop=components.trailing_stop,
+        roster_exit=components.roster_exit,
+    )
 
 
 def component_switches_for(variant: BenchmarkVariant) -> ComponentSwitches:

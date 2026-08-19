@@ -317,12 +317,19 @@ belongs in the per-session `evaluate_symbol` path, where it already exists.
 
 Full spec: `docs/per-session-trend-spec.md`.
 
-**CAUTION, added after the fact:** `run_research_backtest.py` runs FIXED benchmark variants
-(`engine.py:212` uses `component_switches_for(variant)`), so it ignores a config's component
-selection entirely. Three config changes produced identical output because none reached the
-code under test. **The 43%-vs-77% exposure diagnosis came from that runner and is therefore
-unattributed.** First task is a harness that runs a real config through `BacktestEngine` with
-`component_switches=config.components`; everything downstream needs re-measuring through it.
+**CAUTION, added after the fact, now partly addressed:** `run_research_backtest.py` ran only
+FIXED benchmark variants, so it ignored a config's component selection entirely and three config
+changes produced identical output. **The 43%-vs-77% exposure diagnosis came from that runner and
+is therefore still unattributed** — it has not been re-measured.
+
+The harness defect itself is fixed. `switches_for_config()` maps `StrategyComponents` onto the
+engine's `ComponentSwitches`, the runner now emits a `CONFIGURED_STRATEGY` row that actually
+applies the config under test, and `tests/unit/backtest/test_configured_harness.py` asserts the
+property whose absence allowed the original failure: **change the config, and the result has to
+move.** `atr_risk` has no configuration counterpart and is named explicitly rather than left as
+an invisible default.
+
+Re-measuring everything downstream of the old runner is still outstanding, and is now possible.
 
 ## 6i. Hypotheses are now frozen before measurement (#5)
 
