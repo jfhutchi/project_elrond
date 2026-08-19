@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 metadata = MetaData(
     naming_convention={
@@ -473,3 +473,43 @@ budget_spend = Table(
 )
 Index("ix_budget_spend_budget_key", budget_spend.c.budget_key, budget_spend.c.category)
 Index("ix_budget_spend_override_by", budget_spend.c.override_by)
+
+
+# --- Research director (#3) ----------------------------------------------------------------
+#
+# Task state plus an append-only event log. The log is the record: a state column alone cannot
+# answer "who moved this, why, and what did the budget look like at the time", and those are
+# the questions an autonomous loop has to be auditable on.
+
+research_tasks = Table(
+    "research_tasks",
+    metadata,
+    Column("task_id", String(128), primary_key=True),
+    Column("state", String(32), nullable=False),
+    Column("hypothesis_id", String(128)),
+    Column("hypothesis_version", Integer),
+    Column("parent_task_id", String(128)),
+    Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=False),
+    Column("document_json", Text, nullable=False),
+    CheckConstraint(
+        "(hypothesis_id IS NULL) = (hypothesis_version IS NULL)",
+        name="hypothesis_reference_is_whole",
+    ),
+)
+Index("ix_research_tasks_state", research_tasks.c.state, research_tasks.c.updated_at)
+
+research_task_events = Table(
+    "research_task_events",
+    metadata,
+    Column("event_id", Integer, primary_key=True, autoincrement=True),
+    Column("task_id", String(128), ForeignKey("research_tasks.task_id"), nullable=False),
+    Column("from_state", String(32)),
+    Column("to_state", String(32), nullable=False),
+    # Who moved it: an operator, a model identity, or a deterministic component.
+    Column("actor", String(128), nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("occurred_at", String(40), nullable=False),
+    Column("detail_json", Text, nullable=False, server_default=text("'{}'")),
+)
+Index("ix_research_task_events_task_id", research_task_events.c.task_id)

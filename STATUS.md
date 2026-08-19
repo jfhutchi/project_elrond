@@ -689,6 +689,35 @@ Every hypothesis now carries a `basis` with no default: citations, or an explici
 `DATA_DRIVEN_NO_EXTERNAL_SOURCE`. "We did not look" and "we looked and there is nothing" are
 different facts, and a default would have made the first the common answer.
 
+## 6s. Research director: the lifecycle, and what it cannot reach (#3)
+
+`quantbot.research.director`. Eleven states with an explicit transition table, mirroring the
+order lifecycle in `domain/lifecycle.py`. A task runs `PROPOSED → SCOUTING → CRITIQUE →
+REGISTERED → EXPERIMENTING → REVIEW → SURVIVED → PROMOTABLE` and survives a restart, because
+state and its event log are durable.
+
+**`UNDERPOWERED` is terminal and has no transition to `REFUTED`.** Not a policy — the entry in
+the table is an empty frozenset. Research memory already blocks that conversion; the lifecycle
+must not offer a way round it, so the route does not exist. The error message says why.
+
+**Priority is computed, never narrated.** `expected_information_gain()` returns **zero** for an
+underpowered or uneconomic assessment, zero when the trial budget cannot cover it, and zero for
+an exact repeat of prior work — whatever the narrative interest. There is deliberately no
+parameter for a model's opinion of promisingness: it would dominate every other term and it is
+the only input with no measurement behind it.
+
+Every transition is an append-only event carrying actor, reason, timestamp and the evidence and
+budget state at the time. A state column cannot answer "who moved this and why", and an
+autonomous loop that cannot answer that is not auditable.
+
+### The boundary, from the research side
+
+`test_the_director_has_no_route_to_the_broker_or_the_kill_switch` walks the AST of every module
+in `quantbot/research` and fails on any import of `brokers`, `execution`, `operations` or
+`runtime`. A research agent cannot place an order, enable live trading, or clear the kill
+switch, and that holds because there is no import path — asserted, not assumed. #14 asserts the
+same boundary from the trading side.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

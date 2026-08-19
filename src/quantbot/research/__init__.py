@@ -47,6 +47,17 @@ from quantbot.research.critic import (
     regime_split,
     shifted_feature_probe,
 )
+from quantbot.research.director import (
+    ACTIVE,
+    TERMINAL,
+    InvalidTaskTransition,
+    ResearchDirector,
+    ResearchTask,
+    TaskEvent,
+    TaskState,
+    expected_information_gain,
+    prioritize,
+)
 from quantbot.research.manifest import (
     CodeProvenance,
     DatasetSnapshot,
@@ -153,6 +164,15 @@ from quantbot.research.sources import (
 )
 
 __all__ = [
+    "ACTIVE",
+    "TERMINAL",
+    "InvalidTaskTransition",
+    "ResearchDirector",
+    "ResearchTask",
+    "TaskEvent",
+    "TaskState",
+    "expected_information_gain",
+    "prioritize",
     "NOT_MEASURED",
     "Citation",
     "DerivedArtifactCited",
