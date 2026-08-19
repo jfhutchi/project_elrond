@@ -329,7 +329,19 @@ property whose absence allowed the original failure: **change the config, and th
 move.** `atr_risk` has no configuration counterpart and is named explicitly rather than left as
 an invisible default.
 
-Re-measuring everything downstream of the old runner is still outstanding, and is now possible.
+**First attributed run, 2026-08-19** (`reports/research/attributed-harness-2026-08-19.md`,
+classification `EXPLORATORY`): on 1,520 sessions of IEX data the deployed `strategy-v1-2.yaml`
+scores **3.64% CAGR, Sharpe 0.61, 33.82% exposure** — against `FULL_STRATEGY`'s 0.30% / 0.11 /
+18.66%, which is the row the old runner reported in its place. The harness is connected.
+
+Two things that run does **not** establish, stated because the temptation is real. It is on
+IEX 2020-2026, not SIP 2016-2026, so it is **not comparable** to any figure in this file or in
+`REFUTED.md`, and it is **not** a correction of the 43%-vs-77% diagnosis in §6h. And the window
+is consumed, so under §6i–6v the run is exploratory by construction: no registration, no power
+gate, no probes. It is a diagnostic of the harness, not a measurement of an edge.
+
+Re-measuring the cycle-16 finding needs the SIP database through the same runner. Still
+outstanding, and now possible.
 
 ## 6i. Hypotheses are now frozen before measurement (#5)
 
