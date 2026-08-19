@@ -60,6 +60,27 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
 
 ## Structural limits that bound all future work
 
+* **Span, not sample size, is what buys statistical power — so the exhausted equity window is
+  the *weakest* data available, not the best.** The limit above was always stated in years, and
+  that is not an accident of phrasing: for an annualised Sharpe the sampling frequency cancels,
+  because `SE ~= sqrt((1 + SR^2/2) / years)`. A monthly series over 35 years therefore resolves
+  a **smaller** effect than a daily series over 10.6, despite having a twentieth of the rows.
+  Measured with `scripts/power_survey.py` at the current 68-trial bar, charging realistic
+  autocorrelation:
+
+  | dataset | years | minimum detectable Sharpe |
+  |---|---:|---:|
+  | SIP US equities, daily (EXHAUSTED) | 10.6 | **0.94** |
+  | FRED monthly, PAYEMS/UNRATE | 35 | 0.67 |
+  | FRED daily, T10Y2Y from 1976 | 50 | 0.56 |
+  | FRED monthly, CPI from 1947 | 75 | **0.46** |
+
+  SPY buy-and-hold scores 0.90 on the equity window — i.e. sitting *at* its own detection limit,
+  which is why nothing measured there could ever separate from noise. Long free macro history is
+  roughly twice the resolution, and it is not a consolation prize for having run out of
+  equities. This was mis-stated in the opposite direction in an earlier session note; the
+  arithmetic above is the correction.
+
 * **Statistical.** Separating a true Sharpe of 1.0 from zero needs ~3.8 years of daily data;
   0.5 from zero needs ~15 years. Resolving the D7-vs-SPY gap of 0.074 would need **~700
   years**. Most differences this project can measure are inside the noise.

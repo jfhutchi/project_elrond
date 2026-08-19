@@ -282,3 +282,43 @@ def test_an_override_cannot_rescue_an_uneconomic_claim() -> None:
 def test_an_overlapping_claim_must_state_the_horizon_it_overlaps() -> None:
     with pytest.raises(ValueError, match="state the horizon"):
         DependenceAssumptions(sampling=Sampling.OVERLAPPING, horizon_observations=1)
+
+
+def test_statistical_power_follows_years_not_observation_count() -> None:
+    """The correction that redirects this project's data strategy.
+
+    For an annualised Sharpe the sampling frequency cancels: SE ~= sqrt((1+SR^2/2)/years), so
+    to first order the detectable effect depends on the span in years, not the number of rows.
+    A monthly series over 35 years therefore resolves a *smaller* effect than a daily series
+    over 10.6, despite having a twentieth of the observations.
+
+    This is asserted because the opposite assumption -- that low-frequency data is weak data --
+    is easy to make and would have written off the only untouched data this project can get.
+    """
+    bar = Decimal("2.9")
+
+    def annualised(observations: int, per_year: int, rho: str = "0") -> Decimal:
+        return minimum_detectable_effect(
+            sharpe_effect(
+                dependence=DependenceAssumptions(
+                    observations_per_year=per_year,
+                    lag_one_autocorrelation=Decimal(rho),
+                )
+            ),
+            observations,
+            bar,
+        )
+
+    # Same span, wildly different row counts: the answer is the same.
+    assert annualised(2520, 252) == annualised(120, 12)
+
+    # More rows over a shorter span is *worse* than fewer rows over a longer one.
+    ten_years_daily = annualised(2669, 252)
+    thirty_five_years_monthly = annualised(420, 12)
+    assert thirty_five_years_monthly < ten_years_daily
+    assert ten_years_daily > Decimal("0.85")
+    assert thirty_five_years_monthly < Decimal("0.50")
+
+    # And the advantage survives the autocorrelation a macro series actually carries, which is
+    # where an over-optimistic reading of the above would come unstuck.
+    assert annualised(420, 12, rho="0.30") < annualised(2669, 252, rho="0.05")

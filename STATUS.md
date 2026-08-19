@@ -956,6 +956,24 @@ March data available on **6 March** — five days before the month it describes 
 lag runs from period *end*; March payrolls publish 5 April. Pinned by
 `test_the_publication_lag_runs_from_the_period_end_not_the_period_start`.
 
+### And FRED is stronger than the equity window, not weaker
+
+`scripts/power_survey.py`. I first wrote that low-frequency macro data would be weak — the power
+gate refusing most effects on ~420 monthly rows. **That is backwards**, and `REFUTED.md` already
+had the right unit: the structural limit is stated in *years*, because for an annualised Sharpe
+the frequency cancels.
+
+| dataset | years | minimum detectable Sharpe |
+|---|---:|---:|
+| SIP equities daily (EXHAUSTED) | 10.6 | **0.94** |
+| FRED monthly 35y | 35 | 0.67 |
+| FRED daily 50y | 50 | 0.56 |
+| FRED monthly 75y (CPI from 1947) | 75 | **0.46** |
+
+Charged with realistic autocorrelation (ρ=0.30 for macro, 0.05 for equities), so the advantage
+is the honest one rather than the iid one. Free macro history is roughly **twice the
+resolution** of the window this project has already spent.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
