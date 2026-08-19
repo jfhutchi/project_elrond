@@ -18,6 +18,7 @@ from sqlalchemy import select, update
 
 from quantbot.research import (
     PRIOR_TRIALS,
+    Citation,
     ComparisonStructure,
     CriticVerdict,
     Critique,
@@ -26,7 +27,9 @@ from quantbot.research import (
     DependenceAssumptions,
     EconomicProfile,
     EffectSpecification,
+    EpistemicStatus,
     Estimand,
+    EvidenceBasis,
     HypothesisDraft,
     HypothesisRegistry,
     Objection,
@@ -37,6 +40,7 @@ from quantbot.research import (
     RegistrationRefused,
     Sampling,
     Severity,
+    gates_promotion,
     summarize,
     unresolved_questions,
 )
@@ -131,6 +135,10 @@ def make_draft(**overrides: object) -> HypothesisDraft:
         "available_observations": SIP_SESSIONS,
         "confounders": ("regime dependence", "the 2020 crash dominating the sample"),
         "proposed_by": "claude-opus-5",
+        "basis": EvidenceBasis(
+            citations=(),
+            status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE,
+        ),
     }
     fields.update(overrides)
     return HypothesisDraft(**fields)
@@ -681,3 +689,38 @@ def test_the_critique_is_frozen_inside_the_registration(database: Database) -> N
     assert revised.content_hash != frozen.content_hash
     assert summarize(stored)["critic_verdict"] == "PROCEED"
     assert summarize(stored)["unassessed_by_critic"] == []
+
+
+def test_a_hypothesis_must_say_what_backs_it_before_it_can_be_frozen(
+    database: Database,
+) -> None:
+    """Either citations, or an explicit statement that there are none (#4).
+
+    There is no default: "we did not look" would otherwise be indistinguishable from "we
+    looked and there is nothing", and the second is a finding while the first is a gap.
+    """
+    fields = make_draft().model_dump()
+    fields.pop("basis")
+    with pytest.raises(ValueError, match="basis"):
+        HypothesisDraft(**fields)
+
+    cited = make_draft(
+        basis=EvidenceBasis(
+            citations=(
+                Citation(
+                    claim="trend following persists out of sample",
+                    source_id="paper-tsmom-2012",
+                    locator="table 2",
+                    status=EpistemicStatus.LITERATURE_SUPPORTED,
+                ),
+            ),
+            status=EpistemicStatus.LITERATURE_SUPPORTED,
+        )
+    )
+    with database.transaction() as session:
+        frozen = register(HypothesisRegistry(session), cited)
+
+    # The basis travels into the frozen registration, and literature never gates promotion.
+    assert frozen.draft.basis.status is EpistemicStatus.LITERATURE_SUPPORTED
+    assert not frozen.draft.basis.gates_promotion
+    assert not gates_promotion(frozen.draft.basis.status)

@@ -22,7 +22,9 @@ from quantbot.research import (
     DataWindow,
     EconomicProfile,
     EffectSpecification,
+    EpistemicStatus,
     Estimand,
+    EvidenceBasis,
     HypothesisDraft,
     HypothesisRegistry,
     PowerOverride,
@@ -109,6 +111,10 @@ def draft(**overrides: object) -> HypothesisDraft:
         "available_observations": 2669,
         "confounders": ("regime dependence",),
         "proposed_by": "claude-opus-5",
+        "basis": EvidenceBasis(
+            citations=(),
+            status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE,
+        ),
     }
     fields.update(overrides)
     return HypothesisDraft(**fields)

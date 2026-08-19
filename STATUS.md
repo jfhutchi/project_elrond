@@ -658,6 +658,37 @@ Transport is injected the way `market_data.transports` does it, so an OpenAI-com
 endpoint — Ollama, LM Studio, vLLM, llama.cpp — is exercised end to end in tests with no network
 and no vendor SDK.
 
+## 6r. Source scout: external evidence that cannot become measurement (#4)
+
+`quantbot.research.sources`. Three rules, each hardened past metadata because each guards a way
+to manufacture a false edge.
+
+**A derived artifact may never be cited in place of its source.** `cite()` raises on anything
+marked `derived` — an LLM summary, an extraction, a translation. A summary that reads
+authoritatively is worse than no artifact because it stops the search: this project believed a
+Corwin-Schultz estimate of **34bps for SPY against a real 0.26bps** until someone pulled real
+quotes.
+
+**Event time and retrieval time are separate, and ordered.** A source retrieved before it was
+published is refused outright. Look-ahead is the most reliable way to manufacture a fake edge
+and it is invisible in results — a leaky backtest looks like a discovery, not a bug. Storing
+both timestamps is what makes the #7 check possible at all.
+
+**Agreement decides whether to test, never what the answer is.** `worth_testing()` returns a
+boolean, and twenty supporting papers return exactly what one returns. There is deliberately no
+function here converting source count into a prior, weight or confidence: published quant
+findings replicate poorly, and the bias runs toward positive results — the direction that costs
+money.
+
+Only `MEASURED` gates promotion, and an `EvidenceBasis` **can never be** `MEASURED`: that is what
+an experiment finds, not what a question starts with. `REFUTED.md` #13 is the standing case —
+social-sentiment strategies were rejected on published evidence, which was defensible and is a
+different fact from the 23 entries with a measurement behind them.
+
+Every hypothesis now carries a `basis` with no default: citations, or an explicit
+`DATA_DRIVEN_NO_EXTERNAL_SOURCE`. "We did not look" and "we looked and there is nothing" are
+different facts, and a default would have made the first the common answer.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

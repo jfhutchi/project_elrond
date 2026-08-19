@@ -29,6 +29,7 @@ from quantbot.research.power import (
     assess,
 )
 from quantbot.research.registry import DataRole, DataWindow, HypothesisDraft, Registration
+from quantbot.research.sources import EpistemicStatus, EvidenceBasis
 
 NOW = datetime(2026, 8, 18, 14, 30, tzinfo=UTC)
 
@@ -75,6 +76,10 @@ def draft(**overrides: object) -> HypothesisDraft:
         "available_observations": 2669,
         "confounders": ("regime dependence",),
         "proposed_by": "claude-opus-5",
+        "basis": EvidenceBasis(
+            citations=(),
+            status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE,
+        ),
     }
     fields.update(overrides)
     return HypothesisDraft(**fields)

@@ -63,6 +63,7 @@ from quantbot.research.power import (
     explain,
     luck_threshold,
 )
+from quantbot.research.sources import EvidenceBasis
 from quantbot.storage.database import encode_utc
 from quantbot.storage.schema import hypotheses, hypothesis_data_windows, power_assessments
 
@@ -94,13 +95,6 @@ class DataRole(StrEnum):
     VALIDATION = "VALIDATION"
     PROTECTED_EVALUATION = "PROTECTED_EVALUATION"
     FORWARD_PAPER = "FORWARD_PAPER"
-
-
-class EpistemicStatus(StrEnum):
-    LITERATURE_SUPPORTED = "LITERATURE_SUPPORTED"
-    LITERATURE_REFUTED = "LITERATURE_REFUTED"
-    MEASURED = "MEASURED"
-    UNTESTED = "UNTESTED"
 
 
 class RefusalReason(StrEnum):
@@ -207,7 +201,10 @@ class HypothesisDraft(FrozenModel):
     #: different is the whole gate: it is cheap when the difference is real and impossible to
     #: fill in honestly when it is not.
     materially_different: str | None = None
-    epistemic_status: EpistemicStatus = EpistemicStatus.UNTESTED
+    #: What backs the question before anything is measured: citations, or an explicit statement
+    #: that there are none (#4). No default, because silence would then be the common answer
+    #: and "we did not look" would be indistinguishable from "there is nothing".
+    basis: EvidenceBasis
     proposed_by: Text
     prompt_version: str | None = None
 
@@ -712,7 +709,6 @@ __all__ = [
     "REGISTRATION",
     "DataRole",
     "DataWindow",
-    "EpistemicStatus",
     "ExecutionClearance",
     "HypothesisDraft",
     "HypothesisRegistry",
