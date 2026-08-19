@@ -238,6 +238,17 @@ This file is now also loaded into structured research memory (#6) by
 file, not a replacement for it: every statement is carried as written, and the import is
 idempotent. Edit here; the records follow.
 
+A fourteenth, and it is the project's central architectural finding. `STATUS.md` §6h pinned the
+`SPY_SMA200` gap as "time in market, not position size", reading `exposure_fraction` as the
+fraction of sessions invested. It is **capital** exposure, the mean of `gross_exposure / equity`.
+Measured separately, the engine is in the market on **72.50%** of sessions against the benchmark's
+77.37% — a 4.87 point gap, not 34 — and holds an average weight of **11.67%** against 100%,
+because `max_position_value_bps: 1000` caps a position at a tenth of equity. `target_weight_sizing`
+appeared inert because it removes the *ATR* cap rather than that one. Raising the cap moves
+exposure fivefold and then plateaus, so a second constraint exists and is deliberately left
+unidentified rather than guessed at. This one did not flatter a result either: it made an engine
+limitation out of a configuration value.
+
 A thirteenth, and it sat at the top of `STATUS.md` where every session reads it first. The
 severity-1 block attributed **70.8% halted sessions** and a **26.4% drawdown** to the deployed
 `strategy-v1-2.yaml`. Measured through the production engine on SIP: **0 halted sessions and

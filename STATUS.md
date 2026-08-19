@@ -324,12 +324,32 @@ distressed small caps. Data cached at `research/stocks.db` so no future cycle re
 | `strategy-index-v3.yaml` | 0.98% | 0.21 | 30% |
 | `strategy-trend-v4.yaml` (stops effectively disabled) | 2.52% | 0.30 | 43% |
 
-**Cause pinned: it is time in market, not position size.** Adding `target_weight_sizing` to
-remove the ATR risk cap entirely changed nothing — still 43% exposure, still 2.52% CAGR. This
-engine is invested on 43% of sessions against the benchmark's 77%, using the *same* 200-day
-condition. The difference is that it only acts on **monthly rebalance dates**: when SPY dips
-below its average and recovers mid-month, the benchmark re-enters the next session while this
-config waits until month end. Those missed re-entries are most of the return.
+**That diagnosis was backwards, corrected 2026-08-19 by measurement**
+(`reports/research/exposure-diagnosis-2026-08-19.md`). `exposure_fraction` is **capital**
+exposure — the mean of `gross_exposure / equity`, `metrics.py:161` — not the fraction of sessions
+holding a position. The finding read the first as the second.
+
+Measured separately, `universe: [SPY]` with the trend gate only:
+
+| | time in market | avg weight when held | capital exposure |
+|---|---:|---:|---:|
+| `SPY_SMA200` benchmark | 77.37% | 100.00% | 77.37% |
+| engine, SPY + trend only | **72.50%** | **11.67%** | 8.46% |
+
+**The engine expresses the timing almost exactly** — 72.50% against 77.37%, a 4.87 point gap
+rather than 34. The difference is *size*: `max_position_value_bps: 1000` caps any position at
+10% of equity, so a single-name config can never deploy more than a tenth.
+
+`target_weight_sizing` changed nothing because it removes the **ATR** cap, not this one. The knob
+turned was not the constraint.
+
+Raising the cap moves exposure roughly fivefold (8.46% → 43.50% at a 100% cap) and then
+**plateaus well short of 77.37%**, with trades falling 25 → 16. A second constraint exists and
+**is not yet identified** — candidates are the cash/commission reserve in `size_entry`,
+volatility targeting, or a position that cannot be sized being skipped. The spec below records
+five confident diagnoses of this question, three refuted by measurement and two by reading; this
+note declines to be the sixth. Next step is reading `RiskRejection.reasons` on the sessions
+where SPY is above trend and weight is below the cap.
 
 **Narrowed to one line.** `adaptive_momentum.py:273` applies the trend filter when the roster
 is *built* (monthly). A symbol below its 200-day average at month end is locked out for the
@@ -1003,8 +1023,13 @@ resolution** of the window this project has already spent.
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
-- [ ] **Move the trend gate out of roster construction** (`adaptive_momentum.py:273`) —
-      spec in `docs/per-session-trend-spec.md`. Highest-value remaining work.
+- [ ] **~~Move the trend gate out of roster construction~~ — demoted 2026-08-19.** The premise
+      was that the engine is out of the market far too often. Measured, it is out of the market
+      ~5 points more than the benchmark, not 34. Position sizing is worth roughly five times
+      more and is partly one line of YAML. See §6h.
+- [ ] **Identify the second constraint on position weight** — at a 100% cap the engine still
+      averages ~60% weight while held and drops from 25 trades to 16. Read
+      `RiskRejection.reasons`; do not guess. This is now the highest-value engine question.
 - [ ] **Tranche the rebalance date** — $61.24 of terminal-wealth spread per $100 decided by the
       calendar alone, the largest free effect found in 13 cycles. Design settled in
       `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against
