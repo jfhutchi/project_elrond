@@ -38,6 +38,44 @@ Last updated 2026-08-18 (cycles 11-17).
 | 20 | Per-position vol targeting makes more money than flat weights | REFUTED | Cycle 13. At matched 1.0x exposure with the halt enforced at a realistic 21-day resumption it gains $15.88/$100, and the bootstrap 95% CI is **[−$86.76, +$76.79]**, losing in **36.8%** of resamples. Its drawdown reduction is established (#S2); its wealth effect is not |
 | 19 | Any strategy here beats SPY at its own growth-optimal leverage | REFUTED | Cycle 12. Vol-targeted SPY at 4.25x appeared to turn $100 into $2,475 v SPY's $954. Stationary bootstrap (2000 draws, 21d blocks): 95% CI on the gap **[−$173.90, +$432.04]**, spans zero; loses in **22.8%** of resamples. Rests on the Sharpe difference already refuted as #16 — leverage amplifies an edge that is not there |
 
+## Four of the above were never actually tested
+
+Added 2026-08-19. **The table above is unchanged and stands as recorded.** This is an audit
+beside it, not a rewrite: `reports/research/refuted-power-audit-2026-08-19.md`.
+
+Where an entry reports its own 95% interval, the standard error follows (`width / 3.92`) and so
+does the smallest effect the study could have detected (`2.9 x SE`). Four entries measured an
+effect **smaller than their own detection limit**, which is the signature of an instrument too
+blunt to see what it was pointed at:
+
+| # | hypothesis | could only detect | measured | verdict |
+|---|---|---:|---:|---|
+| 6 | BTC trend standalone | 1.60 Sharpe | 0.53 | **UNDERPOWERED** |
+| 10 | ML / meta-labelling | 1.26% | ~0.75% | **UNDERPOWERED** |
+| 19 | growth-optimal leverage beats SPY | $448 | $129 | **UNDERPOWERED** |
+| 20 | per-position vol targeting | $121 | $15.88 | **UNDERPOWERED** |
+
+A confidence interval spanning zero was treated as the reason for refutation in several of
+these. An underpowered study *always* produces an interval spanning zero, so that observation
+carries no information about the mechanism.
+
+**These three mechanisms are untested, not dead:** BTC trend, per-position vol targeting,
+meta-labelling. That does not mean re-run them — the window they need is already exhausted, and
+a re-run would reproduce the same silence. It means they become live questions again if the data
+improves.
+
+**#22 stands, but on its replication rather than its statistic.** Its t-test could not have
+detected an alpha below 5.74%/yr, so "no alpha" is not what the test showed. The entry's other
+argument — SPY held at 0.71x reproduces the rotation to within 0.05 CAGR points with no trading
+— is an equivalence demonstration that does not depend on power, and it is decisive on its own.
+
+For the remaining entries power is not recoverable, because no expected effect size was ever
+pre-registered. That is exactly the field #5 now requires and #19 now gates on, so the ambiguity
+ends with this corpus.
+
+The honest summary of the whole table is therefore **"nothing large was found"** rather than
+"these mechanisms do not work" — weaker, and accurate.
+
 ## Not refuted — measured as genuinely working
 
 | Mechanism | Effect | Cost |
