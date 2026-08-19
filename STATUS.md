@@ -354,6 +354,14 @@ sessions**, first firing 2020-06-11. Widening the ladder restores 72.50% exposur
 trades. Setting `drawdown_halt_floor_bps` does *not* fix it — it releases the halt into the 20%
 **liquidation** tier (868 sessions), for +0.79 exposure points and *worse* CAGR.
 
+**Resolved later the same day** (`reports/research/spy-sma200-resolved-2026-08-19.md`): with the
+cap, the ladder, and **one corrupt SPY bar** all controlled for, the engine reproduces `SPY_SMA200`
+to 0.07 CAGR points. The corrupt bar — 2026-02-02, low 68.64 against a close of 691.70 — tripped a
+stop at a price no trade occurred at and cost 20.1% of equity in one session, worth 2.67 CAGR
+points, more than the trend gate itself. Now rejected at ingestion (`88ad02b`). **And the target
+turned out not to be worth reaching**: `SPY_SMA200` loses to buy-and-hold by 4.75 CAGR points, and
+its +0.026 Sharpe edge is negative in paired point estimate and insignificant (t = −1.24).
+
 **This is not a recommendation to widen the ladder** — those runs are diagnostic instruments. They
 buy 6.68% CAGR with a 24.46% drawdown, worse risk-adjusted than the benchmark. The defensible
 conclusion is the opposite: **a concentrated single-name config is not deployable under this risk
@@ -1033,12 +1041,20 @@ resolution** of the window this project has already spent.
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
-- [ ] **Move the trend gate out of roster construction** (`adaptive_momentum.py:273`) — spec in
-      `docs/per-session-trend-spec.md`. Demoted and then **re-promoted the same day**: its stated
-      premise (a 34-point timing gap) is false — the gap is 4.87 points — but with sizing and the
-      risk ladder held fixed those 4.87 points carry **3.66 CAGR points and 0.33 Sharpe**, because
-      the missed sessions cluster in recoveries. Worth doing on the measured evidence rather than
-      the premise originally given. See §6h.
+- [x] **~~Move the trend gate out of roster construction~~ — CLOSED 2026-08-19.**
+      `trend_gate_per_session` was already implemented and gated off; what was missing was a valid
+      measurement. With the position cap, the risk ladder, and one corrupt bar all controlled for,
+      the engine reproduces `SPY_SMA200` to **0.07 CAGR points** (10.56% vs 10.63%, Sharpe 0.92 vs
+      0.93, exposure 77.29% vs 77.44%). The gate itself is worth 1.70 CAGR points.
+      `reports/research/spy-sma200-resolved-2026-08-19.md`.
+- [ ] **Decide whether `SPY_SMA200` was ever worth reproducing — evidence says no.** It loses to
+      SPY buy-and-hold by **4.75 CAGR points** ($291 vs $455 per $100). Its whole case is a +0.026
+      Sharpe edge, and paired against buy-and-hold that edge is **negative in point estimate and
+      insignificant** (−2.005 bps/session, t = −1.24, 27 years needed). Operator call on whether the
+      halved drawdown (19.50% vs 33.79%) justifies it; it is not an alpha result.
+- [ ] **Apply the power gate to engineering targets, not just hypotheses.** A benchmark treated as
+      a goal is a hypothesis about what is worth building. Six cycles pursued a target that a
+      one-backtest check would have disqualified before any code was written.
 - [x] **~~Identify the second constraint on position weight~~ — resolved 2026-08-19: there is
       none.** Weight is 100.00% at a 100% cap. The plateau is the drawdown ladder halting entry on
       928 sessions. See §6h.

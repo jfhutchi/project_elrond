@@ -238,6 +238,45 @@ This file is now also loaded into structured research memory (#6) by
 file, not a replacement for it: every statement is carried as written, and the import is
 idempotent. Edit here; the records follow.
 
+A sixteenth, and it is one bar. SPY 2026-02-02 was cached as O=685.90 H=693.21 L=68.64 C=691.70 —
+a dropped digit in the low. It passes `Bar.validate_ohlc` because that check is ordinal: 68.64
+really is at or below the open, high, and close. Nothing else looked at it. In a SPY-only backtest
+it tripped a stop at 550.26, a price no trade occurred at, on a day SPY closed **up** 0.50%. Equity
+went 256.35 to 204.84 in one session — a 20.1% loss — and never recovered the gap. That single bar
+is worth **2.67 CAGR points** over the 10.6-year history, more than the trend-gate change that four
+cycles of work were aimed at.
+
+One bar in 96,370. It was found only because a diagnostic ratio moved 20% in a session and the
+implausibility was chased rather than explained away, which is the rule about validating
+instrumentation before interpreting results doing its job. Now rejected at ingestion under
+`DataGapReason.IMPLAUSIBLE_RANGE`: the test is the extreme against the bar's own open/close bracket
+rather than an absolute range, because a real collapse drags the close with it while a dropped digit
+does not — and an absolute-range rule would reject genuine crashes. Threshold calibrated against the
+full history rather than chosen: the corrupt bar sits at low/min(open,close) = 0.1001, the closest
+real bar at 0.8927.
+
+A fifteenth, and it is the goal itself rather than a defect in reaching it. `SPY_SMA200` is
+described throughout this repository as "the one rule measured to beat the market", and six
+diagnostic cycles went into making the engine express it. Measured against the market on the same
+history: it returns **10.63% CAGR against buy-and-hold's 15.38%**, turning $100 into $291 rather
+than $455. It does not beat the market. Its entire case is a **+0.026** Sharpe edge bought with a
+halved drawdown (19.50% vs 33.79%), and paired against buy-and-hold — paired, because the two hold
+the same asset 77% of the time and an unpaired test on correlated series is the error this file
+exists to catch — that edge is **negative in point estimate and insignificant**: −2.005 bps per
+session, t = −1.24, 27 years of data needed to resolve it either way.
+
+The engineering succeeded. With the position cap, the drawdown ladder, `trend_gate_per_session`,
+and one corrupt bar all controlled for, the engine reproduces the rule to **0.07 CAGR points**, so
+"this engine cannot express the one rule measured to beat the market" is now false on both halves
+of the sentence. What failed was never checking whether the target was worth reaching. The
+disqualifying measurement is one backtest and could have run first.
+
+The lesson generalises past this rule: `CLAUDE.md` requires a power analysis before an expensive
+experiment, and that discipline was applied to hypotheses but not to *engineering targets*. A
+benchmark treated as a goal is a hypothesis about what is worth building. This one would have
+failed the gate — an 0.026 Sharpe effect against 10.6 years is unresolvable before a line is
+written.
+
 A fourteenth, and it is the project's central architectural finding. `STATUS.md` §6h pinned the
 `SPY_SMA200` gap as "time in market, not position size", reading `exposure_fraction` as the
 fraction of sessions invested. It is **capital** exposure, the mean of `gross_exposure / equity`.

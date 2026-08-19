@@ -1,5 +1,15 @@
 # Per-session trend evaluation — implementation spec
 
+> **RESOLVED 2026-08-19.** The engine reproduces `SPY_SMA200` to 0.07 CAGR points with
+> `trend_gate_per_session` enabled, once the position cap, the drawdown ladder, and one corrupt SPY
+> bar are controlled for. The success criterion below is met. **But the target was not worth
+> reaching**: `SPY_SMA200` loses to SPY buy-and-hold by 4.75 CAGR points, and the +0.026 Sharpe
+> edge that is its entire case is negative in paired point estimate and statistically
+> insignificant (t = −1.24, 27 years needed). See
+> `reports/research/spy-sma200-resolved-2026-08-19.md`. The six diagnoses recorded below are kept
+> as they were written — each was right about one of four causes, which is why none of them closed
+> the question alone.
+
 The highest-value engineering task left in this project, and it is now narrowed to one line.
 
 ## What is broken
