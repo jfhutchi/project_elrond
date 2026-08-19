@@ -238,6 +238,17 @@ This file is now also loaded into structured research memory (#6) by
 file, not a replacement for it: every statement is carried as written, and the import is
 idempotent. Edit here; the records follow.
 
+A thirteenth, and it sat at the top of `STATUS.md` where every session reads it first. The
+severity-1 block attributed **70.8% halted sessions** and a **26.4% drawdown** to the deployed
+`strategy-v1-2.yaml`. Measured through the production engine on SIP: **0 halted sessions and
+9.09% max drawdown**. The 70.8% belongs to `strategy-trend-v4`; the 26.4% does not reproduce on
+any window tried. Both figures came from the era of the disconnected harness, and the attribution
+drifted from the config that produced them to the config being discussed two sentences later.
+The underlying design defect is real and unchanged — the halt genuinely has no exit — but it is
+latent rather than active, which is a different decision. Unlike most entries here this one did
+not flatter a result; it overstated a risk, which is the rarer direction and still worth the same
+scepticism.
+
 A twelfth, found the same way as the tenth -- by a test rather than by review. The first
 version of the FRED provider (#17) added each series' publication lag to its *stamped* date, but
 FRED stamps a monthly series with its period **start**. March payrolls therefore appeared

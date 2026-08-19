@@ -4,18 +4,40 @@
 
 ### ⚠ SEVERITY-1 (FIX BUILT, NOT DEPLOYED): the drawdown halt is a trap
 
-Measured: the halt blocks entry on **70.8% of sessions** in backtest. Once equity is 15% below
-its high-water mark, `entry_halted` stops new positions — but a strategy that cannot take
-positions cannot earn back the drawdown. **The halt has no exit.**
+**The design defect is real and unchanged.** Once equity is 15% below its high-water mark,
+`entry_halted` stops new positions — but a strategy that cannot take positions cannot earn back
+the drawdown, so equity is frozen, so the drawdown is frozen. **The halt has no exit.** If the
+live account reaches −15%, only a deposit or manual intervention releases it.
 
-`strategy-v1-2.yaml` (DEPLOYED) uses the same thresholds and has a 26.4% historical drawdown.
-**If the live account reaches -15%, it stops trading and cannot recover by trading.** Only a
-deposit or manual intervention releases it.
+**Two figures previously in this block did not describe the deployed config, corrected
+2026-08-19 by measurement through the production engine on SIP 2016-2026:**
+
+| claim as written | measured, deployed `strategy-v1-2.yaml` |
+|---|---|
+| "the halt blocks entry on **70.8% of sessions**" | **0 sessions.** That 70.8% is `strategy-trend-v4`'s number (`docs/per-session-trend-spec.md`), not this config's |
+| "has a **26.4%** historical drawdown" | **9.09%** max drawdown. Two independent computations agree; 26.4% does not reproduce on any window tried (SIP 9.09%, IEX 10.87%) |
+
+The deployed config reaches reduced sizing on 371 sessions (13.9%) and **never reaches the 15%
+halt threshold** over the measured history. That is why setting `drawdown_halt_floor_bps` to
+1000, 2500 or 5000 produces byte-identical results: there is no trap to release on this window.
+
+**What this changes and what it does not.** The trap remains a genuine severity-1 *design*
+defect and the fix remains justified — a backtest maximum is not a bound on future drawdown, and
+if the account does reach −15% it is stuck. What changes is urgency: the deployed strategy is
+not sitting near the threshold, so this is a latent hazard rather than an active one. Deploying
+the floor restarts the qualification window, and that trade-off now has honest numbers on both
+sides.
 
 **Fixed in code, off by default, not yet deployed.** `drawdown_halt_floor_bps` trades at reduced
-size instead of stopping. All four candidate fixes were measured in
-`scripts/halt_policy_study.py`; a floor of 2500bps was chosen and verified through the real
-engine, where it releases the trap (6 → 25 trades, 19.2% → 50.3% exposure).
+size instead of stopping, and it *is* wired into the engine (`engine.py:617` →
+`risk/drawdown.py:39`). The four candidate fixes were measured in `scripts/halt_policy_study.py`,
+which is a **standalone simulation that never calls `BacktestEngine`** — under #8's rules that is
+a `RESEARCH_SCRIPT` result, the same class as the `f77ea08` study that was reproducible and wrong
+about this system. The 6 → 25 trades and 19.2% → 50.3% exposure figures come from
+`strategy-trend-v4`, not the deployed config.
+
+`scripts/halt_floor_through_engine.py` measures the switch through the production engine on the
+deployed config. Result: no effect on this window, for the reason above.
 
 **It does not improve returns, and that is the honest result.** On `strategy-trend-v4` the
 released strategy scores Sharpe 0.21 against the halted 0.36, with drawdown 32.7% against 15.6%.
