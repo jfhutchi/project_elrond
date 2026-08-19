@@ -39,7 +39,58 @@ from sqlalchemy import (
     update,
 )
 
-from quantbot.storage.schema import power_assessments, schema_version
+
+def _schema_version() -> Table:
+    """The version marker as this revision sees it, declared rather than imported.
+
+    A migration that reaches into `quantbot.storage.schema` stops describing the schema it
+    actually operated on the moment a later revision reshapes that table.
+    """
+    return Table(
+        "schema_version",
+        MetaData(),
+        Column("id", Integer, primary_key=True),
+        Column("version", Integer, nullable=False),
+    )
+
+
+
+NAMING_CONVENTION = {
+    "ix": "ix_%(table_name)s_%(column_0_name)s",
+    "uq": "uq_%(table_name)s_%(column_0_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}
+
+
+def _power_assessments() -> Table:
+    """The assessment log exactly as this revision creates it."""
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    table = Table(
+        "power_assessments",
+        metadata,
+        Column("assessment_id", Integer, primary_key=True, autoincrement=True),
+        Column("hypothesis_id", String(128), nullable=False),
+        Column("version", Integer, nullable=False),
+        # REGISTRATION or EXECUTION. The bar moves between them, so both are kept.
+        Column("stage", String(16), nullable=False),
+        Column("assessed_at", String(40), nullable=False),
+        Column("verdict", String(32), nullable=False),
+        Column("estimand", String(32), nullable=False),
+        Column("cumulative_trials", Integer, nullable=False),
+        Column("luck_threshold_z", Text, nullable=False),
+        Column("observations_required", Integer, nullable=False),
+        Column("observations_available", Integer, nullable=False),
+        Column("minimum_detectable_effect", Text, nullable=False),
+        # Present only on an operator override, which is the audit trail for one.
+        Column("overridden_by", String(128)),
+        Column("document_json", Text, nullable=False),
+    )
+    Index("ix_power_assessments_hypothesis", table.c.hypothesis_id, table.c.version)
+    Index("ix_power_assessments_verdict", table.c.verdict)
+    return table
+
 
 revision: str = "0003"
 down_revision: str | Sequence[str] | None = "0002"
@@ -112,7 +163,7 @@ def _v3_hypotheses(*, backfill_defaults: bool) -> Table:
 def upgrade() -> None:
     """Widen the registry to any estimand, and add the power-assessment record."""
     connection = op.get_bind()
-    power_assessments.create(bind=connection)
+    _power_assessments().create(bind=connection)
 
     with op.batch_alter_table("hypotheses", copy_from=_v2_hypotheses()) as batch:
         batch.alter_column("expected_sharpe", new_column_name="expected_effect")
@@ -131,7 +182,8 @@ def upgrade() -> None:
         batch.alter_column("estimand", existing_type=String(32), server_default=None)
         batch.alter_column("power_verdict", existing_type=String(32), server_default=None)
 
-    connection.execute(update(schema_version).where(schema_version.c.id == 1).values(version=3))
+    marker = _schema_version()
+    connection.execute(update(marker).where(marker.c.id == 1).values(version=3))
 
 
 def downgrade() -> None:
@@ -145,5 +197,6 @@ def downgrade() -> None:
         batch.alter_column("expected_effect", new_column_name="expected_sharpe")
         batch.alter_column("required_observations", new_column_name="required_sessions")
         batch.alter_column("available_observations", new_column_name="available_sessions")
-    power_assessments.drop(bind=connection)
-    connection.execute(update(schema_version).where(schema_version.c.id == 1).values(version=2))
+    _power_assessments().drop(bind=connection)
+    marker = _schema_version()
+    connection.execute(update(marker).where(marker.c.id == 1).values(version=2))

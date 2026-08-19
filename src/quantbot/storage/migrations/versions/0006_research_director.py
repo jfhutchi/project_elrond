@@ -25,7 +25,20 @@ from sqlalchemy import (
     update,
 )
 
-from quantbot.storage.schema import schema_version
+
+def _schema_version() -> Table:
+    """The version marker as this revision sees it, declared rather than imported.
+
+    A migration that reaches into `quantbot.storage.schema` stops describing the schema it
+    actually operated on the moment a later revision reshapes that table.
+    """
+    return Table(
+        "schema_version",
+        MetaData(),
+        Column("id", Integer, primary_key=True),
+        Column("version", Integer, nullable=False),
+    )
+
 
 revision: str = "0006"
 down_revision: str | Sequence[str] | None = "0005"
@@ -83,7 +96,8 @@ def upgrade() -> None:
     connection = op.get_bind()
     for table in v6_tables():
         table.create(bind=connection)
-    connection.execute(update(schema_version).where(schema_version.c.id == 1).values(version=6))
+    marker = _schema_version()
+    connection.execute(update(marker).where(marker.c.id == 1).values(version=6))
 
 
 def downgrade() -> None:
@@ -91,4 +105,5 @@ def downgrade() -> None:
     connection = op.get_bind()
     for table in reversed(v6_tables()):
         table.drop(bind=connection)
-    connection.execute(update(schema_version).where(schema_version.c.id == 1).values(version=5))
+    marker = _schema_version()
+    connection.execute(update(marker).where(marker.c.id == 1).values(version=5))

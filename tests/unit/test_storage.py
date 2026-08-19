@@ -899,3 +899,78 @@ def test_a_database_one_version_ahead_of_this_build_is_refused(tmp_path: Path) -
 
     with pytest.raises(UnsupportedSchemaVersionError, match=str(SCHEMA_VERSION + 1)):
         Database(path)
+
+
+def test_no_migration_imports_the_live_schema_module() -> None:
+    """A revision must describe the schema it created, not the one that exists today.
+
+    Pinning table *names* in 0001 was not enough: `metadata.tables[name]` still took each table's
+    *shape* from `schema.py`, so the day a later revision added a column or changed a constraint on
+    a V1 table, revision 0001 would silently begin creating the new shape. A fresh database
+    replaying the chain would then diverge from one that actually lived through it.
+
+    This is the assertion that keeps it fixed. It fails if any revision reaches back into the live
+    schema module for anything at all — which is stricter than strictly necessary for a table like
+    `schema_version`, and deliberately so: the rule is only enforceable if it has no exceptions to
+    argue about.
+    """
+    import ast
+
+    root = Path(__file__).parents[2] / "src" / "quantbot" / "storage" / "migrations"
+    versions = root / "versions"
+    offenders: list[str] = []
+    for source in sorted(versions.glob("[0-9]*.py")):
+        tree = ast.parse(source.read_text(encoding="utf-8"))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.ImportFrom) and (node.module or "").startswith(
+                "quantbot.storage.schema"
+            ):
+                offenders.append(f"{source.name} imports {node.module}")
+            if isinstance(node, ast.Import):
+                offenders.extend(
+                    f"{source.name} imports {alias.name}"
+                    for alias in node.names
+                    if alias.name.startswith("quantbot.storage.schema")
+                )
+    assert offenders == [], (
+        "migrations must declare their own tables literally, not import live metadata: "
+        + "; ".join(offenders)
+    )
+
+
+def test_replaying_every_migration_reproduces_the_head_schema_column_for_column(
+    tmp_path: Path,
+) -> None:
+    """The chain and `schema.py` must agree on shape, not merely on table names.
+
+    The pre-existing upgrade test asserts `set(metadata.tables) <= get_table_names()`, which passes
+    even if every column in every table is wrong. This compares the reflected result of replaying
+    0001 -> head against the live metadata, so drift in either direction fails here rather than
+    surfacing as a confusing failure inside a later migration on a fresh install.
+    """
+    path = tmp_path / "chain.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    try:
+        config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+
+        inspector = inspect(engine)
+        for name, table in sorted(metadata.tables.items()):
+            reflected = {
+                column["name"]: (str(column["type"]), bool(column["nullable"]))
+                for column in inspector.get_columns(name)
+            }
+            declared = {
+                column.name: (str(column.type), bool(column.nullable))
+                for column in table.columns
+            }
+            assert reflected == declared, (
+                f"{name} differs between the migration chain and schema.py"
+            )
+            assert set(inspector.get_pk_constraint(name)["constrained_columns"]) == {
+                column.name for column in table.primary_key.columns
+            }, f"{name} primary key differs between the migration chain and schema.py"
+    finally:
+        engine.dispose()
