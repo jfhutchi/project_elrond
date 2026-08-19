@@ -58,6 +58,18 @@ from quantbot.research.director import (
     expected_information_gain,
     prioritize,
 )
+from quantbot.research.discovery import (
+    DISCOVERY_ROLES,
+    Candidate,
+    ContaminatedGenerator,
+    DiscoveryMode,
+    Generator,
+    ModeYield,
+    admissible,
+    exploratory_only,
+    plausibility_credit,
+    total_search_cost,
+)
 from quantbot.research.manifest import (
     CodeProvenance,
     DatasetSnapshot,
@@ -164,6 +176,16 @@ from quantbot.research.sources import (
 )
 
 __all__ = [
+    "DISCOVERY_ROLES",
+    "Candidate",
+    "ContaminatedGenerator",
+    "DiscoveryMode",
+    "Generator",
+    "ModeYield",
+    "admissible",
+    "exploratory_only",
+    "plausibility_credit",
+    "total_search_cost",
     "ACTIVE",
     "TERMINAL",
     "InvalidTaskTransition",

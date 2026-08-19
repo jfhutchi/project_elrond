@@ -768,6 +768,40 @@ live metadata; a backfill `server_default` that diverged the schema; a permissiv
 test; the kill switch's accidental dependency on research code. None was caught by the code
 looking wrong.
 
+## 6t. Discovery engine: propose without spending the evidence (#13)
+
+`quantbot.research.discovery`. The generator is the component most able to destroy this
+project's remaining statistical capacity, so it is hemmed in hardest. Four rules, all mechanical.
+
+**A generator that read protected data has already spent it.** A `Candidate` declares
+`inspected_roles`, and one naming `PROTECTED_EVALUATION` or `FORWARD_PAPER` **cannot be
+constructed**. There is no confirmatory test left to run: the answer was seen before the
+question was frozen. `ContaminatedGenerator` is deliberately not a `ValueError`, so it survives
+pydantic's wrapping and a caller can tell contamination from a malformed field.
+
+**A search reports what it examined, not what it returned.** A miner evaluating 900 and
+proposing 3 spent 900, and #14 charges for all of them. A mode claiming a search without naming
+the data it searched is refused.
+
+**A generated story is worth nothing as evidence, in every mode.** `plausibility_credit()`
+returns zero for cross-domain analogy and for everything else. It exists as a function so that
+changing it has to be deliberate and reads as what it would be.
+
+**A mode is judged on what reaches registration, never on volume.** 100 candidates with 1
+registration is throttled; 10 with 6 is not. Optimising for candidate count against a fixed
+dataset is how a research programme destroys its own dataset.
+
+### The constraint that shapes what this can do
+
+`exploratory_only()` returns True whenever any requested window is `EXHAUSTED`. For 2016–2026 US
+equities that is already the answer — cycles 2–10 consumed every out-of-sample window. A
+generated idea against that data stays exploratory however good it looks, unless there is new
+protected data or **authentic forward evidence**.
+
+That is #13's own last acceptance criterion, and it means the discovery engine's value is
+currently bounded by #17 delivering a genuinely new asset class. Building the generator does not
+create capacity to test what it generates.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
