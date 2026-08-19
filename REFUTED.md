@@ -244,10 +244,30 @@ fraction of sessions invested. It is **capital** exposure, the mean of `gross_ex
 Measured separately, the engine is in the market on **72.50%** of sessions against the benchmark's
 77.37% — a 4.87 point gap, not 34 — and holds an average weight of **11.67%** against 100%,
 because `max_position_value_bps: 1000` caps a position at a tenth of equity. `target_weight_sizing`
-appeared inert because it removes the *ATR* cap rather than that one. Raising the cap moves
-exposure fivefold and then plateaus, so a second constraint exists and is deliberately left
-unidentified rather than guessed at. This one did not flatter a result either: it made an engine
-limitation out of a configuration value.
+appeared inert because it removes the *ATR* cap rather than that one. This one did not flatter a
+result either: it made an engine limitation out of a configuration value.
+
+**And the correction needed its own correction, within hours.** The note above originally claimed
+a *second constraint on position weight* remained unidentified. There is none — at a 100% cap the
+engine holds an average weight of **100.00%**, 1161 of 1161 held sessions at >=95%. The ~60%
+figure that motivated the claim came from dividing one run's capital exposure by a different run's
+time in market, which is the same conflation the defect itself is about, committed a second time
+while writing it up. What actually collapses at a 100% cap is time in market, 72.50% -> 43.50%,
+and the cause is the **drawdown risk ladder**: invisible at a 10% cap because the position is too
+small to draw the account down 15%, and halting entry on **928 of 2669 sessions** at a 100% cap.
+Widening the ladder restores 72.50% exposure and all 25 trades.
+
+The useful residue is a limitation that is real and permanent rather than a bug: `SPY_SMA200`
+draws down 19.50%, above the deployed 15% halt tier, so this engine cannot express that rule at
+full size without accepting a drawdown its risk engine exists to refuse. Setting
+`drawdown_halt_floor_bps` does not rescue it — the floor releases the halt into the 20%
+*liquidation* tier (868 sessions) for +0.79 exposure points and worse CAGR. Widening the ladder is
+therefore **not** proposed: those runs are diagnostic instruments that buy 6.68% CAGR with a
+24.46% drawdown, worse risk-adjusted than the benchmark, and loosening a drawdown control to
+improve a backtest is precisely the move this file exists to catch. Pinned by
+`test_the_floor_moves_a_concentrated_config_from_halted_to_liquidating` and
+`test_the_halt_threshold_sits_below_the_drawdown_of_the_rule_it_would_express`, both
+mutation-checked.
 
 A thirteenth, and it sat at the top of `STATUS.md` where every session reads it first. The
 severity-1 block attributed **70.8% halted sessions** and a **26.4% drawdown** to the deployed

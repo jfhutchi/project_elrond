@@ -344,12 +344,22 @@ rather than 34. The difference is *size*: `max_position_value_bps: 1000` caps an
 turned was not the constraint.
 
 Raising the cap moves exposure roughly fivefold (8.46% → 43.50% at a 100% cap) and then
-**plateaus well short of 77.37%**, with trades falling 25 → 16. A second constraint exists and
-**is not yet identified** — candidates are the cash/commission reserve in `size_entry`,
-volatility targeting, or a position that cannot be sized being skipped. The spec below records
-five confident diagnoses of this question, three refuted by measurement and two by reading; this
-note declines to be the sixth. Next step is reading `RiskRejection.reasons` on the sessions
-where SPY is above trend and weight is below the cap.
+plateaus. **That plateau was diagnosed the same day, and the "second constraint on position
+weight" hypothesised here was wrong** — at a 100% cap the engine holds an average weight of
+**100.00%** (1161/1161 held sessions ≥95%). What collapses is *time in market*, 72.50% → 43.50%.
+
+The cause is the **drawdown risk ladder**. At a 10% cap the position is too small to draw the
+account down 15%, so the ladder never fires; at a 100% cap it halts entry on **928 of 2669
+sessions**, first firing 2020-06-11. Widening the ladder restores 72.50% exposure and all 25
+trades. Setting `drawdown_halt_floor_bps` does *not* fix it — it releases the halt into the 20%
+**liquidation** tier (868 sessions), for +0.79 exposure points and *worse* CAGR.
+
+**This is not a recommendation to widen the ladder** — those runs are diagnostic instruments. They
+buy 6.68% CAGR with a 24.46% drawdown, worse risk-adjusted than the benchmark. The defensible
+conclusion is the opposite: **a concentrated single-name config is not deployable under this risk
+ladder**, and the ladder is the correct component of the two. `SPY_SMA200` draws down 19.50% —
+above the 15% halt — so the engine cannot express it at full size without accepting a drawdown the
+risk engine exists to refuse. A real limitation, but a *risk-budget* one, not a sizing bug.
 
 **Narrowed to one line.** `adaptive_momentum.py:273` applies the trend filter when the roster
 is *built* (monthly). A symbol below its 200-day average at month end is locked out for the
@@ -1023,13 +1033,15 @@ resolution** of the window this project has already spent.
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
-- [ ] **~~Move the trend gate out of roster construction~~ — demoted 2026-08-19.** The premise
-      was that the engine is out of the market far too often. Measured, it is out of the market
-      ~5 points more than the benchmark, not 34. Position sizing is worth roughly five times
-      more and is partly one line of YAML. See §6h.
-- [ ] **Identify the second constraint on position weight** — at a 100% cap the engine still
-      averages ~60% weight while held and drops from 25 trades to 16. Read
-      `RiskRejection.reasons`; do not guess. This is now the highest-value engine question.
+- [ ] **Move the trend gate out of roster construction** (`adaptive_momentum.py:273`) — spec in
+      `docs/per-session-trend-spec.md`. Demoted and then **re-promoted the same day**: its stated
+      premise (a 34-point timing gap) is false — the gap is 4.87 points — but with sizing and the
+      risk ladder held fixed those 4.87 points carry **3.66 CAGR points and 0.33 Sharpe**, because
+      the missed sessions cluster in recoveries. Worth doing on the measured evidence rather than
+      the premise originally given. See §6h.
+- [x] **~~Identify the second constraint on position weight~~ — resolved 2026-08-19: there is
+      none.** Weight is 100.00% at a 100% cap. The plateau is the drawdown ladder halting entry on
+      928 sessions. See §6h.
 - [ ] **Tranche the rebalance date** — $61.24 of terminal-wealth spread per $100 decided by the
       calendar alone, the largest free effect found in 13 cycles. Design settled in
       `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against

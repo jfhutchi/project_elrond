@@ -114,3 +114,50 @@ def test_hysteresis_cannot_work_because_a_halted_account_cannot_move(
         # A halted account earns nothing, so equity is carried forward untouched.
         equity = equity
         assert state.drawdown_fraction > resume_at, "the release condition is never reachable"
+
+
+def test_the_floor_moves_a_concentrated_config_from_halted_to_liquidating() -> None:
+    """The floor is not a way to restore exposure for a concentrated position.
+
+    Measured 2026-08-19 (`reports/research/exposure-diagnosis-2026-08-19.md`): a single-name SPY
+    config at a 100% cap draws down 16.29% with the floor off — halting entry on 928 of 2669
+    sessions — and 20.51% with the floor on, which trips the *liquidation* tier on 868 sessions.
+    Net exposure gain 0.79 points, CAGR 4.94% -> 4.43%.
+
+    This asserts that specific mechanism at the two measured drawdown depths, so that a change to
+    either threshold fails here rather than being rediscovered by another expensive backtest.
+    """
+    high_water = Decimal("100")
+
+    # Floor off, at the depth the halted run actually reached.
+    halted = calculate_drawdown(Decimal("83.71"), high_water, _with_floor(0))
+    assert halted.entry_halted is True, "the deployed ladder halts a concentrated position"
+    assert halted.liquidation_required is False, "16.29% is short of the 20% liquidation tier"
+
+    # Floor on, at the depth the floored run then reached by continuing to trade.
+    floored = calculate_drawdown(Decimal("79.49"), high_water, _with_floor(2500))
+    assert floored.entry_halted is False, "the floor does release the halt"
+    assert floored.liquidation_required is True, (
+        "but 20.51% crosses the liquidation tier, which the floor deliberately does not touch — "
+        "so the floor does not recover exposure for this config"
+    )
+
+
+def test_the_halt_threshold_sits_below_the_drawdown_of_the_rule_it_would_express() -> None:
+    """Why `SPY_SMA200` is unreachable at full size, asserted rather than narrated.
+
+    The published `SPY_SMA200` benchmark draws down 19.50%. The deployed halt tier is 15%. A config
+    holding that rule in one full-size position therefore halts on its own benchmark's drawdown —
+    a risk-budget limitation, not a sizing defect. If either number moves, this should be revisited
+    rather than silently becoming false.
+    """
+    halt_threshold = Decimal(DEPLOYED.drawdown_thresholds_bps[2]) / Decimal("10000")
+    benchmark_max_drawdown = Decimal("0.1950")
+    assert halt_threshold < benchmark_max_drawdown, (
+        "the risk ladder is calibrated for a ten-name rotation holding 10% positions; a "
+        "concentrated config cannot express a rule whose own drawdown exceeds the halt tier"
+    )
+    state = calculate_drawdown(
+        Decimal("100") * (Decimal("1") - benchmark_max_drawdown), Decimal("100"), DEPLOYED
+    )
+    assert state.entry_halted is True
