@@ -33,6 +33,7 @@ from quantbot.research import (
     HypothesisDraft,
     HypothesisRegistry,
     Objection,
+    ObservedSample,
     PowerOverride,
     PowerVerdict,
     RefusalReason,
@@ -81,7 +82,6 @@ def register(
     return registry.register(candidate, **kwargs)  # type: ignore[arg-type]
 
 
-
 def window(
     role: DataRole,
     start: str,
@@ -115,6 +115,18 @@ def sharpe_effect(**overrides: object) -> EffectSpecification:
     }
     fields.update(overrides)
     return EffectSpecification(**fields)
+
+
+def counted(observations: int, *, dataset: str = "sip-us-equities-daily") -> ObservedSample:
+    """A verified count, as the experiment builder would supply it at execution."""
+    return ObservedSample(
+        observations=observations,
+        dataset=dataset,
+        start_date=date(2016, 1, 4),
+        end_date=date(2026, 8, 18),
+        method="XNYS sessions with SPY bars present",
+        counted_at=NOW,
+    )
 
 
 def make_draft(**overrides: object) -> HypothesisDraft:
@@ -175,7 +187,8 @@ def test_a_protected_window_another_registration_consumed_is_refused(
     database: Database,
 ) -> None:
     with database.transaction() as session:
-        register(HypothesisRegistry(session), 
+        register(
+            HypothesisRegistry(session),
             make_draft(
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2024-12-31"),),
             ),
@@ -217,12 +230,14 @@ def test_a_disjoint_protected_window_on_a_consumed_dataset_still_registers(
 ) -> None:
     """The block is overlap, not the dataset. Otherwise one registration retires the data."""
     with database.transaction() as session:
-        register(HypothesisRegistry(session), 
+        register(
+            HypothesisRegistry(session),
             make_draft(windows=(window(DataRole.VALIDATION, "2016-01-04", "2021-12-31"),)),
             now=NOW,
         )
     with database.transaction() as session:
-        registration = register(HypothesisRegistry(session), 
+        registration = register(
+            HypothesisRegistry(session),
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -245,7 +260,8 @@ def test_forward_paper_windows_may_overlap_because_the_account_runs_once(
     with database.transaction() as session:
         registry = HypothesisRegistry(session)
         register(registry, make_draft(windows=forward), now=NOW)
-        second = register(registry, 
+        second = register(
+            registry,
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -265,8 +281,10 @@ def test_an_effect_too_small_for_the_available_data_is_refused_as_underpowered(
     pass proves the arithmetic ran rather than that some other check stayed quiet.
     """
     with database.transaction() as session:
-        strong = register(HypothesisRegistry(session), 
-            make_draft(effect=sharpe_effect(expected=Decimal("1.0"))), now=NOW
+        strong = register(
+            HypothesisRegistry(session),
+            make_draft(effect=sharpe_effect(expected=Decimal("1.0"))),
+            now=NOW,
         )
     assert strong.power.observations_required <= SIP_SESSIONS
 
@@ -298,7 +316,8 @@ def test_the_trial_count_is_the_project_history_not_this_cycle(database: Databas
     assert first.cumulative_trials == PRIOR_TRIALS + 12
 
     with database.transaction() as session:
-        second = register(HypothesisRegistry(session), 
+        second = register(
+            HypothesisRegistry(session),
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -324,13 +343,16 @@ def test_execution_recomputes_power_against_trials_accumulated_since_registratio
     assert registered.power.observations_required <= 2200
 
     with database.transaction() as session:
-        clearance = HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+        clearance = HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(2200)
+        )
     assert clearance.registration_hash == registered.content_hash
     assert clearance.power.observations_required <= clearance.power.observations_available
 
     # A later, unrelated search raises the luck bar for everything that follows it.
     with database.transaction() as session:
-        register(HypothesisRegistry(session), 
+        register(
+            HypothesisRegistry(session),
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -342,7 +364,9 @@ def test_execution_recomputes_power_against_trials_accumulated_since_registratio
         )
 
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(2200)
+        )
     assert error.value.reason is RefusalReason.UNDERPOWERED
     assert str(registered.power.observations_required) in error.value.detail
 
@@ -364,7 +388,9 @@ def test_editing_the_stored_registration_is_detected_at_execution(database: Data
         session.execute(update(hypotheses).values(document_json=json.dumps(document)))
 
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(SIP_SESSIONS)
+        )
     assert error.value.reason is RefusalReason.TAMPERED
 
 
@@ -436,13 +462,16 @@ def test_an_operator_override_registers_and_stays_labelled_underpowered(
 def test_an_override_carries_into_execution_rather_than_expiring(database: Database) -> None:
     """The operator accepted the shortfall, not one particular sample count."""
     with database.transaction() as session:
-        register(HypothesisRegistry(session), 
+        register(
+            HypothesisRegistry(session),
             make_draft(effect=sharpe_effect(expected=Decimal("0.3"))),
             now=NOW,
             override=PowerOverride(authorized_by="hutch", reason="accepted"),
         )
     with database.transaction() as session:
-        clearance = HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+        clearance = HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(SIP_SESSIONS)
+        )
     assert clearance.power.verdict is PowerVerdict.OVERRIDDEN
     assert clearance.power.stage == "EXECUTION"
 
@@ -476,7 +505,9 @@ def test_every_execution_check_is_recorded_not_only_the_registration(
     with database.transaction() as session:
         register(HypothesisRegistry(session), make_draft(), now=NOW)
     with database.transaction() as session:
-        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(SIP_SESSIONS)
+        )
 
     with database.transaction() as session:
         stages = [
@@ -498,7 +529,7 @@ def test_a_registration_records_the_dependence_assumptions_behind_its_power_numb
             dependence=DependenceAssumptions(
                 sampling=Sampling.OVERLAPPING, horizon_observations=21
             ),
-        )
+        ),
     )
     with database.transaction() as session:
         registration = register(HypothesisRegistry(session), overlapping, now=NOW)
@@ -529,7 +560,8 @@ def test_a_repeat_of_an_existing_idea_is_refused_unless_the_difference_is_writte
     assert "H-2026-001 v1" in error.value.detail
 
     with database.transaction() as session:
-        accepted = register(HypothesisRegistry(session), 
+        accepted = register(
+            HypothesisRegistry(session),
             repeat.model_copy(
                 update={"materially_different": "same signal, but on forward paper evidence"}
             ),
@@ -586,7 +618,8 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert partial.consumers == ("H-2026-001 v1",)
 
     with database.transaction() as session:
-        register(HypothesisRegistry(session), 
+        register(
+            HypothesisRegistry(session),
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a second family against the same window",
@@ -608,7 +641,8 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
 def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Database) -> None:
     """Consumption is per range, not per dataset. Otherwise one run retires a data source."""
     with database.transaction() as session:
-        register(HypothesisRegistry(session), 
+        register(
+            HypothesisRegistry(session),
             make_draft(
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2020-12-31"),),
                 search_cardinality=40,
@@ -724,3 +758,92 @@ def test_a_hypothesis_must_say_what_backs_it_before_it_can_be_frozen(
     assert frozen.draft.basis.status is EpistemicStatus.LITERATURE_SUPPORTED
     assert not frozen.draft.basis.gates_promotion
     assert not gates_promotion(frozen.draft.basis.status)
+
+
+def test_execution_refuses_without_a_verified_count_rather_than_trusting_the_declared_one(
+    database: Database,
+) -> None:
+    """The gate must fail closed on sample size, which is the input most worth overstating.
+
+    `verify_for_execution` used to default to `draft.available_observations` whenever the caller
+    omitted an override. So it re-checked the multiple-testing burden against durable state — the
+    hard part, done correctly — and then read sample size straight off the proposal. A registrant
+    who overstated it got a clean pass from a gate whose docstring said the registered numbers are
+    not trusted.
+    """
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+
+    assert error.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+    assert "planning number" in error.value.detail
+
+
+def test_an_overstated_declaration_cannot_clear_execution_on_a_smaller_verified_count(
+    database: Database,
+) -> None:
+    """The specific attack: declare a sample large enough to pass, then run on what exists.
+
+    Registration is allowed to be optimistic — it is a planning document. Execution is not, and
+    this is the assertion that the verified number, not the declared one, decides.
+    """
+    with database.transaction() as session:
+        registered = register(
+            HypothesisRegistry(session),
+            make_draft(
+                effect=sharpe_effect(expected=Decimal("1.0")),
+                available_observations=SIP_SESSIONS,
+            ),
+            now=NOW,
+        )
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(120)
+        )
+
+    assert error.value.reason is RefusalReason.UNDERPOWERED
+    assert registered.power.observations_required > 120
+
+
+def test_a_count_from_an_unregistered_dataset_is_refused(database: Database) -> None:
+    """Counting from somewhere else is not verification, it is a different experiment.
+
+    Without this, the mandatory-count requirement is satisfiable by measuring whatever dataset
+    happens to be largest, which restores the original defect through a longer path.
+    """
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(SIP_SESSIONS, dataset="crypto-1min")
+        )
+
+    assert error.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+    assert "crypto-1min" in error.value.detail
+
+
+def test_an_operator_override_still_does_not_excuse_measuring(database: Database) -> None:
+    """An override accepts a known shortfall; it is not permission to skip counting.
+
+    Worth pinning separately because the override path is the obvious place for the fallback to
+    creep back in — it already carries one exception forward, so a second looks natural there.
+    """
+    with database.transaction() as session:
+        register(
+            HypothesisRegistry(session),
+            make_draft(available_observations=200, effect=sharpe_effect(expected=Decimal("0.2"))),
+            now=NOW,
+            override=PowerOverride(
+                authorized_by="hutch",
+                reason="accepting a known shortfall to exercise the pipeline end to end",
+            ),
+        )
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+
+    assert error.value.reason is RefusalReason.UNVERIFIED_SAMPLE

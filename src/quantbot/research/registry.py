@@ -107,6 +107,7 @@ class RefusalReason(StrEnum):
     ALREADY_REGISTERED = "ALREADY_REGISTERED"
     NOT_REGISTERED = "NOT_REGISTERED"
     TAMPERED = "TAMPERED"
+    UNVERIFIED_SAMPLE = "UNVERIFIED_SAMPLE"
 
 
 #: A blocking power verdict, mapped to the refusal it becomes.
@@ -285,6 +286,44 @@ class ExecutionClearance:
     registration_hash: str
     registered_trials: int
     power: PowerAssessment
+    #: The verified count this clearance was granted against, for the manifest.
+    observed: ObservedSample
+
+
+class ObservedSample(FrozenModel):
+    """How many observations a dataset actually supplies, and how that was established.
+
+    `HypothesisDraft.available_observations` is what the registrant *claims*. This is what someone
+    counted, with enough provenance to audit the count later. The two are deliberately separate
+    types so that a declared figure cannot be passed where a verified one is required -- the
+    original defect was that `verify_for_execution` accepted the declared number as a default, so
+    the gate re-checked the multiple-testing burden against durable state and then read sample size
+    off the proposal.
+
+    The registry does not compute this. It takes a session and writes rows; giving it data-provider
+    dependencies would make the gate untestable offline and couple statistical policy to storage
+    layout. The count arrives from the caller that owns the immutable input snapshot.
+    """
+
+    #: Raw count in the estimand's sampling unit, before any dependence adjustment.
+    observations: int = Field(ge=0)
+    #: The dataset the count was taken from, matching the registered window's dataset.
+    dataset: Text
+    #: The window actually counted, which may be shorter than the window requested.
+    start_date: date
+    end_date: date
+    #: How it was counted, for the manifest. Free text on purpose: "XNYS sessions with SPY bars
+    #: present after point-in-time availability" is more useful than any enum.
+    method: Text
+    counted_at: datetime
+
+    @model_validator(mode="after")
+    def validate_sample(self) -> Self:
+        if self.end_date < self.start_date:
+            raise ValueError("end_date must not precede start_date")
+        if self.counted_at.tzinfo is None or self.counted_at.utcoffset() is None:
+            raise ValueError("counted_at must be timezone-aware")
+        return self
 
 
 class HypothesisRegistry:
@@ -443,7 +482,7 @@ class HypothesisRegistry:
         version: int,
         *,
         now: datetime,
-        available_observations: int | None = None,
+        observed: ObservedSample | None = None,
     ) -> ExecutionClearance:
         """Re-check a frozen registration against current state before a confirmatory run.
 
@@ -451,6 +490,12 @@ class HypothesisRegistry:
         hypothesis that was adequately powered when frozen can be underpowered by the time it
         runs. Refuses rather than downgrades. An override recorded at registration is carried
         forward, because the operator accepted the shortfall, not one particular number.
+
+        `observed` is mandatory. This previously defaulted to the registrant's declared
+        `available_observations`, which meant the gate failed *open* on the single input a
+        registrant most benefits from overstating -- a real mechanism wired to the wrong source,
+        reporting a clean pass. An operator override does not excuse it either: an override is a
+        judgement that a known shortfall is acceptable, not permission to skip measuring.
         """
         row = self._row(hypothesis_id, version)
         if row is None:
@@ -468,11 +513,21 @@ class HypothesisRegistry:
                 f" but was frozen as {stored_hash}",
             )
 
-        observations = (
-            registration.draft.available_observations
-            if available_observations is None
-            else available_observations
-        )
+        if observed is None:
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{hypothesis_id} v{version} cannot be cleared for execution without a verified"
+                " observation count; the declared figure is a planning number, not evidence",
+            )
+        declared_datasets = {window.dataset for window in registration.draft.windows}
+        if observed.dataset not in declared_datasets:
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{hypothesis_id} v{version} counted {observed.observations} observations from"
+                f" {observed.dataset!r}, which is not among its registered datasets"
+                f" {sorted(declared_datasets)}",
+            )
+        observations = observed.observations
         assessment = assess(
             hypothesis_id=hypothesis_id,
             version=version,
@@ -499,6 +554,7 @@ class HypothesisRegistry:
             registration_hash=stored_hash,
             registered_trials=registration.cumulative_trials,
             power=assessment,
+            observed=observed,
         )
 
     def novelty_report(self, draft: HypothesisDraft) -> NoveltyReport:
