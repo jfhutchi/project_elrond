@@ -174,8 +174,32 @@ from quantbot.research.sources import (
     gates_promotion,
     worth_testing,
 )
+from quantbot.research.workers import (
+    ResearchWorker,
+    UnsupportedSemantics,
+    WorkerCapability,
+    WorkerFailure,
+    WorkerInput,
+    WorkerResult,
+    WorkerSpec,
+    WorkerTrust,
+    empirical_luck_threshold,
+    import_result,
+    null_calibration_summary,
+)
 
 __all__ = [
+    "ResearchWorker",
+    "UnsupportedSemantics",
+    "WorkerCapability",
+    "WorkerFailure",
+    "WorkerInput",
+    "WorkerResult",
+    "WorkerSpec",
+    "WorkerTrust",
+    "empirical_luck_threshold",
+    "import_result",
+    "null_calibration_summary",
     "DISCOVERY_ROLES",
     "Candidate",
     "ContaminatedGenerator",

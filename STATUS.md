@@ -802,6 +802,35 @@ That is #13's own last acceptance criterion, and it means the discovery engine's
 currently bounded by #17 delivering a genuinely new asset class. Building the generator does not
 create capacity to test what it generates.
 
+## 6u. External workers: delegate research, not authority over evidence (#11)
+
+`quantbot.research.workers`. An external miner is a fast way to spend a dataset — RD-Agent or
+Qlib can evaluate thousands of candidates against a fixed window and hand back the best, and the
+best of a thousand skill-free candidates looks excellent. The contract is built around that.
+
+**A worker that will not disclose its search cardinality is `EXPLORATORY_ONLY`** — mechanically
+unable to produce confirmatory evidence, because its result cannot be deflated against a search
+it will not name. There is no configuration that changes this.
+
+**An undisclosed search is charged the whole budget it was given**, not zero. A worker that will
+not say what it spent must not be cheaper than one that will.
+
+**A worker is never handed `PROTECTED_EVALUATION` or `FORWARD_PAPER` data.** A miner over
+protected data spends it, whatever it reports afterwards.
+
+**Unsupported semantics raise.** A worker that cannot express the test a registration requires
+says so rather than running something adjacent and reporting it as the same thing — and a run
+with anything unsupported is exploratory however good its number is, because the number is not
+answering the registered question.
+
+### The most useful thing a miner can do here
+
+Not find a factor. `empirical_luck_threshold()` runs the same search procedure over shuffled or
+synthetic **null** data and takes a high quantile of what it finds. That is a bar the procedure
+earned rather than one assumed from `sqrt(2 ln N)`, and it is the only honest way to judge a
+search whose true cardinality nobody fully specified. `null_calibration_summary()` records the
+shape of what the search finds in noise.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
