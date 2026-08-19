@@ -4,6 +4,16 @@ Kept separate from `quantbot.domain` on purpose. This package holds evidence, no
 state, and nothing in it has authority over the broker, the risk engine, or the kill switch.
 """
 
+from quantbot.research.builder import (
+    GENERALITY_PROBE,
+    REQUIRED_PROBES,
+    CompilationRefused,
+    ExperimentOutcome,
+    ExperimentPlan,
+    OutcomeVerdict,
+    compile_experiment,
+    select_test,
+)
 from quantbot.research.critic import (
     JUDGMENT_DIMENSIONS,
     BetaReport,
@@ -100,6 +110,14 @@ from quantbot.research.reproducibility import (
 )
 
 __all__ = [
+    "GENERALITY_PROBE",
+    "REQUIRED_PROBES",
+    "CompilationRefused",
+    "ExperimentOutcome",
+    "ExperimentPlan",
+    "OutcomeVerdict",
+    "compile_experiment",
+    "select_test",
     "JUDGMENT_DIMENSIONS",
     "BetaReport",
     "CostLadder",

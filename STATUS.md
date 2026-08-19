@@ -552,6 +552,44 @@ objection, not the verdict a critic feels like writing.
 or capacity is never read as approval. The LLM critic is an interface here; #9 owns model
 runtime, and pretending to have assessed judgment would be worse than leaving it open.
 
+## 6o. The experiment builder: compiled, probed, and about this system (#8)
+
+`quantbot.research.builder`. Cycles 11-12 hand-wrote each hypothesis into a script, and that is
+where two of the three analysis errors entered. Three things close that seam.
+
+**The statistic comes from the declared dependence structure, never a default.** Compiling
+"compare the Sharpe of A and B" into an independent-samples test is a faithful compilation and a
+wrong experiment when A and B are the same asset — that measured z=1.01 where it looked like a
+clear win. A pair the mapping cannot resolve is **refused**, because defaulting is what produced
+the wrong test in the first place. Path-dependent quantities get a stationary bootstrap; cycle 12
+is why.
+
+| estimand + structure | test |
+|---|---|
+| Sharpe, paired | Jobson-Korkie-Memmel |
+| Sharpe / mean difference / spread, unpaired | Welch |
+| mean difference / spread, paired | paired t |
+| hit rate, single sample | binomial |
+| information coefficient, single sample | Spearman |
+| anything path-dependent | stationary bootstrap |
+| hit rate or IC, paired/unpaired | **refused** |
+
+**Adversarial probes are compiled in, not added after a good result.** `shifted-feature-probe`,
+`cost-ladder`, `regime-split`, `hidden-beta` always, plus `cross-asset-generality` when the
+universe has more than one instrument. An outcome that did not run them **cannot be constructed
+at all** — including a refutation, because a null from an unprobed run is not a null.
+
+**A confirmatory result must come from the production path.** Commit `f77ea08` is the case: a
+standalone study concluded a 2500bps exposure floor turned $100 into $252.43 against $126.80 —
+deterministic, reproducible, and not about Elrond, because it measured the halt against
+SPY-200-day returns while the engine runs the momentum rotation. Through the real engine the
+same change scored Sharpe 0.21 against 0.36. A `RESEARCH_SCRIPT` outcome can say what it found;
+it cannot be a `SURVIVED`, and `citable` is False.
+
+A survivor must also clear the bar frozen for its own trial count, have no failing probe, and
+report the statistic it cleared with. `FAILED` and `UNDERPOWERED` are recordable outcomes:
+a failure is not an absence, and #6 needs to tell them apart.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
