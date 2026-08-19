@@ -718,6 +718,56 @@ in `quantbot/research` and fails on any import of `brokers`, `execution`, `opera
 switch, and that holds because there is no import path — asserted, not assumed. #14 asserts the
 same boundary from the trading side.
 
+## 6z. Where v0.2 stands, and what to do next
+
+Branch `claude/roadmap-2-issue-5-185afc`. 766 tests; `ruff` and `mypy --strict` clean. Read this
+section first if you are resuming.
+
+### Shipped
+
+| issue | commit | what it enforces |
+|---|---|---|
+| #12 Sandbox | `25d6a64` | generated code cannot import `quantbot` or reach a broker |
+| storage fix | `14c1932` | a database can be migrated instead of rejected — prerequisite for all six revisions below |
+| #5 Registry | `8473085` | frozen predictions, contaminated-window refusal |
+| #19 Power gate | `d4a909e` | five estimands, variance inflation, cost floor, `UNDERPOWERED` |
+| #18 Reproducibility | `7570b5f` | statistical plan in the bundle, four invariants, secret refusal |
+| #6 Research memory | `9249f53` | `REFUTED.md` imported verbatim, novelty gate, window consumption |
+| #17 Data platform | `00bdeea` | point-in-time availability, survivorship, exposure vs listing |
+| #7 Critic | `144f0a3` | six mechanical checks, severity-max consensus |
+| #8 Experiment builder | `545e9f9` | test from dependence structure, mandatory probes, production path |
+| #14 Budget governor | `b26d5f3` | trials as a non-renewable budget, daemon isolation |
+| #9 Model runtime | `7161a08` | critic ≠ generator identity, provenance produced not reconstructed |
+| #4 Source scout | `a2c226a` | a summary can never be cited for its source |
+| #3 Research director | `98f60b7` | lifecycle, computed priority, no route to the broker |
+
+Schema is at V6 with revisions 0001–0006. Every revision declares its own tables.
+
+### Not built
+
+**#13 Discovery Engine, #11 External Workers, #15 Dashboard, #16 Promotion Ladder.**
+
+Nothing calls an LLM anywhere in this system. `ModelRuntime` is wired and unused; the critic is
+deterministic and names the five judgment dimensions it did not assess. No autonomous loop runs:
+each gate is callable, none is driven.
+
+### The next action
+
+#13 in the stated order. Note before starting it: a discovery engine against an **exhausted**
+holdout produces well-documented noise. `window_consumption("sip-us-equities-daily", ...)` will
+answer `EXHAUSTED` for 2016–2026 US equities once seeded, and #14 will refuse the trials. That
+is the system working, and it means #13's value depends on #17 delivering a genuinely new asset
+class first — which needs a provider integration that could not be exercised offline here.
+
+Worth raising with the operator rather than deciding unilaterally.
+
+### Defects found this session, all by guards rather than review
+
+Recorded in `REFUTED.md` beside the nine that came before: three Alembic revisions built from
+live metadata; a backfill `server_default` that diverged the schema; a permissive point-in-time
+test; the kill switch's accidental dependency on research code. None was caught by the code
+looking wrong.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
