@@ -4,6 +4,27 @@ Kept separate from `quantbot.domain` on purpose. This package holds evidence, no
 state, and nothing in it has authority over the broker, the risk engine, or the kill switch.
 """
 
+from quantbot.research.critic import (
+    JUDGMENT_DIMENSIONS,
+    BetaReport,
+    CostLadder,
+    Critic,
+    CriticVerdict,
+    Critique,
+    DeterministicCritic,
+    GeneralityReport,
+    Objection,
+    RegimeSplit,
+    Severity,
+    consensus,
+    cost_ladder,
+    cross_asset_generality,
+    deterministic_objections,
+    disagreements,
+    hidden_beta,
+    regime_split,
+    shifted_feature_probe,
+)
 from quantbot.research.manifest import (
     CodeProvenance,
     DatasetSnapshot,
@@ -79,6 +100,25 @@ from quantbot.research.reproducibility import (
 )
 
 __all__ = [
+    "JUDGMENT_DIMENSIONS",
+    "BetaReport",
+    "CostLadder",
+    "Critic",
+    "CriticVerdict",
+    "Critique",
+    "DeterministicCritic",
+    "GeneralityReport",
+    "Objection",
+    "RegimeSplit",
+    "Severity",
+    "consensus",
+    "cost_ladder",
+    "cross_asset_generality",
+    "deterministic_objections",
+    "disagreements",
+    "hidden_beta",
+    "regime_split",
+    "shifted_feature_probe",
     "DUPLICATE_OVERLAP",
     "EXHAUSTED_TRIALS",
     "NOT_TESTED",

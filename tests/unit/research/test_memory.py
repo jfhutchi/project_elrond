@@ -16,6 +16,8 @@ import pytest
 
 from quantbot.research import (
     ComparisonStructure,
+    CriticVerdict,
+    Critique,
     DataRole,
     DataWindow,
     EconomicProfile,
@@ -24,6 +26,7 @@ from quantbot.research import (
     HypothesisDraft,
     HypothesisRegistry,
     PowerOverride,
+    Registration,
     RegistrationRefused,
 )
 from quantbot.research.memory import (
@@ -46,6 +49,28 @@ def database(tmp_path: Path) -> Iterator[Database]:
     db = Database(tmp_path / "memory.db")
     yield db
     db.close()
+
+
+def cleared(hypothesis_id: str = "H-2026-001", version: int = 1) -> Critique:
+    """A critique raising no objection, so tests of other gates are not about this one."""
+    return Critique(
+        hypothesis_id=hypothesis_id,
+        hypothesis_version=version,
+        critic="deterministic",
+        verdict=CriticVerdict.PROCEED,
+        reasons=("no mechanical check produced an objection",),
+        produced_at=NOW,
+    )
+
+
+def register(
+    registry: HypothesisRegistry, candidate: HypothesisDraft, **kwargs: object
+) -> Registration:
+    """Register with a clean critique unless the test is about the critic gate itself."""
+    kwargs.setdefault("now", NOW)
+    kwargs.setdefault("critique", cleared(candidate.hypothesis_id, candidate.version))
+    return registry.register(candidate, **kwargs)  # type: ignore[arg-type]
+
 
 
 def draft(**overrides: object) -> HypothesisDraft:
@@ -124,7 +149,7 @@ def test_an_underpowered_hypothesis_cannot_be_filed_as_refuted(database: Databas
         )
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(underpowered, now=NOW)
+        register(HypothesisRegistry(session), underpowered, now=NOW)
     assessment = error.value.assessment
     assert assessment is not None
 
@@ -146,7 +171,7 @@ def test_an_underpowered_hypothesis_cannot_be_filed_as_refuted(database: Databas
 def test_a_tested_hypothesis_can_still_be_refuted(database: Database) -> None:
     """The guard must not block the ordinary case, or it will be routed around."""
     with database.transaction() as session:
-        HypothesisRegistry(session).register(draft(), now=NOW)
+        register(HypothesisRegistry(session), draft(), now=NOW)
     with database.transaction() as session:
         assert ResearchMemory(session).record(
             finding(hypothesis_id="H-2026-001", hypothesis_version=1)
@@ -170,7 +195,7 @@ def test_an_overridden_hypothesis_still_cannot_be_refuted(database: Database) ->
         )
     )
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
+        register(HypothesisRegistry(session), 
             underpowered,
             now=NOW,
             override=PowerOverride(authorized_by="hutch", reason="accepted"),

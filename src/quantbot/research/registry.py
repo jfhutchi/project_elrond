@@ -21,6 +21,9 @@ Four things are refused here rather than left to judgement, because software can
    universe and features, unless the registrant writes down what is materially different.
    Momentum has now returned null on three structurally independent universes because each new
    one had a plausible excuse; without a written record, universe four gets proposed next week.
+3c. **A question the critic blocked.** `CRITIQUE_BLOCKS`: a registration cannot be frozen
+   without a critic verdict on that exact version, and a `REVISE` or `REJECT` stops it. The
+   critique is frozen *inside* the registration, so a critic cannot rewrite one afterwards.
 4. **A declared rather than counted multiple-testing burden.** The trial count is computed from
    durable state -- everything this project has ever spent, seeded at what cycles 1-17 used --
    not taken from the registrant. Deflating against one cycle's trials instead of the project's
@@ -49,6 +52,7 @@ from sqlalchemy import func, select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
+from quantbot.research.critic import Critique
 from quantbot.research.manifest import canonical_result_json
 from quantbot.research.power import (
     EffectSpecification,
@@ -102,6 +106,8 @@ class EpistemicStatus(StrEnum):
 class RefusalReason(StrEnum):
     CONTAMINATED_WINDOW = "CONTAMINATED_WINDOW"
     DUPLICATE = "DUPLICATE"
+    CRITIQUE_BLOCKS = "CRITIQUE_BLOCKS"
+    CRITIQUE_MISMATCHED = "CRITIQUE_MISMATCHED"
     UNDERPOWERED = "UNDERPOWERED"
     UNECONOMIC = "UNECONOMIC"
     ALREADY_REGISTERED = "ALREADY_REGISTERED"
@@ -226,6 +232,9 @@ class Registration(FrozenModel):
     #: Prior spend plus this one's search cardinality. Counted, not declared.
     cumulative_trials: int
     power: PowerAssessment
+    #: The critique that let this through, frozen with it. Immutable for the same reason the
+    #: prediction is: a review that can be revised after the result is not a review.
+    critique: Critique
 
     @property
     def content_hash(self) -> str:
@@ -293,6 +302,7 @@ class HypothesisRegistry:
         draft: HypothesisDraft,
         *,
         now: datetime,
+        critique: Critique,
         override: PowerOverride | None = None,
     ) -> Registration:
         """Freeze a hypothesis, or refuse it. Refusal is the useful half.
@@ -301,7 +311,27 @@ class HypothesisRegistry:
         assessment record and leaves the verdict at `OVERRIDDEN`, so the evidence stays
         labelled wherever it is displayed. It cannot rescue an `UNECONOMIC` verdict: an effect
         that cannot pay its own costs is not a measurement problem.
+
+        `critique` is required. A hypothesis reaching protected data without an adversarial
+        review is the situation #7 exists to prevent, and making the argument optional would
+        make it the first thing skipped under time pressure.
         """
+        if (critique.hypothesis_id, critique.hypothesis_version) != (
+            draft.hypothesis_id,
+            draft.version,
+        ):
+            raise RegistrationRefused(
+                RefusalReason.CRITIQUE_MISMATCHED,
+                f"the critique reviews {critique.hypothesis_id} "
+                f"v{critique.hypothesis_version}, not {draft.hypothesis_id} v{draft.version}",
+            )
+        if critique.blocking:
+            raise RegistrationRefused(
+                RefusalReason.CRITIQUE_BLOCKS,
+                f"{critique.critic} returned {critique.verdict.value}: "
+                + "; ".join(objection.finding for objection in critique.objections),
+            )
+
         existing = self.get(draft.hypothesis_id, draft.version)
         if existing is not None:
             raise RegistrationRefused(
@@ -349,6 +379,7 @@ class HypothesisRegistry:
             registered_at=now,
             cumulative_trials=trials,
             power=assessment,
+            critique=critique,
         )
         self._insert(registration)
         self.record_assessment(assessment)
@@ -635,6 +666,9 @@ def summarize(registration: Registration) -> dict[str, object]:
         "luck_threshold_z": str(power.luck_threshold_z),
         "estimand": power.estimand.value,
         "power_verdict": power.verdict.value,
+        "critic": registration.critique.critic,
+        "critic_verdict": registration.critique.verdict.value,
+        "unassessed_by_critic": list(registration.critique.unassessed),
         "overridden_by": None if power.override is None else power.override.authorized_by,
         "expected_effect": str(power.expected_effect),
         "minimum_detectable_effect": str(power.minimum_detectable_effect),

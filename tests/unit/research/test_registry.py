@@ -19,6 +19,8 @@ from sqlalchemy import select, update
 from quantbot.research import (
     PRIOR_TRIALS,
     ComparisonStructure,
+    CriticVerdict,
+    Critique,
     DataRole,
     DataWindow,
     DependenceAssumptions,
@@ -27,11 +29,14 @@ from quantbot.research import (
     Estimand,
     HypothesisDraft,
     HypothesisRegistry,
+    Objection,
     PowerOverride,
     PowerVerdict,
     RefusalReason,
+    Registration,
     RegistrationRefused,
     Sampling,
+    Severity,
     summarize,
     unresolved_questions,
 )
@@ -49,6 +54,28 @@ def database(tmp_path: Path) -> Iterator[Database]:
     db = Database(tmp_path / "research.db")
     yield db
     db.close()
+
+
+def cleared(hypothesis_id: str = "H-2026-001", version: int = 1) -> Critique:
+    """A critique raising no objection, so tests of other gates are not about this one."""
+    return Critique(
+        hypothesis_id=hypothesis_id,
+        hypothesis_version=version,
+        critic="deterministic",
+        verdict=CriticVerdict.PROCEED,
+        reasons=("no mechanical check produced an objection",),
+        produced_at=NOW,
+    )
+
+
+def register(
+    registry: HypothesisRegistry, candidate: HypothesisDraft, **kwargs: object
+) -> Registration:
+    """Register with a clean critique unless the test is about the critic gate itself."""
+    kwargs.setdefault("now", NOW)
+    kwargs.setdefault("critique", cleared(candidate.hypothesis_id, candidate.version))
+    return registry.register(candidate, **kwargs)  # type: ignore[arg-type]
+
 
 
 def window(
@@ -111,7 +138,7 @@ def make_draft(**overrides: object) -> HypothesisDraft:
 
 def test_registration_freezes_the_prediction_under_a_content_hash(database: Database) -> None:
     with database.transaction() as session:
-        registration = HypothesisRegistry(session).register(make_draft(), now=NOW)
+        registration = register(HypothesisRegistry(session), make_draft(), now=NOW)
     frozen = registration.content_hash
 
     with database.transaction() as session:
@@ -123,11 +150,11 @@ def test_registration_freezes_the_prediction_under_a_content_hash(database: Data
 
 def test_a_material_change_cannot_overwrite_a_registration(database: Database) -> None:
     with database.transaction() as session:
-        HypothesisRegistry(session).register(make_draft(), now=NOW)
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
 
     restated = make_draft(prediction="An interior optimum exists.")
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(restated, now=NOW)
+        register(HypothesisRegistry(session), restated, now=NOW)
     assert error.value.reason is RefusalReason.ALREADY_REGISTERED
 
     with database.transaction() as session:
@@ -140,7 +167,7 @@ def test_a_protected_window_another_registration_consumed_is_refused(
     database: Database,
 ) -> None:
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
+        register(HypothesisRegistry(session), 
             make_draft(
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2024-12-31"),),
             ),
@@ -154,7 +181,7 @@ def test_a_protected_window_another_registration_consumed_is_refused(
         windows=(window(DataRole.PROTECTED_EVALUATION, "2020-01-02", "2026-08-18"),),
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(later, now=NOW)
+        register(HypothesisRegistry(session), later, now=NOW)
 
     assert error.value.reason is RefusalReason.CONTAMINATED_WINDOW
     assert "H-2026-001" in error.value.detail
@@ -171,7 +198,7 @@ def test_a_protected_window_overlapping_its_own_discovery_range_is_refused(
         )
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(leaky, now=NOW)
+        register(HypothesisRegistry(session), leaky, now=NOW)
 
     assert error.value.reason is RefusalReason.CONTAMINATED_WINDOW
     assert "its own DISCOVERY window" in error.value.detail
@@ -182,12 +209,12 @@ def test_a_disjoint_protected_window_on_a_consumed_dataset_still_registers(
 ) -> None:
     """The block is overlap, not the dataset. Otherwise one registration retires the data."""
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
+        register(HypothesisRegistry(session), 
             make_draft(windows=(window(DataRole.VALIDATION, "2016-01-04", "2021-12-31"),)),
             now=NOW,
         )
     with database.transaction() as session:
-        registration = HypothesisRegistry(session).register(
+        registration = register(HypothesisRegistry(session), 
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -209,8 +236,8 @@ def test_forward_paper_windows_may_overlap_because_the_account_runs_once(
     forward = (window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19", dataset="paper"),)
     with database.transaction() as session:
         registry = HypothesisRegistry(session)
-        registry.register(make_draft(windows=forward), now=NOW)
-        second = registry.register(
+        register(registry, make_draft(windows=forward), now=NOW)
+        second = register(registry, 
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -230,7 +257,7 @@ def test_an_effect_too_small_for_the_available_data_is_refused_as_underpowered(
     pass proves the arithmetic ran rather than that some other check stayed quiet.
     """
     with database.transaction() as session:
-        strong = HypothesisRegistry(session).register(
+        strong = register(HypothesisRegistry(session), 
             make_draft(effect=sharpe_effect(expected=Decimal("1.0"))), now=NOW
         )
     assert strong.power.observations_required <= SIP_SESSIONS
@@ -251,7 +278,7 @@ def test_an_effect_too_small_for_the_available_data_is_refused_as_underpowered(
         ),
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(weak, now=NOW)
+        register(HypothesisRegistry(session), weak, now=NOW)
 
     assert error.value.reason is RefusalReason.UNDERPOWERED
     assert "2669 are available" in error.value.detail
@@ -259,11 +286,11 @@ def test_an_effect_too_small_for_the_available_data_is_refused_as_underpowered(
 
 def test_the_trial_count_is_the_project_history_not_this_cycle(database: Database) -> None:
     with database.transaction() as session:
-        first = HypothesisRegistry(session).register(make_draft(search_cardinality=12), now=NOW)
+        first = register(HypothesisRegistry(session), make_draft(search_cardinality=12), now=NOW)
     assert first.cumulative_trials == PRIOR_TRIALS + 12
 
     with database.transaction() as session:
-        second = HypothesisRegistry(session).register(
+        second = register(HypothesisRegistry(session), 
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -285,7 +312,7 @@ def test_execution_recomputes_power_against_trials_accumulated_since_registratio
         effect=sharpe_effect(expected=Decimal("1.0")), available_observations=2200
     )
     with database.transaction() as session:
-        registered = HypothesisRegistry(session).register(registrable, now=NOW)
+        registered = register(HypothesisRegistry(session), registrable, now=NOW)
     assert registered.power.observations_required <= 2200
 
     with database.transaction() as session:
@@ -295,7 +322,7 @@ def test_execution_recomputes_power_against_trials_accumulated_since_registratio
 
     # A later, unrelated search raises the luck bar for everything that follows it.
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
+        register(HypothesisRegistry(session), 
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
@@ -320,7 +347,7 @@ def test_execution_refuses_a_hypothesis_that_was_never_registered(database: Data
 
 def test_editing_the_stored_registration_is_detected_at_execution(database: Database) -> None:
     with database.transaction() as session:
-        HypothesisRegistry(session).register(make_draft(), now=NOW)
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
 
     with database.transaction() as session:
         stored = session.execute(select(hypotheses.c.document_json)).scalar_one()
@@ -356,7 +383,7 @@ def test_an_underpowered_refusal_survives_as_research_memory(database: Database)
     """
     weak = make_draft(effect=sharpe_effect(expected=Decimal("0.3")))
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(weak, now=NOW)
+        register(HypothesisRegistry(session), weak, now=NOW)
     refusal = error.value.assessment
     assert refusal is not None
     assert refusal.verdict is PowerVerdict.UNDERPOWERED
@@ -381,7 +408,7 @@ def test_an_operator_override_registers_and_stays_labelled_underpowered(
     override = PowerOverride(authorized_by="hutch", reason="precursor to a forward-paper test")
 
     with database.transaction() as session:
-        registration = HypothesisRegistry(session).register(weak, now=NOW, override=override)
+        registration = register(HypothesisRegistry(session), weak, now=NOW, override=override)
     assert registration.power.verdict is PowerVerdict.OVERRIDDEN
 
     with database.transaction() as session:
@@ -401,7 +428,7 @@ def test_an_operator_override_registers_and_stays_labelled_underpowered(
 def test_an_override_carries_into_execution_rather_than_expiring(database: Database) -> None:
     """The operator accepted the shortfall, not one particular sample count."""
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
+        register(HypothesisRegistry(session), 
             make_draft(effect=sharpe_effect(expected=Decimal("0.3"))),
             now=NOW,
             override=PowerOverride(authorized_by="hutch", reason="accepted"),
@@ -427,7 +454,7 @@ def test_an_edge_that_cannot_pay_its_costs_is_refused_as_uneconomic(database: Da
         ),
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(churn, now=NOW)
+        register(HypothesisRegistry(session), churn, now=NOW)
 
     assert error.value.reason is RefusalReason.UNECONOMIC
     assert error.value.assessment is not None
@@ -439,7 +466,7 @@ def test_every_execution_check_is_recorded_not_only_the_registration(
     database: Database,
 ) -> None:
     with database.transaction() as session:
-        HypothesisRegistry(session).register(make_draft(), now=NOW)
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
     with database.transaction() as session:
         HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
 
@@ -466,7 +493,7 @@ def test_a_registration_records_the_dependence_assumptions_behind_its_power_numb
         )
     )
     with database.transaction() as session:
-        registration = HypothesisRegistry(session).register(overlapping, now=NOW)
+        registration = register(HypothesisRegistry(session), overlapping, now=NOW)
 
     assert registration.power.variance_inflation == Decimal("21")
     assert registration.power.dependence.horizon_observations == 21
@@ -482,19 +509,19 @@ def test_a_repeat_of_an_existing_idea_is_refused_unless_the_difference_is_writte
     impossible to fill in honestly when it is not.
     """
     with database.transaction() as session:
-        HypothesisRegistry(session).register(make_draft(), now=NOW)
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
 
     repeat = make_draft(
         hypothesis_id="H-2026-002",
         windows=(window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19", dataset="paper"),),
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(repeat, now=NOW)
+        register(HypothesisRegistry(session), repeat, now=NOW)
     assert error.value.reason is RefusalReason.DUPLICATE
     assert "H-2026-001 v1" in error.value.detail
 
     with database.transaction() as session:
-        accepted = HypothesisRegistry(session).register(
+        accepted = register(HypothesisRegistry(session), 
             repeat.model_copy(
                 update={"materially_different": "same signal, but on forward paper evidence"}
             ),
@@ -506,7 +533,7 @@ def test_a_repeat_of_an_existing_idea_is_refused_unless_the_difference_is_writte
 def test_a_genuinely_different_universe_is_not_treated_as_a_repeat(database: Database) -> None:
     """The gate is overlap, not similarity of wording. A new universe is a new question."""
     with database.transaction() as session:
-        HypothesisRegistry(session).register(make_draft(), now=NOW)
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
 
     elsewhere = make_draft(
         hypothesis_id="H-2026-002",
@@ -524,7 +551,7 @@ def test_a_genuinely_different_universe_is_not_treated_as_a_repeat(database: Dat
     with database.transaction() as session:
         registry = HypothesisRegistry(session)
         report = registry.novelty_report(elsewhere)
-        registry.register(elsewhere, now=NOW)
+        register(registry, elsewhere, now=NOW)
     assert report.novel
     assert report.highest_overlap == 0.0
 
@@ -541,7 +568,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert virgin.usable
 
     with database.transaction() as session:
-        HypothesisRegistry(session).register(make_draft(search_cardinality=5), now=NOW)
+        register(HypothesisRegistry(session), make_draft(search_cardinality=5), now=NOW)
     with database.transaction() as session:
         partial = HypothesisRegistry(session).window_consumption(
             "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
@@ -551,7 +578,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert partial.consumers == ("H-2026-001 v1",)
 
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
+        register(HypothesisRegistry(session), 
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a second family against the same window",
@@ -573,7 +600,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
 def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Database) -> None:
     """Consumption is per range, not per dataset. Otherwise one run retires a data source."""
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
+        register(HypothesisRegistry(session), 
             make_draft(
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2020-12-31"),),
                 search_cardinality=40,
@@ -590,3 +617,67 @@ def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Databa
         )
     assert old.status == "EXHAUSTED"
     assert later.status == "UNTOUCHED"
+
+
+def test_a_hypothesis_cannot_be_frozen_without_a_critic_verdict(database: Database) -> None:
+    """A hypothesis reaching protected data unreviewed is what #7 exists to prevent."""
+    blocking = Critique(
+        hypothesis_id="H-2026-001",
+        hypothesis_version=1,
+        critic="deterministic",
+        verdict=CriticVerdict.REVISE,
+        reasons=("hidden-beta: alpha is t=0.05 against a 2.90 bar",),
+        objections=(
+            Objection(
+                check="hidden-beta",
+                severity=Severity.BLOCKING,
+                finding="alpha is indistinguishable from zero at beta 0.71",
+                evidence={"alpha_t": "0.05", "beta": "0.71"},
+            ),
+        ),
+        produced_at=NOW,
+    )
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).register(make_draft(), now=NOW, critique=blocking)
+    assert error.value.reason is RefusalReason.CRITIQUE_BLOCKS
+    assert "alpha is indistinguishable from zero" in error.value.detail
+
+    with database.transaction() as session:
+        assert HypothesisRegistry(session).get("H-2026-001", 1) is None
+
+
+def test_a_critique_of_a_different_hypothesis_cannot_be_borrowed(database: Database) -> None:
+    """A clean review of something else is not a review of this."""
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).register(
+            make_draft(), now=NOW, critique=cleared("H-SOMETHING-ELSE", 1)
+        )
+    assert error.value.reason is RefusalReason.CRITIQUE_MISMATCHED
+
+    # And a review of the right hypothesis at the wrong version is equally not a review.
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).register(
+            make_draft(), now=NOW, critique=cleared("H-2026-001", 2)
+        )
+    assert error.value.reason is RefusalReason.CRITIQUE_MISMATCHED
+
+
+def test_the_critique_is_frozen_inside_the_registration(database: Database) -> None:
+    """The critic cannot rewrite a frozen registration, because the review is part of it."""
+    review = cleared()
+    with database.transaction() as session:
+        frozen = register(HypothesisRegistry(session), make_draft(), critique=review)
+
+    with database.transaction() as session:
+        stored = HypothesisRegistry(session).get("H-2026-001", 1)
+    assert stored is not None
+    assert stored.critique == review
+    assert stored.content_hash == frozen.content_hash
+
+    # Changing the critique changes the hash, so a later rewrite is a different registration.
+    revised = frozen.model_copy(
+        update={"critique": review.model_copy(update={"critic": "someone-else"})}
+    )
+    assert revised.content_hash != frozen.content_hash
+    assert summarize(stored)["critic_verdict"] == "PROCEED"
+    assert summarize(stored)["unassessed_by_critic"] == []

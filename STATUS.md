@@ -515,6 +515,43 @@ availability timestamp a bundle can only assert it avoided look-ahead, never sho
 The one change both #17 reviews asked for — the data layer exposing which windows have already
 been used for confirmatory testing — landed in #6 as `window_consumption`.
 
+## 6n. The critic: mechanical first, judgment second (#7)
+
+`quantbot.research.critic`. A registration can no longer be frozen without a critic verdict on
+that exact version, and the critique is frozen *inside* the registration — so a critic cannot
+rewrite a review after the result arrives, for the same reason the prediction cannot be
+restated.
+
+The design brief is this project's own error rate: three analysis errors in two cycles, every
+one flattering the result, and **none caught by the code looking wrong**. Errors of that shape
+are invisible to a reviewer reading code and equally invisible to an LLM asked "is there
+look-ahead here?". So everything mechanically decidable is decided mechanically.
+
+| check | the recorded failure it catches |
+|---|---|
+| `hidden_beta` | cycle 15: rotation is beta 0.71 with alpha t=0.05; 0.71x SPY reproduces it with no trading |
+| `cost_ladder` | refuted #8: +427.9% gross, **−28.8% net at 5bps** |
+| `regime_split` | cycle 11: vol targeting won three eras of four and lost the most recent |
+| `cross_asset_generality` | the same: 6 of 12 assets is a coin flip |
+| `shifted_feature_probe` | shift every feature a bar; an unchanged result read the future |
+| survivorship | cycle 10 needed 241 delisted names to stay interpretable |
+
+Every fixture uses the real recorded numbers. The cost ladder reproduces −28.8% at 5bps from
+9,134 legs, which is the leg count those two published figures imply rather than a round number
+chosen to make the arithmetic land.
+
+**Consensus cannot be configured into evidence.** `consensus()` returns the *most severe*
+verdict, never the majority. Three PROCEEDs against one REJECT is REJECT, structurally.
+
+**Confidence is advisory; reasons are mandatory.** A `Critique` without reasons cannot be
+constructed, and a blocking objection cannot be returned as `PROCEED` — the gate is the
+objection, not the verdict a critic feels like writing.
+
+**A check that never ran is not a check that passed.** `DeterministicCritic` records
+`unassessed` — the five judgment dimensions it did not assess — so silence on economic mechanism
+or capacity is never read as approval. The LLM critic is an interface here; #9 owns model
+runtime, and pretending to have assessed judgment would be worse than leaving it open.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
