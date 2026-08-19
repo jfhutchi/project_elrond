@@ -30,6 +30,15 @@ from quantbot.market_data.crypto import (
     CRYPTO_ADJUSTMENT,
     AlpacaCryptoDataClient,
 )
+from quantbot.market_data.fred import (
+    KNOWN_SERIES,
+    FredError,
+    FredProvider,
+    FredTransport,
+    MacroSeries,
+    RevisionUnavailable,
+    period_end,
+)
 from quantbot.market_data.instruments import (
     AssetClass,
     CorporateAction,
@@ -76,6 +85,13 @@ from quantbot.market_data.validation import (
 )
 
 __all__ = [
+    "KNOWN_SERIES",
+    "FredError",
+    "FredProvider",
+    "FredTransport",
+    "MacroSeries",
+    "RevisionUnavailable",
+    "period_end",
     "AssetClass",
     "Availability",
     "Capability",

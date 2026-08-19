@@ -921,6 +921,41 @@ reconciliations, exhausted budgets, blocked and stuck tasks, and survivors. Rout
 of uninteresting activity by design and including it is how the signal gets lost. A quiet system
 returns no alerts at all.
 
+## 6x. The gates compose, and there is a source of new statistical capacity (#13/#17)
+
+Two things I had wrongly written off as blocked.
+
+### The pipeline is tested end to end
+
+`tests/integration/test_research_pipeline.py` runs one candidate through every gate in order —
+admission → budget → critic → registration → compile → outcome → memory → promotion — against
+one database. Each gate had unit tests proving it refuses; none proved they *compose*. A system
+of individually correct parts that do not fit together refuses everything, which looks exactly
+like a system that works.
+
+Both directions are asserted: a candidate on untouched data reaches `RESEARCH_SURVIVOR`, and the
+same candidate on the window cycles 2-10 spent is stopped as `CONTAMINATED_WINDOW`. The second
+test **seeds** that history, so `EXHAUSTED` is now a measured state rather than a claim I kept
+making.
+
+### FRED, and a look-ahead bug it caught in my own code
+
+`quantbot.market_data.fred`. Free, no credentials, decades of history where equities gave ten
+years — and it is the source that makes the #17 vintage machinery earn its keep, because macro
+series are **revised after publication**.
+
+| rule | why |
+|---|---|
+| a confirmatory run on a revised series must use **ALFRED** | `fredgraph.csv` serves today's revised values, which is what a naive study uses by mistake |
+| a real-time pull carrying values published after the `as_of` **raises** | if the endpoint ignored the parameters the data is not point-in-time, and a backtest fed revised macro data simply looks prescient |
+| an undeclared series is refused | a publication lag guessed at the call site is a look-ahead bug waiting to happen |
+
+**The bug the tests caught.** FRED stamps a monthly series with its period *start*: March
+payrolls are `2026-03-01`. My first version added the publication lag to that stamp, making
+March data available on **6 March** — five days before the month it describes had finished. The
+lag runs from period *end*; March payrolls publish 5 April. Pinned by
+`test_the_publication_lag_runs_from_the_period_end_not_the_period_start`.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

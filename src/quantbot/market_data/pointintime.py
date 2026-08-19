@@ -211,7 +211,14 @@ class ResearchDataProvider(Protocol):
         """What this provider actually serves. Anything absent raises rather than returns []."""
         ...
 
-    def vintage(self, dataset: str) -> Vintage: ...
+    def vintage(self, dataset: str, *, retrieved_at: datetime) -> Vintage:
+        """The clock is passed in, not read.
+
+        A vintage is defined by when it was pulled, and every other component here takes `now`
+        as an argument rather than calling `datetime.now()`. A provider that read the clock
+        itself would make its own output untestable and non-reproducible.
+        """
+        ...
 
     def instruments(self, *, as_of: datetime) -> tuple[Instrument, ...]:
         """Point-in-time membership, including instruments delisted before `as_of`."""

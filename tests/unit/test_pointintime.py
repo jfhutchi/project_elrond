@@ -306,8 +306,13 @@ def test_an_unsupported_capability_raises_instead_of_returning_nothing() -> None
         def capabilities(self) -> frozenset[Capability]:
             return frozenset({Capability.BARS})
 
-        def vintage(self, dataset: str) -> Vintage:
-            return vintage(dataset=dataset)
+        def vintage(self, dataset: str, *, retrieved_at: datetime) -> Vintage:
+            return Vintage(
+                provider=self.name,
+                dataset=dataset,
+                vintage=retrieved_at.date().isoformat(),
+                retrieved_at=retrieved_at,
+            )
 
         def instruments(self, *, as_of: datetime) -> tuple[Instrument, ...]:
             return (equity("SPY"),)

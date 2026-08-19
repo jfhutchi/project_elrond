@@ -179,6 +179,14 @@ This file is now also loaded into structured research memory (#6) by
 file, not a replacement for it: every statement is carried as written, and the import is
 idempotent. Edit here; the records follow.
 
+A twelfth, found the same way as the tenth -- by a test rather than by review. The first
+version of the FRED provider (#17) added each series' publication lag to its *stamped* date, but
+FRED stamps a monthly series with its period **start**. March payrolls therefore appeared
+available on 6 March, five days before March had ended. Ordinary look-ahead, invisible in any
+result it would have produced: it would simply have made the strategy look prescient. The lag now
+runs from period end, and the case is pinned. No result was affected -- the provider had never
+been run.
+
 The harness-not-connected defect below is now mechanically guarded.
 `switches_for_config()` maps a configuration's components onto the engine's switches, and
 `test_changing_the_config_changes_the_result` fails if a harness produces identical output for
