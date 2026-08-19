@@ -131,6 +131,21 @@ from quantbot.research.power import (
     minimum_detectable_effect,
     observations_required,
 )
+from quantbot.research.promotion import (
+    ALLOWED_PROMOTIONS,
+    MINIMUM_FORWARD_DAYS,
+    MINIMUM_FORWARD_TRADES,
+    ForwardObservation,
+    PromotionRefused,
+    PromotionState,
+    Stage,
+    count_forward_days,
+    demote,
+    forward_progress,
+    material_change,
+    promote,
+    survivor_objections,
+)
 from quantbot.research.registry import (
     DUPLICATE_OVERLAP,
     EXECUTION,
@@ -189,6 +204,19 @@ from quantbot.research.workers import (
 )
 
 __all__ = [
+    "ALLOWED_PROMOTIONS",
+    "MINIMUM_FORWARD_DAYS",
+    "MINIMUM_FORWARD_TRADES",
+    "ForwardObservation",
+    "PromotionRefused",
+    "PromotionState",
+    "Stage",
+    "count_forward_days",
+    "demote",
+    "forward_progress",
+    "material_change",
+    "promote",
+    "survivor_objections",
     "ResearchWorker",
     "UnsupportedSemantics",
     "WorkerCapability",

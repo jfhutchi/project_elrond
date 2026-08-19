@@ -831,6 +831,40 @@ earned rather than one assumed from `sqrt(2 ln N)`, and it is the only honest wa
 search whose true cardinality nobody fully specified. `null_calibration_summary()` records the
 shape of what the search finds in noise.
 
+## 6v. Promotion ladder: earning trust, with the last step reserved (#16)
+
+`quantbot.research.promotion`. Seven stages, and **there is no `LIVE` stage in the enum**.
+`LIVE_REVIEW_ELIGIBLE` is terminal, its transition set is empty, and no sequence of moves
+reaches live trading — implemented by the absence of a destination rather than by a permission
+check that could be misconfigured. Only the operator, outside this system, decides what happens
+next.
+
+**`RESEARCH_SURVIVOR` had to be strengthened**, and this is the change the review asked for.
+Passing a pre-registered test is not enough: cycle 11 produced two candidates that did exactly
+that and were both wrong, because the flaw was in the *statistic*, not the protocol.
+
+| candidate | looked like | died on |
+|---|---|---|
+| vol targeting as alpha | Sharpe 0.92→1.09, all 12 parameter sets, break-even 113x spread | Jobson-Korkie z=1.01; 6 of 12 assets |
+| overnight effect | IWM t=3.47, GLD t=3.82 | paired t: SPY 2.74→0.63; 1 of 18 assets |
+
+`survivor_objections()` therefore requires the #7 probes to have run and passed, the production
+evaluation path, the frozen luck bar to be cleared, **and the test to be valid for the
+dependence structure of its data**.
+
+**Paper qualification counts authentic forward evidence and nothing else.** A
+`ForwardObservation` whose role is not `FORWARD_PAPER` cannot be constructed — a backtest, a
+literature claim, an exploratory worker result and an underpowered outcome all increment the
+counter by zero. The account holds **1 forward day against a 30-day, 30-trade window**, and
+`forward_progress()` reports that distance honestly.
+
+**A material change restarts the window by exclusion, not by resetting a counter.** Observations
+of version 1.3.0 are not observations of 1.4.0, so `count_forward_days` filters them out and the
+stage drops to `RESEARCH_SURVIVOR`.
+
+Demotion is deliberately not gated. A system slow to stop trusting something is worse than one
+occasionally too quick.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
