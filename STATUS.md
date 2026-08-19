@@ -317,10 +317,16 @@ belongs in the per-session `evaluate_symbol` path, where it already exists.
 
 Full spec: `docs/per-session-trend-spec.md`.
 
-**CAUTION, added after the fact, now partly addressed:** `run_research_backtest.py` ran only
-FIXED benchmark variants, so it ignored a config's component selection entirely and three config
-changes produced identical output. **The 43%-vs-77% exposure diagnosis came from that runner and
-is therefore still unattributed** — it has not been re-measured.
+**RESOLVED 2026-08-19.** `run_research_backtest.py` ran only FIXED benchmark variants, so it
+ignored a config's component selection and three config changes produced identical output. The
+harness is fixed (`4644c3a`) and **the diagnosis has been re-measured attributably on the same
+SIP window: 41.95% exposure against SPY_SMA200's 77.37%.** The finding holds; the "unattributed"
+caveat is lifted.
+
+The re-measurement reproduces every published benchmark figure exactly — SPY 15.37% CAGR /
+Sharpe 0.90 / 33.79% DD, SPY_SMA200 10.34% / 0.91 / 19.50% / 77.37%, full strategy 0.50% / 0.15 —
+which is why the one row it could not previously produce is trustworthy. See
+`reports/research/attributed-harness-2026-08-19.md` (classification `EXPLORATORY`).
 
 The harness defect itself is fixed. `switches_for_config()` maps `StrategyComponents` onto the
 engine's `ComponentSwitches`, the runner now emits a `CONFIGURED_STRATEGY` row that actually
@@ -329,19 +335,24 @@ property whose absence allowed the original failure: **change the config, and th
 move.** `atr_risk` has no configuration counterpart and is named explicitly rather than left as
 an invisible default.
 
-**First attributed run, 2026-08-19** (`reports/research/attributed-harness-2026-08-19.md`,
-classification `EXPLORATORY`): on 1,520 sessions of IEX data the deployed `strategy-v1-2.yaml`
-scores **3.64% CAGR, Sharpe 0.61, 33.82% exposure** — against `FULL_STRATEGY`'s 0.30% / 0.11 /
-18.66%, which is the row the old runner reported in its place. The harness is connected.
+**Re-measured 2026-08-19 on SIP, 2,669 sessions** (see
+`reports/research/attributed-harness-2026-08-19.md`, classification `EXPLORATORY`):
 
-Two things that run does **not** establish, stated because the temptation is real. It is on
-IEX 2020-2026, not SIP 2016-2026, so it is **not comparable** to any figure in this file or in
-`REFUTED.md`, and it is **not** a correction of the 43%-vs-77% diagnosis in §6h. And the window
-is consumed, so under §6i–6v the run is exploratory by construction: no registration, no power
-gate, no probes. It is a diagnostic of the harness, not a measurement of an edge.
+| | CAGR | Sharpe | exposure |
+|---|---:|---:|---:|
+| SPY buy-and-hold | 15.37% | 0.90 | 100% |
+| SPY_SMA200 | 10.34% | **0.91** | **77.37%** |
+| **deployed `strategy-v1-2.yaml`** | **4.06%** | **0.69** | **41.95%** |
+| `FULL_STRATEGY` (what the old runner reported instead) | 0.50% | 0.15 | 24.06% |
 
-Re-measuring the cycle-16 finding needs the SIP database through the same runner. Still
-outstanding, and now possible.
+The deployed config performs about **eight times better** than the row that stood in for it, and
+still loses to buy-and-hold by a wide margin. §6h's exposure diagnosis is confirmed at 41.95%
+against 77.37%.
+
+Sharpe 0.69 is **not** an edge: the minimum detectable Sharpe over this window at the current
+trial count is ~0.89, so a measured 0.69 sits inside the noise band and would register as
+`UNDERPOWERED`. That is the honest reading. Nothing here is confirmatory — the window is
+consumed and the run carries no registration, power gate or probes.
 
 ## 6i. Hypotheses are now frozen before measurement (#5)
 
