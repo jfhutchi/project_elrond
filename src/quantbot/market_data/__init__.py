@@ -30,6 +30,28 @@ from quantbot.market_data.crypto import (
     CRYPTO_ADJUSTMENT,
     AlpacaCryptoDataClient,
 )
+from quantbot.market_data.instruments import (
+    AssetClass,
+    CorporateAction,
+    CorporateActionKind,
+    Instrument,
+    InstrumentUniverse,
+    universe_from,
+)
+from quantbot.market_data.pointintime import (
+    Availability,
+    Capability,
+    FeatureSpec,
+    Observation,
+    PointInTimeViolation,
+    ResearchDataProvider,
+    UnsupportedCapability,
+    Vintage,
+    knowable,
+    latest_knowable,
+    require,
+    session_availability,
+)
 from quantbot.market_data.stream import (
     AlpacaStockDataStream,
     StreamDisconnected,
@@ -54,6 +76,24 @@ from quantbot.market_data.validation import (
 )
 
 __all__ = [
+    "AssetClass",
+    "Availability",
+    "Capability",
+    "CorporateAction",
+    "CorporateActionKind",
+    "FeatureSpec",
+    "Instrument",
+    "InstrumentUniverse",
+    "Observation",
+    "PointInTimeViolation",
+    "ResearchDataProvider",
+    "UnsupportedCapability",
+    "Vintage",
+    "knowable",
+    "latest_knowable",
+    "require",
+    "session_availability",
+    "universe_from",
     "ALPACA_PAPER_CALENDAR_URL",
     "ALPACA_CRYPTO_BARS_URL",
     "AdjustmentMode",

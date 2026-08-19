@@ -476,6 +476,45 @@ Relational and keyword-based on purpose: at tens-to-hundreds of hypotheses a wro
 neighbour is worse than a missed one when the answer decides whether to spend a holdout.
 Embeddings and a graph database stay out until evidence demands them.
 
+## 6m. Point-in-time data, and universes that include what died (#17)
+
+`quantbot.market_data.pointintime` and `quantbot.market_data.instruments`.
+
+**Availability is two timestamps, never one.** `observed_at` is what a value describes;
+`available_at` is when it could first be known. `knowable(series, as_of)` filters to what a
+decision may actually use — the complement is look-ahead by definition. Every result in
+`REFUTED.md` rested on this being upheld by hand, and two of the three cycle 11-12 errors were
+timing errors of exactly this family.
+
+**A feature is gated by its slowest input, not its newest observation.** A backfilled or revised
+value published after the newest bar delays the feature that uses it. `FeatureSpec.available_at`
+composes lookback + input availability + publication lag so this is computed once rather than
+reasoned about per experiment. The transformation version is part of the feature's identity: a
+feature recomputed with changed code is a different feature.
+
+**A universe is a function of time.** `members(as_of)` includes names that later stopped
+trading; `survivors(as_of)` is the live-only set; `survivorship_bias(as_of)` is the difference,
+so it is measurable rather than assumed. Cycle 10 was only interpretable because delisted
+history existed — 511 names, 241 of which terminated — and whole-market momentum produced more
+return with *less* Sharpe. A live-only universe would have shown a winner.
+
+**A listing is not an exposure.** `quote_currency` and `exposure_currency` are separate fields,
+and `unhedged()` names the instruments carrying FX the hypothesis never declared. Cycle 17's
+global test ran through US-listed country ETFs, and `REFUTED.md` #12 found FX itself unusable at
+Sharpe -0.14, which makes an undeclared currency exposure a confound rather than a detail.
+
+**Missing capabilities raise.** `UnsupportedCapability` rather than an empty list, because
+silence is how a survivorship-free study quietly becomes a live-only one. Alpaca serves bars,
+quotes, corporate actions and delistings; `MACRO_SERIES` and `OPTIONS_DERIVED` are declared and
+unimplemented, so asking for them fails loudly instead of returning nothing.
+
+**Lineage travels into the bundle.** A confirmatory `DatasetSnapshot` now cannot be built
+without provider, retrieval time, earliest availability, and transformation version. Without the
+availability timestamp a bundle can only assert it avoided look-ahead, never show it.
+
+The one change both #17 reviews asked for — the data layer exposing which windows have already
+been used for confirmatory testing — landed in #6 as `window_consumption`.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)

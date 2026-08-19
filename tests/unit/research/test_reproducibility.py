@@ -53,6 +53,24 @@ def plan(**overrides: object) -> StatisticalPlan:
     return StatisticalPlan(**fields)
 
 
+def snapshot(**overrides: object) -> DatasetSnapshot:
+    fields: dict[str, object] = {
+        "dataset": "sip-us-equities-daily",
+        "snapshot": "2026-08-18",
+        "role": "PROTECTED_EVALUATION",
+        "start": date(2016, 1, 4),
+        "end": date(2026, 8, 18),
+        "content_hash": "bars-hash",
+        "observations": 2669,
+        "provider": "alpaca",
+        "retrieved_at": NOW,
+        "earliest_available_at": NOW,
+        "transformation_version": "adjust-v1",
+    }
+    fields.update(overrides)
+    return DatasetSnapshot(**fields)
+
+
 def manifest(**overrides: object) -> ExperimentManifest:
     fields: dict[str, object] = {
         "experiment_id": "experiment-1",
@@ -89,17 +107,7 @@ def manifest(**overrides: object) -> ExperimentManifest:
             host_class="operator-workstation",
             random_seed=7,
         ),
-        "datasets": (
-            DatasetSnapshot(
-                dataset="sip-us-equities-daily",
-                snapshot="2026-08-18",
-                role="PROTECTED_EVALUATION",
-                start=date(2016, 1, 4),
-                end=date(2026, 8, 18),
-                content_hash="bars-hash",
-                observations=2669,
-            ),
-        ),
+        "datasets": (snapshot(),),
         "statistics": plan(),
         "resources": ResourceUsage(
             started_at=NOW,
@@ -223,17 +231,7 @@ def test_identical_results_from_different_inputs_are_reported_as_a_difference() 
 def test_a_changed_dataset_vintage_is_named_even_when_the_range_is_identical() -> None:
     """Silent data revision is what makes an old conclusion unfalsifiable."""
     revised = manifest(
-        datasets=(
-            DatasetSnapshot(
-                dataset="sip-us-equities-daily",
-                snapshot="2026-09-01",
-                role="PROTECTED_EVALUATION",
-                start=date(2016, 1, 4),
-                end=date(2026, 8, 18),
-                content_hash="different-bars-hash",
-                observations=2669,
-            ),
-        )
+        datasets=(snapshot(snapshot="2026-09-01", content_hash="different-bars-hash"),)
     )
     reasons = [str(difference) for difference in compare(manifest(), revised)]
     assert any("2026-08-18 != 2026-09-01" in reason for reason in reasons)
@@ -320,3 +318,31 @@ def test_an_exploratory_experiment_cannot_borrow_a_registration() -> None:
         exploratory(registration_hash=DIGEST)
     with pytest.raises(ValueError, match="cannot claim a registration"):
         exploratory(power_verdict="OVERRIDDEN")
+
+
+def test_a_confirmatory_dataset_must_name_its_provider_and_availability(  ) -> None:
+    """Lineage (#17). Without an availability timestamp a bundle can only assert it avoided
+    look-ahead, never show it."""
+    for missing in ("retrieved_at", "earliest_available_at"):
+        with pytest.raises(ValueError, match="provider, retrieval time"):
+            manifest(datasets=(snapshot(**{missing: None}),))
+    for unrecorded in ("provider", "transformation_version"):
+        with pytest.raises(ValueError, match="provider, retrieval time"):
+            manifest(datasets=(snapshot(**{unrecorded: "unrecorded"}),))
+
+    # An exploratory bundle makes no evidential claim, so it is not held to this.
+    assert exploratory(datasets=(snapshot(provider="unrecorded"),)).mode == "EXPLORATORY"
+
+
+def test_a_changed_transformation_version_is_a_different_experiment() -> None:
+    """A feature recomputed with changed code is a different feature."""
+    reasons = [
+        str(difference)
+        for difference in compare(
+            manifest(), manifest(datasets=(snapshot(transformation_version="adjust-v2"),))
+        )
+    ]
+    assert reasons
+    assert manifest().inputs_hash != manifest(
+        datasets=(snapshot(transformation_version="adjust-v2"),)
+    ).inputs_hash

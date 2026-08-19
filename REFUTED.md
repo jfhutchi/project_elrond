@@ -179,6 +179,14 @@ This file is now also loaded into structured research memory (#6) by
 file, not a replacement for it: every statement is carried as written, and the import is
 idempotent. Edit here; the records follow.
 
+A tenth defect, found in this session and in this project's own test suite rather than in its
+analysis: the first version of the point-in-time feature test (#17) passed with the
+slowest-input rule deleted. Its late-published input was still not the *latest available* one,
+so replacing "gate on the slowest availability" with "gate on the newest observation" produced
+the same answer and the test stayed green. Caught by mutation-testing the guard rather than by
+reading it. The same shape as the #12 memory-limit defect that `CLAUDE.md` now carries a rule
+about, and the reason that rule is worth the words.
+
 The defects in this section are now partly mechanical. #18 turned four of them into invariants
 that run on every result bundle: a statistical test that does not match the dependence structure
 of its data, costs that improve a return, forced liquidation that ends richer than no

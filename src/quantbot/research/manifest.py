@@ -196,6 +196,13 @@ class DatasetSnapshot(FrozenModel):
     #: Content hash of the observations actually loaded.
     content_hash: Text
     observations: int = Field(ge=0)
+    #: Lineage (#17). Who served it, when it was pulled, the earliest moment any value in it
+    #: could have been known, and the version of the code that transformed it. Without the
+    #: availability timestamp a bundle cannot show that it avoided look-ahead, only assert it.
+    provider: Text = "unrecorded"
+    retrieved_at: datetime | None = None
+    earliest_available_at: datetime | None = None
+    transformation_version: Text = "unrecorded"
 
 
 class StatisticalPlan(FrozenModel):
@@ -346,6 +353,19 @@ class ExperimentManifest(FrozenModel):
                 )
             if not self.datasets:
                 raise ValueError("a confirmatory experiment must record its dataset snapshots")
+            unlineaged = [
+                snapshot.dataset
+                for snapshot in self.datasets
+                if snapshot.retrieved_at is None
+                or snapshot.earliest_available_at is None
+                or snapshot.provider == "unrecorded"
+                or snapshot.transformation_version == "unrecorded"
+            ]
+            if unlineaged:
+                raise ValueError(
+                    "a confirmatory dataset snapshot must name its provider, retrieval time, "
+                    f"availability time and transformation version: {', '.join(unlineaged)}"
+                )
         elif any(field is not None for field in registration):
             raise ValueError("an exploratory experiment cannot claim a registration")
 
