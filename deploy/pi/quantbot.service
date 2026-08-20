@@ -1,0 +1,46 @@
+[Unit]
+Description=Elrond quantbot paper-trading daemon
+Documentation=https://github.com/jfhutchi/project_elrond
+# The daemon reads market data and the broker API over the network. Starting before the network
+# is up produces a first cycle that fails its own health checks for no real reason.
+After=network-online.target time-sync.target
+Wants=network-online.target time-sync.target
+
+[Service]
+Type=simple
+User=__USER__
+WorkingDirectory=__QUANTBOT_HOME__
+
+# Credentials and paths live here, mode 600, outside the repo. Never in the unit file.
+EnvironmentFile=/etc/quantbot/quantbot.env
+
+ExecStart=/home/__USER__/.local/bin/uv run quantbot daemon
+
+# Restart always, with a floor on the rate. A daemon that crashes on startup and is restarted
+# instantly forever will hammer the broker API and get the account rate-limited, which turns a
+# small fault into an outage. Five seconds between attempts, and if it fails five times inside
+# two minutes systemd gives up and leaves it stopped for a human to look at -- a process that
+# cannot start is a fault to investigate, not one to retry into the ground.
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+# The Pi has no RTC and this process makes decisions on session boundaries. Fail loudly rather
+# than trade against a wrong clock.
+Environment=TZ=UTC
+
+# The kill switch and the ledger are the safety mechanisms; keep the blast radius small anyway.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+# The ledger directory is the one place this needs to write.
+ReadWritePaths=__QUANTBOT_DATA__
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=quantbot
+
+[Install]
+WantedBy=multi-user.target
