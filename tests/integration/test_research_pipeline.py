@@ -352,9 +352,12 @@ def test_the_same_candidate_on_the_exhausted_window_is_stopped(database: Databas
         available_observations=2669,
     )
     with database.transaction() as session:
-        HypothesisRegistry(session).register(
-            spent_draft, now=NOW, critique=clean_critique("H-HISTORY", 1, series())
-        )
+        registry = HypothesisRegistry(session)
+        registry.register(spent_draft, now=NOW, critique=clean_critique("H-HISTORY", 1, series()))
+        # Spent, not merely claimed. Since #22 a registration only *reserves* its windows, so
+        # seeding history has to record the handoff that actually looked at the data -- which
+        # is what cycles 2-10 did, and what makes this window exhausted rather than reserved.
+        registry.consume("H-HISTORY", 1, dataset=SPENT_DATASET, role=DataRole.VALIDATION, now=NOW)
 
     with database.transaction() as session:
         consumption = [

@@ -9,16 +9,18 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 from sqlalchemy import select, update
+from sqlalchemy.engine import RowMapping
 
 from quantbot.research import (
     PRIOR_TRIALS,
+    RESERVATION_DAYS,
     Citation,
     ComparisonStructure,
     CriticVerdict,
@@ -43,14 +45,20 @@ from quantbot.research import (
     Sampling,
     SearchOrigin,
     Severity,
+    WindowState,
     gates_promotion,
     summarize,
     unresolved_questions,
 )
 from quantbot.storage import Database
-from quantbot.storage.schema import hypotheses
+from quantbot.storage.database import encode_utc
+from quantbot.storage.schema import hypotheses, hypothesis_data_windows
 
 NOW = datetime(2026, 8, 18, 14, 30, tzinfo=UTC)
+
+#: The day a reservation taken at `NOW` still blocks, and the first day it does not (#22).
+LAPSES = NOW.date() + timedelta(days=RESERVATION_DAYS)
+AFTER_LAPSE = datetime.combine(LAPSES + timedelta(days=1), NOW.timetz())
 
 #: 2016-01-04 to 2026-08 of SIP daily data, the whole history this project has.
 SIP_SESSIONS = 2669
@@ -214,9 +222,13 @@ def test_a_material_change_cannot_overwrite_a_registration(database: Database) -
     assert stored.draft.prediction != restated.prediction
 
 
-def test_a_protected_window_another_registration_consumed_is_refused(
-    database: Database,
-) -> None:
+def test_a_protected_window_a_live_reservation_holds_is_refused(database: Database) -> None:
+    """The concurrency half of #22: two live reservations on one holdout cannot coexist.
+
+    The refusal has to name `RESERVED` specifically. A message saying only "overlaps H-2026-001"
+    would read identically under the pre-#22 query, which had no state in it at all, so the
+    assertion would re-certify the defect.
+    """
     with database.transaction() as session:
         register(
             HypothesisRegistry(session),
@@ -238,6 +250,8 @@ def test_a_protected_window_another_registration_consumed_is_refused(
     assert error.value.reason is RefusalReason.CONTAMINATED_WINDOW
     assert "H-2026-001" in error.value.detail
     assert "VALIDATION" in error.value.detail
+    assert f"RESERVED until {LAPSES.isoformat()}" in error.value.detail
+    assert "CONSUMED" not in error.value.detail
 
 
 def test_a_protected_window_overlapping_its_own_discovery_range_is_refused(
@@ -277,6 +291,237 @@ def test_a_disjoint_protected_window_on_a_consumed_dataset_still_registers(
             now=NOW,
         )
     assert registration.draft.hypothesis_id == "H-2026-002"
+
+
+# --- #22: reservation, consumption, release -------------------------------------------------
+#
+# Registration used to write a window and block every later overlap forever, so freezing a
+# hypothesis and then abandoning it burned a clean holdout with nobody having looked at the
+# data. Every test below names the state that produced its answer, because the pre-#22 query --
+# overlap, no state at all -- returns the *correct* verdict in the one case everyone writes a
+# test for, a live reservation. Asserting only "some overlap was refused" re-certifies it.
+
+SIP = "sip-us-equities-daily"
+
+
+def second_claim(**overrides: object) -> HypothesisDraft:
+    """A different hypothesis wanting the same protected window H-2026-001 declared."""
+    fields: dict[str, object] = {
+        "hypothesis_id": "H-2026-002",
+        "materially_different": "a deliberate second look at the same window",
+        "universe": ("QQQ",),
+        "features": ("close_sma_100",),
+    }
+    fields.update(overrides)
+    return make_draft(**fields)
+
+
+def window_state(
+    database: Database,
+    hypothesis_id: str = "H-2026-001",
+    version: int = 1,
+    role: DataRole = DataRole.PROTECTED_EVALUATION,
+) -> RowMapping:
+    with database.transaction() as session:
+        return (
+            session.execute(
+                select(hypothesis_data_windows).where(
+                    hypothesis_data_windows.c.hypothesis_id == hypothesis_id,
+                    hypothesis_data_windows.c.version == version,
+                    hypothesis_data_windows.c.role == role.value,
+                )
+            )
+            .mappings()
+            .one()
+        )
+
+
+def test_registering_reserves_a_window_rather_than_spending_it(database: Database) -> None:
+    """Freezing a claim is not looking at the data, and only looking spends the holdout."""
+    with database.transaction() as session:
+        registration = register(HypothesisRegistry(session), make_draft(), now=NOW)
+
+    row = window_state(database)
+    assert row["state"] == WindowState.RESERVED.value
+    assert row["consumed_at"] is None
+    assert row["reserved_until"] == LAPSES.isoformat()
+    assert registration.reserved_until == LAPSES
+
+    # And the trial burden on that range is unspent, so `discovery.admissible` does not read a
+    # registered-but-never-run hypothesis as having exhausted the window.
+    with database.transaction() as session:
+        consumption = HypothesisRegistry(session).window_consumption(
+            SIP, date(2016, 1, 4), date(2026, 8, 18)
+        )
+    assert consumption.trials == 0
+    assert consumption.status == "UNTOUCHED"
+    assert consumption.consumers == ()
+
+
+def test_a_reservation_lapses_on_its_own_with_nobody_releasing_it(database: Database) -> None:
+    """The recovery #22 exists for. Abandonment is the absence of events, so expiry is the
+    only release that can be relied on -- and the expired row is deliberately left as it is,
+    to show the recovery came from the expiry and not from a cleanup pass."""
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
+
+    # Last day of the reservation: still refused, and refused *as a reservation*.
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        register(
+            HypothesisRegistry(session),
+            second_claim(),
+            now=datetime.combine(LAPSES, NOW.timetz()),
+        )
+    assert error.value.reason is RefusalReason.CONTAMINATED_WINDOW
+    assert f"RESERVED until {LAPSES.isoformat()}" in error.value.detail
+
+    # One day later the same registration goes through, with nothing having been called.
+    with database.transaction() as session:
+        accepted = register(HypothesisRegistry(session), second_claim(), now=AFTER_LAPSE)
+    assert accepted.draft.hypothesis_id == "H-2026-002"
+    assert window_state(database)["state"] == WindowState.RESERVED.value
+
+
+def test_a_released_reservation_stops_blocking_immediately(database: Database) -> None:
+    """Explicit release exists for when abandonment *is* known. Nothing may depend on it."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+        registry.release("H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION)
+
+    assert window_state(database)["state"] == WindowState.RELEASED.value
+
+    # NOW, not after the lapse: the release is what unblocked this, not the expiry.
+    with database.transaction() as session:
+        accepted = register(HypothesisRegistry(session), second_claim(), now=NOW)
+    assert accepted.draft.hypothesis_id == "H-2026-002"
+
+
+def test_a_consumed_window_still_blocks_long_after_a_reservation_would_have_lapsed(
+    database: Database,
+) -> None:
+    """No expiry brings back a holdout somebody looked at. Contamination is about what was
+    seen, not about how old the record of seeing it is."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+        registry.consume("H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=NOW)
+
+    much_later = AFTER_LAPSE + timedelta(days=3650)
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        register(HypothesisRegistry(session), second_claim(), now=much_later)
+
+    assert error.value.reason is RefusalReason.CONTAMINATED_WINDOW
+    assert "CONSUMED" in error.value.detail
+    assert "RESERVED until" not in error.value.detail
+
+
+def test_a_crash_after_the_handoff_still_spends_the_window(database: Database) -> None:
+    """Recording consumption on success would make failing a way to read protected data free.
+
+    The handoff is the event. This experiment dies without producing a result of any kind, and
+    the holdout is spent anyway -- state, timestamp, and trial burden all as if it had run.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+        # The handoff: protected data is about to be given to the experiment.
+        registry.consume("H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=NOW)
+
+    with pytest.raises(RuntimeError), database.transaction():
+        raise RuntimeError("the experiment died holding the holdout")
+
+    row = window_state(database)
+    assert row["state"] == WindowState.CONSUMED.value
+    assert row["consumed_at"] == encode_utc(NOW)
+    with database.transaction() as session:
+        consumption = HypothesisRegistry(session).window_consumption(
+            SIP, date(2016, 1, 4), date(2026, 8, 18)
+        )
+    assert consumption.trials == 1
+    assert consumption.consumers == ("H-2026-001 v1",)
+
+
+def test_a_window_cannot_be_consumed_twice(database: Database) -> None:
+    """The transition is conditional on the state, so of two callers racing for one supposedly
+    untouched window exactly one is told it got it."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+        registry.consume("H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=NOW)
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).consume(
+            "H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=NOW
+        )
+    assert error.value.reason is RefusalReason.WINDOW_NOT_RESERVED
+    assert f"CONSUMED since {encode_utc(NOW)}" in error.value.detail
+
+
+def test_a_consumed_window_cannot_be_released(database: Database) -> None:
+    """Unlooking at data is not an operation, so release cannot undo a consumption."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+        registry.consume("H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=NOW)
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).release(
+            "H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION
+        )
+    assert error.value.reason is RefusalReason.WINDOW_NOT_RESERVED
+    assert "is CONSUMED, not RESERVED" in error.value.detail
+    assert window_state(database)["state"] == WindowState.CONSUMED.value
+
+
+def test_a_holdout_re_let_after_the_lapse_cannot_still_be_handed_to_the_first_claimant(
+    database: Database,
+) -> None:
+    """The hazard expiry introduces, closed at the handoff rather than left to be noticed.
+
+    Expiry means a window can be claimed twice over time. If the first hypothesis surfaces
+    after its lapse and is handed the data anyway, two registrations have both believed they
+    held an untouched holdout -- which is the failure #22 must not create while fixing the one
+    it does.
+    """
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), second_claim(), now=AFTER_LAPSE)
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).consume(
+            "H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=AFTER_LAPSE
+        )
+    assert error.value.reason is RefusalReason.CONTAMINATED_WINDOW
+    assert "H-2026-002 v1" in error.value.detail
+    assert window_state(database)["state"] == WindowState.RESERVED.value
+
+
+def test_a_new_version_may_take_over_its_own_unspent_reservation(database: Database) -> None:
+    """Revising a hypothesis must not cost it the holdout its previous version froze."""
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
+
+    revised = make_draft(version=2, prediction="Annualised Sharpe is at least 1.2.")
+    with database.transaction() as session:
+        accepted = register(HypothesisRegistry(session), revised, now=NOW)
+    assert accepted.draft.version == 2
+
+
+def test_a_new_version_may_not_take_over_its_own_consumption(database: Database) -> None:
+    """The other half: what v1 looked at, v2 cannot un-look at."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+        registry.consume("H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=NOW)
+
+    revised = make_draft(version=2, prediction="Annualised Sharpe is at least 1.2.")
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        register(HypothesisRegistry(session), revised, now=NOW)
+    assert error.value.reason is RefusalReason.CONTAMINATED_WINDOW
+    assert "H-2026-001 v1" in error.value.detail
+    assert "CONSUMED" in error.value.detail
 
 
 def test_forward_paper_windows_may_overlap_because_the_account_runs_once(
@@ -653,13 +898,21 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert virgin.usable
 
     with database.transaction() as session:
+        registry = HypothesisRegistry(session)
         register(
-            HypothesisRegistry(session),
+            registry,
             make_draft(
                 search_cardinality=5,
                 search_origin=SearchOrigin.OPERATOR_ATTESTED,
                 search_attested_by="hutch",
             ),
+            now=NOW,
+        )
+        registry.consume(
+            "H-2026-001",
+            1,
+            dataset="sip-us-equities-daily",
+            role=DataRole.PROTECTED_EVALUATION,
             now=NOW,
         )
     with database.transaction() as session:
@@ -671,8 +924,9 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert partial.consumers == ("H-2026-001 v1",)
 
     with database.transaction() as session:
+        registry = HypothesisRegistry(session)
         register(
-            HypothesisRegistry(session),
+            registry,
             make_draft(
                 hypothesis_id="H-2026-002",
                 materially_different="a second family against the same window",
@@ -683,6 +937,13 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
                 # without tripping the contamination gate this test is not about.
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2026-08-18"),),
             ),
+            now=NOW,
+        )
+        registry.consume(
+            "H-2026-002",
+            1,
+            dataset="sip-us-equities-daily",
+            role=DataRole.VALIDATION,
             now=NOW,
         )
     with database.transaction() as session:
@@ -696,14 +957,22 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
 def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Database) -> None:
     """Consumption is per range, not per dataset. Otherwise one run retires a data source."""
     with database.transaction() as session:
+        registry = HypothesisRegistry(session)
         register(
-            HypothesisRegistry(session),
+            registry,
             make_draft(
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2020-12-31"),),
                 search_cardinality=40,
                 search_origin=SearchOrigin.OPERATOR_ATTESTED,
                 search_attested_by="hutch",
             ),
+            now=NOW,
+        )
+        registry.consume(
+            "H-2026-001",
+            1,
+            dataset="sip-us-equities-daily",
+            role=DataRole.VALIDATION,
             now=NOW,
         )
     with database.transaction() as session:

@@ -394,8 +394,6 @@ __all__ = [
     "RefusalReason",
     "SearchOrigin",
     "WindowState",
-    "SearchOrigin",
-    "WindowState",
     "Registration",
     "RegistrationRefused",
     "Sampling",

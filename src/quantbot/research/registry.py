@@ -7,12 +7,15 @@ would have become "an interior optimum exists" -- true, unfalsifiable, and worth
 
 Four things are refused here rather than left to judgement, because software can prove them:
 
-1. **A false holdout claim.** A `PROTECTED_EVALUATION` window may not overlap any date range a
-   previous registration already recorded on the same dataset, nor this registration's own
-   discovery or validation ranges. This is the check that makes the project's structural limit
-   visible instead of leaving it in a paragraph: SIP data begins 2016-01-04 and cycles 2-10
-   consumed all of it, so any confirmatory claim on that window is in-sample whatever the
-   schema says.
+1. **A false holdout claim.** A `PROTECTED_EVALUATION` window may not overlap a date range
+   another registration still holds on the same dataset, nor this registration's own discovery
+   or validation ranges. This is the check that makes the project's structural limit visible
+   instead of leaving it in a paragraph: SIP data begins 2016-01-04 and cycles 2-10 consumed
+   all of it, so any confirmatory claim on that window is in-sample whatever the schema says.
+   "Still holds" is the whole of #22: registering *reserves* a window and the reservation
+   lapses on its own, because abandonment is the absence of events and nothing observes it;
+   `consume` spends it at the moment the data is handed to an experiment, and that is
+   permanent. A hypothesis that is frozen and then dropped no longer sterilises the holdout.
 2. **An unresolvable question.** `UNDERPOWERED`, computed by `power.py` from the declared
    estimand and its dependence structure. Not the same verdict as `REFUTED`.
 3. **A question not worth resolving.** `UNECONOMIC`: the smallest effect worth acting on cannot
@@ -48,7 +51,7 @@ from enum import StrEnum
 from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
@@ -165,6 +168,8 @@ class RefusalReason(StrEnum):
     NOT_REGISTERED = "NOT_REGISTERED"
     TAMPERED = "TAMPERED"
     UNVERIFIED_SAMPLE = "UNVERIFIED_SAMPLE"
+    #: A window lifecycle transition asked for from a state that does not permit it (#22).
+    WINDOW_NOT_RESERVED = "WINDOW_NOT_RESERVED"
 
 
 #: A blocking power verdict, mapped to the refusal it becomes.
@@ -471,11 +476,11 @@ class HypothesisRegistry:
                 " material changes require a new version",
             )
 
-        contamination = self._contamination(draft)
+        contamination = self._contamination(draft, now=now.date())
         if contamination:
             raise RegistrationRefused(
                 RefusalReason.CONTAMINATED_WINDOW,
-                "protected evaluation window was already consumed by " + "; ".join(contamination),
+                "protected evaluation window is already claimed by " + "; ".join(contamination),
             )
 
         novelty = self.novelty_report(draft)
@@ -681,6 +686,116 @@ class HypothesisRegistry:
             observed=observed,
         )
 
+    def consume(
+        self,
+        hypothesis_id: str,
+        version: int,
+        *,
+        dataset: str,
+        role: DataRole,
+        now: datetime,
+    ) -> None:
+        """Spend a reserved window, because its data is about to be handed to an experiment.
+
+        Permanent, and deliberately recorded at the *handoff* rather than when a result comes
+        back. An experiment that reads the holdout and then crashes has still seen it; marking
+        consumption on success would make failing a way to look at protected data for free.
+
+        The registry does not decide when this happens, because it cannot see the handoff. It
+        exposes the transition and the caller that delivers the data performs it -- the same
+        boundary `verify_for_execution` draws by taking a counted `ObservedSample` instead of
+        reaching for data itself. The corollary is worth stating plainly: **a caller that hands
+        over protected data without calling this leaves the window reserved, and it will lapse
+        as though the experiment never ran.** Nothing here can detect that.
+
+        Refuses a window that is not `RESERVED`, naming the state it is actually in, and -- for
+        a protected window -- refuses when anything else has claimed the range in the meantime,
+        which is the case a lapsed reservation opens: the holdout may have been re-let while
+        this hypothesis sat idle, and two owners of one untouched window is the thing #22 must
+        not create while fixing the thing it does.
+        """
+        row = self._window_row(hypothesis_id, version, dataset, role)
+        if row is None:
+            raise RegistrationRefused(
+                RefusalReason.WINDOW_NOT_RESERVED,
+                f"{hypothesis_id} v{version} registered no {role.value} window on {dataset!r}",
+            )
+        state = WindowState(str(row["state"]))
+        if state is not WindowState.RESERVED:
+            since = f" since {row['consumed_at']}" if state is WindowState.CONSUMED else ""
+            raise RegistrationRefused(
+                RefusalReason.WINDOW_NOT_RESERVED,
+                f"{hypothesis_id} v{version}'s {role.value} window on {dataset!r} is"
+                f" {state.value}{since}, not RESERVED",
+            )
+        if role is DataRole.PROTECTED_EVALUATION:
+            rivals = [
+                _describe_claim(other)
+                for other in self._blocking(
+                    dataset,
+                    date.fromisoformat(str(row["start_date"])),
+                    date.fromisoformat(str(row["end_date"])),
+                    now=now.date(),
+                )
+                if not _own_unspent_claim(other, hypothesis_id)
+            ]
+            if rivals:
+                raise RegistrationRefused(
+                    RefusalReason.CONTAMINATED_WINDOW,
+                    f"{hypothesis_id} v{version} may not be handed a protected window claimed"
+                    " by " + "; ".join(rivals),
+                )
+        # Conditional on the state that was just read, in one statement, so two callers racing
+        # for the same window cannot both be told they got it: exactly one UPDATE matches.
+        updated = self._session.connection().execute(
+            update(hypothesis_data_windows)
+            .where(
+                hypothesis_data_windows.c.hypothesis_id == hypothesis_id,
+                hypothesis_data_windows.c.version == version,
+                hypothesis_data_windows.c.dataset == dataset,
+                hypothesis_data_windows.c.role == role.value,
+                hypothesis_data_windows.c.state == WindowState.RESERVED.value,
+            )
+            .values(state=WindowState.CONSUMED.value, consumed_at=encode_utc(now))
+        )
+        if updated.rowcount != 1:
+            raise RegistrationRefused(
+                RefusalReason.WINDOW_NOT_RESERVED,
+                f"{hypothesis_id} v{version}'s {role.value} window on {dataset!r} stopped being"
+                " RESERVED between the check and the write; another caller took it",
+            )
+
+    def release(self, hypothesis_id: str, version: int, *, dataset: str, role: DataRole) -> None:
+        """Give up a reservation before the data was read, for when someone knows it is dead.
+
+        Available, and depended upon by nothing. That is the point: an abandoned hypothesis has
+        no one left to call this, which is why `reserved_until` exists. Release only makes the
+        lapse immediate in the cases where abandonment is actually known.
+
+        A `CONSUMED` window cannot be released. Unlooking at data is not an operation.
+        """
+        updated = self._session.connection().execute(
+            update(hypothesis_data_windows)
+            .where(
+                hypothesis_data_windows.c.hypothesis_id == hypothesis_id,
+                hypothesis_data_windows.c.version == version,
+                hypothesis_data_windows.c.dataset == dataset,
+                hypothesis_data_windows.c.role == role.value,
+                hypothesis_data_windows.c.state == WindowState.RESERVED.value,
+            )
+            .values(state=WindowState.RELEASED.value)
+        )
+        if updated.rowcount == 1:
+            return
+        row = self._window_row(hypothesis_id, version, dataset, role)
+        raise RegistrationRefused(
+            RefusalReason.WINDOW_NOT_RESERVED,
+            f"{hypothesis_id} v{version} registered no {role.value} window on {dataset!r}"
+            if row is None
+            else f"{hypothesis_id} v{version}'s {role.value} window on {dataset!r} is"
+            f" {row['state']}, not RESERVED",
+        )
+
     def novelty_report(self, draft: HypothesisDraft) -> NoveltyReport:
         """Is the idea new, and is there untouched data left to test it on."""
         signature = _signature(draft.universe, draft.features)
@@ -715,6 +830,13 @@ class HypothesisRegistry:
         This is the question `REFUTED.md` answers in a paragraph -- "cycles 2-10 consumed every
         out-of-sample window and SIP data begins 2016-01-04" -- made queryable, because a
         constraint that only exists in prose is one an agent may or may not read.
+
+        Only `CONSUMED` windows count (#22). A reservation is a trial someone intends to spend,
+        not one they have spent: counting it made a registered-and-abandoned hypothesis push a
+        range to `EXHAUSTED`, which `discovery.admissible` then reads as "this can only ever be
+        exploratory". That is the same capacity loss as the contamination block, one function
+        over. No clock is needed here because a live reservation and a lapsed one are both
+        simply not evidence.
         """
         rows = self._session.execute(
             select(hypothesis_data_windows, hypotheses.c.search_cardinality)
@@ -727,6 +849,7 @@ class HypothesisRegistry:
                 hypothesis_data_windows.c.dataset == dataset,
                 hypothesis_data_windows.c.start_date <= end.isoformat(),
                 hypothesis_data_windows.c.end_date >= start.isoformat(),
+                hypothesis_data_windows.c.state == WindowState.CONSUMED.value,
             )
         ).mappings()
         consumers: list[str] = []
@@ -756,6 +879,22 @@ class HypothesisRegistry:
             .one_or_none()
         )
 
+    def _window_row(
+        self, hypothesis_id: str, version: int, dataset: str, role: DataRole
+    ) -> RowMapping | None:
+        return (
+            self._session.execute(
+                select(hypothesis_data_windows).where(
+                    hypothesis_data_windows.c.hypothesis_id == hypothesis_id,
+                    hypothesis_data_windows.c.version == version,
+                    hypothesis_data_windows.c.dataset == dataset,
+                    hypothesis_data_windows.c.role == role.value,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+
     def _cumulative_trials(self, search_cardinality: int) -> int:
         """Everything this project has ever spent, plus what the incoming draft spends."""
         spent = self._session.execute(
@@ -763,12 +902,50 @@ class HypothesisRegistry:
         ).scalar_one()
         return self._prior_trials + int(spent) + search_cardinality
 
-    def _contamination(self, draft: HypothesisDraft) -> list[str]:
-        """Name every prior consumer of a window this draft calls protected evaluation.
+    def _blocking(self, dataset: str, start: date, end: date, *, now: date) -> list[RowMapping]:
+        """Every window row that still holds a claim over this range, as of `now` (#22).
+
+        The two states are asymmetric on purpose. `CONSUMED` is unconditional: contamination is
+        a fact about what was seen, and no elapsed time makes an inspected holdout clean again.
+        `RESERVED` blocks only while live, because a registration is a claim on data nobody has
+        looked at yet, and the only registrations that release themselves are the ones that
+        lapse -- an abandoned hypothesis never announces that it was abandoned. `RELEASED` never
+        blocks.
+
+        A `RESERVED` row with no expiry cannot be written by this class, but if one exists it is
+        treated as blocking rather than as lapsed: the conservative reading of a missing date.
+        """
+        state = hypothesis_data_windows.c.state
+        return list(
+            self._session.execute(
+                select(hypothesis_data_windows).where(
+                    hypothesis_data_windows.c.dataset == dataset,
+                    hypothesis_data_windows.c.start_date <= end.isoformat(),
+                    hypothesis_data_windows.c.end_date >= start.isoformat(),
+                    (state == WindowState.CONSUMED.value)
+                    | (
+                        (state == WindowState.RESERVED.value)
+                        & (
+                            hypothesis_data_windows.c.reserved_until.is_(None)
+                            | (hypothesis_data_windows.c.reserved_until >= now.isoformat())
+                        )
+                    ),
+                )
+            )
+            .mappings()
+            .all()
+        )
+
+    def _contamination(self, draft: HypothesisDraft, *, now: date) -> list[str]:
+        """Name every live claim on a window this draft calls protected evaluation.
 
         Only `PROTECTED_EVALUATION` claims are blocked. A shared `FORWARD_PAPER` window is
         genuine multiple testing rather than contamination, so it is carried by the trial
         burden instead -- blocking it would make the paper account single-use forever.
+
+        `now` is a parameter rather than a clock read here, so the lapse is testable at an
+        arbitrary date and a registration cannot be decided against a different instant than
+        the one it is recorded under.
         """
         conflicts: list[str] = []
         for window in draft.windows_for(DataRole.PROTECTED_EVALUATION):
@@ -777,18 +954,10 @@ class HypothesisRegistry:
                 for other in draft.windows_for(DataRole.DISCOVERY, DataRole.VALIDATION)
                 if window.overlaps(other)
             )
-            rows = self._session.execute(
-                select(hypothesis_data_windows).where(
-                    hypothesis_data_windows.c.dataset == window.dataset,
-                    hypothesis_data_windows.c.start_date <= window.end.isoformat(),
-                    hypothesis_data_windows.c.end_date >= window.start.isoformat(),
-                )
-            ).mappings()
             conflicts.extend(
-                f"{row['hypothesis_id']} v{row['version']} ({row['role']}"
-                f" {row['start_date']}..{row['end_date']})"
-                for row in rows
-                if (row["hypothesis_id"], row["version"]) != (draft.hypothesis_id, draft.version)
+                _describe_claim(row)
+                for row in self._blocking(window.dataset, window.start, window.end, now=now)
+                if not _own_unspent_claim(row, draft.hypothesis_id)
             )
         return conflicts
 
@@ -865,6 +1034,38 @@ def summarize(registration: Registration) -> dict[str, object]:
     }
 
 
+def _describe_claim(row: RowMapping) -> str:
+    """Name a blocking window *and the state that made it block*.
+
+    The state belongs in the message. A refusal that says only "overlaps H-1 v1" reads the same
+    whether the block came from a spent holdout or from a query with no state in it at all,
+    which is exactly the failure this change exists to make impossible to reintroduce quietly.
+    """
+    held = (
+        f"CONSUMED {row['consumed_at']}"
+        if str(row["state"]) == WindowState.CONSUMED.value
+        else f"{row['state']} until {row['reserved_until']}"
+    )
+    return (
+        f"{row['hypothesis_id']} v{row['version']} ({row['role']}"
+        f" {row['start_date']}..{row['end_date']}, {held})"
+    )
+
+
+def _own_unspent_claim(row: RowMapping, hypothesis_id: str) -> bool:
+    """Whether a blocking row is this hypothesis's own reservation, which it may take over.
+
+    A later version of a hypothesis inherits its own live reservation rather than being refused
+    by it: the claim was never spent, and the alternative is that revising a hypothesis costs it
+    the holdout it froze. Its own *consumption* still blocks, because what was seen was seen
+    whichever version of whichever hypothesis looked at it.
+    """
+    return (
+        str(row["hypothesis_id"]) == hypothesis_id
+        and str(row["state"]) == WindowState.RESERVED.value
+    )
+
+
 def _signature(universe: Sequence[str], features: Sequence[str]) -> frozenset[str]:
     """What two hypotheses are compared on: the things they look at and what they measure."""
     return frozenset(
@@ -893,6 +1094,7 @@ __all__ = [
     "EXHAUSTED_TRIALS",
     "PRIOR_TRIALS",
     "REGISTRATION",
+    "RESERVATION_DAYS",
     "DataRole",
     "DataWindow",
     "ExecutionClearance",
@@ -902,7 +1104,9 @@ __all__ = [
     "RefusalReason",
     "Registration",
     "RegistrationRefused",
+    "SearchOrigin",
     "WindowConsumption",
+    "WindowState",
     "luck_threshold",
     "summarize",
     "unresolved_questions",
