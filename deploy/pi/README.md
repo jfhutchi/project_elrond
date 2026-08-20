@@ -8,7 +8,7 @@ updates, is the wrong host for that. A dedicated Pi is a better one.
 | board | arch | path | verdict |
 |---|---|---|---|
 | Pi Zero 2 W, Pi 3/4/5 (64-bit OS) | aarch64 | uv + PyPI | works |
-| **Pi Zero / Zero W (original)** | **armv6l** | **venv + piwheels** | **works, on Bookworm** |
+| **Pi Zero / Zero W (original)** | **armv6l** | **venv + piwheels** | **works — verified on hardware** |
 | Pi 2/3/4 on 32-bit OS | armv7l | venv + piwheels | works; 64-bit is better |
 
 Check with:
@@ -27,17 +27,31 @@ would fall back to building it from source on one slow core, which takes hours a
 an OOM kill.
 
 [piwheels.org](https://www.piwheels.org/project/pydantic-core/) exists for exactly this and **does
-publish `armv6l` wheels**, including `2.46.4` for `cp311` — the version this project pins. So the
-board works; it just has to install from that index instead of compiling. Raspberry Pi OS already
-ships `/etc/pip.conf` pointing at piwheels, and `setup.sh` verifies it rather than assuming.
+publish `armv6l` wheels**. So the board works; it just has to install from that index rather than
+compile.
+
+**Confirmed on hardware** — Pi Zero W Rev 1.1, Raspbian 13 (trixie), Python 3.13.5, 427MB RAM:
+
+```
+Downloading https://www.piwheels.org/simple/pydantic-core/
+  pydantic_core-2.46.4-cp313-cp313-linux_armv6l.whl (2.1 MB)
+Successfully downloaded pydantic-core
+```
+
+2.1MB, seconds, no compiler. That was the only genuine blocker for this board.
 
 Two consequences for ARMv6:
 
-- **Raspberry Pi OS Bookworm (32-bit) is required.** Debian 12 ships Python 3.11, which this
-  project needs. Bullseye ships 3.9 and Buster 3.7. A Pi that has been running PiHole for years is
-  almost certainly on an older release — reflash before installing.
+- **Python 3.11+, so Bookworm (Debian 12) or newer.** Bookworm ships 3.11 and trixie ships 3.13;
+  both still support ARMv6. Bullseye (3.9) and Buster (3.7) are too old and need a reflash — worth
+  checking if the Pi has been running something else for years.
 - **pip and venv, not uv.** uv is also Rust and its ARMv6 support is not something to bet an
-  unattended trading process on. `setup.sh` picks the right path automatically from `uname -m`.
+  unattended trading process on. `setup.sh` picks the path automatically from `uname -m`.
+
+Note that **piwheels is not always preconfigured.** Raspberry Pi OS often ships `/etc/pip.conf`
+pointing at it, but the trixie image tested here did not have that file at all. `setup.sh` checks
+and adds it rather than assuming — without it, pip silently falls back to building pydantic-core
+from source, which on this board means hours and probably an OOM kill.
 
 ## Why the resource profile fits
 
@@ -55,12 +69,13 @@ path.
 ## Install
 
 ```bash
-sudo apt-get update && sudo apt-get install -y git
 git clone --branch elrond-v0.2 https://github.com/jfhutchi/project_elrond.git ~/quantbot
 bash ~/quantbot/deploy/pi/setup.sh
 ```
 
-It detects the architecture and picks the install path itself.
+It detects the architecture and picks the install path itself. It only touches `apt` if something
+is actually missing — on a current image, nothing is — and it refuses to run at all if an
+`apt`/`dpkg` lock is held by an upgrade in another shell, rather than interrupting it.
 
 Idempotent — safe to re-run. It installs the code and the systemd unit, and creates
 `/etc/quantbot/quantbot.env` as an empty template. It does not start anything, and it never
@@ -91,11 +106,11 @@ ledger comes with it.
 
 3. **Fill in credentials** in `/etc/quantbot/quantbot.env` (mode 600). Paper keys only.
 
-4. **Verify before starting.**
+4. **Verify before starting.** On ARMv6 the venv is at `.venv`; on aarch64 use `uv run`.
 
    ```bash
-   cd ~/quantbot && uv run quantbot status
-   cd ~/quantbot && uv run quantbot reconcile
+   cd ~/quantbot && ./.venv/bin/quantbot status
+   cd ~/quantbot && ./.venv/bin/quantbot reconcile
    ```
 
    `status` should report `trading_mode: PAPER`, `live_credentials_configured: false`, and a

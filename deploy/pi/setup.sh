@@ -12,9 +12,10 @@
 # wheels for it, so the fix is to use that index rather than to compile. uv is also Rust and its
 # armv6 support is not something to bet an unattended process on, so ARMv6 uses pip.
 #
-# ARMv6 requires Raspberry Pi OS *Bookworm* (Debian 12), which ships Python 3.11. Bullseye ships
-# 3.9 and Buster 3.7, and this project needs >=3.11. A Pi that has been running PiHole for years
-# is almost certainly on one of the older two -- reflash before running this.
+# ARMv6 needs Python >=3.11, so Raspberry Pi OS Bookworm (Debian 12, Python 3.11) or newer.
+# Verified working on Raspbian 13 (trixie) with Python 3.13.5 on a Pi Zero W Rev 1.1: piwheels
+# serves pydantic_core-2.46.4-cp313-cp313-linux_armv6l.whl, so nothing is compiled. Bullseye
+# (3.9) and Buster (3.7) are too old and need a reflash.
 #
 # Idempotent: safe to re-run. It does not touch the ledger and it never writes credentials.
 #
@@ -77,11 +78,28 @@ if command -v timedatectl >/dev/null 2>&1; then
      correctness depend on the clock. Fix NTP before trusting a run."
 fi
 
-say "3/7  Installing system packages"
-sudo apt-get update -qq
-sudo apt-get install -y -qq git curl ca-certificates
+say "3/7  Checking system packages"
+# apt is only touched when something is actually missing. Installing from piwheels needs no
+# compiler, and a recent Raspberry Pi OS already ships git, python3, venv and pip -- so on a
+# current image this step does nothing, which also means it does not fight an apt/dpkg lock
+# held by an unattended-upgrade or a full-upgrade running in another shell.
+NEEDED=""
+command -v git  >/dev/null 2>&1 || NEEDED="$NEEDED git"
+command -v curl >/dev/null 2>&1 || NEEDED="$NEEDED curl"
 if [ "$INSTALL_MODE" = pip ]; then
-  sudo apt-get install -y -qq python3 python3-venv python3-dev build-essential libffi-dev
+  python3 -c 'import venv, ensurepip' >/dev/null 2>&1 || NEEDED="$NEEDED python3-venv"
+fi
+if [ -n "$NEEDED" ]; then
+  echo "     missing:$NEEDED"
+  if sudo fuser /var/lib/dpkg/lock-frontend >/dev/null 2>&1; then
+    fail "apt is locked by another process (an upgrade running elsewhere?).
+     Wait for it to finish, then re-run. Refusing to interrupt a package operation."
+  fi
+  sudo apt-get update -qq
+  # shellcheck disable=SC2086
+  sudo apt-get install -y -qq $NEEDED
+else
+  echo "     git, curl and venv already present - skipping apt entirely"
 fi
 
 say "4/7  Preparing the Python toolchain"
@@ -95,8 +113,8 @@ else
   PYVER="$(python3 -c 'import sys; print("%d.%d" % sys.version_info[:2])')"
   echo "     system python3: $PYVER"
   python3 - <<'PY' || fail "Python 3.11+ is required and this OS has an older one.
-     Raspberry Pi OS Bookworm (Debian 12) ships 3.11 and still supports ARMv6.
-     Bullseye ships 3.9 and Buster 3.7. Reflash Bookworm 32-bit and re-run."
+     Bookworm (Debian 12) ships 3.11 and trixie (Debian 13) ships 3.13; both support ARMv6.
+     Bullseye ships 3.9 and Buster 3.7. Reflash a newer 32-bit image and re-run."
 import sys
 sys.exit(0 if sys.version_info >= (3, 11) else 1)
 PY
