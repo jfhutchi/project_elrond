@@ -21,6 +21,24 @@ def _repository_root() -> Path:
     return Path(__file__).resolve().parents[3]
 
 
+class _FakeDistribution:
+    def __init__(
+        self,
+        source_root: Path,
+        name: str,
+        *,
+        requires: tuple[str, ...] = (),
+        files: tuple[Path, ...] = (),
+    ) -> None:
+        self._source_root = source_root
+        self.metadata = {"Name": name}
+        self.requires = requires
+        self.files = files
+
+    def locate_file(self, entry: object) -> Path:
+        return self._source_root / Path(str(entry))
+
+
 @contextmanager
 def _repository_local_package(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
     """Expose one importable package from inside the repository to the parent resolver."""
@@ -126,6 +144,78 @@ print(json.dumps({"found": found}))
     )
 
 
+def test_shared_dependency_namespace_fails_closed_before_unapproved_sibling_is_staged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    repository = _repository_root().resolve()
+    with tempfile.TemporaryDirectory(prefix="sandbox-namespace-", dir=repository) as directory:
+        source_root = Path(directory)
+        approved_name = "sandbox_approved_package"
+        namespace_name = "sandbox_shared_namespace"
+        approved = source_root / approved_name
+        namespace = source_root / namespace_name
+        approved.mkdir()
+        namespace.mkdir()
+        (approved / "__init__.py").write_text("VALUE = 1\n", encoding="utf-8")
+        (namespace / "selected").mkdir()
+        (namespace / "unapproved").mkdir()
+        (namespace / "selected" / "__init__.py").write_text("", encoding="utf-8")
+        (namespace / "unapproved" / "__init__.py").write_text("", encoding="utf-8")
+
+        distributions = {
+            "sandbox-approved-distribution": _FakeDistribution(
+                source_root,
+                "sandbox-approved-distribution",
+                requires=("sandbox-selected-distribution>=1",),
+            ),
+            "sandbox-selected-distribution": _FakeDistribution(
+                source_root,
+                "sandbox-selected-distribution",
+            ),
+        }
+        package_locations = {
+            approved_name: approved,
+            namespace_name: namespace,
+        }
+        monkeypatch.setattr(
+            runner_module.importlib.metadata,
+            "packages_distributions",
+            lambda: {
+                approved_name: ["sandbox-approved-distribution"],
+                namespace_name: [
+                    "sandbox-selected-distribution",
+                    "sandbox-unapproved-distribution",
+                ],
+            },
+        )
+        monkeypatch.setattr(
+            runner_module.importlib.metadata,
+            "distribution",
+            lambda name: distributions[name],
+        )
+        original_find_spec = importlib.util.find_spec
+
+        def find_spec(name: str, package_name_arg: str | None = None) -> object:
+            location = package_locations.get(name)
+            if location is None:
+                return original_find_spec(name, package_name_arg)
+            spec = importlib.machinery.ModuleSpec(name, loader=None, is_package=True)
+            spec.submodule_search_locations = [str(location)]
+            return spec
+
+        monkeypatch.setattr(runner_module.importlib.util, "find_spec", find_spec)
+        policy = SandboxPolicy(allowed_third_party=(approved_name,))
+        sandbox = SandboxRunner(policy)
+
+        with pytest.raises(SandboxError, match="shared.*outside the approved dependency closure"):
+            sandbox._prepare(tmp_path, "print('must not execute')", {})
+
+    unapproved = tmp_path / "_packages" / namespace_name / "unapproved"
+    assert not unapproved.exists(), (
+        f"an unapproved sibling from a shared namespace was staged: {unapproved}"
+    )
+
+
 def test_editable_runtime_dependency_is_staged_from_its_import_root(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -152,27 +242,14 @@ def test_editable_runtime_dependency_is_staged_from_its_import_root(
             encoding="utf-8",
         )
 
-        class FakeDistribution:
-            def __init__(
-                self,
-                name: str,
-                *,
-                requires: tuple[str, ...] = (),
-                files: tuple[Path, ...] = (),
-            ) -> None:
-                self.metadata = {"Name": name}
-                self.requires = requires
-                self.files = files
-
-            def locate_file(self, entry: object) -> Path:
-                return source_root / Path(str(entry))
-
         distributions = {
-            "sandbox-approved-distribution": FakeDistribution(
+            "sandbox-approved-distribution": _FakeDistribution(
+                source_root,
                 "sandbox-approved-distribution",
                 requires=("sandbox-editable-dependency>=1",),
             ),
-            "sandbox-editable-dependency": FakeDistribution(
+            "sandbox-editable-dependency": _FakeDistribution(
+                source_root,
                 "sandbox-editable-dependency",
                 files=(Path(finder_name),),
             ),
@@ -267,18 +344,14 @@ def test_parent_install_location_metadata_is_not_staged(metadata_name: str) -> N
             encoding="utf-8",
         )
 
-        class LocationBearingDistribution:
-            files = (Path(metadata_name),)
-
-            @staticmethod
-            def locate_file(entry: object) -> Path:
-                return source_root / Path(str(entry))
-
+        distribution = _FakeDistribution(
+            source_root,
+            "sandbox-probe-package",
+            files=(Path(metadata_name),),
+        )
         destination = source_root / "staged"
         destination.mkdir()
-        runner_module._copy_distribution(  # type: ignore[arg-type]
-            LocationBearingDistribution(), destination
-        )
+        runner_module._copy_distribution(distribution, destination)  # type: ignore[arg-type]
 
         staged_metadata = destination / metadata_name
         assert not staged_metadata.exists(), (

@@ -171,11 +171,19 @@ def _distribution_import_roots(
     for distribution in distributions:
         distribution_name = distribution.metadata["Name"]
         selected.add(distribution_name.lower().replace("_", "-"))
-    return [
-        import_root
-        for import_root, owners in importlib.metadata.packages_distributions().items()
-        if any(owner.lower().replace("_", "-") in selected for owner in owners)
-    ]
+    import_roots: list[str] = []
+    for import_root, owners in importlib.metadata.packages_distributions().items():
+        normalized_owners = {owner.lower().replace("_", "-") for owner in owners}
+        if not normalized_owners.intersection(selected):
+            continue
+        unselected = normalized_owners.difference(selected)
+        if unselected:
+            raise SandboxError(
+                f"import root {import_root!r} is shared with distributions outside "
+                "the approved dependency closure"
+            )
+        import_roots.append(import_root)
+    return import_roots
 
 
 def _is_unsafe_staged_path(relative: Path) -> bool:
