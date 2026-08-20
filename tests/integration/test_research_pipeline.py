@@ -81,6 +81,7 @@ from quantbot.research.registry import (
     HypothesisDraft,
     HypothesisRegistry,
     RefusalReason,
+    SearchOrigin,
     RegistrationRefused,
 )
 from quantbot.research.sources import EpistemicStatus, EvidenceBasis
@@ -107,7 +108,12 @@ def effect(**overrides: object) -> EffectSpecification:
         "expected": Decimal("1.2"),
         "minimum_practical": Decimal("0.6"),
         "justification": "Published term-structure effects sit near this magnitude.",
+        # A comparative Sharpe is a Sharpe *difference* and must declare the benchmark it is
+        # measured against (#25). This fixture was left behind when that landed, which is how
+        # the only test asserting the gates compose end to end went red unnoticed.
         "comparison": ComparisonStructure.PAIRED,
+        "benchmark_sharpe": Decimal("0.90"),
+        "benchmark_correlation": Decimal("0.95"),
         "economics": EconomicProfile(
             annual_rebalances=12,
             expected_annual_volatility_bps=1500,
@@ -171,6 +177,13 @@ def draft_from(proposal: Candidate, **overrides: object) -> HypothesisDraft:
         "effect": effect(),
         "available_observations": 9000,
         "search_cardinality": proposal.search_cardinality,
+        # A count above 1 must say where it came from (#23). This candidate came from a miner,
+        # and an agent's unattested self-report is exactly the origin that is not accepted -- so
+        # the pipeline has to route it through a human attestation. That is the gap #23 leaves
+        # open: `Candidate` carries a cardinality but no origin, so discovery cannot hand the
+        # registry a provenance it is allowed to trust.
+        "search_origin": SearchOrigin.OPERATOR_ATTESTED,
+        "search_attested_by": "hutch",
         "confounders": proposal.confounders,
         "basis": proposal.basis,
         "proposed_by": proposal.proposed_by,
