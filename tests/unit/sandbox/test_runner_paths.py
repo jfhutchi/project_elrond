@@ -52,7 +52,11 @@ def _repository_local_package(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
             "def source_path():\n    return __file__\n",
             encoding="utf-8",
         )
-        py_compile.compile(str(package_source), doraise=True)
+        py_compile.compile(
+            str(package_source),
+            doraise=True,
+            invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH,
+        )
 
         original_find_spec = importlib.util.find_spec
 
