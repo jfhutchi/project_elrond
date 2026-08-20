@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - fix/sandbox-package-path-isolation
+  pull_request:
+    branches:
+      - elrond-v0.2
 
 jobs:
   verify:
