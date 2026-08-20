@@ -5,6 +5,12 @@ the dashboard is generated rather than hosted. Re-run it whenever you want a fre
 
 Reads only. Safe to run while the daemon holds the writer lock.
 
+**Every row rendered here is read from the database at render time.** This file holds no
+research findings of its own, and there is deliberately no fallback for an empty store: a panel
+that fills silence with the last list somebody typed into a source file manufactures confidence,
+and it drifts silently in the flattering direction because nobody deletes a row from a literal.
+An empty research store renders as visibly empty, which is a truer and more useful thing to see.
+
 Usage:
     uv run python scripts/dashboard.py [OUTPUT.html]
 """
@@ -19,78 +25,18 @@ from decimal import Decimal
 from pathlib import Path
 
 import httpx
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from quantbot.reporting import analyze_fills
+from quantbot.research.budget import Resource
+from quantbot.research.dashboard import luck_bar_at
+from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
+from quantbot.research.memory import ResearchMemory, ResearchRecord
+from quantbot.research.registry import HypothesisRegistry, Registration
 from quantbot.storage import Database, StorageRepository
+from quantbot.storage.schema import budget_spend
 from quantbot.strategy import load_strategy_config, strategy_id_for
-
-# Findings from cycles 1-9, recorded in REFUTED.md. Sequence is real information here:
-# each cycle was designed after reading the previous one's result.
-RESEARCH: tuple[tuple[str, str, str, str], ...] = (
-    (
-        "1",
-        "Momentum parameter tuning",
-        "refuted",
-        "31 candidates; winner's edge existed only at momentum_long=252",
-    ),
-    (
-        "2",
-        "Full shipped strategy worth running",
-        "refuted",
-        "Ranked 6 of 6. CAGR 0.50%, Sharpe 0.15",
-    ),
-    (
-        "3",
-        "Signal-family ensembles",
-        "refuted",
-        "Components correlate 0.75+; no diversification available",
-    ),
-    (
-        "4",
-        "Exposure normalisation",
-        "refuted",
-        "Sharpe is scale-invariant; low drawdown was under-risk",
-    ),
-    ("5", "Crypto momentum", "refuted", "-79.9%, Sharpe -0.45, 80.6% drawdown"),
-    ("5", "BTC trend standalone", "refuted", "Sharpe 0.53, 95% CI [-0.55, 1.61] spans zero"),
-    (
-        "6",
-        "Shorter horizons",
-        "refuted",
-        "1d reversal: strongest raw edge (+427.9% gross), -28.8% net",
-    ),
-    ("7", "Options for faster gains", "refuted", "Affordable contracts are 0DTE at 10-18% spreads"),
-    (
-        "8",
-        "Machine learning / meta-labelling",
-        "refuted",
-        "PF 2.29 looked strong; p=0.085, luck threshold 2.22",
-    ),
-    (
-        "9",
-        "Energy predictable via geopolitics",
-        "refuted",
-        "Trend persistence 21.2d < equities 26.5d",
-    ),
-    ("9", "FX diversification", "refuted", "Lowest correlation (0.02) and Sharpe -0.14"),
-    ("—", "BTC as portfolio diversifier", "refuted", "Blend improvement 0.23 sigma, p~0.82"),
-    ("—", "Reddit / social sentiment", "refuted", "Literature: alpha indistinguishable from zero"),
-    (
-        "—",
-        "Coinbase paper trading",
-        "impossible",
-        "Sandbox is static fixtures; Agents is real money only",
-    ),
-)
-
-BENCHMARKS: tuple[tuple[str, str, str, str, bool], ...] = (
-    ("SPY buy & hold", "$454.70", "15.36%", "0.90", False),
-    ("SPY 200-day trend", "$283.50", "10.34%", "0.91", False),
-    ("Pure 12-1 momentum", "$282.24", "10.30%", "0.77", False),
-    ("Momentum + trend (deployed)", "$232.78", "8.31%", "0.76", True),
-    ("Sleeve ensemble", "$120.51", "1.78%", "0.82", False),
-    ("Full strategy (retired)", "$105.41", "0.50%", "0.15", False),
-)
 
 
 def _money(value: Decimal | float | None, places: int = 2) -> str:
@@ -144,6 +90,7 @@ def _durable() -> dict[str, object]:
         signals = repository.list_signals()
         account_id = os.environ.get("EXPECTED_ACCOUNT_ID", "")
         equity = repository.list_equity_snapshots(account_id=account_id) if account_id else []
+        research = _research(session)
     database.close()
     analysis = analyze_fills(fills)
     return {
@@ -157,7 +104,35 @@ def _durable() -> dict[str, object]:
         "signals": signals,
         "equity": equity,
         "completed": analysis.completed_trades,
+        **research,
     }
+
+
+def _research(session: Session) -> dict[str, object]:
+    """Research state, read from the durable stores and from nowhere else.
+
+    Each entry maps to one table: `hypotheses`, `research_records`, `research_tasks`, and the
+    `TRIALS` rows of `budget_spend`. Nothing here is defaulted or backfilled, so a store with
+    no rows produces panels with no rows.
+    """
+    return {
+        "registrations": HypothesisRegistry(session).list_registrations(),
+        # `recall("")` matches every record: the empty pattern is a substring of any subject.
+        "records": ResearchMemory(session).recall(""),
+        "tasks": ResearchDirector(session).by_state(),
+        "trials": _trials_by_budget(session),
+    }
+
+
+def _trials_by_budget(session: Session) -> list[tuple[str, int]]:
+    """Cumulative trials per budget key. The spend that never refunds."""
+    rows = session.execute(
+        select(budget_spend.c.budget_key, func.coalesce(func.sum(budget_spend.c.amount), "0"))
+        .where(budget_spend.c.category == Resource.TRIALS.value)
+        .group_by(budget_spend.c.budget_key)
+        .order_by(budget_spend.c.budget_key)
+    ).all()
+    return [(str(key), int(Decimal(str(total)))) for key, total in rows]
 
 
 def _supervisor_state() -> tuple[str, str, list[str]]:
@@ -237,23 +212,63 @@ def _fill_row(fill: object) -> str:
     )
 
 
-def _research_row(cycle: str, name: str, verdict: str, detail: str) -> str:
-    tone = "critical" if verdict == "refuted" else "warning"
+def _hypothesis_row(registration: Registration) -> str:
+    draft, power = registration.draft, registration.power
     return (
-        f"<tr><td class='cycle'>{_esc(cycle)}</td><td>{_esc(name)}</td>"
-        f"<td>{_pill(verdict, tone)}</td>"
-        f"<td class='quiet-text'>{_esc(detail)}</td></tr>"
+        f"<tr><td class='mono'>{_esc(draft.hypothesis_id)} v{draft.version}</td>"
+        f"<td>{_esc(draft.question)}</td>"
+        f"<td class='quiet-text'>{_esc(draft.family_id)}</td>"
+        f"<td>{_pill(power.verdict.value, 'good' if power.cleared else 'warning')}</td>"
+        f"<td class='num'>{registration.cumulative_trials}</td>"
+        f"<td class='num'>{_esc(power.luck_threshold_z)}</td></tr>"
     )
 
 
-def _bench_row(name: str, final: str, cagr: str, sharpe: str, live: bool) -> str:
-    row_class = "is-live" if live else ""
-    tag = "<span class='tag'>deployed</span>" if live else ""
+def _record_row(record: ResearchRecord) -> str:
+    """One durable research record. The verdict is printed, never paraphrased.
+
+    UNDERPOWERED and UNECONOMIC get their own tone deliberately: a question the data could not
+    resolve was never tested, and rendering it in the same colour as a refutation teaches a
+    later reader that a mechanism failed when nothing of the sort was established.
+    """
+    label = record.verdict.value if record.verdict is not None else record.kind.value
+    tone = {
+        "REFUTED": "critical",
+        "LITERATURE_REFUTED": "critical",
+        "SURVIVED": "good",
+        "LITERATURE_SUPPORTED": "good",
+        "UNDERPOWERED": "warning",
+        "UNECONOMIC": "warning",
+        "EXPLORATORY_ONLY": "warning",
+    }.get(label, "quiet")
     return (
-        f"<tr class='{row_class}'><td>{_esc(name)} {tag}</td>"
-        f"<td class='num'>{_esc(final)}</td>"
-        f"<td class='num'>{_esc(cagr)}</td>"
-        f"<td class='num'>{_esc(sharpe)}</td></tr>"
+        f"<tr><td>{_esc(record.subject)}</td>"
+        f"<td>{_pill(label, tone)}</td>"
+        f"<td class='quiet-text'>{_esc(record.statement)}</td>"
+        f"<td class='mono quiet-text'>{_esc(record.source)}</td></tr>"
+    )
+
+
+def _task_row(task: ResearchTask) -> str:
+    tone = {
+        TaskState.BLOCKED: "critical",
+        TaskState.UNDERPOWERED: "warning",
+        TaskState.SURVIVED: "good",
+        TaskState.PROMOTABLE: "good",
+    }.get(task.state, "accent")
+    return (
+        f"<tr><td class='mono'>{_esc(task.task_id)}</td>"
+        f"<td>{_pill(task.state.value, tone)}</td>"
+        f"<td class='quiet-text'>{_esc(task.question)}</td>"
+        f"<td class='mono quiet-text'>{_esc(task.updated_at.strftime('%Y-%m-%d %H:%M'))}</td></tr>"
+    )
+
+
+def _trial_row(budget_key: str, trials: int) -> str:
+    return (
+        f"<tr><td class='mono'>{_esc(budget_key)}</td>"
+        f"<td class='num'>{trials}</td>"
+        f"<td class='num'>{_esc(luck_bar_at(trials))}</td></tr>"
     )
 
 
@@ -284,6 +299,10 @@ def build(out: Path) -> None:
     reconciliation = durable.get("reconciliation") if durable.get("available") else None
     kill = durable.get("kill") if durable.get("available") else None
     signals = durable.get("signals", []) if durable.get("available") else []
+    registrations = durable.get("registrations", []) if durable.get("available") else []
+    records = durable.get("records", []) if durable.get("available") else []
+    tasks = durable.get("tasks", []) if durable.get("available") else []
+    trials = durable.get("trials", []) if durable.get("available") else []
 
     total_pl = sum(float(p.get("unrealized_pl", 0) or 0) for p in positions)
     exposure = sum(float(p.get("market_value", 0) or 0) for p in positions)
@@ -291,32 +310,50 @@ def build(out: Path) -> None:
 
     status_pills = []
     if kill is not None:
-        status_pills.append(_pill("KILL SWITCH ENGAGED" if kill.engaged else "Armed",
-                                  "critical" if kill.engaged else "good"))
+        status_pills.append(
+            _pill(
+                "KILL SWITCH ENGAGED" if kill.engaged else "Armed",
+                "critical" if kill.engaged else "good",
+            )
+        )
     if reconciliation is not None:
         ok = reconciliation.status.value == "RECONCILED" and not reconciliation.diffs
-        status_pills.append(_pill(reconciliation.status.value.replace("_", " ").title(),
-                                  "good" if ok else "critical"))
+        status_pills.append(
+            _pill(
+                reconciliation.status.value.replace("_", " ").title(), "good" if ok else "critical"
+            )
+        )
     if market_open is not None:
-        status_pills.append(_pill("Market open" if market_open else "Market closed",
-                                  "accent" if market_open else "quiet"))
+        status_pills.append(
+            _pill(
+                "Market open" if market_open else "Market closed",
+                "accent" if market_open else "quiet",
+            )
+        )
     status_pills.append(_pill(f"Strategy {version}", "quiet"))
     supervisor_detail, supervisor_tone, supervisor_lines = _supervisor_state()
     status_pills.append(_pill(f"Watchdog {supervisor_detail}", supervisor_tone))
 
     position_rows = "".join(_position_row(p) for p in positions) or _empty(7, "No open positions")
-    run_rows = "".join(
-        _run_row(r, signals) for r in reversed(runs[-12:])
-    ) or _empty(4, "No cycles recorded yet")
+    run_rows = "".join(_run_row(r, signals) for r in reversed(runs[-12:])) or _empty(
+        4, "No cycles recorded yet"
+    )
     fill_rows = "".join(
         _fill_row(f) for f in sorted(fills, key=lambda x: x.occurred_at, reverse=True)[:12]
     ) or _empty(5, "No fills yet")
-    research_rows = "".join(_research_row(*row) for row in RESEARCH)
     supervisor_rows = "".join(
-        f"<tr><td class='mono quiet-text'>{_esc(line)}</td></tr>"
-        for line in supervisor_lines
+        f"<tr><td class='mono quiet-text'>{_esc(line)}</td></tr>" for line in supervisor_lines
     ) or _empty(1, "No watchdog output yet")
-    bench_rows = "".join(_bench_row(*row) for row in BENCHMARKS)
+    hypothesis_rows = "".join(_hypothesis_row(r) for r in registrations) or _empty(
+        6, "No hypotheses registered"
+    )
+    record_rows = "".join(_record_row(r) for r in records) or _empty(
+        4, "No research records stored"
+    )
+    task_rows = "".join(_task_row(t) for t in tasks) or _empty(4, "No research tasks")
+    trial_rows = "".join(_trial_row(key, count) for key, count in trials) or _empty(
+        3, "No trials recorded against any budget"
+    )
 
     trades_per_day = len(completed) / max(len(runs), 1)
     wins = sum(1 for t in completed if float(t.net_pnl) > 0)
@@ -354,7 +391,7 @@ body {{
     "Segoe UI", system-ui, sans-serif;
   font-size: 14px; line-height: 1.5;
 }}
-.mono, .num, .sym, .cycle {{
+.mono, .num, .sym {{
   font-family: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
   font-variant-numeric: tabular-nums;
 }}
@@ -410,13 +447,9 @@ td {{ padding: 9px 12px; border-bottom: 1px solid var(--grid); vertical-align: t
 tbody tr:last-child td {{ border-bottom: 0; }}
 .num, th.num {{ text-align: right; }}
 .sym {{ font-weight: 650; }}
-.cycle {{ color: var(--accent); font-weight: 650; }}
 .quiet-text {{ color: var(--ink-quiet); font-size: 12.5px; }}
 .empty {{ color: var(--ink-quiet); text-align: center; padding: 22px; font-style: italic; }}
-.is-live {{ background: var(--accent-soft); }}
-.tag {{ font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent);
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); padding: 1px 5px;
-  border-radius: 2px; margin-left: 6px; }}
+code {{ font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 12px; }}
 .cols {{ display: grid; gap: 30px; grid-template-columns: 1fr; }}
 @media (min-width: 880px) {{ .cols {{ grid-template-columns: 1.15fr 1fr; }} }}
 .caveat {{ border-left: 2px solid var(--warn); padding: 10px 0 10px 14px; margin-top: 12px;
@@ -430,14 +463,14 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
     <h1>QuantBot Instrument Panel</h1>
     <span class="sub mono">{_esc(sid)}</span>
   </header>
-  <div class="pills">{''.join(status_pills)}</div>
+  <div class="pills">{"".join(status_pills)}</div>
 
   <div class="readouts">
     <div class="readout"><div class="k">Equity</div><div class="v">{_money(equity)}</div>
       <div class="note">cash {_money(cash)}</div></div>
     <div class="readout"><div class="k">Open P&amp;L</div>
-      <div class="v {'up' if total_pl >= 0 else 'down'}">{_money(total_pl, 4)}</div>
-      <div class="note">{len(positions)} position{'s' if len(positions) != 1 else ''}</div></div>
+      <div class="v {"up" if total_pl >= 0 else "down"}">{_money(total_pl, 4)}</div>
+      <div class="note">{len(positions)} position{"s" if len(positions) != 1 else ""}</div></div>
     <div class="readout"><div class="k">Exposure</div><div class="v">{open_pct:.1f}%</div>
       <div class="note">{_money(exposure)} deployed</div></div>
     <div class="readout"><div class="k">Cycles</div><div class="v">{len(runs)}</div>
@@ -482,18 +515,6 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
   </div>
 
   <section>
-    <h2>Measured over 10.6 years — $100 start, costs applied</h2>
-    <div class="scroll"><table>
-      <thead><tr><th>Configuration</th><th class="num">Final</th><th class="num">CAGR</th>
-        <th class="num">Sharpe</th></tr></thead>
-      <tbody>{bench_rows}</tbody>
-    </table></div>
-    <p class="caveat">Nothing built here beat buying and holding the index. The deployed
-      configuration is the best of those the live system can express, not a strategy with a
-      demonstrated edge — it loses to SPY on risk-adjusted return.</p>
-  </section>
-
-  <section>
     <h2>Watchdog log — most recent checks</h2>
     <div class="scroll"><table>
       <tbody>{supervisor_rows}</tbody>
@@ -503,27 +524,62 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
   </section>
 
   <section>
-    <h2>Research ledger — hypotheses tested and killed</h2>
-    <div class="scroll"><table>
-      <thead><tr><th>Cycle</th><th>Hypothesis</th><th>Verdict</th><th>Evidence</th></tr></thead>
-      <tbody>{research_rows}</tbody>
+    <h2>Hypotheses registered</h2>
+    <div class="scroll"><table id="panel-hypotheses">
+      <thead><tr><th>Hypothesis</th><th>Question</th><th>Family</th><th>Power</th>
+        <th class="num">Trials</th><th class="num">Luck bar</th></tr></thead>
+      <tbody>{hypothesis_rows}</tbody>
     </table></div>
-    <p class="caveat">Every apparent winner evaporated under a significance test. Fourteen
-      hypotheses refuted with measurement; ~43 candidate evaluations against one dataset now
-      put the luck threshold at t&nbsp;≈&nbsp;2.22, so each new result needs deflating by the
-      cumulative count rather than the current cycle's.</p>
   </section>
+
+  <section>
+    <h2>Research ledger — what the durable store holds</h2>
+    <div class="scroll"><table id="panel-records">
+      <thead><tr><th>Subject</th><th>Verdict</th><th>Statement</th><th>Source</th></tr></thead>
+      <tbody>{record_rows}</tbody>
+    </table></div>
+    <p class="caveat">Read from <code>research_records</code> at render time, with no fallback.
+      An empty table means the store is empty — which is a different and more useful thing to
+      know than whatever list was last typed into the generator. UNDERPOWERED is shown as its
+      own verdict and never as a refutation: a question the data could not resolve was not
+      tested, and colouring the two alike teaches a later reader something that never happened.
+    </p>
+  </section>
+
+  <div class="cols">
+    <section>
+      <h2>Research pipeline</h2>
+      <div class="scroll"><table id="panel-tasks">
+        <thead><tr><th>Task</th><th>State</th><th>Question</th><th>Updated</th></tr></thead>
+        <tbody>{task_rows}</tbody>
+      </table></div>
+    </section>
+    <section>
+      <h2>Statistical budget — trials spent</h2>
+      <div class="scroll"><table id="panel-trials">
+        <thead><tr><th>Budget</th><th class="num">Trials</th>
+          <th class="num">Luck bar</th></tr></thead>
+        <tbody>{trial_rows}</tbody>
+      </table></div>
+      <p class="caveat">Trials are the one budget that never refills. The bar rises with every
+        candidate evaluated against the same data, and no amount of compute buys it back.</p>
+    </section>
+  </div>
 
   <footer>
     Generated {_esc(generated)} · strategy {_esc(version)} · universe {universe_size} symbols,
-    roster {roster} · durable ledger and a live broker read, no synthesised values.
+    roster {roster} · every row read from the durable ledger and a live broker read at render
+    time; no literals, no fallbacks, no synthesised values.
   </footer>
 </div>
 """
     out.write_text(page, encoding="utf-8")
     print(f"wrote {out}")
-    print(f"  equity {_money(equity)}  positions {len(positions)}  cycles {len(runs)}"
-          f"  fills {len(fills)}")
+    print(
+        f"  equity {_money(equity)}  positions {len(positions)}  cycles {len(runs)}"
+        f"  fills {len(fills)}"
+    )
+    print(f"  hypotheses {len(registrations)}  research records {len(records)}  tasks {len(tasks)}")
 
 
 if __name__ == "__main__":
