@@ -126,6 +126,108 @@ print(json.dumps({"found": found}))
     )
 
 
+def test_editable_runtime_dependency_is_staged_from_its_import_root(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    repository = _repository_root().resolve()
+    with tempfile.TemporaryDirectory(prefix="sandbox-dependency-", dir=repository) as directory:
+        source_root = Path(directory)
+        approved_name = "sandbox_approved_package"
+        dependency_name = "sandbox_editable_dependency"
+        approved = source_root / approved_name
+        dependency = source_root / dependency_name
+        approved.mkdir()
+        dependency.mkdir()
+        (approved / "__init__.py").write_text(
+            "import sandbox_editable_dependency as dependency\n"
+            "VALUE = dependency.VALUE\n"
+            "DEPENDENCY_FILE = dependency.__file__\n",
+            encoding="utf-8",
+        )
+        (dependency / "__init__.py").write_text("VALUE = 7\n", encoding="utf-8")
+
+        finder_name = "__editable___sandbox_editable_dependency_0_0_0_finder.py"
+        (source_root / finder_name).write_text(
+            f"MAPPING = {{'sandbox_editable_dependency': {str(repository)!r}}}\n",
+            encoding="utf-8",
+        )
+
+        class FakeDistribution:
+            def __init__(
+                self,
+                name: str,
+                *,
+                requires: tuple[str, ...] = (),
+                files: tuple[Path, ...] = (),
+            ) -> None:
+                self.metadata = {"Name": name}
+                self.requires = requires
+                self.files = files
+
+            def locate_file(self, entry: object) -> Path:
+                return source_root / Path(str(entry))
+
+        distributions = {
+            "sandbox-approved-distribution": FakeDistribution(
+                "sandbox-approved-distribution",
+                requires=("sandbox-editable-dependency>=1",),
+            ),
+            "sandbox-editable-dependency": FakeDistribution(
+                "sandbox-editable-dependency",
+                files=(Path(finder_name),),
+            ),
+        }
+        package_locations = {
+            approved_name: approved,
+            dependency_name: dependency,
+        }
+        monkeypatch.setattr(
+            runner_module.importlib.metadata,
+            "packages_distributions",
+            lambda: {
+                approved_name: ["sandbox-approved-distribution"],
+                dependency_name: ["sandbox-editable-dependency"],
+            },
+        )
+        monkeypatch.setattr(
+            runner_module.importlib.metadata,
+            "distribution",
+            lambda name: distributions[name],
+        )
+        original_find_spec = importlib.util.find_spec
+
+        def find_spec(name: str, package_name_arg: str | None = None) -> object:
+            location = package_locations.get(name)
+            if location is None:
+                return original_find_spec(name, package_name_arg)
+            spec = importlib.machinery.ModuleSpec(name, loader=None, is_package=True)
+            spec.submodule_search_locations = [str(location)]
+            return spec
+
+        monkeypatch.setattr(runner_module.importlib.util, "find_spec", find_spec)
+        source = """
+import json, sandbox_approved_package as package
+print(json.dumps({
+    "value": package.VALUE,
+    "dependency_file": package.DEPENDENCY_FILE,
+}))
+"""
+        policy = SandboxPolicy(
+            allowed_third_party=(approved_name,),
+            wall_clock_seconds=30.0,
+            memory_mb=512,
+        )
+        result = SandboxRunner(policy).run(source)
+
+    assert result.ok, result.stderr
+    observed = json.loads(result.stdout)
+    assert observed["value"] == 7, "the editable runtime dependency was not importable"
+    assert not Path(observed["dependency_file"]).resolve().is_relative_to(repository), (
+        "the editable runtime dependency loaded from its repository source root: "
+        f"{observed['dependency_file']}"
+    )
+
+
 def test_approved_distribution_and_runtime_dependencies_are_staged() -> None:
     source = """
 import json, pydantic

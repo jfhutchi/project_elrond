@@ -163,6 +163,22 @@ def _distribution_closure(package_names: tuple[str, ...]) -> list[importlib.meta
     return resolved
 
 
+def _distribution_import_roots(
+    distributions: list[importlib.metadata.Distribution],
+) -> list[str]:
+    """Map the resolved dependency closure back to import roots for editable installs."""
+    selected: set[str] = set()
+    for distribution in distributions:
+        distribution_name = distribution.metadata.get("Name")
+        if distribution_name:
+            selected.add(distribution_name.lower().replace("_", "-"))
+    return [
+        import_root
+        for import_root, owners in importlib.metadata.packages_distributions().items()
+        if any(owner.lower().replace("_", "-") in selected for owner in owners)
+    ]
+
+
 def _is_unsafe_staged_path(relative: Path) -> bool:
     """Reject files that preserve or activate locations from the parent installation."""
     if relative.is_absolute() or ".." in relative.parts:
@@ -239,10 +255,14 @@ def _approved_package_paths(policy: SandboxPolicy, destination: Path) -> list[st
     metadata-free packages without carrying their original path across the boundary.
     """
     destination.mkdir(parents=True, exist_ok=True)
-    for distribution in _distribution_closure(policy.allowed_third_party):
+    distributions = _distribution_closure(policy.allowed_third_party)
+    for distribution in distributions:
         _copy_distribution(distribution, destination)
+    import_roots = dict.fromkeys(
+        (*policy.allowed_third_party, *_distribution_import_roots(distributions))
+    )
     copied = False
-    for name in policy.allowed_third_party:
+    for name in import_roots:
         copied = _copy_import_root(name, destination) or copied
     if not copied and not any(destination.iterdir()):
         destination.rmdir()
