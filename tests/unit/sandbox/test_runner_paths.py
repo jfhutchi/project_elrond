@@ -83,6 +83,20 @@ def _run_with_repository_local_package(
         return SandboxRunner(policy).run(source.replace("PACKAGE_NAME", package_name))
 
 
+def test_cached_repository_bytecode_is_not_staged(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    with _repository_local_package(monkeypatch) as package_name:
+        destination = tmp_path / "_packages"
+        copied = runner_module._copy_import_root(package_name, destination)
+
+    assert copied, "the approved package was not staged for the bytecode check"
+    cached_bytecode = list(destination.rglob("*.pyc"))
+    assert cached_bytecode == [], (
+        f"cached bytecode from the repository package was staged: {cached_bytecode}"
+    )
+
+
 def test_child_sys_path_entries_and_approved_package_are_outside_repository(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
