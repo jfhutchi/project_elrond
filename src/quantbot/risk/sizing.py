@@ -14,6 +14,22 @@ from quantbot.strategy.config import StrategyConfig
 
 RiskSizingResult = RiskApproval | RiskRejection
 
+#: Brokers that support fractional shares still refuse orders below a small notional.
+MINIMUM_FRACTIONAL_NOTIONAL = Decimal("1")
+
+#: Alpaca accepts nine decimal places on ``qty``; six is ample and keeps values legible.
+FRACTIONAL_QUANTITY_EXPONENT = Decimal("0.000001")
+
+
+def quantize_quantity(quantity: Decimal, config: StrategyConfig) -> Decimal:
+    """Round an unconstrained share count down to a quantity the broker will accept.
+
+    Always rounds down, so quantization can only ever reduce exposure below a cap.
+    """
+    if config.allow_fractional_shares:
+        return quantity.quantize(FRACTIONAL_QUANTITY_EXPONENT, rounding=ROUND_FLOOR)
+    return quantity.to_integral_value(rounding=ROUND_FLOOR)
+
 
 def _rejection(
     request: EntrySizingRequest,
@@ -94,22 +110,48 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
         Decimal("0"),
         portfolio.equity * max_gross_fraction - portfolio.committed_gross_exposure,
     )
+    volatility_cap: Decimal | None = None
+    if config.volatility_target_bps > 0:
+        if request.realized_volatility is None or request.realized_volatility <= 0:
+            return _rejection(request, ["REALIZED_VOLATILITY_UNAVAILABLE"])
+        # Exposure that makes this position contribute the target volatility. Scaling by
+        # target/realised is the whole mechanism: it cuts size when a symbol is turbulent,
+        # which is when losses cluster, and restores it when the symbol calms down.
+        target = Decimal(config.volatility_target_bps) / BASIS_POINTS
+        scaled = portfolio.equity * (target / request.realized_volatility)
+        volatility_cap = max(Decimal("0"), scaled - portfolio.committed_symbol_market_value)
+
     caps = SizingCaps(
         per_trade_risk=risk_budget / request.stop_distance,
         portfolio_open_risk=open_risk_remaining / request.stop_distance,
         position_value=position_value_remaining / request.reference_price,
         gross_exposure=gross_remaining / request.reference_price,
         buying_power=max(Decimal("0"), portfolio.buying_power) / request.reference_price,
+        volatility_target=(
+            None if volatility_cap is None else volatility_cap / request.reference_price
+        ),
     )
-    ordered_caps = (
-        (SizingCapName.PER_TRADE_RISK, caps.per_trade_risk),
+    ordered_caps: tuple[tuple[SizingCapName, Decimal], ...] = (
+        # Target-weight sizing deliberately omits the per-trade risk cap. That cap is
+        # risk_budget / stop_distance, which ties position size to a stop, and a rule that
+        # holds a fixed weight while a condition is true has no stop to divide by. Leaving it
+        # in is what held two attempts at SPY_SMA200 to 30% and 43% of the exposure they
+        # needed. The position-value, gross-exposure and buying-power caps all still apply,
+        # so this loosens one constraint rather than removing risk control.
+        *(
+            ()
+            if config.target_weight_sizing
+            else ((SizingCapName.PER_TRADE_RISK, caps.per_trade_risk),)
+        ),
         (SizingCapName.PORTFOLIO_OPEN_RISK, caps.portfolio_open_risk),
         (SizingCapName.POSITION_VALUE, caps.position_value),
         (SizingCapName.GROSS_EXPOSURE, caps.gross_exposure),
         (SizingCapName.BUYING_POWER, caps.buying_power),
     )
+    if caps.volatility_target is not None:
+        ordered_caps = (*ordered_caps, (SizingCapName.VOLATILITY_TARGET, caps.volatility_target))
     minimum = min(value for _, value in ordered_caps)
-    quantity = minimum.to_integral_value(rounding=ROUND_FLOOR)
+    quantity = quantize_quantity(minimum, config)
 
     exhausted_reasons = {
         SizingCapName.PER_TRADE_RISK: "TRADE_RISK_BUDGET_EXHAUSTED",
@@ -117,9 +159,13 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
         SizingCapName.POSITION_VALUE: "POSITION_VALUE_LIMIT_REACHED",
         SizingCapName.GROSS_EXPOSURE: "GROSS_EXPOSURE_LIMIT_REACHED",
         SizingCapName.BUYING_POWER: "BUYING_POWER_EXHAUSTED",
+        SizingCapName.VOLATILITY_TARGET: "VOLATILITY_TARGET_REACHED",
     }
     reasons = [exhausted_reasons[name] for name, value in ordered_caps if value <= 0]
-    if quantity < 1:
+    if config.allow_fractional_shares:
+        if quantity * request.reference_price < MINIMUM_FRACTIONAL_NOTIONAL:
+            reasons.append("NOTIONAL_BELOW_MINIMUM")
+    elif quantity < 1:
         reasons.append("QUANTITY_BELOW_ONE_SHARE")
     if reasons:
         return _rejection(request, reasons, caps)
@@ -129,6 +175,7 @@ def size_entry(request: EntrySizingRequest, config: StrategyConfig) -> RiskSizin
     return RiskApproval(
         symbol=request.symbol,
         quantity=quantity,
+        fractional_shares=config.allow_fractional_shares,
         stop_distance=request.stop_distance,
         drawdown_fraction=request.drawdown.drawdown_fraction,
         new_risk_multiplier=request.drawdown.new_risk_multiplier,

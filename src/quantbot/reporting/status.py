@@ -158,6 +158,7 @@ def build_project_status(database: Database, context: ProjectStatusContext) -> P
         qualification_days = repository.list_qualification_days(context.strategy_id)
         fills = tuple(repository.list_fills())
         incidents = tuple(repository.list_incidents(unresolved_only=True))
+        account_snapshots = repository.list_account_snapshots(account_id=context.account_id)
 
     successful = [run for run in runs if run.status == "SUCCEEDED" and run.finished_at is not None]
     last_run = successful[-1] if successful else None
@@ -171,10 +172,18 @@ def build_project_status(database: Database, context: ProjectStatusContext) -> P
         for incident in incidents
         if "BUG" in incident.kind.upper()
     )
+    # A durable account snapshot is the only proof the broker was actually reached: it is
+    # written from a broker read that agreed with the local ledger.
+    latest_snapshot = account_snapshots[-1] if account_snapshots else None
+    connection = (
+        f"connection verified {_timestamp(latest_snapshot.captured_at)}"
+        if latest_snapshot is not None
+        else "configured; connection NOT_YET_OBSERVED"
+    )
     broker_environment = (
         f"{context.settings.BROKER_PROVIDER.value.upper()} / "
         f"{context.settings.BROKER_ENVIRONMENT.value} "
-        "(configured; connection NOT_YET_OBSERVED)"
+        f"({connection})"
     )
     return ProjectStatus(
         generated_at=context.generated_at,

@@ -37,17 +37,14 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     _ = output
     parser = argparse.ArgumentParser(prog="quantbot")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in (
-        "status",
-        "doctor",
-        "sync-data",
-        "reconcile",
-        "run-once",
-        "daemon",
-        "backtest",
-        "report-weekly",
-    ):
+    for name in ("status", "doctor", "sync-data", "reconcile", "run-once", "daemon"):
         commands.add_parser(name)
+    backtest = commands.add_parser("backtest")
+    backtest.add_argument("--variant")
+    backtest.add_argument("--initial-cash", dest="initial_cash", default="100000")
+    weekly = commands.add_parser("report-weekly")
+    weekly.add_argument("--iso-year", dest="iso_year", type=int)
+    weekly.add_argument("--iso-week", dest="iso_week", type=int)
     kill = commands.add_parser("kill-switch")
     kill_actions = kill.add_subparsers(dest="kill_action", required=True)
     for action in ("engage", "clear"):
@@ -59,9 +56,35 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
 
 
 def _default_context() -> CLIContext:
-    settings = Settings()
-    database_path = Path(os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
-    return CLIContext(settings=settings, database=Database(database_path), handlers={})
+    """Build the wired runtime, degrading to a safe read-only context without credentials."""
+    from quantbot.runtime import RuntimeConfigurationError, build_cli_context
+
+    try:
+        return build_cli_context()
+    except RuntimeConfigurationError as error:
+        reason = str(error)
+
+        def unavailable(command: str) -> CommandHandler:
+            return lambda _args: {"ok": False, "command": command, "reason": reason}
+
+        database_path = Path(os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+        return CLIContext(
+            settings=Settings(),
+            database=Database(database_path),
+            handlers={
+                command: unavailable(command)
+                for command in (
+                    "doctor",
+                    "sync-data",
+                    "reconcile",
+                    "run-once",
+                    "daemon",
+                    "backtest",
+                    "report-weekly",
+                    "paper-smoke",
+                )
+            },
+        )
 
 
 def _unconfigured(command: str) -> dict[str, object]:

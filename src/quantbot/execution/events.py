@@ -139,6 +139,12 @@ def apply_order_update(state: OrderEventState, update: TradeUpdate) -> OrderEven
 
 
 def _stable_order_fields(order: BrokerOrder) -> tuple[object, ...]:
+    """Fields that economically identify an order and must never change.
+
+    submitted_at is excluded: Alpaca re-stamps it when an order accepted while the market is
+    closed is released into the next session, so including it made every queued order look
+    like a conflicting identity the moment it actually reached the market.
+    """
     return (
         order.broker_order_id,
         order.client_order_id,
@@ -147,7 +153,6 @@ def _stable_order_fields(order: BrokerOrder) -> tuple[object, ...]:
         order.order_type,
         order.time_in_force,
         order.quantity,
-        order.submitted_at,
     )
 
 

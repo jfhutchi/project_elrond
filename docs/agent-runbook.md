@@ -1,0 +1,337 @@
+# QuantBot Agent Runbook
+
+Continuation notes for any session picking this repository up. `PROJECT_STATUS.md` is
+machine-generated and overwritten by `quantbot run-once` / `quantbot doctor`; this file is
+hand-maintained and never overwritten.
+
+## What the system is
+
+Adaptive Momentum V1: momentum rotation + long-term trend filter + market regime filter +
+Donchian breakout + ATR risk management, trading through Alpaca **paper** only.
+`LIVE_TRADING` is disabled and only a human operator may ever change that.
+
+Strategy parameters live in `config/` and are immutable for the running version. Any
+material change is a NEW strategy version with a new `configuration_hash` and a new
+`strategy_id`; historical results are never overwritten.
+
+| Version | Config | strategy_id | Difference |
+|---|---|---|---|
+| 1.0.0 | `config/strategy-v1.yaml` | `adaptive-momentum-v1-7d04bc9cc0cb20e6` | Whole shares only |
+| 1.1.0 | `config/strategy-v1-1.yaml` | `adaptive-momentum-v1-b73083b817f76b8f` | Fractional shares enabled |
+
+The two configs differ in exactly two fields (`version`, `allow_fractional_shares`); every
+signal parameter is identical. 1.1.0 exists because whole-share sizing rejects every entry
+below roughly $3,000 of equity — the cheapest universe member needs $619 for one share
+under the 10% position cap. Point `QUANTBOT_CONFIG` at the version you intend to run.
+
+Sizing note: for this universe the `POSITION_VALUE` cap binds, not the ATR risk cap, so
+positions are effectively equal-weight 10%. The 0.5% ATR risk cap only becomes the binding
+constraint when 2×ATR exceeds 5% of price. That is scale-invariant and by design.
+
+## Current state (2026-08-15)
+
+Implementation is complete and verified end to end against fake transports. **No forward
+paper observation has begun**, because Alpaca paper credentials are not configured in this
+environment. Nothing in the durable ledger has been synthesized.
+
+- 458 tests pass, `ruff check` clean, `mypy --strict` clean.
+- The composition root (`src/quantbot/runtime.py`) was the missing piece: every policy
+  module existed and was tested, but nothing constructed them into a runnable application
+  and every CLI command returned `OPERATION_HANDLER_NOT_CONFIGURED`.
+
+## Operating it
+
+```bash
+uv sync --all-extras
+```
+
+Required environment (see `.env.example`; the process reads the environment only, never a
+dotenv file, so export these in the service unit or shell):
+
+| Variable | Purpose |
+|---|---|
+| `ALPACA_PAPER_API_KEY` / `ALPACA_PAPER_API_SECRET` | Paper credentials |
+| `EXPECTED_ACCOUNT_ID` | Account identity the broker must report, or every gate fails |
+| `KILL_SWITCH` | Process-level switch; the durable switch is separate and starts engaged |
+| `BROKER_HEALTHY`, `MARKET_DATA_HEALTHY`, `RISK_ENGINE_HEALTHY`, `RECONCILIATION_SUCCESSFUL` | Operator assertions that must all be true before any order is allowed |
+| `QUANTBOT_CONFIG` | Strategy config path (default `config/strategy-v1.yaml`) |
+| `QUANTBOT_DB_PATH` | Durable SQLite ledger (default `quantbot.db`) |
+| `QUANTBOT_LOCK_PATH` | Single-writer lock (default `quantbot.lock`) |
+| `QUANTBOT_REPORTS_DIR` | Weekly report output (default `reports`) |
+| `QUANTBOT_MARKET_DATA_FEED` | `iex` (free tier) or `sip` (subscription) |
+| `QUANTBOT_MAX_DATA_AGE_SECONDS` | Staleness halt threshold (default 86400, sized for daily bars) |
+| `QUANTBOT_GIT_COMMIT` | Pin the deployed commit instead of shelling out to git |
+
+First-run order:
+
+```bash
+quantbot status
+```
+
+```bash
+quantbot doctor
+```
+
+```bash
+quantbot sync-data
+```
+
+```bash
+quantbot reconcile
+```
+
+The durable kill switch starts **engaged** (`default fail-closed state`). Clearing it
+requires every readiness gate to pass:
+
+```bash
+quantbot kill-switch clear --reason "all paper gates verified"
+```
+
+Then one cycle, or the scheduling daemon:
+
+```bash
+quantbot run-once
+```
+
+```bash
+quantbot daemon
+```
+
+`daemon` sleeps until the broker's own next close + 5 minutes, runs one cycle, and repeats.
+It holds a single-writer lock and stops cleanly on SIGINT/SIGTERM. Never run two writers.
+
+## Cycle anatomy
+
+`RunOnceCycle` (`src/quantbot/operations/cycle.py`) runs strictly sequentially:
+
+1. **Ledger sync + recovery** (`LedgerSyncingRecovery`) — ingests broker fills and open
+   orders, then derives open positions from the durable fill ledger alone and requires them
+   to equal the broker's positions. Disagreement yields `POSITION_LEDGER_MISMATCH` and
+   blocks new orders. Only on agreement is an account snapshot written, which is what the
+   next reconciliation compares against.
+2. **Kill-switch check** — durable state, checked after recovery.
+3. **Data sync** (`MarketDataSync`) — fetches the warmup window of daily bars for the whole
+   universe, aligns them to authoritative XNYS session closes from the broker calendar,
+   validates for gaps/duplicates/future bars, and caches only validated bars.
+4. **Staleness gate** — halts on future, stale, or incomplete data.
+5. **Strategy** (`AdaptiveMomentumRunner`) — rebuilds the monthly roster deterministically
+   from cached bars, evaluates every universe symbol at the last completed close for action
+   at the next open, sizes entries through the real risk policy with in-cycle reservations,
+   and records one signal row per symbol per run.
+6. **Submission** (`ExecutionCoordinator`) — persists intent before network I/O, never
+   replaces a client order identity, and recovers ambiguous submissions by lookup only.
+
+Any hard failure engages the durable kill switch and halts. That is intended: it requires a
+human to look before trading resumes.
+
+## Position state
+
+Broker positions carry no stop, so the trailing stop is reconstructed durably:
+
+- `entered_at` is derived from the fill ledger (first fill of the currently open run).
+- `initial_stop` and the ratcheted `active_stop` are persisted in each cycle's signal
+  payload under `position_state` and read back on the next cycle.
+- A position with no prior `position_state` (e.g. adopted from the broker) bootstraps its
+  stop from `average_entry_price - initial_stop_atr * ATR` and records that bootstrap.
+
+## Duplicate-order protection
+
+`client_order_id` is a pure function of (strategy version, symbol, signal date, side,
+sequence). Re-running the same trading day mints the identical identity, and the strategy
+runner skips any symbol whose intent is already durable
+(`DUPLICATE_INTENT_ALREADY_DURABLE`). Covered by
+`tests/integration/test_runtime_wiring.py::test_rerunning_the_same_trading_day_never_submits_a_duplicate_order`.
+
+## Reports
+
+```bash
+quantbot report-weekly --iso-year 2026 --iso-week 33
+```
+
+Writes `reports/weekly/YYYY-WW.md`. With no arguments it reports the last completed ISO
+week. Every field is `NOT_YET_OBSERVED` unless the durable ledger contains real forward
+evidence — backtests never fill these in.
+
+```bash
+quantbot backtest --variant FULL_STRATEGY
+```
+
+Runs against the durable bar cache, so `sync-data` must have run first. Omit `--variant` to
+run all six required comparison variants.
+
+## Research
+
+Two databases, deliberately separate. `quantbot.db` is the operational ledger and its bar
+cache feeds the `bar_set_hash` recorded against live signals. `research/bars.db` holds long
+history and must never be merged into it, or live audit provenance changes retroactively.
+
+```bash
+QUANTBOT_MARKET_DATA_FEED=sip uv run python scripts/fetch_research_bars.py 2016-01-01 research/bars.db
+```
+
+```bash
+QUANTBOT_MARKET_DATA_FEED=sip uv run python -u scripts/run_research_experiment.py research/bars.db 100 5
+```
+
+The `sip` feed reaches 2016-01-04 for all 23 symbols; `iex` is only usable from 2020-07-27.
+Live trading stays on `iex` (measured divergence in daily OHLC on these ETFs is 0.003–0.04%
+median, so it does not affect signals). Use `-u`: the harness buffers output otherwise and
+a long run appears to hang.
+
+Findings are recorded in `reports/research/`, with each study pinned by an immutable
+`ExperimentManifest` hashing the config, the bar set and the git commit.
+
+**Promotion blocker to know about before designing a research cycle:** `ComponentSwitches`
+exists only in the backtest engine. The live `evaluate_symbol` hardcodes every filter — the
+Donchian entry gate, the trend filter, the regime filter and the trailing stop are always
+applied. The backtester can therefore simulate designs the live system cannot execute.
+Promoting any ablation-derived design requires threading component switches into
+`StrategyConfig` and `evaluate_symbol` first, as a new strategy version. Deliberately not
+built yet: it is only worth doing once a design actually passes its holdout.
+
+## Research conclusions to date — read before starting a new cycle
+
+Four cycles are complete. Re-running any of them is wasted effort; the findings are durable
+and the reports carry the numbers.
+
+**Nothing has been promoted.** No configuration of this strategy family has passed its
+pre-registered criteria, across 10.6 years, two bear markets and 31+ candidates.
+
+1. **The shipped strategy is the worst version of itself.** Its components fight each other:
+   the Donchian entry gate and ATR trailing stop hold exposure near 19%, and removing the
+   trailing stop was the single largest improvement found. Two components — `donchian_exit`
+   and `atr_risk` — are inert under the shipped config, because the trailing stop fires
+   before a channel exit can and the 10% position cap binds before ATR sizing does.
+2. **Single-strategy results here are statistically undetectable.** D7's holdout Sharpe of
+   1.223 carried a 95% interval of [-0.128, 2.574]. Separating its 0.074 margin over SPY
+   needs roughly 700 years of daily data. Any single-strategy Sharpe claim on 2 years of
+   daily bars is noise; compute the interval before believing one.
+3. **Correlation structure, not signal design, drives ensembles.** Momentum and short-horizon
+   reversal correlate 0.75 — long-only equity strategies share one beta and cannot diversify
+   each other. Confining the same signal to asset-class sleeves drops correlations to
+   0.05–0.22 and does produce a real, production-confirmed benefit: ensemble Sharpe 0.82
+   against its best sleeve's 0.69, drawdown 3.93% against 9.19%.
+4. **The ensemble still loses to buy-and-hold on risk-adjusted return** (0.82 vs 0.90), which
+   is why cycle 4 was not promoted. Note the sleeves run far below full exposure because of
+   the ATR and position caps; exposure normalisation is an open, unpre-registered hypothesis.
+
+**No untouched historical holdout remains.** The 2024-07 → 2026-08 window was consumed in
+cycle 2, and SIP history starts 2016-01-04. The live paper account is now the only clean
+out-of-sample data this project can obtain, which is the strongest reason to keep it running.
+
+Published context worth knowing: roughly half of an anomaly's alpha disappears after
+publication, momentum's premium has fallen from about 10% annually in the 1990s to about 2%,
+and trend systems structurally lag in bull markets. A negative result here is the expected
+outcome, not evidence of a defect.
+
+## Known gaps / next work
+
+1. **No credentials, so zero elapsed paper observation.** This is the only thing standing
+   between the current state and starting the 30/60-day qualification window. It cannot be
+   substituted with backtests.
+2. **The trade stream is not held open between cycles.** `AlpacaPaperTradeStream` and its
+   event handling are implemented and tested but unused by the daily cycle, which ingests
+   broker-confirmed fills over REST instead. Adequate for a daily post-close strategy; wire
+   the stream if intraday order events are ever needed.
+3. **Half-day sessions** are handled correctly (the close time comes from the broker
+   calendar), but no live half-day has been observed yet.
+4. **`paper-smoke`** submits exactly one 1-share benchmark order after every gate passes and
+   the operator supplies the exact acknowledgement string. It is an operator action; it has
+   never been run.
+
+## Rules that must not be relaxed
+
+- Never change strategy parameters to make a losing period look better. A losing week is
+  not authorization to change anything.
+- Never synthesize elapsed trading days, fills, or performance. `NOT_YET_OBSERVED` is a
+  valid answer and the reporting code enforces it.
+- Never enable live trading. Never add live credentials.
+- Never raise risk to recover losses; never average down outside the researched policy.
+- Zero valid signals for a week is a legitimate outcome — record `NO_VALID_SIGNALS`.
+
+---
+
+# Session update: 2026-08-17
+
+State at the end of this session. Supersedes anything above that conflicts with it.
+
+## What is deployed and running
+
+| | |
+|---|---|
+| Strategy | **1.2.0**, `adaptive-momentum-v1-309894d8d8a5296e`, `config/strategy-v1-2.yaml` |
+| Account | Alpaca paper `PA3N9DB5S23G`, started at $100 |
+| Daemon | detached process holding the writer lock, fires at each close + 5 min |
+| Supervisor | `scripts/supervisor.py --watch`, 5-minute interval |
+| Startup | `%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup\quantbot-daemon.cmd`, restart loop |
+
+Positions were entered by 1.1.0 on 2026-08-15 and are managed by 1.2.0 from
+2026-08-17. Attribution for the first three entries belongs to the earlier version.
+
+## Traps that cost time today — read before debugging
+
+**This shell's `QUANTBOT_CONFIG` may be stale.** A Claude Code session inherits the
+environment from when it started, so after switching config the shell still reports the old
+one. Pass `QUANTBOT_CONFIG` explicitly, and confirm what the *daemon* loaded by looking for
+its deployment record in the ledger, not by reading your own environment.
+
+**Liveness means the lock, not the process table.** A `quantbot.exe` can exist while holding
+nothing. Reading the process list produced a confident wrong diagnosis that the system was
+healthy when it was dying. `scripts/supervisor.py` checks the lock for this reason.
+
+**A daemon started from a background shell task gets reaped** when the harness cleans up. Use
+`Start-Process` detached, or the startup entry.
+
+**`doctor` reporting `MARKET_DATA_STALE` before a cycle is expected**, not a fault. The cache
+holds the last synced session; the cycle order is recovery → kill switch → data sync →
+staleness gate, so the gate reads post-sync freshness.
+
+## Defects fixed today, all found on live data
+
+1. **Broker order status was frozen at acknowledgement.** The only `.update()` in the whole
+   repository layer was one added the same day. Once an order filled, the broker stopped
+   listing it as open while local state still said `accepted`, so reconciliation would have
+   halted every subsequent cycle. Would have fired on the first fill.
+2. **`submitted_at` treated as identity.** Alpaca re-stamps it when an order accepted while
+   the market is closed is released into the next session — 08-15T13:37 became 08-17T13:23.
+   Fixed in both `update_broker_order_lifecycle` and `_stable_order_fields`.
+3. **Account snapshot ids were fixed per run label**, so a second manual reconcile conflicted
+   with the first. Snapshots now include the capture timestamp.
+
+## Crypto sleeve — built, composes, not started
+
+`config/strategy-crypto-v2.yaml` runs strategy 2.0.0 on a synthesised 24/7 calendar.
+Verified to compose: `AlpacaCryptoDataClient`, `CryptoSessionCalendar`, a constructed cycle.
+
+```bash
+QUANTBOT_CONFIG=config/strategy-crypto-v2.yaml QUANTBOT_DB_PATH=crypto.db QUANTBOT_LOCK_PATH=crypto.lock uv run quantbot doctor
+```
+
+**Starting it needs a second Alpaca paper account** — a human must create it; the instance
+itself is pure configuration since every path is environment-parameterised. Two writers must
+never share a database or lock.
+
+Built for data velocity (365 observations a year against 252), **not** for return. Cycle 5
+measured crypto momentum at −79.9% and BTC trend at Sharpe 0.53 with a CI spanning zero; the
+blend study put a crypto sleeve at 0.23 sigma, p≈0.82.
+
+## Research state
+
+Ten cycles, **fifteen hypotheses refuted with measurement** — see `REFUTED.md`, and read it
+in full before proposing anything. Cycle 10 tested cross-sectional breadth without
+survivorship bias (511 names, 241 delisted) and it also failed: Sharpe 0.63 against SPY's
+0.80.
+
+Cumulative trials are near 45, so the expected-best-by-luck threshold is now above t≈2.22.
+Any new result must be deflated by the cumulative count, not the current cycle's.
+
+**Nothing built here has beaten SPY buy-and-hold.** The deployed configuration is the best
+the live system can express, not one with a demonstrated edge.
+
+## Dashboard
+
+```bash
+uv run python scripts/dashboard.py reports/dashboard.html
+```
+
+Read-only, safe while the daemon holds the lock.

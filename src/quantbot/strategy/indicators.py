@@ -81,6 +81,10 @@ def donchian_exit_level(bars: Sequence[Bar], period: int = 20) -> Decimal | None
     return min(bar.low for bar in bars[-(period + 1) : -1])
 
 
+#: Sessions in a trading year, for annualising a daily volatility estimate.
+TRADING_DAYS_PER_YEAR = 252
+
+
 def true_ranges(bars: Sequence[Bar]) -> tuple[Decimal, ...]:
     """Return Wilder true ranges for every supplied bar."""
     _validate_bars(bars)
@@ -96,6 +100,31 @@ def true_ranges(bars: Sequence[Bar]) -> tuple[Decimal, ...]:
             )
         )
     return tuple(ranges)
+
+
+def realized_volatility(bars: Sequence[Bar], period: int = 20) -> Decimal | None:
+    """Annualised standard deviation of daily close-to-close returns, as a fraction.
+
+    Deliberately a different measure from ATR. ATR sizes the stop, so it answers "how far can
+    this move against me before I am wrong". This answers "how turbulent is this right now",
+    which is what exposure should scale against. Uses the population standard deviation so the
+    result is a deterministic function of the window with no small-sample correction to argue
+    about, and returns None rather than guessing when the window is not full.
+    """
+    _validate_period(period)
+    if len(bars) < period + 1:
+        return None
+    window = bars[-(period + 1):]
+    returns: list[Decimal] = []
+    for previous, current in zip(window, window[1:], strict=False):
+        if previous.close <= 0:
+            return None
+        returns.append(current.close / previous.close - Decimal(1))
+    mean = sum(returns, Decimal(0)) / Decimal(len(returns))
+    variance = sum(((r - mean) ** 2 for r in returns), Decimal(0)) / Decimal(len(returns))
+    if variance <= 0:
+        return Decimal(0)
+    return variance.sqrt() * Decimal(TRADING_DAYS_PER_YEAR).sqrt()
 
 
 def wilder_atr(bars: Sequence[Bar], period: int = 20) -> Decimal | None:

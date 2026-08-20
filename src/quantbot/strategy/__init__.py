@@ -26,9 +26,17 @@ from quantbot.strategy.indicators import (
     donchian_exit_level,
     highest_high_since,
     momentum_12_1,
+    realized_volatility,
     sma,
     true_ranges,
     wilder_atr,
+)
+from quantbot.strategy.tranches import (
+    active_tranche_rosters,
+    max_supportable_tranches,
+    next_rebalance_index,
+    tranche_schedule,
+    tranche_weights,
 )
 
 __all__ = [
@@ -57,5 +65,11 @@ __all__ = [
     "strategy_id_for",
     "true_ranges",
     "validate_strategy_identity",
+    "realized_volatility",
+    "active_tranche_rosters",
+    "max_supportable_tranches",
+    "next_rebalance_index",
+    "tranche_schedule",
+    "tranche_weights",
     "wilder_atr",
 ]

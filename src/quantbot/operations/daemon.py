@@ -60,6 +60,15 @@ class DaemonRunner:
         metrics: OperationalMetrics,
         lock_path: str | Path,
     ) -> None:
+        """`lock_path` must NOT be the writer lock.
+
+        Two different exclusions are needed and conflating them breaks both. Only one
+        scheduler should run, which is what this lock enforces for the daemon's whole
+        lifetime. Only one writer should touch the ledger at a time, which the cycle
+        enforces for its own duration. Holding the writer lock across the daemon's sleep
+        made every cycle fail on a non-reentrant re-acquisition, and blocked manual
+        run-once and reconcile for as long as the daemon lived.
+        """
         self._clock_provider = clock_provider
         self._cycle = cycle
         self._sleeper = sleeper

@@ -5,6 +5,7 @@ from quantbot.market_data.base import (
     AdjustmentMode,
     AsyncMarketDataTransport,
     BarQuery,
+    BarSource,
     HistoricalMarketDataClient,
     MarketDataBatch,
     MarketDataError,
@@ -17,6 +18,18 @@ from quantbot.market_data.base import (
     TransportResponse,
 )
 from quantbot.market_data.cache import MarketDataCache
+from quantbot.market_data.calendar import (
+    ALPACA_PAPER_CALENDAR_URL,
+    AlpacaMarketCalendar,
+    latest_completed_session,
+    session_closes,
+    session_sequence,
+)
+from quantbot.market_data.crypto import (
+    ALPACA_CRYPTO_BARS_URL,
+    CRYPTO_ADJUSTMENT,
+    AlpacaCryptoDataClient,
+)
 from quantbot.market_data.stream import (
     AlpacaStockDataStream,
     StreamDisconnected,
@@ -41,11 +54,17 @@ from quantbot.market_data.validation import (
 )
 
 __all__ = [
+    "ALPACA_PAPER_CALENDAR_URL",
+    "ALPACA_CRYPTO_BARS_URL",
     "AdjustmentMode",
+    "AlpacaCryptoDataClient",
+    "AlpacaMarketCalendar",
     "AlpacaMarketDataClient",
     "AlpacaStockDataStream",
     "AsyncMarketDataTransport",
+    "CRYPTO_ADJUSTMENT",
     "BarQuery",
+    "BarSource",
     "BarValidationReport",
     "DataGap",
     "DataGapReason",
@@ -71,5 +90,8 @@ __all__ = [
     "WebsocketsConnection",
     "WebsocketsConnector",
     "align_daily_bars_to_session_closes",
+    "latest_completed_session",
+    "session_closes",
+    "session_sequence",
     "validate_bar_batch",
 ]

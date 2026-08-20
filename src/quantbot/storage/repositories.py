@@ -670,6 +670,53 @@ class StorageRepository:
         self._session.execute(broker_orders.insert().values(**payload))
         return True
 
+    def update_broker_order_lifecycle(self, order: BrokerOrder) -> bool:
+        """Advance the mutable lifecycle fields of an already-stored broker order.
+
+        Identity is immutable and any mismatch is a conflict. Status, filled quantity and
+        average fill price are lifecycle state that necessarily changes as the broker works
+        an order. Storing them once at acknowledgement and never updating them left local
+        open-order state permanently stale the moment anything filled, which reconciliation
+        then reported as a mismatch against the broker forever.
+        """
+        row = (
+            self._session.execute(
+                select(broker_orders).where(
+                    broker_orders.c.broker_order_id == order.broker_order_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RecordNotFoundError(f"broker order not found: {order.broker_order_id}")
+        payload = self._broker_order_payload(order)
+        # What economically identifies an order. submitted_at is deliberately excluded:
+        # Alpaca re-stamps it when an order accepted while the market is closed is released
+        # into the next session, so treating it as identity rejects every queued order the
+        # moment it actually reaches the market.
+        immutable = (
+            "client_order_id",
+            "symbol",
+            "side",
+            "order_type",
+            "time_in_force",
+            "quantity",
+        )
+        if any(row[field] != payload[field] for field in immutable):
+            raise StateConflictError(
+                f"broker order {order.broker_order_id} identity conflicts with stored data"
+            )
+        lifecycle = ("status", "filled_quantity", "filled_average_price", "submitted_at")
+        if all(row[field] == payload[field] for field in lifecycle):
+            return False
+        self._session.execute(
+            broker_orders.update()
+            .where(broker_orders.c.broker_order_id == order.broker_order_id)
+            .values(**{field: payload[field] for field in lifecycle})
+        )
+        return True
+
     @staticmethod
     def _broker_order_payload(order: BrokerOrder) -> dict[str, object]:
         return {
@@ -1279,6 +1326,24 @@ class StorageRepository:
             return False
         raise StateConflictError(f"incident {incident_id} conflicts with stored data")
 
+    def resolve_incident(self, incident_id: str, *, resolved_at: datetime) -> None:
+        """Close an incident whose cause is actually fixed.
+
+        Without this the schema's resolved_at was never written, so every incident stayed
+        unresolved forever and the supervisor reported a permanent warning. An alert that
+        cannot clear is an alert people learn to ignore.
+        """
+        existing = self._session.execute(
+            select(incidents.c.incident_id).where(incidents.c.incident_id == incident_id)
+        ).first()
+        if existing is None:
+            raise StateConflictError(f"incident {incident_id} does not exist")
+        self._session.execute(
+            incidents.update()
+            .where(incidents.c.incident_id == incident_id)
+            .values(resolved_at=encode_utc(resolved_at))
+        )
+
     def list_incidents(self, *, unresolved_only: bool = False) -> list[IncidentRecord]:
         statement = select(incidents)
         if unresolved_only:
@@ -1369,9 +1434,21 @@ class StorageRepository:
             return True
         if _row_matches(row, payload):
             return False
-        raise StateConflictError(
-            f"qualification day {strategy_id}:{payload['trading_date']} conflicts with stored data"
+        # A trading date can be observed by more than one run (a retry after a transient
+        # halt). That is the same observed day, not a conflict: the day stays qualified
+        # once any run qualified it, and the most recent run's detail is retained.
+        self._session.execute(
+            qualification_days.update()
+            .where(
+                qualification_days.c.strategy_id == strategy_id,
+                qualification_days.c.trading_date == payload["trading_date"],
+            )
+            .values(
+                qualified=bool(row["qualified"]) or qualified,
+                detail_json=payload["detail_json"],
+            )
         )
+        return False
 
     def get_qualification_day(
         self,

@@ -6,11 +6,11 @@ from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
-from typing import Literal, Protocol, Self
+from typing import Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from quantbot.domain import Bar
+from quantbot.domain import Bar, TradingCalendar
 
 
 class MarketDataError(RuntimeError):
@@ -36,6 +36,9 @@ class MarketDataFeed(StrEnum):
     BOATS = "boats"
     OVERNIGHT = "overnight"
     OTC = "otc"
+    #: Crypto has no consolidated tape to choose between; this names the source so the
+    #: provider key identifying cached bars stays truthful.
+    CRYPTO = "crypto"
 
 
 class AdjustmentMode(StrEnum):
@@ -133,7 +136,7 @@ class MarketDataBatch(MarketDataModel):
 
 
 class MarketSessionClose(MarketDataModel):
-    calendar: Literal["XNYS"]
+    calendar: TradingCalendar
     session_date: date
     close_at: datetime
 
@@ -163,6 +166,17 @@ class AsyncMarketDataTransport(Protocol):
 
 
 Sleeper = Callable[[Decimal], Awaitable[None]]
+
+
+class BarSource(Protocol):
+    """Anything that can return completed bars for a query.
+
+    Narrower than HistoricalMarketDataClient on purpose: the daily cycle only fetches
+    bars, and depending on the wider interface would exclude the crypto client for
+    methods nothing calls.
+    """
+
+    async def get_historical_bars(self, query: BarQuery) -> MarketDataBatch: ...
 
 
 class HistoricalMarketDataClient(Protocol):
