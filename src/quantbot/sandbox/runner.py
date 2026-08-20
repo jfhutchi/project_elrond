@@ -2,11 +2,12 @@
 
 The enforcement story, in the order it matters:
 
-1. **`sys.path` is built, not inherited.** The child runs `python -I -S`, which starts with no
-   site-packages and ignores every `PYTHON*` environment variable. The parent then resolves the
-   handful of approved scientific packages and passes their directories in explicitly. `quantbot`
-   is never among them, so the broker adapter, the runtime composition root, and every
-   order-submission path are unreachable — not blocked, absent.
+1. **`sys.path` is built, not inherited.** The child runs the base interpreter with `-I -S`,
+   which starts with no site-packages and ignores every `PYTHON*` environment variable. Approved
+   scientific distributions are copied into the disposable workspace before launch; source
+   package and repository paths are never handed to the child. `quantbot` is never staged, so the
+   broker adapter, runtime composition root, and every order-submission path are unreachable —
+   not blocked, absent.
 2. **The environment is constructed from empty.** Nothing is inherited. There is no `ALPACA_*`
    to read. This is load-bearing because `.env` also sits on disk: hiding variables alone would
    be theatre, but a child with no dotenv loader, no `quantbot`, and no repository path has no
@@ -25,9 +26,11 @@ caught by tree termination at the next poll. `policy.py` records this in full.
 from __future__ import annotations
 
 import hashlib
+import importlib.metadata
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -96,28 +99,186 @@ class SandboxResult:
         return self.terminated_reason == "memory"
 
 
-def _approved_package_paths(policy: SandboxPolicy) -> list[str]:
-    """Resolve approved third-party packages to directories, skipping any not installed.
+_REQUIREMENT_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*")
+_UNSAFE_STAGING_SUFFIXES = frozenset({".egg-link", ".pth", ".pyc", ".pyo"})
+_PACKAGE_COPY_IGNORE = shutil.ignore_patterns(
+    "__pycache__", "*.pyc", "*.pyo", "*.pth", "*.egg-link", "__editable__*"
+)
 
-    Resolved in the parent so the child never needs a package index or a path to search. A
-    missing package is silently omitted: the experiment will fail at import with a clear message,
-    which is better than the sandbox refusing to start.
+
+def _source_repository_root() -> Path | None:
+    """Return the checkout containing this module, if the package is running from one."""
+    for candidate in Path(__file__).resolve().parents:
+        if (candidate / "pyproject.toml").is_file() and (
+            candidate / "src" / "quantbot" / "sandbox" / "runner.py"
+        ).is_file():
+            return candidate.resolve()
+    return None
+
+
+def _assert_child_paths_outside_repository(paths: list[str]) -> None:
+    """Fail closed before serialising any repository path into the child's import path."""
+    repository = _source_repository_root()
+    if repository is None:
+        return
+    disclosed = [
+        path for path in paths if Path(path).resolve(strict=False).is_relative_to(repository)
+    ]
+    if disclosed:
+        raise SandboxError("child sys.path entry is inside the repository root")
+
+
+def _distribution_closure(package_names: tuple[str, ...]) -> list[importlib.metadata.Distribution]:
+    """Resolve installed distributions needed by the approved import roots.
+
+    Optional-extra requirements are excluded. Installed conditional requirements are safe to
+    include: they are copied into the workspace and disclose no source location to the child.
     """
-    paths: list[str] = []
-    for name in policy.allowed_third_party:
-        spec = importlib.util.find_spec(name)
-        if spec is None:
+    import_to_distributions = importlib.metadata.packages_distributions()
+    pending = [
+        distribution
+        for package_name in package_names
+        for distribution in import_to_distributions.get(package_name, ())
+    ]
+    resolved: list[importlib.metadata.Distribution] = []
+    seen: set[str] = set()
+    while pending:
+        distribution_name = pending.pop()
+        normalized = distribution_name.lower().replace("_", "-")
+        if normalized in seen:
             continue
-        locations = list(spec.submodule_search_locations or [])
-        for location in locations:
-            parent = str(Path(location).parent)
-            if parent not in paths:
-                paths.append(parent)
-    return paths
+        try:
+            distribution = importlib.metadata.distribution(distribution_name)
+        except importlib.metadata.PackageNotFoundError:
+            continue
+        seen.add(normalized)
+        resolved.append(distribution)
+        for requirement in distribution.requires or ():
+            marker = requirement.partition(";")[2]
+            if "extra" in marker:
+                continue
+            match = _REQUIREMENT_NAME.match(requirement)
+            if match is not None:
+                pending.append(match.group(0))
+    return resolved
+
+
+def _distribution_import_roots(
+    distributions: list[importlib.metadata.Distribution],
+) -> list[str]:
+    """Map the resolved dependency closure back to import roots for editable installs."""
+    selected: set[str] = set()
+    for distribution in distributions:
+        distribution_name = distribution.metadata["Name"]
+        selected.add(distribution_name.lower().replace("_", "-"))
+    import_roots: list[str] = []
+    for import_root, owners in importlib.metadata.packages_distributions().items():
+        normalized_owners = {owner.lower().replace("_", "-") for owner in owners}
+        if not normalized_owners.intersection(selected):
+            continue
+        unselected = normalized_owners.difference(selected)
+        if unselected:
+            raise SandboxError(
+                f"import root {import_root!r} is shared with distributions outside "
+                "the approved dependency closure"
+            )
+        import_roots.append(import_root)
+    return import_roots
+
+
+def _is_unsafe_staged_path(relative: Path) -> bool:
+    """Reject files that preserve or activate locations from the parent installation."""
+    if relative.is_absolute() or ".." in relative.parts:
+        return True
+    for part in relative.parts:
+        lowered = part.lower()
+        if lowered == "__pycache__" or lowered.startswith("__editable__"):
+            return True
+        if Path(lowered).suffix in _UNSAFE_STAGING_SUFFIXES:
+            return True
+    return relative.name.lower() == "direct_url.json"
+
+
+def _copy_distribution(
+    distribution: importlib.metadata.Distribution, destination: Path
+) -> None:
+    """Copy one installed distribution without source-location metadata or external scripts."""
+    for entry in distribution.files or ():
+        relative = Path(str(entry))
+        if _is_unsafe_staged_path(relative):
+            continue
+        source = Path(str(distribution.locate_file(entry)))
+        if not source.is_file():
+            continue
+        target = (destination / relative).resolve(strict=False)
+        if not target.is_relative_to(destination.resolve()):
+            raise SandboxError("package staging target escaped the sandbox workspace")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+
+
+def _copy_import_root(name: str, destination: Path) -> bool:
+    """Copy an approved import root, including adjacent native-library directories."""
+    if not name.isidentifier():
+        raise SandboxError(f"invalid approved package name: {name!r}")
+    spec = importlib.util.find_spec(name)
+    if spec is None:
+        return False
+    copied = False
+    for location_text in spec.submodule_search_locations or ():
+        location = Path(location_text)
+        if not location.is_dir():
+            continue
+        shutil.copytree(
+            location,
+            destination / name,
+            dirs_exist_ok=True,
+            ignore=_PACKAGE_COPY_IGNORE,
+        )
+        for native_libraries in location.parent.glob(f"{location.name}*.libs"):
+            if native_libraries.is_dir():
+                shutil.copytree(
+                    native_libraries,
+                    destination / native_libraries.name,
+                    dirs_exist_ok=True,
+                    ignore=_PACKAGE_COPY_IGNORE,
+                )
+        copied = True
+    origin = spec.origin
+    if not copied and origin is not None and origin not in ("built-in", "frozen"):
+        source = Path(origin)
+        if source.is_file() and not _is_unsafe_staged_path(Path(source.name)):
+            shutil.copy2(source, destination / source.name)
+            copied = True
+    return copied
+
+
+def _approved_package_paths(policy: SandboxPolicy, destination: Path) -> list[str]:
+    """Stage approved packages into the disposable workspace, never exposing source paths.
+
+    Resolution happens only in the trusted parent. Missing packages remain omitted so the child
+    receives the same clear import failure as before. Distribution metadata supplies transitive
+    runtime dependencies, while copying each approved import root also supports editable or
+    metadata-free packages without carrying their original path across the boundary.
+    """
+    destination.mkdir(parents=True, exist_ok=True)
+    distributions = _distribution_closure(policy.allowed_third_party)
+    for distribution in distributions:
+        _copy_distribution(distribution, destination)
+    import_roots = dict.fromkeys(
+        (*policy.allowed_third_party, *_distribution_import_roots(distributions))
+    )
+    copied = False
+    for name in import_roots:
+        copied = _copy_import_root(name, destination) or copied
+    if not copied and not any(destination.iterdir()):
+        destination.rmdir()
+        return []
+    return [str(destination.resolve())]
 
 
 def _stdlib_paths() -> list[str]:
-    """The standard library only, resolved from sysconfig rather than filtered from sys.path.
+    """The base interpreter's standard library, never the repository-local virtualenv.
 
     An earlier version of this built the list by taking every `sys.path` entry that was not
     site-packages. That silently handed the child the whole repository, because an editable
@@ -125,18 +286,36 @@ def _stdlib_paths() -> list[str]:
     check caught it on the first run — which is the entire reason that check exists, and the
     reason it asserts rather than warns.
 
-    Asking sysconfig for the two stdlib locations cannot pick up project code by accident.
+    `platstdlib` under a virtualenv can itself point into `<repo>/.venv/Lib`, so every sysconfig
+    base is explicitly replaced with the base interpreter prefix before paths are resolved.
     """
+    base_variables = {
+        "base": sys.base_prefix,
+        "platbase": sys.base_exec_prefix,
+        "installed_base": sys.base_prefix,
+        "installed_platbase": sys.base_exec_prefix,
+    }
+    scheme = sysconfig.get_preferred_scheme("prefix")
     paths: list[str] = []
     for key in ("stdlib", "platstdlib"):
-        location = sysconfig.get_path(key)
+        location = sysconfig.get_path(key, scheme=scheme, vars=base_variables)
         if location and Path(location).exists() and location not in paths:
             paths.append(location)
-    # Extension modules (_socket, _json) live beside the stdlib on Windows.
-    dlls = Path(sysconfig.get_path("stdlib")).parent / "DLLs"
-    if dlls.exists():
-        paths.append(str(dlls))
+    for extensions in (Path(sys.base_prefix) / "DLLs", Path(paths[0]) / "lib-dynload"):
+        if extensions.exists() and str(extensions) not in paths:
+            paths.append(str(extensions))
     return paths
+
+
+def _child_interpreter() -> str:
+    """Use the base executable so interpreter metadata cannot disclose a repo-local venv."""
+    executable = Path(getattr(sys, "_base_executable", sys.executable)).resolve()
+    repository = _source_repository_root()
+    if repository is not None and executable.is_relative_to(repository):
+        raise SandboxError("child interpreter is inside the repository root")
+    if not executable.is_file():
+        raise SandboxError(f"base Python interpreter does not exist: {executable}")
+    return str(executable)
 
 
 def _child_environment() -> dict[str, str]:
@@ -243,10 +422,14 @@ class SandboxRunner:
             target = paths.inputs / Path(name).name
             target.write_bytes(payload)
         paths.script.write_text(PREAMBLE + "\n" + source, encoding="utf-8")
+        child_paths = _stdlib_paths() + _approved_package_paths(
+            self._policy, root / "_packages"
+        )
+        _assert_child_paths_outside_repository(child_paths)
         (root / "_sandbox.json").write_text(
             json.dumps(
                 {
-                    "path": _stdlib_paths() + _approved_package_paths(self._policy),
+                    "path": child_paths,
                     "network": self._policy.network_enabled,
                     "hosts": list(self._policy.resolved_hosts()),
                 }
@@ -270,7 +453,7 @@ class SandboxRunner:
             paths = self._prepare(root, source, inputs or {})
             started = time.monotonic()
             process = subprocess.Popen(  # noqa: S603 - fixed interpreter, constructed argv
-                [sys.executable, "-I", "-S", str(paths.script.name)],
+                [_child_interpreter(), "-I", "-S", str(paths.script.name)],
                 cwd=str(root),
                 env=_child_environment(),
                 stdout=subprocess.PIPE,
