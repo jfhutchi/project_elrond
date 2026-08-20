@@ -1,0 +1,20 @@
+name: Temporary sandbox verification
+
+on:
+  push:
+    branches:
+      - fix/sandbox-package-path-isolation
+
+jobs:
+  verify:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - run: uv sync --frozen
+      - run: uv run pytest tests/
+      - run: uv run ruff check .
+      - run: uv run mypy src
