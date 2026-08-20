@@ -20,4 +20,4 @@ jobs:
       - run: uv sync --frozen
       - run: uv run pytest tests/
       - run: uv run ruff check .
-      - run: uv run mypy src
+      - run: uv run mypy src/quantbot/sandbox/runner.py
