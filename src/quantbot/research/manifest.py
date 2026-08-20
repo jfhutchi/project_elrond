@@ -375,9 +375,7 @@ class ExperimentManifest(FrozenModel):
             if looks_like_credential(found)
         ]
         if leaked:
-            raise ValueError(
-                "a manifest must not carry credentials; redact before building it"
-            )
+            raise ValueError("a manifest must not carry credentials; redact before building it")
         return self
 
     def canonical_json(self) -> str:

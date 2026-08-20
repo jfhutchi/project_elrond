@@ -218,9 +218,7 @@ def promote(
 
     if target is Stage.RESEARCH_SURVIVOR:
         if outcome is None:
-            raise PromotionRefused(
-                state.strategy_id, target, "no experiment outcome was supplied"
-            )
+            raise PromotionRefused(state.strategy_id, target, "no experiment outcome was supplied")
         objections = survivor_objections(outcome)
         if objections:
             raise PromotionRefused(state.strategy_id, target, "; ".join(objections))

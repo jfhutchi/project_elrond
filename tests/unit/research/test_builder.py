@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
@@ -28,7 +28,13 @@ from quantbot.research.power import (
     PowerOverride,
     assess,
 )
-from quantbot.research.registry import DataRole, DataWindow, HypothesisDraft, Registration
+from quantbot.research.registry import (
+    RESERVATION_DAYS,
+    DataRole,
+    DataWindow,
+    HypothesisDraft,
+    Registration,
+)
 from quantbot.research.sources import EpistemicStatus, EvidenceBasis
 
 NOW = datetime(2026, 8, 18, 14, 30, tzinfo=UTC)
@@ -97,6 +103,7 @@ def registration(**overrides: object) -> Registration:
     return Registration(
         draft=candidate,
         registered_at=NOW,
+        reserved_until=NOW.date() + timedelta(days=RESERVATION_DAYS),
         cumulative_trials=69,
         power=assess(
             hypothesis_id=candidate.hypothesis_id,

@@ -276,8 +276,7 @@ class LoopBound(FrozenModel):
     def validate_bound(self) -> Self:
         if self.rounds_taken > self.max_rounds:
             raise ValueError(
-                f"{self.task} took {self.rounds_taken} rounds against a bound of "
-                f"{self.max_rounds}"
+                f"{self.task} took {self.rounds_taken} rounds against a bound of {self.max_rounds}"
             )
         return self
 

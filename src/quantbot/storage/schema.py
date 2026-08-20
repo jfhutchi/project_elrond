@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 6
+SCHEMA_VERSION = 7
 
 metadata = MetaData(
     naming_convention={
@@ -308,8 +308,15 @@ hypotheses = Table(
     Column("parent_version", Integer),
     Column("registered_at", String(40), nullable=False),
     Column("content_hash", String(64), nullable=False, unique=True),
-    # Declared: only the registrant knows how many candidates it inspected to pick this one.
+    # How many candidates were inspected to pick this one. Never accepted as a bare
+    # self-report: `search_origin` says where the number came from, and an agent's unattested
+    # claim is not one of the accepted origins (#23).
     Column("search_cardinality", Integer, nullable=False),
+    # NO_DATA_DEPENDENT_SEARCH, OPERATOR_ATTESTED, or MEASURED.
+    Column("search_origin", String(32), nullable=False),
+    # Who attested the count. Present exactly when the origin is OPERATOR_ATTESTED, which is
+    # what makes an attestation auditable rather than an unsigned assertion.
+    Column("search_attested_by", String(128)),
     # Computed at registration from durable state, never declared. See research/registry.py.
     Column("cumulative_trials", Integer, nullable=False),
     Column("luck_threshold_z", Text, nullable=False),
@@ -328,6 +335,14 @@ hypotheses = Table(
     ),
     CheckConstraint("version >= 1", name="version_positive"),
     CheckConstraint(
+        "(search_origin = 'OPERATOR_ATTESTED') = (search_attested_by IS NOT NULL)",
+        name="attestation_is_signed",
+    ),
+    CheckConstraint(
+        "search_origin != 'NO_DATA_DEPENDENT_SEARCH' OR search_cardinality = 1",
+        name="theory_searches_nothing",
+    ),
+    CheckConstraint(
         "(parent_hypothesis_id IS NULL) = (parent_version IS NULL)",
         name="parent_is_whole",
     ),
@@ -345,12 +360,24 @@ hypothesis_data_windows = Table(
     Column("role", String(32), primary_key=True),
     Column("start_date", String(10), nullable=False),
     Column("end_date", String(10), nullable=False),
+    # RESERVED, CONSUMED, or RELEASED. Registration reserves; handing the data to an experiment
+    # consumes. A reservation that is never consumed used to burn the holdout forever (#22).
+    Column("state", String(16), nullable=False),
+    # When a RESERVED claim stops blocking. Abandonment is the absence of events, not an event,
+    # so nothing can be relied on to release a reservation explicitly -- it has to lapse.
+    Column("reserved_until", String(10)),
+    # When the data was actually made available to an experiment. Permanent once set.
+    Column("consumed_at", String(40)),
     ForeignKeyConstraint(
         ["hypothesis_id", "version"],
         ["hypotheses.hypothesis_id", "hypotheses.version"],
         ondelete="CASCADE",
     ),
     CheckConstraint("end_date >= start_date", name="range_ordered"),
+    CheckConstraint(
+        "(state = 'CONSUMED') = (consumed_at IS NOT NULL)",
+        name="consumption_is_dated",
+    ),
 )
 Index(
     "ix_hypothesis_data_windows_dataset",

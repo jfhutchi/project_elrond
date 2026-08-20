@@ -79,9 +79,9 @@ from quantbot.market_data.validation import (
     BarValidationReport,
     DataGap,
     DataGapReason,
-    implausible_range,
     MarketDataValidationError,
     align_daily_bars_to_session_closes,
+    implausible_range,
     validate_bar_batch,
 )
 

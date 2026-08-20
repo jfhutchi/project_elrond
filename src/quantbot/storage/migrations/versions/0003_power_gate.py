@@ -54,7 +54,6 @@ def _schema_version() -> Table:
     )
 
 
-
 NAMING_CONVENTION = {
     "ix": "ix_%(table_name)s_%(column_0_name)s",
     "uq": "uq_%(table_name)s_%(column_0_name)s",
@@ -169,9 +168,7 @@ def upgrade() -> None:
         batch.alter_column("expected_sharpe", new_column_name="expected_effect")
         batch.alter_column("required_sessions", new_column_name="required_observations")
         batch.alter_column("available_sessions", new_column_name="available_observations")
-        batch.add_column(
-            Column("estimand", String(32), nullable=False, server_default=V2_ESTIMAND)
-        )
+        batch.add_column(Column("estimand", String(32), nullable=False, server_default=V2_ESTIMAND))
         batch.add_column(
             Column("power_verdict", String(32), nullable=False, server_default=V2_VERDICT)
         )

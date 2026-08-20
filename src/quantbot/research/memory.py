@@ -154,9 +154,7 @@ class ResearchMemory:
         if existing is not None:
             if existing == entry:
                 return False
-            raise MemoryError_(
-                f"record {entry.record_id} already exists with different content"
-            )
+            raise MemoryError_(f"record {entry.record_id} already exists with different content")
         if entry.kind is RecordKind.FINDING and entry.verdict is Verdict.REFUTED:
             self._refuse_refuting_what_was_never_tested(entry)
         self._session.execute(
@@ -185,9 +183,7 @@ class ResearchMemory:
         """
         if entry.hypothesis_id is None or entry.hypothesis_version is None:
             return
-        assessments = self._registry.list_assessments(
-            entry.hypothesis_id, entry.hypothesis_version
-        )
+        assessments = self._registry.list_assessments(entry.hypothesis_id, entry.hypothesis_version)
         blocking = [
             assessment
             for assessment in assessments
@@ -253,9 +249,7 @@ class ResearchMemory:
         """
         statement = select(research_records).order_by(research_records.c.recorded_at)
         if kinds is not None:
-            statement = statement.where(
-                research_records.c.kind.in_([kind.value for kind in kinds])
-            )
+            statement = statement.where(research_records.c.kind.in_([kind.value for kind in kinds]))
         pattern = topic.strip().lower()
         return [
             record
@@ -407,9 +401,7 @@ def _import_paragraph(paragraph: str, *, path: str, now: datetime) -> ResearchRe
     return _record_from_text(paragraph, RecordKind.ANALYSIS_DEFECT, path=path, now=now)
 
 
-def _record_from_text(
-    body: str, kind: RecordKind, *, path: str, now: datetime
-) -> ResearchRecord:
+def _record_from_text(body: str, kind: RecordKind, *, path: str, now: datetime) -> ResearchRecord:
     return ResearchRecord(
         record_id=f"{kind.value.lower()}-{content_id(body)[:16]}",
         kind=kind,

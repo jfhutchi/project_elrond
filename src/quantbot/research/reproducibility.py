@@ -89,9 +89,7 @@ def capture_environment(
 ) -> EnvironmentFingerprint:
     """Fingerprint the interpreter and dependency set, without identifying the machine."""
     lock = lock_file or Path("uv.lock")
-    lock_hash = (
-        hashlib.sha256(lock.read_bytes()).hexdigest() if lock.exists() else "no-lock-file"
-    )
+    lock_hash = hashlib.sha256(lock.read_bytes()).hexdigest() if lock.exists() else "no-lock-file"
     return EnvironmentFingerprint(
         python_version=sys.version.split()[0],
         platform=f"{platform.system()}-{platform.machine()}",

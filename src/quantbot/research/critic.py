@@ -177,15 +177,11 @@ def hidden_beta(strategy: Sequence[float], benchmark: Sequence[float]) -> BetaRe
     variance = sum((x - mean_x) ** 2 for x in benchmark)
     if variance == 0:
         raise ValueError("benchmark has no variance to regress against")
-    covariance = sum(
-        (x - mean_x) * (y - mean_y) for x, y in zip(benchmark, strategy, strict=True)
-    )
+    covariance = sum((x - mean_x) * (y - mean_y) for x, y in zip(benchmark, strategy, strict=True))
     beta = covariance / variance
     alpha = mean_y - beta * mean_x
 
-    residuals = [
-        y - (alpha + beta * x) for x, y in zip(benchmark, strategy, strict=True)
-    ]
+    residuals = [y - (alpha + beta * x) for x, y in zip(benchmark, strategy, strict=True)]
     residual_sum = sum(value**2 for value in residuals)
     degrees = count - 2
     standard_error = math.sqrt(residual_sum / degrees) * math.sqrt(1 / count + mean_x**2 / variance)
@@ -243,9 +239,7 @@ def cost_ladder(
         CostPoint(cost_bps=cost, net_return=gross_return - trade_legs * cost / 10_000)
         for cost in sorted(ladder)
     )
-    break_even = (
-        gross_return * 10_000 / trade_legs if trade_legs > 0 and gross_return > 0 else None
-    )
+    break_even = gross_return * 10_000 / trade_legs if trade_legs > 0 and gross_return > 0 else None
     return CostLadder(points=points, break_even_bps=break_even)
 
 
@@ -371,9 +365,7 @@ def deterministic_objections(
 
     if ladder is not None and not ladder.survives(cost_floor_bps):
         break_even = (
-            "never positive"
-            if ladder.break_even_bps is None
-            else f"{ladder.break_even_bps:.2f}bps"
+            "never positive" if ladder.break_even_bps is None else f"{ladder.break_even_bps:.2f}bps"
         )
         objections.append(
             Objection(

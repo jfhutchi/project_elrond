@@ -245,9 +245,7 @@ class ResearchDirector:
 
     def get(self, task_id: str) -> ResearchTask | None:
         row = (
-            self._session.execute(
-                select(research_tasks).where(research_tasks.c.task_id == task_id)
-            )
+            self._session.execute(select(research_tasks).where(research_tasks.c.task_id == task_id))
             .mappings()
             .one_or_none()
         )
@@ -352,9 +350,7 @@ class ResearchDirector:
         return [
             TaskEvent(
                 task_id=str(row["task_id"]),
-                from_state=None
-                if row["from_state"] is None
-                else TaskState(str(row["from_state"])),
+                from_state=None if row["from_state"] is None else TaskState(str(row["from_state"])),
                 to_state=TaskState(str(row["to_state"])),
                 actor=str(row["actor"]),
                 reason=str(row["reason"]),

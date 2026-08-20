@@ -178,8 +178,7 @@ class EvidenceBasis(FrozenModel):
         if self.status is EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE:
             if self.citations:
                 raise ValueError(
-                    "a data-driven candidate cannot also carry citations; pick the one that is "
-                    "true"
+                    "a data-driven candidate cannot also carry citations; pick the one that is true"
                 )
             return self
         if not self.citations:
@@ -212,9 +211,7 @@ def cite(source: Source, *, claim: str, locator: str, status: EpistemicStatus) -
             "the summary of it"
         )
     if source.health is SourceHealth.UNVERIFIABLE:
-        raise DerivedArtifactCited(
-            f"{source.source_id} is unverifiable and cannot back a claim"
-        )
+        raise DerivedArtifactCited(f"{source.source_id} is unverifiable and cannot back a claim")
     return Citation(claim=claim, source_id=source.source_id, locator=locator, status=status)
 
 
@@ -231,9 +228,7 @@ def worth_testing(citations: Sequence[Citation]) -> bool:
     toward positive results, which is the direction that costs money. Twenty papers make a
     question worth asking; they do not make its answer more likely to be yes.
     """
-    return any(
-        citation.status is EpistemicStatus.LITERATURE_SUPPORTED for citation in citations
-    )
+    return any(citation.status is EpistemicStatus.LITERATURE_SUPPORTED for citation in citations)
 
 
 def contradicted_by_literature(citations: Sequence[Citation]) -> tuple[str, ...]:
@@ -295,9 +290,7 @@ class SourceIndex:
 
     def knowable_at(self, as_of: datetime) -> tuple[Source, ...]:
         """Sources that existed at a point in time, for anti-look-ahead checks."""
-        return tuple(
-            source for source in self._by_id.values() if source.known_by(as_of)
-        )
+        return tuple(source for source in self._by_id.values() if source.known_by(as_of))
 
     def snapshot(self) -> str:
         """Content address of the whole set, so an experiment can name what it read."""

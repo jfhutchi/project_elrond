@@ -135,8 +135,7 @@ class EvidencePanel(FrozenModel):
     @property
     def qualified(self) -> bool:
         return (
-            self.forward_days >= self.days_required
-            and self.forward_trades >= self.trades_required
+            self.forward_days >= self.days_required and self.forward_trades >= self.trades_required
         )
 
     def metrics(self) -> tuple[Metric, ...]:
@@ -276,8 +275,7 @@ def attention(
         if item.state is TaskState.BLOCKED
     )
     alerts.extend(
-        Alert(kind="STUCK", detail=f"{item.task_id} has not moved", urgency=3)
-        for item in stuck
+        Alert(kind="STUCK", detail=f"{item.task_id} has not moved", urgency=3) for item in stuck
     )
     alerts.extend(
         Alert(kind="SURVIVED", detail=f"{item.task_id}: {item.question}", urgency=4)

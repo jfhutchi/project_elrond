@@ -119,9 +119,7 @@ class PromptTemplate(FrozenModel):
 
     @property
     def template_hash(self) -> str:
-        return hashlib.sha256(
-            f"{self.name}@{self.version}\n{self.text}".encode()
-        ).hexdigest()
+        return hashlib.sha256(f"{self.name}@{self.version}\n{self.text}".encode()).hexdigest()
 
     def render(self, values: Mapping[str, str]) -> str:
         rendered = self.text.format(**values)

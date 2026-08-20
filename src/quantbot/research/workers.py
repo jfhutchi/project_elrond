@@ -216,9 +216,7 @@ def empirical_luck_threshold(
         raise ValueError("quantile must be an upper tail")
     ordered = sorted(abs(value) for value in null_statistics)
     index = min(len(ordered) - 1, math.ceil(quantile * len(ordered)) - 1)
-    return Decimal(repr(ordered[index])).quantize(
-        Decimal("0.000001"), rounding=ROUND_HALF_EVEN
-    )
+    return Decimal(repr(ordered[index])).quantize(Decimal("0.000001"), rounding=ROUND_HALF_EVEN)
 
 
 def null_calibration_summary(null_statistics: Sequence[float]) -> Mapping[str, Decimal]:
@@ -246,9 +244,7 @@ def import_result(result: WorkerResult) -> dict[str, str]:
         "configuration_hash": result.worker.configuration_hash,
         "trust": result.trust.value,
         "search_cardinality": (
-            "undisclosed"
-            if result.search_cardinality is None
-            else str(result.search_cardinality)
+            "undisclosed" if result.search_cardinality is None else str(result.search_cardinality)
         ),
         "trials_charged": str(result.trials_spent),
         "data_roles": ",".join(sorted(role.value for role in result.request.data_roles)),

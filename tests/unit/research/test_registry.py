@@ -40,6 +40,7 @@ from quantbot.research import (
     Registration,
     RegistrationRefused,
     Sampling,
+    SearchOrigin,
     Severity,
     gates_promotion,
     summarize,
@@ -341,7 +342,15 @@ def test_an_effect_too_small_for_the_available_data_is_refused_as_underpowered(
 
 def test_the_trial_count_is_the_project_history_not_this_cycle(database: Database) -> None:
     with database.transaction() as session:
-        first = register(HypothesisRegistry(session), make_draft(search_cardinality=12), now=NOW)
+        first = register(
+            HypothesisRegistry(session),
+            make_draft(
+                search_cardinality=12,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
+            ),
+            now=NOW,
+        )
     assert first.cumulative_trials == PRIOR_TRIALS + 12
 
     with database.transaction() as session:
@@ -351,6 +360,8 @@ def test_the_trial_count_is_the_project_history_not_this_cycle(database: Databas
                 hypothesis_id="H-2026-002",
                 materially_different="a deliberate second look, on a different dataset or window",
                 search_cardinality=5,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
                 windows=(window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19"),),
             ),
             now=NOW,
@@ -387,6 +398,8 @@ def test_execution_recomputes_power_against_trials_accumulated_since_registratio
                 materially_different="a deliberate second look, on a different dataset or window",
                 effect=sharpe_effect(expected=Decimal("3.0")),
                 search_cardinality=10,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
                 windows=(window(DataRole.FORWARD_PAPER, "2026-08-19", "2027-08-19"),),
             ),
             now=NOW,
@@ -639,7 +652,15 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert virgin.usable
 
     with database.transaction() as session:
-        register(HypothesisRegistry(session), make_draft(search_cardinality=5), now=NOW)
+        register(
+            HypothesisRegistry(session),
+            make_draft(
+                search_cardinality=5,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
+            ),
+            now=NOW,
+        )
     with database.transaction() as session:
         partial = HypothesisRegistry(session).window_consumption(
             "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
@@ -655,6 +676,8 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
                 hypothesis_id="H-2026-002",
                 materially_different="a second family against the same window",
                 search_cardinality=40,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
                 # Validation rather than protected evaluation, so it consumes the window
                 # without tripping the contamination gate this test is not about.
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2026-08-18"),),
@@ -677,6 +700,8 @@ def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Databa
             make_draft(
                 windows=(window(DataRole.VALIDATION, "2016-01-04", "2020-12-31"),),
                 search_cardinality=40,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
             ),
             now=NOW,
         )

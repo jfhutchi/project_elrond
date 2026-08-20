@@ -43,7 +43,7 @@ from __future__ import annotations
 import hashlib
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Annotated, Self
 
@@ -86,6 +86,61 @@ DUPLICATE_OVERLAP = 0.8
 #: 68 candidate evaluations against 2016-2026 US equities, which is why that window is exhausted
 #: and why the number sits here.
 EXHAUSTED_TRIALS = 40
+
+#: How long a registration's claim on its declared windows blocks other registrations (#22).
+#: Long enough that a hypothesis actually being worked on keeps its holdout, short enough that an
+#: abandoned one stops sterilising the data within a research cycle. A reservation must lapse
+#: rather than wait to be released: nothing observes abandonment, so an explicitly-released-only
+#: reservation is the old permanent-consumption behaviour wearing a state column.
+RESERVATION_DAYS = 90
+
+
+class SearchOrigin(StrEnum):
+    """Where a registration's trial count came from (#23).
+
+    `search_cardinality` was previously a bare self-report added straight into the
+    multiple-testing burden, so a miner that evaluated 5,000 candidates could declare 1 and
+    permanently understate the project's budget. `workers.py` already refuses to trust an
+    external engine that will not disclose its cardinality -- `WorkerTrust.EXPLORATORY_ONLY` --
+    and the registry simply did not participate in that policy. These are the origins it accepts.
+
+    An agent's unattested self-report is deliberately absent. That is the laundering path.
+    """
+
+    #: Theory or literature. Nothing data-dependent was searched, so the count is pinned to 1.
+    NO_DATA_DEPENDENT_SEARCH = "NO_DATA_DEPENDENT_SEARCH"
+    #: A human states the number and is recorded as having stated it. Auditable, and what keeps
+    #: the gate from paralysing research before a discovery engine exists to measure it (#13).
+    OPERATOR_ATTESTED = "OPERATOR_ATTESTED"
+    #: Derived from a durable search record. Reachable once something emits one.
+    MEASURED = "MEASURED"
+    #: Rows that predate this distinction. Never selectable by a new registration; it exists so
+    #: the 0007 backfill does not have to call those rows attested or measured, which would
+    #: launder exactly the claim the origin was added to stop.
+    LEGACY_SELF_REPORTED = "LEGACY_SELF_REPORTED"
+
+
+#: Origins a new registration may declare. `LEGACY_SELF_REPORTED` is readable, never writable.
+REGISTRABLE_ORIGINS = frozenset(
+    {
+        SearchOrigin.NO_DATA_DEPENDENT_SEARCH,
+        SearchOrigin.OPERATOR_ATTESTED,
+        SearchOrigin.MEASURED,
+    }
+)
+
+
+class WindowState(StrEnum):
+    """Whether a declared window is merely claimed or actually spent (#22)."""
+
+    #: Claimed at registration. Blocks overlap only while live, and lapses on its own, because
+    #: abandonment is the absence of events rather than an event anyone will report.
+    RESERVED = "RESERVED"
+    #: The data was handed to an experiment. Permanent: contamination is a fact about what was
+    #: seen, not about a record, so no expiry brings it back.
+    CONSUMED = "CONSUMED"
+    #: Given up before the data was read. Stops blocking.
+    RELEASED = "RELEASED"
 
 
 class DataRole(StrEnum):
@@ -196,6 +251,12 @@ class HypothesisDraft(FrozenModel):
     #: candidate came from theory or literature rather than from mining data. This is the
     #: registration's whole cost against the project's multiple-testing budget.
     search_cardinality: int = Field(default=1, ge=1)
+    #: Where that count came from. Defaults to the only origin whose count is self-evident: a
+    #: candidate that searched no data has a cardinality of 1 by construction, so declaring
+    #: nothing claims nothing. Any other count has to say where it came from (#23).
+    search_origin: SearchOrigin = SearchOrigin.NO_DATA_DEPENDENT_SEARCH
+    #: Who attested the count. Required for, and only for, `OPERATOR_ATTESTED`.
+    search_attested_by: str | None = None
 
     confounders: tuple[Text, ...] = Field(min_length=1)
     #: Required only when this candidate overlaps a prior hypothesis. Writing down what is
@@ -213,6 +274,26 @@ class HypothesisDraft(FrozenModel):
     def validate_draft(self) -> Self:
         if (self.parent_hypothesis_id is None) != (self.parent_version is None):
             raise ValueError("a parent reference needs both id and version")
+        if self.search_origin not in REGISTRABLE_ORIGINS:
+            raise ValueError(
+                f"{self.search_origin.value} describes rows that predate the search-origin "
+                "distinction and cannot be declared by a new registration"
+            )
+        if (self.search_origin is SearchOrigin.OPERATOR_ATTESTED) != (
+            self.search_attested_by is not None
+        ):
+            raise ValueError(
+                "an operator-attested trial count must name the operator attesting it, and only "
+                "an attested count may name one -- an unsigned attestation is a self-report"
+            )
+        if (
+            self.search_origin is SearchOrigin.NO_DATA_DEPENDENT_SEARCH
+            and self.search_cardinality != 1
+        ):
+            raise ValueError(
+                f"a candidate from theory or literature searched nothing, so it cannot claim "
+                f"{self.search_cardinality} trials; declare where the count came from"
+            )
         seen = {(window.dataset, window.role) for window in self.windows}
         if len(seen) != len(self.windows):
             raise ValueError("declare one contiguous window per dataset and role")
@@ -233,6 +314,10 @@ class Registration(FrozenModel):
     #: The critique that let this through, frozen with it. Immutable for the same reason the
     #: prediction is: a review that can be revised after the result is not a review.
     critique: Critique
+    #: When this registration's claim on its declared windows lapses (#22). A reservation has to
+    #: expire on its own: abandonment is the absence of events, so nothing can be relied upon to
+    #: release it, and a reservation that only ends by explicit call never ends at all.
+    reserved_until: date
 
     @property
     def content_hash(self) -> str:
@@ -416,6 +501,7 @@ class HypothesisRegistry:
             cumulative_trials=trials,
             power=assessment,
             critique=critique,
+            reserved_until=now.date() + timedelta(days=RESERVATION_DAYS),
         )
         self._insert(registration)
         self.record_assessment(assessment)
@@ -680,6 +766,8 @@ class HypothesisRegistry:
                 registered_at=encode_utc(registration.registered_at),
                 content_hash=registration.content_hash,
                 search_cardinality=draft.search_cardinality,
+                search_origin=draft.search_origin.value,
+                search_attested_by=draft.search_attested_by,
                 cumulative_trials=registration.cumulative_trials,
                 luck_threshold_z=str(registration.power.luck_threshold_z),
                 estimand=draft.effect.estimand.value,
@@ -699,6 +787,10 @@ class HypothesisRegistry:
                     role=window.role.value,
                     start_date=window.start.isoformat(),
                     end_date=window.end.isoformat(),
+                    # Registration reserves; only handing the data to an experiment consumes it.
+                    state=WindowState.RESERVED.value,
+                    reserved_until=registration.reserved_until.isoformat(),
+                    consumed_at=None,
                 )
             )
 

@@ -1053,9 +1053,7 @@ class StorageRepository:
         for snapshot_id in snapshot_ids:
             row = (
                 self._session.execute(
-                    select(account_snapshots).where(
-                        account_snapshots.c.snapshot_id == snapshot_id
-                    )
+                    select(account_snapshots).where(account_snapshots.c.snapshot_id == snapshot_id)
                 )
                 .mappings()
                 .one()
@@ -1286,9 +1284,7 @@ class StorageRepository:
         for identifier in identifiers:
             record = self.get_reconciliation(str(identifier))
             if record is None:
-                raise RecordNotFoundError(
-                    f"reconciliation disappeared while listing: {identifier}"
-                )
+                raise RecordNotFoundError(f"reconciliation disappeared while listing: {identifier}")
             records.append(record)
         return records
 

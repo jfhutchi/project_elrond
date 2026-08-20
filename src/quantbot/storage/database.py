@@ -36,6 +36,7 @@ REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {
     4: "0004",
     5: "0005",
     6: "0006",
+    7: "0007",
 }
 
 
@@ -125,8 +126,7 @@ class Database:
             has_schema_marker = schema_version.name in table_names
             has_alembic_table = "alembic_version" in table_names
             if has_alembic_table and "version_num" not in {
-                str(row[1])
-                for row in connection.execute('PRAGMA table_info("alembic_version")')
+                str(row[1]) for row in connection.execute('PRAGMA table_info("alembic_version")')
             }:
                 raise UnsupportedSchemaVersionError("invalid Alembic version marker")
             alembic_rows = (
@@ -146,8 +146,7 @@ class Database:
 
             if has_schema_marker:
                 if {"id", "version"} - {
-                    str(row[1])
-                    for row in connection.execute('PRAGMA table_info("schema_version")')
+                    str(row[1]) for row in connection.execute('PRAGMA table_info("schema_version")')
                 }:
                     raise UnsupportedSchemaVersionError("incompatible schema")
                 schema_rows = connection.execute("SELECT version FROM schema_version").fetchall()
@@ -156,9 +155,7 @@ class Database:
                 try:
                     actual = int(schema_rows[0][0])
                 except (TypeError, ValueError) as exc:
-                    raise UnsupportedSchemaVersionError(
-                        "invalid schema version marker"
-                    ) from exc
+                    raise UnsupportedSchemaVersionError("invalid schema version marker") from exc
                 if actual > SCHEMA_VERSION:
                     raise UnsupportedSchemaVersionError(actual)
                 observed_version = actual
