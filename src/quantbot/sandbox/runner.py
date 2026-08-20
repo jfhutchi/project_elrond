@@ -169,9 +169,8 @@ def _distribution_import_roots(
     """Map the resolved dependency closure back to import roots for editable installs."""
     selected: set[str] = set()
     for distribution in distributions:
-        distribution_name = distribution.metadata.get("Name")
-        if distribution_name:
-            selected.add(distribution_name.lower().replace("_", "-"))
+        distribution_name = distribution.metadata["Name"]
+        selected.add(distribution_name.lower().replace("_", "-"))
     return [
         import_root
         for import_root, owners in importlib.metadata.packages_distributions().items()
