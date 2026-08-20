@@ -14,7 +14,7 @@ WorkingDirectory=__QUANTBOT_HOME__
 # Credentials and paths live here, mode 600, outside the repo. Never in the unit file.
 EnvironmentFile=/etc/quantbot/quantbot.env
 
-ExecStart=/home/__USER__/.local/bin/uv run quantbot daemon
+__EXECSTART__
 
 # Restart always, with a floor on the rate. A daemon that crashes on startup and is restarted
 # instantly forever will hammer the broker API and get the account rate-limited, which turns a

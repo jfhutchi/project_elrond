@@ -5,12 +5,11 @@ updates, is the wrong host for that. A dedicated Pi is a better one.
 
 ## Which boards work
 
-| board | arch | verdict |
-|---|---|---|
-| Pi Zero 2 W | aarch64 | works |
-| Pi 3 / 4 / 5 | aarch64 | works |
-| Pi Zero / Zero W (original) | armv6l | **no** |
-| any board on 32-bit Raspberry Pi OS | armv7l | **no** — reflash 64-bit |
+| board | arch | path | verdict |
+|---|---|---|---|
+| Pi Zero 2 W, Pi 3/4/5 (64-bit OS) | aarch64 | uv + PyPI | works |
+| **Pi Zero / Zero W (original)** | **armv6l** | **venv + piwheels** | **works, on Bookworm** |
+| Pi 2/3/4 on 32-bit OS | armv7l | venv + piwheels | works; 64-bit is better |
 
 Check with:
 
@@ -18,17 +17,27 @@ Check with:
 uname -m && grep -E '^(Model|Revision)' /proc/cpuinfo
 ```
 
-`aarch64` is what you want.
+### The ARMv6 case (Pi Zero / Zero W)
 
-The blocker on ARMv6 is `pydantic-core`, which is compiled Rust and publishes no `armv6l` wheel.
-`pip` would fall back to building it from source on a single 1GHz core with 512MB of RAM. That
-takes hours and usually ends in an out-of-memory kill. `setup.sh` refuses on ARMv6 rather than
-letting you find that out slowly.
+The original Zero is ARMv6, single-core 1GHz, 512MB RAM, and **cannot run a 64-bit OS at all** —
+reflashing to arm64 is not an option for this board.
 
-**This has not been run on ARM hardware.** It is a reasoned read of the dependency graph — no
-numpy, no pandas, no scipy, and a workload that is I/O-bound on the broker API rather than
-compute-bound. The install script checks its own assumptions as it goes, but the first real run
-is the proof.
+PyPI publishes no `armv6l` wheel for `pydantic-core`, which is compiled Rust. Installing from PyPI
+would fall back to building it from source on one slow core, which takes hours and usually ends in
+an OOM kill.
+
+[piwheels.org](https://www.piwheels.org/project/pydantic-core/) exists for exactly this and **does
+publish `armv6l` wheels**, including `2.46.4` for `cp311` — the version this project pins. So the
+board works; it just has to install from that index instead of compiling. Raspberry Pi OS already
+ships `/etc/pip.conf` pointing at piwheels, and `setup.sh` verifies it rather than assuming.
+
+Two consequences for ARMv6:
+
+- **Raspberry Pi OS Bookworm (32-bit) is required.** Debian 12 ships Python 3.11, which this
+  project needs. Bullseye ships 3.9 and Buster 3.7. A Pi that has been running PiHole for years is
+  almost certainly on an older release — reflash before installing.
+- **pip and venv, not uv.** uv is also Rust and its ARMv6 support is not something to bet an
+  unattended trading process on. `setup.sh` picks the right path automatically from `uname -m`.
 
 ## Why the resource profile fits
 
@@ -46,9 +55,12 @@ path.
 ## Install
 
 ```bash
+sudo apt-get update && sudo apt-get install -y git
 git clone --branch elrond-v0.2 https://github.com/jfhutchi/project_elrond.git ~/quantbot
 bash ~/quantbot/deploy/pi/setup.sh
 ```
+
+It detects the architecture and picks the install path itself.
 
 Idempotent — safe to re-run. It installs the code and the systemd unit, and creates
 `/etc/quantbot/quantbot.env` as an empty template. It does not start anything, and it never
