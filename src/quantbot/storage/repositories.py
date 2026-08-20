@@ -208,6 +208,28 @@ def _row_matches(row: RowMapping, payload: Mapping[str, object]) -> bool:
     return all(row[key] == value for key, value in payload.items())
 
 
+#: Fields a market-data vendor revises after publication as a matter of routine.
+#:
+#: Consolidated volume is restated for a day or two after the close as late trades report. On
+#: 2026-08-20 this crashed the live daemon: EEM at 2026-08-18 was stored with volume 2025744 and
+#: re-fetched as 2028904 -- 0.16% -- with open, high, low, close and the adjustment factor all
+#: identical. The observation had not been restated in any sense that matters; a handful of
+#: trades were reported late.
+#:
+#: Prices are deliberately NOT on this list. A changed open, high, low, close or adjustment
+#: factor means history was restated, which is exactly what the conflict check exists to catch.
+REVISABLE_BAR_FIELDS = frozenset({"volume"})
+
+
+def _bar_conflict(row: RowMapping, payload: Mapping[str, object]) -> list[str]:
+    """Fields that differ and are not routinely revised, i.e. the ones worth stopping for."""
+    return sorted(
+        key
+        for key, value in payload.items()
+        if key not in REVISABLE_BAR_FIELDS and row[key] != value
+    )
+
+
 class StorageRepository:
     """Persist and restore records inside one caller-owned transaction."""
 
@@ -410,10 +432,19 @@ class StorageRepository:
             if row is None:
                 self._session.execute(bars.insert().values(**payload))
                 inserted += 1
-            elif not _row_matches(row, payload):
+            elif conflicts := _bar_conflict(row, payload):
                 raise StateConflictError(
                     f"bar observation conflicts for {bar.symbol} at {payload['timestamp']}"
+                    f" on {', '.join(conflicts)}: stored "
+                    + ", ".join(f"{key}={row[key]}" for key in conflicts)
+                    + " but the provider now reports "
+                    + ", ".join(f"{key}={payload[key]}" for key in conflicts)
                 )
+            # A revision-only difference keeps the observation already stored rather than
+            # overwriting it. Two reasons, and the second is the stronger one: the first value
+            # is what was actually knowable at the time, and `strategy/identity.py` hashes
+            # volume into the dataset fingerprint, so silently adopting a revision would change
+            # the hash of results that were already recorded against the old one.
         return inserted
 
     def list_bars(self, *, symbol: str | None = None, provider: str | None = None) -> list[Bar]:

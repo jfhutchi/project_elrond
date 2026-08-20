@@ -63,7 +63,7 @@ def make_identity() -> StrategyIdentity:
     )
 
 
-def make_bar(*, close: str = "105") -> Bar:
+def make_bar(*, close: str = "105", volume: str = "1000") -> Bar:
     return Bar(
         symbol="AAPL",
         timestamp=NOW,
@@ -71,7 +71,7 @@ def make_bar(*, close: str = "105") -> Bar:
         high="110",
         low="95",
         close=close,
-        volume="1000",
+        volume=volume,
         adjustment="1",
     )
 
@@ -412,22 +412,21 @@ def test_database_rejects_corrupt_supported_pre_alembic_schema_without_mutation(
 
     raw_connection = sqlite3.connect(path)
     try:
+        assert raw_connection.execute("PRAGMA journal_mode").fetchone()[0] == original_journal_mode
         assert (
-            raw_connection.execute("PRAGMA journal_mode").fetchone()[0]
-            == original_journal_mode
+            raw_connection.execute(
+                "SELECT type, name, tbl_name, sql FROM sqlite_master "
+                "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
+            ).fetchall()
+            == original_schema
         )
-        assert raw_connection.execute(
-            "SELECT type, name, tbl_name, sql FROM sqlite_master "
-            "WHERE name NOT LIKE 'sqlite_%' ORDER BY type, name"
-        ).fetchall() == original_schema
-        assert raw_connection.execute(
-            "SELECT reason FROM kill_switch_state WHERE id = 1"
-        ).fetchone() == original_reason
+        assert (
+            raw_connection.execute("SELECT reason FROM kill_switch_state WHERE id = 1").fetchone()
+            == original_reason
+        )
         assert "alembic_version" not in {
             row[0]
-            for row in raw_connection.execute(
-                "SELECT name FROM sqlite_master WHERE type = 'table'"
-            )
+            for row in raw_connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
         }
     finally:
         raw_connection.close()
@@ -482,12 +481,61 @@ def test_bar_observations_are_idempotent_and_conflicts_are_explicit(database: Da
         assert restored[0].close == Decimal("105")
         assert restored[0].timestamp.tzinfo is UTC
 
-        with pytest.raises(StateConflictError, match="bar"):
+        with pytest.raises(StateConflictError, match="close") as conflict:
             repository.save_bars(
                 [make_bar(close="106")],
                 provider="polygon",
                 adjustment_metadata={"split": True},
             )
+        # The message has to say which field moved and what both values were. "bar observation
+        # conflicts" alone sent an operator to the database to find out what changed.
+        assert "105" in str(conflict.value)
+        assert "106" in str(conflict.value)
+
+
+def test_a_revised_volume_is_not_a_conflict_and_does_not_overwrite(database: Database) -> None:
+    """Vendors restate consolidated volume after the close; that is not restated history.
+
+    On 2026-08-20 this took the live daemon down. EEM at 2026-08-18 was stored with volume
+    2025744 and re-fetched as 2028904 -- 0.16%, with open, high, low, close and the adjustment
+    factor all identical -- and the conflict guard exited the process with code 2. A handful of
+    trades reporting late is not a restatement and must not stop trading.
+
+    The stored value is kept rather than updated, which matters more than it first appears:
+    `strategy/identity.py` hashes volume into the dataset fingerprint, so adopting a revision
+    would silently change the hash of results already recorded against the original.
+    """
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        assert repository.save_bars([make_bar(volume="2025744")], provider="alpaca") == 1
+
+        # Same bar, volume revised upward by the vendor. No exception, no new row.
+        assert repository.save_bars([make_bar(volume="2028904")], provider="alpaca") == 0
+
+        restored = repository.list_bars(symbol="AAPL", provider="alpaca")
+        assert len(restored) == 1
+        assert restored[0].volume == Decimal("2025744"), (
+            "the first observation is what was knowable"
+        )
+
+
+def test_a_revised_price_is_still_a_conflict(database: Database) -> None:
+    """The other half: tolerating volume must not tolerate a restated price.
+
+    Without this, `test_a_revised_volume_is_not_a_conflict` could pass with the guard removed
+    entirely, and the check that exists to catch rewritten history would be gone.
+    """
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.save_bars([make_bar(close="105", volume="1000")], provider="alpaca")
+
+        for field, revised in (
+            ("close", make_bar(close="106", volume="1000")),
+            # A price change arriving alongside a volume revision is still a price change.
+            ("close", make_bar(close="106", volume="2028904")),
+        ):
+            with pytest.raises(StateConflictError, match=field):
+                repository.save_bars([revised], provider="alpaca")
 
 
 def test_intent_lifecycle_is_atomic_and_optimistic(database: Database) -> None:
@@ -880,8 +928,7 @@ def test_a_v1_database_upgrades_to_head_and_carries_its_ledger_across(tmp_path: 
                 == "engaged before the upgrade"
             )
             assert [
-                tuple(row)
-                for row in connection.exec_driver_sql("SELECT run_id, status FROM runs")
+                tuple(row) for row in connection.exec_driver_sql("SELECT run_id, status FROM runs")
             ] == [("run-1", "COMPLETED")]
     finally:
         database.close()
@@ -963,8 +1010,7 @@ def test_replaying_every_migration_reproduces_the_head_schema_column_for_column(
                 for column in inspector.get_columns(name)
             }
             declared = {
-                column.name: (str(column.type), bool(column.nullable))
-                for column in table.columns
+                column.name: (str(column.type), bool(column.nullable)) for column in table.columns
             }
             assert reflected == declared, (
                 f"{name} differs between the migration chain and schema.py"

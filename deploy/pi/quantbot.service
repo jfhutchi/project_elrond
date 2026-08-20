@@ -6,6 +6,17 @@ Documentation=https://github.com/jfhutchi/project_elrond
 After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
 
+# Restart rate limit. These belong in [Unit], not [Service] -- systemd silently ignores them
+# there ("Unknown key 'StartLimitIntervalSec' in section [Service]"), which is where they were
+# and why the limit was not in force on the first deployment.
+#
+# A daemon that fails on startup and restarts instantly forever hammers the broker API and gets
+# the account rate-limited, turning a small fault into an outage. Five failures inside two
+# minutes and systemd stops trying: a process that cannot start is something to investigate,
+# not something to retry into the ground.
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
 [Service]
 Type=simple
 User=__USER__
@@ -16,15 +27,10 @@ EnvironmentFile=/etc/quantbot/quantbot.env
 
 __EXECSTART__
 
-# Restart always, with a floor on the rate. A daemon that crashes on startup and is restarted
-# instantly forever will hammer the broker API and get the account rate-limited, which turns a
-# small fault into an outage. Five seconds between attempts, and if it fails five times inside
-# two minutes systemd gives up and leaves it stopped for a human to look at -- a process that
-# cannot start is a fault to investigate, not one to retry into the ground.
+# Always restart, with five seconds between attempts. The ceiling on how many attempts is in
+# [Unit] above, because that is the only section where systemd reads it.
 Restart=always
 RestartSec=5
-StartLimitBurst=5
-StartLimitIntervalSec=120
 
 # The Pi has no RTC and this process makes decisions on session boundaries. Fail loudly rather
 # than trade against a wrong clock.
