@@ -112,7 +112,11 @@ class SearchOrigin(StrEnum):
     #: A human states the number and is recorded as having stated it. Auditable, and what keeps
     #: the gate from paralysing research before a discovery engine exists to measure it (#13).
     OPERATOR_ATTESTED = "OPERATOR_ATTESTED"
-    #: Derived from a durable search record. Reachable once something emits one.
+    #: Derived from a durable search record. Not yet reachable: nothing in this system emits
+    #: search telemetry, so a registration claiming MEASURED is claiming provenance that cannot
+    #: exist, and `validate_draft` refuses it. Declaring it registrable before there is a
+    #: producer would have reopened the laundering path one enum value across from where #23
+    #: closed it -- an agent that may not self-report a count could simply call it measured.
     MEASURED = "MEASURED"
     #: Rows that predate this distinction. Never selectable by a new registration; it exists so
     #: the 0007 backfill does not have to call those rows attested or measured, which would
@@ -120,13 +124,11 @@ class SearchOrigin(StrEnum):
     LEGACY_SELF_REPORTED = "LEGACY_SELF_REPORTED"
 
 
-#: Origins a new registration may declare. `LEGACY_SELF_REPORTED` is readable, never writable.
+#: Origins a new registration may declare. `LEGACY_SELF_REPORTED` is readable and never
+#: writable; `MEASURED` is reserved until something actually emits search telemetry to derive it
+#: from. Both are refused by `HypothesisDraft.validate_draft` with their own explanation.
 REGISTRABLE_ORIGINS = frozenset(
-    {
-        SearchOrigin.NO_DATA_DEPENDENT_SEARCH,
-        SearchOrigin.OPERATOR_ATTESTED,
-        SearchOrigin.MEASURED,
-    }
+    {SearchOrigin.NO_DATA_DEPENDENT_SEARCH, SearchOrigin.OPERATOR_ATTESTED}
 )
 
 
@@ -274,10 +276,18 @@ class HypothesisDraft(FrozenModel):
     def validate_draft(self) -> Self:
         if (self.parent_hypothesis_id is None) != (self.parent_version is None):
             raise ValueError("a parent reference needs both id and version")
-        if self.search_origin not in REGISTRABLE_ORIGINS:
+        if self.search_origin is SearchOrigin.LEGACY_SELF_REPORTED:
             raise ValueError(
-                f"{self.search_origin.value} describes rows that predate the search-origin "
-                "distinction and cannot be declared by a new registration"
+                "LEGACY_SELF_REPORTED describes rows that predate the search-origin distinction "
+                "and cannot be declared by a new registration"
+            )
+        if self.search_origin is SearchOrigin.MEASURED:
+            raise ValueError(
+                "MEASURED requires a durable search record to derive the count from, and nothing "
+                "in this system emits one yet (#13 and #11 are unbuilt). Accepting it on trust "
+                "would reopen the laundering path #23 closed: an agent forbidden from "
+                "self-reporting a count could simply relabel it as measured. Use "
+                "OPERATOR_ATTESTED, which records who is standing behind the number"
             )
         if (self.search_origin is SearchOrigin.OPERATOR_ATTESTED) != (
             self.search_attested_by is not None
@@ -612,6 +622,34 @@ class HypothesisRegistry:
                 f"{hypothesis_id} v{version} counted {observed.observations} observations from"
                 f" {observed.dataset!r}, which is not among its registered datasets"
                 f" {sorted(declared_datasets)}",
+            )
+        # Matching the dataset is not enough: the count has to come from the range the
+        # registration froze. Otherwise a hypothesis registered on 2016-2026 can be cleared by a
+        # count taken over 1990-2026 of the same dataset, which is the declared-sample defect
+        # this check exists to close, wearing a verified label.
+        #
+        # Containment rather than equality, deliberately. Counting *fewer* observations than the
+        # window spans is the honest case -- data is missing at the edges, a feature needs
+        # warm-up, a symbol lists late -- and that is exactly what verification is meant to
+        # surface. Counting more is the attack.
+        covering = [
+            window
+            for window in registration.draft.windows
+            if window.dataset == observed.dataset
+            and window.start <= observed.start_date
+            and observed.end_date <= window.end
+        ]
+        if not covering:
+            spans = ", ".join(
+                f"{window.role.value} {window.start.isoformat()}..{window.end.isoformat()}"
+                for window in registration.draft.windows
+                if window.dataset == observed.dataset
+            )
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{hypothesis_id} v{version} counted {observed.observations} observations over"
+                f" {observed.start_date.isoformat()}..{observed.end_date.isoformat()} on"
+                f" {observed.dataset!r}, which no registered window covers ({spans})",
             )
         observations = observed.observations
         assessment = assess(

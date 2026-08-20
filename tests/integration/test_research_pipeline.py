@@ -36,6 +36,7 @@ from quantbot.research.critic import (
     CriticVerdict,
     Critique,
     DeterministicCritic,
+    DeterministicReview,
     Objection,
     Severity,
     cost_ladder,
@@ -142,9 +143,7 @@ def candidate(**overrides: object) -> Candidate:
         "search_cardinality": 3,
         "confounders": ("the slope is itself driven by policy expectations",),
         "simplest_refutation": "Sort months by slope and compare the following drawdown.",
-        "basis": EvidenceBasis(
-            citations=(), status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE
-        ),
+        "basis": EvidenceBasis(citations=(), status=EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE),
         "estimated_trials": 3,
         "proposed_by": "literature-gap-miner",
         "proposed_at": NOW,
@@ -216,9 +215,7 @@ def clean_critique(
         beta=hidden_beta(statistics["strategy"], statistics["benchmark"]),
         ladder=cost_ladder(gross_return=0.42, trade_legs=24.0),
         split=regime_split({"1990s": 0.4, "2000s": 0.3, "2010s": 0.5, "2020s": 0.2}),
-        generality=cross_asset_generality(
-            {"SPY": 3.4, "IWM": 3.1, "EFA": 3.0}, threshold=2.9
-        ),
+        generality=cross_asset_generality({"SPY": 3.4, "IWM": 3.1, "EFA": 3.0}, threshold=2.9),
         shifted_probe_passed=True,
         survivorship_bias=None,
         alpha_threshold=2.9,
@@ -367,9 +364,7 @@ def test_the_same_candidate_on_the_exhausted_window_is_stopped(database: Databas
         ]
     assert consumption[0].status == "EXHAUSTED"
 
-    on_spent_data = candidate(
-        candidate_id="C-2", required_datasets=(SPENT_DATASET,)
-    )
+    on_spent_data = candidate(candidate_id="C-2", required_datasets=(SPENT_DATASET,))
     ok, reason = admissible(on_spent_data, consumption=consumption)
     assert not ok
     assert "exploratory" in reason
@@ -402,20 +397,24 @@ def test_a_critic_objection_stops_the_chain_before_anything_is_frozen(
 ) -> None:
     """The gate order matters: a blocked critique means there is no registration to compile."""
     blocking = DeterministicCritic(
-        [
-            Objection(
-                check="hidden-beta",
-                severity=Severity.BLOCKING,
-                finding="alpha is t=0.05 against a 2.90 bar",
-                evidence={"alpha_t": "0.05"},
-            )
-        ]
+        DeterministicReview(
+            objections=(
+                Objection(
+                    check="hidden-beta",
+                    severity=Severity.BLOCKING,
+                    finding="alpha is t=0.05 against a 2.90 bar",
+                    evidence={"alpha_t": "0.05"},
+                ),
+            ),
+            # The check that objected did run, so this critique carries real coverage. Passing
+            # no coverage would now block on "no-coverage" instead, and this test would pass for
+            # the wrong reason.
+            assessed=("hidden-beta",),
+        )
     ).review("H-PIPE-1", 1, now=NOW)
 
     with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
-        HypothesisRegistry(session).register(
-            draft_from(candidate()), now=NOW, critique=blocking
-        )
+        HypothesisRegistry(session).register(draft_from(candidate()), now=NOW, critique=blocking)
     assert error.value.reason is RefusalReason.CRITIQUE_BLOCKS
 
     with database.transaction() as session:

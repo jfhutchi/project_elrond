@@ -352,9 +352,9 @@ def test_a_runaway_sandbox_does_not_block_the_writer_lock() -> None:
     outcome: dict[str, object] = {}
 
     def burn() -> None:
-        outcome["result"] = SandboxRunner(
-            SandboxPolicy(wall_clock_seconds=6.0)
-        ).run("while True:\n    pass\n")
+        outcome["result"] = SandboxRunner(SandboxPolicy(wall_clock_seconds=6.0)).run(
+            "while True:\n    pass\n"
+        )
 
     worker = threading.Thread(target=burn)
     worker.start()

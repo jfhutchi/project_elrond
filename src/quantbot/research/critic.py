@@ -38,6 +38,7 @@ from __future__ import annotations
 import math
 import statistics
 from collections.abc import Sequence
+from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
 from typing import Annotated, Protocol, Self
@@ -48,6 +49,17 @@ Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 #: Judgment dimensions no deterministic check can settle. Named so a critique that skipped them
 #: says so rather than implying coverage it does not have.
+#: The mechanical checks this module can run. Named so coverage is derived from what was
+#: actually supplied rather than asserted by whoever built the critique.
+MECHANICAL_CHECKS: tuple[str, ...] = (
+    "hidden-beta",
+    "cost-sensitivity",
+    "regime-split",
+    "cross-asset-generality",
+    "shifted-feature-probe",
+    "survivorship",
+)
+
 JUDGMENT_DIMENSIONS: tuple[str, ...] = (
     "economic mechanism plausibility",
     "confounders and alternative explanations",
@@ -326,6 +338,24 @@ def shifted_feature_probe(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class DeterministicReview:
+    """What the mechanical pass produced, and which checks actually ran to produce it.
+
+    The two travel together on purpose. An empty objection tuple means "nothing objected", which
+    is indistinguishable from "nothing was asked" unless the coverage rides alongside it -- and
+    that ambiguity is what let a critic assessing nothing return PROCEED.
+    """
+
+    objections: tuple[Objection, ...]
+    #: Names from `MECHANICAL_CHECKS` whose inputs were supplied. Derived, never declared.
+    assessed: tuple[str, ...]
+
+    @property
+    def unassessed(self) -> tuple[str, ...]:
+        return tuple(name for name in MECHANICAL_CHECKS if name not in self.assessed)
+
+
 def deterministic_objections(
     *,
     beta: BetaReport | None = None,
@@ -432,7 +462,19 @@ def deterministic_objections(
             )
         )
 
-    return tuple(objections)
+    assessed = tuple(
+        name
+        for name, supplied in (
+            ("hidden-beta", beta is not None),
+            ("cost-sensitivity", ladder is not None),
+            ("regime-split", split is not None),
+            ("cross-asset-generality", generality is not None),
+            ("shifted-feature-probe", shifted_probe_passed is not None),
+            ("survivorship", survivorship_bias is not None),
+        )
+        if supplied
+    )
+    return DeterministicReview(objections=tuple(objections), assessed=assessed)
 
 
 class Critic(Protocol):
@@ -449,16 +491,39 @@ class DeterministicCritic:
 
     name = "deterministic"
 
-    def __init__(self, objections: Sequence[Objection]) -> None:
-        self._objections = tuple(objections)
+    def __init__(self, review: DeterministicReview) -> None:
+        self._review = review
 
     def review(self, hypothesis_id: str, version: int, *, now: datetime) -> Critique:
-        blocking = [item for item in self._objections if item.severity is Severity.BLOCKING]
+        objections = list(self._review.objections)
+        # A critic that ran no check at all must not clear anything. Previously an empty
+        # objection tuple produced PROCEED with the reason "no mechanical check produced an
+        # objection" -- true, and true precisely because none was run. This module's own
+        # docstring says a check that was never run must not read as a check that passed; that
+        # rule now applies to the pass as a whole and not only to its individual checks.
+        if not self._review.assessed:
+            objections.append(
+                Objection(
+                    check="no-coverage",
+                    severity=Severity.BLOCKING,
+                    finding=(
+                        "no mechanical check ran: none of "
+                        f"{', '.join(MECHANICAL_CHECKS)} was supplied an input, so this critique "
+                        "carries no evidence either way"
+                    ),
+                    evidence={"assessed": "0", "available": str(len(MECHANICAL_CHECKS))},
+                )
+            )
+        frozen = tuple(objections)
+        blocking = [item for item in frozen if item.severity is Severity.BLOCKING]
         verdict = CriticVerdict.REVISE if blocking else CriticVerdict.PROCEED
         reasons = (
-            tuple(f"{item.check}: {item.finding}" for item in self._objections)
-            if self._objections
-            else ("no mechanical check produced an objection",)
+            tuple(f"{item.check}: {item.finding}" for item in frozen)
+            if frozen
+            else (
+                "no objection from "
+                f"{len(self._review.assessed)} of {len(MECHANICAL_CHECKS)} mechanical checks",
+            )
         )
         return Critique(
             hypothesis_id=hypothesis_id,
@@ -466,16 +531,19 @@ class DeterministicCritic:
             critic=self.name,
             verdict=verdict,
             reasons=reasons,
-            objections=self._objections,
-            # Named rather than left implicit: this critic assessed none of them, and a
-            # registration that only ever saw this critic has an open judgment surface.
-            unassessed=JUDGMENT_DIMENSIONS,
+            objections=frozen,
+            # Both surfaces this critic left open: the judgment dimensions it cannot assess at
+            # all, and the mechanical checks it was given no input for. Recording only the
+            # former made an unfed critic look fully covered on the mechanical side.
+            unassessed=JUDGMENT_DIMENSIONS + self._review.unassessed,
             produced_at=now,
         )
 
 
 __all__ = [
     "JUDGMENT_DIMENSIONS",
+    "MECHANICAL_CHECKS",
+    "DeterministicReview",
     "BetaReport",
     "CostLadder",
     "CostPoint",

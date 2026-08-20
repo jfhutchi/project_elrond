@@ -14,6 +14,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from pydantic import ValidationError
 from sqlalchemy import select, update
 
 from quantbot.research import (
@@ -903,3 +904,100 @@ def test_an_operator_override_still_does_not_excuse_measuring(database: Database
         HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
 
     assert error.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+
+
+def test_a_count_from_outside_the_registered_window_is_refused(database: Database) -> None:
+    """Matching the dataset is not enough; the range has to be the one that was frozen.
+
+    Residual hole in the #24 fix: `verify_for_execution` compared `observed.dataset` against the
+    registered datasets and never looked at the dates. A hypothesis registered on 2016-2026 could
+    therefore be cleared by a count taken over 1990-2026 of the same dataset — the declared-sample
+    defect the check exists to close, wearing a verified label and a much larger N.
+    """
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), make_draft(), now=NOW)
+
+    inflated = ObservedSample(
+        observations=SIP_SESSIONS * 3,
+        dataset="sip-us-equities-daily",
+        start_date=date(1990, 1, 2),
+        end_date=date(2026, 8, 18),
+        method="every session the vendor has, not the window that was registered",
+        counted_at=NOW,
+    )
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as error:
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=inflated
+        )
+
+    assert error.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+    assert "no registered window covers" in error.value.detail
+
+
+def test_counting_fewer_observations_than_the_window_spans_is_allowed(
+    database: Database,
+) -> None:
+    """The honest shortfall must still clear, or verification becomes unusable.
+
+    Containment rather than equality is the rule: data missing at the edges, a feature needing
+    warm-up, or a symbol listing late all produce a genuine count narrower than the registered
+    window. Surfacing that is the entire point of verifying. Refusing it would push every caller
+    back to declaring the window's nominal width, which is where this started.
+    """
+    with database.transaction() as session:
+        register(
+            HypothesisRegistry(session),
+            make_draft(effect=sharpe_effect(expected=Decimal("1.0"))),
+            now=NOW,
+        )
+
+    short = ObservedSample(
+        observations=2400,
+        dataset="sip-us-equities-daily",
+        start_date=date(2016, 6, 1),
+        end_date=date(2026, 8, 18),
+        method="sessions with a bar present after the 200-day warm-up",
+        counted_at=NOW,
+    )
+    with database.transaction() as session:
+        clearance = HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=short
+        )
+
+    assert clearance.observed.observations == 2400
+    assert clearance.power.observations_available == 2400
+
+
+def test_measured_cannot_be_declared_while_nothing_emits_search_telemetry() -> None:
+    """The #23 laundering path had moved one enum value across.
+
+    `search_origin` was added so an agent could not simply assert its own trial count. But
+    `MEASURED` had no validation rule at all, so the same agent could declare
+    `search_origin=MEASURED, search_cardinality=1` and be believed — a stronger claim than the
+    self-report that was just forbidden, accepted on less evidence.
+
+    It stays reserved until #11 or #13 produces a durable search record to derive it from.
+    """
+    with pytest.raises(ValidationError, match="requires a durable search record"):
+        make_draft(search_cardinality=5000, search_origin=SearchOrigin.MEASURED)
+
+    with pytest.raises(ValidationError, match="requires a durable search record"):
+        make_draft(search_cardinality=1, search_origin=SearchOrigin.MEASURED)
+
+
+def test_the_only_way_to_claim_a_search_is_to_sign_for_it(database: Database) -> None:
+    """What remains registrable above a count of 1, so the refusals above are not a dead end."""
+    with database.transaction() as session:
+        registered = register(
+            HypothesisRegistry(session),
+            make_draft(
+                search_cardinality=12,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
+            ),
+            now=NOW,
+        )
+    assert registered.draft.search_origin is SearchOrigin.OPERATOR_ATTESTED
+    assert registered.draft.search_attested_by == "hutch"
+    # And the burden actually moved, rather than the origin being decorative.
+    assert registered.cumulative_trials >= PRIOR_TRIALS + 12

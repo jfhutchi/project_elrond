@@ -13,10 +13,11 @@ from datetime import UTC, datetime
 import pytest
 
 from quantbot.research.critic import (
-    JUDGMENT_DIMENSIONS,
+    MECHANICAL_CHECKS,
     CriticVerdict,
     Critique,
     DeterministicCritic,
+    DeterministicReview,
     Objection,
     Severity,
     consensus,
@@ -177,16 +178,44 @@ def test_agreement_can_never_outvote_an_objection() -> None:
 
 
 def test_the_deterministic_critic_names_what_it_did_not_assess() -> None:
-    """Absence of an objection on a judgment dimension must not read as approval of it."""
-    clean = DeterministicCritic([]).review("H-2026-001", 1, now=NOW)
-    assert clean.verdict is CriticVerdict.PROCEED
-    assert clean.unassessed == JUDGMENT_DIMENSIONS
-    assert "economic mechanism plausibility" in clean.unassessed
+    """Absence of an objection must not read as approval — on either surface.
 
-    blocked = DeterministicCritic([objection()]).review("H-2026-001", 1, now=NOW)
+    The critic leaves two surfaces open: judgment dimensions it cannot assess at all, and
+    mechanical checks it was handed no input for. Recording only the first made a critic that
+    ran nothing mechanically look fully covered on the mechanical side.
+    """
+    review = DeterministicReview(objections=(objection(),), assessed=("hidden-beta",))
+    blocked = DeterministicCritic(review).review("H-2026-001", 1, now=NOW)
     assert blocked.verdict is CriticVerdict.REVISE
     assert blocked.blocking
     assert blocked.reasons[0].startswith("hidden-beta:")
+    assert "economic mechanism plausibility" in blocked.unassessed
+    # It ran hidden-beta, so that one is not listed; the other five are.
+    assert "hidden-beta" not in blocked.unassessed
+    assert "cost-sensitivity" in blocked.unassessed
+
+
+def test_a_critic_that_ran_no_check_cannot_clear_a_hypothesis() -> None:
+    """The defect this replaces: `DeterministicCritic([])` returned PROCEED.
+
+    Its reason was "no mechanical check produced an objection" — true, and true precisely
+    because none had been run. `deterministic_objections`'s own docstring says a check that was
+    never run must not read as a check that passed; that rule now governs the pass as a whole.
+    """
+    empty = deterministic_objections(alpha_threshold=2.9)
+    assert empty.objections == ()
+    assert empty.assessed == ()
+
+    critique = DeterministicCritic(empty).review("H-2026-001", 1, now=NOW)
+
+    assert critique.verdict is not CriticVerdict.PROCEED
+    assert critique.verdict is CriticVerdict.REVISE
+    assert [item.check for item in critique.objections] == ["no-coverage"]
+    assert critique.blocking
+    assert "no mechanical check ran" in critique.reasons[0]
+    # Every mechanical check is named as unassessed, not silently absent.
+    for name in MECHANICAL_CHECKS:
+        assert name in critique.unassessed
 
 
 def test_the_mechanical_checks_compose_into_objections_with_their_numbers() -> None:
@@ -194,7 +223,7 @@ def test_the_mechanical_checks_compose_into_objections_with_their_numbers() -> N
     benchmark = [generator.gauss(0.0004, 0.011) for _ in range(2669)]
     levered = [0.71 * value for value in benchmark]
 
-    objections = deterministic_objections(
+    review = deterministic_objections(
         beta=hidden_beta(levered, benchmark),
         ladder=cost_ladder(gross_return=0.05, trade_legs=9134.0),
         split=regime_split({"a": 0.2, "b": -0.1, "c": 0.3, "d": -0.2}),
@@ -205,6 +234,10 @@ def test_the_mechanical_checks_compose_into_objections_with_their_numbers() -> N
         survivorship_bias=0.0,
         alpha_threshold=2.9,
     )
+    objections = review.objections
+    # Every check that was fed an input is recorded as assessed, whether or not it objected.
+    assert set(review.assessed) == set(MECHANICAL_CHECKS)
+    assert review.unassessed == ()
     checks = {item.check for item in objections}
     assert checks == {
         "hidden-beta",
@@ -220,6 +253,20 @@ def test_the_mechanical_checks_compose_into_objections_with_their_numbers() -> N
 
 
 def test_a_check_that_was_never_run_produces_no_objection_and_no_reassurance() -> None:
-    """Supplying nothing yields nothing. That is why the critic records `unassessed`."""
-    assert deterministic_objections(alpha_threshold=2.9) == ()
-    assert DeterministicCritic([]).review("H", 1, now=NOW).unassessed == JUDGMENT_DIMENSIONS
+    """Supplying one input assesses one check and leaves the rest explicitly open.
+
+    This test previously asserted only that no objection was produced, and passed while the
+    critic returned PROCEED — which is the strongest reassurance available. Asserting the
+    absence of an objection while ignoring the verdict is the failure class `CLAUDE.md` names:
+    it could not fail for the reason it was named after.
+    """
+    review = deterministic_objections(alpha_threshold=2.9, survivorship_bias=0.4)
+    assert review.objections == ()
+    assert review.assessed == ("survivorship",)
+
+    critique = DeterministicCritic(review).review("H", 1, now=NOW)
+
+    assert critique.verdict is CriticVerdict.PROCEED, "one clean check may clear"
+    assert "survivorship" not in critique.unassessed
+    assert "hidden-beta" in critique.unassessed, "the five unrun checks stay named"
+    assert "1 of 6 mechanical checks" in critique.reasons[0]
