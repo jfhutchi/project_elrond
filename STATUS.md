@@ -2,17 +2,54 @@
 
 ## START HERE
 
-### ⚠ SEVERITY-1: the drawdown halt is a trap, and it affects the live account
+### ⚠ SEVERITY-1 (FIX BUILT, NOT DEPLOYED): the drawdown halt is a trap
 
-Measured: the halt blocks entry on **70.8% of sessions** in backtest. Once equity is 15% below
-its high-water mark, `entry_halted` stops new positions — but a strategy that cannot take
-positions cannot earn back the drawdown. **The halt has no exit.**
+**The design defect is real and unchanged.** Once equity is 15% below its high-water mark,
+`entry_halted` stops new positions — but a strategy that cannot take positions cannot earn back
+the drawdown, so equity is frozen, so the drawdown is frozen. **The halt has no exit.** If the
+live account reaches −15%, only a deposit or manual intervention releases it.
 
-`strategy-v1-2.yaml` (DEPLOYED) uses the same thresholds and has a 26.4% historical drawdown.
-**If the live account reaches -15%, it stops trading and cannot recover by trading.** Only a
-deposit or manual intervention releases it.
+**Two figures previously in this block did not describe the deployed config, corrected
+2026-08-19 by measurement through the production engine on SIP 2016-2026:**
 
-Fix options and evidence: `docs/per-session-trend-spec.md`, final section. Not yet fixed.
+| claim as written | measured, deployed `strategy-v1-2.yaml` |
+|---|---|
+| "the halt blocks entry on **70.8% of sessions**" | **0 sessions.** That 70.8% is `strategy-trend-v4`'s number (`docs/per-session-trend-spec.md`), not this config's |
+| "has a **26.4%** historical drawdown" | **9.09%** max drawdown. Two independent computations agree; 26.4% does not reproduce on any window tried (SIP 9.09%, IEX 10.87%) |
+
+The deployed config reaches reduced sizing on 371 sessions (13.9%) and **never reaches the 15%
+halt threshold** over the measured history. That is why setting `drawdown_halt_floor_bps` to
+1000, 2500 or 5000 produces byte-identical results: there is no trap to release on this window.
+
+**What this changes and what it does not.** The trap remains a genuine severity-1 *design*
+defect and the fix remains justified — a backtest maximum is not a bound on future drawdown, and
+if the account does reach −15% it is stuck. What changes is urgency: the deployed strategy is
+not sitting near the threshold, so this is a latent hazard rather than an active one. Deploying
+the floor restarts the qualification window, and that trade-off now has honest numbers on both
+sides.
+
+**Fixed in code, off by default, not yet deployed.** `drawdown_halt_floor_bps` trades at reduced
+size instead of stopping, and it *is* wired into the engine (`engine.py:617` →
+`risk/drawdown.py:39`). The four candidate fixes were measured in `scripts/halt_policy_study.py`,
+which is a **standalone simulation that never calls `BacktestEngine`** — under #8's rules that is
+a `RESEARCH_SCRIPT` result, the same class as the `f77ea08` study that was reproducible and wrong
+about this system. The 6 → 25 trades and 19.2% → 50.3% exposure figures come from
+`strategy-trend-v4`, not the deployed config.
+
+`scripts/halt_floor_through_engine.py` measures the switch through the production engine on the
+deployed config. Result: no effect on this window, for the reason above.
+
+**It does not improve returns, and that is the honest result.** On `strategy-trend-v4` the
+released strategy scores Sharpe 0.21 against the halted 0.36, with drawdown 32.7% against 15.6%.
+The hard halt's flattering Sharpe was achieved by not trading. Releasing a strategy with no edge
+simply exposes more capital to it. The justification for the fix is capital safety — without it a
+15% drawdown locks the live account out permanently — **not** performance.
+
+**Hysteresis is refuted, structurally.** A halted account holds nothing, so equity is frozen, so
+drawdown is frozen, so no drawdown-based release can ever fire. Measured byte-identical to the
+broken policy at every resume threshold.
+
+Deploying it to the live config is an operator decision: it restarts the qualification window.
 
 
 Run these two first. They take a minute and tell you whether anything is on fire:
@@ -287,12 +324,50 @@ distressed small caps. Data cached at `research/stocks.db` so no future cycle re
 | `strategy-index-v3.yaml` | 0.98% | 0.21 | 30% |
 | `strategy-trend-v4.yaml` (stops effectively disabled) | 2.52% | 0.30 | 43% |
 
-**Cause pinned: it is time in market, not position size.** Adding `target_weight_sizing` to
-remove the ATR risk cap entirely changed nothing — still 43% exposure, still 2.52% CAGR. This
-engine is invested on 43% of sessions against the benchmark's 77%, using the *same* 200-day
-condition. The difference is that it only acts on **monthly rebalance dates**: when SPY dips
-below its average and recovers mid-month, the benchmark re-enters the next session while this
-config waits until month end. Those missed re-entries are most of the return.
+**That diagnosis was backwards, corrected 2026-08-19 by measurement**
+(`reports/research/exposure-diagnosis-2026-08-19.md`). `exposure_fraction` is **capital**
+exposure — the mean of `gross_exposure / equity`, `metrics.py:161` — not the fraction of sessions
+holding a position. The finding read the first as the second.
+
+Measured separately, `universe: [SPY]` with the trend gate only:
+
+| | time in market | avg weight when held | capital exposure |
+|---|---:|---:|---:|
+| `SPY_SMA200` benchmark | 77.37% | 100.00% | 77.37% |
+| engine, SPY + trend only | **72.50%** | **11.67%** | 8.46% |
+
+**The engine expresses the timing almost exactly** — 72.50% against 77.37%, a 4.87 point gap
+rather than 34. The difference is *size*: `max_position_value_bps: 1000` caps any position at
+10% of equity, so a single-name config can never deploy more than a tenth.
+
+`target_weight_sizing` changed nothing because it removes the **ATR** cap, not this one. The knob
+turned was not the constraint.
+
+Raising the cap moves exposure roughly fivefold (8.46% → 43.50% at a 100% cap) and then
+plateaus. **That plateau was diagnosed the same day, and the "second constraint on position
+weight" hypothesised here was wrong** — at a 100% cap the engine holds an average weight of
+**100.00%** (1161/1161 held sessions ≥95%). What collapses is *time in market*, 72.50% → 43.50%.
+
+The cause is the **drawdown risk ladder**. At a 10% cap the position is too small to draw the
+account down 15%, so the ladder never fires; at a 100% cap it halts entry on **928 of 2669
+sessions**, first firing 2020-06-11. Widening the ladder restores 72.50% exposure and all 25
+trades. Setting `drawdown_halt_floor_bps` does *not* fix it — it releases the halt into the 20%
+**liquidation** tier (868 sessions), for +0.79 exposure points and *worse* CAGR.
+
+**Resolved later the same day** (`reports/research/spy-sma200-resolved-2026-08-19.md`): with the
+cap, the ladder, and **one corrupt SPY bar** all controlled for, the engine reproduces `SPY_SMA200`
+to 0.07 CAGR points. The corrupt bar — 2026-02-02, low 68.64 against a close of 691.70 — tripped a
+stop at a price no trade occurred at and cost 20.1% of equity in one session, worth 2.67 CAGR
+points, more than the trend gate itself. Now rejected at ingestion (`88ad02b`). **And the target
+turned out not to be worth reaching**: `SPY_SMA200` loses to buy-and-hold by 4.75 CAGR points, and
+its +0.026 Sharpe edge is negative in paired point estimate and insignificant (t = −1.24).
+
+**This is not a recommendation to widen the ladder** — those runs are diagnostic instruments. They
+buy 6.68% CAGR with a 24.46% drawdown, worse risk-adjusted than the benchmark. The defensible
+conclusion is the opposite: **a concentrated single-name config is not deployable under this risk
+ladder**, and the ladder is the correct component of the two. `SPY_SMA200` draws down 19.50% —
+above the 15% halt — so the engine cannot express it at full size without accepting a drawdown the
+risk engine exists to refuse. A real limitation, but a *risk-budget* one, not a sizing bug.
 
 **Narrowed to one line.** `adaptive_momentum.py:273` applies the trend filter when the roster
 is *built* (monthly). A symbol below its 200-day average at month end is locked out for the
@@ -302,12 +377,662 @@ belongs in the per-session `evaluate_symbol` path, where it already exists.
 
 Full spec: `docs/per-session-trend-spec.md`.
 
-**CAUTION, added after the fact:** `run_research_backtest.py` runs FIXED benchmark variants
-(`engine.py:212` uses `component_switches_for(variant)`), so it ignores a config's component
-selection entirely. Three config changes produced identical output because none reached the
-code under test. **The 43%-vs-77% exposure diagnosis came from that runner and is therefore
-unattributed.** First task is a harness that runs a real config through `BacktestEngine` with
-`component_switches=config.components`; everything downstream needs re-measuring through it.
+**RESOLVED 2026-08-19.** `run_research_backtest.py` ran only FIXED benchmark variants, so it
+ignored a config's component selection and three config changes produced identical output. The
+harness is fixed (`4644c3a`) and **the diagnosis has been re-measured attributably on the same
+SIP window: 41.95% exposure against SPY_SMA200's 77.37%.** The finding holds; the "unattributed"
+caveat is lifted.
+
+The re-measurement reproduces every published benchmark figure exactly — SPY 15.37% CAGR /
+Sharpe 0.90 / 33.79% DD, SPY_SMA200 10.34% / 0.91 / 19.50% / 77.37%, full strategy 0.50% / 0.15 —
+which is why the one row it could not previously produce is trustworthy. See
+`reports/research/attributed-harness-2026-08-19.md` (classification `EXPLORATORY`).
+
+The harness defect itself is fixed. `switches_for_config()` maps `StrategyComponents` onto the
+engine's `ComponentSwitches`, the runner now emits a `CONFIGURED_STRATEGY` row that actually
+applies the config under test, and `tests/unit/backtest/test_configured_harness.py` asserts the
+property whose absence allowed the original failure: **change the config, and the result has to
+move.** `atr_risk` has no configuration counterpart and is named explicitly rather than left as
+an invisible default.
+
+**Re-measured 2026-08-19 on SIP, 2,669 sessions** (see
+`reports/research/attributed-harness-2026-08-19.md`, classification `EXPLORATORY`):
+
+| | CAGR | Sharpe | exposure |
+|---|---:|---:|---:|
+| SPY buy-and-hold | 15.37% | 0.90 | 100% |
+| SPY_SMA200 | 10.34% | **0.91** | **77.37%** |
+| **deployed `strategy-v1-2.yaml`** | **4.06%** | **0.69** | **41.95%** |
+| `FULL_STRATEGY` (what the old runner reported instead) | 0.50% | 0.15 | 24.06% |
+
+The deployed config performs about **eight times better** than the row that stood in for it, and
+still loses to buy-and-hold by a wide margin. §6h's exposure diagnosis is confirmed at 41.95%
+against 77.37%.
+
+Sharpe 0.69 is **not** an edge: the minimum detectable Sharpe over this window at the current
+trial count is ~0.89, so a measured 0.69 sits inside the noise band and would register as
+`UNDERPOWERED`. That is the honest reading. Nothing here is confirmatory — the window is
+consumed and the run carries no registration, power gate or probes.
+
+## 6i. Hypotheses are now frozen before measurement (#5)
+
+`quantbot.research.HypothesisRegistry` replaces the hand-written pre-registration markdown in
+`reports/research/`. A registration is hashed at insert, so a prediction cannot be restated
+after the number arrives — which is the only reason cycle 12's "growth-optimal leverage is
+below 2x" counts as a miss against the 3.25x it measured.
+
+Three things it refuses, mechanically:
+
+| refusal | rule |
+|---|---|
+| `CONTAMINATED_WINDOW` | a `PROTECTED_EVALUATION` range may not overlap any range an earlier registration recorded on that dataset, nor its own discovery/validation ranges |
+| `UNDERPOWERED` | detecting an annualised Sharpe of `SR` at bar `z` needs `(z/SR)^2` years; ~93 for 0.30, ~8.4 for 1.00. Not the same verdict as `REFUTED` |
+| `TAMPERED` | the stored document is rehashed before every confirmatory run |
+
+`FORWARD_PAPER` windows are deliberately exempt from the overlap block and carried by the trial
+count instead. Blocking them would retire the paper account after one hypothesis, and it is the
+only uncontaminated data this project will ever get.
+
+The multiple-testing burden is counted, never declared: seeded at **68**, what cycles 1-17
+already spent. `verify_for_execution` recomputes it before a run, because every registration
+since raises the bar — a hypothesis adequately powered when frozen can be underpowered by the
+time it executes.
+
+Experiment manifests now carry `mode`, defaulting to `EXPLORATORY`. Only a run naming a
+registration hash is `CONFIRMATORY`; anything else is not evidence. `quantbot hypotheses` lists
+what is registered.
+
+Deliberately left to its own issue: refutation memory and the structured `REFUTED.md`
+migration (#6).
+
+## 6j. The power gate refuses questions the data cannot answer (#19)
+
+`quantbot.research.power`. Two arithmetic questions, asked before any compute is spent and
+answerable without touching the data.
+
+**Can this sample detect this effect?** `t = d*sqrt(n)`, so `n = (z/d)^2`. Five estimands over
+one core: Sharpe is a standardised mean difference with `d = SR/sqrt(252)`, so it cannot drift
+from `MEAN_DIFFERENCE` or `CROSS_SECTIONAL_SPREAD`. `HIT_RATE` uses the proportion form and
+`INFORMATION_COEFFICIENT` uses Fisher's transform.
+
+**Would it survive its own costs?** A minimum practical effect that cannot pay its annual
+trading drag is `UNECONOMIC` -- a different fact from `UNDERPOWERED`. This is `REFUTED.md` #8
+made mechanical: 1-day reversal had the strongest raw edge ever measured here and netted
+-28.8% at 5bps.
+
+**Variance inflation is mandatory, and it is the term that matters most here.** 2,669 daily
+observations of a 252-day forward return are not 2,669 independent draws, they are closer to
+ten. Three declared sources are applied and recorded with every power number: AR(1)
+`(1+rho)/(1-rho)`, clustering `1+(m-1)*ICC`, and horizon overlap `h`. An unpaired comparison
+costs 2x a paired one -- cycle 11 used the wrong one and the overnight premium looked
+significant when it is not.
+
+| refusal | rule |
+|---|---|
+| `UNDERPOWERED` | the requested sample cannot resolve the claimed effect at the current bar |
+| `UNECONOMIC` | the smallest effect worth acting on cannot pay its own annual trading cost |
+| `OVERRIDDEN` | underpowered, and an operator authorised it. Never becomes `POWERED` |
+
+Every decision is written to `power_assessments` at registration and again before each
+confirmatory run. A refusal travels out on the exception so the caller can record it after the
+rollback: `UNDERPOWERED` must survive as its own outcome, because recording an untestable
+hypothesis as refuted teaches a later agent that a mechanism was tested and failed when it was
+never tested at all.
+
+An override is audited, carries into execution (the operator accepted the shortfall, not one
+sample count), and travels into the result bundle beside the minimum detectable effect so a
+null result reads "no effect larger than X". It cannot rescue `UNECONOMIC`.
+
+**No Monte Carlo, deliberately.** The gate runs before the data is read. At that point only
+declared parameters exist, so simulating a null from them converges to the closed form with
+noise added; the version that would add information needs the window the gate exists to
+protect. Deferred until an estimand with no analytic form is actually registered.
+
+## 6k. Result bundles carry what produced them, and get attacked (#18)
+
+`quantbot.research.manifest` and `quantbot.research.reproducibility`. The manifest moved out of
+`quantbot.backtest.experiment` (which is now a re-export shim, so scripts keep working) because
+the registry needs its canonical JSON and the provenance tooling needs its types.
+
+A **confirmatory** bundle now cannot be built without code provenance (commit *and* dirty flag,
+config hash, execution path), an environment fingerprint (interpreter, platform, dependency-lock
+hash, seed), dataset snapshots with vintages and roles, a statistical plan, and resource usage.
+Exploratory bundles stay unencumbered — they make no evidential claim.
+
+**Faithful reproduction of a wrong number is not the goal.** The statistical plan records the
+test *and* the dependence structure of the data, and `check_invariants` refuses the combination
+when they disagree. That is cycle 11's actual error made mechanical: a one-sample test on paired
+data put the overnight premium at t=2.74 where paired gives 0.63, and an independent-samples
+comparison of two Sharpes of the same asset gave 1.09 v 0.92 where Jobson-Korkie-Memmel gives
+z=1.01.
+
+Invariants, each encoding a defect that already happened here:
+
+| invariant | the defect it encodes |
+|---|---|
+| `statistical-test-matches-dependence` | cycle 11, twice |
+| `costs-never-improve-returns` | a margin path that appeared to create wealth |
+| `forced-liquidation-never-creates-wealth` | cycle 12, monthly-vs-daily rebalance mismatch |
+| `significance-clears-the-frozen-bar` | a verdict function declaring success with no test |
+
+`InvariantReport` names what it **could not** check as well as what failed. A check that
+silently does nothing because the result did not report the figure it needs looks exactly like a
+check that passed, and this project has been burned by that shape of false assurance.
+
+`compare()` answers both directions. The one that matters most is the reverse: three of this
+project's recorded analysis errors came from a harness that was not connected to the code under
+test, and the tell was byte-identical output across runs that should have differed. A bundle
+whose results match another's while `inputs_hash` differs is reported as
+"identical despite different inputs -- the run may not exercise what changed".
+
+**Secrets are refused, not merely redacted.** The manifest scans every string it would serialise
+against credential shapes and raises. A redaction bug now fails loudly instead of publishing a
+key.
+
+## 6l. Research memory: what we know, as records not recollection (#6)
+
+`quantbot.research.memory`. `REFUTED.md` made queryable, without rewriting what any of it meant.
+
+`import_refuted_markdown` loads the real file — 24 refuted findings, the survivor table, the
+structural limits, and the defect log — carrying every statement **verbatim**. Nothing is
+paraphrased or re-judged, and `IMPOSSIBLE` is not flattened into `REFUTED` because they are
+different facts. Each section is read in the shape it is actually written in (tables as rows,
+limits as bullets, the defect log as paragraphs), because a parser handling only one shape would
+silently drop the defect log — the section that is the calibration prior on every number here.
+
+Four things are enforced rather than encouraged:
+
+| rule | why |
+|---|---|
+| `UNDERPOWERED` cannot be filed as `REFUTED` | recording an untestable hypothesis as refuted teaches a later agent the mechanism failed when it was never tested |
+| a `STRUCTURAL_LIMIT` must be curated | a generated one becomes "momentum did not work" and loses the part that changes decisions |
+| a `SUMMARY` carries no verdict | it is derived; deleting it destroys nothing because the evidence is separate rows |
+| a conflicting rewrite of a record is refused | an exact repeat is idempotent, a changed one is an error |
+
+**Novelty is now a registration gate.** A candidate overlapping a prior hypothesis by ≥0.80
+Jaccard on universe + features is refused as `DUPLICATE` unless the registrant writes down what
+is materially different. Momentum returned null on three structurally independent universes
+because each new one had a plausible excuse; writing the excuse down is cheap when the
+difference is real and impossible to fill in honestly when it is not.
+
+**Window consumption is queryable.** `window_consumption(dataset, start, end)` returns
+`UNTOUCHED`, `PARTIALLY_CONSUMED`, or `EXHAUSTED` with the trial count and the hypotheses that
+spent it. That is the constraint `REFUTED.md` states in prose — "cycles 2-10 consumed every
+out-of-sample window and SIP data begins 2016-01-04" — made machine-checkable. Consumption is
+per range, not per dataset, so one run cannot retire a whole data source.
+
+`recall(topic)` answers "what have we learned about momentum" with evidence-linked records.
+Relational and keyword-based on purpose: at tens-to-hundreds of hypotheses a wrong semantic
+neighbour is worse than a missed one when the answer decides whether to spend a holdout.
+Embeddings and a graph database stay out until evidence demands them.
+
+## 6m. Point-in-time data, and universes that include what died (#17)
+
+`quantbot.market_data.pointintime` and `quantbot.market_data.instruments`.
+
+**Availability is two timestamps, never one.** `observed_at` is what a value describes;
+`available_at` is when it could first be known. `knowable(series, as_of)` filters to what a
+decision may actually use — the complement is look-ahead by definition. Every result in
+`REFUTED.md` rested on this being upheld by hand, and two of the three cycle 11-12 errors were
+timing errors of exactly this family.
+
+**A feature is gated by its slowest input, not its newest observation.** A backfilled or revised
+value published after the newest bar delays the feature that uses it. `FeatureSpec.available_at`
+composes lookback + input availability + publication lag so this is computed once rather than
+reasoned about per experiment. The transformation version is part of the feature's identity: a
+feature recomputed with changed code is a different feature.
+
+**A universe is a function of time.** `members(as_of)` includes names that later stopped
+trading; `survivors(as_of)` is the live-only set; `survivorship_bias(as_of)` is the difference,
+so it is measurable rather than assumed. Cycle 10 was only interpretable because delisted
+history existed — 511 names, 241 of which terminated — and whole-market momentum produced more
+return with *less* Sharpe. A live-only universe would have shown a winner.
+
+**A listing is not an exposure.** `quote_currency` and `exposure_currency` are separate fields,
+and `unhedged()` names the instruments carrying FX the hypothesis never declared. Cycle 17's
+global test ran through US-listed country ETFs, and `REFUTED.md` #12 found FX itself unusable at
+Sharpe -0.14, which makes an undeclared currency exposure a confound rather than a detail.
+
+**Missing capabilities raise.** `UnsupportedCapability` rather than an empty list, because
+silence is how a survivorship-free study quietly becomes a live-only one. Alpaca serves bars,
+quotes, corporate actions and delistings; `MACRO_SERIES` and `OPTIONS_DERIVED` are declared and
+unimplemented, so asking for them fails loudly instead of returning nothing.
+
+**Lineage travels into the bundle.** A confirmatory `DatasetSnapshot` now cannot be built
+without provider, retrieval time, earliest availability, and transformation version. Without the
+availability timestamp a bundle can only assert it avoided look-ahead, never show it.
+
+The one change both #17 reviews asked for — the data layer exposing which windows have already
+been used for confirmatory testing — landed in #6 as `window_consumption`.
+
+## 6n. The critic: mechanical first, judgment second (#7)
+
+`quantbot.research.critic`. A registration can no longer be frozen without a critic verdict on
+that exact version, and the critique is frozen *inside* the registration — so a critic cannot
+rewrite a review after the result arrives, for the same reason the prediction cannot be
+restated.
+
+The design brief is this project's own error rate: three analysis errors in two cycles, every
+one flattering the result, and **none caught by the code looking wrong**. Errors of that shape
+are invisible to a reviewer reading code and equally invisible to an LLM asked "is there
+look-ahead here?". So everything mechanically decidable is decided mechanically.
+
+| check | the recorded failure it catches |
+|---|---|
+| `hidden_beta` | cycle 15: rotation is beta 0.71 with alpha t=0.05; 0.71x SPY reproduces it with no trading |
+| `cost_ladder` | refuted #8: +427.9% gross, **−28.8% net at 5bps** |
+| `regime_split` | cycle 11: vol targeting won three eras of four and lost the most recent |
+| `cross_asset_generality` | the same: 6 of 12 assets is a coin flip |
+| `shifted_feature_probe` | shift every feature a bar; an unchanged result read the future |
+| survivorship | cycle 10 needed 241 delisted names to stay interpretable |
+
+Every fixture uses the real recorded numbers. The cost ladder reproduces −28.8% at 5bps from
+9,134 legs, which is the leg count those two published figures imply rather than a round number
+chosen to make the arithmetic land.
+
+**Consensus cannot be configured into evidence.** `consensus()` returns the *most severe*
+verdict, never the majority. Three PROCEEDs against one REJECT is REJECT, structurally.
+
+**Confidence is advisory; reasons are mandatory.** A `Critique` without reasons cannot be
+constructed, and a blocking objection cannot be returned as `PROCEED` — the gate is the
+objection, not the verdict a critic feels like writing.
+
+**A check that never ran is not a check that passed.** `DeterministicCritic` records
+`unassessed` — the five judgment dimensions it did not assess — so silence on economic mechanism
+or capacity is never read as approval. The LLM critic is an interface here; #9 owns model
+runtime, and pretending to have assessed judgment would be worse than leaving it open.
+
+## 6o. The experiment builder: compiled, probed, and about this system (#8)
+
+`quantbot.research.builder`. Cycles 11-12 hand-wrote each hypothesis into a script, and that is
+where two of the three analysis errors entered. Three things close that seam.
+
+**The statistic comes from the declared dependence structure, never a default.** Compiling
+"compare the Sharpe of A and B" into an independent-samples test is a faithful compilation and a
+wrong experiment when A and B are the same asset — that measured z=1.01 where it looked like a
+clear win. A pair the mapping cannot resolve is **refused**, because defaulting is what produced
+the wrong test in the first place. Path-dependent quantities get a stationary bootstrap; cycle 12
+is why.
+
+| estimand + structure | test |
+|---|---|
+| Sharpe, paired | Jobson-Korkie-Memmel |
+| Sharpe / mean difference / spread, unpaired | Welch |
+| mean difference / spread, paired | paired t |
+| hit rate, single sample | binomial |
+| information coefficient, single sample | Spearman |
+| anything path-dependent | stationary bootstrap |
+| hit rate or IC, paired/unpaired | **refused** |
+
+**Adversarial probes are compiled in, not added after a good result.** `shifted-feature-probe`,
+`cost-ladder`, `regime-split`, `hidden-beta` always, plus `cross-asset-generality` when the
+universe has more than one instrument. An outcome that did not run them **cannot be constructed
+at all** — including a refutation, because a null from an unprobed run is not a null.
+
+**A confirmatory result must come from the production path.** Commit `f77ea08` is the case: a
+standalone study concluded a 2500bps exposure floor turned $100 into $252.43 against $126.80 —
+deterministic, reproducible, and not about Elrond, because it measured the halt against
+SPY-200-day returns while the engine runs the momentum rotation. Through the real engine the
+same change scored Sharpe 0.21 against 0.36. A `RESEARCH_SCRIPT` outcome can say what it found;
+it cannot be a `SURVIVED`, and `citable` is False.
+
+A survivor must also clear the bar frozen for its own trial count, have no failing probe, and
+report the statistic it cleared with. `FAILED` and `UNDERPOWERED` are recordable outcomes:
+a failure is not an absence, and #6 needs to tell them apart.
+
+## 6p. The budget governor, and the boundary around the daemon (#14)
+
+`quantbot.research.budget`. Wall time, CPU, tokens and dollars refill. **Untouched data does
+not**, and it is the only budget in this project with permanent consequences:
+
+| cumulative trials | luck bar | minimum Sharpe detectable over 10.6y |
+|---|---|---|
+| 24 | 2.52 | 0.77 |
+| 100 | 3.03 | 0.93 |
+| 1,000 | 3.72 | 1.14 |
+
+SPY scores 0.90 on that window. Spend enough trials and the project can no longer demonstrate
+anything, and no amount of compute buys the budget back. So `TRIALS` gets the same machinery as
+tokens — caps, admission control, audited overrides — and a different attitude. `RENEWABLE`
+names the distinction and a test asserts it rather than leaving it to the docstring.
+
+**Statistical budget is keyed per dataset and per family**, never as one global number: a single
+figure hides the difference between having used up US equities and having used up everything.
+
+**Estimated before admission, not counted after.** An external miner that evaluates 1,000
+candidates and returns one has spent 1,000 trials; discovering that afterwards is discovering it
+too late. `worth_spending()` is the Research Director's deferral — a family near its cap declines
+a low-value question even when compute is free.
+
+Fail closed throughout: a resource nobody capped is a resource nobody may spend. Spend is
+append-only, so a budget cannot be quietly rewound. `LoopBound` is a hard stop on debate and
+retry rounds, because a loop that can always try once more does not terminate.
+
+### The boundary, tested rather than assumed
+
+Both reviews asked that research starvation never reach the trading daemon. The paper account is
+the only genuinely uncontaminated evidence this project will ever get.
+`test_research_budgets_cannot_starve_the_trading_daemon` walks the AST of every module in
+`runtime`, `cli`, `operations`, `execution`, `brokers` and `risk` and fails on any **top-level**
+import of `quantbot.research`.
+
+It found one on its first run. `cli.py` imported the registry at module scope for the
+`hypotheses` command — so a research import failure would have broken the kill switch, which
+lives in the same file. That import is now function-local, matching how `cli.py` already defers
+`runtime`. The property enforced is precise: research is not a load-time dependency of the
+trading path.
+
+## 6q. Model runtime: replaceable, except for one rule (#9)
+
+`quantbot.research.models`. Mostly ordinary provider-neutrality — a role names a model, a chain
+names its fallbacks, and swapping either is configuration. Two things are not ordinary.
+
+**A critic may not share a model identity with the generator it reviews.** Enforced in
+`RoleRouting`, not left to whoever writes the config, and checked across the whole chain rather
+than the primary. Not because another vendor is smarter: the same model asked to critique its
+own proposal tends to find it sound. #7 already refuses to let agreement outvote an objection;
+this refuses to let the agreement be an artefact of asking one model twice. It can be waived,
+but only by setting `require_distinct_critic=False` explicitly — forgetting cannot waive it.
+
+**Provenance is produced, not reconstructed.** `ModelResponse.provenance()` returns exactly the
+`ModelProvenance` #18's manifest requires: provider, model@version, prompt-template hash,
+parameter hash. A conclusion whose reasoning came from a since-updated model is not
+reproducible, and without the hash there is no way to know that happened.
+
+Also: fail-closed by default (a silent downgrade to a weaker critic is the failure nobody
+notices), a circuit breaker with cooldown, and a prompt carrying a credential is **refused**
+rather than redacted — a prompt leaves this machine, and stripping the key hides whatever
+assembled it.
+
+Transport is injected the way `market_data.transports` does it, so an OpenAI-compatible
+endpoint — Ollama, LM Studio, vLLM, llama.cpp — is exercised end to end in tests with no network
+and no vendor SDK.
+
+## 6r. Source scout: external evidence that cannot become measurement (#4)
+
+`quantbot.research.sources`. Three rules, each hardened past metadata because each guards a way
+to manufacture a false edge.
+
+**A derived artifact may never be cited in place of its source.** `cite()` raises on anything
+marked `derived` — an LLM summary, an extraction, a translation. A summary that reads
+authoritatively is worse than no artifact because it stops the search: this project believed a
+Corwin-Schultz estimate of **34bps for SPY against a real 0.26bps** until someone pulled real
+quotes.
+
+**Event time and retrieval time are separate, and ordered.** A source retrieved before it was
+published is refused outright. Look-ahead is the most reliable way to manufacture a fake edge
+and it is invisible in results — a leaky backtest looks like a discovery, not a bug. Storing
+both timestamps is what makes the #7 check possible at all.
+
+**Agreement decides whether to test, never what the answer is.** `worth_testing()` returns a
+boolean, and twenty supporting papers return exactly what one returns. There is deliberately no
+function here converting source count into a prior, weight or confidence: published quant
+findings replicate poorly, and the bias runs toward positive results — the direction that costs
+money.
+
+Only `MEASURED` gates promotion, and an `EvidenceBasis` **can never be** `MEASURED`: that is what
+an experiment finds, not what a question starts with. `REFUTED.md` #13 is the standing case —
+social-sentiment strategies were rejected on published evidence, which was defensible and is a
+different fact from the 23 entries with a measurement behind them.
+
+Every hypothesis now carries a `basis` with no default: citations, or an explicit
+`DATA_DRIVEN_NO_EXTERNAL_SOURCE`. "We did not look" and "we looked and there is nothing" are
+different facts, and a default would have made the first the common answer.
+
+## 6s. Research director: the lifecycle, and what it cannot reach (#3)
+
+`quantbot.research.director`. Eleven states with an explicit transition table, mirroring the
+order lifecycle in `domain/lifecycle.py`. A task runs `PROPOSED → SCOUTING → CRITIQUE →
+REGISTERED → EXPERIMENTING → REVIEW → SURVIVED → PROMOTABLE` and survives a restart, because
+state and its event log are durable.
+
+**`UNDERPOWERED` is terminal and has no transition to `REFUTED`.** Not a policy — the entry in
+the table is an empty frozenset. Research memory already blocks that conversion; the lifecycle
+must not offer a way round it, so the route does not exist. The error message says why.
+
+**Priority is computed, never narrated.** `expected_information_gain()` returns **zero** for an
+underpowered or uneconomic assessment, zero when the trial budget cannot cover it, and zero for
+an exact repeat of prior work — whatever the narrative interest. There is deliberately no
+parameter for a model's opinion of promisingness: it would dominate every other term and it is
+the only input with no measurement behind it.
+
+Every transition is an append-only event carrying actor, reason, timestamp and the evidence and
+budget state at the time. A state column cannot answer "who moved this and why", and an
+autonomous loop that cannot answer that is not auditable.
+
+### The boundary, from the research side
+
+`test_the_director_has_no_route_to_the_broker_or_the_kill_switch` walks the AST of every module
+in `quantbot/research` and fails on any import of `brokers`, `execution`, `operations` or
+`runtime`. A research agent cannot place an order, enable live trading, or clear the kill
+switch, and that holds because there is no import path — asserted, not assumed. #14 asserts the
+same boundary from the trading side.
+
+## 6z. Where v0.2 stands, and what to do next
+
+Branch `claude/roadmap-2-issue-5-185afc`. 766 tests; `ruff` and `mypy --strict` clean. Read this
+section first if you are resuming.
+
+### Shipped
+
+| issue | commit | what it enforces |
+|---|---|---|
+| #12 Sandbox | `25d6a64` | generated code cannot import `quantbot` or reach a broker |
+| storage fix | `14c1932` | a database can be migrated instead of rejected — prerequisite for all six revisions below |
+| #5 Registry | `8473085` | frozen predictions, contaminated-window refusal |
+| #19 Power gate | `d4a909e` | five estimands, variance inflation, cost floor, `UNDERPOWERED` |
+| #18 Reproducibility | `7570b5f` | statistical plan in the bundle, four invariants, secret refusal |
+| #6 Research memory | `9249f53` | `REFUTED.md` imported verbatim, novelty gate, window consumption |
+| #17 Data platform | `00bdeea` | point-in-time availability, survivorship, exposure vs listing |
+| #7 Critic | `144f0a3` | six mechanical checks, severity-max consensus |
+| #8 Experiment builder | `545e9f9` | test from dependence structure, mandatory probes, production path |
+| #14 Budget governor | `b26d5f3` | trials as a non-renewable budget, daemon isolation |
+| #9 Model runtime | `7161a08` | critic ≠ generator identity, provenance produced not reconstructed |
+| #4 Source scout | `a2c226a` | a summary can never be cited for its source |
+| #3 Research director | `98f60b7` | lifecycle, computed priority, no route to the broker |
+
+Schema is at V6 with revisions 0001–0006. Every revision declares its own tables.
+
+### Not built
+
+**#13 Discovery Engine, #11 External Workers, #15 Dashboard, #16 Promotion Ladder.**
+
+Nothing calls an LLM anywhere in this system. `ModelRuntime` is wired and unused; the critic is
+deterministic and names the five judgment dimensions it did not assess. No autonomous loop runs:
+each gate is callable, none is driven.
+
+### The next action
+
+#13 in the stated order. Note before starting it: a discovery engine against an **exhausted**
+holdout produces well-documented noise. `window_consumption("sip-us-equities-daily", ...)` will
+answer `EXHAUSTED` for 2016–2026 US equities once seeded, and #14 will refuse the trials. That
+is the system working, and it means #13's value depends on #17 delivering a genuinely new asset
+class first — which needs a provider integration that could not be exercised offline here.
+
+Worth raising with the operator rather than deciding unilaterally.
+
+### Defects found this session, all by guards rather than review
+
+Recorded in `REFUTED.md` beside the nine that came before: three Alembic revisions built from
+live metadata; a backfill `server_default` that diverged the schema; a permissive point-in-time
+test; the kill switch's accidental dependency on research code. None was caught by the code
+looking wrong.
+
+## 6t. Discovery engine: propose without spending the evidence (#13)
+
+`quantbot.research.discovery`. The generator is the component most able to destroy this
+project's remaining statistical capacity, so it is hemmed in hardest. Four rules, all mechanical.
+
+**A generator that read protected data has already spent it.** A `Candidate` declares
+`inspected_roles`, and one naming `PROTECTED_EVALUATION` or `FORWARD_PAPER` **cannot be
+constructed**. There is no confirmatory test left to run: the answer was seen before the
+question was frozen. `ContaminatedGenerator` is deliberately not a `ValueError`, so it survives
+pydantic's wrapping and a caller can tell contamination from a malformed field.
+
+**A search reports what it examined, not what it returned.** A miner evaluating 900 and
+proposing 3 spent 900, and #14 charges for all of them. A mode claiming a search without naming
+the data it searched is refused.
+
+**A generated story is worth nothing as evidence, in every mode.** `plausibility_credit()`
+returns zero for cross-domain analogy and for everything else. It exists as a function so that
+changing it has to be deliberate and reads as what it would be.
+
+**A mode is judged on what reaches registration, never on volume.** 100 candidates with 1
+registration is throttled; 10 with 6 is not. Optimising for candidate count against a fixed
+dataset is how a research programme destroys its own dataset.
+
+### The constraint that shapes what this can do
+
+`exploratory_only()` returns True whenever any requested window is `EXHAUSTED`. For 2016–2026 US
+equities that is already the answer — cycles 2–10 consumed every out-of-sample window. A
+generated idea against that data stays exploratory however good it looks, unless there is new
+protected data or **authentic forward evidence**.
+
+That is #13's own last acceptance criterion, and it means the discovery engine's value is
+currently bounded by #17 delivering a genuinely new asset class. Building the generator does not
+create capacity to test what it generates.
+
+## 6u. External workers: delegate research, not authority over evidence (#11)
+
+`quantbot.research.workers`. An external miner is a fast way to spend a dataset — RD-Agent or
+Qlib can evaluate thousands of candidates against a fixed window and hand back the best, and the
+best of a thousand skill-free candidates looks excellent. The contract is built around that.
+
+**A worker that will not disclose its search cardinality is `EXPLORATORY_ONLY`** — mechanically
+unable to produce confirmatory evidence, because its result cannot be deflated against a search
+it will not name. There is no configuration that changes this.
+
+**An undisclosed search is charged the whole budget it was given**, not zero. A worker that will
+not say what it spent must not be cheaper than one that will.
+
+**A worker is never handed `PROTECTED_EVALUATION` or `FORWARD_PAPER` data.** A miner over
+protected data spends it, whatever it reports afterwards.
+
+**Unsupported semantics raise.** A worker that cannot express the test a registration requires
+says so rather than running something adjacent and reporting it as the same thing — and a run
+with anything unsupported is exploratory however good its number is, because the number is not
+answering the registered question.
+
+### The most useful thing a miner can do here
+
+Not find a factor. `empirical_luck_threshold()` runs the same search procedure over shuffled or
+synthetic **null** data and takes a high quantile of what it finds. That is a bar the procedure
+earned rather than one assumed from `sqrt(2 ln N)`, and it is the only honest way to judge a
+search whose true cardinality nobody fully specified. `null_calibration_summary()` records the
+shape of what the search finds in noise.
+
+## 6v. Promotion ladder: earning trust, with the last step reserved (#16)
+
+`quantbot.research.promotion`. Seven stages, and **there is no `LIVE` stage in the enum**.
+`LIVE_REVIEW_ELIGIBLE` is terminal, its transition set is empty, and no sequence of moves
+reaches live trading — implemented by the absence of a destination rather than by a permission
+check that could be misconfigured. Only the operator, outside this system, decides what happens
+next.
+
+**`RESEARCH_SURVIVOR` had to be strengthened**, and this is the change the review asked for.
+Passing a pre-registered test is not enough: cycle 11 produced two candidates that did exactly
+that and were both wrong, because the flaw was in the *statistic*, not the protocol.
+
+| candidate | looked like | died on |
+|---|---|---|
+| vol targeting as alpha | Sharpe 0.92→1.09, all 12 parameter sets, break-even 113x spread | Jobson-Korkie z=1.01; 6 of 12 assets |
+| overnight effect | IWM t=3.47, GLD t=3.82 | paired t: SPY 2.74→0.63; 1 of 18 assets |
+
+`survivor_objections()` therefore requires the #7 probes to have run and passed, the production
+evaluation path, the frozen luck bar to be cleared, **and the test to be valid for the
+dependence structure of its data**.
+
+**Paper qualification counts authentic forward evidence and nothing else.** A
+`ForwardObservation` whose role is not `FORWARD_PAPER` cannot be constructed — a backtest, a
+literature claim, an exploratory worker result and an underpowered outcome all increment the
+counter by zero. The account holds **1 forward day against a 30-day, 30-trade window**, and
+`forward_progress()` reports that distance honestly.
+
+**A material change restarts the window by exclusion, not by resetting a counter.** Observations
+of version 1.3.0 are not observations of 1.4.0, so `count_forward_days` filters them out and the
+stage drops to `RESEARCH_SURVIVOR`.
+
+Demotion is deliberately not gated. A system slow to stop trusting something is worse than one
+occasionally too quick.
+
+## 6w. Research dashboard: what changed, what is blocked, what is left (#15)
+
+`quantbot.research.dashboard` — the data behind the view, not the view. `scripts/dashboard.py`
+remains the single truth source for the operations panels; this adds the research panels beside
+it rather than a second place to look.
+
+**Forward evidence always carries its denominator.** `1 of 30 days, 0 of 30 trades`, never
+`1 day`. Forward evidence and research volume live in separate fields with separate evidence
+states, and there is deliberately no property combining them. Seventeen cycles is a bigger
+number than one day; the panel makes that impossible to read as progress.
+
+**Statistical budget shows what spending it would cost, before it is spent.** Trials, the bar
+now, and the bar *if the budget is fully spent* — at 1,000 trials that is t=3.72, above SPY's own
+Sharpe on this window. Renewable spend is shown beside it so the difference is visible rather
+than implied.
+
+**A generated number can never be displayed as a measurement.** `Provenance.MODEL_NARRATIVE`
+cannot carry `OBSERVED` or `BACKTEST`, and `OBSERVED` accepts only the durable ledger — forward
+evidence has exactly one source. Both are validators, not review habits.
+
+**The default view is what is blocked, not what ran.** `attention()` returns halts, failed
+reconciliations, exhausted budgets, blocked and stuck tasks, and survivors. Routine activity is
+**dropped entirely** rather than ranked lower, because a research loop generates a large volume
+of uninteresting activity by design and including it is how the signal gets lost. A quiet system
+returns no alerts at all.
+
+## 6x. The gates compose, and there is a source of new statistical capacity (#13/#17)
+
+Two things I had wrongly written off as blocked.
+
+### The pipeline is tested end to end
+
+`tests/integration/test_research_pipeline.py` runs one candidate through every gate in order —
+admission → budget → critic → registration → compile → outcome → memory → promotion — against
+one database. Each gate had unit tests proving it refuses; none proved they *compose*. A system
+of individually correct parts that do not fit together refuses everything, which looks exactly
+like a system that works.
+
+Both directions are asserted: a candidate on untouched data reaches `RESEARCH_SURVIVOR`, and the
+same candidate on the window cycles 2-10 spent is stopped as `CONTAMINATED_WINDOW`. The second
+test **seeds** that history, so `EXHAUSTED` is now a measured state rather than a claim I kept
+making.
+
+### FRED, and a look-ahead bug it caught in my own code
+
+`quantbot.market_data.fred`. Free, no credentials, decades of history where equities gave ten
+years — and it is the source that makes the #17 vintage machinery earn its keep, because macro
+series are **revised after publication**.
+
+| rule | why |
+|---|---|
+| a confirmatory run on a revised series must use **ALFRED** | `fredgraph.csv` serves today's revised values, which is what a naive study uses by mistake |
+| a real-time pull carrying values published after the `as_of` **raises** | if the endpoint ignored the parameters the data is not point-in-time, and a backtest fed revised macro data simply looks prescient |
+| an undeclared series is refused | a publication lag guessed at the call site is a look-ahead bug waiting to happen |
+
+**The bug the tests caught.** FRED stamps a monthly series with its period *start*: March
+payrolls are `2026-03-01`. My first version added the publication lag to that stamp, making
+March data available on **6 March** — five days before the month it describes had finished. The
+lag runs from period *end*; March payrolls publish 5 April. Pinned by
+`test_the_publication_lag_runs_from_the_period_end_not_the_period_start`.
+
+### And FRED is stronger than the equity window, not weaker
+
+`scripts/power_survey.py`. I first wrote that low-frequency macro data would be weak — the power
+gate refusing most effects on ~420 monthly rows. **That is backwards**, and `REFUTED.md` already
+had the right unit: the structural limit is stated in *years*, because for an annualised Sharpe
+the frequency cancels.
+
+| dataset | years | minimum detectable Sharpe |
+|---|---:|---:|
+| SIP equities daily (EXHAUSTED) | 10.6 | **0.94** |
+| FRED monthly 35y | 35 | 0.67 |
+| FRED daily 50y | 50 | 0.56 |
+| FRED monthly 75y (CPI from 1947) | 75 | **0.46** |
+
+Charged with realistic autocorrelation (ρ=0.30 for macro, 0.05 for equities), so the advantage
+is the honest one rather than the iid one. Free macro history is roughly **twice the
+resolution** of the window this project has already spent.
 
 ## 7. Open items
 
@@ -316,20 +1041,55 @@ unattributed.** First task is a harness that runs a real config through `Backtes
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
       open between cycles
-- [ ] **Move the trend gate out of roster construction** (`adaptive_momentum.py:273`) —
-      spec in `docs/per-session-trend-spec.md`. Highest-value remaining work.
+- [x] **~~Move the trend gate out of roster construction~~ — CLOSED 2026-08-19.**
+      `trend_gate_per_session` was already implemented and gated off; what was missing was a valid
+      measurement. With the position cap, the risk ladder, and one corrupt bar all controlled for,
+      the engine reproduces `SPY_SMA200` to **0.07 CAGR points** (10.56% vs 10.63%, Sharpe 0.92 vs
+      0.93, exposure 77.29% vs 77.44%). The gate itself is worth 1.70 CAGR points.
+      `reports/research/spy-sma200-resolved-2026-08-19.md`.
+- [ ] **Decide whether `SPY_SMA200` was ever worth reproducing — evidence says no.** It loses to
+      SPY buy-and-hold by **4.75 CAGR points** ($291 vs $455 per $100). Its whole case is a +0.026
+      Sharpe edge, and paired against buy-and-hold that edge is **negative in point estimate and
+      insignificant** (−2.005 bps/session, t = −1.24, 27 years needed). Operator call on whether the
+      halved drawdown (19.50% vs 33.79%) justifies it; it is not an alpha result.
+- [ ] **Apply the power gate to engineering targets, not just hypotheses.** A benchmark treated as
+      a goal is a hypothesis about what is worth building. Six cycles pursued a target that a
+      one-backtest check would have disqualified before any code was written.
+- [x] **~~Identify the second constraint on position weight~~ — resolved 2026-08-19: there is
+      none.** Weight is 100.00% at a 100% cap. The plateau is the drawdown ladder halting entry on
+      928 sessions. See §6h.
 - [ ] **Tranche the rebalance date** — $61.24 of terminal-wealth spread per $100 decided by the
       calendar alone, the largest free effect found in 13 cycles. Design settled in
       `docs/tranching-spec.md`: **5 tranches** (88% of the benefit, $2.00 minimum trade against
       Alpaca's $1 floor). The cheap weight-ramp shortcut is measured and refuted, so the roster
       machinery genuinely has to change.
-      **Scheduling and weighting are now built and tested** in `src/quantbot/strategy/tranches.py`
-      (11 tests, including the guarantee that 1 tranche reproduces month-end exactly, and that
-      the tranche count is derived from equity so it widens as the account grows).
-      Remaining: roster identity, durable state, and config wiring — see the spec.
+      **Steps 1 and 2 are now built.** Scheduling and weighting in
+      `src/quantbot/strategy/tranches.py`; roster identity and tranche-aware expiry on
+      `MonthlyRoster`/`XNYSSessionSequence`; durable tranche attribution on `PositionContext`
+      and in `position_state`. The single-tranche equivalence to month-end is pinned
+      month-by-month against the calendar, and state written before tranching existed still
+      loads as tranche 0 — the live account is holding positions in exactly that shape.
+      **Step 3 is half done.** `build_monthly_roster` takes a tranche and validates against the
+      schedule instead of insisting on month-end; `_tranche_rosters` builds one roster per
+      tranche; `_target_fractions` blends them. Unstarted tranches are omitted rather than
+      passed as empty rosters — an empty roster and an unstarted one differ, and conflating
+      them would divide every weight by the full tranche count and under-invest the account
+      through the ramp-up month.
+      **Remaining: wire the blended fraction into position sizing** — `size_entry` still caps
+      at the full `max_position_value_bps` regardless of how many tranches hold the name. That
+      is a change to the risk path and deserves a fresh session rather than a tired one.
+      Nothing is switched on; `rebalance_tranches` is still at its default of 1.
 - [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
-- [ ] **Recalibrate the cost model** from 5bps to the measured ~1bp (cycle 11 S3)
+- [ ] **Recalibrate the cost model** from 5bps — deliberately NOT done yet. Two independent
+      estimates say the assumption is 5-20x too high (quoted NBBO 0.26-3.31bps; realised fills
+      -0.3bps against the opening auction), and there is a structural reason to believe them:
+      DAY orders submitted after the close execute in the opening auction, where a single
+      clearing price means no spread to cross. But n=3. Lowering an assumed cost improves every
+      historical result at once, so it needs a real sample.
+      `scripts/slippage_report.py` accumulates the evidence and refuses to endorse a change
+      below n=30. Re-run it as fills accrue; when it clears, do the recalibration as a
+      pre-registered change with a new strategy version, not by editing the constant.
 
 ## 8. If you are about to change the strategy
 

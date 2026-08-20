@@ -24,7 +24,7 @@ from decimal import Decimal
 from pathlib import Path
 
 from quantbot.backtest import BacktestEngine, BenchmarkVariant
-from quantbot.backtest.benchmarks import ComponentSwitches
+from quantbot.backtest.benchmarks import switches_for_config
 from quantbot.market_data import MarketDataCache
 from quantbot.runtime import market_data_settings, runtime_paths
 from quantbot.storage import Database, StorageRepository
@@ -62,13 +62,11 @@ def main() -> int:
     print()
 
     # StrategyComponents (config) and ComponentSwitches (backtest) are separate types with
-    # different fields — ComponentSwitches carries atr_risk, which the config does not express.
-    # That mismatch is precisely the seam where a config silently fails to reach the engine.
-    components = config.components.model_dump()
-    switches = ComponentSwitches(
-        **{k: v for k, v in components.items() if k in ComponentSwitches.model_fields},
-        atr_risk=True,
-    )
+    # different fields -- ComponentSwitches carries atr_risk, which the config does not express.
+    # That mismatch is precisely the seam where a config silently fails to reach the engine, so
+    # the conversion lives in the library with a test that fails if any field stops being
+    # carried, rather than as a filtered dict comprehension that would drop one in silence.
+    switches = switches_for_config(config.components)
 
     engine = BacktestEngine(config=config, initial_cash=cash)
     # FULL_STRATEGY is the variant whose switches we are overriding; passing the config's own

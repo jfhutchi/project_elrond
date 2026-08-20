@@ -20,6 +20,7 @@ from quantbot.strategy.indicators import (
     sma,
     wilder_atr,
 )
+from quantbot.strategy.tranches import next_rebalance_index, tranche_schedule
 
 
 class StrategyModel(BaseModel):
@@ -92,6 +93,31 @@ class XNYSSessionSequence(StrategyModel):
             return index
         raise ValueError("evaluation_at must be an XNYS session close")
 
+    def tranche_schedule_map(self, tranches: int) -> dict[int, int]:
+        """Which tranche rebalances on each session index.
+
+        With one tranche this is exactly the final session of every month, so today's
+        month-end rule is the degenerate case rather than a separate code path.
+        """
+        return tranche_schedule(
+            [session.session_date.strftime("%Y-%m") for session in self.sessions], tranches
+        )
+
+    def tranche_expiry_after(
+        self, evaluation_index: int, *, tranche: int, tranches: int
+    ) -> datetime:
+        """When a roster built at `evaluation_index` for `tranche` stops governing.
+
+        A roster lives until its own tranche next rebalances. For a single tranche that is the
+        month boundary, so this returns exactly what `roster_expiry_after` does — verified by
+        test rather than asserted.
+        """
+        schedule = self.tranche_schedule_map(tranches)
+        next_index = next_rebalance_index(schedule, evaluation_index, tranche)
+        if next_index is None or next_index + 1 >= len(self.sessions):
+            raise ValueError("session sequence must extend past this tranche's next rebalance")
+        return self.sessions[next_index + 1].open_at
+
     def roster_expiry_after(self, effective_index: int) -> datetime:
         """Return the first XNYS open after the effective session's calendar month."""
         effective_month = self.sessions[effective_index].session_date.strftime("%Y-%m")
@@ -137,6 +163,11 @@ class MonthlyRoster(StrategyModel):
     expires_at: datetime
     symbols: tuple[str, ...]
     rankings: tuple[Ranking, ...]
+    #: Which tranche produced this roster, and how many are running. The defaults describe an
+    #: untranched strategy, which is every deployed version. Exits cannot be attributed without
+    #: this, and a mis-attributed exit surfaces as a position diff that halts trading.
+    tranche: int = 0
+    tranche_count: int = 1
 
     @field_validator("symbols")
     @classmethod
@@ -197,6 +228,12 @@ class PositionContext(StrategyModel):
     entered_at: datetime
     initial_stop: Decimal = Field(gt=0, allow_inf_nan=False)
     active_stop: Decimal = Field(gt=0, allow_inf_nan=False)
+    #: Which tranche opened this position. Under tranching the same symbol can be held by
+    #: several tranches at once with different entry dates and different stops, so an exit has
+    #: to name the tranche it belongs to. Mis-attributing one shows up as a broker position
+    #: diff, which fails reconciliation and halts trading — the expensive failure this field
+    #: exists to prevent. 0 is the untranched case and is what every deployed version means.
+    tranche: int = Field(default=0, ge=0)
 
     @field_validator("symbol")
     @classmethod
@@ -232,8 +269,14 @@ def build_monthly_roster(
     config: StrategyConfig,
     *,
     session_sequence: XNYSSessionSequence,
+    tranche: int = 0,
 ) -> MonthlyRoster:
-    """Rank eligible symbols using only bars available at evaluation time."""
+    """Rank eligible symbols using only bars available at evaluation time.
+
+    `tranche` selects which rebalance schedule the evaluation date must belong to. At the
+    default single tranche the schedule is exactly the month-end sessions, so the guard below
+    is the same rule it has always been, expressed once instead of twice.
+    """
     _aware("evaluation_at", evaluation_at)
     _aware("effective_at", effective_at)
     if effective_at <= evaluation_at:
@@ -244,11 +287,24 @@ def build_monthly_roster(
     evaluation_session = session_sequence.sessions[evaluation_index]
     effective_index = evaluation_index + 1
     effective_session = session_sequence.sessions[effective_index]
-    if evaluation_session.session_date.strftime("%Y-%m") == effective_session.session_date.strftime(
-        "%Y-%m"
-    ):
-        raise ValueError("evaluation_at must be the final XNYS session of its month")
-    expires_at = session_sequence.roster_expiry_after(effective_index)
+    tranches = config.rebalance_tranches
+    if tranches == 1:
+        # Kept as an explicit branch rather than folded into the schedule check so the error
+        # message every deployed version can raise stays byte-identical.
+        if evaluation_session.session_date.strftime(
+            "%Y-%m"
+        ) == effective_session.session_date.strftime("%Y-%m"):
+            raise ValueError("evaluation_at must be the final XNYS session of its month")
+        expires_at = session_sequence.roster_expiry_after(effective_index)
+    else:
+        schedule = session_sequence.tranche_schedule_map(tranches)
+        if schedule.get(evaluation_index) != tranche:
+            raise ValueError(
+                f"evaluation_at is not tranche {tranche}'s rebalance session"
+            )
+        expires_at = session_sequence.tranche_expiry_after(
+            evaluation_index, tranche=tranche, tranches=tranches
+        )
 
     expected_symbols = set(config.universe)
     provided_symbols = set(histories)

@@ -10,6 +10,7 @@ from quantbot.market_data import (
     AdjustmentMode,
     BarQuery,
     BarValidationReport,
+    DataGap,
     DataGapReason,
     MarketDataBatch,
     MarketDataFeed,
@@ -17,6 +18,10 @@ from quantbot.market_data import (
     MarketSessionClose,
     align_daily_bars_to_session_closes,
     validate_bar_batch,
+)
+from quantbot.market_data.validation import (
+    IMPLAUSIBLE_LOW_RATIO,
+    implausible_range,
 )
 
 
@@ -240,3 +245,79 @@ def test_batch_and_validation_report_reject_inconsistent_identity_sets() -> None
             stale_symbols=(),
             completed_through=datetime(2026, 8, 31, 20, tzinfo=UTC),
         )
+
+
+def corrupt_bar(symbol: str, day: int) -> Bar:
+    """The real SPY 2026-02-02 bar: a dropped digit in the low, everything else intact.
+
+    It satisfies `Bar.validate_ohlc` because that check is ordinal — 68.64 really is <= the open,
+    high, and close — which is exactly why it reached a backtest and cost 20.1% of equity in one
+    session by tripping a stop at a price no trade occurred at.
+    """
+    return Bar(
+        symbol=symbol,
+        timestamp=timestamp(day),
+        open=Decimal("685.90"),
+        high=Decimal("693.21"),
+        low=Decimal("68.64"),
+        close=Decimal("691.70"),
+        volume=Decimal("1000"),
+        adjustment=Decimal("1"),
+    )
+
+
+def test_a_bar_whose_extreme_the_open_and_close_do_not_corroborate_is_rejected() -> None:
+    report = validate_bar_batch(
+        batch(bar("QQQ", 28), bar("SPY", 28), bar("QQQ", 31), corrupt_bar("SPY", 31)),
+        expected_timestamps=(timestamp(28), timestamp(31)),
+        completed_through=datetime(2026, 8, 31, 20, tzinfo=UTC),
+    )
+
+    assert report.ineligible_symbols == ("SPY",), "the corrupt bar must not be silently traded on"
+    assert report.eligible_symbols == ("QQQ",), "one bad bar must not condemn an unrelated symbol"
+    assert report.gaps == (
+        DataGap(
+            symbol="SPY",
+            timestamp=timestamp(31),
+            reason=DataGapReason.IMPLAUSIBLE_RANGE,
+        ),
+    ), "reported under its own reason, not as a missing bar — the bar is present, it is wrong"
+    assert corrupt_bar("SPY", 31) not in report.valid_bars
+    assert report.valid_bars == (bar("QQQ", 28), bar("SPY", 28), bar("QQQ", 31))
+
+
+def test_the_threshold_does_not_fire_on_a_real_crash_that_moves_the_close() -> None:
+    """A genuine collapse drags the close with it, so the bracket test leaves it alone.
+
+    This is the property that makes the rule safe for volatile single names, and it is the one
+    that would break if the check were rewritten in terms of absolute intraday range.
+    """
+    crash = Bar(
+        symbol="SPY",
+        timestamp=timestamp(31),
+        open=Decimal("100"),
+        high=Decimal("100"),
+        low=Decimal("55"),
+        close=Decimal("58"),
+        volume=Decimal("1000"),
+        adjustment=Decimal("1"),
+    )
+    assert not implausible_range(crash), "a 45% drop that holds into the close is real data"
+    report = validate_bar_batch(
+        batch(bar("QQQ", 28), bar("SPY", 28), bar("QQQ", 31), crash),
+        expected_timestamps=(timestamp(28), timestamp(31)),
+        completed_through=datetime(2026, 8, 31, 20, tzinfo=UTC),
+    )
+    assert report.eligible_symbols == ("QQQ", "SPY")
+    assert report.gaps == ()
+
+
+def test_the_margin_between_the_defect_and_real_data_is_not_a_tuned_parameter() -> None:
+    """Calibration evidence, asserted so it fails if the threshold is moved into live data.
+
+    Measured over the full 96,370-bar research history: the corrupt bar sits at a
+    low/min(open, close) ratio of 0.1001 and the lowest ratio among all other bars is 0.8927.
+    The threshold must stay inside that empty margin at both ends.
+    """
+    assert IMPLAUSIBLE_LOW_RATIO > Decimal("0.1001"), "must still catch the known defect"
+    assert IMPLAUSIBLE_LOW_RATIO < Decimal("0.8927"), "must not reach the closest real bar"

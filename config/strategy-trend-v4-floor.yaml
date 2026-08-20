@@ -1,0 +1,88 @@
+# Trend-v4: an ATTEMPT to express "hold SPY above its 200-day average" in this engine.
+# IT DOES NOT WORK, and the failure is the point. NOT DEPLOYED.
+#
+# The engine's own SPY_SMA200 benchmark returns 10.34% CAGR at Sharpe 0.91 on 77%
+# average exposure. This config tries to reproduce that one-sentence rule with the
+# stop machinery pushed as far out of the way as the schema allows: volatility target
+# off, risk_per_trade_bps at 5000, initial_stop_atr at 20 so stops effectively never
+# trigger.
+#
+# It reaches 43.36% exposure and 2.52% CAGR. Better than the 30% and 0.98% of
+# strategy-index-v3.yaml, and still a quarter of the benchmark it is imitating.
+#
+# The cause is now pinned precisely, and it is NOT position sizing. Adding
+# target_weight_sizing (which removes the ATR risk cap entirely) changed nothing:
+# still 43.36% exposure, still 2.52% CAGR.
+#
+# The gap is TIME IN MARKET, not position size. This config is invested on 43% of
+# sessions; SPY_SMA200 is invested on 77%. Both use the same 200-day trend condition.
+# The difference is that this engine only acts on monthly rebalance dates, so when SPY
+# dips below its average and recovers mid-month, the benchmark re-enters the next
+# session and this config waits until month end. Over 10.6 years those missed
+# re-entries are most of the return.
+#
+# So the fix is a rebalance-frequency change, not a sizing one: the execution path
+# needs to re-evaluate a hold-while-true condition every session rather than monthly.
+#
+# Kept as a record of a tested failure so the next reader does not retry the tuning.
+strategy_name: adaptive-momentum
+version: 1.3.0
+calendar: XNYS
+
+# A single-name universe. The momentum ranking still runs but has nothing to rank
+# against, so it degenerates to "hold SPY when it is above its own trend".
+universe:
+  - SPY
+benchmark_symbol: SPY
+regime_symbol: SPY
+roster_size: 1
+
+momentum_long: 252
+momentum_skip: 21
+trend_period: 200
+entry_period: 55
+exit_period: 20
+atr_period: 20
+initial_stop_atr: 20
+trailing_stop_atr: 25
+rotation_frequency: monthly
+positive_momentum_required: false  # a single-name universe has no cross-section to rank
+market_regime_blocks_entries_only: true
+
+# Risk. The position cap is deliberately loose because volatility targeting is doing the
+# sizing here; letting a 10% cap bind would make the vol target inert, which is exactly
+# the silent no-op cycle 13 found and recorded.
+risk_per_trade_bps: 5000
+max_open_risk_bps: 10000
+max_position_value_bps: 10000
+target_weight_sizing: true
+trend_gate_per_session: true
+max_gross_exposure_bps: 10000
+max_positions: 1
+drawdown_thresholds_bps: [500, 1000, 1500, 2000]
+drawdown_multipliers_bps: [10000, 7500, 5000, 0, 0]
+
+slippage_bps: 5
+commission_per_order: 0
+idle_cash_rate_bps: 0
+allow_fractional_shares: true
+allow_pyramiding: false
+
+volatility_target_bps: 0
+volatility_lookback_days: 20
+
+# The asset trend filter stays on: it is the one component measured to carry the highest
+# Sharpe of anything in this project (SPY 200d trend, 0.91). Everything else is off.
+components:
+  momentum: false
+  asset_trend: true
+  market_regime: false
+  donchian_entry: false
+  donchian_exit: false
+  trailing_stop: false
+  roster_exit: false
+
+# Cycle 18: releases the absorbing halt by trading at a quarter size instead of stopping.
+# A halted account holds nothing, so its equity is frozen and its drawdown cannot shrink; the
+# only escape is to keep some exposure. Measured in scripts/halt_policy_study.py.
+drawdown_halt_floor_bps: 2500

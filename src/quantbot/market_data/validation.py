@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from enum import StrEnum
 from typing import Self
 
@@ -24,6 +25,32 @@ class MarketDataValidationError(ValueError):
 
 class DataGapReason(StrEnum):
     MISSING_EXPECTED_BAR = "MISSING_EXPECTED_BAR"
+    IMPLAUSIBLE_RANGE = "IMPLAUSIBLE_RANGE"
+
+
+# A corrupt extreme is one the open and close do not corroborate. A real collapse drags the close
+# down with it; a dropped digit leaves the close where it was and only the low moves. So the test
+# is the extreme against the open/close bracket rather than any absolute range, which is what makes
+# it safe for genuinely volatile single names.
+#
+# Calibrated 2026-08-19 against the full 96,370-bar research history: exactly one bar trips it --
+# SPY 2026-02-02, O=685.90 H=693.21 L=68.64 C=691.70, a dropped digit -- at a low/min(open,close)
+# ratio of 0.1001. The lowest ratio among all other bars is 0.8927 (XLE 2020-11-09). The threshold
+# sits in an empty margin nearly 0.8 wide, so it is not a tuned parameter.
+#
+# That bar cost 20.1% of equity in a single session in a SPY-only backtest: it tripped a stop at a
+# price no trade ever occurred at, while SPY actually rose that day. Bars pass `Bar.validate_ohlc`
+# because that check is ordinal -- low <= min(open, high, close) -- and 68.64 satisfies it.
+IMPLAUSIBLE_LOW_RATIO = Decimal("0.5")
+IMPLAUSIBLE_HIGH_RATIO = Decimal("2")
+
+
+def implausible_range(bar: Bar) -> bool:
+    """True when a bar's extreme is uncorroborated by its own open and close."""
+    return (
+        bar.low < IMPLAUSIBLE_LOW_RATIO * min(bar.open, bar.close)
+        or bar.high > IMPLAUSIBLE_HIGH_RATIO * max(bar.open, bar.close)
+    )
 
 
 class DataGap(MarketDataModel):
@@ -126,6 +153,7 @@ def validate_bar_batch(
         symbol: set() for symbol in batch.requested_symbols
     }
     previous_by_symbol: dict[str, datetime] = {}
+    implausible: dict[str, list[datetime]] = {}
 
     for bar in batch.bars:
         if bar.symbol not in requested_set:
@@ -147,8 +175,12 @@ def validate_bar_batch(
         if previous is not None and bar.timestamp <= previous:
             raise MarketDataValidationError(f"bars for {bar.symbol} must be strictly increasing")
         seen.add(key)
+        # Counted as observed so it does not also raise a MISSING_EXPECTED_BAR for the same
+        # session; it is reported under its own reason and still makes the symbol ineligible.
         observed_by_symbol[bar.symbol].add(bar.timestamp)
         previous_by_symbol[bar.symbol] = bar.timestamp
+        if implausible_range(bar):
+            implausible.setdefault(bar.symbol, []).append(bar.timestamp)
 
     gaps: list[DataGap] = []
     eligible: list[str] = []
@@ -157,7 +189,12 @@ def validate_bar_batch(
     latest_expected = expected[-1] if expected else None
     for symbol in sorted(batch.requested_symbols):
         missing = [value for value in expected if value not in observed_by_symbol[symbol]]
-        if missing:
+        corrupt = sorted(implausible.get(symbol, ()))
+        gaps.extend(
+            DataGap(symbol=symbol, timestamp=value, reason=DataGapReason.IMPLAUSIBLE_RANGE)
+            for value in corrupt
+        )
+        if missing or corrupt:
             ineligible.append(symbol)
             if latest_expected is not None and latest_expected in missing:
                 stale.append(symbol)
@@ -169,7 +206,7 @@ def validate_bar_batch(
                 )
                 for value in missing
             )
-        else:
+        elif not corrupt:
             eligible.append(symbol)
 
     return BarValidationReport(
@@ -178,7 +215,7 @@ def validate_bar_batch(
         adjustment=batch.adjustment,
         timeframe=batch.timeframe,
         requested_symbols=batch.requested_symbols,
-        valid_bars=batch.bars,
+        valid_bars=tuple(bar for bar in batch.bars if not implausible_range(bar)),
         gaps=tuple(gaps),
         eligible_symbols=tuple(eligible),
         ineligible_symbols=tuple(ineligible),

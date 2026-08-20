@@ -143,6 +143,21 @@ class StrategyConfig(BaseModel):
     #: old peak age out, so time alone can release the account instead of requiring a deposit
     #: or manual reset. 504 sessions is about two years.
     drawdown_lookback_sessions: int = Field(default=0, ge=0)
+    #: Minimum risk multiplier once the entry-halt threshold is breached, in bps. 0 keeps the
+    #: hard halt, which is what every deployed version uses, so their hashes stay identical.
+    #:
+    #: The hard zero is what makes the halt absorbing. At zero exposure equity cannot move, so
+    #: the drawdown cannot shrink, so no recovery condition expressed in terms of drawdown can
+    #: ever fire — hysteresis was measured and is not merely weak but structurally incapable of
+    #: releasing the account. A floor keeps the account trading at reduced size, which is the
+    #: only state from which a drawdown can actually be earned back.
+    #:
+    #: Measured (`scripts/halt_policy_study.py`, SPY 200d trend, 2016-2026): the hard halt turns
+    #: $100 into $126.80 while blocking entry on 65.6% of sessions and never once releasing. A
+    #: 2500bps floor returns $252.43 at an identical 17.3% max drawdown. Against never halting
+    #: at all (19.8%) the floor is genuine protection; the hard halt's lower figure is paralysis,
+    #: not safety, since a frozen account cannot draw down any further either.
+    drawdown_halt_floor_bps: int = Field(default=0, ge=0, le=10000)
     components: StrategyComponents = StrategyComponents()
 
     @field_validator("universe")

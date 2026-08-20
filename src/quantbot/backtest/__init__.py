@@ -8,6 +8,7 @@ from quantbot.backtest.benchmarks import (
     equal_weight_targets,
     rank_assets,
     spy_target,
+    switches_for_config,
 )
 from quantbot.backtest.engine import (
     BacktestCostComparison,
@@ -65,5 +66,6 @@ __all__ = [
     "fill_stop_order",
     "rank_assets",
     "spy_target",
+    "switches_for_config",
     "write_experiment_manifest",
 ]

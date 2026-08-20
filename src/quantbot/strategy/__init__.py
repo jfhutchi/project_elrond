@@ -11,7 +11,12 @@ from quantbot.strategy.adaptive_momentum import (
     build_monthly_roster,
     evaluate_symbol,
 )
-from quantbot.strategy.config import DEFAULT_UNIVERSE, StrategyConfig, load_strategy_config
+from quantbot.strategy.config import (
+    DEFAULT_UNIVERSE,
+    StrategyComponents,
+    StrategyConfig,
+    load_strategy_config,
+)
 from quantbot.strategy.identity import (
     bar_set_hash,
     build_strategy_identity,
@@ -40,6 +45,7 @@ from quantbot.strategy.tranches import (
 )
 
 __all__ = [
+    "StrategyComponents",
     "DEFAULT_UNIVERSE",
     "IndicatorInputError",
     "MonthlyRoster",

@@ -50,6 +50,8 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     for action in ("engage", "clear"):
         action_parser = kill_actions.add_parser(action)
         action_parser.add_argument("--reason", required=True)
+    registered = commands.add_parser("hypotheses")
+    registered.add_argument("--family")
     smoke = commands.add_parser("paper-smoke")
     smoke.add_argument("--acknowledgement", required=True)
     return parser
@@ -146,6 +148,22 @@ def main(
                     updated_at=now,
                 )
             result = {"ok": True, "engaged": state.engaged, "reason": state.reason}
+        elif args.command == "hypotheses":
+            # Imported here, not at module scope. The kill switch lives in this file, and it
+            # must not stop working because research code failed to import.
+            from quantbot.research import HypothesisRegistry, summarize
+
+            with active.database.transaction() as session:
+                registry = HypothesisRegistry(session)
+                registrations = registry.list_registrations(family_id=args.family)
+            result = {
+                "ok": True,
+                "registered": [summarize(entry) for entry in registrations],
+                "note": (
+                    "only a listed registration may back a CONFIRMATORY experiment; "
+                    "any other analysis is EXPLORATORY and is not evidence"
+                ),
+            }
         elif args.command == "paper-smoke":
             if active.reported_account_id is None:
                 raise ValueError("paper smoke requires a broker-reported account ID")

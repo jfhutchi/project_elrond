@@ -38,6 +38,44 @@ Last updated 2026-08-18 (cycles 11-17).
 | 20 | Per-position vol targeting makes more money than flat weights | REFUTED | Cycle 13. At matched 1.0x exposure with the halt enforced at a realistic 21-day resumption it gains $15.88/$100, and the bootstrap 95% CI is **[−$86.76, +$76.79]**, losing in **36.8%** of resamples. Its drawdown reduction is established (#S2); its wealth effect is not |
 | 19 | Any strategy here beats SPY at its own growth-optimal leverage | REFUTED | Cycle 12. Vol-targeted SPY at 4.25x appeared to turn $100 into $2,475 v SPY's $954. Stationary bootstrap (2000 draws, 21d blocks): 95% CI on the gap **[−$173.90, +$432.04]**, spans zero; loses in **22.8%** of resamples. Rests on the Sharpe difference already refuted as #16 — leverage amplifies an edge that is not there |
 
+## Four of the above were never actually tested
+
+Added 2026-08-19. **The table above is unchanged and stands as recorded.** This is an audit
+beside it, not a rewrite: `reports/research/refuted-power-audit-2026-08-19.md`.
+
+Where an entry reports its own 95% interval, the standard error follows (`width / 3.92`) and so
+does the smallest effect the study could have detected (`2.9 x SE`). Four entries measured an
+effect **smaller than their own detection limit**, which is the signature of an instrument too
+blunt to see what it was pointed at:
+
+| # | hypothesis | could only detect | measured | verdict |
+|---|---|---:|---:|---|
+| 6 | BTC trend standalone | 1.60 Sharpe | 0.53 | **UNDERPOWERED** |
+| 10 | ML / meta-labelling | 1.26% | ~0.75% | **UNDERPOWERED** |
+| 19 | growth-optimal leverage beats SPY | $448 | $129 | **UNDERPOWERED** |
+| 20 | per-position vol targeting | $121 | $15.88 | **UNDERPOWERED** |
+
+A confidence interval spanning zero was treated as the reason for refutation in several of
+these. An underpowered study *always* produces an interval spanning zero, so that observation
+carries no information about the mechanism.
+
+**These three mechanisms are untested, not dead:** BTC trend, per-position vol targeting,
+meta-labelling. That does not mean re-run them — the window they need is already exhausted, and
+a re-run would reproduce the same silence. It means they become live questions again if the data
+improves.
+
+**#22 stands, but on its replication rather than its statistic.** Its t-test could not have
+detected an alpha below 5.74%/yr, so "no alpha" is not what the test showed. The entry's other
+argument — SPY held at 0.71x reproduces the rotation to within 0.05 CAGR points with no trading
+— is an equivalence demonstration that does not depend on power, and it is decisive on its own.
+
+For the remaining entries power is not recoverable, because no expected effect size was ever
+pre-registered. That is exactly the field #5 now requires and #19 now gates on, so the ambiguity
+ends with this corpus.
+
+The honest summary of the whole table is therefore **"nothing large was found"** rather than
+"these mechanisms do not work" — weaker, and accurate.
+
 ## Not refuted — measured as genuinely working
 
 | Mechanism | Effect | Cost |
@@ -59,6 +97,27 @@ Leverage helps a *good* strategy only. At 2x it added 0.75% CAGR to momentum+tre
 worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.49%**.
 
 ## Structural limits that bound all future work
+
+* **Span, not sample size, is what buys statistical power — so the exhausted equity window is
+  the *weakest* data available, not the best.** The limit above was always stated in years, and
+  that is not an accident of phrasing: for an annualised Sharpe the sampling frequency cancels,
+  because `SE ~= sqrt((1 + SR^2/2) / years)`. A monthly series over 35 years therefore resolves
+  a **smaller** effect than a daily series over 10.6, despite having a twentieth of the rows.
+  Measured with `scripts/power_survey.py` at the current 68-trial bar, charging realistic
+  autocorrelation:
+
+  | dataset | years | minimum detectable Sharpe |
+  |---|---:|---:|
+  | SIP US equities, daily (EXHAUSTED) | 10.6 | **0.94** |
+  | FRED monthly, PAYEMS/UNRATE | 35 | 0.67 |
+  | FRED daily, T10Y2Y from 1976 | 50 | 0.56 |
+  | FRED monthly, CPI from 1947 | 75 | **0.46** |
+
+  SPY buy-and-hold scores 0.90 on the equity window — i.e. sitting *at* its own detection limit,
+  which is why nothing measured there could ever separate from noise. Long free macro history is
+  roughly twice the resolution, and it is not a consolation prize for having run out of
+  equities. This was mis-stated in the opposite direction in an earlier session note; the
+  arithmetic above is the correction.
 
 * **Statistical.** Separating a true Sharpe of 1.0 from zero needs ~3.8 years of daily data;
   0.5 from zero needs ~15 years. Resolving the D7-vs-SPY gap of 0.074 would need **~700
@@ -103,6 +162,16 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   available. Caveat worth keeping: these are US-listed ETFs, so currency exposure is unhedged
   and local small caps are absent. A test on native exchanges could differ but Alpaca cannot
   reach them.
+* **A halt that removes all exposure cannot be escaped by any drawdown-based rule.** At zero
+  exposure equity is frozen, so the drawdown is frozen, so hysteresis, resume thresholds, and
+  every other release condition expressed in terms of drawdown are structurally incapable of
+  firing — not mistuned. Measured byte-identical to the broken policy at resume levels of 10%,
+  5% and 1%. Only keeping some exposure, or ageing the high-water mark out on a rolling window,
+  can release it. Cycle 18, `scripts/halt_policy_study.py`.
+* **Releasing the halt does not make a worthless strategy profitable — it exposes it.** The hard
+  halt scored Sharpe 0.36 on `strategy-trend-v4` by blocking entry on 65.6% of sessions. With a
+  2500bps floor it trades 25 times instead of 6, and scores 0.21 at double the drawdown. A halt
+  that suppresses trading will always flatter a strategy with no edge. Cycle 18.
 * **There was never a signal to tune.** Cycle 15 tested the premise underneath cycles 1-10 and
   it fails: the momentum ranking does not separate winners from losers (top-minus-bottom
   t=0.77), selection does not beat not-selecting (t=0.84), and alpha against SPY is 0.10%/yr
@@ -163,6 +232,147 @@ real quotes; and **an unpaired t-test that made the overnight effect look signif
 is not**; and two in one leverage function — debt held fixed instead of leverage, so high
 leverage looked survivable; then a monthly-rebalanced margin path compared against a
 daily-rebalanced baseline, which appeared to show that margin calls *create* wealth.
+
+This file is now also loaded into structured research memory (#6) by
+`quantbot.research.memory.import_refuted_markdown`, verbatim. The records are additional to this
+file, not a replacement for it: every statement is carried as written, and the import is
+idempotent. Edit here; the records follow.
+
+A sixteenth, and it is one bar. SPY 2026-02-02 was cached as O=685.90 H=693.21 L=68.64 C=691.70 —
+a dropped digit in the low. It passes `Bar.validate_ohlc` because that check is ordinal: 68.64
+really is at or below the open, high, and close. Nothing else looked at it. In a SPY-only backtest
+it tripped a stop at 550.26, a price no trade occurred at, on a day SPY closed **up** 0.50%. Equity
+went 256.35 to 204.84 in one session — a 20.1% loss — and never recovered the gap. That single bar
+is worth **2.67 CAGR points** over the 10.6-year history, more than the trend-gate change that four
+cycles of work were aimed at.
+
+One bar in 96,370. It was found only because a diagnostic ratio moved 20% in a session and the
+implausibility was chased rather than explained away, which is the rule about validating
+instrumentation before interpreting results doing its job. Now rejected at ingestion under
+`DataGapReason.IMPLAUSIBLE_RANGE`: the test is the extreme against the bar's own open/close bracket
+rather than an absolute range, because a real collapse drags the close with it while a dropped digit
+does not — and an absolute-range rule would reject genuine crashes. Threshold calibrated against the
+full history rather than chosen: the corrupt bar sits at low/min(open,close) = 0.1001, the closest
+real bar at 0.8927.
+
+A fifteenth, and it is the goal itself rather than a defect in reaching it. `SPY_SMA200` is
+described throughout this repository as "the one rule measured to beat the market", and six
+diagnostic cycles went into making the engine express it. Measured against the market on the same
+history: it returns **10.63% CAGR against buy-and-hold's 15.38%**, turning $100 into $291 rather
+than $455. It does not beat the market. Its entire case is a **+0.026** Sharpe edge bought with a
+halved drawdown (19.50% vs 33.79%), and paired against buy-and-hold — paired, because the two hold
+the same asset 77% of the time and an unpaired test on correlated series is the error this file
+exists to catch — that edge is **negative in point estimate and insignificant**: −2.005 bps per
+session, t = −1.24, 27 years of data needed to resolve it either way.
+
+The engineering succeeded. With the position cap, the drawdown ladder, `trend_gate_per_session`,
+and one corrupt bar all controlled for, the engine reproduces the rule to **0.07 CAGR points**, so
+"this engine cannot express the one rule measured to beat the market" is now false on both halves
+of the sentence. What failed was never checking whether the target was worth reaching. The
+disqualifying measurement is one backtest and could have run first.
+
+The lesson generalises past this rule: `CLAUDE.md` requires a power analysis before an expensive
+experiment, and that discipline was applied to hypotheses but not to *engineering targets*. A
+benchmark treated as a goal is a hypothesis about what is worth building. This one would have
+failed the gate — an 0.026 Sharpe effect against 10.6 years is unresolvable before a line is
+written.
+
+A fourteenth, and it is the project's central architectural finding. `STATUS.md` §6h pinned the
+`SPY_SMA200` gap as "time in market, not position size", reading `exposure_fraction` as the
+fraction of sessions invested. It is **capital** exposure, the mean of `gross_exposure / equity`.
+Measured separately, the engine is in the market on **72.50%** of sessions against the benchmark's
+77.37% — a 4.87 point gap, not 34 — and holds an average weight of **11.67%** against 100%,
+because `max_position_value_bps: 1000` caps a position at a tenth of equity. `target_weight_sizing`
+appeared inert because it removes the *ATR* cap rather than that one. This one did not flatter a
+result either: it made an engine limitation out of a configuration value.
+
+**And the correction needed its own correction, within hours.** The note above originally claimed
+a *second constraint on position weight* remained unidentified. There is none — at a 100% cap the
+engine holds an average weight of **100.00%**, 1161 of 1161 held sessions at >=95%. The ~60%
+figure that motivated the claim came from dividing one run's capital exposure by a different run's
+time in market, which is the same conflation the defect itself is about, committed a second time
+while writing it up. What actually collapses at a 100% cap is time in market, 72.50% -> 43.50%,
+and the cause is the **drawdown risk ladder**: invisible at a 10% cap because the position is too
+small to draw the account down 15%, and halting entry on **928 of 2669 sessions** at a 100% cap.
+Widening the ladder restores 72.50% exposure and all 25 trades.
+
+The useful residue is a limitation that is real and permanent rather than a bug: `SPY_SMA200`
+draws down 19.50%, above the deployed 15% halt tier, so this engine cannot express that rule at
+full size without accepting a drawdown its risk engine exists to refuse. Setting
+`drawdown_halt_floor_bps` does not rescue it — the floor releases the halt into the 20%
+*liquidation* tier (868 sessions) for +0.79 exposure points and worse CAGR. Widening the ladder is
+therefore **not** proposed: those runs are diagnostic instruments that buy 6.68% CAGR with a
+24.46% drawdown, worse risk-adjusted than the benchmark, and loosening a drawdown control to
+improve a backtest is precisely the move this file exists to catch. Pinned by
+`test_the_floor_moves_a_concentrated_config_from_halted_to_liquidating` and
+`test_the_halt_threshold_sits_below_the_drawdown_of_the_rule_it_would_express`, both
+mutation-checked.
+
+A thirteenth, and it sat at the top of `STATUS.md` where every session reads it first. The
+severity-1 block attributed **70.8% halted sessions** and a **26.4% drawdown** to the deployed
+`strategy-v1-2.yaml`. Measured through the production engine on SIP: **0 halted sessions and
+9.09% max drawdown**. The 70.8% belongs to `strategy-trend-v4`; the 26.4% does not reproduce on
+any window tried. Both figures came from the era of the disconnected harness, and the attribution
+drifted from the config that produced them to the config being discussed two sentences later.
+The underlying design defect is real and unchanged — the halt genuinely has no exit — but it is
+latent rather than active, which is a different decision. Unlike most entries here this one did
+not flatter a result; it overstated a risk, which is the rarer direction and still worth the same
+scepticism.
+
+A twelfth, found the same way as the tenth -- by a test rather than by review. The first
+version of the FRED provider (#17) added each series' publication lag to its *stamped* date, but
+FRED stamps a monthly series with its period **start**. March payrolls therefore appeared
+available on 6 March, five days before March had ended. Ordinary look-ahead, invisible in any
+result it would have produced: it would simply have made the strategy look prescient. The lag now
+runs from period end, and the case is pinned. No result was affected -- the provider had never
+been run.
+
+The harness-not-connected defect below is now mechanically guarded.
+`switches_for_config()` maps a configuration's components onto the engine's switches, and
+`test_changing_the_config_changes_the_result` fails if a harness produces identical output for
+different configs. The three results it produced remain unattributed until re-measured; the
+guard stops a fourth.
+
+An eleventh, also from this session and also found by a guard rather than by review: `cli.py`
+imported research code at module scope, so a failure anywhere in the research package would have
+broken the kill switch, which lives in the same file. Found by the #14 import-graph test on its
+first run. No incident resulted; it is recorded because the kill switch is the last control and
+it had acquired a dependency nobody chose.
+
+A tenth defect, found in this session and in this project's own test suite rather than in its
+analysis: the first version of the point-in-time feature test (#17) passed with the
+slowest-input rule deleted. Its late-published input was still not the *latest available* one,
+so replacing "gate on the slowest availability" with "gate on the newest observation" produced
+the same answer and the test stayed green. Caught by mutation-testing the guard rather than by
+reading it. The same shape as the #12 memory-limit defect that `CLAUDE.md` now carries a rule
+about, and the reason that rule is worth the words.
+
+The defects in this section are now partly mechanical. #18 turned four of them into invariants
+that run on every result bundle: a statistical test that does not match the dependence structure
+of its data, costs that improve a return, forced liquidation that ends richer than no
+liquidation, and a significance claim below the luck bar frozen for its own trial count. The
+harness-not-connected failure — three of the entries below — is caught by a bundle comparison
+that flags identical results across differing inputs.
+
+Found while building the migration path for #5 and #19: **three of the four Alembic revisions
+built their tables from live metadata rather than from their own definitions**, so each stopped
+describing the schema it actually produced as soon as the next revision landed. Revision 0002
+created V3 column names on a fresh database and 0003's rename then failed on a column that had
+never existed. A second instance in the same pair of revisions left a backfill `server_default`
+attached, which diverged the migrated schema from head metadata. Both were caught by the
+post-upgrade schema comparison rather than by reading the code -- the same asymmetry as every
+entry below. Each revision now names its own tables. Neither flattered a research result; they
+are recorded because the migration path is what will carry every future result.
+
+Found while building the hypothesis registry (#5): **this project has used two different
+luck bars.** Cycle 10 quotes t=2.22 for 43 trials, which is Bailey & Lopez de Prado's finite-N
+expected maximum. Cycles 15-17 quote 2.87/2.89/2.90, which is `sqrt(2 ln N)` — about 0.5 higher
+at comparable N. Bars quoted before cycle 15 are therefore not comparable with bars quoted
+after it. **No verdict changes:** every refuted result failed by a wide margin under either
+convention (cycle 8's metalabelling t=1.72 misses both 2.22 and 2.74). The registry uses the
+stricter `sqrt(2 ln N)` going forward and does not retro-fit either historical number. Unlike
+the defects below, this one did not flatter a result — it is recorded because a bar that moves
+silently is the mechanism by which one eventually would.
 
 **Every one of these errors flattered the result.** None was caught by the code looking wrong;
 each was caught by the number being implausible. That asymmetry is the single most useful thing

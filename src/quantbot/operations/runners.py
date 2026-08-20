@@ -68,6 +68,7 @@ from quantbot.strategy import (
     build_monthly_roster,
     evaluate_symbol,
     realized_volatility,
+    tranche_weights,
     wilder_atr,
 )
 
@@ -443,6 +444,63 @@ class AdaptiveMomentumRunner:
             sliced[symbol] = kept
         return sliced
 
+    def _tranche_rosters(
+        self,
+        histories: Mapping[str, list[Bar]],
+        calendar_sessions: tuple[XNYSSession, ...],
+        acting_index: int,
+    ) -> tuple[MonthlyRoster, ...]:
+        """One roster per tranche, each evaluated on that tranche's own rebalance session.
+
+        With a single tranche this returns exactly what `_roster` returns, because tranche 0's
+        rebalance session is the final session of the month. That equivalence is what lets the
+        capability land while switched off.
+
+        Tranches whose first rebalance has not happened yet are omitted rather than represented
+        as empty. An empty roster and an unstarted one mean different things — the first says
+        "hold nothing", the second says "no opinion yet" — and blending them together would
+        quietly dilute every weight during the ramp-up month.
+        """
+        tranches = self._config.rebalance_tranches
+        if tranches == 1:
+            return (self._roster(histories, calendar_sessions, acting_index),)
+
+        sequence = sequence_for(self._config, calendar_sessions)
+        schedule = sequence.tranche_schedule_map(tranches)
+        rosters: list[MonthlyRoster] = []
+        for tranche in range(tranches):
+            owned = [
+                index
+                for index, owner in schedule.items()
+                if owner == tranche and index < acting_index
+            ]
+            if not owned:
+                continue  # this tranche has not had its first rebalance
+            evaluation_index = max(owned)
+            evaluation_at = calendar_sessions[evaluation_index].close_at
+            rosters.append(
+                build_monthly_roster(
+                    self._slice(histories, evaluation_at),
+                    evaluation_at,
+                    calendar_sessions[evaluation_index + 1].open_at,
+                    self._config,
+                    session_sequence=sequence,
+                    tranche=tranche,
+                )
+            )
+        if not rosters:
+            raise StrategyDataError("no tranche has reached its first rebalance session")
+        return tuple(rosters)
+
+    def _target_fractions(self, rosters: tuple[MonthlyRoster, ...]) -> dict[str, Decimal]:
+        """Fractional membership across tranches: held by 3 of 5 means three fifths of a size.
+
+        This is the whole mechanism. Membership stops being binary, which is what averages away
+        the arbitrary choice of rebalance date — worth $61.24 of terminal wealth per $100 in
+        dispersion that carries no information.
+        """
+        return tranche_weights([roster.symbols for roster in rosters], Decimal(1))
+
     def _roster(
         self,
         histories: Mapping[str, list[Bar]],
@@ -473,15 +531,24 @@ class AdaptiveMomentumRunner:
         repository: StorageRepository,
         symbol: str,
         entered_at: datetime,
-    ) -> tuple[Decimal, Decimal] | None:
-        """Return the (initial_stop, active_stop) already durable for this position run."""
+    ) -> tuple[Decimal, Decimal, int] | None:
+        """Return the (initial_stop, active_stop, tranche) already durable for this position.
+
+        The tranche defaults to 0 when absent so state written before tranching existed still
+        loads. Treating a missing tranche as an error would strand every position opened by a
+        prior version, including the ones the live account is holding right now.
+        """
         for record in reversed(repository.list_signals(symbol=symbol)):
             state = record.payload.get("position_state")
             if not isinstance(state, dict):
                 continue
             if str(state.get("entered_at")) != entered_at.isoformat():
                 continue
-            return Decimal(str(state["initial_stop"])), Decimal(str(state["active_stop"]))
+            return (
+                Decimal(str(state["initial_stop"])),
+                Decimal(str(state["active_stop"])),
+                int(state.get("tranche", 0)),
+            )
         return None
 
     def _position_context(
@@ -492,8 +559,9 @@ class AdaptiveMomentumRunner:
         atr: Decimal | None,
     ) -> PositionContext:
         stored = self._prior_position_state(repository, position.symbol, entered_at)
+        tranche = 0
         if stored is not None:
-            initial_stop, active_stop = stored
+            initial_stop, active_stop, tranche = stored
         else:
             if atr is None:
                 raise StrategyDataError(
@@ -508,6 +576,7 @@ class AdaptiveMomentumRunner:
             entered_at=entered_at,
             initial_stop=initial_stop,
             active_stop=active_stop,
+            tranche=tranche,
         )
 
     def _intent(
@@ -697,6 +766,9 @@ class AdaptiveMomentumRunner:
                         "entered_at": context.entered_at.isoformat(),
                         "initial_stop": str(context.initial_stop),
                         "active_stop": str(max(context.active_stop, active_stop)),
+                        # Written unconditionally, including the untranched 0, so state is
+                        # self-describing rather than relying on absence to mean anything.
+                        "tranche": context.tranche,
                     }
                 repository.record_signal(
                     f"{run_id}:{symbol}",

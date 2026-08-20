@@ -25,6 +25,20 @@ from quantbot.storage.schema import (
     schema_version,
 )
 
+#: The Alembic revision whose upgrade produces each schema version. Databases written before
+#: Alembic was introduced carry only the `schema_version` marker, so they are stamped at the
+#: revision matching their observed layout and then upgraded normally. Extend when
+#: `SCHEMA_VERSION` is bumped; a version absent here cannot be opened.
+REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {
+    1: "0001",
+    2: "0002",
+    3: "0003",
+    4: "0004",
+    5: "0005",
+    6: "0006",
+    7: "0007",
+}
+
 
 class UnsupportedSchemaVersionError(RuntimeError):
     """Raised when a database was written by an unsupported schema version."""
@@ -82,17 +96,22 @@ class Database:
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.busy_timeout_ms = busy_timeout_ms
-        self._requires_alembic_stamp = self._preflight_schema()
+        self._stamp_revision, self._pending_upgrade = self._preflight_schema()
         self.engine: Engine = create_engine(f"sqlite+pysqlite:///{self.path.as_posix()}")
         event.listen(self.engine, "connect", self._configure_connection)
         self._initialize_schema()
 
-    def _preflight_schema(self) -> bool:
-        """Validate an existing file without changing persistent SQLite settings."""
-        if not self.path.exists() or self.path.stat().st_size == 0:
-            return False
+    def _preflight_schema(self) -> tuple[str | None, bool]:
+        """Validate an existing file without changing persistent SQLite settings.
 
-        requires_alembic_stamp = False
+        Returns the revision to stamp a pre-Alembic file at (or `None`), and whether the file
+        is behind head and therefore still has migrations to run.
+        """
+        if not self.path.exists() or self.path.stat().st_size == 0:
+            return None, False
+
+        stamp_revision: str | None = None
+        observed_version = SCHEMA_VERSION
         validate_metadata = False
         connection = sqlite3.connect(self.path)
         try:
@@ -107,8 +126,7 @@ class Database:
             has_schema_marker = schema_version.name in table_names
             has_alembic_table = "alembic_version" in table_names
             if has_alembic_table and "version_num" not in {
-                str(row[1])
-                for row in connection.execute('PRAGMA table_info("alembic_version")')
+                str(row[1]) for row in connection.execute('PRAGMA table_info("alembic_version")')
             }:
                 raise UnsupportedSchemaVersionError("invalid Alembic version marker")
             alembic_rows = (
@@ -128,8 +146,7 @@ class Database:
 
             if has_schema_marker:
                 if {"id", "version"} - {
-                    str(row[1])
-                    for row in connection.execute('PRAGMA table_info("schema_version")')
+                    str(row[1]) for row in connection.execute('PRAGMA table_info("schema_version")')
                 }:
                     raise UnsupportedSchemaVersionError("incompatible schema")
                 schema_rows = connection.execute("SELECT version FROM schema_version").fetchall()
@@ -138,22 +155,28 @@ class Database:
                 try:
                     actual = int(schema_rows[0][0])
                 except (TypeError, ValueError) as exc:
-                    raise UnsupportedSchemaVersionError(
-                        "invalid schema version marker"
-                    ) from exc
-                if actual != SCHEMA_VERSION:
+                    raise UnsupportedSchemaVersionError("invalid schema version marker") from exc
+                if actual > SCHEMA_VERSION:
                     raise UnsupportedSchemaVersionError(actual)
-                if not set(metadata.tables) <= table_names:
-                    raise UnsupportedSchemaVersionError("incomplete versioned database")
-                validate_metadata = True
+                observed_version = actual
+                if actual == SCHEMA_VERSION:
+                    if not set(metadata.tables) <= table_names:
+                        raise UnsupportedSchemaVersionError("incomplete versioned database")
+                    validate_metadata = True
+                # An older marker is upgraded by Alembic below rather than rejected. It is not
+                # compared against head metadata here: the difference is exactly what the
+                # migration exists to close. The comparison runs after the upgrade instead.
 
-            requires_alembic_stamp = has_schema_marker and alembic_revision is None
+            if has_schema_marker and alembic_revision is None:
+                stamp_revision = REVISION_FOR_SCHEMA_VERSION.get(observed_version)
+                if stamp_revision is None:
+                    raise UnsupportedSchemaVersionError(observed_version)
         finally:
             connection.close()
 
         if validate_metadata:
             self._validate_metadata_compatibility()
-        return requires_alembic_stamp
+        return stamp_revision, observed_version < SCHEMA_VERSION
 
     def _validate_metadata_compatibility(self) -> None:
         """Require a zero-diff schema using a read-only, non-operational engine."""
@@ -161,14 +184,19 @@ class Database:
         try:
             with preflight_engine.connect() as connection:
                 connection.exec_driver_sql("PRAGMA query_only=ON")
-                context = MigrationContext.configure(
-                    connection,
-                    opts={"compare_type": True, "compare_server_default": True},
-                )
-                if compare_metadata(context, metadata):
-                    raise UnsupportedSchemaVersionError("incompatible schema")
+                self._compare_against_metadata(connection)
         finally:
             preflight_engine.dispose()
+
+    @staticmethod
+    def _compare_against_metadata(connection: Connection) -> None:
+        """Fail unless the live schema matches the metadata this build was compiled against."""
+        context = MigrationContext.configure(
+            connection,
+            opts={"compare_type": True, "compare_server_default": True},
+        )
+        if compare_metadata(context, metadata):
+            raise UnsupportedSchemaVersionError("incompatible schema")
 
     def _configure_connection(
         self,
@@ -195,13 +223,18 @@ class Database:
     def _initialize_schema(self) -> None:
         with self.engine.begin() as connection:
             config = self._alembic_config(connection)
-            if self._requires_alembic_stamp:
-                command.stamp(config, "head")
+            if self._stamp_revision is not None:
+                command.stamp(config, self._stamp_revision)
             command.upgrade(config, "head")
 
             actual = connection.execute(select(schema_version.c.version)).scalar_one()
             if actual != SCHEMA_VERSION:
                 raise UnsupportedSchemaVersionError(actual)
+            if self._pending_upgrade:
+                # Preflight skipped the comparison because the file was behind head. Check it
+                # here, inside the transaction, so a migration that fails to reproduce head
+                # metadata rolls back instead of leaving a half-shaped store on disk.
+                self._compare_against_metadata(connection)
 
             if connection.execute(select(kill_switch_state.c.id)).scalar_one_or_none() is None:
                 connection.execute(
