@@ -81,8 +81,8 @@ from quantbot.research.registry import (
     HypothesisDraft,
     HypothesisRegistry,
     RefusalReason,
-    SearchOrigin,
     RegistrationRefused,
+    SearchOrigin,
 )
 from quantbot.research.sources import EpistemicStatus, EvidenceBasis
 from quantbot.storage import Database
