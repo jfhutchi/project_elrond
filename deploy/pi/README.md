@@ -104,7 +104,22 @@ ledger comes with it.
    scp quantbot.db pi@<host>:~/quantbot-data/quantbot.db
    ```
 
-3. **Fill in credentials** in `/etc/quantbot/quantbot.env` (mode 600). Paper keys only.
+3. **Fill in `/etc/quantbot/quantbot.env`** (mode 600): the two Alpaca paper credentials and
+   `EXPECTED_ACCOUNT_ID`.
+
+   The file also carries the **operator-declared readiness flags** — `BROKER_HEALTHY`,
+   `MARKET_DATA_HEALTHY`, `RISK_ENGINE_HEALTHY`, `RECONCILIATION_SUCCESSFUL`. These are gates,
+   not reports. `recovery.py` computes `BROKER_HEALTHY` as *declared AND measured*, so a false
+   declaration keeps the system fail-closed however healthy the live probe is, and every one of
+   them defaults to false.
+
+   This is worth knowing because the symptom is misleading: valid credentials, a reachable
+   broker, an authenticated `HTTP 200` by hand — and `quantbot status` still reporting
+   `broker_healthy: false`. On the host this was migrated from, those flags lived in the **user
+   environment**, not in `.env`, and environment variables override `.env`. Checking only the
+   `.env` file will tell you the wrong thing.
+
+   `LIVE_TRADING_ACKNOWLEDGED=false` stays false.
 
 4. **Verify before starting.** On ARMv6 the venv is at `.venv`; on aarch64 use `uv run`.
 
@@ -157,6 +172,12 @@ minimum.
 hammer the broker API and get the account rate-limited, turning a small fault into an outage.
 After five failures inside two minutes systemd stops trying and waits for a human — a process that
 cannot start is something to investigate, not something to retry into the ground.
+
+**A commit is pinned, not resolved.** `QUANTBOT_GIT_COMMIT` is set in the env file so the daemon
+never shells out to `git rev-parse` at runtime. Without it the runtime raises
+`cannot determine the deployed git commit` whenever git is unavailable, the checkout is owned by
+another user, or `safe.directory` blocks it — and running the CLI under `sudo` against a
+user-owned checkout hits exactly that. Re-pin it when you update the code.
 
 **Logs go to the journal**, not to a file:
 

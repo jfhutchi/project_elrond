@@ -174,10 +174,36 @@ sudo mkdir -p /etc/quantbot "$(dirname "$ENV_FILE")"
 mkdir -p "$QUANTBOT_DATA"
 if [ ! -f "$ENV_FILE" ]; then
   sudo tee "$ENV_FILE" >/dev/null <<EOF
-# Populate these by hand, then: sudo chmod 600 $ENV_FILE
+# Populate the two credentials by hand, then: sudo chmod 600 $ENV_FILE
 # Never commit this file. Paper credentials only -- live trading stays disabled.
 ALPACA_PAPER_API_KEY=
 ALPACA_PAPER_API_SECRET=
+
+# The account this host is allowed to act on. Copy it from the existing deployment; a mismatch
+# is refused rather than adopted, which is the point.
+EXPECTED_ACCOUNT_ID=
+
+# Operator-declared readiness. These are GATES, not reports. recovery.py computes
+# BROKER_HEALTHY as (declared AND measured), so leaving one false keeps the system fail-closed
+# no matter what the live probe says. Omitting them entirely is why a working broker with valid
+# credentials reads as unhealthy on a fresh host -- the default for every one of them is false.
+BROKER_PROVIDER=alpaca
+MARKET_DATA_PROVIDER=alpaca
+TRADING_MODE=PAPER
+BROKER_ENVIRONMENT=PAPER
+BROKER_HEALTHY=true
+MARKET_DATA_HEALTHY=true
+RISK_ENGINE_HEALTHY=true
+RECONCILIATION_SUCCESSFUL=true
+KILL_SWITCH=false
+
+# Live trading stays disabled. Do not change these.
+LIVE_TRADING_ACKNOWLEDGED=false
+
+# Pinned rather than resolved by shelling out to `git rev-parse` at runtime, so the daemon does
+# not depend on git being installed, on the checkout being readable by the running user, or on
+# safe.directory. Update when you update the checkout.
+QUANTBOT_GIT_COMMIT=__COMMIT__
 
 QUANTBOT_CONFIG=$QUANTBOT_HOME/config/strategy-v1-2.yaml
 QUANTBOT_DB_PATH=$QUANTBOT_DATA/quantbot.db
@@ -187,8 +213,9 @@ QUANTBOT_MARKET_DATA_FEED=iex
 QUANTBOT_MARKET_DATA_ADJUSTMENT=all
 QUANTBOT_MAX_DATA_AGE_SECONDS=86400
 EOF
+  sudo sed -i "s|__COMMIT__|$(git -C "$QUANTBOT_HOME" rev-parse HEAD)|" "$ENV_FILE"
   sudo chmod 600 "$ENV_FILE"
-  echo "     Created $ENV_FILE -- fill in the two Alpaca values before starting."
+  echo "     Created $ENV_FILE -- fill in the two Alpaca values and EXPECTED_ACCOUNT_ID."
 else
   echo "     $ENV_FILE already exists, left untouched."
 fi
