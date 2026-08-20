@@ -26,6 +26,8 @@ from quantbot.storage import Database, StorageRepository
         ["backtest"],
         ["report-weekly"],
         ["paper-smoke", "--acknowledgement", PAPER_SMOKE_ACKNOWLEDGEMENT],
+        ["hypotheses"],
+        ["register-hypothesis", "--draft", "d.json", "--critique", "c.json"],
     ],
 )
 def test_required_cli_commands_are_registered(argv: list[str]) -> None:
@@ -201,3 +203,36 @@ def test_cli_dispatches_injected_operations_and_status_never_prints_secrets(
     assert "paper-key" not in status_output.getvalue()
     assert "paper-secret" not in status_output.getvalue()
     database.close()
+
+
+def test_registering_a_hypothesis_defaults_to_spending_nothing() -> None:
+    """`--commit` is opt-in, because registration is not reversible in the way that matters.
+
+    It reserves protected evaluation windows and permanently raises the multiple-testing burden
+    for everything registered after it. A CLI that froze on the default invocation would make
+    burning a holdout the easiest thing to do by accident.
+    """
+    parser = build_parser(output=StringIO())
+
+    preview = parser.parse_args(
+        ["register-hypothesis", "--draft", "d.json", "--critique", "c.json"]
+    )
+    assert preview.commit is False
+
+    explicit = parser.parse_args(
+        ["register-hypothesis", "--draft", "d.json", "--critique", "c.json", "--commit"]
+    )
+    assert explicit.commit is True
+
+
+def test_a_registration_requires_both_a_draft_and_a_critique() -> None:
+    """Neither is optional. A registration without a critique is unreviewed by construction."""
+    parser = build_parser(output=StringIO())
+
+    for argv in (
+        ["register-hypothesis", "--draft", "d.json"],
+        ["register-hypothesis", "--critique", "c.json"],
+        ["register-hypothesis"],
+    ):
+        with pytest.raises(SystemExit):
+            parser.parse_args(argv)

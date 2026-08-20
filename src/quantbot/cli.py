@@ -24,6 +24,21 @@ from quantbot.storage import Database, StorageRepository
 CommandHandler = Callable[[argparse.Namespace], Mapping[str, object]]
 
 
+class _DryRun(Exception):
+    """Abandons the transaction after the gates have run, so a preview costs no budget.
+
+    Registration is not reversible in the way that matters: it reserves protected evaluation
+    windows and permanently raises the multiple-testing burden for everything registered after
+    it. Rolling back rather than skipping the write means the preview is produced by the real
+    gates against real durable state -- the cumulative trial count is read from the database,
+    not assumed -- while spending none of it.
+    """
+
+    def __init__(self, summary: dict[str, object]) -> None:
+        self.summary = summary
+        super().__init__("dry run")
+
+
 @dataclass(frozen=True, slots=True)
 class CLIContext:
     settings: Settings
@@ -52,6 +67,13 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
         action_parser.add_argument("--reason", required=True)
     registered = commands.add_parser("hypotheses")
     registered.add_argument("--family")
+    freeze = commands.add_parser("register-hypothesis")
+    freeze.add_argument("--draft", required=True)
+    freeze.add_argument("--critique", required=True)
+    # Registration is not reversible in the way that matters: it reserves protected windows and
+    # permanently raises the multiple-testing burden for everything registered after it. So the
+    # default is to report what the gates say and persist nothing.
+    freeze.add_argument("--commit", action="store_true")
     smoke = commands.add_parser("paper-smoke")
     smoke.add_argument("--acknowledgement", required=True)
     return parser
@@ -164,6 +186,53 @@ def main(
                     "any other analysis is EXPLORATORY and is not evidence"
                 ),
             }
+        elif args.command == "register-hypothesis":
+            # Function-scope import for the same reason as `hypotheses` above: the kill switch
+            # lives in this file and must not stop working because research code failed to
+            # import.
+            from quantbot.research import (
+                Critique,
+                HypothesisDraft,
+                HypothesisRegistry,
+                RegistrationRefused,
+                summarize,
+            )
+
+            draft = HypothesisDraft.model_validate_json(
+                Path(args.draft).read_text(encoding="utf-8")
+            )
+            critique = Critique.model_validate_json(Path(args.critique).read_text(encoding="utf-8"))
+            now = datetime.now(UTC)
+            try:
+                with active.database.transaction() as session:
+                    registration = HypothesisRegistry(session).register(
+                        draft, now=now, critique=critique
+                    )
+                    frozen = summarize(registration)
+                    if not args.commit:
+                        # Every gate ran against real durable state -- the cumulative trial
+                        # burden is read from the database, not assumed -- and the transaction
+                        # is then abandoned, so the verdict is real and the spend is not.
+                        raise _DryRun(frozen)
+            except _DryRun as preview:
+                result = {
+                    "ok": True,
+                    "committed": False,
+                    "registration": preview.summary,
+                    "note": (
+                        "gates cleared against live state and nothing was persisted; "
+                        "re-run with --commit to reserve the windows and spend the trial"
+                    ),
+                }
+            except RegistrationRefused as refusal:
+                result = {
+                    "ok": False,
+                    "committed": False,
+                    "reason": refusal.reason.value,
+                    "detail": refusal.detail,
+                }
+            else:
+                result = {"ok": True, "committed": True, "registration": frozen}
         elif args.command == "paper-smoke":
             if active.reported_account_id is None:
                 raise ValueError("paper smoke requires a broker-reported account ID")
