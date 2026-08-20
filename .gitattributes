@@ -1,0 +1,7 @@
+# Shell scripts and systemd units are executed on Linux. Git on Windows checks files out with
+# CRLF by default, and a CRLF shebang line makes bash fail with the famously unhelpful
+# "$'\r': command not found" -- which is exactly what happened when deploy/pi/setup.sh was
+# copied from a Windows checkout to a Raspberry Pi. Pin these to LF everywhere.
+*.sh        text eol=lf
+*.service   text eol=lf
+*.bash      text eol=lf

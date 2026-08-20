@@ -135,11 +135,24 @@ fi
 
 say "5/7  Fetching the code (branch: $BRANCH)"
 if [ -d "$QUANTBOT_HOME/.git" ]; then
-  git -C "$QUANTBOT_HOME" fetch origin --prune
-  git -C "$QUANTBOT_HOME" checkout "$BRANCH"
-  git -C "$QUANTBOT_HOME" pull --ff-only origin "$BRANCH"
+  git -C "$QUANTBOT_HOME" checkout -q "$BRANCH" 2>/dev/null || true
+  # The repository is private, so an unauthenticated Pi cannot fetch. That is a normal state --
+  # the code may have arrived by bundle or rsync instead -- so a failed fetch is a warning, not
+  # a stop. It is still reported loudly, because installing stale code silently is the worse
+  # failure of the two.
+  if git -C "$QUANTBOT_HOME" fetch -q origin --prune 2>/dev/null; then
+    git -C "$QUANTBOT_HOME" merge -q --ff-only "origin/$BRANCH" 2>/dev/null       || echo "     WARNING: could not fast-forward to origin/$BRANCH; using the local checkout"
+  else
+    echo "     NOTE: cannot reach origin (private repo without credentials on this host?)."
+    echo "     Continuing with the checkout already present. Verify the commit below is the"
+    echo "     one you intended -- this step did NOT update it."
+  fi
 else
-  git clone --branch "$BRANCH" "$REPO_URL" "$QUANTBOT_HOME"
+  git clone --branch "$BRANCH" "$REPO_URL" "$QUANTBOT_HOME"     || fail "Cannot clone $REPO_URL. If the repository is private this host has no credentials.
+     Either add a read-only deploy key, or copy the code across from a machine that does have
+     access:  git bundle create /tmp/elrond.bundle $BRANCH
+              scp /tmp/elrond.bundle <pi>:/tmp/
+              git clone -b $BRANCH /tmp/elrond.bundle $QUANTBOT_HOME"
 fi
 cd "$QUANTBOT_HOME"
 if [ "$INSTALL_MODE" = uv ]; then
