@@ -149,6 +149,19 @@ class WslSandbox:
         runner: Runner | None = None,
     ) -> None:
         self._policy = policy or SandboxPolicy()
+        if self._policy.network_enabled:
+            # Refused rather than half-enforced. Filtering a namespace down to an allowlist needs
+            # a veth pair and a NAT rule, which need root; without that, "network enabled" here
+            # would mean the whole namespace opened and only the in-process allowlist standing --
+            # the weaker Windows guarantee, wearing this backend's stronger name. A caller who
+            # genuinely needs egress can use `SandboxRunner`, whose ceiling is stated in its own
+            # docstring. The intended path is the one this design already takes: inputs are
+            # copied in before the child starts, so a normal experiment needs no network at all.
+            raise WslUnavailable(
+                "the WSL backend does not offer network access: an allowlist inside a network "
+                "namespace needs privileges this process does not have, and opening the "
+                "namespace would give a weaker guarantee under a stronger name"
+            )
         self._distro = distro
         self._runner = runner
 
@@ -240,10 +253,9 @@ class WslSandbox:
                 "exit $?",
             ]
         )
-        namespaces = ["--user", "--map-root-user", "--mount", "--pid", "--fork"]
-        if not self._policy.network_enabled:
-            # The whole network stack, not a patched socket module.
-            namespaces.append("--net")
+        # `--net` is unconditional: this backend refuses a network-enabled policy at
+        # construction, so there is no configuration in which the stack is left open.
+        namespaces = ["--user", "--map-root-user", "--mount", "--net", "--pid", "--fork"]
         # bash, not sh. See the `set -e` note above: dash silently lacks `ulimit -u`.
         command = ["unshare", *namespaces, "--", "/bin/bash", "-c", inner]
         try:

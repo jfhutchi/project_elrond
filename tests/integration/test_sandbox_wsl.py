@@ -21,7 +21,7 @@ import subprocess
 import pytest
 
 from quantbot.sandbox import SandboxPolicy
-from quantbot.sandbox.wsl import WslSandbox, wsl_backend_available
+from quantbot.sandbox.wsl import WslSandbox, WslUnavailable, wsl_backend_available
 
 pytestmark = pytest.mark.skipif(
     not wsl_backend_available(),
@@ -180,3 +180,16 @@ print("QUANTBOT", importlib.util.find_spec("quantbot") is not None)
     result = WslSandbox(ROOMY).run(probe)
 
     assert "QUANTBOT False" in result.stdout, result.stdout
+
+
+def test_a_network_enabled_policy_is_refused_rather_than_half_enforced() -> None:
+    """The weaker guarantee must not be available under the stronger name.
+
+    Filtering a network namespace down to an allowlist needs a veth pair and a NAT rule, which
+    need privileges this process does not have. Opening the namespace instead would leave only
+    the in-process allowlist standing -- the Windows backend's ceiling, wearing this backend's
+    reputation. A caller who genuinely needs egress can use `SandboxRunner`, where the ceiling
+    is stated. Refusing at construction means no configuration produces the silent downgrade.
+    """
+    with pytest.raises(WslUnavailable, match="does not offer network access"):
+        WslSandbox(SandboxPolicy(wall_clock_seconds=30.0, network_enabled=True))
