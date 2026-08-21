@@ -7,12 +7,23 @@ from decimal import Decimal
 
 import pytest
 
+from quantbot.domain import (
+    BrokerOrder,
+    Fill,
+    IntentState,
+    OrderIntent,
+    OrderSide,
+    OrderType,
+    StrategyIdentity,
+    TimeInForce,
+)
 from quantbot.research.builder import OutcomeVerdict
 from quantbot.research.manifest import ExecutionPath, StatisticalTest
 from quantbot.research.promotion import (
     ALLOWED_PROMOTIONS,
     MINIMUM_FORWARD_DAYS,
     ForwardObservation,
+    LedgerObservations,
     PromotionLedger,
     PromotionRefused,
     PromotionState,
@@ -21,11 +32,12 @@ from quantbot.research.promotion import (
     demote,
     forward_progress,
     material_change,
+    observe_forward_days,
     promote,
     survivor_objections,
 )
 from quantbot.research.registry import DataRole
-from quantbot.storage import Database
+from quantbot.storage import Database, StorageRepository
 from tests.unit.research.test_builder import (  # reuse the compiled plan and outcome fixtures
     outcome,
 )
@@ -47,9 +59,10 @@ def state(stage: Stage = Stage.REGISTERED, **overrides: object) -> PromotionStat
     return PromotionState(**fields)
 
 
-def observations(
+def hand_built(
     days: int, *, trades_each: int = 1, version: str = "1.3.0", config: str = "cfg-abc"
 ) -> list[ForwardObservation]:
+    """Forward observations nobody traded. Every counter must refuse these."""
     return [
         ForwardObservation(
             strategy_id="adaptive-momentum",
@@ -61,6 +74,79 @@ def observations(
         )
         for index in range(days)
     ]
+
+
+def seed_ledger(
+    session,
+    *,
+    days: int,
+    trades_each: int = 1,
+    strategy_id: str = "adaptive-momentum",
+    version: str = "1.3.0",
+    config: str = "cfg-abc",
+) -> None:
+    """Write the durable facts a real trading day leaves behind.
+
+    A deployment, one qualified `qualification_days` row per session, and real intent/order/fill
+    rows for the trades. This is deliberately laborious: it is the whole point that the only way
+    to make the forward counter move is to make the ledger say a strategy traded.
+    """
+    repository = StorageRepository(session)
+    repository.save_strategy_deployment(
+        StrategyIdentity(
+            strategy_id=strategy_id,
+            version=version,
+            git_commit="abc1234",
+            configuration_hash=config,
+            deployment_timestamp=NOW,
+        )
+    )
+    for index in range(days):
+        trading_date = date(2026, 8, 19) + timedelta(days=index)
+        repository.record_qualification_day(strategy_id, trading_date, qualified=True)
+        for trade in range(trades_each):
+            suffix = f"{index}-{trade}"
+            repository.create_order_intent(
+                OrderIntent(
+                    intent_id=f"intent-{suffix}",
+                    client_order_id=f"client-{suffix}",
+                    strategy_id=strategy_id,
+                    symbol="SPY",
+                    signal_date=trading_date,
+                    side=OrderSide.BUY,
+                    order_type=OrderType.MARKET,
+                    time_in_force=TimeInForce.DAY,
+                    quantity="1",
+                    created_at=NOW,
+                    state=IntentState.RISK_APPROVED,
+                )
+            )
+            repository.save_broker_order(
+                BrokerOrder(
+                    broker_order_id=f"broker-{suffix}",
+                    client_order_id=f"client-{suffix}",
+                    symbol="SPY",
+                    side=OrderSide.BUY,
+                    order_type=OrderType.MARKET,
+                    time_in_force=TimeInForce.DAY,
+                    quantity="1",
+                    filled_quantity="1",
+                    status="filled",
+                    submitted_at=NOW,
+                )
+            )
+            repository.record_fill(
+                Fill(
+                    fill_id=f"fill-{suffix}",
+                    broker_order_id=f"broker-{suffix}",
+                    symbol="SPY",
+                    side=OrderSide.BUY,
+                    quantity="1",
+                    price="500.00",
+                    occurred_at=NOW + timedelta(days=index, minutes=trade),
+                    fee="0",
+                )
+            )
 
 
 def test_there_is_no_transition_into_live_trading() -> None:
@@ -154,45 +240,184 @@ def test_a_backtest_can_never_increment_the_forward_counter() -> None:
             )
 
 
-def test_paper_qualification_needs_the_full_authentic_window() -> None:
-    """The account holds one forward day against a thirty-day window."""
+def test_paper_qualification_needs_the_full_authentic_window(ledger_db: Database) -> None:
+    """The account holds a handful of forward days against a thirty-day window."""
     one_day = state(Stage.PAPER_OBSERVATION)
-    with pytest.raises(PromotionRefused, match="1 authentic forward days") as error:
-        promote(
+
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=1)
+        with pytest.raises(PromotionRefused, match="1 authentic forward days") as error:
+            promote(
+                one_day,
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="seventeen research cycles",
+                now=NOW,
+                observations=observe_forward_days(
+                    session,
+                    strategy_id="adaptive-momentum",
+                    strategy_version="1.3.0",
+                    configuration_hash="cfg-abc",
+                ),
+            )
+        assert "30 and 30 required" in str(error.value)
+
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        qualified = promote(
             one_day,
             Stage.PAPER_QUALIFIED,
             actor="director",
-            reason="seventeen research cycles",
+            reason="window complete",
             now=NOW,
-            observations=observations(1),
+            observations=observe_forward_days(
+                session,
+                strategy_id="adaptive-momentum",
+                strategy_version="1.3.0",
+                configuration_hash="cfg-abc",
+            ),
         )
-    assert "30 and 30 required" in str(error.value)
-
-    qualified = promote(
-        one_day,
-        Stage.PAPER_QUALIFIED,
-        actor="director",
-        reason="window complete",
-        now=NOW,
-        observations=observations(MINIMUM_FORWARD_DAYS),
-    )
     assert qualified.stage is Stage.PAPER_QUALIFIED
 
-    # Enough days but too few trades is still not qualified.
-    with pytest.raises(PromotionRefused, match="30 authentic forward days and 0 trades"):
-        promote(
-            one_day,
-            Stage.PAPER_QUALIFIED,
-            actor="director",
-            reason="days but no trading",
-            now=NOW,
-            observations=observations(MINIMUM_FORWARD_DAYS, trades_each=0),
+
+def test_thirty_sessions_without_trading_is_not_qualification(ledger_db: Database) -> None:
+    """Days and trades are separate counters, and the ledger supplies both separately.
+
+    A strategy that was live for thirty sessions and submitted nothing has thirty days of
+    evidence that it does not trade, which is not thirty days of evidence that it works.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, trades_each=0)
+        with pytest.raises(PromotionRefused, match="30 authentic forward days and 0 trades"):
+            promote(
+                state(Stage.PAPER_OBSERVATION),
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="days but no trading",
+                now=NOW,
+                observations=observe_forward_days(
+                    session,
+                    strategy_id="adaptive-momentum",
+                    strategy_version="1.3.0",
+                    configuration_hash="cfg-abc",
+                ),
+            )
+
+
+def test_forward_observations_nobody_traded_cannot_reach_the_counter() -> None:
+    """The #16 gap: `ForwardObservation` refused a backtest role but not a fabricated day.
+
+    Forward evidence is the only category in this project that cannot be regenerated. A bad
+    backtest can be re-run; a trading day that did not happen cannot be un-invented. So the
+    counter takes `LedgerObservations`, which only `observe_forward_days` can produce.
+
+    The runtime check is the mechanism. The annotation alone would let a perfectly well-formed
+    list of thirty `ForwardObservation`s through, which is exactly the attack.
+    """
+    fabricated = hand_built(MINIMUM_FORWARD_DAYS)
+
+    with pytest.raises(TypeError, match="not forward evidence"):
+        count_forward_days(
+            fabricated,  # type: ignore[arg-type]
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
         )
 
+    with pytest.raises(TypeError, match="not forward evidence"):
+        promote(
+            state(Stage.PAPER_OBSERVATION),
+            Stage.PAPER_QUALIFIED,
+            actor="director",
+            reason="thirty days, allegedly",
+            now=NOW,
+            observations=fabricated,  # type: ignore[arg-type]
+        )
 
-def test_a_material_change_restarts_the_window_by_excluding_the_old_days() -> None:
+    # Nor by constructing the wrapper directly around the same fabricated list.
+    with pytest.raises(TypeError, match="cannot be constructed, only observed"):
+        LedgerObservations(fabricated, token=object())
+
+
+def test_a_deployment_the_ledger_never_recorded_yields_no_forward_evidence(
+    ledger_db: Database,
+) -> None:
+    """Qualified days alone are not enough: they must belong to *this* identity.
+
+    Without the deployment check a strategy could inherit the trading history of whatever else
+    ran under the same id, which is the material-change rule failing open at the source.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, version="1.3.0", config="cfg-abc")
+
+        same = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+        assert len(same) == MINIMUM_FORWARD_DAYS
+
+        # Same version, different configuration: a different strategy wearing the same number.
+        reconfigured = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-changed",
+        )
+        assert len(reconfigured) == 0
+
+        # A version that never deployed at all.
+        unknown = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="9.9.9",
+            configuration_hash="cfg-abc",
+        )
+        assert len(unknown) == 0
+
+
+def test_the_durable_ladder_reads_forward_evidence_and_refuses_to_be_told_it(
+    ledger_db: Database,
+) -> None:
+    """`PromotionLedger` has a session, so it goes and looks rather than asking the caller."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, strategy_id="adaptive-momentum")
+        ladder = PromotionLedger(session)
+        ladder.enter(state(Stage.PAPER_OBSERVATION))
+
+        with pytest.raises(PromotionRefused, match="read from the durable ledger, not supplied"):
+            ladder.promote(
+                "adaptive-momentum",
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="I brought my own",
+                now=NOW,
+                observations=hand_built(MINIMUM_FORWARD_DAYS),
+            )
+
+        moved = ladder.promote(
+            "adaptive-momentum",
+            Stage.PAPER_QUALIFIED,
+            actor="director",
+            reason="the ledger agrees",
+            now=NOW,
+        )
+
+    assert moved.stage is Stage.PAPER_QUALIFIED
+
+
+def test_a_material_change_restarts_the_window_by_excluding_the_old_days(
+    ledger_db: Database,
+) -> None:
     """The observations were of a different strategy, so they are not observations of this one."""
-    collected = observations(MINIMUM_FORWARD_DAYS)
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        collected = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
     days, trades = count_forward_days(
         collected, strategy_version="1.3.0", configuration_hash="cfg-abc"
     )
@@ -254,10 +479,16 @@ def test_demotion_is_not_gated() -> None:
         )
 
 
-def test_forward_progress_reports_the_honest_distance() -> None:
-    progress = forward_progress(
-        observations(1), strategy_version="1.3.0", configuration_hash="cfg-abc"
-    )
+def test_forward_progress_reports_the_honest_distance(ledger_db: Database) -> None:
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=1)
+        observed = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+    progress = forward_progress(observed, strategy_version="1.3.0", configuration_hash="cfg-abc")
     assert progress["forward_days"] == Decimal("1")
     assert progress["days_required"] == Decimal("30")
     assert progress["forward_days"] < progress["days_required"]

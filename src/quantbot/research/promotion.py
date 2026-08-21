@@ -21,10 +21,21 @@ structure of the data, which is checked rather than asserted.
 
 **Paper qualification counts authentic forward observations and nothing else.** A backtest,
 a literature claim, an exploratory worker result and an underpowered outcome all increment the
-counter by zero, and `count_forward_days` refuses to accept anything not sourced from the paper
-account. The account currently holds a single trading day against a thirty-day window; a
-narrative treating seventeen research cycles as progress toward deployment is confusing backtest
-volume with forward evidence, and the counter is what makes that mechanically impossible.
+counter by zero. The account currently holds a handful of trading days against a thirty-day
+window; a narrative treating seventeen research cycles as progress toward deployment is confusing
+backtest volume with forward evidence, and the counter is what makes that mechanically
+impossible.
+
+**And the observations are read, not accepted.** `ForwardObservation` refuses a non-paper role,
+which stops a backtest being counted, but for a while it did not stop a caller assembling thirty
+perfectly well-formed observations of days nobody traded. `count_forward_days` now takes
+`LedgerObservations`, which only `observe_forward_days` can produce, and it checks that at runtime
+rather than only in the annotation -- a list satisfies every static reading of the old signature,
+which was the whole attack. Three durable facts have to agree before a day counts: the deployment
+record matches this exact configuration, the trading system marked the session qualified, and the
+trades are reached through `order_intents`. Forward evidence is the one category here that cannot
+be regenerated: a bad backtest can be re-run, a trading day that did not happen cannot be
+un-invented.
 
 **A material change restarts the window.** Not a warning -- the observations were of a different
 strategy, so they are not observations of this one.
@@ -32,7 +43,7 @@ strategy, so they are not observations of this one.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterator, Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -118,8 +129,88 @@ class ForwardObservation(FrozenModel):
         return self
 
 
+#: Held by `LedgerObservations` so the class cannot be constructed outside this module. The same
+#: device as `ProtectedAccess` in `runner.py`, for the same reason: a rule that forward evidence
+#: must come from the ledger is a rule, and a type that only the ledger reader can produce is a
+#: mechanism. `promote()` stays a pure function -- it takes data, not a session -- and still
+#: cannot be handed observations somebody typed.
+_LEDGER_TOKEN = object()
+
+
+class LedgerObservations:
+    """Forward observations read out of the durable trading ledger, and nothing else.
+
+    `ForwardObservation` already refuses a non-`FORWARD_PAPER` role, which stops a backtest being
+    counted. It does not stop a caller constructing one by hand, and forward evidence is the only
+    category in this project that cannot be regenerated: a bad backtest can be re-run, a trading
+    day that did not happen cannot be un-invented. CLAUDE.md forbids fabricating forward
+    observations, fills and trading days; this makes it unavailable rather than forbidden.
+    """
+
+    __slots__ = ("_observations",)
+
+    def __init__(self, observations: Sequence[ForwardObservation], *, token: object) -> None:
+        if token is not _LEDGER_TOKEN:
+            raise TypeError(
+                "LedgerObservations comes from observe_forward_days() reading the durable "
+                "ledger; forward evidence cannot be constructed, only observed"
+            )
+        self._observations = tuple(observations)
+
+    def __iter__(self) -> Iterator[ForwardObservation]:
+        return iter(self._observations)
+
+    def __len__(self) -> int:
+        return len(self._observations)
+
+
+def observe_forward_days(
+    session: Session,
+    *,
+    strategy_id: str,
+    strategy_version: str,
+    configuration_hash: str,
+) -> LedgerObservations:
+    """Derive forward observations for one strategy identity from the durable ledger.
+
+    Three ledger facts have to agree before a day counts:
+
+    1. `strategy_deployments` records this `(strategy_id, version)` with **this**
+       `configuration_hash`. A deployment under a different configuration is a different
+       strategy, and its days belong to that one.
+    2. `qualification_days` marks the date qualified. That row is written by the trading
+       system's own daily check, so a day the system did not consider a real session cannot
+       become one here.
+    3. Fills are counted through `order_intents`, so an order no strategy submitted has no route
+       into the trade count.
+
+    Returns empty rather than raising when the identity has never deployed. Empty fails closed --
+    `promote()` refuses with zero days -- whereas raising would tempt a caller into an
+    ``except: pass`` that silently skipped the check. A freshly changed identity legitimately has
+    no deployment yet, which is exactly the case the material-change rule wants to read as zero.
+    """
+    repository = StorageRepository(session)
+    deployment = repository.get_strategy_deployment(strategy_id, strategy_version)
+    if deployment is None or deployment.configuration_hash != configuration_hash:
+        return LedgerObservations((), token=_LEDGER_TOKEN)
+
+    trades_by_date = repository.fills_by_signal_date(strategy_id)
+    observations = [
+        ForwardObservation(
+            strategy_id=strategy_id,
+            trading_date=day.trading_date,
+            trades=trades_by_date.get(day.trading_date, 0),
+            role=DataRole.FORWARD_PAPER,
+            strategy_version=strategy_version,
+            configuration_hash=configuration_hash,
+        )
+        for day in repository.list_qualification_days(strategy_id, qualified=True)
+    ]
+    return LedgerObservations(observations, token=_LEDGER_TOKEN)
+
+
 def count_forward_days(
-    observations: Sequence[ForwardObservation], *, strategy_version: str, configuration_hash: str
+    observations: LedgerObservations, *, strategy_version: str, configuration_hash: str
 ) -> tuple[int, int]:
     """Days and trades observed for exactly this strategy identity.
 
@@ -127,7 +218,16 @@ def count_forward_days(
     a caveat: they were observations of a different strategy, so they are not observations of
     this one. That is the material-change rule, applied by filtering rather than by trusting a
     caller to reset a counter.
+
+    The `LedgerObservations` check is at runtime and not only in the annotation, because an
+    annotation is not a control: a plain list of hand-built `ForwardObservation`s satisfies every
+    static reading of this signature and would count perfectly well. That is the entire attack.
     """
+    if not isinstance(observations, LedgerObservations):
+        raise TypeError(
+            "forward days are counted from LedgerObservations returned by observe_forward_days();"
+            " a sequence assembled by a caller is not forward evidence, whatever it contains"
+        )
     matching = [
         observation
         for observation in observations
@@ -199,7 +299,7 @@ def promote(
     reason: str,
     now: datetime,
     outcome: ExperimentOutcome | None = None,
-    observations: Sequence[ForwardObservation] = (),
+    observations: LedgerObservations | None = None,
     integrity_clear: bool = True,
 ) -> PromotionState:
     """Move a strategy up, refusing every stage it has not earned.
@@ -226,6 +326,13 @@ def promote(
             raise PromotionRefused(state.strategy_id, target, "; ".join(objections))
 
     if target is Stage.PAPER_QUALIFIED:
+        if observations is None:
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                "no ledger-derived forward observations were supplied; call "
+                "observe_forward_days() rather than assembling them",
+            )
         days, trades = count_forward_days(
             observations,
             strategy_version=state.strategy_version,
@@ -295,7 +402,7 @@ def _rank(stage: Stage) -> int:
 
 
 def forward_progress(
-    observations: Sequence[ForwardObservation], *, strategy_version: str, configuration_hash: str
+    observations: LedgerObservations, *, strategy_version: str, configuration_hash: str
 ) -> Mapping[str, Decimal]:
     """How far qualification actually is, for the dashboard and for honesty."""
     days, trades = count_forward_days(
@@ -314,6 +421,7 @@ __all__ = [
     "MINIMUM_FORWARD_DAYS",
     "MINIMUM_FORWARD_TRADES",
     "ForwardObservation",
+    "LedgerObservations",
     "PromotionRefused",
     "PromotionState",
     "Stage",
@@ -321,6 +429,7 @@ __all__ = [
     "demote",
     "forward_progress",
     "material_change",
+    "observe_forward_days",
     "promote",
     "survivor_objections",
 ]
@@ -340,6 +449,7 @@ class PromotionLedger:
     """
 
     def __init__(self, session: Session) -> None:
+        self._session = session
         self._repository = StorageRepository(session)
 
     def current(self, strategy_id: str) -> PromotionState | None:
@@ -378,8 +488,28 @@ class PromotionLedger:
 
         A refusal writes no event. A promotion that did not happen is not a move, and recording
         the attempt would put refused transitions in the same history as earned ones.
+
+        Forward observations are **read here, not accepted here**. Paper qualification is the one
+        gate whose evidence cannot be regenerated if it turns out to be wrong, so the ladder goes
+        to the ledger itself rather than believing a caller about how many days a strategy has
+        traded. Passing them is refused rather than ignored: silently discarding an argument a
+        caller believed was doing something is how a control becomes decorative.
         """
-        moved = promote(self._require(strategy_id), target, **kwargs)  # type: ignore[arg-type]
+        state = self._require(strategy_id)
+        if target is Stage.PAPER_QUALIFIED:
+            if "observations" in kwargs:
+                raise PromotionRefused(
+                    strategy_id,
+                    target,
+                    "forward observations are read from the durable ledger, not supplied",
+                )
+            kwargs["observations"] = observe_forward_days(
+                self._session,
+                strategy_id=strategy_id,
+                strategy_version=state.strategy_version,
+                configuration_hash=state.configuration_hash,
+            )
+        moved = promote(state, target, **kwargs)  # type: ignore[arg-type]
         self._save(moved, direction="PROMOTION")
         return moved
 

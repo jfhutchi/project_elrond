@@ -10,7 +10,7 @@ from decimal import Decimal
 from enum import Enum
 from typing import TypeAlias, cast
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
@@ -1627,6 +1627,34 @@ class StorageRepository:
             qualified=bool(row["qualified"]),
             detail=_decode_json(row["detail_json"]),
         )
+
+    def fills_by_signal_date(self, strategy_id: str) -> dict[date, int]:
+        """How many fills this strategy took, per trading date, straight from the ledger.
+
+        Attributed by `order_intents.signal_date` rather than by re-deriving a date from the
+        fill's UTC timestamp. The signal date is the trading system's own record of which
+        session an order belongs to; a fill at 20:00 Eastern is stored as 00:00 UTC the next
+        day, so a UTC-derived date would credit a session that had not happened. Reusing the
+        recorded attribution avoids inventing a second, disagreeing one.
+
+        Reached through the intent, so an order nobody's strategy submitted has no route into
+        this count.
+        """
+        rows = self._session.execute(
+            select(order_intents.c.signal_date, func.count())
+            .select_from(
+                fills.join(
+                    broker_orders,
+                    fills.c.broker_order_id == broker_orders.c.broker_order_id,
+                ).join(
+                    order_intents,
+                    broker_orders.c.client_order_id == order_intents.c.client_order_id,
+                )
+            )
+            .where(order_intents.c.strategy_id == strategy_id)
+            .group_by(order_intents.c.signal_date)
+        ).all()
+        return {date.fromisoformat(str(row[0])): int(row[1]) for row in rows}
 
     def count_qualification_days(self, strategy_id: str) -> int:
         rows = self._session.execute(
