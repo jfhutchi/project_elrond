@@ -101,3 +101,54 @@ def test_the_generator_and_critic_resolve_to_different_models() -> None:
     critic = runtime.resolve(ModelRole.CRITIC, now=datetime.now(UTC))
 
     assert generator.identity != critic.identity
+
+
+def test_the_judgment_critic_either_produces_a_usable_critique_or_is_refused() -> None:
+    """#7's calibration box: a weak model must not silently pass as judgment coverage.
+
+    Measured against `mistral:7b`, which is the point -- calibration against a strong model
+    proves nothing about the failure mode this guards. Two real defects surfaced doing it, and
+    both were fixed by making the *instruction* clearer, never the validation looser:
+
+    1. It returned `"verdict": "REVIEW"`, which is not one of the three allowed values. The
+       schema refused it. Guessing that REVIEW meant REVISE would have been inventing a verdict.
+    2. It then graded every dimension with a severity and **no finding** -- labels with no
+       content. "confounders: BLOCKING" that does not say what the confounder is can neither be
+       acted on nor dismissed, so it is refused.
+
+    Prompt v3 says to include an entry only where there is a concrete problem to state. After
+    that, four of four runs produced usable critiques.
+
+    What is asserted here is the disjunction, not a particular outcome: either a critique that
+    carries real content, or a clean refusal. The one thing that must never happen is a critique
+    that looks like coverage and contains none, and that is what every assertion below checks.
+    """
+    from quantbot.research.critic import MECHANICAL_CHECKS
+    from quantbot.research.model_critic import ModelCritic, ModelCriticRefused
+
+    def describe(hypothesis_id: str, version: int) -> str:
+        return (
+            f"{hypothesis_id} v{version}: a 200-day trend filter on SPY earns annualised "
+            "Sharpe >= 1.0. Universe SPY only. Falsified if the Sharpe fails to clear the "
+            "luck bar."
+        )
+
+    reviewer = ModelCritic(build_model_runtime(), describe)
+    try:
+        review = reviewer.review("H-LIVE-CRITIC", 1, now=datetime.now(UTC))
+    except ModelCriticRefused:
+        # A clean refusal is a pass. The model failed to produce a usable review and said so
+        # loudly, which is the behaviour being verified.
+        return
+
+    assert review.reasons, "a verdict without reasons is a vote"
+    for objection in review.objections:
+        assert objection.finding.strip(), "a severity label with no finding is not an objection"
+        assert objection.evidence["source"] == "model-judgment"
+        assert objection.check not in MECHANICAL_CHECKS, (
+            f"the model opined on {objection.check}, which is computed elsewhere"
+        )
+    assert set(MECHANICAL_CHECKS) <= set(review.unassessed), (
+        "silence on the mechanical checks must not read as approval"
+    )
+    assert reviewer.last_response is not None

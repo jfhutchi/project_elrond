@@ -47,7 +47,7 @@ from quantbot.research.models import ModelResponse, ModelRole, ModelRuntime, Pro
 
 CRITIC_PROMPT = PromptTemplate(
     name="adversarial-critic",
-    version="1",
+    version="3",
     text="""You are reviewing a pre-registered trading research hypothesis. Your job is to find
 reasons it is wrong, not reasons it is interesting.
 
@@ -61,11 +61,24 @@ an opinion about them from you would be indistinguishable from a measurement.
 Hypothesis:
 {hypothesis}
 
-Return JSON with keys: verdict (PROCEED, REVISE or REJECT), reasons (list of strings, at least
-one), objections (list of objects with dimension, severity of exactly BLOCKING or ADVISORY, and
-finding), falsification_tests (list of strings), unassessed (list of dimensions you could not
-judge). If a dimension cannot be judged from what you were given, say so in unassessed rather
-than guessing.""",
+Return only JSON, with these keys:
+
+- "verdict": copy exactly one of these three strings, character for character. Do not
+  substitute a synonym. The only accepted values are:
+    "PROCEED"  - no objection that should stop this
+    "REVISE"   - fixable problems; say what they are
+    "REJECT"   - the idea does not survive scrutiny
+- "reasons": list of strings, at least one.
+- "objections": list of objects. Include an entry ONLY for a dimension where you have a
+  specific, concrete problem to state. Do not grade every dimension. Each entry needs all
+  three of:
+    "dimension" - which of the dimensions above
+    "severity"  - exactly "BLOCKING" or "ADVISORY"
+    "finding"   - one or two sentences saying what is actually wrong. An objection without
+                  this is a label nobody can act on or dismiss, and it will be rejected.
+- "falsification_tests": list of strings.
+- "unassessed": list of the dimensions above you could not judge from what you were given. Say
+  so here rather than guessing.""",
 )
 
 
