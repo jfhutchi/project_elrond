@@ -6,6 +6,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import ValidationError
 
 from quantbot.research.models import (
     CircuitBreaker,
@@ -250,3 +251,78 @@ def test_an_unreadable_backend_response_is_an_error_not_an_empty_answer() -> Non
 
     with pytest.raises(ModelError, match="unreadable response"):
         OpenAICompatibleTransport(post).complete(spec(), "hello", timeout_seconds=5.0)
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        pytest.param("", id="empty string"),
+        pytest.param("   \n\t ", id="whitespace only"),
+        pytest.param(None, id="null content"),
+        pytest.param({"text": "hi"}, id="not a string"),
+    ],
+)
+def test_a_missing_completion_is_a_failure_rather_than_a_silent_no_objection(
+    content: object,
+) -> None:
+    """An empty answer becoming "the model had no objection" is the failure class this exists for.
+
+    Checked at the transport, not at `ModelResponse`: the response model's non-empty constraint
+    would only fire for the empty string, and would let `None` through as the literal text
+    "None" -- an answer nobody wrote, attributed to a model, carrying provenance.
+    """
+
+    def post(url: str, payload: object, *, timeout_seconds: float) -> str:
+        return json.dumps({"choices": [{"message": {"content": content}}]})
+
+    with pytest.raises(ModelError, match="silence is not agreement"):
+        OpenAICompatibleTransport(post).complete(spec(), "hello", timeout_seconds=5.0)
+
+
+def test_unusable_token_accounting_is_an_error_not_a_negative_budget() -> None:
+    def post(url: str, payload: object, *, timeout_seconds: float) -> str:
+        return json.dumps(
+            {
+                "choices": [{"message": {"content": "a real answer"}}],
+                "usage": {"prompt_tokens": -5, "completion_tokens": 40},
+            }
+        )
+
+    with pytest.raises(ModelError, match="negative token usage"):
+        OpenAICompatibleTransport(post).complete(spec(), "hello", timeout_seconds=5.0)
+
+    def unparseable(url: str, payload: object, *, timeout_seconds: float) -> str:
+        return json.dumps(
+            {
+                "choices": [{"message": {"content": "a real answer"}}],
+                "usage": "not an object",
+            }
+        )
+
+    with pytest.raises(ModelError, match="unreadable response"):
+        OpenAICompatibleTransport(unparseable).complete(spec(), "hello", timeout_seconds=5.0)
+
+
+def test_a_spec_cannot_carry_the_credential_that_belongs_to_the_transport() -> None:
+    """A spec is hashed into provenance and serialised into manifests. The transport is not."""
+    with pytest.raises(ValidationError, match="shaped like a credential"):
+        ModelSpec(
+            provider="openai",
+            model="gpt-4o",
+            version="2026-08-01",
+            endpoint="https://api.example/v1?api_key=sk-live-0123456789abcdef01",
+            capabilities=ModelCapabilities(context_tokens=128000),
+        )
+
+    with pytest.raises(ValidationError, match="shaped like a credential"):
+        ModelSpec(
+            provider="openai",
+            model="gpt-4o",
+            version="2026-08-01",
+            endpoint="https://api.example/v1",
+            parameters={"api_key": "sk-live-0123456789abcdef01"},
+            capabilities=ModelCapabilities(context_tokens=128000),
+        )
+
+    # An ordinary endpoint and ordinary parameters are untouched.
+    assert spec().endpoint == "http://localhost:11434/v1"

@@ -20,7 +20,8 @@ it raises rather than redacting: a prompt is sent to a third party, and quietly 
 that should never have been there hides the bug that put it there.
 
 Transport is injected, following `market_data.transports`, so an OpenAI-compatible endpoint --
-Ollama, LM Studio, vLLM, llama.cpp -- is exercised in tests without a network.
+Ollama, LM Studio, vLLM, llama.cpp -- is exercised in tests without a network. The concrete
+httpx implementation of `PostJson` lives in `research.transports`, beside the other two.
 """
 
 from __future__ import annotations
@@ -75,6 +76,15 @@ class RoutingError(ModelError):
     """Raised when a routing table violates a rule that is not negotiable."""
 
 
+class ModelTransportError(ModelError):
+    """Raised when the endpoint could not be reached, or answered with something other than 200.
+
+    Carries a status code and nothing else. Provider error bodies routinely echo part of the
+    key that was rejected, and this message is interpolated into `ModelUnavailable` and from
+    there into logs, so the body does not travel with it.
+    """
+
+
 class FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -99,6 +109,23 @@ class ModelSpec(FrozenModel):
     endpoint: Text
     parameters: dict[str, str] = Field(default_factory=dict)
     capabilities: ModelCapabilities
+
+    @model_validator(mode="after")
+    def refuse_embedded_credentials(self) -> Self:
+        """A spec is hashed into provenance and serialised into manifests; a key must not be here.
+
+        The key belongs to the transport, which is neither hashed nor serialised. Using the same
+        matcher `manifest.py` uses, and raising rather than redacting, for the same reason: a
+        stripped key hides whatever assembled it.
+        """
+        carried = [self.endpoint, *self.parameters.values()]
+        if any(looks_like_credential(value) for value in carried):
+            raise ValueError(
+                f"{self.provider}/{self.model} carries something shaped like a credential in "
+                "its endpoint or parameters; give it to the transport instead, which is never "
+                "hashed or serialised"
+            )
+        return self
 
     @property
     def identity(self) -> tuple[str, str, str]:
@@ -326,14 +353,18 @@ class OpenAICompatibleTransport:
         try:
             decoded = json.loads(body)
             text = decoded["choices"][0]["message"]["content"]
-            usage = decoded.get("usage", {})
-        except (json.JSONDecodeError, KeyError, IndexError, TypeError) as error:
+            usage = decoded.get("usage") or {}
+            prompt_tokens = int(usage.get("prompt_tokens", 0))
+            completion_tokens = int(usage.get("completion_tokens", 0))
+        except (ValueError, KeyError, IndexError, TypeError, AttributeError) as error:
             raise ModelError(f"{spec.model} returned an unreadable response") from error
-        return (
-            str(text),
-            int(usage.get("prompt_tokens", 0)),
-            int(usage.get("completion_tokens", 0)),
-        )
+        if not isinstance(text, str) or not text.strip():
+            # An empty completion becoming "the model had no objection" is precisely the
+            # failure this project is built to refuse. A missing answer is not an answer.
+            raise ModelError(f"{spec.model} returned no completion text; silence is not agreement")
+        if prompt_tokens < 0 or completion_tokens < 0:
+            raise ModelError(f"{spec.model} reported negative token usage")
+        return text, prompt_tokens, completion_tokens
 
 
 class PostJson(Protocol):
@@ -357,6 +388,7 @@ __all__ = [
     "ModelRole",
     "ModelRuntime",
     "ModelSpec",
+    "ModelTransportError",
     "ModelUnavailable",
     "OpenAICompatibleTransport",
     "PostJson",

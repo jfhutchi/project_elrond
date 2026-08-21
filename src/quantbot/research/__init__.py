@@ -120,8 +120,10 @@ from quantbot.research.models import (
     ModelRole,
     ModelRuntime,
     ModelSpec,
+    ModelTransportError,
     ModelUnavailable,
     OpenAICompatibleTransport,
+    PostJson,
     PromptTemplate,
     RoleRouting,
     RoutingError,
@@ -205,6 +207,7 @@ from quantbot.research.sources import (
     gates_promotion,
     worth_testing,
 )
+from quantbot.research.transports import HttpxModelTransport
 from quantbot.research.workers import (
     ResearchWorker,
     UnsupportedSemantics,
@@ -294,9 +297,12 @@ __all__ = [
     "ModelResponse",
     "ModelRole",
     "ModelRuntime",
+    "HttpxModelTransport",
     "ModelSpec",
+    "ModelTransportError",
     "ModelUnavailable",
     "OpenAICompatibleTransport",
+    "PostJson",
     "PromptTemplate",
     "RoleRouting",
     "RoutingError",

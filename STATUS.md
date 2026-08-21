@@ -841,6 +841,12 @@ Nothing calls an LLM anywhere in this system. `ModelRuntime` is wired and unused
 deterministic and names the five judgment dimensions it did not assess. No autonomous loop runs:
 each gate is callable, none is driven.
 
+`research.transports.HttpxModelTransport` now supplies the wire the runtime was missing — an
+OpenAI-compatible `/chat/completions` client covering Ollama, LM Studio, llama.cpp, vLLM and the
+hosted APIs. It is exercised through `httpx.MockTransport`, which drives the production request
+path with no network. **No endpoint has been contacted and no composition root constructs one**;
+the runtime remains infrastructure waiting for #13 and #3 to have something to route.
+
 ### The next action
 
 #13 in the stated order. Note before starting it: a discovery engine against an **exhausted**
