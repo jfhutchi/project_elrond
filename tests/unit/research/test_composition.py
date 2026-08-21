@@ -9,6 +9,7 @@ import pytest
 
 from quantbot.research.composition import (
     API_KEY,
+    CODER,
     CONTEXT_TOKENS,
     CRITIC,
     CRITIC_MIN_CONTEXT,
@@ -154,6 +155,7 @@ def test_what_it_builds_actually_completes_a_call() -> None:
         endpoint="http://localhost:11434/v1",
         generator="qwen2.5:32b",
         critic="llama3.3:70b",
+        coder="qwen2.5:32b",
         context_tokens=32768,
         critic_minimum_context_tokens=8192,
         api_key=None,
@@ -181,3 +183,30 @@ def test_what_it_builds_actually_completes_a_call() -> None:
     assert not response.is_fallback
     assert captured, "the request reached the wire"
     assert json.loads(captured[0].content)["model"] == "qwen2.5:32b"
+
+
+def test_the_coder_role_defaults_to_the_generator_and_never_to_the_critic(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Writing an implementation is generation, so it routes to the generator.
+
+    Deliberately not the critic. The distinct-identity rule exists so that whatever reviews a
+    proposal is not whatever produced it, and code is a proposal about how to measure something.
+    A critic that had also written the implementation would be reviewing its own work at the one
+    point where nobody else reads the source.
+
+    It defaults rather than being required: an operator who configured two models has configured
+    enough to run, and a third mandatory variable would stop research for a decision nobody has
+    a reason to make yet.
+    """
+    monkeypatch.setenv(ENDPOINT, "http://localhost:11434/v1")
+    monkeypatch.setenv(GENERATOR, "llama3.1:8b")
+    monkeypatch.setenv(CRITIC, "mistral:7b")
+    monkeypatch.delenv(CODER, raising=False)
+
+    settings = model_configuration()
+    assert settings.coder == "llama3.1:8b"
+    assert settings.coder != settings.critic
+
+    monkeypatch.setenv(CODER, "deepseek-coder:6.7b")
+    assert model_configuration().coder == "deepseek-coder:6.7b"

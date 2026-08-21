@@ -40,6 +40,8 @@ from quantbot.research.transports import HttpxModelTransport
 ENDPOINT = "QUANTBOT_MODEL_ENDPOINT"
 GENERATOR = "QUANTBOT_MODEL_GENERATOR"
 CRITIC = "QUANTBOT_MODEL_CRITIC"
+#: Optional. Defaults to the generator, because writing an implementation is generation.
+CODER = "QUANTBOT_MODEL_CODER"
 API_KEY = "QUANTBOT_MODEL_API_KEY"
 CONTEXT_TOKENS = "QUANTBOT_MODEL_CONTEXT_TOKENS"
 CRITIC_MIN_CONTEXT = "QUANTBOT_CRITIC_MIN_CONTEXT_TOKENS"
@@ -56,6 +58,8 @@ class ModelConfiguration:
     endpoint: str
     generator: str
     critic: str
+    #: Who writes experiment implementations. Defaults to the generator.
+    coder: str
     context_tokens: int
     critic_minimum_context_tokens: int
     api_key: SecretStr | None
@@ -100,6 +104,10 @@ def model_configuration() -> ModelConfiguration:
         endpoint=_required(ENDPOINT, "there is nowhere to send a completion"),
         generator=generator,
         critic=critic,
+        # Defaults to the generator rather than being required. An operator who has configured
+        # two models has configured enough to run; making this a third required variable would
+        # mean research could not start without a decision nobody has a reason to make yet.
+        coder=os.environ.get(CODER, "").strip() or generator,
         context_tokens=_positive_int(CONTEXT_TOKENS, 8192),
         critic_minimum_context_tokens=_positive_int(CRITIC_MIN_CONTEXT, 8192),
         # A local endpoint legitimately has no key, and an empty string is not a key. Storing
@@ -155,6 +163,14 @@ def build_model_runtime(
                 _spec(settings.generator, settings.endpoint, settings.context_tokens),
             ),
             ModelRole.CRITIC: (_spec(settings.critic, settings.endpoint, settings.context_tokens),),
+            # Code generation is a generation task, so it routes to the generator by default.
+            # Deliberately *not* the critic: the distinct-identity rule exists so that whatever
+            # reviews a proposal is not whatever produced it, and code is a proposal about how
+            # to measure something. A critic that had also written the implementation would be
+            # reviewing its own work at the one point where nobody else reads the source.
+            ModelRole.CODER: (
+                _spec(settings.coder, settings.endpoint, settings.context_tokens),
+            ),
         },
         critic_minimum_context_tokens=settings.critic_minimum_context_tokens,
         critic_requires=STRUCTURED_OUTPUT,
