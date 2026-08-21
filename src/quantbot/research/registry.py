@@ -120,11 +120,13 @@ class SearchOrigin(StrEnum):
     #: A human states the number and is recorded as having stated it. Auditable, and what keeps
     #: the gate from paralysing research before a discovery engine exists to measure it (#13).
     OPERATOR_ATTESTED = "OPERATOR_ATTESTED"
-    #: Derived from a durable search record. Not yet reachable: nothing in this system emits
-    #: search telemetry, so a registration claiming MEASURED is claiming provenance that cannot
-    #: exist, and `validate_draft` refuses it. Declaring it registrable before there is a
-    #: producer would have reopened the laundering path one enum value across from where #23
-    #: closed it -- an agent that may not self-report a count could simply call it measured.
+    #: Derived from a durable `search_runs` row. Refused outright until 0009, because while
+    #: nothing emitted search telemetry a registration claiming MEASURED was claiming provenance
+    #: that could not exist -- which would have reopened the laundering path one enum value
+    #: across from where #23 closed it. `SubprocessWorker` now discloses a cardinality and
+    #: `record_search_run` persists it, so the registry checks that the row exists *and* that
+    #: the declared count matches it. Naming a real search and registering a smaller number is
+    #: the original defect wearing a reference, so both halves are verified.
     MEASURED = "MEASURED"
     #: Rows that predate this distinction. Never selectable by a new registration; it exists so
     #: the 0007 backfill does not have to call those rows attested or measured, which would
@@ -133,8 +135,7 @@ class SearchOrigin(StrEnum):
 
 
 #: Origins a new registration may declare. `LEGACY_SELF_REPORTED` is readable and never
-#: writable; `MEASURED` is reserved until something actually emits search telemetry to derive it
-#: from. Both are refused by `HypothesisDraft.validate_draft` with their own explanation.
+#: writable, and is refused by `HypothesisDraft.validate_draft` with its own explanation.
 REGISTRABLE_ORIGINS = frozenset(
     {
         SearchOrigin.NO_DATA_DEPENDENT_SEARCH,

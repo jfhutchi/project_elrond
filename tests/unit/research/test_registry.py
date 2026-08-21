@@ -1256,7 +1256,7 @@ def test_measured_requires_a_durable_record_and_a_matching_count(database: Datab
             make_draft(search_cardinality=500, search_origin=SearchOrigin.MEASURED)
 
         # Naming a record that does not exist.
-        with pytest.raises(RegistrationRefused, match="not\s+recorded"):
+        with pytest.raises(RegistrationRefused, match=r"not\s+recorded"):
             register(
                 HypothesisRegistry(session),
                 make_draft(
@@ -1461,3 +1461,80 @@ def test_two_families_jointly_exhaust_a_range_neither_could_alone(database: Data
     # And the range is still spent, because the burden belongs to the data.
     assert consumption.status == "EXHAUSTED"
     assert consumption.usable is False
+
+
+def test_no_route_through_the_gate_is_opened_by_overstating_an_input(
+    database: Database,
+) -> None:
+    """#5's closure test: three lies a registrant benefits from, none of which lowers the bar.
+
+    Each of these is an input the registry cannot compute for itself and therefore has to be
+    told. That is exactly the set worth attacking together rather than one test at a time --
+    the gate is only as strong as the weakest number it accepts on trust, and a suite that
+    checks them separately can still leave a combination that works.
+    """
+    registrable = make_draft(
+        effect=sharpe_effect(expected=Decimal("1.0")), available_observations=2200
+    )
+    with database.transaction() as session:
+        registered = register(HypothesisRegistry(session), registrable, now=NOW)
+
+    # 1. An inflated sample count. `available_observations` was the planning number; the gate
+    #    requires a verified one and does not fall back to the claim.
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as unverified:
+        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW)
+    assert unverified.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+
+    # 2. A verified count taken over a wider window than the registration froze. The dataset
+    #    matches and the number is real; it is simply a count of different data. This is the
+    #    declared-sample defect wearing a verified label.
+    wider = ObservedSample(
+        observations=9000,
+        dataset="sip-us-equities-daily",
+        start_date=date(1990, 1, 2),
+        end_date=date(2026, 8, 18),
+        method="every session since 1990",
+        counted_at=NOW,
+    )
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as widened:
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=wider
+        )
+    assert widened.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+    assert "no registered window covers" in widened.value.detail
+
+    # 3. A count from a dataset the registration never named.
+    elsewhere = counted(2200, dataset="crypto-daily")
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as foreign:
+        HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=elsewhere
+        )
+    assert foreign.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+
+    # 4. A search burden that does not match its stated origin. There is no self-report origin
+    #    to declare -- that path was removed rather than validated -- so the remaining move is
+    #    to run a wide search and file it under an origin that means "searched nothing".
+    with pytest.raises(ValidationError, match="searched nothing"):
+        make_draft(
+            hypothesis_id="H-2026-009",
+            materially_different="a second look after a wide search",
+            search_cardinality=500,
+            search_origin=SearchOrigin.NO_DATA_DEPENDENT_SEARCH,
+        )
+
+    # 5. And MEASURED cannot be claimed without a durable search record behind it.
+    with pytest.raises(ValidationError):
+        make_draft(
+            hypothesis_id="H-2026-010",
+            materially_different="a second look after a measured search",
+            search_cardinality=500,
+            search_origin=SearchOrigin.MEASURED,
+        )
+
+    # And an honest count over the registered window still clears, so none of the above is a
+    # blanket refusal dressed up as four protections.
+    with database.transaction() as session:
+        clearance = HypothesisRegistry(session).verify_for_execution(
+            "H-2026-001", 1, now=NOW, observed=counted(2200)
+        )
+    assert clearance.registration_hash == registered.content_hash
