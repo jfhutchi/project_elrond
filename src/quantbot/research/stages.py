@@ -18,15 +18,27 @@ this module leans on rather than works around.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import UTC, datetime
 from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+from quantbot.research.critic import (
+    Critic,
+    CriticVerdict,
+    Critique,
+    consensus,
+    disagreements,
+)
 from quantbot.research.cycle import StageHandler, StageResult
 from quantbot.research.director import ResearchTask, TaskState
 from quantbot.research.memory import RecordKind, ResearchMemory, Verdict
+from quantbot.research.registry import (
+    HypothesisDraft,
+    HypothesisRegistry,
+    RegistrationRefused,
+)
 from quantbot.research.scout import (
     LiteratureSearch,
     ScoutError,
@@ -164,4 +176,134 @@ def scouting_stage(
     return handle
 
 
-__all__ = ["SETTLED", "novelty_stage", "scouting_stage"]
+def critique_stage(
+    critics: Sequence[Critic],
+    registry: HypothesisRegistry,
+    draft_for: Callable[[ResearchTask], HypothesisDraft | None],
+) -> StageHandler:
+    """Build a CRITIQUE handler that reviews, and registers only what survives (#3, #7, #5).
+
+    This is the only stage handler that spends something non-renewable. Registration adds to the
+    cumulative trial count permanently, which raises the luck bar for every hypothesis after it,
+    so the `--commit` default on `research-cycle` matters most here.
+
+    **A critic's REJECT is not a refutation.** It routes to BLOCKED, never to REFUTED. `REFUTED`
+    means the thing was measured and did not survive; a critic saying it looks wrong is an
+    opinion about a claim nobody has tested. The state machine makes `REFUTED` terminal, so a
+    handler that could put a task there on a critic's say-so would permanently retire ideas on
+    the strength of a review.
+
+    **REVISE returns the task to PROPOSED.** That is the revision loop working: the objection
+    names what a new version has to address, and a new version is a new hypothesis version with
+    its own critique. Blocking instead would treat a fixable problem as a dead end.
+
+    **PROCEED registers, with the critique frozen into the registration.** `register()` requires
+    the critique for exactly this reason -- a review that can be revised after the result is not
+    a review. If registration is refused by a gate the critics do not run (power, contamination,
+    an exhausted window), that refusal blocks rather than propagating: the critics approving does
+    not entitle a hypothesis to a window it cannot have.
+
+    `draft_for` is injected rather than looked up, for the same reason `ModelCritic` takes
+    `describe`: this module decides transitions and must not also decide what a hypothesis is.
+    """
+
+    def handle(task: ResearchTask) -> StageResult:
+        draft = draft_for(task)
+        if draft is None:
+            return StageResult(
+                next_state=TaskState.BLOCKED,
+                reason=(
+                    "no draft is available to critique; a task cannot be reviewed in "
+                    "the abstract"
+                ),
+            )
+
+        reviews = [
+            critic.review(draft.hypothesis_id, draft.version, now=datetime.now(UTC))
+            for critic in critics
+        ]
+        if not reviews:
+            # An empty critic list would make `consensus` raise, but the more important point is
+            # that no review at all must never read as approval -- the same rule
+            # `DeterministicCritic` applies to a run in which no mechanical check fired.
+            return StageResult(
+                next_state=TaskState.BLOCKED,
+                reason="no critic reviewed this; an unreviewed hypothesis is not an approved one",
+            )
+
+        verdict = consensus(reviews)
+        detail = {
+            "critics": ", ".join(review.critic for review in reviews),
+            "verdict": verdict.value,
+            # Preserved rather than averaged away, so an unresolved split is visible.
+            "disagreements": "; ".join(disagreements(reviews)) or "none",
+        }
+
+        if verdict is CriticVerdict.REVISE:
+            return StageResult(
+                next_state=TaskState.PROPOSED,
+                reason=f"revision required: {reviews[0].reasons[0]}",
+                detail=detail,
+            )
+        if verdict is CriticVerdict.REJECT:
+            return StageResult(
+                # Not REFUTED. A critic's rejection is an opinion about a claim nobody measured,
+                # and REFUTED is terminal.
+                next_state=TaskState.BLOCKED,
+                reason=f"rejected on review: {reviews[0].reasons[0]}",
+                detail=detail,
+            )
+
+        try:
+            registration = registry.register(
+                draft, now=datetime.now(UTC), critique=_merged(reviews)
+            )
+        except RegistrationRefused as refused:
+            return StageResult(
+                next_state=TaskState.BLOCKED,
+                reason=(
+                    f"the critics proceeded but registration was refused "
+                    f"({refused.reason.value}): {refused.detail}"
+                ),
+                detail=detail,
+            )
+        return StageResult(
+            next_state=TaskState.REGISTERED,
+            reason=f"registered at v{registration.draft.version}",
+            detail=detail | {"registration_hash": registration.content_hash},
+        )
+
+    return handle
+
+
+def _merged(reviews: Sequence[Critique]) -> Critique:
+    """One critique carrying every objection raised, under the most severe verdict.
+
+    `register()` freezes a single critique, and picking one review would discard the others --
+    including, if the deterministic one were dropped, every computed objection. Merging keeps
+    them all; `consensus` supplies the verdict so agreement still cannot outvote an objection.
+
+    `unassessed` is intersected rather than unioned: a dimension is only unassessed if *no*
+    critic assessed it. Unioning would let a dimension one critic examined be reported as
+    unexamined because another abstained from it.
+    """
+    first = reviews[0]
+    unassessed = set(first.unassessed)
+    for review in reviews[1:]:
+        unassessed &= set(review.unassessed)
+    return Critique(
+        hypothesis_id=first.hypothesis_id,
+        hypothesis_version=first.hypothesis_version,
+        critic=" + ".join(review.critic for review in reviews),
+        verdict=consensus(reviews),
+        reasons=tuple(reason for review in reviews for reason in review.reasons),
+        objections=tuple(item for review in reviews for item in review.objections),
+        falsification_tests=tuple(
+            test for review in reviews for test in review.falsification_tests
+        ),
+        unassessed=tuple(sorted(unassessed)),
+        produced_at=first.produced_at,
+    )
+
+
+__all__ = ["SETTLED", "critique_stage", "novelty_stage", "scouting_stage"]
