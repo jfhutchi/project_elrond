@@ -1,0 +1,40 @@
+[Unit]
+Description=Regenerate the QuantBot dashboard
+Documentation=file:///home/jfhutchi/quantbot/deploy/pi/README.md
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=jfhutchi
+WorkingDirectory=/home/jfhutchi/quantbot
+# The broker read needs the paper keys. This unit holds them and never listens on a socket; the
+# unit that listens holds none. That split is the point: whichever one an attacker reaches, they
+# do not get both the network and the credentials.
+EnvironmentFile=/etc/quantbot/quantbot.env
+# QUANTBOT_DB_PATH deliberately comes from that file and is not repeated here. The daemon
+# reads it from the same place, and a second copy is a second thing to keep in sync -- a
+# dashboard pointed at a different ledger from the one being traded would report confidently
+# on the wrong database.
+Environment=TZ=UTC
+
+# Writes index.html so the server offers the dashboard at `/` rather than a directory listing.
+# Reads only, so it is safe while the daemon holds the writer lock -- which is why this is a
+# timer rather than something the daemon calls. A reporting job that can block trading is a
+# reporting job that will eventually block trading.
+# Renders to a sibling temp file and moves it into place only on success. Two reasons, and
+# the second is why this replaced an ExecStopPost cleanup:
+#
+# 1. `mv` within a directory is atomic, so a request arriving mid-render never sees a
+#    half-written page.
+# 2. The cleanup approach used `$EXIT_STATUS`, which systemd expands itself before /bin/sh
+#    ever sees it -- so the comparison was against an empty string, and it deleted every
+#    page including the successful ones. Not writing a bad file is simpler than removing
+#    one afterwards, and it has no variable to get wrong.
+ExecStart=/bin/sh -c '/home/jfhutchi/quantbot/.venv/bin/python /home/jfhutchi/quantbot/scripts/dashboard.py /home/jfhutchi/quantbot/reports/.index.html.new && mv -f /home/jfhutchi/quantbot/reports/.index.html.new /home/jfhutchi/quantbot/reports/index.html'
+
+# A failed render leaves the previous page in place. That is the right trade for a page
+# refreshed every five minutes: a five-minute-old number with a visible timestamp beats an
+# error page, and the render either produces a whole file or none.
+
+TimeoutStartSec=240
+NoNewPrivileges=true

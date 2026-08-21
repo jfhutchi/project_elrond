@@ -1,0 +1,35 @@
+[Unit]
+Description=QuantBot dashboard (static file server)
+Documentation=file:///home/jfhutchi/quantbot/deploy/pi/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jfhutchi
+WorkingDirectory=/home/jfhutchi/quantbot/reports
+
+# `python -m http.server` cannot execute anything, has no upload path, and cannot escape the
+# directory it was started in. That is why it is the right tool: the dashboard is a generated
+# file, serving it needs a file server, and anything more capable is attack surface for no gain.
+#
+# This process is deliberately given NO credentials. It has no EnvironmentFile, so a compromise
+# of the thing listening on the network reaches no broker key. The refresh unit holds those and
+# does not listen on anything.
+ExecStart=/usr/bin/python3 -m http.server 8080 --bind 0.0.0.0 --directory /home/jfhutchi/quantbot/reports
+
+Restart=on-failure
+RestartSec=10
+
+ProtectSystem=strict
+PrivateTmp=true
+NoNewPrivileges=true
+PrivateDevices=true
+RestrictSUIDSGID=true
+# It serves files. It has no business making outbound connections, so a compromised file server
+# cannot phone home. LAN ranges only.
+IPAddressAllow=localhost 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target

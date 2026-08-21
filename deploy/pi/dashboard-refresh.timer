@@ -1,0 +1,22 @@
+[Unit]
+Description=Regenerate the QuantBot dashboard every five minutes
+Documentation=file:///home/jfhutchi/quantbot/deploy/pi/README.md
+
+[Timer]
+# Calendar rather than monotonic, and that is not a style preference. The first version used
+# `OnBootSec=` with `OnUnitActiveSec=`, which fired once and then reported
+# NextElapseUSecMonotonic=infinity -- it would never have run again, and the page would have
+# sat there looking current forever. `Persistent=` also only has any effect on calendar timers,
+# so it was inert in that version too.
+#
+# Verified by reading NextElapse after enabling rather than by assuming the syntax was right.
+OnCalendar=*:0/5
+# Runs a missed refresh after a reboot instead of waiting for the next slot.
+Persistent=true
+# The Pi Zero takes ~25s of CPU to render this. Jitter keeps that off the exact minute boundary
+# where the daemon's own scheduled work lands.
+RandomizedDelaySec=20
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target

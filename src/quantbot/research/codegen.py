@@ -4,19 +4,19 @@
 correct as far as it goes and it is not what #8 asked for: the issue wants feature and strategy
 code *generated*, executed under isolation, and bound to the production evaluation path.
 
-This module does the first two. It deliberately does not do the third, and the reason is worth
-stating rather than working around.
+This module does all three, the third only since the operator authorised
+`BenchmarkVariant.EXTERNAL_SIGNAL` and the `external_weights` parameter on `BacktestEngine.run()`.
 
-**Why the binding is not here.** `BacktestEngine.run()` takes histories and a `BenchmarkVariant`;
-it has no parameter through which an external signal could arrive. Making generated code reach the
-production evaluation path therefore requires changing the engine, which is trusted trading code
-shared with the live paper daemon. The alternative -- evaluating the generated signal here against
-a reimplementation of the fill and cost model -- would create a second scoring path that can
-disagree with the first, which is the failure class this project exists to resist. A number that
-two code paths compute differently is worse than a number one path cannot yet compute.
+**Why the binding waited for that.** The engine had no parameter through which an external signal
+could arrive, so reaching the production evaluation path meant changing trusted trading code
+shared with the live paper daemon. The alternative -- scoring the generated signal here against a
+reimplementation of the fill and cost model -- would have created a second scoring path that can
+disagree with the first, and a number two paths compute differently is worse than a number one
+path cannot yet compute. So it was described and left for a deliberate decision rather than
+approximated.
 
-So the seam is described precisely on #8 and left for a deliberate change to the engine, rather
-than approximated.
+`measurement_from_signal` is the binding. The generated weights go through the same engine, the
+same fill model, the same costs and the same look-ahead protection every comparator uses.
 
 **What is enforced here.**
 
@@ -41,12 +41,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
+from decimal import Decimal
 
+from quantbot.backtest.benchmarks import BenchmarkVariant
+from quantbot.backtest.engine import BacktestEngine
+from quantbot.domain import Bar
+from quantbot.research.builder import ExperimentPlan
 from quantbot.research.mining import IsolatedSandbox
 from quantbot.research.models import ModelResponse, ModelRole, ModelRuntime, PromptTemplate
 from quantbot.research.registry import Registration
+from quantbot.research.runner import Measured, Measurement, ProtectedAccess
 
 SIGNAL_PROMPT = PromptTemplate(
     name="signal-implementation",
@@ -189,6 +196,63 @@ def run_generated_signal(
     )
 
 
+def measurement_from_signal(
+    engine: BacktestEngine,
+    histories: Mapping[str, Sequence[Bar]],
+    run: SignalRun,
+) -> Measurement:
+    """Bind a generated signal to the production engine, as an `ExperimentRunner` measurement.
+
+    This is #8's last box. The weights computed by model-authored code inside the sandbox are
+    executed by the engine that would actually trade -- not by a second implementation of the
+    fill model that could disagree with it.
+
+    **The measurement reports; it does not grade.** `Measured` carries the effect and the probes
+    that ran, and `ExperimentRunner` decides what those are allowed to be called. That separation
+    already existed and matters more here than anywhere else: this is the one measurement whose
+    code nobody reviewed, and letting it return its own verdict would put SURVIVED in the gift of
+    the thing being judged.
+
+    A backtest that produces no Sharpe reports `None` rather than zero. A strategy that never
+    traded and a strategy that broke even are different findings, and zero is the answer to the
+    second question.
+    """
+
+    def measure(plan: ExperimentPlan, access: ProtectedAccess) -> Measured:
+        # `access` is required by the protocol and unused here on purpose: the histories were
+        # already consumed by the runner before this was called, which is what minting the token
+        # means. Reaching for more data through it would be reading a window nobody spent.
+        _ = access
+        result = engine.run(
+            histories,
+            BenchmarkVariant.EXTERNAL_SIGNAL,
+            external_weights=_weights_by_date(run.signal),
+        )
+        return Measured(
+            effect=result.metrics.sharpe,
+            probes_run=plan.probes,
+        )
+
+    return measure
+
+
+def _weights_by_date(
+    signal: dict[str, dict[str, str]],
+) -> dict[date, dict[str, Decimal]]:
+    """Convert the run's string weights into the engine's types.
+
+    Decimal rather than float, because the engine works in Decimal throughout and a float here
+    would introduce a rounding difference between what the model asked for and what was traded
+    -- small, invisible, and exactly the kind of discrepancy that makes a result irreproducible.
+    """
+    converted: dict[date, dict[str, Decimal]] = {}
+    for day, weights in signal.items():
+        converted[date.fromisoformat(day)] = {
+            symbol: Decimal(weight) for symbol, weight in weights.items()
+        }
+    return converted
+
+
 def _with_inputs(source: str, bars: dict[str, list[dict[str, str]]]) -> str:
     """Prepend a preamble that materialises the input file the prompt promised.
 
@@ -272,5 +336,6 @@ __all__ = [
     "GenerationRefused",
     "SignalRun",
     "generate_signal",
+    "measurement_from_signal",
     "run_generated_signal",
 ]
