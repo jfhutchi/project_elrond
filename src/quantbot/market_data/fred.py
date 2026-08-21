@@ -48,6 +48,7 @@ from quantbot.market_data.pointintime import (
     Capability,
     Observation,
     Vintage,
+    require,
 )
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -299,6 +300,21 @@ class FredProvider:
             vintage=f"{'alfred' if realtime else 'fred'}:{retrieved_at.date().isoformat()}",
             retrieved_at=retrieved_at,
         )
+
+    def observations(
+        self, dataset: str, *, capability: Capability, retrieved_at: datetime
+    ) -> tuple[Observation[object], ...]:
+        """The common retrieval surface (#17), serving today's series.
+
+        Deliberately the `latest_series` path and not the ALFRED one. A uniform interface cannot
+        silently decide which vintage a caller gets: `realtime_series` needs an `as_of` date that
+        only the caller knows, and defaulting it to today would hand a confirmatory run
+        today-revised numbers under a method whose name promises nothing about vintage. A study
+        that needs point-in-time values on a revised series asks for them explicitly, and
+        `Vintage.realtime` records which it got.
+        """
+        require(self, capability)
+        return self.latest_series(dataset, retrieved_at=retrieved_at)
 
     def latest_series(
         self, series_id: str, *, retrieved_at: datetime

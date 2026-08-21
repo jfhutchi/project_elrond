@@ -39,7 +39,15 @@ from quantbot.market_data.base import MarketDataError
 from quantbot.market_data.instruments import Instrument
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-Value = TypeVar("Value")
+#: Covariant, because an `Observation` is frozen and only ever produces its value. That is
+#: what lets `observations()` return `Observation[object]` while each provider keeps its own
+#: precise type -- an invariant parameter would force every implementation to widen, and a
+#: caller asking FRED for numbers would get back something typed as anything.
+Value = TypeVar("Value", covariant=True)
+
+#: Invariant, for the one place a value is an *input* rather than an output. A covariant
+#: parameter is unsound there, and `materialize` genuinely consumes the value it wraps.
+Materialized = TypeVar("Materialized")
 
 
 class PointInTimeViolation(MarketDataError):
@@ -178,11 +186,11 @@ class FeatureSpec(FrozenModel):
 
     def materialize(
         self,
-        value: Value,
+        value: Materialized,
         *,
         inputs: Sequence[Availability],
         vintage: Vintage,
-    ) -> Observation[Value]:
+    ) -> Observation[Materialized]:
         """Attach availability and lineage to a computed feature value.
 
         Takes the inputs' availabilities rather than the inputs: the values themselves are the
@@ -222,6 +230,27 @@ class ResearchDataProvider(Protocol):
 
     def instruments(self, *, as_of: datetime) -> tuple[Instrument, ...]:
         """Point-in-time membership, including instruments delisted before `as_of`."""
+        ...
+
+    def observations(
+        self, dataset: str, *, capability: Capability, retrieved_at: datetime
+    ) -> tuple[Observation[object], ...]:
+        """One retrieval surface every provider answers, whatever it is made of (#17).
+
+        This is what makes `knowable()` a general point-in-time filter rather than a helper each
+        source needs its own plumbing to reach. Bars, macro observations and filings differ in
+        every respect except the one that matters here: each was knowable at some instant, and
+        using it before that instant is look-ahead.
+
+        The value type is deliberately loose. A caller that asked for `MACRO_SERIES` knows it
+        will get numbers and a caller that asked for `FUNDAMENTALS` knows it will get filings;
+        narrowing the protocol per capability would produce one method per data shape, which is
+        the vendor-shaped interface this exists to avoid.
+
+        `capability` is an argument rather than inferred from the dataset name, so asking a
+        provider for something it does not serve raises through `require()` at the call rather
+        than returning an empty tuple that reads like an absence of data.
+        """
         ...
 
 

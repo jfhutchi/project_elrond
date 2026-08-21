@@ -54,6 +54,15 @@ from datetime import UTC, date, datetime
 
 import httpx
 
+from quantbot.market_data.instruments import Instrument
+from quantbot.market_data.pointintime import (
+    Availability,
+    Capability,
+    Observation,
+    UnsupportedCapability,
+    Vintage,
+    require,
+)
 from quantbot.research.scout import (
     MAX_RESPONSE_BYTES,
     LiteratureSearch,
@@ -338,6 +347,73 @@ class SecFilingScout:
         )
 
 
+class SecFilingProvider:
+    """`SecFilingScout` behind the common retrieval interface (#17).
+
+    Satisfies `ResearchDataProvider`, so a study asks EDGAR the same way it asks FRED and
+    filters both through the same `knowable()`. Filings and macro observations share nothing
+    except the property that matters: each became knowable at an instant, and using it earlier
+    is look-ahead.
+
+    `dataset` is `"CIK:FORM"` -- `"0000320193:10-K"`. A compound key rather than two arguments,
+    because the protocol's method has one dataset parameter and inventing a second for this
+    provider is how a common interface stops being common.
+    """
+
+    name = "sec-edgar"
+
+    def __init__(self, scout: SecFilingScout) -> None:
+        self._scout = scout
+
+    def capabilities(self) -> frozenset[Capability]:
+        """Filings are fundamentals. Asking for bars raises rather than returning ()."""
+        return frozenset({Capability.FUNDAMENTALS})
+
+    def vintage(self, dataset: str, *, retrieved_at: datetime) -> Vintage:
+        return Vintage(
+            provider=self.name,
+            dataset=dataset,
+            vintage=f"edgar:{retrieved_at.date().isoformat()}",
+            retrieved_at=retrieved_at,
+        )
+
+    def instruments(self, *, as_of: datetime) -> tuple[Instrument, ...]:
+        """EDGAR is not a membership source, so this raises rather than returning ().
+
+        A provider that answered () here would be reporting an empty universe, and a
+        survivorship check reading that would conclude nothing had ever been listed.
+        """
+        raise UnsupportedCapability(self.name, Capability.DELISTINGS)
+
+    def observations(
+        self, dataset: str, *, capability: Capability, retrieved_at: datetime
+    ) -> tuple[Observation[object], ...]:
+        """Filings for one company and form type, each knowable from its filing date."""
+        require(self, capability)
+        cik, _, form_type = dataset.partition(":")
+        if not form_type:
+            raise ValueError(
+                f"{dataset!r} is not a filings dataset; expected CIK:FORM, as in 0000320193:10-K"
+            )
+        search = self._scout.search(cik, form_type=form_type)
+        marker = self.vintage(dataset, retrieved_at=retrieved_at)
+        return tuple(
+            Observation(
+                label=source.source_id,
+                availability=Availability(
+                    # The filing covers a period this feed does not report, so `observed_at` is
+                    # the filing date too. Stating an unknown period as if it were known is the
+                    # look-ahead this connector refuses to invent; see the module docstring.
+                    observed_at=source.published_at,
+                    available_at=source.published_at,
+                ),
+                vintage=marker,
+                value=source,
+            )
+            for source in search.results
+        )
+
+
 __all__ = [
     "CONTACT_ENV",
     "EDGAR_BROWSE_URL",
@@ -345,6 +421,7 @@ __all__ = [
     "EDGAR_MIN_INTERVAL_SECONDS",
     "ContactNotDeclared",
     "HttpxFilingTransport",
+    "SecFilingProvider",
     "SecFilingScout",
     "contact_from_environment",
     "parse_filings",
