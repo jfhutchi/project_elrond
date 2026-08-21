@@ -30,6 +30,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 
+from quantbot.research.budget import BudgetExceeded, BudgetGovernor, LoopBound
 from quantbot.research.director import (
     ACTIVE,
     InvalidTaskTransition,
@@ -80,6 +81,35 @@ def equal_priority(task: ResearchTask) -> Decimal:
     """
     _ = task
     return Decimal("0")
+
+
+def budget_aware(
+    governor: BudgetGovernor,
+    *,
+    trials_per_task: Decimal,
+    gain: TaskScore,
+) -> TaskScore:
+    """Score a task at zero when its family cannot afford the trials it would spend (#14).
+
+    `prioritize` sorts zero-gain work to the bottom, so an unaffordable question is deferred
+    rather than refused -- it stays actionable if the family's cap is later raised by an
+    attributable operator override, and it does not vanish from the queue in the meantime.
+
+    The governor's own argument is why this is not a compute decision: a family close to its
+    trial cap should decline a low-value question even when compute is free, because trials are
+    the thing that cannot be bought back. Wall time and tokens refill overnight; a consumed
+    holdout never does.
+    """
+
+    def score(task: ResearchTask) -> Decimal:
+        value = gain(task)
+        if governor.worth_spending(
+            task.family_id, trials_per_task, expected_information_gain=value
+        ):
+            return value
+        return Decimal("0")
+
+    return score
 
 
 @dataclass(frozen=True, slots=True)
@@ -198,6 +228,7 @@ def drain(
     now: datetime,
     max_steps: int,
     score: TaskScore = equal_priority,
+    bound: LoopBound | None = None,
 ) -> list[CycleOutcome]:
     """Run up to `max_steps` cycles, stopping early when there is nothing left to do.
 
@@ -210,7 +241,22 @@ def drain(
     if max_steps < 1:
         raise CycleRefused("a drain must be allowed at least one step")
     outcomes: list[CycleOutcome] = []
+    counter = bound
     for _ in range(max_steps):
+        if counter is not None:
+            # Counted before the step, not after. A bound checked afterwards permits one round
+            # beyond it, which for a recursive agent workflow is the round that matters (#14).
+            try:
+                counter = counter.advance()
+            except BudgetExceeded as exceeded:
+                outcomes.append(
+                    CycleOutcome(
+                        task=None,
+                        moved_to=None,
+                        reason=f"loop bound reached: {exceeded}",
+                    )
+                )
+                break
         outcome = run_cycle(director, stages, actor=actor, now=now, score=score)
         outcomes.append(outcome)
         if outcome.idle:
@@ -225,6 +271,7 @@ __all__ = [
     "StageResult",
     "TaskScore",
     "actionable",
+    "budget_aware",
     "drain",
     "equal_priority",
     "run_cycle",

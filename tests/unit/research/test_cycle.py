@@ -8,18 +8,27 @@ from decimal import Decimal
 
 import pytest
 
+from quantbot.research.budget import BudgetGovernor, Cap, LoopBound, Resource
 from quantbot.research.cycle import (
     CycleRefused,
     StageResult,
     actionable,
+    budget_aware,
     drain,
     equal_priority,
     run_cycle,
 )
-from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
+from quantbot.research.director import (
+    ResearchDirector,
+    ResearchTask,
+    TaskState,
+    prioritize,
+)
 from quantbot.storage import Database
 
 NOW = datetime(2026, 8, 21, 14, 30, tzinfo=UTC)
+#: A stage that always advances, so tests about ordering are not also tests about handlers.
+STAGES = {TaskState.CRITIQUE: lambda _t: StageResult(TaskState.REGISTERED, "ok")}
 
 
 @pytest.fixture
@@ -276,3 +285,95 @@ def test_a_task_waiting_on_a_dependency_is_not_actionable(database: Database) ->
     assert "T-blocker" in ready
     assert outcome.task is not None
     assert outcome.task.task_id == "T-blocker", "the cycle cannot route around the ordering"
+
+
+def test_a_family_that_cannot_afford_trials_is_deferred_not_refused(database: Database) -> None:
+    """#14: the director defers low-value work because of statistical-budget cost.
+
+    Deferred rather than refused is the deliberate part. `prioritize` sorts zero-gain work to
+    the bottom, so an unaffordable question stays in the queue and becomes actionable again if
+    an operator raises the cap. Dropping it would lose the question; refusing it would need a
+    terminal state, and "we could not afford it" is not a research finding.
+    """
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        _open(director, task("T-rich", family_id="affordable"))
+        _open(director, task("T-poor", family_id="exhausted"))
+
+        governor = BudgetGovernor(
+            session,
+            caps=[
+                Cap(budget_key="affordable", resource=Resource.TRIALS, limit=Decimal("100")),
+                Cap(budget_key="exhausted", resource=Resource.TRIALS, limit=Decimal("0")),
+            ],
+        )
+        score = budget_aware(governor, trials_per_task=Decimal("1"), gain=lambda _t: Decimal("0.9"))
+        # Both tasks are PROPOSED, so the stage map has to cover PROPOSED for either to be
+        # actionable at all.
+        proposed = {TaskState.PROPOSED: lambda _t: StageResult(TaskState.CRITIQUE, "ok")}
+        ranked = [
+            item.task_id for item, _ in prioritize(actionable(director, proposed, score=score))
+        ]
+        scores = {
+            item.task_id: value for item, value in actionable(director, proposed, score=score)
+        }
+
+    assert scores["T-poor"] == Decimal("0"), "an exhausted family scores zero"
+    assert scores["T-rich"] == Decimal("0.9")
+    assert ranked[0] == "T-rich", "affordable work is chosen first"
+    assert "T-poor" in ranked, "and the unaffordable question is still in the queue"
+
+
+def test_a_recursive_workflow_stops_at_its_configured_bound(database: Database) -> None:
+    """#14: a deliberately recursive agent workflow stops at configured bounds.
+
+    The stage here always sends the task back where it came from, which is the shape of a debate
+    or revision loop that can always try once more. Without a bound `drain` would run to
+    `max_steps` every time; the point is that the bound stops it earlier and says so.
+    """
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        _open(director, task("T-loop", TaskState.CRITIQUE))
+
+        # CRITIQUE -> PROPOSED -> CRITIQUE ... a revision loop with no natural end.
+        stages = {
+            TaskState.CRITIQUE: lambda _t: StageResult(TaskState.PROPOSED, "needs revision"),
+            TaskState.PROPOSED: lambda _t: StageResult(TaskState.CRITIQUE, "revised"),
+        }
+        outcomes = drain(
+            director,
+            stages,
+            actor="claude",
+            now=NOW,
+            max_steps=50,
+            bound=LoopBound(task="revision", max_rounds=3),
+        )
+
+    advanced = [o for o in outcomes if o.task is not None]
+    assert len(advanced) == 3, "exactly the bound, not one more"
+    assert "loop bound reached" in outcomes[-1].reason
+    assert len(outcomes) < 50, "the bound stopped it well short of max_steps"
+
+
+def test_the_bound_is_counted_before_the_step_not_after(database: Database) -> None:
+    """A bound checked afterwards permits one round beyond it.
+
+    For a recursive workflow that extra round is the one that matters -- it is the round the
+    bound existed to prevent. A bound of 1 must allow exactly one step.
+    """
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        _open(director, task("T-1", TaskState.CRITIQUE), task("T-2", TaskState.CRITIQUE))
+
+        outcomes = drain(
+            director,
+            STAGES,
+            actor="claude",
+            now=NOW,
+            max_steps=10,
+            bound=LoopBound(task="revision", max_rounds=1),
+        )
+        remaining = len(director.by_state(TaskState.CRITIQUE))
+
+    assert len([o for o in outcomes if o.task is not None]) == 1
+    assert remaining == 1, "the second task was never touched"
