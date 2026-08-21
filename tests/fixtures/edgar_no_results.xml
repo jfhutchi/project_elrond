@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="ISO-8859-1" ?>
+  <feed xmlns="http://www.w3.org/2005/Atom">
+    <author>
+      <email>webmaster@sec.gov</email>
+      <name>Webmaster</name>
+    </author>
+    <company-info>
+      <addresses>
+        <address type="mailing">
+          <city>CUPERTINO</city>
+          <state>CA</state>
+          <street1>ONE APPLE PARK WAY</street1>
+          <zip>95014</zip>
+        </address>
+        <address type="business">
+          <city>CUPERTINO</city>
+          <phone>(408) 996-1010</phone>
+          <state>CA</state>
+          <street1>ONE APPLE PARK WAY</street1>
+          <zip>95014</zip>
+        </address>
+      </addresses>
+      <assigned-sic>3571</assigned-sic>
+      <assigned-sic-desc>ELECTRONIC COMPUTERS</assigned-sic-desc>
+      <assigned-sic-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;SIC=3571&amp;owner=include&amp;count=10</assigned-sic-href>
+      <cik>0000320193</cik>
+      <cik-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0000320193&amp;owner=include&amp;count=10</cik-href>
+      <conformed-name>Apple Inc.</conformed-name>
+      <fiscal-year-end>0926</fiscal-year-end>
+      <formerly-names count="3">
+        <names>
+          <date>2007-01-04</date>
+          <name>APPLE COMPUTER INC</name>
+        </names>
+        <names>
+          <date>1997-07-28</date>
+          <name>APPLE COMPUTER INC/ FA</name>
+        </names>
+        <names>
+          <date>2019-08-05</date>
+          <name>APPLE INC</name>
+        </names>
+      </formerly-names>
+      <state-location>CA</state-location>
+      <state-location-href>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;State=CA&amp;owner=include&amp;count=10</state-location-href>
+      <state-of-incorporation>CA</state-of-incorporation>
+    </company-info>
+    <id>https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0000320193</id>
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0000320193&amp;type=N-CSR&amp;owner=include&amp;start=0&amp;count=10" rel="alternate" type="text/html" />
+    <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&amp;CIK=0000320193&amp;type=N-CSR&amp;owner=include&amp;start=0&amp;count=10&amp;output=atom" rel="self" type="application/atom+xml" />
+    <title>Apple Inc.  (0000320193)</title>
+    <updated>2026-08-21T09:43:11-04:00</updated>
+  </feed>
