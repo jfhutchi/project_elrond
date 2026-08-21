@@ -345,3 +345,103 @@ def test_a_changed_transformation_version_is_a_different_experiment() -> None:
         manifest().inputs_hash
         != manifest(datasets=(snapshot(transformation_version="adjust-v2"),)).inputs_hash
     )
+
+
+# --- #18: the invariants against this project's own documented failures ---------------------
+#
+# The tests above use synthetic cases. #18 asks that the tooling flag "documented project failure
+# fixtures where a favorable result is economically impossible or statistically mismatched", and
+# a check that only catches invented numbers has not been shown to catch the real ones. These
+# fixtures are transcribed from REFUTED.md with its actual figures.
+
+
+def test_refuted_8_is_disappointing_and_not_impossible_so_it_is_not_flagged() -> None:
+    """`REFUTED.md` #8: +427.9% gross netting -28.8% at 5bps. A real result, not a violation.
+
+    Written the other way round on the first attempt, which was wrong: I expected the cost
+    invariant to flag this and it does not, correctly. An edge destroyed by the cost of trading
+    it is disappointing and entirely possible -- it is what this project actually measured.
+
+    Flagging it would make the invariant a false-positive generator on exactly the class of
+    honest negative result the system is supposed to keep. The distinction between "the number
+    is bad" and "the number cannot be real" is the whole value of the check, so it is asserted
+    here rather than assumed.
+    """
+    report = check_invariants(
+        manifest(results={"ONE_DAY_REVERSAL": {"gross_return": "4.279", "net_return": "-0.288"}})
+    )
+
+    assert report.ok, "a real, bad result must not be reported as impossible"
+    assert "costs-never-improve-returns" in report.checked, "and the check did run"
+
+
+def test_the_cost_invariant_flags_the_inversion_of_refuted_8() -> None:
+    """What would be impossible: trading costs making the return better.
+
+    Same figures as #8 with gross and net swapped. Costs are a subtraction, so a net above gross
+    means the accounting is wrong however plausible the headline looks -- and a favourable
+    number produced by broken accounting is the failure this file is a record of.
+    """
+    report = check_invariants(
+        manifest(results={"ONE_DAY_REVERSAL": {"gross_return": "-0.288", "net_return": "4.279"}})
+    )
+
+    assert not report.ok
+    assert any("costs" in violation.invariant for violation in report.violations)
+
+
+def test_the_significance_invariant_flags_refuted_17_the_unpaired_overnight_test() -> None:
+    """`REFUTED.md` #17: an unpaired t-test made the overnight premium look significant.
+
+    Corrected to paired, SPY fell from t=2.74 to t=0.63. This is the failure the file calls the
+    error it exists to catch, so a bundle claiming significance at t=0.63 against its own frozen
+    bar must be flagged -- the computation was valid and the conclusion was not.
+    """
+    report = check_invariants(
+        manifest(
+            results={
+                "OVERNIGHT_PREMIUM": {
+                    "test_statistic": "0.63",
+                    "significant": "true",
+                }
+            },
+            statistics=plan(luck_threshold_z=Decimal("2.74")),
+        )
+    )
+
+    assert not report.ok
+    assert any("significan" in v.invariant for v in report.violations)
+
+
+def test_a_corrected_paired_result_below_the_bar_is_not_flagged_as_significant() -> None:
+    """The other half: the corrected analysis claimed nothing, and nothing is flagged.
+
+    Without this, the test above would pass with the invariant hard-coded to complain, which
+    would make it a test of pessimism rather than of the check.
+    """
+    report = check_invariants(
+        manifest(
+            results={
+                "OVERNIGHT_PREMIUM": {
+                    "test_statistic": "0.63",
+                    "significant": "false",
+                }
+            },
+            statistics=plan(luck_threshold_z=Decimal("2.74")),
+        )
+    )
+
+    assert report.ok, "a result that does not claim significance cannot overclaim it"
+
+
+def test_the_invariants_report_what_they_could_not_check_on_a_sparse_bundle() -> None:
+    """A bundle carrying none of the keys is not a clean bundle.
+
+    `REFUTED.md` is largely a record of checks that appeared to pass because they never ran.
+    An invariant that silently skips is indistinguishable from one that succeeded, so the report
+    has to say which happened.
+    """
+    report = check_invariants(manifest(results={"FULL_STRATEGY": {"note": "nothing numeric"}}))
+
+    assert report.ok, "nothing was violated"
+    assert report.skipped, "and nothing was actually checked, which the report must say"
