@@ -74,6 +74,9 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # remembers a flag is a safety control that does nothing. Demotion is reversible and
     # preserves the forward evidence, so acting wrongly is cheap and not acting is not.
     sweep.add_argument("--dry-run", dest="dry_run", action="store_true")
+    verify = commands.add_parser("verify-manifest")
+    verify.add_argument("--manifest", required=True)
+    verify.add_argument("--against")
     freeze = commands.add_parser("register-hypothesis")
     freeze.add_argument("--draft", required=True)
     freeze.add_argument("--critique", required=True)
@@ -239,6 +242,62 @@ def main(
                 },
                 "actionable_now": ready,
                 "note": ("research-status reports and never advances; use the cycle for that"),
+            }
+        elif args.command == "verify-manifest":
+            # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.manifest import ExperimentManifest
+            from quantbot.research.reproducibility import (
+                capture_git_state,
+                check_invariants,
+                compare,
+            )
+
+            manifest = ExperimentManifest.model_validate_json(
+                Path(args.manifest).read_text(encoding="utf-8")
+            )
+            report = check_invariants(manifest)
+            commit, dirty = capture_git_state()
+            differences = []
+            if args.against is not None:
+                other = ExperimentManifest.model_validate_json(
+                    Path(args.against).read_text(encoding="utf-8")
+                )
+                differences = [
+                    {"field": item.field, "recorded": item.left, "other": item.right,
+                     "material": item.material}
+                    for item in compare(manifest, other)
+                ]
+
+            result = {
+                # `ok` is about the invariants only. Code drift is reported and never folded in:
+                # a result computed on a different commit is not thereby wrong, and marking it
+                # failed would train a reader to ignore this field.
+                "ok": report.ok,
+                "manifest_hash": manifest.manifest_hash,
+                "experiment_id": manifest.experiment_id,
+                "mode": manifest.mode,
+                "violations": [
+                    {"invariant": item.invariant, "detail": item.detail}
+                    for item in report.violations
+                ],
+                "checked": list(report.checked),
+                # Surfaced, never summarised away. A check that quietly did nothing because the
+                # result lacked the figure it needs looks exactly like a check that passed.
+                "skipped": list(report.skipped),
+                # `code` is optional on the model, and a bundle without it cannot have its
+                # drift checked. Reported as unrecorded rather than defaulted to the current
+                # commit, which would claim the run happened on code nobody showed it did.
+                "code": {
+                    "recorded_commit": (
+                        None if manifest.code is None else manifest.code.git_commit
+                    ),
+                    "current_commit": commit,
+                    "current_tree_dirty": dirty,
+                    "same_commit": (
+                        None if manifest.code is None else manifest.code.git_commit == commit
+                    ),
+                },
+                "differences": differences,
             }
         elif args.command == "integrity-sweep":
             # Function-scope import for the same reason as the other research commands.

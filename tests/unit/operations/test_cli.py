@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from io import StringIO
 from pathlib import Path
 
@@ -30,6 +30,7 @@ from quantbot.storage import Database, StorageRepository
         ["register-hypothesis", "--draft", "d.json", "--critique", "c.json"],
         ["research-status"],
         ["integrity-sweep"],
+        ["verify-manifest", "--manifest", "m.json"],
     ],
 )
 def test_required_cli_commands_are_registered(argv: list[str]) -> None:
@@ -346,4 +347,127 @@ def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach
     with database.transaction() as session:
         moved = PromotionLedger(session).current("adaptive-momentum")
     assert moved is not None and moved.stage is Stage.RESEARCH_SURVIVOR
+    database.close()
+
+
+def test_verify_manifest_reports_violations_skips_and_code_drift(tmp_path: Path) -> None:
+    """#18: a bundle is only evidence if somebody can check it, and checking needs a command.
+
+    The interesting assertions here are the two that are easy to get wrong:
+
+    * `skipped` is surfaced rather than folded into a pass. A check that quietly did nothing
+      because the result lacked the figure it needs looks exactly like a check that passed, and
+      that is the failure class this project exists to resist.
+    * code drift does not make `ok` false. A result computed on a different commit is not
+      thereby wrong, and marking it failed would train a reader to ignore the field.
+    """
+    import json
+
+    from quantbot.research.manifest import ExperimentManifest, ExperimentPeriod
+
+    manifest = ExperimentManifest(
+        experiment_id="E-1",
+        git_commit="0" * 40,
+        data_hash="d" * 16,
+        configuration_hash="c" * 16,
+        # Costs improving a return is the impossibility this invariant exists for: a margin
+        # path once appeared to create wealth this way.
+        costs={"slippage_bps": "1.1", "commission_per_order": "0"},
+        periods=(ExperimentPeriod(name="full", start=date(2016, 1, 4), end=date(2026, 8, 14)),),
+        walk_forward_splits=(
+            ExperimentPeriod(name="split-1", start=date(2016, 1, 4), end=date(2021, 1, 1)),
+        ),
+        holdout=ExperimentPeriod(name="full", start=date(2016, 1, 4), end=date(2026, 8, 14)),
+        neighborhood_grid={"lookback": ["100", "200"]},
+        ablations=("no-trend-filter",),
+        results={"primary": {"gross_return": "10", "net_return": "25"}},
+    )
+    path = tmp_path / "manifest.json"
+    path.write_text(manifest.canonical_json(), encoding="utf-8")
+
+    database = Database(tmp_path / "quantbot.db")
+    context = CLIContext(
+        settings=_ready_settings(),
+        database=database,
+        handlers={},
+        reported_account_id="paper-1",
+        clearance_evidence=_ready_evidence(),
+    )
+    output = StringIO()
+
+    # Nonzero, so a violated invariant fails a CI step rather than being read in passing.
+    assert main(["verify-manifest", "--manifest", str(path)], context=context, output=output) == 2
+    payload = json.loads(output.getvalue())
+
+    assert payload["ok"] is False, "costs improving a return has to be caught"
+    assert [item["invariant"] for item in payload["violations"]] == [
+        "costs-never-improve-returns"
+    ]
+    assert payload["manifest_hash"] == manifest.manifest_hash
+    # Nothing here reported a test statistic, so those checks did not run -- and say so.
+    assert payload["skipped"], "a check that did not run must not be silent"
+    # Drift is reported next to the verdict, not merged into it.
+    assert payload["code"]["recorded_commit"] is None
+    assert payload["code"]["current_commit"]
+    database.close()
+
+
+def test_verify_manifest_explains_why_two_runs_are_not_the_same_experiment(
+    tmp_path: Path,
+) -> None:
+    """A conclusion whose inputs changed underneath it is unfalsifiable unless that is visible."""
+    import json
+
+    from quantbot.research.manifest import ExperimentManifest, ExperimentPeriod
+
+    def bundle(data_hash: str) -> ExperimentManifest:
+        return ExperimentManifest(
+            experiment_id="E-1",
+            git_commit="0" * 40,
+            data_hash=data_hash,
+            configuration_hash="c" * 16,
+            costs={"slippage_bps": "1.1", "commission_per_order": "0"},
+            periods=(
+                ExperimentPeriod(name="full", start=date(2016, 1, 4), end=date(2026, 8, 14)),
+            ),
+            walk_forward_splits=(
+                ExperimentPeriod(
+                    name="split-1", start=date(2016, 1, 4), end=date(2021, 1, 1)
+                ),
+            ),
+            holdout=ExperimentPeriod(
+                name="full", start=date(2016, 1, 4), end=date(2026, 8, 14)
+            ),
+            neighborhood_grid={"lookback": ["100", "200"]},
+            ablations=("no-trend-filter",),
+            results={"primary": {"gross_return": "25", "net_return": "10"}},
+        )
+
+    first = tmp_path / "a.json"
+    second = tmp_path / "b.json"
+    first.write_text(bundle("d" * 16).canonical_json(), encoding="utf-8")
+    second.write_text(bundle("e" * 16).canonical_json(), encoding="utf-8")
+
+    database = Database(tmp_path / "quantbot.db")
+    context = CLIContext(
+        settings=_ready_settings(),
+        database=database,
+        handlers={},
+        reported_account_id="paper-1",
+        clearance_evidence=_ready_evidence(),
+    )
+    output = StringIO()
+
+    assert (
+        main(
+            ["verify-manifest", "--manifest", str(first), "--against", str(second)],
+            context=context,
+            output=output,
+        )
+        == 0
+    )
+    payload = json.loads(output.getvalue())
+
+    assert payload["ok"] is True, "these results are merely different, not impossible"
+    assert any(item["field"] == "data_hash" for item in payload["differences"]), payload
     database.close()
