@@ -5,3 +5,8 @@
 *.sh        text eol=lf
 *.service   text eol=lf
 *.bash      text eol=lf
+
+# Captured wire responses used as connector fixtures. These are evidence of what a host
+# actually sent, and their bytes are content-hashed, so no end-of-line conversion may touch
+# them on checkout.
+tests/fixtures/arxiv_*   -text

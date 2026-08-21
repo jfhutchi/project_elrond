@@ -779,6 +779,42 @@ Every hypothesis now carries a `basis` with no default: citations, or an explici
 `DATA_DRIVEN_NO_EXTERNAL_SOURCE`. "We did not look" and "we looked and there is nothing" are
 different facts, and a default would have made the first the common answer.
 
+### The connector that fills it
+
+`quantbot.research.scout`. The provenance layer above had nothing acquiring anything, so every
+hypothesis declared `DATA_DRIVEN_NO_EXTERNAL_SOURCE` whether or not literature existed. arXiv is
+the first place that gets looked: documented public API, no credentials, and q-fin is where this
+project's subject matter lives.
+
+**A failed fetch is never an empty result.** Every failure path raises `ScoutError` —
+`SourceUnavailable` for a timeout or a non-200, `SourceProtocolError` for a body that is not the
+documented schema. There is no code path turning an exception into an empty search, because a
+connector that returns `[]` on a timeout records a transient outage as "no literature exists",
+which is a research finding and a false one.
+
+**arXiv reports a bad query as a result row.** A `<entry>` titled "Error", with `totalResults`
+of 1 and an abstract. A parser that does not know this stores a paper called Error and cites it.
+The captured response is `tests/fixtures/arxiv_error_entry.xml`, and the reported reason reaches
+the caller rather than being flattened into a generic parse failure.
+
+**"We looked and found nothing" is a record.** `search()` returns a `LiteratureSearch`, never a
+bare tuple, so a zero-result search still carries the query, the connector and the time it ran.
+`query` and `searched_at` have no defaults, so a search that never happened has no
+representation at all — which is what keeps the two facts distinguishable.
+
+**The connector cannot raise epistemic status.** It yields `Source` objects; `cite()` is still
+the only step that says `LITERATURE_SUPPORTED`, at a call site that has to name the claim. Once
+something is fetching, source count is the cheapest thing in this system to manufacture.
+
+One request every three seconds, enforced by the transport rather than left to callers, with a
+User-Agent that says who is calling and where to complain. Every test runs offline against real
+responses captured from `export.arxiv.org`; the transport is injected the way
+`market_data.transports` does it.
+
+Still missing for #4: no second source type (SEC, macro releases, news), no orchestration path
+that invokes the scout — `director` has a `SCOUTING` state and nothing drives it — and no
+persistence for a `LiteratureSearch`, so a search record lives only as long as its caller.
+
 ## 6s. Research director: the lifecycle, and what it cannot reach (#3)
 
 `quantbot.research.director`. Eleven states with an explicit transition table, mirroring the
@@ -829,6 +865,7 @@ section first if you are resuming.
 | #14 Budget governor | `b26d5f3` | trials as a non-renewable budget, daemon isolation |
 | #9 Model runtime | `7161a08` | critic ≠ generator identity, provenance produced not reconstructed |
 | #4 Source scout | `a2c226a` | a summary can never be cited for its source |
+| #4 arXiv connector | this branch | an outage raises; it never reads as "no literature exists" |
 | #3 Research director | `98f60b7` | lifecycle, computed priority, no route to the broker |
 
 Schema is at V6 with revisions 0001–0006. Every revision declares its own tables.
