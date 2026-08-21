@@ -13,7 +13,10 @@ The enforcement story, in the order it matters:
    be theatre, but a child with no dotenv loader, no `quantbot`, and no repository path has no
    route to the file.
 3. **Data arrives as files.** Inputs are copied in before the child starts, so a normal
-   experiment needs no network. Network is opt-in per policy.
+   experiment needs no network. Network is opt-in per policy, and when it is on the allowlist is
+   enforced rather than merely recorded: only hosts in `policy.resolved_hosts()` resolve, and only
+   addresses one of those lookups returned are connectable, so a raw IP has no route. In-process
+   enforcement, with the ceiling stated at `PREAMBLE`.
 4. **The workspace is disposable and the outputs are quarantined.** Every produced file is
    hashed and recorded so an artifact can name the experiment that made it.
 
@@ -46,19 +49,64 @@ from quantbot.sandbox.static import enforce
 #: Injected ahead of the generated script. Rebuilds a minimal import path, then proves the
 #: boundary from the inside: if `quantbot` turns out to be importable the run aborts rather than
 #: continuing in a state the caller believes is isolated.
-PREAMBLE = '''\
-import sys as _sys, json as _json, pathlib as _pathlib
+#:
+#: The enabled-network branch enforces `policy.resolved_hosts()`. It previously did not: the
+#: allowlist was written into `_sandbox.json` and never read, so turning networking on opened
+#: every destination while the config file described a restriction that did not exist. A policy
+#: field that is written and never consulted is worse than an absent one, because it reads as a
+#: control in review.
+#:
+#: Its strength is the same as the deny branch beside it and no greater: this is in-process
+#: monkeypatching, so generated code that deliberately re-imports `_socket` or restores the saved
+#: descriptors can step around it. That is #21's job, and it is written down here rather than
+#: implied so nobody mistakes it for a boundary against adversarial code. Against the realistic
+#: case -- generated research code reaching for a URL nobody approved -- it holds.
+PREAMBLE = '''import sys as _sys, json as _json, pathlib as _pathlib
 _cfg = _json.loads(_pathlib.Path("_sandbox.json").read_text(encoding="utf-8"))
 _sys.path = [p for p in _cfg["path"] if p]
 import importlib.util as _u
 if _u.find_spec("quantbot") is not None:
     raise SystemExit("SANDBOX INTEGRITY FAILURE: quantbot is importable inside the sandbox")
+import socket as _socket
 if not _cfg["network"]:
-    import socket as _socket
     def _denied(*_a, **_k):
         raise PermissionError("sandbox policy: network access is disabled")
     _socket.socket = _denied          # type: ignore[assignment]
     _socket.create_connection = _denied  # type: ignore[assignment]
+else:
+    _allowed_hosts = {str(h).lower() for h in _cfg["hosts"]}
+    _allowed_addrs = set()
+    _real_getaddrinfo = _socket.getaddrinfo
+    _real_connect = _socket.socket.connect
+    _real_connect_ex = _socket.socket.connect_ex
+    def _refuse(_target):
+        raise PermissionError(
+            "sandbox policy: " + repr(_target) + " is not in the host allowlist"
+        )
+    def _guarded_getaddrinfo(host, port, *_a, **_k):
+        if str(host).lower() not in _allowed_hosts:
+            _refuse(host)
+        _infos = _real_getaddrinfo(host, port, *_a, **_k)
+        for _info in _infos:
+            _allowed_addrs.add(_info[4][0])
+        return _infos
+    def _permitted(_address):
+        return (
+            isinstance(_address, tuple)
+            and len(_address) >= 2
+            and _address[0] in _allowed_addrs
+        )
+    def _guarded_connect(self, address, *_a, **_k):
+        if not _permitted(address):
+            _refuse(address)
+        return _real_connect(self, address, *_a, **_k)
+    def _guarded_connect_ex(self, address, *_a, **_k):
+        if not _permitted(address):
+            _refuse(address)
+        return _real_connect_ex(self, address, *_a, **_k)
+    _socket.getaddrinfo = _guarded_getaddrinfo
+    _socket.socket.connect = _guarded_connect
+    _socket.socket.connect_ex = _guarded_connect_ex
 del _cfg, _u, _sys, _json, _pathlib
 '''
 

@@ -157,6 +157,124 @@ except Exception as error:
     assert "DENIED" in result.stdout, result.stdout
 
 
+def test_a_host_outside_the_allowlist_is_denied_with_networking_enabled() -> None:
+    """The allowlist was written into the config and never read, so network opened everything.
+
+    Deliberately offline: the refusal happens before name resolution, so this asserts the policy
+    and not the state of the network the suite happens to run on.
+    """
+    permissive = SandboxPolicy(
+        wall_clock_seconds=30.0,
+        memory_mb=512,
+        network_enabled=True,
+        allowed_hosts=("data.alpaca.markets",),
+    )
+    attack = """
+import socket
+try:
+    socket.create_connection(("example.com", 80), timeout=5)
+    print("CONNECTED")
+except PermissionError as error:
+    print(f"DENIED: {error}")
+except Exception as error:
+    print(f"OTHER: {type(error).__name__}")
+"""
+
+    result = _run(attack, permissive)
+
+    assert "CONNECTED" not in result.stdout, "an unlisted host was reachable"
+    assert "DENIED" in result.stdout, result.stdout
+    assert "OTHER" not in result.stdout, (
+        "the refusal must be the allowlist, not a DNS failure that would pass on an "
+        f"offline machine and fail on a connected one: {result.stdout}"
+    )
+
+
+def test_a_raw_address_never_resolved_through_the_allowlist_is_denied() -> None:
+    """Skipping the name is the obvious way around a host allowlist.
+
+    Only addresses an allowlisted name actually resolved to are connectable, so a literal IP
+    that no permitted lookup produced has no route.
+    """
+    permissive = SandboxPolicy(
+        wall_clock_seconds=30.0,
+        memory_mb=512,
+        network_enabled=True,
+        allowed_hosts=("data.alpaca.markets",),
+    )
+    attack = """
+import socket
+try:
+    socket.socket(socket.AF_INET, socket.SOCK_STREAM).connect(("93.184.216.34", 80))
+    print("CONNECTED")
+except PermissionError as error:
+    print(f"DENIED: {error}")
+except Exception as error:
+    print(f"OTHER: {type(error).__name__}")
+"""
+
+    result = _run(attack, permissive)
+
+    assert "CONNECTED" not in result.stdout, "a raw address bypassed the allowlist"
+    assert "DENIED" in result.stdout, result.stdout
+    assert "OTHER" not in result.stdout, result.stdout
+
+
+def test_an_allowlisted_host_is_still_reachable() -> None:
+    """The counterweight, and the test that fails if the guard degenerates into a blanket deny.
+
+    Denying everything would pass both tests above while making networking useless, so this one
+    asserts the permitted half against a loopback listener -- real sockets, no internet.
+    """
+    import socket as socket_module
+    import threading
+
+    listener = socket_module.socket(socket_module.AF_INET, socket_module.SOCK_STREAM)
+    listener.setsockopt(socket_module.SOL_SOCKET, socket_module.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+
+    def serve() -> None:
+        try:
+            connection, _ = listener.accept()
+            with connection:
+                connection.sendall(b"HELLO")
+        except OSError:
+            pass
+
+    server = threading.Thread(target=serve, daemon=True)
+    server.start()
+
+    permitted = SandboxPolicy(
+        wall_clock_seconds=30.0,
+        memory_mb=512,
+        network_enabled=True,
+        allowed_hosts=("127.0.0.1",),
+    )
+    probe = f"""
+import socket
+try:
+    with socket.create_connection(("127.0.0.1", {port}), timeout=10) as connection:
+        print("RECEIVED:", connection.recv(16).decode())
+except PermissionError as error:
+    print(f"DENIED: {{error}}")
+except Exception as error:
+    print(f"OTHER: {{type(error).__name__}}: {{error}}")
+"""
+
+    try:
+        result = _run(probe, permitted)
+    finally:
+        listener.close()
+        server.join(timeout=5)
+
+    assert "RECEIVED: HELLO" in result.stdout, (
+        f"an allowlisted host must stay reachable, or the allowlist is a blanket deny: "
+        f"{result.stdout} {result.stderr}"
+    )
+
+
 # --------------------------------------------------------------------------------------------
 # Resource limits
 # --------------------------------------------------------------------------------------------
