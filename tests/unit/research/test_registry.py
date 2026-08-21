@@ -19,6 +19,7 @@ from sqlalchemy import select, update
 from sqlalchemy.engine import RowMapping
 
 from quantbot.research import (
+    EXHAUSTED_TRIALS,
     PRIOR_TRIALS,
     RESERVATION_DAYS,
     Citation,
@@ -1270,3 +1271,145 @@ def test_the_only_way_to_claim_a_search_is_to_sign_for_it(database: Database) ->
     assert registered.draft.search_attested_by == "hutch"
     # And the burden actually moved, rather than the origin being decorative.
     assert registered.cumulative_trials >= PRIOR_TRIALS + 12
+
+
+def test_window_consumption_says_which_family_spent_the_budget(database: Database) -> None:
+    """#14: statistical budget keyed to family, not one undifferentiated number.
+
+    An operator deciding where to look next needs to know who spent the range. A total alone
+    says the data is used up without saying by what, which is the "misleading global number"
+    the issue names.
+
+    The three hypotheses take non-overlapping spans of the same dataset, because that is the
+    only honest way several of them coexist there: the contamination gate refuses two claims on
+    one protected window, and rightly so.
+    """
+    spans = (
+        ("2016-01-04", "2018-12-31", "trend-following"),
+        ("2019-01-02", "2021-12-31", "trend-following"),
+        ("2022-01-03", "2024-12-31", "mean-reversion"),
+    )
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        for index, (start, end, family) in enumerate(spans):
+            register(
+                registry,
+                make_draft(
+                    hypothesis_id=f"H-FAM-{index}",
+                    family_id=family,
+                    materially_different="a different span of the same dataset",
+                    search_cardinality=3,
+                    search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                    search_attested_by="hutch",
+                    features=(f"feature_{index}",),
+                    windows=(window(DataRole.PROTECTED_EVALUATION, start, end),),
+                ),
+            )
+            registry.consume(
+                f"H-FAM-{index}",
+                1,
+                dataset="sip-us-equities-daily",
+                role=DataRole.PROTECTED_EVALUATION,
+                now=NOW,
+            )
+
+        consumption = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+
+    assert consumption.by_family == {"mean-reversion": 3, "trend-following": 6}
+    assert consumption.trials == 9, "the total is every family's spend, not one family's"
+
+
+def test_a_new_family_does_not_start_from_zero_on_a_spent_range(database: Database) -> None:
+    """Exhaustion is deliberately NOT family-scoped, and this is why.
+
+    The multiple-testing burden is a property of the data, not of the question's label. Forty
+    hypotheses tested on 2016-2026 raise the luck bar for the forty-first whatever family it
+    belongs to. Scoping exhaustion by family would hand out fresh significance for the price of
+    renaming the question -- which is the laundering this whole subsystem exists to prevent.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(
+            registry,
+            make_draft(
+                hypothesis_id="H-HEAVY",
+                family_id="trend-following",
+                search_cardinality=EXHAUSTED_TRIALS,
+                search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                search_attested_by="hutch",
+            ),
+        )
+        registry.consume(
+            "H-HEAVY",
+            1,
+            dataset="sip-us-equities-daily",
+            role=DataRole.PROTECTED_EVALUATION,
+            now=NOW,
+        )
+
+        consumption = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+
+    assert consumption.status == "EXHAUSTED"
+    # The spend is attributable to one family, and the range is spent for every family.
+    assert consumption.by_family == {"trend-following": EXHAUSTED_TRIALS}
+    assert consumption.usable is False
+
+
+def test_two_families_jointly_exhaust_a_range_neither_could_alone(database: Database) -> None:
+    """The case that distinguishes a global burden from a family-scoped one.
+
+    Two families each spend a little over half the budget on different spans of one dataset.
+    Globally the range is spent; per family, neither is close. Scoping exhaustion by family
+    would report this range as usable and hand out fresh significance for the price of renaming
+    the question.
+
+    A single family spending the whole budget cannot test this: there, the total and the
+    per-family maximum are the same number, and a family-scoped implementation passes. That
+    mutation survived until this test existed.
+    """
+    half = EXHAUSTED_TRIALS // 2 + 1
+    spans = (
+        ("2016-01-04", "2020-12-31", "trend-following"),
+        ("2021-01-04", "2024-12-31", "mean-reversion"),
+    )
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        for index, (start, end, family) in enumerate(spans):
+            register(
+                registry,
+                make_draft(
+                    hypothesis_id=f"H-JOINT-{index}",
+                    family_id=family,
+                    materially_different="a different span of the same dataset",
+                    search_cardinality=half,
+                    search_origin=SearchOrigin.OPERATOR_ATTESTED,
+                    search_attested_by="hutch",
+                    features=(f"joint_feature_{index}",),
+                    windows=(window(DataRole.PROTECTED_EVALUATION, start, end),),
+                    effect=sharpe_effect(expected=Decimal("3.0")),
+                ),
+            )
+            registry.consume(
+                f"H-JOINT-{index}",
+                1,
+                dataset="sip-us-equities-daily",
+                role=DataRole.PROTECTED_EVALUATION,
+                now=NOW,
+            )
+
+        consumption = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+
+    assert consumption.trials == half * 2
+    assert consumption.trials >= EXHAUSTED_TRIALS
+    # Neither family alone reaches the threshold.
+    assert all(spent < EXHAUSTED_TRIALS for spent in consumption.by_family.values())
+    assert len(consumption.by_family) == 2
+    # And the range is still spent, because the burden belongs to the data.
+    assert consumption.status == "EXHAUSTED"
+    assert consumption.usable is False

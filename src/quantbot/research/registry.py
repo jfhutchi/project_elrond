@@ -44,8 +44,8 @@ here rewrites that record.
 from __future__ import annotations
 
 import hashlib
-from collections.abc import Sequence
-from dataclasses import dataclass
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import StrEnum
 from typing import Annotated, Self
@@ -345,9 +345,20 @@ class WindowConsumption:
 
     dataset: str
     #: UNTOUCHED, PARTIALLY_CONSUMED, or EXHAUSTED for the requested range.
+    #:
+    #: Derived from the TOTAL across every family, and deliberately so. #14 asks for statistical
+    #: budget keyed to dataset, window and family "rather than one misleading global number",
+    #: and `by_family` below is that view -- but exhaustion itself is not family-scoped, because
+    #: the multiple-testing burden is not. Forty hypotheses tested on 2016-2026 raise the luck
+    #: bar for the forty-first whatever family it belongs to, and letting a new family start
+    #: from zero on a spent range would hand out fresh significance by renaming the question.
     status: str
     trials: int
     consumers: tuple[str, ...]
+    #: Trials spent on this range per family. The keyed view #14 asks for: it says who spent the
+    #: budget, which is what an operator needs to decide where to look next, without letting any
+    #: family escape the total.
+    by_family: Mapping[str, int] = field(default_factory=dict)
 
     @property
     def usable(self) -> bool:
@@ -839,7 +850,11 @@ class HypothesisRegistry:
         simply not evidence.
         """
         rows = self._session.execute(
-            select(hypothesis_data_windows, hypotheses.c.search_cardinality)
+            select(
+                hypothesis_data_windows,
+                hypotheses.c.search_cardinality,
+                hypotheses.c.family_id,
+            )
             .join(
                 hypotheses,
                 (hypothesis_data_windows.c.hypothesis_id == hypotheses.c.hypothesis_id)
@@ -853,10 +868,14 @@ class HypothesisRegistry:
             )
         ).mappings()
         consumers: list[str] = []
+        by_family: dict[str, int] = {}
         trials = 0
         for row in rows:
             consumers.append(f"{row['hypothesis_id']} v{row['version']}")
-            trials += int(row["search_cardinality"])
+            spent = int(row["search_cardinality"])
+            trials += spent
+            family = str(row["family_id"])
+            by_family[family] = by_family.get(family, 0) + spent
         if trials >= EXHAUSTED_TRIALS:
             status = "EXHAUSTED"
         elif trials:
@@ -864,7 +883,11 @@ class HypothesisRegistry:
         else:
             status = "UNTOUCHED"
         return WindowConsumption(
-            dataset=dataset, status=status, trials=trials, consumers=tuple(sorted(set(consumers)))
+            dataset=dataset,
+            status=status,
+            trials=trials,
+            consumers=tuple(sorted(set(consumers))),
+            by_family=dict(sorted(by_family.items())),
         )
 
     def _row(self, hypothesis_id: str, version: int) -> RowMapping | None:
