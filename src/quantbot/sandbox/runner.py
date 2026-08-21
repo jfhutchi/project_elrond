@@ -133,6 +133,10 @@ class SandboxResult:
     stdout: str
     stderr: str
     duration_seconds: float
+    #: Highest memory the monitor observed, in MB, or None when it never got a reading -- a
+    #: process that exits between polls is measured zero times. None rather than 0.0 for the
+    #: usual reason: an unmeasured figure that reads as a measured zero is worse than a gap.
+    peak_memory_mb: float | None = None
     artifacts: tuple[Artifact, ...] = field(default_factory=tuple)
     #: Set when the sandbox stopped the run rather than the script finishing on its own.
     terminated_reason: str | None = None
@@ -507,7 +511,7 @@ class SandboxRunner:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
             )
-            reason = self._supervise(process)
+            reason, peak_memory = self._supervise(process)
             try:
                 out, err = process.communicate(timeout=5)
             except subprocess.TimeoutExpired:
@@ -522,6 +526,7 @@ class SandboxRunner:
                 stdout=out.decode("utf-8", "replace"),
                 stderr=err.decode("utf-8", "replace"),
                 duration_seconds=duration,
+                peak_memory_mb=peak_memory,
                 artifacts=artifacts,
                 terminated_reason=reason,
                 script_sha256=script_digest,
@@ -530,26 +535,34 @@ class SandboxRunner:
             # Deterministic cleanup. A leftover workspace could be read by the next experiment.
             shutil.rmtree(root, ignore_errors=True)
 
-    def _supervise(self, process: subprocess.Popen[bytes]) -> str | None:
+    def _supervise(self, process: subprocess.Popen[bytes]) -> tuple[str | None, float | None]:
         """Wait for the child, killing it on wall-clock or memory breach.
 
-        Returns the reason it was stopped, or None if it finished on its own. The kill targets
-        the whole process tree because a script that spawned helpers would otherwise outlive it.
+        Returns the reason it was stopped -- None if it finished on its own -- and the highest
+        memory reading taken. The peak is kept because the ceiling is configuration and the peak
+        is evidence: a panel showing `memory_mb` would be displaying its own settings back, and a
+        run that used 40MB of a 1024MB allowance is a different fact from one that used 1000.
+
+        The kill targets the whole process tree because a script that spawned helpers would
+        otherwise outlive it.
         """
         deadline = time.monotonic() + self._policy.wall_clock_seconds
         reason: str | None = None
+        peak: float | None = None
         while process.poll() is None:
             if time.monotonic() >= deadline:
                 reason = "wall-clock"
                 break
             used = _memory_mb(process)
-            if used is not None and used > self._policy.memory_mb:
-                reason = "memory"
-                break
+            if used is not None:
+                peak = used if peak is None else max(peak, used)
+                if used > self._policy.memory_mb:
+                    reason = "memory"
+                    break
             time.sleep(self._policy.poll_interval_seconds)
         if reason is not None:
             self._terminate_tree(process)
-        return reason
+        return reason, peak
 
     @staticmethod
     def _terminate_tree(process: subprocess.Popen[bytes]) -> None:
