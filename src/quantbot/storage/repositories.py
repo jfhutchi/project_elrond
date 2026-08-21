@@ -41,6 +41,8 @@ from quantbot.storage.schema import (
     order_events,
     order_intents,
     positions,
+    promotion_events,
+    promotion_state,
     qualification_days,
     reconciliation_diffs,
     reconciliation_runs,
@@ -392,6 +394,111 @@ class StorageRepository:
                 )
             )
         return records
+
+
+    def save_promotion(self, record: PromotionRecord, *, direction: str) -> PromotionEvent:
+        """Move a strategy on the ladder, recording both where it is and that it moved.
+
+        The event is written first and unconditionally. If only the state were stored, a ladder
+        could be walked backwards and rewritten with no trace, and for a mechanism whose whole
+        claim is "this earned its way here" an unauditable record is worth nothing.
+
+        `direction` is stored rather than derived from the stage ranks, because the ranks are
+        code and this row has to stay readable after the ladder is reshaped.
+        """
+        if direction not in {"PROMOTION", "DEMOTION"}:
+            raise ValueError("promotion direction must be PROMOTION or DEMOTION")
+        previous = self.get_promotion(record.strategy_id)
+        event = PromotionEvent(
+            strategy_id=record.strategy_id,
+            from_stage=previous.stage if previous is not None else None,
+            to_stage=record.stage,
+            direction=direction,
+            strategy_version=record.strategy_version,
+            configuration_hash=record.configuration_hash,
+            reason=record.reason,
+            actor=record.actor,
+            occurred_at=record.updated_at,
+        )
+        self._session.execute(
+            promotion_events.insert().values(
+                strategy_id=event.strategy_id,
+                from_stage=event.from_stage,
+                to_stage=event.to_stage,
+                direction=event.direction,
+                strategy_version=event.strategy_version,
+                configuration_hash=event.configuration_hash,
+                reason=event.reason,
+                actor=event.actor,
+                occurred_at=encode_utc(event.occurred_at),
+            )
+        )
+        values = {
+            "stage": record.stage,
+            "strategy_version": record.strategy_version,
+            "configuration_hash": record.configuration_hash,
+            "reason": record.reason,
+            "actor": record.actor,
+            "updated_at": encode_utc(record.updated_at),
+        }
+        if previous is None:
+            self._session.execute(
+                promotion_state.insert().values(strategy_id=record.strategy_id, **values)
+            )
+        else:
+            self._session.execute(
+                update(promotion_state)
+                .where(promotion_state.c.strategy_id == record.strategy_id)
+                .values(**values)
+            )
+        return event
+
+    def get_promotion(self, strategy_id: str) -> PromotionRecord | None:
+        """Where a strategy is now, or `None` if it has never entered the ladder."""
+        row = (
+            self._session.execute(
+                select(promotion_state).where(promotion_state.c.strategy_id == strategy_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+        return PromotionRecord(
+            strategy_id=str(row["strategy_id"]),
+            stage=str(row["stage"]),
+            strategy_version=str(row["strategy_version"]),
+            configuration_hash=str(row["configuration_hash"]),
+            reason=str(row["reason"]),
+            actor=str(row["actor"]),
+            updated_at=decode_utc(str(row["updated_at"])),
+        )
+
+    def list_promotion_events(self, strategy_id: str) -> list[PromotionEvent]:
+        """Every move this strategy made, oldest first. The audit trail, not a cache."""
+        rows = (
+            self._session.execute(
+                select(promotion_events)
+                .where(promotion_events.c.strategy_id == strategy_id)
+                .order_by(promotion_events.c.event_id)
+            )
+            .mappings()
+            .all()
+        )
+        return [
+            PromotionEvent(
+                strategy_id=str(row["strategy_id"]),
+                from_stage=None if row["from_stage"] is None else str(row["from_stage"]),
+                to_stage=str(row["to_stage"]),
+                direction=str(row["direction"]),
+                strategy_version=str(row["strategy_version"]),
+                configuration_hash=str(row["configuration_hash"]),
+                reason=str(row["reason"]),
+                actor=str(row["actor"]),
+                occurred_at=decode_utc(str(row["occurred_at"])),
+            )
+            for row in rows
+        ]
 
     def save_bars(
         self,
@@ -1529,3 +1636,37 @@ class StorageRepository:
             )
         ).all()
         return len(rows)
+
+
+@dataclass(frozen=True, slots=True)
+class PromotionRecord:
+    """One durable promotion state, as stored. Decoupled from `research.promotion` on purpose.
+
+    `storage` does not import `research`, so the ladder's enum stays in the module that owns the
+    rules and this layer stores the string it was given. That also keeps a stored history
+    readable after the ladder is reshaped: a stage this build no longer defines still reads back
+    as the stage it was.
+    """
+
+    strategy_id: str
+    stage: str
+    strategy_version: str
+    configuration_hash: str
+    reason: str
+    actor: str
+    updated_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class PromotionEvent:
+    """One move on the ladder. Append-only; nothing updates or deletes these."""
+
+    strategy_id: str
+    from_stage: str | None
+    to_stage: str
+    direction: str
+    strategy_version: str
+    configuration_hash: str
+    reason: str
+    actor: str
+    occurred_at: datetime

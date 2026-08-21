@@ -13,6 +13,7 @@ from quantbot.research.promotion import (
     ALLOWED_PROMOTIONS,
     MINIMUM_FORWARD_DAYS,
     ForwardObservation,
+    PromotionLedger,
     PromotionRefused,
     PromotionState,
     Stage,
@@ -24,6 +25,7 @@ from quantbot.research.promotion import (
     survivor_objections,
 )
 from quantbot.research.registry import DataRole
+from quantbot.storage import Database
 from tests.unit.research.test_builder import (  # reuse the compiled plan and outcome fixtures
     outcome,
 )
@@ -259,3 +261,113 @@ def test_forward_progress_reports_the_honest_distance() -> None:
     assert progress["forward_days"] == Decimal("1")
     assert progress["days_required"] == Decimal("30")
     assert progress["forward_days"] < progress["days_required"]
+
+
+@pytest.fixture
+def ledger_db(tmp_path):
+    db = Database(tmp_path / "ladder.db")
+    yield db
+    db.close()
+
+
+def _entry(stage: Stage = Stage.CANDIDATE) -> PromotionState:
+    return PromotionState(
+        strategy_id="adaptive-momentum-v1-309894d8d8a5296e",
+        stage=stage,
+        strategy_version="1.2.0",
+        configuration_hash="cfg-hash",
+        reason="entered the ladder",
+        actor="hutch",
+        updated_at=NOW,
+    )
+
+
+def test_a_ladder_position_outlives_the_process_that_computed_it(ledger_db) -> None:
+    """#16: `promote()` returned a state and nothing could store it.
+
+    A restart previously reset every strategy to whatever a caller happened to construct next,
+    which for a record of what a strategy earned is the same as having no record.
+    """
+    with ledger_db.transaction() as session:
+        PromotionLedger(session).enter(_entry())
+
+    with ledger_db.transaction() as session:
+        restored = PromotionLedger(session).current("adaptive-momentum-v1-309894d8d8a5296e")
+
+    assert restored is not None
+    assert restored.stage is Stage.CANDIDATE
+    assert restored.strategy_version == "1.2.0"
+
+
+def test_the_ledger_enforces_the_same_transitions_as_the_pure_function(ledger_db) -> None:
+    """The rules are not duplicated in the ledger; it delegates to `promote`.
+
+    A second copy of the transition table would eventually disagree with the first, and the one
+    in `ALLOWED_PROMOTIONS` is the one that has tests.
+    """
+    with ledger_db.transaction() as session:
+        ledger = PromotionLedger(session)
+        ledger.enter(_entry())
+        with pytest.raises(PromotionRefused, match="does not lead to"):
+            ledger.promote(
+                "adaptive-momentum-v1-309894d8d8a5296e",
+                Stage.PAPER_QUALIFIED,
+                actor="hutch",
+                reason="skipping the queue",
+                now=NOW,
+            )
+
+
+def test_a_refused_promotion_writes_no_history(ledger_db) -> None:
+    """A promotion that did not happen is not a move.
+
+    Recording the attempt would put refused transitions in the same history as earned ones, and
+    the history is what the ladder's claim rests on.
+    """
+    with ledger_db.transaction() as session:
+        ledger = PromotionLedger(session)
+        ledger.enter(_entry())
+        with pytest.raises(PromotionRefused):
+            ledger.promote(
+                "adaptive-momentum-v1-309894d8d8a5296e",
+                Stage.SHADOW,
+                actor="hutch",
+                reason="not earned",
+                now=NOW,
+            )
+
+    with ledger_db.transaction() as session:
+        events = PromotionLedger(session).history("adaptive-momentum-v1-309894d8d8a5296e")
+
+    assert [event.to_stage for event in events] == ["CANDIDATE"]
+
+
+def test_re_entering_the_ladder_is_refused_rather_than_silently_resetting(ledger_db) -> None:
+    """Re-entry would discard everything the strategy earned, through the call that starts one."""
+    with ledger_db.transaction() as session:
+        ledger = PromotionLedger(session)
+        ledger.enter(_entry())
+        ledger.promote(
+            "adaptive-momentum-v1-309894d8d8a5296e",
+            Stage.REGISTERED,
+            actor="hutch",
+            reason="registered",
+            now=NOW,
+        )
+        with pytest.raises(PromotionRefused, match="already on the ladder"):
+            ledger.enter(_entry())
+
+    with ledger_db.transaction() as session:
+        assert (
+            PromotionLedger(session).current("adaptive-momentum-v1-309894d8d8a5296e").stage
+            is Stage.REGISTERED
+        )
+
+
+def test_a_strategy_that_never_entered_cannot_move(ledger_db) -> None:
+    """Promoting an unknown strategy would create a position it never earned."""
+    with ledger_db.transaction() as session:
+        with pytest.raises(PromotionRefused, match="not on the ladder"):
+            PromotionLedger(session).promote(
+                "never-seen", Stage.REGISTERED, actor="hutch", reason="x", now=NOW
+            )

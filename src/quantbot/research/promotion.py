@@ -40,10 +40,12 @@ from types import MappingProxyType
 from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from sqlalchemy.orm import Session
 
 from quantbot.research.builder import ExperimentOutcome, OutcomeVerdict
 from quantbot.research.manifest import VALID_FOR, ExecutionPath
 from quantbot.research.registry import DataRole
+from quantbot.storage.repositories import PromotionEvent, PromotionRecord, StorageRepository
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -322,3 +324,93 @@ __all__ = [
     "promote",
     "survivor_objections",
 ]
+
+
+class PromotionLedger:
+    """The durable ladder: load where a strategy is, apply the rules, record that it moved.
+
+    `promote()` and `demote()` are pure and stay that way -- they take a state and return one.
+    Until this existed nothing stored the answer, so a ladder position lived only as long as the
+    process that computed it and a restart reset every strategy to whatever a caller constructed
+    next (#16).
+
+    The rules are not duplicated here. This loads, delegates, and persists; a second copy of the
+    transition table would eventually disagree with the first, and the one in `ALLOWED_PROMOTIONS`
+    is the one that has tests.
+    """
+
+    def __init__(self, session: Session) -> None:
+        self._repository = StorageRepository(session)
+
+    def current(self, strategy_id: str) -> PromotionState | None:
+        """Where this strategy has got to, or `None` if it has never entered the ladder."""
+        record = self._repository.get_promotion(strategy_id)
+        if record is None:
+            return None
+        return PromotionState(
+            strategy_id=record.strategy_id,
+            stage=Stage(record.stage),
+            strategy_version=record.strategy_version,
+            configuration_hash=record.configuration_hash,
+            reason=record.reason,
+            actor=record.actor,
+            updated_at=record.updated_at,
+        )
+
+    def enter(self, state: PromotionState) -> PromotionState:
+        """Record a strategy entering the ladder. Refuses to overwrite an existing position.
+
+        Re-entering would silently discard everything the strategy had earned, and would do it
+        through the same call that legitimately starts one -- so it is refused rather than
+        treated as an upsert.
+        """
+        if self._repository.get_promotion(state.strategy_id) is not None:
+            raise PromotionRefused(
+                state.strategy_id,
+                state.stage,
+                "already on the ladder; use promote or demote rather than re-entering",
+            )
+        self._save(state, direction="PROMOTION")
+        return state
+
+    def promote(self, strategy_id: str, target: Stage, **kwargs: object) -> PromotionState:
+        """Move a strategy up and persist it, or refuse and persist nothing.
+
+        A refusal writes no event. A promotion that did not happen is not a move, and recording
+        the attempt would put refused transitions in the same history as earned ones.
+        """
+        moved = promote(self._require(strategy_id), target, **kwargs)  # type: ignore[arg-type]
+        self._save(moved, direction="PROMOTION")
+        return moved
+
+    def demote(self, strategy_id: str, target: Stage, **kwargs: object) -> PromotionState:
+        """Drop a strategy back and persist it."""
+        moved = demote(self._require(strategy_id), target, **kwargs)  # type: ignore[arg-type]
+        self._save(moved, direction="DEMOTION")
+        return moved
+
+    def history(self, strategy_id: str) -> list[PromotionEvent]:
+        """Every move this strategy made, oldest first."""
+        return self._repository.list_promotion_events(strategy_id)
+
+    def _require(self, strategy_id: str) -> PromotionState:
+        state = self.current(strategy_id)
+        if state is None:
+            raise PromotionRefused(
+                strategy_id, Stage.CANDIDATE, "is not on the ladder, so it cannot move on it"
+            )
+        return state
+
+    def _save(self, state: PromotionState, *, direction: str) -> None:
+        self._repository.save_promotion(
+            PromotionRecord(
+                strategy_id=state.strategy_id,
+                stage=state.stage.value,
+                strategy_version=state.strategy_version,
+                configuration_hash=state.configuration_hash,
+                reason=state.reason,
+                actor=state.actor,
+                updated_at=state.updated_at,
+            ),
+            direction=direction,
+        )

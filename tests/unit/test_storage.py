@@ -40,6 +40,7 @@ from quantbot.storage import (
     encode_utc,
 )
 from quantbot.storage.database import REVISION_FOR_SCHEMA_VERSION
+from quantbot.storage.repositories import PromotionRecord
 from quantbot.storage.schema import (
     SCHEMA_VERSION,
     kill_switch_state,
@@ -1020,3 +1021,89 @@ def test_replaying_every_migration_reproduces_the_head_schema_column_for_column(
             }, f"{name} primary key differs between the migration chain and schema.py"
     finally:
         engine.dispose()
+
+
+def _promotion(stage: str = "CANDIDATE", **overrides: object) -> PromotionRecord:
+    fields: dict[str, object] = {
+        "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+        "stage": stage,
+        "strategy_version": "1.2.0",
+        "configuration_hash": "cfg-hash",
+        "reason": "entered the ladder",
+        "actor": "hutch",
+        "updated_at": NOW,
+    }
+    fields.update(overrides)
+    return PromotionRecord(**fields)  # type: ignore[arg-type]
+
+
+def test_promotion_state_survives_the_process_that_computed_it(database: Database) -> None:
+    """#16: `promote()` returned a value and nothing could store it.
+
+    The ladder is the record of what a strategy earned. Holding it in memory meant a restart
+    reset every strategy to whatever a caller happened to construct next.
+    """
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        assert repository.get_promotion("adaptive-momentum-v1-309894d8d8a5296e") is None
+        repository.save_promotion(_promotion(), direction="PROMOTION")
+
+    with database.transaction() as session:
+        restored = StorageRepository(session).get_promotion(
+            "adaptive-momentum-v1-309894d8d8a5296e"
+        )
+
+    assert restored is not None
+    assert restored.stage == "CANDIDATE"
+    assert restored.updated_at == NOW
+    assert restored.actor == "hutch"
+
+
+def test_every_move_is_recorded_even_when_the_stage_returns_to_where_it_started(
+    database: Database,
+) -> None:
+    """The history is the point, not a convenience.
+
+    A ladder that stores only the current stage can be walked up and back down and end up
+    looking untouched. For a mechanism whose entire claim is "this earned its way here", a
+    record that cannot show the walk is worth nothing.
+    """
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.save_promotion(_promotion("CANDIDATE"), direction="PROMOTION")
+        repository.save_promotion(_promotion("REGISTERED"), direction="PROMOTION")
+        repository.save_promotion(
+            _promotion("CANDIDATE", reason="integrity violation"), direction="DEMOTION"
+        )
+
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        current = repository.get_promotion("adaptive-momentum-v1-309894d8d8a5296e")
+        events = repository.list_promotion_events("adaptive-momentum-v1-309894d8d8a5296e")
+
+    # The state looks exactly as it did at the start.
+    assert current is not None
+    assert current.stage == "CANDIDATE"
+    # The history does not.
+    assert [(event.from_stage, event.to_stage, event.direction) for event in events] == [
+        (None, "CANDIDATE", "PROMOTION"),
+        ("CANDIDATE", "REGISTERED", "PROMOTION"),
+        ("REGISTERED", "CANDIDATE", "DEMOTION"),
+    ]
+    assert events[-1].reason == "integrity violation"
+
+
+def test_the_first_event_records_that_there_was_no_previous_stage(database: Database) -> None:
+    """Entering the ladder is a distinct fact from moving within it."""
+    with database.transaction() as session:
+        event = StorageRepository(session).save_promotion(_promotion(), direction="PROMOTION")
+
+    assert event.from_stage is None
+    assert event.to_stage == "CANDIDATE"
+
+
+def test_an_unknown_direction_is_refused(database: Database) -> None:
+    """Only PROMOTION and DEMOTION exist. A third value would make the audit trail unreadable."""
+    with database.transaction() as session:
+        with pytest.raises(ValueError, match="PROMOTION or DEMOTION"):
+            StorageRepository(session).save_promotion(_promotion(), direction="SIDEWAYS")

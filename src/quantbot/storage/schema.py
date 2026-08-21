@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 metadata = MetaData(
     naming_convention={
@@ -540,3 +540,48 @@ research_task_events = Table(
     Column("detail_json", Text, nullable=False, server_default=text("'{}'")),
 )
 Index("ix_research_task_events_task_id", research_task_events.c.task_id)
+
+
+# --- Promotion ladder (#16) ------------------------------------------------------------------
+#
+# Two tables rather than one, and the second is the point. `promotion_state` is where a strategy
+# is now; `promotion_events` is every move it ever made. A ladder that only stores the current
+# stage can be walked backwards and rewritten with no trace, which for a mechanism whose whole
+# purpose is "this earned its way here" would make the record worthless.
+#
+# Events are append-only. Nothing in `StorageRepository` updates or deletes one.
+promotion_state = Table(
+    "promotion_state",
+    metadata,
+    Column("strategy_id", String(128), primary_key=True),
+    Column("stage", String(32), nullable=False),
+    Column("strategy_version", String(64), nullable=False),
+    Column("configuration_hash", String(128), nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("actor", String(128), nullable=False),
+    Column("updated_at", String(40), nullable=False),
+)
+
+promotion_events = Table(
+    "promotion_events",
+    metadata,
+    Column("event_id", Integer, primary_key=True, autoincrement=True),
+    Column("strategy_id", String(128), nullable=False),
+    # Null on the first event, which is the strategy entering the ladder.
+    Column("from_stage", String(32)),
+    Column("to_stage", String(32), nullable=False),
+    # PROMOTION or DEMOTION. Stored rather than derived from the stage ranks, because the ranks
+    # are code and this row has to stay readable after the ladder is reshaped.
+    Column("direction", String(16), nullable=False),
+    Column("strategy_version", String(64), nullable=False),
+    Column("configuration_hash", String(128), nullable=False),
+    Column("reason", Text, nullable=False),
+    Column("actor", String(128), nullable=False),
+    Column("occurred_at", String(40), nullable=False),
+    CheckConstraint("direction IN ('PROMOTION', 'DEMOTION')", name="direction_known"),
+)
+Index(
+    "ix_promotion_events_strategy",
+    promotion_events.c.strategy_id,
+    promotion_events.c.occurred_at,
+)
