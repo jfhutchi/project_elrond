@@ -31,6 +31,7 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from enum import StrEnum
+from types import MappingProxyType
 from typing import Annotated, Protocol, Self, TypeVar
 
 from pydantic import (
@@ -474,7 +475,7 @@ class OpenAICompatibleTransport:
         payload = {
             "model": spec.model,
             "messages": [{"role": "user", "content": prompt}],
-            **spec.parameters,
+            **_typed_parameters(spec.parameters),
         }
         body = self._post(
             f"{spec.endpoint.rstrip('/')}/chat/completions",
@@ -496,6 +497,60 @@ class OpenAICompatibleTransport:
         if prompt_tokens < 0 or completion_tokens < 0:
             raise ModelError(f"{spec.model} reported negative token usage")
         return text, prompt_tokens, completion_tokens
+
+
+#: OpenAI-compatible parameters that are not strings on the wire, and what they are instead.
+#:
+#: `ModelSpec.parameters` is `dict[str, str]` because it is hashed into provenance, and a
+#: canonical hash over mixed types is a hash that changes when nothing did. The wire format is
+#: not the storage format, so the conversion belongs here rather than in the spec.
+#:
+#: This is the defect the first real endpoint found. Against `httpx.MockTransport` every value
+#: was accepted, so `{"temperature": "0"}` looked correct for as long as nothing strict read it.
+#: Ollama answers `cannot unmarshal string into Go struct field ... of type float64` and every
+#: call fails -- which is what "no real endpoint has been contacted" was hiding.
+_WIRE_TYPES: Mapping[str, type] = MappingProxyType(
+    {
+        "temperature": float,
+        "top_p": float,
+        "frequency_penalty": float,
+        "presence_penalty": float,
+        "max_tokens": int,
+        "max_completion_tokens": int,
+        "n": int,
+        "seed": int,
+        "top_k": int,
+        "repeat_penalty": float,
+    }
+)
+
+
+def _typed_parameters(parameters: Mapping[str, str]) -> dict[str, object]:
+    """Convert stored string parameters into the types an OpenAI-compatible server expects.
+
+    Only names in `_WIRE_TYPES` are converted, and anything else is passed through unchanged. A
+    blanket "try float() on everything" would eventually mangle a parameter that is genuinely a
+    string -- `stop` and `user` are the obvious ones -- and silently changing a value's type is
+    how a request stops meaning what it said.
+
+    A declared-numeric parameter that will not convert is an error rather than a passthrough. It
+    would fail at the server anyway, and failing here says which parameter is wrong instead of
+    returning an HTTP 400 whose body this transport deliberately does not echo.
+    """
+    converted: dict[str, object] = {}
+    for name, raw in parameters.items():
+        wire = _WIRE_TYPES.get(name)
+        if wire is None:
+            converted[name] = raw
+            continue
+        try:
+            converted[name] = wire(raw)
+        except (TypeError, ValueError) as error:
+            raise ModelError(
+                f"{name}={raw!r} is not a {wire.__name__}; the endpoint would reject the whole "
+                "request without saying which parameter was wrong"
+            ) from error
+    return converted
 
 
 class PostJson(Protocol):

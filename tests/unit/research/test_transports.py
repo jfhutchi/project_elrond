@@ -97,7 +97,11 @@ def test_a_local_endpoint_runs_a_complete_role_through_the_production_http_path(
     body = seen["body"]
     assert isinstance(body, dict)
     assert body["model"] == "qwen2.5-32b"
-    assert body["temperature"] == "0"
+    # A float on the wire even though the spec stores it as a string, because that is what the
+    # OpenAI schema says and what a strict server enforces. This asserted the string until a
+    # real endpoint rejected it -- see `_typed_parameters`.
+    assert body["temperature"] == 0.0
+    assert isinstance(body["temperature"], float)
     assert body["messages"][0]["content"].endswith("momentum works")
 
 

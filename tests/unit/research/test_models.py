@@ -243,7 +243,12 @@ def test_a_local_openai_compatible_endpoint_runs_a_complete_role() -> None:
     payload = seen["payload"]
     assert isinstance(payload, dict)
     assert payload["model"] == "qwen2.5-32b"
-    assert payload["temperature"] == "0"
+    # A float, not the string this asserted until a real endpoint read it. The stored form is a
+    # string because `parameters` is hashed into provenance; the wire form is what the OpenAI
+    # schema says, and Ollama refuses anything else. This assertion previously encoded the
+    # defect, which is what a mock transport buys you if it is the only reader you ever have.
+    assert payload["temperature"] == 0.0
+    assert isinstance(payload["temperature"], float)
     assert response.provenance().model == "qwen2.5-32b@1"
 
 
@@ -521,3 +526,40 @@ def test_a_structured_call_never_reaches_a_model_that_cannot_produce_json() -> N
 
     assert response.spec.model == "json-model"
     assert "no-json" not in [model for model, _ in chat.calls]
+
+
+def test_numeric_parameters_reach_the_wire_as_numbers_not_strings() -> None:
+    """The defect the first real endpoint found, and that no mock could have.
+
+    `ModelSpec.parameters` is `dict[str, str]` because it is hashed into provenance, and a
+    canonical hash over mixed types changes when nothing did. But the wire format is not the
+    storage format: an OpenAI-compatible server parses `temperature` as a float, and Ollama
+    answers `cannot unmarshal string into Go struct field ... of type float64`. Every call
+    failed, and `httpx.MockTransport` had accepted the string happily for as long as it was the
+    only reader.
+    """
+    from quantbot.research.models import _typed_parameters
+
+    wire = _typed_parameters({"temperature": "0", "max_tokens": "512", "stop": "###"})
+
+    assert wire["temperature"] == 0.0
+    assert isinstance(wire["temperature"], float)
+    assert wire["max_tokens"] == 512
+    assert isinstance(wire["max_tokens"], int)
+    # Unknown names pass through untouched. A blanket "try float() on everything" would
+    # eventually mangle a parameter that is genuinely a string, and silently changing a value's
+    # type is how a request stops meaning what it said.
+    assert wire["stop"] == "###"
+
+
+def test_a_declared_numeric_parameter_that_is_not_numeric_fails_here_not_at_the_server() -> None:
+    """The endpoint would reject the whole request without saying which parameter was wrong.
+
+    And this transport deliberately does not echo provider error bodies, because they routinely
+    contain part of the key that was rejected -- so a server-side rejection arrives as a bare
+    status code. Failing locally is the only place the parameter name survives.
+    """
+    from quantbot.research.models import ModelError, _typed_parameters
+
+    with pytest.raises(ModelError, match="temperature"):
+        _typed_parameters({"temperature": "warm"})
