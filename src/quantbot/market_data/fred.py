@@ -41,6 +41,7 @@ from typing import Annotated, Protocol
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 
 from quantbot.market_data.base import MarketDataError
+from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.market_data.instruments import AssetClass, Instrument
 from quantbot.market_data.pointintime import (
     Availability,
@@ -57,9 +58,16 @@ FRED_CSV_URL = "https://fred.stlouisfed.org/graph/fredgraph.csv"
 #: The archival endpoint. The only one whose values are point-in-time.
 ALFRED_URL = "https://alfred.stlouisfed.org/graph/fredgraph.csv"
 
-#: FRED publishes in US Eastern; 8:30am ET is the standard release hour for the major series.
+#: FRED publishes in US Eastern; 08:30 ET is the standard release time for the major series.
 #: Recorded as an assumption rather than hidden, because it sets the availability timestamp.
-RELEASE_HOUR_UTC = 13
+#:
+#: Held in Eastern and converted per date rather than stored as a fixed UTC hour. 08:30 ET is
+#: 13:30 UTC under standard time and 12:30 UTC under daylight time, so a constant 13:00 UTC --
+#: which this module used until GPT-5.6 Sol found it on #17 -- published every winter release
+#: thirty minutes early. That is look-ahead, in the one module written to prevent it, and it is
+#: the invisible kind: it does not break a backtest, it just makes the strategy look prescient.
+#: (The summer half of the same error ran thirty minutes late, which is merely conservative.)
+RELEASE_TIME_ET = time(hour=8, minute=30)
 
 
 class FredError(MarketDataError):
@@ -180,17 +188,26 @@ def _month_end(year: int, month: int) -> date:
     return date(year + month // 12, month % 12 + 1, 1) - timedelta(days=1)
 
 
+def release_instant(released: date) -> datetime:
+    """The UTC instant a release published on `released` became knowable.
+
+    Converted through `America/New_York` for that specific date, so the answer follows the
+    daylight-saving rule in force rather than an average of it.
+    """
+    return datetime.combine(released, RELEASE_TIME_ET, tzinfo=XNYS_TIMEZONE).astimezone(UTC)
+
+
 def _release_datetime(observed: date, *, series: MacroSeries) -> datetime:
     """When a value for `observed` could first be known.
 
-    The end of the period it covers, plus the publication lag, at the release hour. The hour
-    matters: a series released at 8:30am ET is not usable by a strategy acting on the previous
+    The end of the period it covers, plus the publication lag, at the release time. The time of
+    day matters: a series released at 08:30 ET is not usable by a strategy acting on the previous
     close, and rounding to midnight would quietly grant half a day of hindsight.
     """
     released = period_end(observed, series.frequency) + timedelta(
         days=series.publication_lag_days
     )
-    return datetime.combine(released, time(hour=RELEASE_HOUR_UTC), tzinfo=UTC)
+    return release_instant(released)
 
 
 def parse_series(
@@ -230,7 +247,7 @@ def parse_series(
 
         released = (release_dates or {}).get(observed)
         available_at = (
-            datetime.combine(released, time(hour=RELEASE_HOUR_UTC), tzinfo=UTC)
+            release_instant(released)
             if released is not None
             else _release_datetime(observed, series=series)
         )
@@ -372,7 +389,7 @@ __all__ = [
     "FRED_CSV_URL",
     "FRED_HOST",
     "KNOWN_SERIES",
-    "RELEASE_HOUR_UTC",
+    "RELEASE_TIME_ET",
     "FredError",
     "FredProvider",
     "FredTransport",
@@ -380,6 +397,7 @@ __all__ = [
     "RevisionUnavailable",
     "content_hash",
     "period_end",
+    "release_instant",
     "observations_available_at",
     "parse_series",
 ]

@@ -99,6 +99,37 @@ def test_an_actual_release_date_overrides_the_assumed_lag() -> None:
     assert observations[1].availability.available_at.date() == date(2026, 5, 5)
 
 
+def test_the_release_instant_follows_eastern_daylight_saving_not_a_fixed_utc_hour() -> None:
+    """08:30 ET is 13:30 UTC in winter and 12:30 UTC in summer. A constant is wrong twice.
+
+    This module stored a fixed 13:00 UTC until GPT-5.6 Sol found it reviewing #17. The summer
+    half of that error was merely conservative -- thirty minutes late. The winter half published
+    every release thirty minutes *early*, which is look-ahead, in the module written to prevent
+    look-ahead, and of the invisible kind: it does not break a backtest, it makes the strategy
+    look prescient.
+
+    Asserting the exact instant rather than the date, because the date was already right.
+    """
+    body = """
+DATE,PAYEMS
+2026-01-01,158000
+2026-06-01,158600
+"""
+    winter, summer = parse_series(
+        body,
+        KNOWN_SERIES["PAYEMS"],
+        vintage=vintage(),
+        release_dates={date(2026, 1, 1): date(2026, 2, 6), date(2026, 6, 1): date(2026, 7, 2)},
+    )
+
+    assert winter.availability.available_at == datetime(2026, 2, 6, 13, 30, tzinfo=UTC)
+    assert summer.availability.available_at == datetime(2026, 7, 2, 12, 30, tzinfo=UTC)
+
+    # The defect itself: at the old constant the winter release was already knowable.
+    assert not winter.availability.known_by(datetime(2026, 2, 6, 13, 0, tzinfo=UTC))
+    assert winter.availability.known_by(datetime(2026, 2, 6, 13, 30, tzinfo=UTC))
+
+
 def test_a_confirmatory_run_on_a_revised_series_must_use_the_archival_endpoint() -> None:
     """`fredgraph.csv` serves today's revised values, which is what a naive study uses."""
     transport = FakeFred()
