@@ -6,7 +6,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from quantbot.research.models import (
     STRUCTURED_OUTPUT,
@@ -23,6 +23,7 @@ from quantbot.research.models import (
     PromptTemplate,
     RoleRouting,
     RoutingError,
+    StructuredOutputError,
 )
 
 NOW = datetime(2026, 8, 18, 14, 30, tzinfo=UTC)
@@ -423,3 +424,100 @@ def test_a_requirement_no_model_can_meet_is_refused_rather_than_downgraded() -> 
         runtime.call(
             ModelRole.GENERATOR, template(), {"claim": "x"}, now=NOW, needs=STRUCTURED_OUTPUT
         )
+
+
+class Verdict(BaseModel):
+    """A minimal structured answer, standing in for a real critic schema."""
+
+    verdict: str
+    confidence: float
+
+
+def test_a_weak_model_cannot_be_configured_as_the_critic() -> None:
+    """#9: nothing previously stopped a weak local model serving as CRITIC.
+
+    The critic decides whether a hypothesis survives, so a weak one quietly lowers the bar for
+    everything the system will ever believe. The floor is declared by the operator rather than
+    invented here: there is no universal threshold for "weak", and a number this module made up
+    would be applied to models it has never seen.
+    """
+    weak = _incapable("tiny-local")  # 8192 context, no structured output
+
+    with pytest.raises(RoutingError, match="against a critic floor"):
+        RoleRouting(
+            chains={ModelRole.GENERATOR: (spec("gen"),), ModelRole.CRITIC: (weak,)},
+            critic_minimum_context_tokens=32000,
+        )
+
+    with pytest.raises(RoutingError, match="cannot structured_output"):
+        RoleRouting(
+            chains={ModelRole.GENERATOR: (spec("gen"),), ModelRole.CRITIC: (weak,)},
+            critic_requires=STRUCTURED_OUTPUT,
+        )
+
+    # A model that clears the declared bar is accepted, so the floor is a filter and not a ban.
+    RoleRouting(
+        chains={ModelRole.GENERATOR: (spec("gen"),), ModelRole.CRITIC: (spec("strong-critic"),)},
+        critic_minimum_context_tokens=32000,
+        critic_requires=STRUCTURED_OUTPUT,
+    )
+
+
+def test_a_floor_of_zero_is_not_silently_applied_to_the_generator() -> None:
+    """The floor governs CRITIC only; a cheap generator is a legitimate configuration."""
+    weak = _incapable("tiny-local")
+    RoleRouting(
+        chains={ModelRole.GENERATOR: (weak,), ModelRole.CRITIC: (spec("strong-critic"),)},
+        critic_minimum_context_tokens=32000,
+    )
+
+
+def test_structured_output_is_validated_rather_than_assumed() -> None:
+    """#9: `structured_output` was a declared capability that nothing ever checked the result of.
+
+    Prose, truncated JSON and well-formed JSON of the wrong shape each produced a ModelResponse
+    that looked entirely successful, leaving the caller to crash further from the cause or read
+    a half-parsed answer as a real one.
+    """
+    routing = RoleRouting(
+        chains={ModelRole.GENERATOR: (spec("json-model"),), ModelRole.CRITIC: (spec("critic"),)}
+    )
+
+    good = ModelRuntime(routing, FakeChat(answer='{"verdict": "REVISE", "confidence": 0.4}'))
+    parsed, response = good.call_structured(
+        ModelRole.GENERATOR, template(), {"claim": "x"}, Verdict, now=NOW
+    )
+    assert parsed.verdict == "REVISE"
+    assert parsed.confidence == 0.4
+    # The raw response travels with the parsed object: a structured answer without provenance
+    # cannot say which model produced it, or whether that model was a fallback.
+    assert response.spec.model == "json-model"
+
+    prose = ModelRuntime(routing, FakeChat(answer="I think it should be revised, honestly"))
+    with pytest.raises(StructuredOutputError, match="did not return JSON"):
+        prose.call_structured(ModelRole.GENERATOR, template(), {"claim": "x"}, Verdict, now=NOW)
+
+    wrong_shape = ModelRuntime(routing, FakeChat(answer='{"verdict": "REVISE"}'))
+    with pytest.raises(StructuredOutputError, match="not a valid Verdict"):
+        wrong_shape.call_structured(
+            ModelRole.GENERATOR, template(), {"claim": "x"}, Verdict, now=NOW
+        )
+
+
+def test_a_structured_call_never_reaches_a_model_that_cannot_produce_json() -> None:
+    """The requirement is added automatically, so the caller cannot forget it."""
+    routing = RoleRouting(
+        chains={
+            ModelRole.GENERATOR: (_incapable("no-json"), spec("json-model")),
+            ModelRole.CRITIC: (spec("critic"),),
+        },
+        fall_back=True,
+    )
+    chat = FakeChat(answer='{"verdict": "PROCEED", "confidence": 0.9}')
+
+    _, response = ModelRuntime(routing, chat).call_structured(
+        ModelRole.GENERATOR, template(), {"claim": "x"}, Verdict, now=NOW
+    )
+
+    assert response.spec.model == "json-model"
+    assert "no-json" not in [model for model, _ in chat.calls]

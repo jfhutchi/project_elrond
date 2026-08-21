@@ -31,9 +31,16 @@ import json
 from collections.abc import Mapping, Sequence
 from datetime import datetime
 from enum import StrEnum
-from typing import Annotated, Protocol, Self
+from typing import Annotated, Protocol, Self, TypeVar
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    StringConstraints,
+    ValidationError,
+    model_validator,
+)
 
 from quantbot.research.manifest import ModelProvenance, canonical_result_json, looks_like_credential
 
@@ -181,6 +188,13 @@ class PromptTemplate(FrozenModel):
         return rendered
 
 
+ModelT = TypeVar("ModelT", bound=BaseModel)
+
+
+class StructuredOutputError(ModelError):
+    """Raised when a model asked for structured output did not produce a valid instance."""
+
+
 class RoleRouting(FrozenModel):
     """Which models serve which roles, and in what order when one is unavailable."""
 
@@ -190,6 +204,17 @@ class RoleRouting(FrozenModel):
     fall_back: bool = False
     #: Enforced rather than advisory. Set False only with a recorded reason.
     require_distinct_critic: bool = True
+    #: The floor a model must clear to serve as CRITIC (#9).
+    #:
+    #: Declared rather than inferred, and required rather than defaulted to zero. A critic is
+    #: the component that decides whether a hypothesis survives, so configuring a weak local
+    #: model there quietly lowers the bar for everything the system will ever believe -- and
+    #: nothing previously stopped it. There is no sensible universal threshold for "weak", so
+    #: the operator states the bar and this refuses a chain that does not clear it, rather than
+    #: this module inventing a number and applying it to models it has never seen.
+    critic_minimum_context_tokens: int = Field(default=0, ge=0)
+    #: Capabilities every CRITIC model must have, e.g. `STRUCTURED_OUTPUT`.
+    critic_requires: Capability = frozenset()
 
     @model_validator(mode="after")
     def validate_routing(self) -> Self:
@@ -207,6 +232,19 @@ class RoleRouting(FrozenModel):
                 raise RoutingError(
                     "the critic must not share a model identity with the generator it "
                     "reviews: " + ", ".join(":".join(item) for item in sorted(shared))
+                )
+
+        for spec in critic or ():
+            if spec.capabilities.context_tokens < self.critic_minimum_context_tokens:
+                raise RoutingError(
+                    f"{spec.model} offers {spec.capabilities.context_tokens} context tokens "
+                    f"against a critic floor of {self.critic_minimum_context_tokens}; a critic "
+                    "that cannot hold the material it reviews will approve what it did not read"
+                )
+            lacking = _missing(spec, self.critic_requires)
+            if lacking:
+                raise RoutingError(
+                    f"{spec.model} cannot {', '.join(lacking)} and is configured as a critic"
                 )
         return self
 
@@ -380,6 +418,45 @@ class ModelRuntime:
             )
         raise ModelUnavailable(f"{role.value} exhausted its chain: {'; '.join(attempted)}")
 
+    def call_structured(
+        self,
+        role: ModelRole,
+        template: PromptTemplate,
+        values: Mapping[str, str],
+        schema: type[ModelT],
+        *,
+        now: datetime,
+    ) -> tuple[ModelT, ModelResponse]:
+        """Call a model and parse its answer against `schema`, or fail (#9).
+
+        Structured output was declared as a capability and never validated, so a model that
+        answered with prose, truncated JSON, or JSON of the wrong shape produced a
+        `ModelResponse` that looked entirely successful. The caller then either crashed further
+        away from the cause or -- worse -- read a partially-parsed answer as a real one.
+
+        `STRUCTURED_OUTPUT` is added to the routing requirement automatically, so a model that
+        cannot produce JSON is never asked to. Both the parsed object and the raw response are
+        returned: the provenance of a structured answer is the response, and discarding it would
+        leave a parsed result with nothing saying which model produced it or whether that model
+        was a fallback.
+        """
+        response = self.call(role, template, values, now=now, needs=STRUCTURED_OUTPUT)
+        try:
+            payload = json.loads(response.text)
+        except ValueError as error:
+            raise StructuredOutputError(
+                f"{response.spec.model} was asked for {schema.__name__} and did not return JSON"
+            ) from error
+        try:
+            return schema.model_validate(payload), response
+        except ValidationError as error:
+            # The model's text is deliberately not quoted back. It can be long, and a prompt
+            # containing operator data could return it -- an error message is not a safe place
+            # to widen what a failure discloses.
+            raise StructuredOutputError(
+                f"{response.spec.model} returned JSON that is not a valid {schema.__name__}"
+            ) from error
+
 
 class OpenAICompatibleTransport:
     """Talk to any OpenAI-compatible `/chat/completions`, local or hosted.
@@ -438,6 +515,7 @@ __all__ = [
     "CredentialInPrompt",
     "Capability",
     "ModelCapabilities",
+    "StructuredOutputError",
     "STRUCTURED_OUTPUT",
     "TOOLS",
     "ModelError",
