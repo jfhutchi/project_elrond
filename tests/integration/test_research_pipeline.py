@@ -465,3 +465,94 @@ def test_the_lifecycle_and_the_evidence_panel_agree_with_the_registry(
     )
     assert not panel.qualified
     assert panel.qualification_fraction == "1 of 30 days, 0 of 30 trades"
+
+
+def test_a_wide_measured_search_becomes_memory_at_its_real_size(database: Database) -> None:
+    """#6 and #23, end to end: the burden a worker spent is the burden memory remembers.
+
+    Sol's closure condition for #6 was that a measured 5,000-candidate search should become
+    queryable memory as 5,000 even if the selected hypothesis payload says 1. The honest form
+    of that is stronger than the requested one: a payload saying 1 is *refused*, because the
+    registry checks the record exists **and** that the declared count matches it. Naming a real
+    search of five thousand and registering a count of one is the original laundering defect
+    wearing a reference, so it does not get to be a silent correction either -- a registration
+    whose stated burden differs from its evidence is a mistake somebody should see.
+    """
+    from datetime import datetime as _datetime
+
+    from quantbot.research.worker_adapter import measured_cardinality, record_search_run
+    from quantbot.research.workers import (
+        WorkerCapability,
+        WorkerInput,
+        WorkerResult,
+        WorkerSpec,
+    )
+
+    moment = _datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+    spec = WorkerSpec(
+        name="rd-agent",
+        version="0.4.1",
+        capabilities=frozenset({WorkerCapability.FACTOR_MINING}),
+        configuration_hash="cfg-abc",
+        discloses_search_cardinality=True,
+    )
+    result = WorkerResult(
+        worker=spec,
+        request=WorkerInput(
+            mandate="mine factors on the discovery window",
+            datasets=(NEW_DATASET,),
+            data_roles=frozenset({DataRole.DISCOVERY}),
+            trial_budget=6000,
+        ),
+        started_at=moment,
+        finished_at=moment,
+        search_cardinality=5000,
+        metrics={"best_ic": "0.031"},
+        artifacts={},
+    )
+
+    with database.transaction() as session:
+        record_search_run(session, result, search_id="SR-5000")
+
+    # The record says five thousand, whatever anybody would prefer it to say.
+    with database.transaction() as session:
+        assert measured_cardinality(session, "SR-5000") == 5000
+
+    # A registration that names the search and declares one trial is refused.
+    with database.transaction() as session:
+        with pytest.raises(RegistrationRefused) as understated:
+            HypothesisRegistry(session).register(
+                draft_from(
+                    candidate(),
+                    hypothesis_id="H-MINED-1",
+                    search_cardinality=1,
+                    search_origin=SearchOrigin.MEASURED,
+                    search_attested_by=None,
+                    search_run_id="SR-5000",
+                ),
+                now=NOW,
+                critique=clean_critique("H-MINED-1", 1, series()),
+            )
+    # The named failure, not a set that happens to include it: an understated burden is an
+    # unverified sample, and the message says which record contradicts it.
+    assert understated.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+    assert "declares 1 trials" in understated.value.detail
+    assert "recorded 5000" in understated.value.detail
+
+    # Declared honestly, the whole search enters the burden.
+    with database.transaction() as session:
+        registered = HypothesisRegistry(session).register(
+            draft_from(
+                candidate(),
+                hypothesis_id="H-MINED-1",
+                search_cardinality=5000,
+                search_origin=SearchOrigin.MEASURED,
+                search_attested_by=None,
+                search_run_id="SR-5000",
+            ),
+            now=NOW,
+            critique=clean_critique("H-MINED-1", 1, series()),
+        )
+    assert registered.cumulative_trials >= 5000, (
+        "a search of five thousand has to cost five thousand, or the luck bar is a fiction"
+    )
