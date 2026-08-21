@@ -69,6 +69,8 @@ PANELS = {
     "panel-windows": "No protected evaluation window is claimed",
     "panel-attention": "Nothing needs you",
     "panel-ladder": "No strategy is on the promotion ladder",
+    "panel-compute": "No sandboxed compute has been charged to any budget",
+    "panel-overrides": "No budget cap has been overridden",
 }
 
 
@@ -242,7 +244,42 @@ def populate(root: Path) -> None:
         )
 
         _seed_ladder(session)
+        _seed_compute(session)
     database.close()
+
+
+def _seed_compute(session: object) -> None:
+    """One charged run and one override, so both budget panels have a countable truth."""
+    from quantbot.research.compute import record_sandbox_run
+    from quantbot.sandbox.runner import SandboxResult
+
+    book = BudgetGovernor(
+        session,
+        caps=[
+            Cap(
+                budget_key="compute:sandbox",
+                resource=Resource.WALL_SECONDS,
+                limit=Decimal("5"),
+            )
+        ],
+    )
+    # Deliberately over the cap, so the override panel has its row as well. An override is
+    # the only way a budget row differs from every other budget row, so a fixture without
+    # one cannot tell whether the panel filters or merely renders everything.
+    record_sandbox_run(
+        book,
+        SandboxResult(
+            ok=True,
+            exit_code=0,
+            stdout="",
+            stderr="",
+            duration_seconds=9.0,
+            peak_memory_mb=64.0,
+        ),
+        budget_key="compute:sandbox",
+        task="fixture run",
+        now=NOW,
+    )
 
 
 #: Three sessions and two fills, which is roughly the real account's position and nowhere near
@@ -544,3 +581,65 @@ def test_an_unconfigured_research_runtime_says_so_rather_than_going_quiet(
     assert "not configured" in page
     # And it is a statement about configuration, not a health claim nobody verified.
     assert "configuration, not a health check" in page
+
+
+def test_compute_spend_and_the_overrides_that_exceeded_it_both_render(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#14: an override nobody looks at is a cap that quietly stopped applying.
+
+    Both halves matter and they are separate facts. The compute panel says what work cost; the
+    override panel says where a cap stopped constraining it. A dashboard showing only the first
+    would report a budget that was never exceeded, because the row that exceeded it looks
+    exactly like the rows that did not.
+    """
+    from quantbot.research.compute import record_sandbox_run
+    from quantbot.sandbox.runner import SandboxResult
+
+    populate(ledger)
+    database = Database(ledger / "quantbot.db")
+    with database.transaction() as session:
+        book = BudgetGovernor(
+            session,
+            caps=[
+                Cap(
+                    budget_key="compute:research",
+                    resource=Resource.WALL_SECONDS,
+                    limit=Decimal("10"),
+                )
+            ],
+        )
+        # Well inside the cap.
+        record_sandbox_run(
+            book,
+            SandboxResult(
+                ok=True, exit_code=0, stdout="", stderr="", duration_seconds=4.0,
+                peak_memory_mb=64.0,
+            ),
+            budget_key="compute:research",
+            task="experiment-a",
+            now=NOW,
+        )
+        # And one that blew straight through it.
+        record_sandbox_run(
+            book,
+            SandboxResult(
+                ok=False, exit_code=None, stdout="", stderr="", duration_seconds=90.0,
+                peak_memory_mb=900.0, terminated_reason="wall-clock",
+            ),
+            budget_key="compute:research",
+            task="experiment-b",
+            now=NOW,
+        )
+    database.close()
+
+    page = render(ledger, monkeypatch)
+
+    compute = [row for row in _rows(page, "panel-compute") if "compute:research" in row]
+    assert len(compute) == 1, "one row per budget key"
+    assert "94.0" in compute[0], "both runs charged, including the one that was killed"
+    assert ">2<" in compute[0].replace(" ", ""), compute[0]
+
+    overrides = [row for row in _rows(page, "panel-overrides") if "WALL_SECONDS" in row]
+    assert overrides, "the overrun has to be visible somewhere"
+    assert all("compute-accounting" in row for row in overrides)

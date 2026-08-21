@@ -131,6 +131,8 @@ def _research(session: Session) -> dict[str, object]:
         "trials": _trials_by_budget(session),
         "windows": _protected_windows(session),
         "ladder": _promotion_rows(session),
+        "compute": _compute_rows(session),
+        "overrides": _override_rows(session),
     }
 
 
@@ -229,6 +231,56 @@ def _protected_windows(session: Session) -> list[tuple[str, str, str, str, str]]
     return [
         (str(dataset), str(start), str(end), str(state), str(holder))
         for dataset, start, end, state, holder in rows
+    ]
+
+
+def _compute_rows(session: Session) -> list[tuple[str, str, int, str]]:
+    """Wall-clock seconds spent per budget key, with when it was last spent (#14).
+
+    Trials are the budget that never refills and get their own panel. This is the one that does:
+    compute is renewable, so the useful question is not "how much is left" but "what has this
+    been costing", which only a history answers. A single remaining number would hide a loop
+    that burns its allowance every day and recovers every night.
+    """
+    rows = session.execute(
+        select(
+            budget_spend.c.budget_key,
+            func.coalesce(func.sum(budget_spend.c.amount), "0"),
+            func.count(),
+            func.max(budget_spend.c.recorded_at),
+        )
+        .where(budget_spend.c.category == Resource.WALL_SECONDS.value)
+        .group_by(budget_spend.c.budget_key)
+        .order_by(budget_spend.c.budget_key)
+    ).all()
+    return [
+        (str(key), f"{Decimal(str(total)):.1f}", int(count), str(last)[:16])
+        for key, total, count, last in rows
+    ]
+
+
+def _override_rows(session: Session) -> list[tuple[str, str, str, str]]:
+    """Every cap somebody raised, and who is recorded as having raised it (#14).
+
+    An override that nobody ever looks at is a cap that quietly stopped applying. These are
+    already attributable and permanent in `budget_spend`; the gap was that nothing rendered
+    them, so the only way to discover a budget had been overridden was to know to go and ask.
+    """
+    rows = session.execute(
+        select(
+            budget_spend.c.override_by,
+            budget_spend.c.budget_key,
+            budget_spend.c.category,
+            budget_spend.c.note,
+            budget_spend.c.recorded_at,
+        )
+        .where(budget_spend.c.override_by.is_not(None))
+        .order_by(budget_spend.c.recorded_at.desc())
+        .limit(20)
+    ).all()
+    return [
+        (str(who), f"{key} / {category}", str(note), str(when)[:16])
+        for who, key, category, note, when in rows
     ]
 
 
@@ -433,6 +485,25 @@ def _alert_row(alert: Alert) -> str:
     return f"<tr><td>{_pill(alert.kind, tone)}</td><td>{_esc(alert.detail)}</td></tr>"
 
 
+def _compute_row(budget_key: str, seconds: str, runs: int, last: str) -> str:
+    return (
+        f"<tr><td class='mono'>{_esc(budget_key)}</td>"
+        f"<td class='num'>{_esc(seconds)}</td>"
+        f"<td class='num'>{runs}</td>"
+        f"<td class='mono'>{_esc(last)}</td></tr>"
+    )
+
+
+def _override_row(who: str, scope: str, note: str, when: str) -> str:
+    """An override is always warn-toned. It is not an error, and it is never routine."""
+    return (
+        f"<tr><td>{_pill(who, 'warn')}</td>"
+        f"<td class='mono'>{_esc(scope)}</td>"
+        f"<td>{_esc(note)}</td>"
+        f"<td class='mono'>{_esc(when)}</td></tr>"
+    )
+
+
 def _trial_row(budget_key: str, trials: int) -> str:
     return (
         f"<tr><td class='mono'>{_esc(budget_key)}</td>"
@@ -474,6 +545,8 @@ def build(out: Path) -> None:
     trials = durable.get("trials", []) if durable.get("available") else []
     windows = durable.get("windows", []) if durable.get("available") else []
     ladder = durable.get("ladder", []) if durable.get("available") else []
+    compute = durable.get("compute", []) if durable.get("available") else []
+    budget_overrides = durable.get("overrides", []) if durable.get("available") else []
 
     total_pl = sum(float(p.get("unrealized_pl", 0) or 0) for p in positions)
     exposure = sum(float(p.get("market_value", 0) or 0) for p in positions)
@@ -532,6 +605,12 @@ def build(out: Path) -> None:
     )
     ladder_rows = "".join(_ladder_row(*row) for row in ladder) or _empty(
         5, "No strategy is on the promotion ladder"
+    )
+    compute_rows = "".join(_compute_row(*row) for row in compute) or _empty(
+        4, "No sandboxed compute has been charged to any budget"
+    )
+    override_rows = "".join(_override_row(*row) for row in budget_overrides) or _empty(
+        4, "No budget cap has been overridden"
     )
     # The single most useful juxtaposition this page can show: how much research has been done
     # against how much forward evidence exists. Seventeen cycles beside a handful of trading
@@ -780,6 +859,28 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
       <p class="caveat">Reserved and consumed are different facts. A reservation is a claim on
         data nobody has looked at yet and it lapses; a consumption is permanent, because
         contamination is a fact about what was seen rather than about a record.</p>
+    </section>
+  </div>
+
+  <div class="cols">
+    <section>
+      <h2>Compute spent</h2>
+      <div class="scroll"><table id="panel-compute">
+        <thead><tr><th>Budget</th><th class="num">Wall seconds</th><th class="num">Runs</th>
+          <th>Last</th></tr></thead>
+        <tbody>{compute_rows}</tbody>
+      </table></div>
+      <p class="caveat">Compute is renewable, so the useful question is what it has been
+        costing rather than what is left. A killed run is charged in full: it used the clock.</p>
+    </section>
+    <section>
+      <h2>Budget overrides</h2>
+      <div class="scroll"><table id="panel-overrides">
+        <thead><tr><th>Authorized by</th><th>Scope</th><th>Reason</th><th>When</th></tr></thead>
+        <tbody>{override_rows}</tbody>
+      </table></div>
+      <p class="caveat">An override nobody looks at is a cap that quietly stopped applying.
+        These are permanent and attributable; they are never removed from the record.</p>
     </section>
   </div>
 
