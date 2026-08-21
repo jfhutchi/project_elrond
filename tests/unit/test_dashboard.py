@@ -54,6 +54,9 @@ PANELS = {
     "panel-records": "No research records stored",
     "panel-tasks": "No research tasks",
     "panel-trials": "No trials recorded against any budget",
+    # #15's deferred operator views, buildable once #22 gave windows a state.
+    "panel-windows": "No protected evaluation window is claimed",
+    "panel-attention": "Nothing needs you",
 }
 
 
@@ -319,3 +322,45 @@ def test_the_dashboard_holds_no_hand_maintained_records(ledger: Path) -> None:
         f"{SOURCE.name} declares hand-maintained data at module level: {literals}. "
         "Research state belongs in the durable store, which the page already reads."
     )
+
+
+def test_a_reserved_window_is_not_shown_as_a_spent_one(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#15 and #22: reserved and consumed are different facts and the panel keeps them apart.
+
+    A reservation is a claim on data nobody has looked at, and it lapses. A consumption is
+    permanent, because contamination is a fact about what was seen. Collapsing them into one
+    "used" count would tell an operator a holdout is gone when it is merely spoken for -- which
+    is the capacity loss #22 was opened to fix, reintroduced at the display layer.
+    """
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    rows = _rows(page, "panel-windows")
+    assert len(rows) == 1, "one window in the ledger, one row rendered"
+    window = rows[0]
+    assert "H-2026-100" in window
+    assert "RESERVED" in window
+    assert "CONSUMED" not in window, "an unspent claim must not read as a spent one"
+
+
+def test_the_attention_panel_shows_a_blocked_task_and_not_routine_activity(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#15: the ranked what-needs-you view, rendered rather than merely available.
+
+    `attention()` existed in `research/dashboard.py` and the script never called it, so the one
+    view that decides what an operator looks at first was reachable only from a test. The
+    seeded task is BLOCKED, which is a blocker; the registered hypothesis and the stored records
+    are routine and must not appear here.
+    """
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    rows = _rows(page, "panel-attention")
+    assert rows, "a blocked task needs the operator"
+    body = " ".join(rows)
+    assert "T-2026-050" in body or "STUCK" in body or "BLOCKED" in body
+    # Routine activity is dropped, not ranked lower.
+    assert "Does a 200-day trend filter" not in body

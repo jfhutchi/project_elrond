@@ -30,12 +30,12 @@ from sqlalchemy.orm import Session
 
 from quantbot.reporting import analyze_fills
 from quantbot.research.budget import Resource
-from quantbot.research.dashboard import luck_bar_at
+from quantbot.research.dashboard import Alert, BudgetPanel, attention, luck_bar_at
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import ResearchMemory, ResearchRecord
-from quantbot.research.registry import HypothesisRegistry, Registration
+from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
 from quantbot.storage import Database, StorageRepository
-from quantbot.storage.schema import budget_spend
+from quantbot.storage.schema import budget_spend, hypothesis_data_windows
 from quantbot.strategy import load_strategy_config, strategy_id_for
 
 
@@ -121,7 +121,36 @@ def _research(session: Session) -> dict[str, object]:
         "records": ResearchMemory(session).recall(""),
         "tasks": ResearchDirector(session).by_state(),
         "trials": _trials_by_budget(session),
+        "windows": _protected_windows(session),
     }
+
+
+def _protected_windows(session: Session) -> list[tuple[str, str, str, str, str]]:
+    """Protected evaluation windows and whether each is still available (#22, #15).
+
+    Reserved and consumed are different facts and the panel keeps them apart. A reservation is
+    a claim on data nobody has looked at, and it lapses; a consumption is permanent, because
+    contamination is a fact about what was seen. Showing one number for both would tell an
+    operator a holdout is gone when it is merely spoken for.
+    """
+    rows = session.execute(
+        select(
+            hypothesis_data_windows.c.dataset,
+            hypothesis_data_windows.c.start_date,
+            hypothesis_data_windows.c.end_date,
+            hypothesis_data_windows.c.state,
+            hypothesis_data_windows.c.hypothesis_id,
+        )
+        .where(hypothesis_data_windows.c.role == DataRole.PROTECTED_EVALUATION.value)
+        .order_by(
+            hypothesis_data_windows.c.dataset,
+            hypothesis_data_windows.c.start_date,
+        )
+    ).all()
+    return [
+        (str(dataset), str(start), str(end), str(state), str(holder))
+        for dataset, start, end, state, holder in rows
+    ]
 
 
 def _trials_by_budget(session: Session) -> list[tuple[str, int]]:
@@ -264,6 +293,25 @@ def _task_row(task: ResearchTask) -> str:
     )
 
 
+def _window_row(dataset: str, start: str, end: str, state: str, holder: str) -> str:
+    """One protected window. The tone says whether the data is still available."""
+    tone = {"CONSUMED": "bad", "RESERVED": "warn", "RELEASED": "good"}.get(state, "warn")
+    return (
+        "<tr>"
+        f"<td>{_esc(dataset)}</td>"
+        f"<td>{_esc(start)} .. {_esc(end)}</td>"
+        f"<td>{_pill(state, tone)}</td>"
+        f"<td>{_esc(holder)}</td>"
+        "</tr>"
+    )
+
+
+def _alert_row(alert: Alert) -> str:
+    """One thing that needs the operator. Not one thing that merely happened."""
+    tone = "bad" if alert.urgency == 0 else "warn" if alert.urgency < 3 else "good"
+    return f"<tr><td>{_pill(alert.kind, tone)}</td><td>{_esc(alert.detail)}</td></tr>"
+
+
 def _trial_row(budget_key: str, trials: int) -> str:
     return (
         f"<tr><td class='mono'>{_esc(budget_key)}</td>"
@@ -303,6 +351,7 @@ def build(out: Path) -> None:
     records = durable.get("records", []) if durable.get("available") else []
     tasks = durable.get("tasks", []) if durable.get("available") else []
     trials = durable.get("trials", []) if durable.get("available") else []
+    windows = durable.get("windows", []) if durable.get("available") else []
 
     total_pl = sum(float(p.get("unrealized_pl", 0) or 0) for p in positions)
     exposure = sum(float(p.get("market_value", 0) or 0) for p in positions)
@@ -354,6 +403,24 @@ def build(out: Path) -> None:
     trial_rows = "".join(_trial_row(key, count) for key, count in trials) or _empty(
         3, "No trials recorded against any budget"
     )
+    window_rows = "".join(_window_row(*row) for row in windows) or _empty(
+        4, "No protected evaluation window is claimed"
+    )
+
+    # `attention()` decides what matters; this only renders it. The panel is driven by the same
+    # durable state as everything else -- the trial spend, the task states, the kill switch and
+    # the last reconciliation -- so it cannot show an alert the ledger does not support.
+    alerts = attention(
+        tasks,
+        [
+            BudgetPanel(budget_key=key, trials_spent=count, trials_cap=max(count, 1))
+            for key, count in trials
+        ],
+        stuck=[t for t in tasks if t.state is TaskState.BLOCKED],
+        kill_switch_engaged=bool(durable.get("kill_switch_engaged")),
+        reconciliation_failed=not durable.get("reconciliation_ok", True),
+    )
+    alert_rows = "".join(_alert_row(a) for a in alerts) or _empty(2, "Nothing needs you")
 
     trades_per_day = len(completed) / max(len(runs), 1)
     wins = sum(1 for t in completed if float(t.net_pnl) > 0)
@@ -564,7 +631,27 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
       <p class="caveat">Trials are the one budget that never refills. The bar rises with every
         candidate evaluated against the same data, and no amount of compute buys it back.</p>
     </section>
+    <section>
+      <h2>Protected evaluation windows</h2>
+      <div class="scroll"><table id="panel-windows">
+        <thead><tr><th>Dataset</th><th>Range</th><th>State</th><th>Claimed by</th></tr></thead>
+        <tbody>{window_rows}</tbody>
+      </table></div>
+      <p class="caveat">Reserved and consumed are different facts. A reservation is a claim on
+        data nobody has looked at yet and it lapses; a consumption is permanent, because
+        contamination is a fact about what was seen rather than about a record.</p>
+    </section>
   </div>
+
+  <section>
+    <h2>Needs you</h2>
+    <div class="scroll"><table id="panel-attention">
+      <thead><tr><th>Kind</th><th>What</th></tr></thead>
+      <tbody>{alert_rows}</tbody>
+    </table></div>
+    <p class="caveat">Blockers and results only. A research loop generates a large volume of
+      uninteresting activity by design, and including it is how the signal gets lost.</p>
+  </section>
 
   <footer>
     Generated {_esc(generated)} · strategy {_esc(version)} · universe {universe_size} symbols,
