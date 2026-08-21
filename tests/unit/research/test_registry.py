@@ -1538,3 +1538,48 @@ def test_no_route_through_the_gate_is_opened_by_overstating_an_input(
             "H-2026-001", 1, now=NOW, observed=counted(2200)
         )
     assert clearance.registration_hash == registered.content_hash
+
+
+def test_an_overstated_registration_reserves_nothing_permanent(database: Database) -> None:
+    """#35: the bounded-harm argument, as a mechanism rather than a claim.
+
+    GPT-5.6 Sol argues registration-time power should require a verified observation count,
+    because a registrant can otherwise reserve a protected holdout after overstating the sample.
+    I argue the declared figure is correct at that gate and that the harm is bounded since #22 --
+    a reservation expires, and only consumed windows count toward the burden.
+
+    This test is worth having whichever way that decision goes, because my half of it is
+    currently an assertion about behaviour rather than a demonstration of it. If the argument is
+    wrong, this fails and the disagreement is settled by evidence.
+
+    The overstatement here is deliberate and large: 10,000 claimed against a window that will
+    only ever supply a few thousand. The registration succeeds -- that is the behaviour under
+    discussion -- and the question is what it costs.
+    """
+    inflated = make_draft(
+        effect=sharpe_effect(expected=Decimal("1.0")), available_observations=10_000
+    )
+    with database.transaction() as session:
+        register(HypothesisRegistry(session), inflated, now=NOW)
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+
+        # 1. Execution clearance refuses it, because the verified count is what that gate uses.
+        with pytest.raises(RegistrationRefused) as refused:
+            registry.verify_for_execution("H-2026-001", 1, now=NOW, observed=counted(800))
+        assert refused.value.reason is RefusalReason.UNDERPOWERED
+
+        # 2. Nothing was consumed. The window is spoken for, not spent.
+        consumption = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+
+    assert consumption.status != "EXHAUSTED", (
+        "an overstated registration must not push a range to exhausted; it reserved, it did not "
+        "consume, and only consumption is permanent"
+    )
+    assert consumption.trials == 0, (
+        "the multiple-testing burden counts consumed windows, so an unexecuted registration "
+        "costs the next hypothesis nothing"
+    )

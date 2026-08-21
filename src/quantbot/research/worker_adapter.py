@@ -226,12 +226,46 @@ def record_search_run(
             finished_at=encode_utc(result.finished_at),
             configuration_hash=result.worker.configuration_hash,
             detail_json=json.dumps(
-                {"mandate": request.mandate, "trial_budget": request.trial_budget},
+                {
+                    "mandate": request.mandate,
+                    "trial_budget": request.trial_budget,
+                    # #11's last box: what the worker produced, not only that it searched.
+                    # Content-addressed, so a file found on disk later can be matched back to
+                    # the run that made it -- and a file that cannot be matched is a file
+                    # nobody should treat as evidence.
+                    #
+                    # Stored on the search row rather than in a table of its own. The only
+                    # question anything asks today is "what did this run produce", which a
+                    # JSON column answers; "which run produced this hash" would want an index,
+                    # and can have one when something needs to ask.
+                    "artifacts": dict(sorted(result.artifacts.items())),
+                    "metrics": dict(sorted(result.metrics.items())),
+                },
                 sort_keys=True,
             ),
         )
     )
     return search_id
+
+
+def recorded_artifacts(session: Session, search_id: str) -> dict[str, str]:
+    """What a recorded search produced, keyed by filename and content hash.
+
+    Raises when the search is not recorded, rather than returning {}. An empty mapping would say
+    "this run produced nothing", and a run nobody logged produced nothing *that we know of* --
+    which is a different claim and the one that matters when deciding whether an artifact on
+    disk is evidence.
+    """
+    row = session.execute(
+        select(search_runs.c.detail_json).where(search_runs.c.search_id == search_id)
+    ).one_or_none()
+    if row is None:
+        raise WorkerFailure(
+            f"no search run {search_id} is recorded, so nothing is known about what it produced"
+        )
+    detail = json.loads(str(row[0]))
+    artifacts = detail.get("artifacts", {})
+    return {str(name): str(digest) for name, digest in artifacts.items()}
 
 
 def measured_cardinality(session: Session, search_id: str) -> int:
@@ -265,6 +299,7 @@ def _assert_protocol(worker: SubprocessWorker) -> ResearchWorker:
 __all__ = [
     "SubprocessWorker",
     "measured_cardinality",
+    "recorded_artifacts",
     "record_search_run",
     "record_worker_search",
 ]

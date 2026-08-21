@@ -13,7 +13,12 @@ import pytest
 
 from quantbot.research.budget import BudgetGovernor, Cap, Resource
 from quantbot.research.registry import DataRole
-from quantbot.research.worker_adapter import SubprocessWorker, record_worker_search
+from quantbot.research.worker_adapter import (
+    SubprocessWorker,
+    record_search_run,
+    record_worker_search,
+    recorded_artifacts,
+)
 from quantbot.research.workers import (
     WorkerCapability,
     WorkerFailure,
@@ -248,3 +253,42 @@ def test_a_worker_is_never_handed_protected_data() -> None:
             data_roles=frozenset({DataRole.PROTECTED_EVALUATION}),
             trial_budget=10,
         )
+
+
+def test_what_a_worker_produced_is_durable_not_only_that_it_searched(
+    database: Database,
+) -> None:
+    """#11's last box: result and artifact provenance imports into durable storage.
+
+    `search_runs` recorded that a search happened and how large it was, which is what the
+    multiple-testing budget needs. It said nothing about what came out. An artifact found on
+    disk later could not be matched to the run that made it, and an artifact that cannot be
+    matched is one nobody should treat as evidence.
+    """
+    worker_spec = spec()
+    payload = json.loads(result_payload(worker_spec))
+    payload["artifacts"] = {"factors.parquet": "sha256:abc", "report.md": "sha256:def"}
+    worker = SubprocessWorker(worker_spec, ["x"], runner=runner_returning(json.dumps(payload)))
+    outcome = worker.run(request(), now=NOW)
+
+    with database.transaction() as session:
+        record_search_run(session, outcome, search_id="SR-ARTIFACTS")
+
+    with database.transaction() as session:
+        stored = recorded_artifacts(session, "SR-ARTIFACTS")
+
+    assert stored == {"factors.parquet": "sha256:abc", "report.md": "sha256:def"}
+
+
+def test_an_unrecorded_search_produced_nothing_that_anybody_knows_of(
+    database: Database,
+) -> None:
+    """Raises rather than returning {}.
+
+    An empty mapping says "this run produced nothing". A run nobody logged produced nothing
+    *that we know of*, which is a different claim -- and it is the one that matters when
+    deciding whether a file sitting on disk counts as evidence.
+    """
+    with database.transaction() as session:
+        with pytest.raises(WorkerFailure, match="nothing is known"):
+            recorded_artifacts(session, "SR-NEVER-HAPPENED")
