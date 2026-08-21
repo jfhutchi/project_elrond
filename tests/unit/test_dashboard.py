@@ -25,6 +25,16 @@ from types import ModuleType
 
 import pytest
 
+from quantbot.domain import (
+    BrokerOrder,
+    Fill,
+    IntentState,
+    OrderIntent,
+    OrderSide,
+    OrderType,
+    StrategyIdentity,
+    TimeInForce,
+)
 from quantbot.research import (
     ComparisonStructure,
     CriticVerdict,
@@ -42,7 +52,8 @@ from quantbot.research import (
 from quantbot.research.budget import BudgetGovernor, Cap, Resource
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import RecordKind, ResearchMemory, ResearchRecord, Verdict
-from quantbot.storage import Database
+from quantbot.research.promotion import PromotionLedger, PromotionState, Stage
+from quantbot.storage import Database, StorageRepository
 
 ROOT = Path(__file__).parents[2]
 SOURCE = ROOT / "scripts" / "dashboard.py"
@@ -57,6 +68,7 @@ PANELS = {
     # #15's deferred operator views, buildable once #22 gave windows a state.
     "panel-windows": "No protected evaluation window is claimed",
     "panel-attention": "Nothing needs you",
+    "panel-ladder": "No strategy is on the promotion ladder",
 }
 
 
@@ -228,7 +240,87 @@ def populate(root: Path) -> None:
             task="dashboard test",
             now=NOW,
         )
+
+        _seed_ladder(session)
     database.close()
+
+
+#: Three sessions and two fills, which is roughly the real account's position and nowhere near
+#: the thirty-day window. The panel has to say so rather than round it up into progress.
+LADDER_DAYS = 3
+LADDER_FILLS = 2
+
+
+def _seed_ladder(session: object) -> None:
+    """A strategy on the ladder, plus the durable trading facts behind its forward counters."""
+    repository = StorageRepository(session)
+    repository.save_strategy_deployment(
+        StrategyIdentity(
+            strategy_id="adaptive-momentum",
+            version="1.2.0",
+            git_commit="abc1234",
+            configuration_hash="cfg-abcdef012345",
+            deployment_timestamp=NOW,
+        )
+    )
+    for index in range(LADDER_DAYS):
+        trading_date = date(2026, 8, 17 + index)
+        repository.record_qualification_day("adaptive-momentum", trading_date, qualified=True)
+        if index >= LADDER_FILLS:
+            continue
+        repository.create_order_intent(
+            OrderIntent(
+                intent_id=f"intent-{index}",
+                client_order_id=f"client-{index}",
+                strategy_id="adaptive-momentum",
+                symbol="SPY",
+                signal_date=trading_date,
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                time_in_force=TimeInForce.DAY,
+                quantity="1",
+                created_at=NOW,
+                state=IntentState.RISK_APPROVED,
+            )
+        )
+        repository.save_broker_order(
+            BrokerOrder(
+                broker_order_id=f"broker-{index}",
+                client_order_id=f"client-{index}",
+                symbol="SPY",
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                time_in_force=TimeInForce.DAY,
+                quantity="1",
+                filled_quantity="1",
+                status="filled",
+                submitted_at=NOW,
+            )
+        )
+        repository.record_fill(
+            Fill(
+                fill_id=f"fill-{index}",
+                broker_order_id=f"broker-{index}",
+                symbol="SPY",
+                side=OrderSide.BUY,
+                quantity="1",
+                price="500.00",
+                occurred_at=NOW,
+                fee="0",
+            )
+        )
+
+    PromotionLedger(session).enter(
+        PromotionState(
+            strategy_id="adaptive-momentum",
+            stage=Stage.PAPER_OBSERVATION,
+            strategy_version="1.2.0",
+            configuration_hash="cfg-abcdef012345",
+            reason="seeded for the dashboard test",
+            actor="operator",
+            updated_at=NOW,
+        )
+    )
 
 
 def test_an_empty_research_store_renders_as_empty(
@@ -343,6 +435,50 @@ def test_a_reserved_window_is_not_shown_as_a_spent_one(
     assert "H-2026-100" in window
     assert "RESERVED" in window
     assert "CONSUMED" not in window, "an unspent claim must not read as a spent one"
+
+
+def test_the_ladder_panel_counts_forward_evidence_the_ledger_supports_and_no_more(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#15 and #16: the view an operator reads before considering real capital.
+
+    A flattering number here is the most expensive wrong number in the system, so the counters
+    are read from the trading ledger rather than supplied. The seeded strategy has three
+    qualified sessions and two fills; the panel must say exactly that, and must state the
+    shortfall rather than describing the strategy as progressing.
+    """
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    rows = _rows(page, "panel-ladder")
+    assert len(rows) == 1, "one strategy on the ladder, one row rendered"
+    row = rows[0]
+
+    assert "adaptive-momentum" in row
+    assert "PAPER_OBSERVATION" in row
+    # Exactly the ledger's counts, not a rounding of them.
+    assert f"{LADDER_DAYS}/30 days" in row, row
+    assert f"{LADDER_FILLS}/30 trades" in row, row
+    # And the gap named, in the units the operator has to wait out.
+    assert f"{30 - LADDER_DAYS} more forward days" in row, row
+    assert f"{30 - LADDER_FILLS} more trades" in row, row
+
+
+def test_the_ladder_panel_never_offers_a_route_to_live_trading(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The absent destination, asserted at the display layer too.
+
+    `Stage` has no LIVE member, so the panel cannot render one. This checks the rendered page
+    rather than the enum because a dashboard is where a human forms an intention, and a column
+    that looked like a path to deployment would be dangerous even with nothing behind it.
+    """
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    body = _body(page, "panel-ladder")
+    assert "LIVE_TRADING" not in body
+    assert ">LIVE<" not in body
 
 
 def test_the_attention_panel_shows_a_blocked_task_and_not_routine_activity(

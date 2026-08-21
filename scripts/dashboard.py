@@ -33,6 +33,14 @@ from quantbot.research.budget import Resource
 from quantbot.research.dashboard import Alert, BudgetPanel, attention, luck_bar_at
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import ResearchMemory, ResearchRecord
+from quantbot.research.promotion import (
+    ALLOWED_PROMOTIONS,
+    MINIMUM_FORWARD_DAYS,
+    MINIMUM_FORWARD_TRADES,
+    Stage,
+    forward_progress,
+    observe_forward_days,
+)
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
 from quantbot.storage import Database, StorageRepository
 from quantbot.storage.schema import budget_spend, hypothesis_data_windows
@@ -122,7 +130,78 @@ def _research(session: Session) -> dict[str, object]:
         "tasks": ResearchDirector(session).by_state(),
         "trials": _trials_by_budget(session),
         "windows": _protected_windows(session),
+        "ladder": _promotion_rows(session),
     }
+
+
+_ORDER = tuple(Stage)
+
+
+def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
+    """Where each strategy stands on the ladder, and precisely what it has not yet earned (#15).
+
+    The stage comes from `promotion_state` and the forward counters from the durable ledger via
+    `observe_forward_days`, so this panel cannot show progress a strategy did not make. That
+    matters more here than on any other panel: this is the view an operator would read before
+    deciding a strategy is worth a human conversation about real capital, so a flattering number
+    here is the most expensive wrong number in the system.
+
+    Gates that need an experiment outcome are reported as needing one rather than being scored.
+    An unmeasured gate shown as satisfied is worse than an unmeasured gate shown as unknown.
+    """
+    repository = StorageRepository(session)
+    rows: list[tuple[str, str, str, str, str]] = []
+    for record in repository.list_promotions():
+        stage = Stage(record.stage)
+        observed = observe_forward_days(
+            session,
+            strategy_id=record.strategy_id,
+            strategy_version=record.strategy_version,
+            configuration_hash=record.configuration_hash,
+        )
+        progress = forward_progress(
+            observed,
+            strategy_version=record.strategy_version,
+            configuration_hash=record.configuration_hash,
+        )
+        days = int(progress["forward_days"])
+        trades = int(progress["forward_trades"])
+        rows.append(
+            (
+                record.strategy_id,
+                stage.value,
+                f"{record.strategy_version} / {record.configuration_hash[:12]}",
+                f"{days}/{MINIMUM_FORWARD_DAYS} days, {trades}/{MINIMUM_FORWARD_TRADES} trades",
+                _unmet_gates(stage, days=days, trades=trades),
+            )
+        )
+    return rows
+
+
+def _unmet_gates(stage: Stage, *, days: int, trades: int) -> str:
+    """What stands between this strategy and its next stage, named rather than summarised."""
+    if stage is Stage.LIVE_REVIEW_ELIGIBLE:
+        return "awaiting human review; there is no stage after this one"
+    targets = ALLOWED_PROMOTIONS[stage]
+    upward = [target for target in targets if _ORDER.index(target) > _ORDER.index(stage)]
+    if not upward:
+        return "no upward transition from here"
+    unmet: list[str] = []
+    for target in upward:
+        if target is Stage.PAPER_QUALIFIED:
+            shortfall = []
+            if days < MINIMUM_FORWARD_DAYS:
+                shortfall.append(f"{MINIMUM_FORWARD_DAYS - days} more forward days")
+            if trades < MINIMUM_FORWARD_TRADES:
+                shortfall.append(f"{MINIMUM_FORWARD_TRADES - trades} more trades")
+            unmet.append(
+                f"{target.value}: {', '.join(shortfall)}" if shortfall else f"{target.value}: met"
+            )
+        elif target is Stage.RESEARCH_SURVIVOR:
+            unmet.append(f"{target.value}: needs a surviving experiment outcome")
+        else:
+            unmet.append(f"{target.value}: operator decision")
+    return "; ".join(unmet)
 
 
 def _protected_windows(session: Session) -> list[tuple[str, str, str, str, str]]:
@@ -306,6 +385,25 @@ def _window_row(dataset: str, start: str, end: str, state: str, holder: str) -> 
     )
 
 
+def _ladder_row(strategy: str, stage: str, identity: str, progress: str, unmet: str) -> str:
+    """One strategy's position. The tone tracks how much trust the stage implies."""
+    tone = {
+        "LIVE_REVIEW_ELIGIBLE": "warn",
+        "PAPER_QUALIFIED": "good",
+        "PAPER_OBSERVATION": "good",
+        "SHADOW": "good",
+    }.get(stage, "warn")
+    return (
+        "<tr>"
+        f"<td class='mono'>{_esc(strategy)}</td>"
+        f"<td>{_pill(stage, tone)}</td>"
+        f"<td class='mono'>{_esc(identity)}</td>"
+        f"<td>{_esc(progress)}</td>"
+        f"<td>{_esc(unmet)}</td>"
+        "</tr>"
+    )
+
+
 def _alert_row(alert: Alert) -> str:
     """One thing that needs the operator. Not one thing that merely happened."""
     tone = "bad" if alert.urgency == 0 else "warn" if alert.urgency < 3 else "good"
@@ -352,6 +450,7 @@ def build(out: Path) -> None:
     tasks = durable.get("tasks", []) if durable.get("available") else []
     trials = durable.get("trials", []) if durable.get("available") else []
     windows = durable.get("windows", []) if durable.get("available") else []
+    ladder = durable.get("ladder", []) if durable.get("available") else []
 
     total_pl = sum(float(p.get("unrealized_pl", 0) or 0) for p in positions)
     exposure = sum(float(p.get("market_value", 0) or 0) for p in positions)
@@ -405,6 +504,9 @@ def build(out: Path) -> None:
     )
     window_rows = "".join(_window_row(*row) for row in windows) or _empty(
         4, "No protected evaluation window is claimed"
+    )
+    ladder_rows = "".join(_ladder_row(*row) for row in ladder) or _empty(
+        5, "No strategy is on the promotion ladder"
     )
 
     # `attention()` decides what matters; this only renders it. The panel is driven by the same
@@ -642,6 +744,19 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
         contamination is a fact about what was seen rather than about a record.</p>
     </section>
   </div>
+
+  <section>
+    <h2>Promotion ladder</h2>
+    <div class="scroll"><table id="panel-ladder">
+      <thead><tr><th>Strategy</th><th>Stage</th><th>Version / config</th>
+        <th>Forward evidence</th><th>Unmet gates</th></tr></thead>
+      <tbody>{ladder_rows}</tbody>
+    </table></div>
+    <p class="caveat">Stage comes from the durable ladder and the forward counters are read from
+      the trading ledger, not supplied. There is no stage after LIVE_REVIEW_ELIGIBLE: the
+      transition table has no destination past it, so no agent can move a strategy into live
+      trading. Backtest volume is not forward evidence and never appears in these counters.</p>
+  </section>
 
   <section>
     <h2>Needs you</h2>

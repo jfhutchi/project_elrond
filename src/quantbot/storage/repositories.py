@@ -464,6 +464,25 @@ class StorageRepository:
         )
         if row is None:
             return None
+        return self._promotion_from_row(row)
+
+    def list_promotions(self) -> list[PromotionRecord]:
+        """Every strategy currently on the ladder, so a view can show all of them.
+
+        `get_promotion` answers about one strategy the caller already knows to ask about, which
+        is no use to an operator panel whose whole job is showing what exists.
+        """
+        rows = (
+            self._session.execute(
+                select(promotion_state).order_by(promotion_state.c.strategy_id)
+            )
+            .mappings()
+            .all()
+        )
+        return [self._promotion_from_row(row) for row in rows]
+
+    @staticmethod
+    def _promotion_from_row(row: RowMapping) -> PromotionRecord:
         return PromotionRecord(
             strategy_id=str(row["strategy_id"]),
             stage=str(row["stage"]),
