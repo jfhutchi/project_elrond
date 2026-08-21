@@ -500,3 +500,47 @@ def test_the_attention_panel_shows_a_blocked_task_and_not_routine_activity(
     assert "T-2026-050" in body or "STUCK" in body or "BLOCKED" in body
     # Routine activity is dropped, not ranked lower.
     assert "Does a 200-day trend filter" not in body
+
+
+def test_research_volume_is_shown_next_to_forward_evidence_not_instead_of_it(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#15: the juxtaposition is the point, and it only lands when the two are adjacent.
+
+    One registered hypothesis beside three forward days is a very different picture from either
+    number alone, and confusing research volume with forward evidence is the specific error the
+    project goal document was written to prevent. Two panels apart, the comparison is one a
+    reader has to assemble; in one readout it is unavoidable.
+    """
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    readout = re.search(r"Research vs forward.*?</div>\s*</div>", page, re.S)
+    assert readout is not None, "the page has no research-versus-forward readout"
+    body = readout.group(0)
+
+    assert "1 registered" in body, body
+    assert f"{LADDER_DAYS}/30 days" in body, body
+    assert "backtest volume is not forward evidence" in body
+
+
+def test_an_unconfigured_research_runtime_says_so_rather_than_going_quiet(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#15: "nothing could run" and "nothing was worth running" must not render identically.
+
+    Omitting the readout when no model is configured would make an unconfigured system look
+    like an idle one, which is the more flattering of the two readings and the wrong one.
+    """
+    from quantbot.research.composition import CRITIC, ENDPOINT, GENERATOR
+
+    for name in (ENDPOINT, GENERATOR, CRITIC):
+        monkeypatch.delenv(name, raising=False)
+
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    assert "Research models" in page
+    assert "not configured" in page
+    # And it is a statement about configuration, not a health claim nobody verified.
+    assert "configuration, not a health check" in page

@@ -243,6 +243,29 @@ def _trials_by_budget(session: Session) -> list[tuple[str, int]]:
     return [(str(key), int(Decimal(str(total)))) for key, total in rows]
 
 
+def _model_runtime() -> tuple[str, str]:
+    """Whether a research model is configured, read from the same place the CLI reads (#15).
+
+    Reports "not configured" rather than omitting the readout. An unconfigured research runtime
+    is a state an operator needs to see: it is the difference between "no hypotheses were
+    generated because none were worth generating" and "no hypotheses were generated because
+    nothing could run", and a dashboard that renders those identically is worse than one that
+    does not mention models at all.
+
+    This asks for configuration, never for a completion. A dashboard that pinged an endpoint to
+    colour a dot would spend tokens and wall-clock on every render, and would report the model
+    healthy on the strength of one trivial round trip.
+    """
+    from quantbot.research.composition import ResearchNotConfigured, model_configuration
+
+    try:
+        configuration = model_configuration()
+    except ResearchNotConfigured as unconfigured:
+        return f"not configured: {unconfigured}", "warn"
+    key = "key set" if configuration.api_key is not None else "no key"
+    return f"{configuration.generator} / {configuration.critic} ({key})", "good"
+
+
 def _supervisor_state() -> tuple[str, str, list[str]]:
     """Freshness of the watchdog, from the timestamps it writes.
 
@@ -479,6 +502,8 @@ def build(out: Path) -> None:
             )
         )
     status_pills.append(_pill(f"Strategy {version}", "quiet"))
+    model_detail, model_tone = _model_runtime()
+    status_pills.append(_pill("Research models", model_tone))
     supervisor_detail, supervisor_tone, supervisor_lines = _supervisor_state()
     status_pills.append(_pill(f"Watchdog {supervisor_detail}", supervisor_tone))
 
@@ -508,6 +533,12 @@ def build(out: Path) -> None:
     ladder_rows = "".join(_ladder_row(*row) for row in ladder) or _empty(
         5, "No strategy is on the promotion ladder"
     )
+    # The single most useful juxtaposition this page can show: how much research has been done
+    # against how much forward evidence exists. Seventeen cycles beside a handful of trading
+    # days is the whole argument against confusing the two, and it only lands when they are
+    # next to each other rather than two panels apart. Read from the ladder rows, so it cannot
+    # disagree with the panel below.
+    forward_days = max((int(row[3].split("/")[0]) for row in ladder), default=0)
 
     # `attention()` decides what matters; this only renders it. The panel is driven by the same
     # durable state as everything else -- the trial spend, the task states, the kill switch and
@@ -652,6 +683,13 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
     <div class="readout"><div class="k">Watchdog</div>
       <div class="v" style="font-size:15px">{_esc(supervisor_detail)}</div>
       <div class="note">restarts a dead daemon; never lifts a halt</div></div>
+    <div class="readout"><div class="k">Research vs forward</div>
+      <div class="v" style="font-size:15px">{len(registrations)} registered &middot;
+        {forward_days}/30 days</div>
+      <div class="note">backtest volume is not forward evidence</div></div>
+    <div class="readout"><div class="k">Research models</div>
+      <div class="v" style="font-size:15px">{_esc(model_detail)}</div>
+      <div class="note">configuration, not a health check</div></div>
   </div>
 
   <section>
