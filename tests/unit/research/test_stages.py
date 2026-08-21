@@ -6,11 +6,13 @@ from collections.abc import Iterator
 from datetime import UTC, datetime
 
 import pytest
+from sqlalchemy import text
 
 from quantbot.research.cycle import actionable, drain
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import RecordKind, ResearchMemory, ResearchRecord, Verdict
-from quantbot.research.stages import novelty_stage
+from quantbot.research.scout import LiteratureSearch, SourceUnavailable
+from quantbot.research.stages import novelty_stage, scouting_stage
 from quantbot.storage import Database
 
 NOW = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
@@ -140,3 +142,104 @@ def test_a_state_with_no_handler_leaves_the_task_visibly_stuck(database: Databas
 
     assert after is not None and after.state is TaskState.SCOUTING
     assert still_runnable == [], "SCOUTING has no handler, so nothing further is actionable"
+
+class FakeScout:
+    """Returns a scripted search, or raises the way a real connector raises."""
+
+    connector = "arxiv"
+
+    def __init__(self, search=None, error: Exception | None = None) -> None:
+        self._search = search
+        self._error = error
+        self.queries: list[str] = []
+
+    def search(self, query: str, *, max_results: int = 10):
+        self.queries.append(query)
+        if self._error is not None:
+            raise self._error
+        return self._search
+
+
+def literature(results: tuple = (), matched: int = 0) -> LiteratureSearch:
+    return LiteratureSearch(
+        connector="arxiv",
+        query="does revision dispersion precede index drawdowns",
+        searched_at=NOW,
+        total_matched=matched,
+        results=results,
+    )
+
+
+def scouting_task(director: ResearchDirector, task_id: str) -> None:
+    open_task(director, task_id, "does revision dispersion precede index drawdowns")
+    director.advance(
+        task_id, TaskState.SCOUTING, actor="operator", reason="ready to search", now=NOW
+    )
+
+
+def test_a_completed_search_that_found_nothing_still_advances(database: Database) -> None:
+    """Zero literature is not a blocker.
+
+    A genuinely novel idea has none, and treating an empty search as a failure would select
+    against exactly the ideas worth having. What matters is that somebody looked, and that the
+    looking is on the record.
+    """
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        scouting_task(director, "T-SCOUT-1")
+        scout = FakeScout(literature())
+
+        drain(
+            director,
+            {
+                TaskState.SCOUTING: scouting_stage(
+                    scout, session, search_id=lambda t: f"LS-{t.task_id}"
+                )
+            },
+            actor="cycle",
+            now=NOW,
+            max_steps=2,
+        )
+        moved = director.get("T-SCOUT-1")
+        recorded = session.execute(
+            text("SELECT outcome, query FROM literature_searches WHERE search_id = 'LS-T-SCOUT-1'")
+        ).all()
+
+    assert moved is not None and moved.state is TaskState.CRITIQUE
+    assert recorded == [("NO_RESULTS", "does revision dispersion precede index drawdowns")]
+
+
+def test_an_outage_blocks_the_task_and_is_recorded_as_an_outage(database: Database) -> None:
+    """The distinction `ArxivScout` was built around, finally consumed by something.
+
+    Advancing here would let "arXiv returned 503" become "nothing has been published about
+    this", recorded as though somebody had looked. The task stays put and the failure is
+    durable, so a later reader can tell the gap in the evidence from the gap in the search.
+    """
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        scouting_task(director, "T-SCOUT-2")
+        scout = FakeScout(error=SourceUnavailable("export.arxiv.org timed out"))
+
+        drain(
+            director,
+            {
+                TaskState.SCOUTING: scouting_stage(
+                    scout, session, search_id=lambda t: f"LS-{t.task_id}"
+                )
+            },
+            actor="cycle",
+            now=NOW,
+            max_steps=2,
+        )
+        stuck = director.get("T-SCOUT-2")
+        recorded = session.execute(
+            text("SELECT outcome, detail FROM literature_searches WHERE search_id = 'LS-T-SCOUT-2'")
+        ).all()
+
+    assert stuck is not None and stuck.state is TaskState.BLOCKED
+    assert recorded[0][0] == "OUTAGE"
+    # The exception type, never its message: a transport error can carry a URL, and a URL can
+    # carry a contact or a key in some proxy formats.
+    assert "SourceUnavailable" in recorded[0][1]
+    assert "export.arxiv.org" not in recorded[0][1]

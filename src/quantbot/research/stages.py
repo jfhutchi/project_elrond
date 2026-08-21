@@ -3,11 +3,13 @@
 `run_cycle` and `drain` have existed since `d495d9e` and nothing supplied them with handlers, so
 the driver was reachable only from a test. This is the first real one.
 
-**Why only one.** The research loop's stages divide cleanly into those software can decide and
-those needing judgment. Novelty against durable memory is mechanical: either a record already
-answers the question or it does not. Scouting, critique and experiment design are not -- they
-need a model (#9) or a measurement (#8), and a handler that pretended otherwise would advance
-tasks through stages nobody performed, which is worse than leaving them visibly stuck.
+**What is here and what is not.** The research loop's stages divide into those software can
+decide and those needing judgment. Novelty against durable memory is mechanical: either a record
+already answers the question or it does not. Scouting is mechanical too once a connector exists --
+it is a search, and the only judgment in it is what to do about an outage. Critique and experiment
+design are not: they need a model's opinion (#7) or a measurement (#8), and a handler that
+pretended otherwise would advance tasks through stages nobody performed, which is worse than
+leaving them visibly stuck.
 
 `actionable()` already treats a state with no handler as not-actionable rather than as an error,
 so a partially built loop runs the stages it has and leaves the rest visible. That is the design
@@ -16,9 +18,29 @@ this module leans on rather than works around.
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Protocol
+
+from sqlalchemy.orm import Session
+
 from quantbot.research.cycle import StageHandler, StageResult
 from quantbot.research.director import ResearchTask, TaskState
 from quantbot.research.memory import RecordKind, ResearchMemory, Verdict
+from quantbot.research.scout import (
+    LiteratureSearch,
+    ScoutError,
+    record_literature_outage,
+    record_literature_search,
+)
+
+
+class LiteratureScout(Protocol):
+    """What a scouting handler needs, so any connector satisfying it can be scheduled."""
+
+    connector: str
+
+    def search(self, query: str, *, max_results: int = 10) -> LiteratureSearch: ...
 
 #: Verdicts that mean the question has already been answered against, so asking again spends the
 #: multiple-testing budget to re-learn something durable memory already holds. `UNDERPOWERED` is
@@ -79,4 +101,67 @@ def novelty_stage(memory: ResearchMemory) -> StageHandler:
     return handle
 
 
-__all__ = ["SETTLED", "novelty_stage"]
+def scouting_stage(
+    scout: LiteratureScout,
+    session: Session,
+    *,
+    search_id: Callable[[ResearchTask], str],
+) -> StageHandler:
+    """Build a SCOUTING handler that searches the literature and records that it did (#4, #13).
+
+    The distinction this handler exists to preserve is the one `ArxivScout` was built around and
+    that nothing downstream had yet consumed: **an outage is not an absence**.
+
+    * Sources found, or a search that completed and found none -> CRITIQUE. Zero literature is
+      not a blocker; a genuinely novel idea has none, and treating that as a failure would
+      select against exactly the ideas worth having.
+    * The source could not be reached -> BLOCKED, and the task does not advance. Advancing on an
+      outage would let "arXiv returned 503" become "nothing has been published about this",
+      recorded as though somebody had looked.
+
+    Both outcomes are persisted before the state changes, so the durable record of what was
+    searched exists whether or not the task moved.
+    """
+
+    def handle(task: ResearchTask) -> StageResult:
+        identifier = search_id(task)
+        try:
+            search = scout.search(task.question)
+        except ScoutError as error:
+            record_literature_outage(
+                session,
+                search_id=identifier,
+                connector=getattr(scout, "connector", "unknown"),
+                query=task.question,
+                attempted_at=datetime.now(UTC),
+                # The exception type, not its message: a transport error can carry a URL, and a
+                # URL can carry a contact or a key in some proxy formats.
+                detail=f"{type(error).__name__} while searching",
+            )
+            return StageResult(
+                next_state=TaskState.BLOCKED,
+                reason=(
+                    f"the literature source could not be reached ({type(error).__name__}); "
+                    "an outage is not an absence of literature"
+                ),
+                detail={"search_id": identifier},
+            )
+
+        outcome = record_literature_search(session, search, search_id=identifier)
+        return StageResult(
+            next_state=TaskState.CRITIQUE,
+            reason=(
+                f"searched {search.connector}: {outcome.value.lower().replace('_', ' ')} "
+                f"({len(search.results)} sources)"
+            ),
+            detail={
+                "search_id": identifier,
+                "outcome": outcome.value,
+                "sources": ", ".join(source.source_id for source in search.results) or "none",
+            },
+        )
+
+    return handle
+
+
+__all__ = ["SETTLED", "novelty_stage", "scouting_stage"]
