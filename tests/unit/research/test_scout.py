@@ -10,6 +10,7 @@ connector's fixtures were being collected too quickly.
 
 from __future__ import annotations
 
+import json
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -18,6 +19,8 @@ from pathlib import Path
 import httpx
 import pytest
 from pydantic import BaseModel, ValidationError
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from quantbot.research.scout import (
     ARXIV_MIN_INTERVAL_SECONDS,
@@ -25,9 +28,14 @@ from quantbot.research.scout import (
     ArxivScout,
     HttpxScoutTransport,
     LiteratureSearch,
+    SearchNotRecordable,
+    SearchOutcome,
     SourceProtocolError,
     SourceUnavailable,
     parse_feed,
+    record_literature_outage,
+    record_literature_search,
+    searched_before,
 )
 from quantbot.research.sources import (
     EpistemicStatus,
@@ -37,6 +45,7 @@ from quantbot.research.sources import (
     SourceKind,
     cite,
 )
+from quantbot.storage import Database
 
 FIXTURES = Path(__file__).resolve().parents[2] / "fixtures"
 FETCHED = datetime(2026, 8, 20, 23, 59, 4, tzinfo=UTC)
@@ -326,3 +335,120 @@ def test_an_oversized_response_is_refused_before_it_is_parsed() -> None:
     """A bound on what an untrusted host can make this process allocate."""
     with pytest.raises(SourceProtocolError, match="cap"):
         parsed(b"x" * (MAX_RESPONSE_BYTES + 1))
+
+
+@pytest.fixture
+def store(tmp_path):
+    database = Database(tmp_path / "scout.db")
+    yield database
+    database.close()
+
+
+def test_a_completed_search_survives_the_process_that_ran_it(store) -> None:
+    """#4: the connector's care about outages lasted exactly one run and then evaporated.
+
+    Storing the results with each source's identifier and content hash is what makes a citation
+    traceable to bytes that were actually acquired, rather than to a title somebody typed.
+    """
+    scout = ArxivScout(ScriptedTransport(read("arxiv_qfin_entry.xml")), now=lambda: FETCHED)
+    search = scout.search("all:cat:q-fin.PM")
+
+    with store.transaction() as session:
+        outcome = record_literature_search(session, search, search_id="LS-1")
+
+    assert outcome is SearchOutcome.RESULTS
+
+    with store.transaction() as session:
+        assert searched_before(session, "all:cat:q-fin.PM") is True
+        rows = session.execute(
+            text(
+                "SELECT connector, query, outcome, total_matched, results_json "
+                "FROM literature_searches"
+            )
+        ).all()
+
+    assert len(rows) == 1
+    connector, query, stored_outcome, matched, results_json = rows[0]
+    assert (connector, query, stored_outcome) == ("arxiv", "all:cat:q-fin.PM", "RESULTS")
+    assert matched == search.total_matched
+    stored = json.loads(results_json)
+    assert [item["content_hash"] for item in stored] == [
+        source.content_hash for source in search.results
+    ]
+
+
+def test_a_zero_result_search_and_an_outage_are_stored_as_different_facts(store) -> None:
+    """The distinction the connector was written to preserve, made durable.
+
+    A gap in the evidence and a gap in the search look identical once both are gone. A system
+    that cannot tell them apart eventually reports "no literature supports this" when it means
+    "arXiv returned 503 twice".
+    """
+    scout = ArxivScout(ScriptedTransport(read("arxiv_no_results.xml")), now=lambda: FETCHED)
+    empty = scout.search('all:"zzqxjwl nonexistent phrase"')
+
+    with store.transaction() as session:
+        looked = record_literature_search(session, empty, search_id="LS-EMPTY")
+        could_not_look = record_literature_outage(
+            session,
+            search_id="LS-DOWN",
+            connector="arxiv",
+            query="all:volatility-risk-premium",
+            attempted_at=FETCHED,
+            detail="export.arxiv.org returned 503 twice",
+        )
+
+    assert looked is SearchOutcome.NO_RESULTS
+    assert could_not_look is SearchOutcome.OUTAGE
+
+    with store.transaction() as session:
+        # We looked for this one, so the literature has genuinely been checked.
+        assert searched_before(session, 'all:"zzqxjwl nonexistent phrase"') is True
+        # We never managed to look for this one, so it has not.
+        assert searched_before(session, "all:volatility-risk-premium") is False
+
+
+def test_an_outage_cannot_carry_a_match_count_or_an_empty_explanation(store) -> None:
+    """Two ways an outage record would become a small fiction.
+
+    A match count against a request that never completed is a number nobody received, and an
+    unexplained outage is only marginally more useful than no record at all.
+    """
+    with store.transaction() as session:
+        with pytest.raises(SearchNotRecordable, match="say what failed"):
+            record_literature_outage(
+                session,
+                search_id="LS-BLANK",
+                connector="arxiv",
+                query="all:momentum",
+                attempted_at=FETCHED,
+                detail="   ",
+            )
+
+    # And the database refuses it too, so a future writer bypassing the helper still cannot.
+    with pytest.raises(IntegrityError):
+        with store.transaction() as session:
+            session.execute(
+                text(
+                    "INSERT INTO literature_searches (search_id, connector, query, outcome, "
+                    "attempted_at, total_matched, results_json, detail) VALUES "
+                    "('LS-LIE', 'arxiv', 'all:momentum', 'OUTAGE', '2026-08-20T23:59:04Z', "
+                    "42, '[]', 'invented')"
+                )
+            )
+
+
+def test_a_search_record_cannot_be_replaced_with_a_better_one(store) -> None:
+    """Append-only, for the same reason `search_runs` is.
+
+    A disappointing search that can be overwritten is a search that never constrains anything.
+    """
+    scout = ArxivScout(ScriptedTransport(read("arxiv_no_results.xml")), now=lambda: FETCHED)
+    empty = scout.search('all:"zzqxjwl nonexistent phrase"')
+
+    with store.transaction() as session:
+        record_literature_search(session, empty, search_id="LS-1")
+
+    with pytest.raises(SearchNotRecordable, match="already recorded"):
+        with store.transaction() as session:
+            record_literature_search(session, empty, search_id="LS-1")

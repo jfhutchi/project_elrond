@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 metadata = MetaData(
     naming_convention={
@@ -598,6 +598,35 @@ Index(
 #
 # Append-only. A search that happened cannot un-happen, and a row that could be revised downward
 # would be exactly the understatement the multiple-testing budget exists to prevent.
+literature_searches = Table(
+    "literature_searches",
+    metadata,
+    Column("search_id", String(128), primary_key=True),
+    Column("connector", String(64), nullable=False),
+    Column("query", Text, nullable=False),
+    # RESULTS / NO_RESULTS / OUTAGE. Three states rather than a nullable result set, because
+    # "we looked and found nothing" and "we could not look" are different facts about the
+    # world and collapsing them is how an outage reads as evidence of absence.
+    Column("outcome", String(16), nullable=False),
+    Column("attempted_at", String(40), nullable=False),
+    Column("total_matched", Integer, nullable=False),
+    #: The sources returned, with the identifier and content hash of each, so a citation can be
+    #: traced back to the bytes that were actually acquired.
+    Column("results_json", Text, nullable=False, server_default=text("'[]'")),
+    Column("detail", Text, nullable=False, server_default=text("''")),
+    CheckConstraint(
+        "outcome IN ('RESULTS', 'NO_RESULTS', 'OUTAGE')", name="known_search_outcome"
+    ),
+    CheckConstraint("total_matched >= 0", name="matched_not_negative"),
+    # An outage found nothing because it never looked; recording a match count against one
+    # would be inventing a number nobody received.
+    CheckConstraint(
+        "outcome != 'OUTAGE' OR total_matched = 0", name="an_outage_matched_nothing"
+    ),
+)
+Index("ix_literature_searches_connector", literature_searches.c.connector)
+Index("ix_literature_searches_attempted", literature_searches.c.attempted_at)
+
 search_runs = Table(
     "search_runs",
     metadata,

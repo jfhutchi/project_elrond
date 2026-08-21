@@ -39,17 +39,23 @@ module treats as a protocol failure rather than as an absence of papers.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 import time
 import xml.etree.ElementTree as ElementTree
 from collections.abc import Callable, Mapping
 from datetime import UTC, datetime
+from enum import StrEnum
 from typing import Protocol
 
 import httpx
 from pydantic import Field, ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from quantbot.research.sources import FrozenModel, Source, SourceKind
+from quantbot.storage.database import encode_utc
+from quantbot.storage.schema import literature_searches
 
 #: HTTPS rather than the documented http:// base. Same service, and a plaintext hop is a
 #: place for someone else's bytes to become our provenance.
@@ -178,6 +184,151 @@ class LiteratureSearch(FrozenModel):
     def found_nothing(self) -> bool:
         """We looked. There was nothing. Not the same fact as never having looked."""
         return not self.results
+
+
+class SearchOutcome(StrEnum):
+    """What happened to one attempt, kept as three facts rather than two and a null."""
+
+    RESULTS = "RESULTS"
+    #: We looked and the source holds nothing matching. Evidence of absence.
+    NO_RESULTS = "NO_RESULTS"
+    #: We could not look. Absence of evidence, and never the same thing.
+    OUTAGE = "OUTAGE"
+
+
+class SearchNotRecordable(RuntimeError):
+    """Raised when a search record would be a duplicate or a fiction."""
+
+
+def record_literature_search(
+    session: Session, search: LiteratureSearch, *, search_id: str
+) -> SearchOutcome:
+    """Persist one completed search, whether or not it found anything (#4).
+
+    `ArxivScout` has distinguished a zero-result search from an outage since it was written, and
+    none of it survived the process. So the distinction the connector was careful to make lasted
+    one run, and a later reader could not tell a gap in the evidence from a gap in the search.
+
+    The results are stored with each source's identifier, URI and content hash, which is what
+    makes a citation traceable to bytes that were actually acquired rather than to a title
+    somebody typed.
+    """
+    outcome = SearchOutcome.NO_RESULTS if search.found_nothing else SearchOutcome.RESULTS
+    _insert(
+        session,
+        search_id=search_id,
+        connector=search.connector,
+        query=search.query,
+        outcome=outcome,
+        attempted_at=search.searched_at,
+        total_matched=search.total_matched,
+        results=[
+            {
+                "source_id": source.source_id,
+                "uri": source.uri,
+                "title": source.title,
+                "content_hash": source.content_hash,
+                "published_at": source.published_at.isoformat(),
+                "retrieved_at": source.retrieved_at.isoformat(),
+                "parser_version": source.parser_version,
+            }
+            for source in search.results
+        ],
+        detail="",
+    )
+    return outcome
+
+
+def record_literature_outage(
+    session: Session,
+    *,
+    search_id: str,
+    connector: str,
+    query: str,
+    attempted_at: datetime,
+    detail: str,
+) -> SearchOutcome:
+    """Persist an attempt that could not complete (#4).
+
+    This exists so that a source being down leaves a mark. Without it the only durable trace of
+    a failed search is its absence, which is indistinguishable from nobody having searched -- and
+    a research system that cannot tell those apart will eventually report "no literature supports
+    this" when it means "arXiv returned 503 twice".
+
+    `detail` is the operator's note about what failed. The transport's own error text is
+    deliberately not the default: it is arbitrary remote output and may be enormous.
+    """
+    if not detail.strip():
+        raise SearchNotRecordable(
+            "an outage record needs to say what failed; an unexplained outage is only "
+            "marginally more useful than no record"
+        )
+    _insert(
+        session,
+        search_id=search_id,
+        connector=connector,
+        query=query,
+        outcome=SearchOutcome.OUTAGE,
+        attempted_at=attempted_at,
+        # Not "unknown" and not the last successful count: nothing was received.
+        total_matched=0,
+        results=[],
+        detail=detail,
+    )
+    return SearchOutcome.OUTAGE
+
+
+def _insert(
+    session: Session,
+    *,
+    search_id: str,
+    connector: str,
+    query: str,
+    outcome: SearchOutcome,
+    attempted_at: datetime,
+    total_matched: int,
+    results: list[dict[str, str]],
+    detail: str,
+) -> None:
+    """Append one record. Append-only, because a search that happened cannot un-happen."""
+    existing = session.execute(
+        select(literature_searches.c.search_id).where(
+            literature_searches.c.search_id == search_id
+        )
+    ).one_or_none()
+    if existing is not None:
+        raise SearchNotRecordable(
+            f"literature search {search_id} is already recorded; these are append-only so a "
+            "disappointing search cannot be quietly replaced with a better one"
+        )
+    session.execute(
+        literature_searches.insert().values(
+            search_id=search_id,
+            connector=connector,
+            query=query,
+            outcome=outcome.value,
+            attempted_at=encode_utc(attempted_at),
+            total_matched=total_matched,
+            results_json=json.dumps(results, sort_keys=True),
+            detail=detail,
+        )
+    )
+
+
+def searched_before(session: Session, query: str, *, connector: str | None = None) -> bool:
+    """Whether this exact query has ever *successfully* completed.
+
+    An outage does not count as having searched, which is the whole point of storing three
+    outcomes. A novelty check that treated a failed attempt as a completed one would conclude
+    the literature had been checked when it had not.
+    """
+    statement = select(literature_searches.c.search_id).where(
+        literature_searches.c.query == query,
+        literature_searches.c.outcome != SearchOutcome.OUTAGE.value,
+    )
+    if connector is not None:
+        statement = statement.where(literature_searches.c.connector == connector)
+    return session.execute(statement).first() is not None
 
 
 def _utcnow() -> datetime:
@@ -356,7 +507,12 @@ __all__ = [
     "LiteratureSearch",
     "ScoutError",
     "ScoutTransport",
+    "SearchNotRecordable",
+    "SearchOutcome",
     "SourceProtocolError",
     "SourceUnavailable",
     "parse_feed",
+    "record_literature_outage",
+    "record_literature_search",
+    "searched_before",
 ]
