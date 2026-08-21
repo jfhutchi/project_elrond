@@ -90,13 +90,36 @@ class FrozenModel(BaseModel):
 
 
 class ModelCapabilities(FrozenModel):
-    """What a backend can actually do, so a role is not routed somewhere it cannot run."""
+    """What a backend can actually do, so a role is not routed somewhere it cannot run.
+
+    `structured_output` and `tools` were declared here and read nowhere for as long as this class
+    existed, so the docstring's promise was not kept by anything: a call needing structured
+    output was routed to a model that could not produce it, and the failure appeared later as
+    unparseable text rather than as a routing refusal. `ModelRuntime.call` now takes the
+    requirement and skips specs that cannot meet it.
+
+    `context_tokens` is still not enforced. Doing so needs a token count for the rendered prompt,
+    and this module has no tokenizer -- estimating one would put a guess in the path of a routing
+    decision. Stated rather than quietly unimplemented.
+    """
 
     context_tokens: int = Field(ge=1)
     structured_output: bool = False
     tools: bool = False
     local: bool = False
     cost_class: CostClass = CostClass.LOCAL
+
+
+#: Capabilities a particular call needs. Members are `ModelCapabilities` field names.
+Capability = frozenset[str]
+
+STRUCTURED_OUTPUT: Capability = frozenset({"structured_output"})
+TOOLS: Capability = frozenset({"tools"})
+
+
+def _missing(spec: ModelSpec, needs: Capability) -> list[str]:
+    """Required capabilities this spec does not have, in a stable order."""
+    return sorted(name for name in needs if not getattr(spec.capabilities, name, False))
 
 
 class ModelSpec(FrozenModel):
@@ -236,6 +259,20 @@ class ModelResponse(FrozenModel):
     prompt_tokens: int = Field(ge=0)
     completion_tokens: int = Field(ge=0)
     produced_at: datetime
+    #: Where in the role's chain this model sat. 0 is the primary (#9).
+    chain_position: int = Field(default=0, ge=0)
+    #: Models tried before this one and why they did not serve, in order. Empty on a primary.
+    #:
+    #: Recorded because a fallback answer used to be indistinguishable from a primary one: the
+    #: attempt list was built and then thrown away on success, so a critique produced by a
+    #: degraded backup model read exactly like one from the model the operator chose. A result
+    #: that cannot say it was produced under degradation cannot be weighed against one that was
+    #: not.
+    superseded: tuple[Text, ...] = ()
+
+    @property
+    def is_fallback(self) -> bool:
+        return self.chain_position > 0
 
     @property
     def response_hash(self) -> str:
@@ -279,11 +316,18 @@ class ModelRuntime:
         self._breaker = breaker or CircuitBreaker()
         self._timeout = timeout_seconds
 
-    def resolve(self, role: ModelRole, *, now: datetime) -> ModelSpec:
-        """The first model in the role's chain that is not tripped."""
-        chain = self._routing.chain(role)
-        for spec in chain:
-            if not self._breaker.is_open(spec, now=now):
+    def resolve(
+        self,
+        role: ModelRole,
+        *,
+        now: datetime,
+        needs: Capability = frozenset(),
+    ) -> ModelSpec:
+        """The first model in the role's chain that is neither tripped nor incapable."""
+        for spec in self._routing.chain(role):
+            if self._breaker.is_open(spec, now=now):
+                continue
+            if not _missing(spec, needs):
                 return spec
         raise ModelUnavailable(f"every model configured for {role.value} is unavailable")
 
@@ -294,13 +338,21 @@ class ModelRuntime:
         values: Mapping[str, str],
         *,
         now: datetime,
+        needs: Capability = frozenset(),
     ) -> ModelResponse:
         prompt = template.render(values)
         chain = self._routing.chain(role)
         attempted: list[str] = []
-        for spec in chain:
+        for position, spec in enumerate(chain):
             if self._breaker.is_open(spec, now=now):
                 attempted.append(f"{spec.model} (circuit open)")
+                continue
+            lacking = _missing(spec, needs)
+            if lacking:
+                # Skipped rather than tried. Routing a structured-output call to a model that
+                # cannot produce it does not fail at the routing layer -- it fails later as
+                # unparseable text, which reads like a bad answer rather than a bad route.
+                attempted.append(f"{spec.model} (cannot {', '.join(lacking)})")
                 continue
             try:
                 text, prompt_tokens, completion_tokens = self._transport.complete(
@@ -323,6 +375,8 @@ class ModelRuntime:
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,
                 produced_at=now,
+                chain_position=position,
+                superseded=tuple(attempted),
             )
         raise ModelUnavailable(f"{role.value} exhausted its chain: {'; '.join(attempted)}")
 
@@ -382,7 +436,10 @@ __all__ = [
     "CircuitBreaker",
     "CostClass",
     "CredentialInPrompt",
+    "Capability",
     "ModelCapabilities",
+    "STRUCTURED_OUTPUT",
+    "TOOLS",
     "ModelError",
     "ModelResponse",
     "ModelRole",

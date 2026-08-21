@@ -9,6 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from quantbot.research.models import (
+    STRUCTURED_OUTPUT,
     CircuitBreaker,
     CostClass,
     CredentialInPrompt,
@@ -326,3 +327,99 @@ def test_a_spec_cannot_carry_the_credential_that_belongs_to_the_transport() -> N
 
     # An ordinary endpoint and ordinary parameters are untouched.
     assert spec().endpoint == "http://localhost:11434/v1"
+
+
+def _incapable(model: str) -> ModelSpec:
+    """A model that answers fine but cannot produce structured output."""
+    return ModelSpec(
+        provider="ollama",
+        model=model,
+        version="1",
+        endpoint="http://localhost:11434/v1",
+        parameters={"temperature": "0"},
+        capabilities=ModelCapabilities(
+            context_tokens=8192, structured_output=False, local=True, cost_class=CostClass.LOCAL
+        ),
+    )
+
+
+def test_a_fallback_answer_says_that_it_is_one(monkeypatch: pytest.MonkeyPatch) -> None:
+    """#9: a response produced under degradation must be distinguishable from a primary one.
+
+    The attempt list was built and thrown away on success, so a critique from a degraded backup
+    read exactly like one from the model the operator chose. A result that cannot say it was
+    produced under degradation cannot be weighed against one that was not.
+    """
+    primary, backup = spec("primary-model"), spec("backup-model", version="2")
+    routing = RoleRouting(
+        chains={ModelRole.GENERATOR: (primary, backup), ModelRole.CRITIC: (spec("critic"),)},
+        fall_back=True,
+    )
+    # One failure: the primary falls over, the backup answers.
+    chat = FakeChat(failures=1)
+    runtime = ModelRuntime(routing, chat)
+
+    response = runtime.call(ModelRole.GENERATOR, template(), {"claim": "x"}, now=NOW)
+
+    assert response.spec.model == "backup-model"
+    assert response.is_fallback
+    assert response.chain_position == 1
+    assert response.superseded, "the response names what it superseded"
+    assert "primary-model" in response.superseded[0]
+
+
+def test_a_primary_answer_is_not_marked_as_a_fallback() -> None:
+    """The other half: if everything is a fallback, the flag says nothing."""
+    routing = RoleRouting(
+        chains={ModelRole.GENERATOR: (spec("primary-model"),), ModelRole.CRITIC: (spec("c"),)}
+    )
+    response = ModelRuntime(routing, FakeChat()).call(
+        ModelRole.GENERATOR, template(), {"claim": "x"}, now=NOW
+    )
+
+    assert not response.is_fallback
+    assert response.chain_position == 0
+    assert response.superseded == ()
+
+
+def test_a_model_that_cannot_meet_the_requirement_is_skipped_not_tried() -> None:
+    """#9: capability metadata was declared and consulted nowhere.
+
+    Routing a structured-output call to a model that cannot produce it does not fail at the
+    routing layer -- it fails later as unparseable text, which reads like a bad answer rather
+    than a bad route. Silent degradation is the failure mode the criterion names.
+    """
+    weak, strong = _incapable("no-json-model"), spec("json-model")
+    routing = RoleRouting(
+        chains={ModelRole.GENERATOR: (weak, strong), ModelRole.CRITIC: (spec("critic"),)},
+        fall_back=True,
+    )
+    chat = FakeChat()
+    runtime = ModelRuntime(routing, chat)
+
+    response = runtime.call(
+        ModelRole.GENERATOR, template(), {"claim": "x"}, now=NOW, needs=STRUCTURED_OUTPUT
+    )
+
+    assert response.spec.model == "json-model"
+    assert "no-json-model" in response.superseded[0]
+    assert "cannot structured_output" in response.superseded[0]
+    # Skipped, not called: the weak model must never have been asked.
+    assert "no-json-model" not in [model for model, _ in chat.calls]
+
+
+def test_a_requirement_no_model_can_meet_is_refused_rather_than_downgraded() -> None:
+    """Fail closed. Answering with a model that cannot do the job is worse than not answering."""
+    routing = RoleRouting(
+        chains={
+            ModelRole.GENERATOR: (_incapable("a"), _incapable("b")),
+            ModelRole.CRITIC: (spec("critic"),),
+        },
+        fall_back=True,
+    )
+    runtime = ModelRuntime(routing, FakeChat())
+
+    with pytest.raises(ModelUnavailable, match="exhausted its chain"):
+        runtime.call(
+            ModelRole.GENERATOR, template(), {"claim": "x"}, now=NOW, needs=STRUCTURED_OUTPUT
+        )
