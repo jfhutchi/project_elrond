@@ -6,9 +6,11 @@ consumption record existing for it. Every test here should fail if that stops be
 
 from __future__ import annotations
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlalchemy import text
@@ -68,6 +70,12 @@ def database(tmp_path) -> Iterator[Database]:
     db = Database(tmp_path / "runner.db")
     yield db
     db.close()
+
+
+@pytest.fixture
+def manifests(tmp_path) -> Path:
+    """Where the runner writes its bundles. Required, so every test has somewhere real."""
+    return tmp_path / "manifests"
 
 
 def draft(**overrides: object) -> HypothesisDraft:
@@ -173,7 +181,9 @@ def _window_state(session) -> str:
     return str(row[0])
 
 
-def test_the_holdout_is_spent_before_the_measurement_reads_it(database: Database) -> None:
+def test_the_holdout_is_spent_before_the_measurement_reads_it(
+    database: Database, manifests: Path
+) -> None:
     """#32: consumption happens at handoff, not on success.
 
     Asserted from *inside* the measurement rather than after the run, because the distinction
@@ -197,7 +207,7 @@ def test_the_holdout_is_spent_before_the_measurement_reads_it(database: Database
                 probes_run=plan.probes,
             )
 
-        ExperimentRunner(HypothesisRegistry(session)).run(
+        ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
             plan,
             registration,
             measurement,
@@ -211,7 +221,9 @@ def test_the_holdout_is_spent_before_the_measurement_reads_it(database: Database
     assert observed_during_run == [WindowState.CONSUMED.value]
 
 
-def test_a_crashing_measurement_still_spends_the_holdout(database: Database) -> None:
+def test_a_crashing_measurement_still_spends_the_holdout(
+    database: Database, manifests: Path
+) -> None:
     """Reading the data and then failing has still read it.
 
     If consumption were recorded on success, failing would be a way to inspect a protected
@@ -225,7 +237,7 @@ def test_a_crashing_measurement_still_spends_the_holdout(database: Database) -> 
         raise ZeroDivisionError("the experiment blew up after opening the data")
 
     with database.transaction() as session:
-        result = ExperimentRunner(HypothesisRegistry(session)).run(
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
             plan,
             registration,
             measurement,
@@ -253,7 +265,9 @@ def test_protected_access_cannot_be_forged() -> None:
         )
 
 
-def test_a_measurement_cannot_nominate_itself_a_survivor(database: Database) -> None:
+def test_a_measurement_cannot_nominate_itself_a_survivor(
+    database: Database, manifests: Path
+) -> None:
     """The runner grades; the measurement reports. A number below the bar is refuted."""
     registration = _register(database)
     plan = compile_experiment(registration, datasets=[snapshot()])
@@ -268,7 +282,7 @@ def test_a_measurement_cannot_nominate_itself_a_survivor(database: Database) -> 
         )
 
     with database.transaction() as session:
-        result = ExperimentRunner(HypothesisRegistry(session)).run(
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
             plan,
             registration,
             weak,
@@ -283,7 +297,9 @@ def test_a_measurement_cannot_nominate_itself_a_survivor(database: Database) -> 
     assert "did not clear" in result.outcome.detail
 
 
-def test_a_failed_probe_refutes_even_when_the_statistic_clears(database: Database) -> None:
+def test_a_failed_probe_refutes_even_when_the_statistic_clears(
+    database: Database, manifests: Path
+) -> None:
     """Ordering matters: probes are disqualifying, not advisory.
 
     A result that clears the luck bar and fails an adversarial probe is refuted. If the headline
@@ -302,7 +318,7 @@ def test_a_failed_probe_refutes_even_when_the_statistic_clears(database: Databas
         )
 
     with database.transaction() as session:
-        result = ExperimentRunner(HypothesisRegistry(session)).run(
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
             plan,
             registration,
             strong_but_objectionable,
@@ -317,7 +333,9 @@ def test_a_failed_probe_refutes_even_when_the_statistic_clears(database: Databas
     assert "hidden-beta" in result.outcome.detail
 
 
-def test_skipping_a_required_probe_is_inconclusive_not_survived(database: Database) -> None:
+def test_skipping_a_required_probe_is_inconclusive_not_survived(
+    database: Database, manifests: Path
+) -> None:
     """A run that dropped its probes has no readable result, however good the number looks."""
     registration = _register(database)
     plan = compile_experiment(registration, datasets=[snapshot()])
@@ -331,7 +349,7 @@ def test_skipping_a_required_probe_is_inconclusive_not_survived(database: Databa
         )
 
     with database.transaction() as session:
-        result = ExperimentRunner(HypothesisRegistry(session)).run(
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
             plan,
             registration,
             partial,
@@ -346,7 +364,9 @@ def test_skipping_a_required_probe_is_inconclusive_not_survived(database: Databa
     assert "did not run" in result.outcome.detail
 
 
-def test_a_plan_cannot_be_reported_against_a_different_registration(database: Database) -> None:
+def test_a_plan_cannot_be_reported_against_a_different_registration(
+    database: Database, manifests: Path
+) -> None:
     """The hash ties the result to the claim it was frozen against."""
     registration = _register(database)
     plan = compile_experiment(registration, datasets=[snapshot()])
@@ -373,7 +393,7 @@ def test_a_plan_cannot_be_reported_against_a_different_registration(database: Da
 
     with database.transaction() as session:
         with pytest.raises(ExperimentRunError, match="compiled against registration"):
-            ExperimentRunner(HypothesisRegistry(session)).run(
+            ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
                 plan,
                 other,
                 lambda _p, _a: Measured(effect=None),
@@ -386,7 +406,7 @@ def test_a_plan_cannot_be_reported_against_a_different_registration(database: Da
 
 
 def test_the_manifest_records_the_run_as_confirmatory_with_its_provenance(
-    database: Database,
+    database: Database, manifests: Path
 ) -> None:
     """#18: a result cited as evidence has to say what produced it.
 
@@ -398,7 +418,7 @@ def test_the_manifest_records_the_run_as_confirmatory_with_its_provenance(
     code, environment = provenance()
 
     with database.transaction() as session:
-        result = ExperimentRunner(HypothesisRegistry(session)).run(
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
             plan,
             registration,
             lambda _p, _a: Measured(
@@ -423,7 +443,9 @@ def test_the_manifest_records_the_run_as_confirmatory_with_its_provenance(
     assert manifest.power_verdict == "POWERED"
 
 
-def test_a_plan_with_no_protected_window_is_refused(database: Database) -> None:
+def test_a_plan_with_no_protected_window_is_refused(
+    database: Database, manifests: Path
+) -> None:
     """There is no holdout to spend, so nothing the run produces would be evidence."""
     registration = _register(database)
     plan = compile_experiment(registration, datasets=[snapshot()])
@@ -434,7 +456,7 @@ def test_a_plan_with_no_protected_window_is_refused(database: Database) -> None:
 
     with database.transaction() as session:
         with pytest.raises(ExperimentRunError, match="no PROTECTED_EVALUATION dataset"):
-            ExperimentRunner(HypothesisRegistry(session)).run(
+            ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
                 exploratory,
                 registration,
                 lambda _p, _a: Measured(effect=None),
@@ -444,3 +466,93 @@ def test_a_plan_with_no_protected_window_is_refused(database: Database) -> None:
                 applied_costs=COSTS,
                 design=DESIGN,
             )
+
+
+def test_a_confirmatory_outcome_cannot_be_obtained_without_its_manifest_on_disk(
+    database: Database, manifests: Path
+) -> None:
+    """#18: persisting the bundle was a caller responsibility, so eventually it would not happen.
+
+    Same shape of omission as `compile_experiment()` and `consume()` having no callers: correct,
+    optional, and therefore absent the first time somebody is in a hurry. The runner now takes
+    the directory in its constructor, so a runner that keeps no record cannot be built.
+    """
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+    code, environment = provenance()
+
+    def measurement(_plan, _access) -> Measured:
+        return Measured(
+            effect=Decimal("2.4"), test_statistic=Decimal("4.0"), probes_run=plan.probes
+        )
+
+    with database.transaction() as session:
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            plan,
+            registration,
+            measurement,
+            now=NOW,
+            code=code,
+            environment=environment,
+            applied_costs=COSTS,
+            design=DESIGN,
+        )
+
+    assert result.manifest_path.exists(), "the outcome arrived without its provenance"
+    written = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert written["mode"] == "CONFIRMATORY"
+    assert written["hypothesis_id"] == registration.draft.hypothesis_id
+    # The name is content-addressed, so the file can be found from the manifest alone.
+    assert result.manifest.manifest_hash[:16] in result.manifest_path.name
+
+
+def test_a_failed_run_is_recorded_as_fully_as_a_successful_one(
+    database: Database, manifests: Path
+) -> None:
+    """An archive that only keeps what worked is the selection bias this project resists.
+
+    The crash path used to build a manifest and hand it back with everything else; it would
+    have been the easiest one to skip writing, and the most damaging, because a failure nobody
+    recorded is a failure the next agent repeats.
+    """
+
+    def explodes(plan, access):
+        raise ZeroDivisionError("the covariance matrix was singular")
+
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+    code, environment = provenance()
+
+    with database.transaction() as session:
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            plan,
+            registration,
+            explodes,
+            now=NOW,
+            code=code,
+            environment=environment,
+            applied_costs=COSTS,
+            design=DESIGN,
+        )
+
+    assert result.outcome.verdict is OutcomeVerdict.FAILED
+    assert result.manifest_path.exists(), "a failed run must leave a record too"
+    written = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert written["results"]["primary"]["verdict"] == "FAILED"
+    assert "ZeroDivisionError" in result.outcome.detail
+
+
+def test_a_runner_cannot_be_built_without_somewhere_to_record(database: Database) -> None:
+    """The enforcement is the required argument, so this asserts the argument is required.
+
+    An optional `manifests=None` would leave the default construction -- the one people
+    actually write -- as the one that keeps no evidence.
+    """
+    import inspect
+
+    signature = inspect.signature(ExperimentRunner.__init__)
+    assert signature.parameters["manifests"].default is inspect.Parameter.empty
+
+    with database.transaction() as session:
+        with pytest.raises(TypeError):
+            ExperimentRunner(HypothesisRegistry(session))  # type: ignore[call-arg]

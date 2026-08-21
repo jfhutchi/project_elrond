@@ -24,6 +24,12 @@ Forgetting is therefore a type error rather than a silent contamination.
 Consumption happens *before* the measurement runs, never after. An experiment that reads the
 holdout and then crashes has still read it, and recording consumption on success would make
 failing a way to look at data for free.
+
+The manifest is written the same way, and for the same reason (#18). `run()` used to return the
+bundle and leave persisting it to the caller, which is the identical shape of omission: correct,
+optional, and therefore absent under time pressure. A runner is now constructed with the
+directory its manifests live in, so there is no way to obtain a confirmatory outcome while
+quietly dropping the record of how it was reached.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from decimal import Decimal
+from pathlib import Path
 from types import ModuleType
 from typing import Protocol
 
@@ -46,6 +53,7 @@ from quantbot.research.manifest import (
     ExperimentPeriod,
     ResourceUsage,
     content_id,
+    write_experiment_manifest,
 )
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
 
@@ -153,13 +161,21 @@ class ExperimentDesign:
 class RunResult:
     outcome: ExperimentOutcome
     manifest: ExperimentManifest
+    #: Where the bundle was written. Present because it was written, not as an intention.
+    manifest_path: Path
 
 
 class ExperimentRunner:
     """Executes a compiled plan against a registry that owns the protected windows."""
 
-    def __init__(self, registry: HypothesisRegistry) -> None:
+    def __init__(self, registry: HypothesisRegistry, *, manifests: Path) -> None:
+        """`manifests` is required, so a runner that does not record cannot be constructed.
+
+        Passing a directory is the whole enforcement. An optional argument would leave the
+        default path -- the one people actually take -- as the one that keeps no evidence.
+        """
         self._registry = registry
+        self._manifests = Path(manifests)
 
     def run(
         self,
@@ -219,34 +235,17 @@ class ExperimentRunner:
                 detail=f"{type(error).__name__}: {error}",
                 completed_at=now,
             )
-            return RunResult(
-                outcome=outcome,
-                manifest=self._manifest(
-                    plan,
-                    registration,
-                    outcome,
-                    code,
-                    environment,
-                    applied_costs,
-                    design,
-                    resources,
-                ),
+            # A failed run is recorded exactly as fully as a successful one. A bundle written
+            # only on success would make the archive a record of things that worked, which is
+            # the selection bias this project exists to resist.
+            return self._record(
+                plan, registration, outcome, code, environment, applied_costs, design, resources
             )
 
         resources = _usage(started_at, cpu_before, tracemalloc)
         outcome = self._grade(plan, measured, now=now)
-        return RunResult(
-            outcome=outcome,
-            manifest=self._manifest(
-                plan,
-                registration,
-                outcome,
-                code,
-                environment,
-                applied_costs,
-                design,
-                resources,
-            ),
+        return self._record(
+            plan, registration, outcome, code, environment, applied_costs, design, resources
         )
 
     def _spend(self, plan: ExperimentPlan, *, now: datetime) -> ProtectedAccess:
@@ -343,6 +342,39 @@ class ExperimentRunner:
             detail=detail,
             completed_at=now,
         )
+
+    def _record(
+        self,
+        plan: ExperimentPlan,
+        registration: Registration,
+        outcome: ExperimentOutcome,
+        code: CodeProvenance,
+        environment: EnvironmentFingerprint,
+        applied_costs: Mapping[str, str],
+        design: ExperimentDesign,
+        resources: ResourceUsage,
+    ) -> RunResult:
+        """Build the bundle, write it, and only then hand back the outcome (#18).
+
+        The ordering matters for the same reason consumption precedes measurement: if writing
+        fails, the caller gets an exception rather than a usable verdict whose provenance never
+        reached disk. A result you can act on and cannot trace is the thing the manifest exists
+        to prevent.
+
+        The filename carries the hypothesis, its version and the manifest hash. The hash makes
+        the name content-addressed, so re-running an identical experiment lands on the identical
+        file and `write_experiment_manifest` accepts the exact repeat, while any difference in
+        inputs or results produces a different name instead of a conflict. The hypothesis prefix
+        is there for humans reading the directory.
+        """
+        manifest = self._manifest(
+            plan, registration, outcome, code, environment, applied_costs, design, resources
+        )
+        destination = self._manifests / (
+            f"{plan.hypothesis_id}-v{plan.hypothesis_version}-{manifest.manifest_hash[:16]}.json"
+        )
+        write_experiment_manifest(destination, manifest)
+        return RunResult(outcome=outcome, manifest=manifest, manifest_path=destination)
 
     def _manifest(
         self,
