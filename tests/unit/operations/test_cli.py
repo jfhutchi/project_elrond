@@ -29,6 +29,7 @@ from quantbot.storage import Database, StorageRepository
         ["hypotheses"],
         ["register-hypothesis", "--draft", "d.json", "--critique", "c.json"],
         ["research-status"],
+        ["integrity-sweep"],
     ],
 )
 def test_required_cli_commands_are_registered(argv: list[str]) -> None:
@@ -257,3 +258,92 @@ def test_research_status_reports_being_unconfigured_rather_than_failing(
     parsed = parser.parse_args(["research-status"])
 
     assert parsed.command == "research-status"
+
+def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach(
+    tmp_path: Path,
+) -> None:
+    """#16: the automated demotion path, exercised through the real command.
+
+    The polarity is the point. `register-hypothesis` defaults to reporting because registration
+    spends a non-renewable budget; this defaults to *acting* because it reduces trust, and a
+    safety control that does nothing unless someone remembers a flag does nothing. Demotion is
+    reversible and preserves the forward evidence, so acting wrongly is cheap here and not
+    acting is not.
+    """
+    import json
+
+    from quantbot.domain import StrategyIdentity
+    from quantbot.research.promotion import PromotionLedger, PromotionState, Stage
+
+    database = Database(tmp_path / "quantbot.db")
+    moment = datetime(2026, 8, 21, 14, 30, tzinfo=UTC)
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_run(
+            "run-1",
+            StrategyIdentity(
+                strategy_id="adaptive-momentum",
+                version="1.3.0",
+                git_commit="abc1234",
+                configuration_hash="cfg-abc",
+                deployment_timestamp=moment,
+            ),
+            started_at=moment,
+        )
+        repository.create_incident(
+            "INC-1",
+            severity="ERROR",
+            kind="RECONCILIATION_FAILED",
+            message="broker and ledger disagree",
+            occurred_at=moment,
+            run_id="run-1",
+        )
+        repository.create_incident(
+            "INC-ORPHAN",
+            severity="ERROR",
+            kind="RECONCILIATION_FAILED",
+            message="raised outside any run",
+            occurred_at=moment,
+        )
+        PromotionLedger(session).enter(
+            PromotionState(
+                strategy_id="adaptive-momentum",
+                stage=Stage.PAPER_QUALIFIED,
+                strategy_version="1.3.0",
+                configuration_hash="cfg-abc",
+                reason="seeded",
+                actor="operator",
+                updated_at=moment,
+            )
+        )
+
+    context = CLIContext(
+        settings=_ready_settings(),
+        database=database,
+        handlers={},
+        reported_account_id="paper-1",
+        clearance_evidence=_ready_evidence(),
+    )
+
+    dry = StringIO()
+    assert main(["integrity-sweep", "--dry-run"], context=context, output=dry) == 0
+    with database.transaction() as session:
+        unchanged = PromotionLedger(session).current("adaptive-momentum")
+    assert unchanged is not None and unchanged.stage is Stage.PAPER_QUALIFIED, (
+        "--dry-run must not move anything"
+    )
+
+    acted = StringIO()
+    assert main(["integrity-sweep"], context=context, output=acted) == 0
+    payload = json.loads(acted.getvalue())
+
+    assert payload["demoted"] == [
+        {"strategy_id": "adaptive-momentum", "stage": "RESEARCH_SURVIVOR"}
+    ]
+    assert payload["unattributed_incidents"] == ["INC-ORPHAN"]
+    assert payload["clean"] is False, "an unreachable incident is not a clean system"
+
+    with database.transaction() as session:
+        moved = PromotionLedger(session).current("adaptive-momentum")
+    assert moved is not None and moved.stage is Stage.RESEARCH_SURVIVOR
+    database.close()

@@ -44,6 +44,7 @@ strategy, so they are not observations of this one.
 from __future__ import annotations
 
 from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -421,18 +422,109 @@ __all__ = [
     "MINIMUM_FORWARD_DAYS",
     "MINIMUM_FORWARD_TRADES",
     "ForwardObservation",
+    "IntegritySweep",
     "LedgerObservations",
+    "NON_INFORMATIONAL",
     "PromotionRefused",
     "PromotionState",
     "Stage",
     "count_forward_days",
     "demote",
+    "demote_on_integrity_incidents",
     "forward_progress",
     "material_change",
     "observe_forward_days",
     "promote",
     "survivor_objections",
 ]
+
+
+#: Severities that are not merely informational. Keyed on severity rather than on an allowlist
+#: of incident kinds, because `incidents.kind` is free text and an allowlist fails **open** on
+#: every kind nobody remembered to add -- a new integrity check would ship, raise incidents, and
+#: quietly demote nothing. Severity is the field every raiser already has to choose.
+NON_INFORMATIONAL = frozenset({"WARNING", "ERROR", "CRITICAL", "FATAL"})
+
+#: An integrity incident drops a strategy out of the forward track entirely rather than one rung.
+#: "A system that can be slow to stop trusting something is worse than one that is occasionally
+#: too quick" -- and a strategy whose ledger is in doubt should not be accumulating qualification
+#: days while the doubt stands.
+INTEGRITY_FLOOR = Stage.RESEARCH_SURVIVOR
+
+
+@dataclass(frozen=True, slots=True)
+class IntegritySweep:
+    """What an integrity sweep did, and what it could not reach.
+
+    `unattributed` is not a diagnostic afterthought. An incident raised outside a run has no
+    strategy to demote, so this sweep cannot act on it -- and reporting only what it demoted
+    would let an operator read a clean sweep as a clean system. The count belongs in the same
+    return value as the action so the two cannot drift apart.
+    """
+
+    demoted: tuple[PromotionState, ...]
+    unattributed: tuple[str, ...]
+
+    @property
+    def clean(self) -> bool:
+        """True only when nothing was demoted **and** nothing was left unattributable."""
+        return not self.demoted and not self.unattributed
+
+
+def demote_on_integrity_incidents(
+    session: Session,
+    *,
+    now: datetime,
+    actor: str = "integrity-sweep",
+) -> IntegritySweep:
+    """Drop every strategy with an unresolved non-informational incident (#16).
+
+    `demote()` has always existed and is deliberately ungated; nothing called it when an
+    incident landed, so the ladder could report a strategy as PAPER_QUALIFIED while its own
+    reconciliation was failing. That is the failure mode the ladder exists to prevent, and a
+    rule nobody invokes is not a control.
+
+    Demotion does **not** erase forward evidence. `observe_forward_days` reads the ledger, which
+    is unchanged, so resolving the incident and re-promoting restores the days that really
+    happened. An incident casts doubt on evidence; it does not make the sessions un-occur, and
+    deleting them would be its own kind of fabrication.
+
+    **Known limitation, recorded rather than silently decided:** days that fall *inside* an
+    incident window still count once the incident is resolved. Arguing they should not is
+    reasonable -- evidence gathered while the ledger was in doubt is weaker evidence -- but
+    excluding them needs incident time ranges this schema does not carry, and guessing the
+    overlap would be worse than counting honestly and saying so.
+    """
+    repository = StorageRepository(session)
+    ladder = PromotionLedger(session)
+    suspect: set[str] = set()
+    unattributed: list[str] = []
+    for strategy_id, incident_id, severity in repository.unresolved_incidents_with_strategy():
+        if severity.upper() not in NON_INFORMATIONAL:
+            continue
+        if strategy_id is None:
+            unattributed.append(incident_id)
+        else:
+            suspect.add(strategy_id)
+
+    demoted: list[PromotionState] = []
+    for record in repository.list_promotions():
+        if record.strategy_id not in suspect:
+            continue
+        if _rank(Stage(record.stage)) <= _rank(INTEGRITY_FLOOR):
+            # Already at or below the floor. Re-demoting would write an event recording a move
+            # that did not happen, and the history is meant to hold moves.
+            continue
+        demoted.append(
+            ladder.demote(
+                record.strategy_id,
+                INTEGRITY_FLOOR,
+                actor=actor,
+                reason="unresolved integrity incident",
+                now=now,
+            )
+        )
+    return IntegritySweep(demoted=tuple(demoted), unattributed=tuple(unattributed))
 
 
 class PromotionLedger:

@@ -30,6 +30,7 @@ from quantbot.research.promotion import (
     Stage,
     count_forward_days,
     demote,
+    demote_on_integrity_incidents,
     forward_progress,
     material_change,
     observe_forward_days,
@@ -602,3 +603,152 @@ def test_a_strategy_that_never_entered_cannot_move(ledger_db) -> None:
             PromotionLedger(session).promote(
                 "never-seen", Stage.REGISTERED, actor="hutch", reason="x", now=NOW
             )
+
+
+def _raise_incident(
+    session,
+    *,
+    incident_id: str,
+    severity: str = "ERROR",
+    strategy_id: str | None = "adaptive-momentum",
+    resolved: bool = False,
+) -> None:
+    """One incident, optionally attached to a run so it can be attributed to a strategy."""
+    repository = StorageRepository(session)
+    run_id: str | None = None
+    if strategy_id is not None:
+        run_id = f"run-for-{incident_id}"
+        repository.create_run(
+            run_id,
+            StrategyIdentity(
+                strategy_id=strategy_id,
+                version="1.3.0",
+                git_commit="abc1234",
+                configuration_hash="cfg-abc",
+                deployment_timestamp=NOW,
+            ),
+            started_at=NOW,
+        )
+    repository.create_incident(
+        incident_id,
+        severity=severity,
+        kind="RECONCILIATION_FAILED",
+        message="broker and ledger disagree",
+        occurred_at=NOW,
+        run_id=run_id,
+        resolved_at=NOW if resolved else None,
+    )
+
+
+def test_an_unresolved_integrity_incident_demotes_out_of_the_forward_track(
+    ledger_db: Database,
+) -> None:
+    """#16: `demote()` was ungated and nothing called it when an incident landed.
+
+    So the ladder could report a strategy as PAPER_QUALIFIED while its own reconciliation was
+    failing, which is the exact failure the ladder exists to prevent. A rule nobody invokes is
+    not a control.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        ladder = PromotionLedger(session)
+        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        _raise_incident(session, incident_id="INC-1")
+
+        sweep = demote_on_integrity_incidents(session, now=NOW)
+
+        assert not sweep.clean
+        assert [item.strategy_id for item in sweep.demoted] == ["adaptive-momentum"]
+        assert ladder.current("adaptive-momentum").stage is Stage.RESEARCH_SURVIVOR
+
+
+def test_demotion_does_not_erase_the_forward_evidence_that_really_happened(
+    ledger_db: Database,
+) -> None:
+    """An incident casts doubt on evidence; it does not make the sessions un-occur.
+
+    Deleting the days would be its own kind of fabrication, and it would make the demotion
+    irreversible for a problem that turns out to be a bad broker feed.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        PromotionLedger(session).enter(state(Stage.PAPER_QUALIFIED))
+        _raise_incident(session, incident_id="INC-1")
+        demote_on_integrity_incidents(session, now=NOW)
+
+        still_there = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+
+    days, trades = count_forward_days(
+        still_there, strategy_version="1.3.0", configuration_hash="cfg-abc"
+    )
+    assert (days, trades) == (MINIMUM_FORWARD_DAYS, MINIMUM_FORWARD_DAYS)
+
+
+def test_an_informational_or_resolved_incident_demotes_nothing(ledger_db: Database) -> None:
+    """Otherwise every routine INFO note would knock a strategy off the ladder.
+
+    A control that fires on everything is one an operator turns off, which leaves the real
+    incidents unhandled -- so the severity filter is part of the protection, not a softening
+    of it.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        ladder = PromotionLedger(session)
+        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        _raise_incident(session, incident_id="INC-INFO", severity="INFO")
+        _raise_incident(session, incident_id="INC-FIXED", severity="ERROR", resolved=True)
+
+        sweep = demote_on_integrity_incidents(session, now=NOW)
+
+        assert sweep.clean
+        assert ladder.current("adaptive-momentum").stage is Stage.PAPER_QUALIFIED
+
+
+def test_an_incident_nobody_can_attribute_is_reported_rather_than_dropped(
+    ledger_db: Database,
+) -> None:
+    """A sweep that demoted nothing must not read as a clean system.
+
+    An incident raised outside a run has no strategy to demote. Returning only what was demoted
+    would let an operator read silence as safety, so the count travels in the same result as
+    the action and `clean` accounts for both.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        ladder = PromotionLedger(session)
+        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        _raise_incident(session, incident_id="INC-ORPHAN", strategy_id=None)
+
+        sweep = demote_on_integrity_incidents(session, now=NOW)
+
+        assert sweep.demoted == ()
+        assert sweep.unattributed == ("INC-ORPHAN",)
+        assert not sweep.clean, "nothing demoted is not the same as nothing wrong"
+        # It belongs to no strategy, so no strategy is moved for it.
+        assert ladder.current("adaptive-momentum").stage is Stage.PAPER_QUALIFIED
+
+
+def test_a_repeated_sweep_records_no_second_move(ledger_db: Database) -> None:
+    """History holds moves. A strategy already at the floor did not move again."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        ladder = PromotionLedger(session)
+        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        _raise_incident(session, incident_id="INC-1")
+
+        first = demote_on_integrity_incidents(session, now=NOW)
+        second = demote_on_integrity_incidents(session, now=NOW)
+
+        assert len(first.demoted) == 1
+        assert second.demoted == ()
+        demotions = [
+            event
+            for event in ladder.history("adaptive-momentum")
+            if event.direction == "DEMOTION"
+        ]
+    assert len(demotions) == 1, "one incident, one recorded demotion"

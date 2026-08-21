@@ -68,6 +68,12 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     registered = commands.add_parser("hypotheses")
     registered.add_argument("--family")
     commands.add_parser("research-status")
+    sweep = commands.add_parser("integrity-sweep")
+    # Acts by default, unlike `register-hypothesis`. The polarity is deliberate: this
+    # command *reduces* trust, and a safety control that does nothing unless someone
+    # remembers a flag is a safety control that does nothing. Demotion is reversible and
+    # preserves the forward evidence, so acting wrongly is cheap and not acting is not.
+    sweep.add_argument("--dry-run", dest="dry_run", action="store_true")
     freeze = commands.add_parser("register-hypothesis")
     freeze.add_argument("--draft", required=True)
     freeze.add_argument("--critique", required=True)
@@ -234,6 +240,49 @@ def main(
                 "actionable_now": ready,
                 "note": ("research-status reports and never advances; use the cycle for that"),
             }
+        elif args.command == "integrity-sweep":
+            # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.promotion import (
+                NON_INFORMATIONAL,
+                demote_on_integrity_incidents,
+            )
+            from quantbot.storage import StorageRepository
+
+            with active.database.transaction() as session:
+                if args.dry_run:
+                    repository = StorageRepository(session)
+                    open_incidents = [
+                        (strategy, incident)
+                        for strategy, incident, severity in (
+                            repository.unresolved_incidents_with_strategy()
+                        )
+                        if severity.upper() in NON_INFORMATIONAL
+                    ]
+                    result = {
+                        "ok": True,
+                        "dry_run": True,
+                        "would_consider": [
+                            {"strategy_id": strategy, "incident_id": incident}
+                            for strategy, incident in open_incidents
+                        ],
+                        "note": "nothing was demoted; re-run without --dry-run to act",
+                    }
+                else:
+                    outcome = demote_on_integrity_incidents(
+                        session, now=datetime.now(UTC), actor="cli"
+                    )
+                    result = {
+                        "ok": True,
+                        "dry_run": False,
+                        "demoted": [
+                            {"strategy_id": moved.strategy_id, "stage": moved.stage.value}
+                            for moved in outcome.demoted
+                        ],
+                        # Surfaced rather than summarised away: a sweep that demoted nothing is
+                        # not the same as a system with nothing wrong.
+                        "unattributed_incidents": list(outcome.unattributed),
+                        "clean": outcome.clean,
+                    }
         elif args.command == "register-hypothesis":
             # Function-scope import for the same reason as `hypotheses` above: the kill switch
             # lives in this file and must not stop working because research code failed to

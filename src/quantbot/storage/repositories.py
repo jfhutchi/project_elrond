@@ -1528,6 +1528,26 @@ class StorageRepository:
             )
         return records
 
+    def unresolved_incidents_with_strategy(self) -> list[tuple[str | None, str, str]]:
+        """Every open incident as `(strategy_id, incident_id, severity)`, newest last.
+
+        `incidents.run_id` is nullable and `runs` is what carries `strategy_id`, so the join is
+        an outer one: an incident raised outside a run has no strategy and arrives here with
+        `None`. Dropping those rows would be the tidier query and the wrong one -- an unresolved
+        integrity problem nobody can attribute is not an unresolved integrity problem nobody
+        has, and a caller deciding what to trust needs to see it.
+        """
+        rows = self._session.execute(
+            select(runs.c.strategy_id, incidents.c.incident_id, incidents.c.severity)
+            .select_from(incidents.outerjoin(runs, incidents.c.run_id == runs.c.run_id))
+            .where(incidents.c.resolved_at.is_(None))
+            .order_by(incidents.c.occurred_at, incidents.c.incident_id)
+        ).all()
+        return [
+            (None if strategy is None else str(strategy), str(incident), str(severity))
+            for strategy, incident, severity in rows
+        ]
+
     def get_kill_switch_state(self) -> KillSwitchState:
         row = (
             self._session.execute(select(kill_switch_state).where(kill_switch_state.c.id == 1))
