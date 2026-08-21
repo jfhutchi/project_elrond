@@ -24,6 +24,7 @@ from quantbot.research.manifest import (
     ExecutionPath,
     ExperimentPeriod,
 )
+from quantbot.research.memory import RecordKind, Verdict
 from quantbot.research.power import (
     ComparisonStructure,
     EconomicProfile,
@@ -44,6 +45,7 @@ from quantbot.research.runner import (
     ExperimentRunner,
     Measured,
     ProtectedAccess,
+    record_from_run,
 )
 from quantbot.research.sources import EpistemicStatus, EvidenceBasis
 from quantbot.storage import Database
@@ -556,3 +558,82 @@ def test_a_runner_cannot_be_built_without_somewhere_to_record(database: Database
     with database.transaction() as session:
         with pytest.raises(TypeError):
             ExperimentRunner(HypothesisRegistry(session))  # type: ignore[call-arg]
+
+
+def _run_to_completion(database, manifests, measurement):
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+    code, environment = provenance()
+    with database.transaction() as session:
+        return ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            plan,
+            registration,
+            measurement,
+            now=NOW,
+            code=code,
+            environment=environment,
+            applied_costs=COSTS,
+            design=DESIGN,
+        )
+
+
+def test_a_stored_conclusion_names_the_bundle_behind_it(
+    database: Database, manifests: Path
+) -> None:
+    """#18: `evidence_hash` was documented as the manifest hash and nothing populated it.
+
+    So every stored conclusion was a sentence with no route back to the run that produced it.
+    A finding you cannot trace to a manifest is a narrative, and storing those is the thing
+    this project exists not to do.
+    """
+
+    def measurement(plan, _access) -> Measured:
+        return Measured(
+            effect=Decimal("2.4"), test_statistic=Decimal("4.0"), probes_run=plan.probes
+        )
+
+    result = _run_to_completion(database, manifests, measurement)
+
+    record = record_from_run(
+        result,
+        record_id="R-1",
+        subject="the 200-day trend filter on SPY",
+        source="cycle 18",
+        now=NOW,
+    )
+
+    assert record.kind is RecordKind.FINDING
+    assert record.verdict is Verdict.SURVIVED
+    assert record.evidence_hash == result.manifest.manifest_hash
+    assert record.hypothesis_id == result.outcome.plan.hypothesis_id
+    assert record.detail["manifest_path"] == str(result.manifest_path)
+
+
+def test_a_run_that_did_not_complete_is_a_defect_and_never_a_finding(
+    database: Database, manifests: Path
+) -> None:
+    """A crash produced no evidence about the hypothesis, so it gets no verdict about it.
+
+    It is still recorded: this project's own error rate is evidence about the project even when
+    it says nothing about the market. Recording it as `REFUTED` would be the same error class as
+    a crashed cycle stage being stored as a refutation.
+    """
+
+    def explodes(_plan, _access) -> Measured:
+        raise ZeroDivisionError("the covariance matrix was singular")
+
+    result = _run_to_completion(database, manifests, explodes)
+
+    record = record_from_run(
+        result,
+        record_id="R-2",
+        subject="the 200-day trend filter on SPY",
+        source="cycle 18",
+        now=NOW,
+    )
+
+    assert record.kind is RecordKind.ANALYSIS_DEFECT
+    assert record.verdict is None, "a crash is not a verdict about the hypothesis"
+    # And it still points at the bundle, so the failure is as traceable as a success.
+    assert record.evidence_hash == result.manifest.manifest_hash
+    assert "ZeroDivisionError" in record.statement

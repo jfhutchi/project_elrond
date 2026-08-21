@@ -55,6 +55,7 @@ from quantbot.research.manifest import (
     content_id,
     write_experiment_manifest,
 )
+from quantbot.research.memory import RecordKind, ResearchRecord, Verdict
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
 
 
@@ -438,6 +439,92 @@ class ExperimentRunner:
         )
 
 
+#: How a run's verdict becomes something memory may hold. `FAILED` is absent on purpose and is
+#: handled separately below: an experiment that did not complete produced no evidence about the
+#: hypothesis, and mapping it onto any research verdict would turn a crash into a finding.
+_VERDICTS: Mapping[OutcomeVerdict, Verdict] = {
+    OutcomeVerdict.SURVIVED: Verdict.SURVIVED,
+    OutcomeVerdict.REFUTED: Verdict.REFUTED,
+    OutcomeVerdict.UNDERPOWERED: Verdict.UNDERPOWERED,
+}
+
+
+def record_from_run(
+    result: RunResult,
+    *,
+    record_id: str,
+    subject: str,
+    source: str,
+    now: datetime,
+) -> ResearchRecord:
+    """Turn a completed run into a memory record that names the bundle behind it (#18, #6).
+
+    `ResearchRecord.evidence_hash` has always been documented as "manifest hash of the bundle
+    evidencing this" and nothing populated it, so every stored conclusion was a sentence with no
+    route back to the run that produced it. A finding you cannot trace to a manifest is a
+    narrative, and this project's whole premise is that it should not be storing those.
+
+    Two outcomes deliberately do not become findings:
+
+    * `FAILED` -- the experiment did not complete, so it produced no evidence about the
+      hypothesis. It is recorded as an `ANALYSIS_DEFECT`, because this project's own error rate
+      is evidence about the project even when it says nothing about the market.
+    * `INCONCLUSIVE` -- it ran, but something about the run means the number cannot be read.
+      Also a defect rather than a finding, for the same reason: a verdict here would be a claim
+      the run explicitly declined to make.
+
+    The statement is assembled from the outcome's own fields rather than written. Prose composed
+    here would be a second account of the result, free to drift from the manifest it cites.
+    """
+    outcome = result.outcome
+    plan = outcome.plan
+    verdict = _VERDICTS.get(outcome.verdict)
+    detail = {
+        "verdict": outcome.verdict.value,
+        "manifest_path": str(result.manifest_path),
+        "probes_run": ", ".join(outcome.probes_run),
+        "probes_failed": ", ".join(outcome.probes_failed),
+    }
+    if outcome.effect is not None:
+        detail["effect"] = str(outcome.effect)
+    if outcome.test_statistic is not None:
+        detail["test_statistic"] = str(outcome.test_statistic)
+
+    if verdict is None:
+        return ResearchRecord(
+            record_id=record_id,
+            kind=RecordKind.ANALYSIS_DEFECT,
+            subject=subject,
+            statement=(
+                f"{plan.hypothesis_id} v{plan.hypothesis_version} produced no readable result: "
+                f"{outcome.detail}"
+            ),
+            hypothesis_id=plan.hypothesis_id,
+            hypothesis_version=plan.hypothesis_version,
+            evidence_hash=result.manifest.manifest_hash,
+            source=source,
+            recorded_at=now,
+            detail=detail,
+        )
+
+    return ResearchRecord(
+        record_id=record_id,
+        kind=RecordKind.FINDING,
+        subject=subject,
+        statement=(
+            f"{plan.hypothesis_id} v{plan.hypothesis_version}: {outcome.verdict.value}"
+            f"{'' if outcome.detail == '' else f' -- {outcome.detail}'}"
+        ),
+        verdict=verdict,
+        hypothesis_id=plan.hypothesis_id,
+        hypothesis_version=plan.hypothesis_version,
+        evidence_hash=result.manifest.manifest_hash,
+        source=source,
+        recorded_at=now,
+        detail=detail,
+    )
+
+
 def _usage(started_at: datetime, cpu_before: float, tracer: ModuleType) -> ResourceUsage:
     """Close out the measurement window. Approximate, and honest about which approximation."""
     _, peak_bytes = tracer.get_traced_memory()
@@ -467,4 +554,5 @@ __all__ = [
     "Measurement",
     "ProtectedAccess",
     "RunResult",
+    "record_from_run",
 ]
