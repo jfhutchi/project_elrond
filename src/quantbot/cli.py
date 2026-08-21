@@ -67,6 +67,7 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
         action_parser.add_argument("--reason", required=True)
     registered = commands.add_parser("hypotheses")
     registered.add_argument("--family")
+    commands.add_parser("research-status")
     freeze = commands.add_parser("register-hypothesis")
     freeze.add_argument("--draft", required=True)
     freeze.add_argument("--critique", required=True)
@@ -185,6 +186,53 @@ def main(
                     "only a listed registration may back a CONFIRMATORY experiment; "
                     "any other analysis is EXPLORATORY and is not evidence"
                 ),
+            }
+        elif args.command == "research-status":
+            # Function-scope import, like the other research commands: the kill switch lives in
+            # this file and must not stop working because research code failed to import.
+            from quantbot.research.composition import (
+                ResearchNotConfigured,
+                model_configuration,
+            )
+            from quantbot.research.cycle import actionable
+            from quantbot.research.director import ResearchDirector
+
+            try:
+                configuration = model_configuration()
+                models = {
+                    "endpoint": configuration.endpoint,
+                    "generator": configuration.generator,
+                    "critic": configuration.critic,
+                    "api_key_configured": configuration.api_key is not None,
+                }
+                blocked_by = None
+            except ResearchNotConfigured as unconfigured:
+                # Reported, not raised. "Research cannot run yet" is a state an operator needs
+                # to see alongside everything else, not an error that hides the rest of it.
+                models = None
+                blocked_by = str(unconfigured)
+
+            with active.database.transaction() as session:
+                director = ResearchDirector(session)
+                tasks = director.by_state()
+                # No stage handlers are passed, so nothing is actionable: this reports the
+                # queue, and deliberately does not advance it. A status command that moved
+                # research forward would be the worst possible place to spend a trial.
+                ready = len(actionable(director, {}))
+
+            result = {
+                "ok": True,
+                "models": models,
+                "blocked_by": blocked_by,
+                "tasks": {
+                    "total": len(tasks),
+                    "by_state": {
+                        state: sum(1 for task in tasks if task.state.value == state)
+                        for state in sorted({task.state.value for task in tasks})
+                    },
+                },
+                "actionable_now": ready,
+                "note": ("research-status reports and never advances; use the cycle for that"),
             }
         elif args.command == "register-hypothesis":
             # Function-scope import for the same reason as `hypotheses` above: the kill switch

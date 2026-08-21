@@ -28,6 +28,7 @@ from quantbot.storage import Database, StorageRepository
         ["paper-smoke", "--acknowledgement", PAPER_SMOKE_ACKNOWLEDGEMENT],
         ["hypotheses"],
         ["register-hypothesis", "--draft", "d.json", "--critique", "c.json"],
+        ["research-status"],
     ],
 )
 def test_required_cli_commands_are_registered(argv: list[str]) -> None:
@@ -236,3 +237,23 @@ def test_a_registration_requires_both_a_draft_and_a_critique() -> None:
     ):
         with pytest.raises(SystemExit):
             parser.parse_args(argv)
+
+
+def test_research_status_reports_being_unconfigured_rather_than_failing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """ "Research cannot run yet" is a state to display, not an error that hides everything else.
+
+    An operator checking status while no model is configured should still see the task queue.
+    Raising here would mean the one command that reports readiness is the one that cannot run
+    until the system is already ready.
+    """
+    from quantbot.research.composition import CRITIC, ENDPOINT, GENERATOR
+
+    for name in (ENDPOINT, GENERATOR, CRITIC):
+        monkeypatch.delenv(name, raising=False)
+
+    parser = build_parser(output=StringIO())
+    parsed = parser.parse_args(["research-status"])
+
+    assert parsed.command == "research-status"
