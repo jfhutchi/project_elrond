@@ -368,7 +368,7 @@ def deterministic_objections(
     #: Cost the edge must clear, per leg. Measured NBBO here is ~1.1bps; the deployed model
     #: assumed 5bps, which `REFUTED.md` records as miscalibrated in the punitive direction.
     cost_floor_bps: float = 1.1,
-) -> tuple[Objection, ...]:
+) -> DeterministicReview:
     """Turn the mechanical measurements into blocking objections, or none.
 
     Anything not supplied produces no objection, which is why `DeterministicCritic` records what
