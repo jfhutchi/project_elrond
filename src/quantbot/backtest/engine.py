@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -207,8 +207,33 @@ class BacktestEngine:
         variant: BenchmarkVariant,
         *,
         component_switches: ComponentSwitches | None = None,
+        external_weights: Mapping[date, Mapping[str, Decimal]] | None = None,
     ) -> BacktestResult:
+        """Simulate one variant. `external_weights` is accepted only by EXTERNAL_SIGNAL (#8).
+
+        The gate is symmetric and deliberate. Weights with any other variant raise, so no
+        existing comparator can have its own targets silently overridden -- every call site that
+        existed before this parameter behaves identically by construction. And EXTERNAL_SIGNAL
+        without weights raises rather than simulating an empty strategy, which would produce a
+        flat equity curve that looks like a result.
+
+        The weights are applied through the same `_PendingTargets` path every other variant uses,
+        so an externally computed signal is executed on the *next* session with the same fill
+        model, the same costs and the same look-ahead protection. That is the whole point: a
+        generated signal scored by a second code path would be a number this engine did not
+        produce.
+        """
         _validate_histories(histories)
+        if external_weights is not None and variant is not BenchmarkVariant.EXTERNAL_SIGNAL:
+            raise BacktestInputError(
+                f"external_weights is only accepted by {BenchmarkVariant.EXTERNAL_SIGNAL.value}; "
+                f"{variant.value} computes its own targets and must not have them replaced"
+            )
+        if variant is BenchmarkVariant.EXTERNAL_SIGNAL and not external_weights:
+            raise BacktestInputError(
+                f"{BenchmarkVariant.EXTERNAL_SIGNAL.value} requires external_weights; running it "
+                "without any would simulate holding nothing and report a flat curve as a result"
+            )
         switches = component_switches or component_switches_for(variant)
         bars_by_symbol = {
             symbol: {bar.timestamp: bar for bar in bars} for symbol, bars in histories.items()
@@ -720,6 +745,15 @@ class BacktestEngine:
                     drawdown_multiplier=drawdown.new_risk_multiplier,
                     liquidation=drawdown.liquidation_required,
                 )
+                continue
+
+            if variant is BenchmarkVariant.EXTERNAL_SIGNAL:
+                # Keyed on the session date, and absent means "no new instruction" rather than
+                # "go flat". A signal that only names the days it wants to change would
+                # otherwise be liquidated on every silent day, which is not what it said.
+                supplied = (external_weights or {}).get(timestamp.date())
+                if supplied is not None:
+                    pending_targets = _PendingTargets(timestamp, dict(supplied), True)
                 continue
 
             if variant in {

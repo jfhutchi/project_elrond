@@ -14,6 +14,7 @@ from quantbot.backtest import (
     canonical_result_json,
     write_experiment_manifest,
 )
+from quantbot.backtest.engine import BacktestInputError
 from quantbot.domain import Bar
 from quantbot.strategy import StrategyConfig, load_strategy_config
 
@@ -71,6 +72,10 @@ def test_all_required_benchmarks_and_explicit_ablation_switches_exist() -> None:
         "PURE_MOMENTUM_12_1",
         "MOMENTUM_TREND",
         "FULL_STRATEGY",
+        # Not a comparator. Its targets come from the caller, so it has nothing of its own to
+        # compare against the others -- it exists so a generated signal (#8) reaches this engine
+        # rather than a second scoring path.
+        "EXTERNAL_SIGNAL",
     )
     assert ComponentSwitches.full().model_dump() == {
         "momentum": True,
@@ -126,9 +131,16 @@ def test_every_benchmark_variant_runs_on_the_same_adjusted_window() -> None:
     )
     engine = BacktestEngine(config, initial_cash=Decimal("100000"))
 
-    results = {variant: engine.run({"SPY": bars}, variant) for variant in BenchmarkVariant}
+    # EXTERNAL_SIGNAL is excluded because it has no targets of its own: it is the seam through
+    # which a caller supplies them. Excluded explicitly rather than by the loop quietly
+    # succeeding on an empty run -- and the exclusion is not a hole, because the test below
+    # asserts it refuses to run this way at all.
+    comparators = [
+        variant for variant in BenchmarkVariant if variant is not BenchmarkVariant.EXTERNAL_SIGNAL
+    ]
+    results = {variant: engine.run({"SPY": bars}, variant) for variant in comparators}
 
-    assert set(results) == set(BenchmarkVariant)
+    assert set(results) == set(comparators)
     assert all(result.equity_curve for result in results.values())
     expected_input_hash = results[BenchmarkVariant.SPY_BUY_AND_HOLD].input_hash
     assert all(result.input_hash == expected_input_hash for result in results.values())
@@ -189,3 +201,102 @@ def test_experiment_manifest_binds_research_inputs_without_mutating_config(
     assert destination.read_text(encoding="utf-8") == encoded_once + "\n"
     assert config.slippage_bps == 0
     assert (repo_root / "config" / "strategy-v1.yaml").read_bytes() == before
+
+
+def test_external_weights_are_refused_by_every_variant_that_computes_its_own(
+    tmp_path: Path,
+) -> None:
+    """The gate that makes this change safe for the live paper daemon (#8).
+
+    Every call site that existed before `external_weights` passes none, so nothing changes for
+    them. But the dangerous version of this feature is the one where a comparator *accepts*
+    weights and silently uses them instead of its own targets -- a SPY_SMA200 result that is
+    not SPY_SMA200, with nothing in the output saying so. Refused for every variant, asserted
+    for every variant, so adding a comparator later cannot quietly open a hole.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    config = _config(repo_root)
+    bars = tuple(
+        _bar(index, open_price=str(100 + index * 2), close=str(101 + index * 2))
+        for index in range(300)
+    )
+    engine = BacktestEngine(config, initial_cash=Decimal("100000"))
+    weights = {bars[10].timestamp.date(): {"SPY": Decimal("1")}}
+
+    for variant in BenchmarkVariant:
+        if variant is BenchmarkVariant.EXTERNAL_SIGNAL:
+            continue
+        with pytest.raises(BacktestInputError, match="only accepted by EXTERNAL_SIGNAL"):
+            engine.run({"SPY": bars}, variant, external_weights=weights)
+
+
+def test_the_external_variant_refuses_to_run_with_nothing_to_run(tmp_path: Path) -> None:
+    """Simulating an empty strategy would produce a flat curve that looks like a result.
+
+    A caller whose signal generation failed would get back a clean-looking zero-return backtest
+    rather than an error, and "the strategy made nothing" and "the strategy never ran" are not
+    the same finding.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    config = _config(repo_root)
+    bars = tuple(_bar(index, open_price="100", close="101") for index in range(300))
+    engine = BacktestEngine(config, initial_cash=Decimal("100000"))
+
+    with pytest.raises(BacktestInputError, match="requires external_weights"):
+        engine.run({"SPY": bars}, BenchmarkVariant.EXTERNAL_SIGNAL)
+
+
+def test_an_external_signal_is_executed_by_the_production_engine(tmp_path: Path) -> None:
+    """#8's outstanding box: the generated signal reaches the engine that would actually trade.
+
+    Not a reimplementation of the fill and cost model -- the same one, with the same look-ahead
+    protection. The weights are applied through `_PendingTargets`, so they execute on the *next*
+    session exactly as every other variant's do.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    config = _config(repo_root)
+    bars = tuple(
+        _bar(index, open_price=str(100 + index), close=str(101 + index)) for index in range(300)
+    )
+    engine = BacktestEngine(config, initial_cash=Decimal("100000"))
+
+    entry = bars[50].timestamp.date()
+    exit_day = bars[200].timestamp.date()
+    result = engine.run(
+        {"SPY": bars},
+        BenchmarkVariant.EXTERNAL_SIGNAL,
+        external_weights={entry: {"SPY": Decimal("1")}, exit_day: {}},
+    )
+
+    assert result.variant is BenchmarkVariant.EXTERNAL_SIGNAL
+    assert result.fills, "the signal should have traded"
+    # It bought after the signal date, never on it: pending targets execute next session.
+    first_fill = min(result.fills, key=lambda fill: fill.occurred_at)
+    assert first_fill.occurred_at.date() > entry, "a signal must not fill on its own session"
+    # Costs came from the production fill model, not from anything this test supplied.
+    assert result.cost_comparison.net_final_equity == result.final_equity
+    assert all(point.cash >= 0 for point in result.equity_curve)
+
+
+def test_a_silent_day_is_not_an_instruction_to_go_flat(tmp_path: Path) -> None:
+    """Absent means "no new instruction", not "liquidate".
+
+    A signal that only names the days it changes would otherwise be sold out on every silent
+    day, which is not what it said -- and the resulting turnover would be charged to it.
+    """
+    repo_root = Path(__file__).resolve().parents[2]
+    config = _config(repo_root)
+    bars = tuple(
+        _bar(index, open_price=str(100 + index), close=str(101 + index)) for index in range(300)
+    )
+    engine = BacktestEngine(config, initial_cash=Decimal("100000"))
+
+    result = engine.run(
+        {"SPY": bars},
+        BenchmarkVariant.EXTERNAL_SIGNAL,
+        external_weights={bars[50].timestamp.date(): {"SPY": Decimal("1")}},
+    )
+
+    # One instruction, so one entry and no churn from the 249 sessions that said nothing.
+    assert len(result.fills) == 1, [fill.occurred_at for fill in result.fills]
+    assert result.positions, "the position should still be held at the end"

@@ -27,6 +27,10 @@ class BenchmarkVariant(StrEnum):
     PURE_MOMENTUM_12_1 = "PURE_MOMENTUM_12_1"
     MOMENTUM_TREND = "MOMENTUM_TREND"
     FULL_STRATEGY = "FULL_STRATEGY"
+    #: Targets supplied by the caller rather than computed from the configuration (#8). The only
+    #: variant that accepts `external_weights`, and the only one a generated signal can reach --
+    #: so no existing comparator can have its own targets overridden by anything.
+    EXTERNAL_SIGNAL = "EXTERNAL_SIGNAL"
 
 
 class ComponentSwitches(BaseModel):
@@ -88,6 +92,10 @@ def component_switches_for(variant: BenchmarkVariant) -> ComponentSwitches:
         return ComponentSwitches(**{**disabled, "asset_trend": True})
     if variant is BenchmarkVariant.SPY_DONCHIAN:
         return ComponentSwitches(**{**disabled, "donchian_entry": True, "donchian_exit": True})
+    if variant is BenchmarkVariant.EXTERNAL_SIGNAL:
+        # Every component off. The weights came from outside, so claiming a momentum or trend
+        # filter contributed to them would put a component in the manifest that never ran.
+        return ComponentSwitches(**disabled)
     if variant is BenchmarkVariant.PURE_MOMENTUM_12_1:
         return ComponentSwitches(**{**disabled, "momentum": True, "roster_exit": True})
     if variant is BenchmarkVariant.MOMENTUM_TREND:
