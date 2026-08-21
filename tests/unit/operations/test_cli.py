@@ -31,6 +31,7 @@ from quantbot.storage import Database, StorageRepository
         ["research-status"],
         ["integrity-sweep"],
         ["verify-manifest", "--manifest", "m.json"],
+        ["research-cycle", "--max-steps", "3"],
     ],
 )
 def test_required_cli_commands_are_registered(argv: list[str]) -> None:
@@ -471,3 +472,85 @@ def test_verify_manifest_explains_why_two_runs_are_not_the_same_experiment(
     assert payload["ok"] is True, "these results are merely different, not impossible"
     assert any(item["field"] == "data_hash" for item in payload["differences"]), payload
     database.close()
+
+
+def test_the_research_cycle_reports_before_it_advances_anything(tmp_path: Path) -> None:
+    """#3: `run_cycle` and `drain` existed and nothing supplied them with handlers.
+
+    The driver was reachable only from a test, so the loop could not run at all. This is the
+    first real caller, and it reports by default: advancing writes durable task events, and the
+    handler set will grow to include stages that spend the multiple-testing budget. The safe
+    polarity is the one that stays safe as more handlers arrive.
+    """
+    import json
+
+    from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
+
+    database = Database(tmp_path / "quantbot.db")
+    moment = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
+    with database.transaction() as session:
+        ResearchDirector(session).open_task(
+            ResearchTask(
+                task_id="T-CLI-1",
+                state=TaskState.PROPOSED,
+                question="does revision dispersion precede index drawdowns",
+                family_id="revisions",
+                created_at=moment,
+                updated_at=moment,
+            ),
+            actor="operator",
+            reason="opened for the cli test",
+        )
+
+    context = CLIContext(
+        settings=_ready_settings(),
+        database=database,
+        handlers={},
+        reported_account_id="paper-1",
+        clearance_evidence=_ready_evidence(),
+    )
+
+    dry = StringIO()
+    assert main(["research-cycle", "--max-steps", "3"], context=context, output=dry) == 0
+    reported = json.loads(dry.getvalue())
+    assert reported["committed"] is False
+    assert reported["runnable_now"] == ["T-CLI-1"]
+    assert reported["stages_available"] == ["PROPOSED"]
+
+    with database.transaction() as session:
+        unmoved = ResearchDirector(session).get("T-CLI-1")
+    assert unmoved is not None and unmoved.state is TaskState.PROPOSED, (
+        "a report must not advance anything"
+    )
+
+    acted = StringIO()
+    assert (
+        main(["research-cycle", "--max-steps", "3", "--commit"], context=context, output=acted)
+        == 0
+    )
+    advanced = json.loads(acted.getvalue())
+    assert advanced["committed"] is True
+    assert advanced["advanced"] == [
+        {
+            "task_id": "T-CLI-1",
+            "moved_to": "SCOUTING",
+            "reason": "no stored record settles this question",
+        }
+    ]
+
+    with database.transaction() as session:
+        moved = ResearchDirector(session).get("T-CLI-1")
+    assert moved is not None and moved.state is TaskState.SCOUTING
+    database.close()
+
+
+def test_the_research_cycle_will_not_run_without_being_told_how_many_steps() -> None:
+    """`drain` requires it for a reason, and the CLI must not supply a default on its behalf.
+
+    Each stage a run advances can permanently raise the luck bar. How many is a decision the
+    operator makes explicitly rather than inherits from whatever looked reasonable.
+    """
+    parser = build_parser(output=StringIO())
+
+    with pytest.raises(SystemExit):
+        parser.parse_args(["research-cycle"])

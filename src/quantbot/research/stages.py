@@ -16,7 +16,7 @@ this module leans on rather than works around.
 
 from __future__ import annotations
 
-from quantbot.research.cycle import StageResult
+from quantbot.research.cycle import StageHandler, StageResult
 from quantbot.research.director import ResearchTask, TaskState
 from quantbot.research.memory import RecordKind, ResearchMemory, Verdict
 
@@ -27,7 +27,7 @@ from quantbot.research.memory import RecordKind, ResearchMemory, Verdict
 SETTLED = frozenset({Verdict.REFUTED, Verdict.LITERATURE_REFUTED})
 
 
-def novelty_stage(memory: ResearchMemory) -> object:
+def novelty_stage(memory: ResearchMemory) -> StageHandler:
     """Build a PROPOSED handler that refuses to re-ask a question memory already settled.
 
     This is the cheapest gate in the loop and belongs first for exactly that reason: it costs one

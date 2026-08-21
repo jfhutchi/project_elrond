@@ -77,6 +77,15 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     verify = commands.add_parser("verify-manifest")
     verify.add_argument("--manifest", required=True)
     verify.add_argument("--against")
+    cycle = commands.add_parser("research-cycle")
+    # Required, with no default, for the same reason `drain` requires it: each stage a run
+    # advances can permanently raise the luck bar, so how many is a decision the operator
+    # makes explicitly rather than inherits.
+    cycle.add_argument("--max-steps", dest="max_steps", type=int, required=True)
+    # Reports by default. Advancing writes durable task events, and the handler set will
+    # grow to include stages that spend budget -- so the safe polarity is the one that
+    # stays safe as more handlers arrive.
+    cycle.add_argument("--commit", action="store_true")
     freeze = commands.add_parser("register-hypothesis")
     freeze.add_argument("--draft", required=True)
     freeze.add_argument("--critique", required=True)
@@ -243,6 +252,58 @@ def main(
                 "actionable_now": ready,
                 "note": ("research-status reports and never advances; use the cycle for that"),
             }
+        elif args.command == "research-cycle":
+            # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.cycle import actionable, drain
+            from quantbot.research.director import ResearchDirector, TaskState
+            from quantbot.research.memory import ResearchMemory
+            from quantbot.research.stages import novelty_stage
+
+            with active.database.transaction() as session:
+                director = ResearchDirector(session)
+                # The stages that can be decided mechanically. Scouting, critique and experiment
+                # design need a model or a measurement; `actionable()` treats a state with no
+                # handler as not-actionable rather than as an error, so those tasks stay
+                # visibly stuck instead of being advanced by something that did not run them.
+                stages = {TaskState.PROPOSED: novelty_stage(ResearchMemory(session))}
+                runnable = actionable(director, stages)
+
+                if not args.commit:
+                    result = {
+                        "ok": True,
+                        "committed": False,
+                        "runnable_now": [task.task_id for task, _ in runnable],
+                        "stages_available": sorted(state.value for state in stages),
+                        "note": "nothing advanced; re-run with --commit to act",
+                    }
+                else:
+                    outcomes = drain(
+                        director,
+                        stages,
+                        actor="research-cycle",
+                        now=datetime.now(UTC),
+                        max_steps=args.max_steps,
+                    )
+                    result = {
+                        "ok": True,
+                        "committed": True,
+                        "advanced": [
+                            {
+                                "task_id": None if outcome.task is None else outcome.task.task_id,
+                                "moved_to": (
+                                    None if outcome.moved_to is None else outcome.moved_to.value
+                                ),
+                                "reason": outcome.reason,
+                            }
+                            # An idle outcome carries no task and is dropped: "the queue had
+                            # nothing to do" is reported by the empty list, not by a row.
+                            for outcome in outcomes
+                            if not outcome.idle
+                        ],
+                        # A drain that stopped early is not the same as one with nothing left,
+                        # and reporting only the count would make them look alike.
+                        "steps_requested": args.max_steps,
+                    }
         elif args.command == "verify-manifest":
             # Function-scope import for the same reason as the other research commands.
             from quantbot.research.manifest import ExperimentManifest
