@@ -256,7 +256,14 @@ class ExperimentOutcome(FrozenModel):
 
     @model_validator(mode="after")
     def validate_outcome(self) -> Self:
-        if self.verdict is OutcomeVerdict.FAILED:
+        # FAILED did not complete; INCONCLUSIVE completed and is explicitly not evidence. Both
+        # may carry an incomplete probe set, and the second exemption matters: without it a run
+        # that finished but dropped a probe had to be recorded as FAILED, which says the
+        # experiment never ran. That is a less accurate record, not a safer one.
+        #
+        # SURVIVED and REFUTED are evidence claims and stay barred, which is the whole
+        # protection -- an unprobed result cannot be cited either way.
+        if self.verdict in (OutcomeVerdict.FAILED, OutcomeVerdict.INCONCLUSIVE):
             return self
 
         missing = [probe for probe in self.plan.probes if probe not in self.probes_run]

@@ -91,7 +91,30 @@ def content_id(value: object) -> str:
     return hashlib.sha256(canonical_result_json(value).encode("utf-8")).hexdigest()
 
 
+#: Lowercase hex of exactly SHA-1 or SHA-256 width. Every hash this module carries has this
+#: shape -- git commits, content hashes, configuration hashes, registration hashes.
+_HASH_SHAPED = re.compile(r"^[0-9a-f]{40}$|^[0-9a-f]{64}$")
+
+
 def looks_like_credential(value: str) -> bool:
+    """Whether a string is credential-shaped and must never reach a manifest.
+
+    Hex hashes are excluded, and that exclusion is load-bearing rather than a convenience. The
+    base64 pattern below is `[A-Za-z0-9/+]{40}`, which matches every 40-character git commit
+    SHA. `CodeProvenance.git_commit` is required on a confirmatory run, so before this exclusion
+    existed **no confirmatory manifest could be constructed at all** -- the provenance validator
+    demanded a commit and the credential validator rejected every valid one.
+
+    Nothing noticed because nothing in `src/` had ever built a manifest. The first caller found
+    it immediately, which is the argument for having callers.
+
+    The narrowing is deliberate: a secret that is exactly 40 or 64 lowercase hex characters now
+    passes, but every other credential shape here -- base64 blobs, `sk-`, `ghp_`, `PK`, and
+    bearer tokens -- is still caught, and mixed case or any non-hex character still trips the
+    base64 pattern.
+    """
+    if _HASH_SHAPED.match(value):
+        return False
     return any(pattern.search(value) for pattern in CREDENTIAL_PATTERNS)
 
 
