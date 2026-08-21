@@ -36,6 +36,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from pydantic import ValidationError
+from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from quantbot.research.budget import BudgetGovernor, Resource
 from quantbot.research.workers import (
@@ -46,6 +48,8 @@ from quantbot.research.workers import (
     WorkerSpec,
     WorkerTrust,
 )
+from quantbot.storage.database import encode_utc
+from quantbot.storage.schema import search_runs
 
 
 class SubprocessWorker:
@@ -172,6 +176,80 @@ def record_worker_search(
     return spend
 
 
+def record_search_run(
+    session: Session,
+    result: WorkerResult,
+    *,
+    search_id: str,
+) -> str:
+    """Persist a worker's disclosed search as a durable record (#23).
+
+    This is what makes `SearchOrigin.MEASURED` reachable. It was refused outright while nothing
+    emitted search telemetry, because accepting it on trust would have reopened the laundering
+    path one enum value across from where #23 closed it -- an agent forbidden from self-reporting
+    a count could simply have relabelled it as measured. A row here is the evidence that was
+    missing.
+
+    Append-only. A search that happened cannot un-happen, and a record that could be revised
+    downward would be exactly the understatement the multiple-testing budget exists to prevent,
+    so a second write under the same id is refused rather than merged.
+    """
+    if result.search_cardinality is None:
+        raise WorkerFailure(
+            f"{result.worker.name}@{result.worker.version} disclosed no search cardinality; "
+            "there is nothing to record, and a record with a guessed number would be worse "
+            "than no record at all"
+        )
+    existing = session.execute(
+        select(search_runs.c.search_id).where(search_runs.c.search_id == search_id)
+    ).one_or_none()
+    if existing is not None:
+        raise WorkerFailure(
+            f"search run {search_id} is already recorded; search records are append-only "
+            "because a count that can be revised downward is a count that can be understated"
+        )
+
+    request = result.request
+    session.execute(
+        search_runs.insert().values(
+            search_id=search_id,
+            actor=result.worker.name,
+            actor_version=result.worker.version,
+            candidates_evaluated=result.search_cardinality,
+            dataset=request.datasets[0],
+            # The role the worker was permitted, which `WorkerInput` already restricts to
+            # discovery or validation -- a worker is never handed a protected window.
+            data_role=sorted(role.value for role in request.data_roles)[0],
+            start_date=result.started_at.date().isoformat(),
+            end_date=result.finished_at.date().isoformat(),
+            started_at=encode_utc(result.started_at),
+            finished_at=encode_utc(result.finished_at),
+            configuration_hash=result.worker.configuration_hash,
+            detail_json=json.dumps(
+                {"mandate": request.mandate, "trial_budget": request.trial_budget},
+                sort_keys=True,
+            ),
+        )
+    )
+    return search_id
+
+
+def measured_cardinality(session: Session, search_id: str) -> int:
+    """Read a recorded search, so a registration derives its count instead of asserting it.
+
+    Raises when the record does not exist. A `MEASURED` origin naming a search nobody recorded
+    is a stronger claim on less evidence than the self-report it replaced.
+    """
+    row = session.execute(
+        select(search_runs.c.candidates_evaluated).where(search_runs.c.search_id == search_id)
+    ).one_or_none()
+    if row is None:
+        raise WorkerFailure(
+            f"no search run {search_id} is recorded, so its cardinality cannot be measured"
+        )
+    return int(row[0])
+
+
 def _reason(result: WorkerResult) -> str:
     return (
         f"{result.worker.name}@{result.worker.version} evaluated "
@@ -184,4 +262,9 @@ def _assert_protocol(worker: SubprocessWorker) -> ResearchWorker:
     return worker
 
 
-__all__ = ["SubprocessWorker", "record_worker_search"]
+__all__ = [
+    "SubprocessWorker",
+    "measured_cardinality",
+    "record_search_run",
+    "record_worker_search",
+]

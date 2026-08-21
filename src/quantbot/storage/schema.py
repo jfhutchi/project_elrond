@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 metadata = MetaData(
     naming_convention={
@@ -585,3 +585,40 @@ Index(
     promotion_events.c.strategy_id,
     promotion_events.c.occurred_at,
 )
+
+
+# --- Research: durable search records (#23, #11) ---------------------------------------------
+#
+# The origin of a trial count, made durable rather than declared. `SearchOrigin.MEASURED` was
+# unreachable while nothing emitted search telemetry: accepting it on trust would have reopened
+# the laundering path one enum value across from where #23 closed it, so it was refused outright.
+#
+# `SubprocessWorker` now emits a disclosed cardinality, so a producer exists and the origin can
+# be derived from a record instead of asserted by whoever registers.
+#
+# Append-only. A search that happened cannot un-happen, and a row that could be revised downward
+# would be exactly the understatement the multiple-testing budget exists to prevent.
+search_runs = Table(
+    "search_runs",
+    metadata,
+    Column("search_id", String(128), primary_key=True),
+    # Who did the searching: a worker name@version, or a generator, or an operator.
+    Column("actor", String(128), nullable=False),
+    Column("actor_version", String(64), nullable=False),
+    # Everything evaluated, including what was discarded. Not the count that was kept.
+    Column("candidates_evaluated", Integer, nullable=False),
+    # The data it searched over, so a count can be attributed to the window it spent.
+    Column("dataset", String(128), nullable=False),
+    Column("start_date", String(10), nullable=False),
+    Column("end_date", String(10), nullable=False),
+    Column("data_role", String(32), nullable=False),
+    Column("started_at", String(40), nullable=False),
+    Column("finished_at", String(40), nullable=False),
+    # Hash of the configuration that produced the search, so two runs are distinguishable.
+    Column("configuration_hash", String(128), nullable=False),
+    Column("detail_json", Text, nullable=False, server_default=text("'{}'")),
+    CheckConstraint("candidates_evaluated >= 1", name="searched_something"),
+    CheckConstraint("end_date >= start_date", name="search_range_ordered"),
+)
+Index("ix_search_runs_dataset", search_runs.c.dataset, search_runs.c.start_date)
+Index("ix_search_runs_actor", search_runs.c.actor)

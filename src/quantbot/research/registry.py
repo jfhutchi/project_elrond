@@ -68,7 +68,12 @@ from quantbot.research.power import (
 )
 from quantbot.research.sources import EvidenceBasis
 from quantbot.storage.database import encode_utc
-from quantbot.storage.schema import hypotheses, hypothesis_data_windows, power_assessments
+from quantbot.storage.schema import (
+    hypotheses,
+    hypothesis_data_windows,
+    power_assessments,
+    search_runs,
+)
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -131,7 +136,14 @@ class SearchOrigin(StrEnum):
 #: writable; `MEASURED` is reserved until something actually emits search telemetry to derive it
 #: from. Both are refused by `HypothesisDraft.validate_draft` with their own explanation.
 REGISTRABLE_ORIGINS = frozenset(
-    {SearchOrigin.NO_DATA_DEPENDENT_SEARCH, SearchOrigin.OPERATOR_ATTESTED}
+    {
+        SearchOrigin.NO_DATA_DEPENDENT_SEARCH,
+        SearchOrigin.OPERATOR_ATTESTED,
+        # Reachable since 0009: `SubprocessWorker` emits a disclosed cardinality and
+        # `record_search_run` persists it, so the count can be derived from a row rather than
+        # asserted. The registry verifies the row exists and matches before accepting it.
+        SearchOrigin.MEASURED,
+    }
 )
 
 
@@ -264,6 +276,9 @@ class HypothesisDraft(FrozenModel):
     search_origin: SearchOrigin = SearchOrigin.NO_DATA_DEPENDENT_SEARCH
     #: Who attested the count. Required for, and only for, `OPERATOR_ATTESTED`.
     search_attested_by: str | None = None
+    #: The durable `search_runs` record this count was derived from. Required for, and only
+    #: for, `MEASURED`. The registry checks the row exists and that the count matches it (#23).
+    search_run_id: str | None = None
 
     confounders: tuple[Text, ...] = Field(min_length=1)
     #: Required only when this candidate overlaps a prior hypothesis. Writing down what is
@@ -286,13 +301,12 @@ class HypothesisDraft(FrozenModel):
                 "LEGACY_SELF_REPORTED describes rows that predate the search-origin distinction "
                 "and cannot be declared by a new registration"
             )
-        if self.search_origin is SearchOrigin.MEASURED:
+        if (self.search_origin is SearchOrigin.MEASURED) != (self.search_run_id is not None):
             raise ValueError(
-                "MEASURED requires a durable search record to derive the count from, and nothing "
-                "in this system emits one yet (#13 and #11 are unbuilt). Accepting it on trust "
-                "would reopen the laundering path #23 closed: an agent forbidden from "
-                "self-reporting a count could simply relabel it as measured. Use "
-                "OPERATOR_ATTESTED, which records who is standing behind the number"
+                "MEASURED derives its count from a durable search record, so it must name one "
+                "and only it may. Accepting the origin without a record would reopen the "
+                "laundering path #23 closed: an agent forbidden from self-reporting a count "
+                "could relabel it as measured and be believed on less evidence"
             )
         if (self.search_origin is SearchOrigin.OPERATOR_ATTESTED) != (
             self.search_attested_by is not None
@@ -503,6 +517,7 @@ class HypothesisRegistry:
                 "materially different or register it as a new version of that hypothesis",
             )
 
+        self._verify_measured_search(draft)
         trials = self._cumulative_trials(draft.search_cardinality)
         assessment = assess(
             hypothesis_id=draft.hypothesis_id,
@@ -917,6 +932,37 @@ class HypothesisRegistry:
             .mappings()
             .one_or_none()
         )
+
+    def _verify_measured_search(self, draft: HypothesisDraft) -> None:
+        """A MEASURED count must match the record it names (#23).
+
+        Checking only that the id exists would leave the number itself declared: a draft could
+        cite a real search of five thousand candidates and register a cardinality of one, which
+        is the original defect wearing a reference. The row is the authority, and a mismatch is
+        refused rather than silently corrected to the recorded value -- a registration whose
+        stated burden differs from its evidence is a mistake someone should see.
+        """
+        if draft.search_origin is not SearchOrigin.MEASURED:
+            return
+        row = self._session.execute(
+            select(search_runs.c.candidates_evaluated).where(
+                search_runs.c.search_id == draft.search_run_id
+            )
+        ).one_or_none()
+        if row is None:
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{draft.hypothesis_id} cites search run {draft.search_run_id!r}, which is not "
+                "recorded; a MEASURED origin naming a search nobody logged is a stronger claim "
+                "on less evidence than the self-report it replaced",
+            )
+        recorded = int(row[0])
+        if recorded != draft.search_cardinality:
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{draft.hypothesis_id} declares {draft.search_cardinality} trials against "
+                f"search run {draft.search_run_id!r}, which recorded {recorded}",
+            )
 
     def _cumulative_trials(self, search_cardinality: int) -> int:
         """Everything this project has ever spent, plus what the incoming draft spends."""

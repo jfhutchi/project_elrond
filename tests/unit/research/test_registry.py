@@ -53,7 +53,7 @@ from quantbot.research import (
 )
 from quantbot.storage import Database
 from quantbot.storage.database import encode_utc
-from quantbot.storage.schema import hypotheses, hypothesis_data_windows
+from quantbot.storage.schema import hypotheses, hypothesis_data_windows, search_runs
 
 NOW = datetime(2026, 8, 18, 14, 30, tzinfo=UTC)
 
@@ -1238,21 +1238,69 @@ def test_counting_fewer_observations_than_the_window_spans_is_allowed(
     assert clearance.power.observations_available == 2400
 
 
-def test_measured_cannot_be_declared_while_nothing_emits_search_telemetry() -> None:
-    """The #23 laundering path had moved one enum value across.
+def test_measured_requires_a_durable_record_and_a_matching_count(database: Database) -> None:
+    """#23: MEASURED is now reachable, and only against evidence.
 
-    `search_origin` was added so an agent could not simply assert its own trial count. But
-    `MEASURED` had no validation rule at all, so the same agent could declare
-    `search_origin=MEASURED, search_cardinality=1` and be believed — a stronger claim than the
-    self-report that was just forbidden, accepted on less evidence.
+    It was refused outright while nothing emitted search telemetry, because accepting it on
+    trust would have reopened the laundering path one enum value across from where #23 closed
+    it. `SubprocessWorker` now discloses a cardinality and `record_search_run` persists it, so
+    the count can be derived from a row.
 
-    It stays reserved until #11 or #13 produces a durable search record to derive it from.
+    Two things are checked, and the second is the one that matters: the record must exist, AND
+    the declared count must match it. Verifying only the id would leave the number itself
+    declared -- a draft could cite a real search of 5,000 and register a cardinality of 1, which
+    is the original defect wearing a reference.
     """
-    with pytest.raises(ValidationError, match="requires a durable search record"):
-        make_draft(search_cardinality=5000, search_origin=SearchOrigin.MEASURED)
+    with database.transaction() as session:
+        with pytest.raises(ValidationError, match="must name one"):
+            make_draft(search_cardinality=500, search_origin=SearchOrigin.MEASURED)
 
-    with pytest.raises(ValidationError, match="requires a durable search record"):
-        make_draft(search_cardinality=1, search_origin=SearchOrigin.MEASURED)
+        # Naming a record that does not exist.
+        with pytest.raises(RegistrationRefused, match="not\s+recorded"):
+            register(
+                HypothesisRegistry(session),
+                make_draft(
+                    search_cardinality=500,
+                    search_origin=SearchOrigin.MEASURED,
+                    search_run_id="search-nobody-logged",
+                ),
+            )
+
+
+def test_a_measured_count_that_contradicts_its_record_is_refused(database: Database) -> None:
+    """The record is the authority, and a mismatch is refused rather than silently corrected.
+
+    Quietly adopting the recorded value would hide a registration whose stated burden differs
+    from its evidence, which is a mistake someone should see rather than one the system fixes
+    on their behalf.
+    """
+    with database.transaction() as session:
+        session.execute(
+            search_runs.insert().values(
+                search_id="search-1",
+                actor="rd-agent",
+                actor_version="0.4.1",
+                candidates_evaluated=5000,
+                dataset="sip-us-equities-daily",
+                start_date="2016-01-04",
+                end_date="2026-08-18",
+                data_role="DISCOVERY",
+                started_at="2026-08-21T12:00:00Z",
+                finished_at="2026-08-21T13:00:00Z",
+                configuration_hash="cfg-1",
+                detail_json="{}",
+            )
+        )
+
+        with pytest.raises(RegistrationRefused, match="recorded 5000"):
+            register(
+                HypothesisRegistry(session),
+                make_draft(
+                    search_cardinality=1,
+                    search_origin=SearchOrigin.MEASURED,
+                    search_run_id="search-1",
+                ),
+            )
 
 
 def test_the_only_way_to_claim_a_search_is_to_sign_for_it(database: Database) -> None:
