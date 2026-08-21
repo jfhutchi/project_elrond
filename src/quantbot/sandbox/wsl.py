@@ -165,6 +165,11 @@ class WslSandbox:
         self._distro = distro
         self._runner = runner
 
+    #: This backend's isolation comes from the kernel, so it may be handed a miner. Stated as a
+    #: property rather than a constructor argument: a backend cannot become OS-enforced by
+    #: configuration, and callers that need the guarantee must be able to ask rather than assume.
+    os_enforced = True
+
     def run(self, source: str) -> SandboxResult:
         """Execute `source`. Raises only when the sandbox itself fails, never the script."""
         # Static scan first, exactly as the Windows backend does. It is defence in depth and

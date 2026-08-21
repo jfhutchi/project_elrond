@@ -453,6 +453,13 @@ def _memory_mb(process: subprocess.Popen[bytes]) -> float | None:
 class SandboxRunner:
     """Runs one generated script per call, in a workspace it creates and destroys."""
 
+    #: Concealment, not containment -- see the module docstring. An absolute path still resolves
+    #: here and `importlib.reload(socket)` undoes the network guard, so callers whose safety
+    #: depends on the kernel (anomaly mining, model-authored experiment code) must refuse this
+    #: backend. Stated as a property because no configuration can change the answer: a caller
+    #: that had to infer it from the class name would eventually infer wrong.
+    os_enforced = False
+
     def __init__(self, policy: SandboxPolicy | None = None) -> None:
         self._policy = policy or SandboxPolicy()
 
