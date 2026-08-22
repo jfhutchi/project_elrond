@@ -295,6 +295,32 @@ class ResearchMemory:
             if record.kind is RecordKind.FINDING and record.verdict in REFUTING
         ]
 
+    def unlinked_refutations(self, terms: Iterable[str]) -> list[ResearchRecord]:
+        """Refuting findings that carry no hypothesis lineage and share one of these subjects.
+
+        `refutations_of` queries `hypothesis_id`, which is exactly right for anything registered
+        under this schema and completely blind to everything imported from `REFUTED.md` -- those
+        findings predate hypothesis ids, so no exact lookup will ever match one. Reading that
+        silence as "this mechanism has never been refuted" is the failure #53's review named:
+        absence of an id is not evidence of absence.
+
+        Matching is on `subject` only, and only on words of four characters or more. `subject`
+        is the field that exists to answer "what is this about"; `statement` is prose, and a
+        refutation mentioning SPY in passing is not a refutation about SPY. The output is a
+        prompt to adjudicate, not a verdict -- the caller files it as *unassessed*, because what
+        is actually true is that nobody has decided whether these records bear on this claim.
+        """
+        wanted = {term.lower() for term in terms if len(term) >= 4}
+        if not wanted:
+            return []
+        return [
+            record
+            for record in self.recall("", kinds=[RecordKind.FINDING])
+            if record.hypothesis_id is None
+            and record.verdict in REFUTING
+            and any(term in record.subject.lower() for term in wanted)
+        ]
+
     def structural_limits(self) -> list[ResearchRecord]:
         return list(self.recall("", kinds=[RecordKind.STRUCTURAL_LIMIT]))
 

@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 metadata = MetaData(
     naming_convention={
@@ -550,6 +550,11 @@ Index("ix_research_task_events_task_id", research_task_events.c.task_id)
 # purpose is "this earned its way here" would make the record worthless.
 #
 # Events are append-only. Nothing in `StorageRepository` updates or deletes one.
+#
+# The four nullable columns added in 0011 are the answer to "what claim is this strategy
+# carrying, and what justified the stage it is at". They are nullable because a strategy below
+# REGISTERED legitimately has no claim and one below PAPER_QUALIFIED legitimately has no
+# qualifying assessment -- `PromotionState` refuses the combinations that would be dishonest.
 promotion_state = Table(
     "promotion_state",
     metadata,
@@ -560,6 +565,10 @@ promotion_state = Table(
     Column("reason", Text, nullable=False),
     Column("actor", String(128), nullable=False),
     Column("updated_at", String(40), nullable=False),
+    Column("hypothesis_id", String(128)),
+    Column("hypothesis_version", Integer),
+    Column("objective_identity", String(128)),
+    Column("evidence_identity", String(64)),
 )
 
 promotion_events = Table(
@@ -578,6 +587,13 @@ promotion_events = Table(
     Column("reason", Text, nullable=False),
     Column("actor", String(128), nullable=False),
     Column("occurred_at", String(40), nullable=False),
+    # Copied onto the event as well as the state, because the state is a current value and the
+    # event is the record. An audit asking "what justified PAPER_QUALIFIED on the day it was
+    # granted" must not have to hope the current row still says the same thing.
+    Column("hypothesis_id", String(128)),
+    Column("hypothesis_version", Integer),
+    Column("objective_identity", String(128)),
+    Column("evidence_identity", String(64)),
     CheckConstraint("direction IN ('PROMOTION', 'DEMOTION')", name="direction_known"),
 )
 Index(
