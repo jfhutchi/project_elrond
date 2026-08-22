@@ -155,8 +155,14 @@ from it passing.*
 **Operator action outstanding:** `main` is currently unprotected. To require the gate:
 
 ```bash
-gh api -X PUT repos/jfhutchi/project_elrond/branches/main/protection   -F required_status_checks[strict]=true   -F 'required_status_checks[contexts][]=checks'   -F enforce_admins=false   -F required_pull_request_reviews=null   -F restrictions=null   -F allow_force_pushes=false
+gh api -X PUT repos/jfhutchi/project_elrond/branches/main/protection -F required_status_checks[strict]=true -F 'required_status_checks[contexts][]=checks (ubuntu-latest)' -F 'required_status_checks[contexts][]=checks (windows-latest)' -F enforce_admins=false -F required_pull_request_reviews=null -F restrictions=null -F allow_force_pushes=false
 ```
+
+The two contexts are named exactly as above, verified against a real run's job names rather
+than guessed from the job key. An earlier version of this command required a context called
+`checks`, which is the *job* id and not a status any run reports: branch protection would have
+waited forever for a check that never arrives, and the gate would have read as configured while
+blocking everything. A matrix job reports one context per cell, `<job name> (<matrix value>)`.
 
 Left to the operator deliberately: branch protection is a repository setting, and an agent
 changing the rules it is judged by is the shape of defect this file is full of.
