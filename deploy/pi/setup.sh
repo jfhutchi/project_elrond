@@ -28,7 +28,7 @@ QUANTBOT_DATA="${QUANTBOT_DATA:-$HOME/quantbot-data}"
 ENV_FILE="/etc/quantbot/quantbot.env"
 SERVICE_FILE="/etc/systemd/system/quantbot.service"
 REPO_URL="${REPO_URL:-https://github.com/jfhutchi/project_elrond.git}"
-BRANCH="${BRANCH:-elrond-v0.2}"
+BRANCH="${BRANCH:-main}"
 
 say()  { printf '\n\033[1m%s\033[0m\n' "$*"; }
 fail() { printf '\n\033[31mERROR: %s\033[0m\n' "$*" >&2; exit 1; }

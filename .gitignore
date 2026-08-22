@@ -20,6 +20,12 @@ htmlcov/
 logs/*
 !logs/.gitkeep
 quantbot.lock
+# The daemon's single-writer mutex. Its siblings above were ignored and this one was missed,
+# so it was committed in 644752c. Runtime state does not belong in version control: git writes
+# to it during a checkout while the daemon holds an exclusive OS lock on it, and every clone
+# ships a stray file. It is not a liveness spoof -- `daemon_holds_lock` acquires the lock rather
+# than checking the path -- but it has no business being tracked.
+*.daemon.lock
 crypto.db
 crypto.lock
 crypto-probe.db

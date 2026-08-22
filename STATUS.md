@@ -875,7 +875,9 @@ same boundary from the trading side.
 
 ## 6z. Where v0.2 stands, and what to do next
 
-Branch `elrond-v0.2`. **1,315 tests**; `ruff` and `mypy` clean across 144 source files. Read
+Branch `main` (renamed from `elrond-v0.2` on 2026-08-22, when v0.2 became the default and
+`codex/quantbot` was retired). **1,332 tests**; `ruff` and `mypy` clean across 146 source files.
+Read
 this section first if you are resuming.
 
 **Updated 2026-08-22.** The table below was written when four issues were outstanding; all four

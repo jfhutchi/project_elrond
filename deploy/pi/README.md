@@ -69,7 +69,7 @@ path.
 ## Install
 
 ```bash
-git clone --branch elrond-v0.2 https://github.com/jfhutchi/project_elrond.git ~/quantbot
+git clone --branch main https://github.com/jfhutchi/project_elrond.git ~/quantbot
 bash ~/quantbot/deploy/pi/setup.sh
 ```
 
