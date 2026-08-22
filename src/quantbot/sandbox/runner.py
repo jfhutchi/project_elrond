@@ -525,31 +525,37 @@ def _memory_mb(process: subprocess.Popen[bytes]) -> float | None:
     choice is that a probe which never works looks exactly like a healthy run, which is what
     happened on Linux for as long as this function was PowerShell and nothing else.
     """
-    if sys.platform != "win32":
+    # Both halves live inside the platform branch rather than one being a fallthrough, so that
+    # each is analysed on the runner that executes it and neither reads as dead code on the
+    # other. That is not tidiness: the first attempt at this fix put the POSIX path behind an
+    # early return, which type-checked on Windows and failed on Linux with the Windows half
+    # unreachable -- the same asymmetry, one platform along.
+    if sys.platform == "win32":
+        # By concatenation, not str.format: the PowerShell braces would be read as fields.
+        script = (
+            "$ids=@(" + str(process.pid) + ");$i=0;"
+            "while($i -lt $ids.Count){"
+            "$kids=Get-CimInstance Win32_Process "
+            "-Filter \"ParentProcessId=$($ids[$i])\" -ErrorAction SilentlyContinue;"
+            "foreach($k in $kids){if($ids -notcontains $k.ProcessId){$ids+=$k.ProcessId}};$i++};"
+            "$t=0;foreach($id in $ids){"
+            "$p=Get-CimInstance Win32_Process -Filter \"ProcessId=$id\" "
+            "-ErrorAction SilentlyContinue;"
+            "if($p){$t+=$p.WorkingSetSize}};[math]::Round($t/1MB,2)"
+        )
+        try:
+            out = subprocess.run(  # noqa: S603 - fixed executable, integer pid interpolated
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True, text=True, timeout=20, check=False,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+        try:
+            return float(out.splitlines()[-1]) if out else None
+        except (ValueError, IndexError):
+            return None
+    else:
         return _posix_memory_mb(process.pid)
-    # Built by concatenation, not str.format: the PowerShell braces would be read as fields.
-    script = (
-        "$ids=@(" + str(process.pid) + ");$i=0;"
-        "while($i -lt $ids.Count){"
-        "$kids=Get-CimInstance Win32_Process "
-        "-Filter \"ParentProcessId=$($ids[$i])\" -ErrorAction SilentlyContinue;"
-        "foreach($k in $kids){if($ids -notcontains $k.ProcessId){$ids+=$k.ProcessId}};$i++};"
-        "$t=0;foreach($id in $ids){"
-        "$p=Get-CimInstance Win32_Process -Filter \"ProcessId=$id\" "
-        "-ErrorAction SilentlyContinue;"
-        "if($p){$t+=$p.WorkingSetSize}};[math]::Round($t/1MB,2)"
-    )
-    try:
-        out = subprocess.run(  # noqa: S603 - fixed executable, integer pid interpolated
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True, text=True, timeout=20, check=False,
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return None
-    try:
-        return float(out.splitlines()[-1]) if out else None
-    except (ValueError, IndexError):
-        return None
 
 
 class SandboxRunner:
@@ -688,20 +694,18 @@ class SandboxRunner:
         -- kills the direct child and leaves its helpers running against the same ceiling the
         run was stopped for.
         """
-        if sys.platform != "win32":
+        if sys.platform == "win32":
+            try:
+                subprocess.run(  # noqa: S603 - fixed command, integer pid
+                    ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                    capture_output=True, timeout=15, check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
+        else:
             try:
                 os.killpg(os.getpgid(process.pid), signal.SIGKILL)
             except (OSError, ProcessLookupError):
                 pass
-            if process.poll() is None:
-                process.kill()
-            return
-        try:
-            subprocess.run(  # noqa: S603 - fixed command, integer pid
-                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                capture_output=True, timeout=15, check=False,
-            )
-        except (OSError, subprocess.SubprocessError):
-            pass
         if process.poll() is None:
             process.kill()

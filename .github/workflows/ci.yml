@@ -63,8 +63,15 @@ jobs:
       - name: Lint
         run: uv run ruff check src tests
 
-      - name: Type-check
-        run: uv run mypy src
+      # Both platforms from every runner. `mypy` analyses only the host's half of a
+      # `sys.platform` branch, so a single-platform type-check silently exempts the other -- the
+      # defect this file's first run found, and then again in the opposite direction when the
+      # fix was written. Two commands make each runner prove both halves.
+      - name: Type-check (linux)
+        run: uv run mypy --platform linux src
+
+      - name: Type-check (windows)
+        run: uv run mypy --platform win32 src
 
       - name: Test
         run: uv run pytest

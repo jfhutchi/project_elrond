@@ -128,9 +128,9 @@ leaves the test green, the test is measuring something else.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `ruff check src tests`, `mypy src` and `pytest` on every push
-and pull request, on **ubuntu-latest and windows-latest**, then fails if the suite left the
-working tree dirty. The required status checks to protect `main` with are
+`.github/workflows/ci.yml` runs `ruff check src tests`, `mypy` for **both** platforms, and
+`pytest`, on every push and pull request, on **ubuntu-latest and windows-latest**, then fails if
+the suite left the working tree dirty. The required status checks to protect `main` with are
 **`checks (ubuntu-latest)`** and **`checks (windows-latest)`**.
 
 Both runners, and its first run is why rather than a guess: `mypy src` had been reported clean
@@ -138,6 +138,12 @@ for months and fails with seven errors on Linux, because `msvcrt.locking` and `c
 sit behind `os.name` / `platform.system()` guards that mypy does not narrow. The claim was true
 on the author's machine and nowhere else. Elrond runs on Windows (the coordinator) and Linux
 (the Pi, WSL2); one runner only ever checked one half.
+
+Before pushing, check the half your machine does not:
+
+```bash
+uv run mypy --platform linux src && uv run mypy --platform win32 src
+```
 
 It references **no secrets**. The suite must be incapable of reaching a broker, so it is never
 handed the means to.
