@@ -7,7 +7,7 @@ design; if it stops being short, split it rather than skimming it.
 Rule: nothing is listed here without a measurement behind it. "It seemed unlikely" is not a
 refutation.
 
-Last updated 2026-08-18 (cycles 11-17).
+Last updated 2026-08-22 (cycles 11-17, plus the first external-model evaluation, #25).
 
 ## Refuted with measurement
 
@@ -38,6 +38,7 @@ Last updated 2026-08-18 (cycles 11-17).
 | 20 | Per-position vol targeting makes more money than flat weights | REFUTED | Cycle 13. At matched 1.0x exposure with the halt enforced at a realistic 21-day resumption it gains $15.88/$100, and the bootstrap 95% CI is **[−$86.76, +$76.79]**, losing in **36.8%** of resamples. Its drawdown reduction is established (#S2); its wealth effect is not |
 | 19 | Any strategy here beats SPY at its own growth-optimal leverage | REFUTED | Cycle 12. Vol-targeted SPY at 4.25x appeared to turn $100 into $2,475 v SPY's $954. Stationary bootstrap (2000 draws, 21d blocks): 95% CI on the gap **[−$173.90, +$432.04]**, spans zero; loses in **22.8%** of resamples. Rests on the Sharpe difference already refuted as #16 — leverage amplifies an edge that is not there |
 
+| 25 | **Kronos-small zero-shot beats a naive baseline on daily ETF returns** | REFUTED | 2026-08-22, #36, the first external-model evaluation. 42 non-overlapping 5-day windows over 14 months, 23 ETFs, lookback 90, 10 samples, seed 7 — one configuration, not a sweep. **30 windows scored** (12 blocked by holidays), 688 forecasts. Direction **0.501** — a coin flip. Against momentum +0.011 (**t=0.24**) and against short-reversal **−0.039** (t=−1.13), both inside a 1.79 luck bar for 5 comparisons. On absolute error it **loses to predicting zero**: 0.01806 v persistence 0.01738, **t=−2.53**, worse in 21 of 30 windows — past the luck bar in the wrong direction. It beats momentum (t=6.85) and short-reversal (t=3.28) on error, but momentum's MAE is more than double, so that is a weak bar. The unknown training cutoff means this history may be **in-sample, which would flatter it** — and it still lost. Scope: zero-shot, unfine-tuned, daily bars, horizon 5, ETFs only |
 ## Four of the above were never actually tested
 
 Added 2026-08-19. **The table above is unchanged and stands as recorded.** This is an audit

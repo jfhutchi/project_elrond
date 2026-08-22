@@ -233,6 +233,41 @@ evaluator; this integration does not import or execute the protected strategy to
   `KronosSignalProvider` rather than by calling the model directly: 64 daily bars in, horizon 3,
   2 sample paths, model initialization 0.23 s, inference 0.18 s, peak process memory 660 MB. The
   GPU field remains null; GPU measurement is deferred with the CPU-only first integration.
+## Measured value: none, at this configuration
+
+A 42-window baseline study ran on 2026-08-22 and is recorded as REFUTED.md #25. Zero-shot
+Kronos-small over 23 ETFs, lookback 90, horizon 5, 10 samples, one configuration:
+
+| | direction | mean absolute error |
+|---|---|---|
+| kronos | 0.501 | 0.01806 |
+| momentum | 0.490 | 0.03996 |
+| persistence (predict zero) | n/a | **0.01738** |
+| short reversal | 0.540 | 0.02167 |
+
+Direction is a coin flip, and the point forecasts are **worse than predicting no change**
+(paired t = −2.53 over 30 windows, losing in 21 of them, against a 1.79 luck bar for five
+comparisons). It beats momentum and short-reversal on error, but momentum's error is more than
+double, so that is a weak bar rather than a result.
+
+The unknown training cutoff means this history may be in-sample, which would flatter Kronos. It
+lost anyway, which makes the negative finding stronger rather than weaker.
+
+**Scope of the claim**: zero-shot, unfine-tuned, daily bars, horizon 5, ETFs only, one
+configuration. It says nothing about a fine-tuned Kronos, other horizons, intraday data, or
+other asset classes. Those are separate experiments and each would carry its own search cost.
+
+Two operational facts fell out of the same run:
+
+- **12 of 42 windows could not be scored at all**, every one blocked by a registered target that
+  never traded — a market holiday. Default target generation skips weekends and deliberately
+  does not guess holidays, so roughly a quarter of windows are unscoreable without an
+  authoritative calendar.
+- **65% of forecasts carried at least one internally inconsistent candle** at 10 samples. Under
+  the OHLC validation removed earlier, two-thirds of this study would have been discarded, and
+  the discarded fraction varies by window — which is the selection effect that argued for
+  removing it.
+
 - **Those runs establish plumbing and cost, not forecast value.** They say what the integration
   costs to run and nothing about whether Kronos predicts anything. No forecast accuracy is
   claimed anywhere in this document.
