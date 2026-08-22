@@ -144,12 +144,13 @@ def test_the_model_spec_can_carry_a_cutoff() -> None:
             cost_class=CostClass.LOCAL,
         ),
         training_cutoff="2024-06-01",
+        training_cutoff_source="model card",
     )
 
     assert spec.training_cutoff == "2024-06-01"
     # Absent by default, so existing specs stay valid and are treated as unknown rather than
     # silently clean.
-    bare = spec.model_copy(update={"training_cutoff": None})
+    bare = spec.model_copy(update={"training_cutoff": None, "training_cutoff_source": ""})
     assert bare.training_cutoff is None
 
 
@@ -173,3 +174,71 @@ def test_analysing_nothing_is_not_clean_analysis() -> None:
     assert known_model.contaminated == ()
     assert known_model.clean == ()
     assert known_model.usable_as_evidence is False, "reading nothing establishes nothing"
+
+
+def test_a_cutoff_without_a_source_is_refused() -> None:
+    """A cutoff matters most when it is wrong in the unsafe direction.
+
+    Guessed *earlier* than the truth, text believed post-cutoff was in training after all, and
+    the contamination check passes while the contamination is real. Recording where the number
+    came from is the difference between a cutoff and a guess, and this project has repeatedly
+    found that an input accepted without provenance is one somebody eventually sets to whatever
+    is convenient.
+    """
+    from pydantic import ValidationError
+
+    from quantbot.research.models import CostClass, ModelCapabilities, ModelSpec
+
+    def spec(**overrides):
+        fields = {
+            "provider": "openai-compatible",
+            "model": "fingpt",
+            "version": "1.0",
+            "endpoint": "http://localhost:11434/v1",
+            "capabilities": ModelCapabilities(
+                context_tokens=32768,
+                structured_output=True,
+                local=True,
+                cost_class=CostClass.LOCAL,
+            ),
+        }
+        fields.update(overrides)
+        return ModelSpec(**fields)
+
+    with pytest.raises(ValidationError, match="where it came from"):
+        spec(training_cutoff="2024-06-01")
+
+    attributed = spec(training_cutoff="2024-06-01", training_cutoff_source="model card")
+    assert attributed.training_cutoff_source == "model card"
+
+    # A spec with no cutoff at all stays valid -- it is treated as unknown by `hindsight.py`,
+    # which is the conservative reading, rather than being blocked from existing.
+    assert spec().training_cutoff is None
+
+
+def test_cutoff_status_reaches_the_manifest() -> None:
+    """#45 and #18: a result downgraded for contamination and one never checked look the same
+    afterwards unless the bundle says which.
+
+    That distinction is what a later reader needs to tell an evidentiary downgrade from an
+    absence of assessment, and it is exactly the information that vanishes if only the verdict
+    is stored.
+    """
+    mixed = [source("pre-1", date(2019, 4, 1)), source("post-1", date(2025, 3, 1))]
+
+    entry = assess_hindsight(
+        mixed, model="fingpt-1.0", cutoff=CUTOFF, cutoff_source="model card"
+    ).manifest_entry()
+
+    assert entry["hindsight_model"] == "fingpt-1.0"
+    assert entry["hindsight_cutoff"] == "2024-06-01"
+    assert entry["hindsight_cutoff_source"] == "model card"
+    assert entry["hindsight_sources_contaminated"] == "1"
+    assert entry["hindsight_sources_clean"] == "1"
+    assert entry["hindsight_usable_as_evidence"] == "false"
+
+    # An unassessed model records that it was unrecorded rather than omitting the key, so a
+    # bundle without the field means "this predates the rule", not "this was checked and clean".
+    never = assess_hindsight(mixed, model="mystery", cutoff=None).manifest_entry()
+    assert never["hindsight_cutoff"] == "unrecorded"
+    assert never["hindsight_cutoff_source"] == "unattributed"

@@ -58,6 +58,10 @@ class HindsightAssessment:
 
     model: str
     cutoff: date | None
+    #: Where the cutoff came from, carried so a manifest records whether the boundary was
+    #: documented or estimated. An estimated cutoff can be wrong in the unsafe direction --
+    #: guessed early, and text believed post-cutoff was in training after all.
+    cutoff_source: str
     contaminated: tuple[str, ...]
     clean: tuple[str, ...]
 
@@ -84,6 +88,22 @@ class HindsightAssessment:
             and bool(self.clean)
         )
 
+    def manifest_entry(self) -> dict[str, str]:
+        """Cutoff status in the shape a bundle stores (#45, #18).
+
+        A result marked exploratory for contamination, and one that was never checked, look the
+        same afterwards unless the bundle says which. This is what a later reader needs to tell
+        an evidentiary downgrade from an absence of assessment.
+        """
+        return {
+            "hindsight_model": self.model,
+            "hindsight_cutoff": "unrecorded" if self.cutoff is None else self.cutoff.isoformat(),
+            "hindsight_cutoff_source": self.cutoff_source or "unattributed",
+            "hindsight_sources_clean": str(len(self.clean)),
+            "hindsight_sources_contaminated": str(len(self.contaminated)),
+            "hindsight_usable_as_evidence": str(self.usable_as_evidence).lower(),
+        }
+
     @property
     def reason(self) -> str:
         if self.cutoff is None:
@@ -101,7 +121,11 @@ class HindsightAssessment:
 
 
 def assess_hindsight(
-    sources: Sequence[Source], *, model: str, cutoff: date | None
+    sources: Sequence[Source],
+    *,
+    model: str,
+    cutoff: date | None,
+    cutoff_source: str = "",
 ) -> HindsightAssessment:
     """Split sources by whether the model could already have known their outcome.
 
@@ -118,20 +142,27 @@ def assess_hindsight(
     return HindsightAssessment(
         model=model,
         cutoff=cutoff,
+        cutoff_source=cutoff_source,
         contaminated=tuple(contaminated),
         clean=tuple(clean),
     )
 
 
 def require_no_hindsight(
-    sources: Sequence[Source], *, model: str, cutoff: date | None
+    sources: Sequence[Source],
+    *,
+    model: str,
+    cutoff: date | None,
+    cutoff_source: str = "",
 ) -> HindsightAssessment:
     """Refuse outright when an analysis would rest on text the model already knew.
 
     For the confirmatory path. `assess_hindsight` is for callers that want to mark a result
     exploratory and continue; this is for callers that must not proceed at all.
     """
-    assessment = assess_hindsight(sources, model=model, cutoff=cutoff)
+    assessment = assess_hindsight(
+        sources, model=model, cutoff=cutoff, cutoff_source=cutoff_source
+    )
     if not assessment.usable_as_evidence:
         raise HindsightRefused(assessment.reason)
     return assessment

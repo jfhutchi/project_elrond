@@ -146,6 +146,32 @@ class ModelSpec(FrozenModel):
     #: text published before it already knows how the story ended, which is look-ahead that
     #: nothing downstream can detect.
     training_cutoff: str | None = None
+    #: Where the cutoff came from. A cutoff matters most when it is wrong in the *unsafe*
+    #: direction: guessed earlier than the truth, text you believe is post-cutoff was actually
+    #: in training, and the contamination check passes while the contamination is real. So the
+    #: provenance travels with the number rather than being lost -- "the model card says so" and
+    #: "somebody estimated it" are different claims and only one is checkable.
+    #:
+    #: Free text on purpose, like `ObservedSample.method`: "model card", "vendor docs 2026-08",
+    #: "operator estimate". A closed enum would push an honest odd case into the nearest wrong
+    #: box.
+    training_cutoff_source: str = ""
+
+    @model_validator(mode="after")
+    def validate_cutoff_provenance(self) -> Self:
+        """A cutoff without a source is refused, because it is a number nobody can check.
+
+        Not defaulted to "unknown" and accepted: recording where a fact came from is the whole
+        difference between a cutoff and a guess, and this project has repeatedly found that an
+        input accepted without provenance is one somebody eventually sets to whatever is
+        convenient.
+        """
+        if self.training_cutoff and not self.training_cutoff_source.strip():
+            raise ValueError(
+                "a training cutoff must say where it came from; an unattributed cutoff is a "
+                "number nobody can check, and it is trusted in the direction that costs evidence"
+            )
+        return self
 
     @model_validator(mode="after")
     def refuse_embedded_credentials(self) -> Self:
