@@ -1,0 +1,9 @@
+# Install into a dedicated Python 3.11 environment outside this repository.
+# Do not install QuantBot/Elrond into the worker environment.
+einops==0.8.1
+huggingface-hub==0.33.1
+numpy==1.26.4
+pandas==2.2.2
+safetensors==0.6.2
+torch==2.5.1
+tqdm==4.67.1

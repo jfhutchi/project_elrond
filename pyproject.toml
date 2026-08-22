@@ -21,6 +21,7 @@ dependencies = [
 
 [project.scripts]
 quantbot = "quantbot.cli:main"
+quantbot-kronos = "quantbot.forecasting.cli:main"
 
 [dependency-groups]
 dev = [
