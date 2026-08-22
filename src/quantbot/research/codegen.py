@@ -49,7 +49,8 @@ from decimal import Decimal
 from quantbot.backtest.benchmarks import BenchmarkVariant
 from quantbot.backtest.engine import BacktestEngine
 from quantbot.domain import Bar
-from quantbot.research.builder import ExperimentPlan
+from quantbot.research.builder import REQUIRED_PROBES, ExperimentPlan
+from quantbot.research.causality import CausalityReport
 from quantbot.research.mining import IsolatedSandbox
 from quantbot.research.models import ModelResponse, ModelRole, ModelRuntime, PromptTemplate
 from quantbot.research.registry import Registration
@@ -196,10 +197,18 @@ def run_generated_signal(
     )
 
 
+#: The plan's name for look-ahead detection. Imported rather than re-spelled: a probe reported
+#: under a name the plan does not use is a probe the grader counts as missing, and the run would
+#: be INCONCLUSIVE for a reason nobody could see.
+LOOK_AHEAD_PROBE = REQUIRED_PROBES[0]
+
+
 def measurement_from_signal(
     engine: BacktestEngine,
     histories: Mapping[str, Sequence[Bar]],
     run: SignalRun,
+    *,
+    causality: CausalityReport | None = None,
 ) -> Measurement:
     """Bind a generated signal to the production engine, as an `ExperimentRunner` measurement.
 
@@ -216,6 +225,20 @@ def measurement_from_signal(
     A backtest that produces no Sharpe reports `None` rather than zero. A strategy that never
     traded and a strategy that broke even are different findings, and zero is the answer to the
     second question.
+
+    **`probes_run` reports what actually ran, which is usually less than the plan requires.**
+
+    It used to report `plan.probes` -- the whole list, unconditionally. `ExperimentRunner._grade`
+    refuses to read a number as evidence unless every required probe ran, and echoing the plan's
+    own list back at it defeated that check completely: the one measurement whose code nobody
+    reviewed was asserting that its own falsification attempts had happened. A generated
+    experiment will therefore now usually grade INCONCLUSIVE, and that is the correct verdict for
+    a run whose probes did not run.
+
+    Pass `causality` to have the look-ahead probe count. A clean report contributes
+    `shifted-feature-probe`; a report with violations contributes it to `probes_failed` instead,
+    which disqualifies the result. A report that probed nothing contributes neither -- a check
+    that could not run must not look like one that passed.
     """
 
     def measure(plan: ExperimentPlan, access: ProtectedAccess) -> Measured:
@@ -228,9 +251,20 @@ def measurement_from_signal(
             BenchmarkVariant.EXTERNAL_SIGNAL,
             external_weights=_weights_by_date(run.signal),
         )
+        ran: list[str] = []
+        failed: list[str] = []
+        if causality is not None and causality.probed:
+            if causality.violations:
+                # It ran and objected. Reported as failed rather than omitted: "the probe did not
+                # run" and "the probe caught something" are different, and only one of them is a
+                # reason to disqualify rather than to re-run.
+                failed.append(LOOK_AHEAD_PROBE)
+            else:
+                ran.append(LOOK_AHEAD_PROBE)
         return Measured(
             effect=result.metrics.sharpe,
-            probes_run=plan.probes,
+            probes_run=tuple(ran),
+            probes_failed=tuple(failed),
         )
 
     return measure

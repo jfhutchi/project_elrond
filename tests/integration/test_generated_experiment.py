@@ -284,8 +284,21 @@ def test_a_registration_reaches_a_manifest_through_generated_code(
     assert result.manifest_path.exists()
     assert result.manifest.mode == "CONFIRMATORY"
     assert result.manifest.hypothesis_id == "H-GEN-1"
-    assert result.outcome.verdict in set(OutcomeVerdict), result.outcome.verdict
-    assert result.outcome.verdict is not OutcomeVerdict.FAILED, result.outcome.detail
+    # `verdict in set(OutcomeVerdict)` stood here and was a tautology -- every verdict is in the
+    # set of verdicts, so it passed whatever the pipeline did, in the one test that is supposed
+    # to prove the pipeline works.
+    #
+    # The specific verdict is INCONCLUSIVE, and that is the *correct* answer rather than a
+    # disappointment. The plan requires four probes; this measurement runs none of them, so the
+    # runner refuses to read the number as evidence either way. A generated experiment that
+    # graded SURVIVED without a single falsification attempt having run would be the worst
+    # outcome this repository could produce.
+    assert result.outcome.verdict is OutcomeVerdict.INCONCLUSIVE, result.outcome.detail
+    assert "did not run" in result.outcome.detail
+    assert result.outcome.probes_run == (), "nothing ran, so nothing may be claimed"
+    # The effect still reached the outcome. INCONCLUSIVE means "this cannot be read as
+    # evidence", not "this was not measured" -- the number is recorded for the manifest.
+    assert result.outcome.effect is not None
     # The execution path says the production engine, and it is true rather than declared: the
     # Sharpe in this result came out of `BacktestEngine.run`.
     assert plan.execution_path is ExecutionPath.PRODUCTION_ENGINE
