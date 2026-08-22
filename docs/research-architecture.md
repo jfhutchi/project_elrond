@@ -20,9 +20,25 @@ It has appeared at least five times, in five unrelated modules:
 | #16 promotion | Has it traded 30 forward days? | `ForwardObservation` objects a caller could build |
 | #18 provenance | Is the result traceable? | A manifest the caller could decline to persist |
 | #38 kill switch | Is it safe to resume? | `BROKER_HEALTHY=true` in a dotenv |
+| #53 deployment role | Has this claim been refuted? | `hypothesis_id`, chosen by the caller asking |
+| #54 economic success | Did the forward window clear the bar? | A mandate the agent wrote itself |
 
 None of these were *missing* controls. Each was a real, correct control fed by a claim. A gate
 that validates a number it was handed by the party who benefits from the number is decoration.
+
+The last two rows are the same shape one level up, and they are worth stating separately because
+the fix is different. #53 was not a value a caller could inflate; it was a *relationship* — which
+hypothesis stands behind a deployment — supplied at the moment it was checked. A strategy whose
+mechanism had been refuted could be offered a different, unrefuted registration and the gate
+would faithfully report finding no refutation of the thing it had been handed. #54 is the same
+move against the success criterion rather than the evidence: an agent that writes the hurdle and
+then announces its evidence cleared it has not been gated, it has been asked politely.
+
+**A relationship is fixed by making it durable, not by making it a token.** The claim behind a
+strategy is now written to `promotion_state` at `REGISTERED` and read everywhere after; the id is
+refused as an argument at every other transition. A definition of success is fixed by requiring a
+signature from outside the system: `PAPER_QUALIFIED` and `LIVE_REVIEW_ELIGIBLE` both require a
+`RATIFIED` mandate, and a `ratified_by` that reads as an automated identity is refused at load.
 
 ---
 
@@ -187,10 +203,42 @@ the trading system wrote, and fills reached through `order_intents`. Trades are 
 `signal_date` rather than a UTC timestamp, because a fill at 20:00 Eastern is stored as 00:00 UTC
 the next day and would credit a session that had not happened.
 
+Clearing that floor is **authenticity, not economics**. Thirty losing trades satisfy it
+completely. `PAPER_QUALIFIED` additionally requires `assess_forward_evidence` to return
+`FORWARD_EDGE_SUPPORTED`: a benchmark-relative, beta-adjusted, adequately powered, positive result
+on a claim frozen before the window opened, measured against a **ratified** economic objective.
+
+Session returns are paired on **adjacent exchange sessions**, not on consecutive entries in the
+list of qualified dates. A session the deployment failed on leaves no entry, and zipping the list
+against itself turns two sessions of market movement into one session's return — inflating the
+mean, the t, the Sharpe and the drawdown together. Adjacency is checked against the union of
+benchmark bar dates and `qualification_days` rows of either flag; a pair spanning a known session
+is dropped and counted rather than rescaled.
+
+Three durable facts hang off the promotion record and nothing else may supply them:
+
+| Field | Written at | Answers |
+|---|---|---|
+| `hypothesis_id` / `hypothesis_version` | `REGISTERED` | What claim is this strategy testing? |
+| `objective_identity` | `PAPER_QUALIFIED` | Which economic objective was it judged under? |
+| `evidence_identity` | `PAPER_QUALIFIED` | Which forward assessment justified the stage? |
+
+An economic stage cannot be represented without all three, `enter()` refuses to place a strategy
+at one, and `LIVE_REVIEW_ELIGIBLE` refuses a mandate whose identity differs from the one that
+backed qualification — so a looser objective forces reassessment instead of inheriting a label.
+
+`DeploymentRole` distinguishes an `OPERATIONAL_BASELINE` from an `EDGE_CANDIDATE` and is derived
+from those durable facts rather than stored as a flag. Keeping a refuted strategy trading is
+legitimate and useful — it is where slippage, reconciliation and recovery evidence comes from —
+but it must not convert running time into progress toward a claim about edge.
+`demote_on_refuted_claims` runs the derivation rather than waiting for the next qualification
+attempt to notice, because a derived answer nobody derives is a stale answer.
+
 An unresolved integrity incident demotes a strategy out of the forward track. Demotion does
 **not** erase forward evidence — the ledger is unchanged, so resolving and re-promoting restores
 days that really happened. An incident casts doubt on evidence; it does not make sessions
-un-occur.
+un-occur. The same is true of demotion on a refuted claim: the sessions happened, they stop
+counting toward edge qualification, and they remain available as execution evidence.
 
 ---
 
