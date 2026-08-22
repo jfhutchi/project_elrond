@@ -140,6 +140,12 @@ class ModelSpec(FrozenModel):
     endpoint: Text
     parameters: dict[str, str] = Field(default_factory=dict)
     capabilities: ModelCapabilities
+    #: When this model stopped learning, as an ISO date. Optional because it is a fact somebody
+    #: has to look up, and absent is *not* exempt -- `hindsight.py` treats an unrecorded cutoff
+    #: as contaminating everything rather than as clean. Recorded here because a model applied to
+    #: text published before it already knows how the story ended, which is look-ahead that
+    #: nothing downstream can detect.
+    training_cutoff: str | None = None
 
     @model_validator(mode="after")
     def refuse_embedded_credentials(self) -> Self:
