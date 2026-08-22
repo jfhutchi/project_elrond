@@ -84,6 +84,20 @@ The Pi is not banned by name. A rule naming a host would be wrong the moment the
 changed. It is sized out: 434 MB does not meet the control plane's 512 MB floor, and does meet
 the watchdog's.
 
+### On the dispatch path, not beside it
+
+A `SubprocessWorker` given `requirements=` checks this host **before spawning the subprocess**
+and raises `NoCapableHost` rather than starting work the machine cannot carry. Checking after
+the process fails would be worthless: a Kronos job that starts on a 512 MB host does not fail
+cleanly, it thrashes onto the microSD, and by the time it has failed the damage is the point.
+
+It raises rather than returning a failure, deliberately. A caller retrying a broken worker or
+moving to the next one is doing the right thing; a caller retrying an incapable host is not,
+because nothing ran and running it again here will not change that.
+
+A worker declaring no requirements is not gated. A capability system that silently blocked
+everything predating it would be removed, and the check that matters would go with it.
+
 ## Not done yet
 
 - **Automatic recovery after a Windows reboot or WSL restart** is not implemented. The Pi's
@@ -92,10 +106,3 @@ the watchdog's.
 - **The move itself has not happened.** This records the topology, the measurements and the
   enforcement. Elrond's durable state still lives where it lived, and migrating it is a separate
   operator-visible step that should not happen silently.
-- **The move itself is the remaining step.** Placement now runs on dispatch: a `SubprocessWorker`
-  given `requirements=` checks this host *before* spawning the subprocess and raises
-  `NoCapableHost` rather than starting work the machine cannot carry. It raises rather than
-  returning a failure deliberately -- a caller retrying a broken worker is doing the right
-  thing, and a caller retrying an incapable host is not, because nothing ran and running it
-  again here will not change that. A worker declaring no requirements is not gated, so existing
-  workers are unaffected.
