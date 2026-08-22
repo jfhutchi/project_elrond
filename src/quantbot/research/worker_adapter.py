@@ -34,12 +34,19 @@ import subprocess
 from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
+from platform import node
 
 from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from quantbot.research.budget import BudgetGovernor, Resource
+from quantbot.research.placement import (
+    HostProfile,
+    JobRequirements,
+    NoCapableHost,
+    unmet_requirement,
+)
 from quantbot.research.workers import (
     ResearchWorker,
     WorkerFailure,
@@ -66,6 +73,8 @@ class SubprocessWorker:
         command: Sequence[str],
         *,
         timeout_seconds: float = 900.0,
+        requirements: JobRequirements | None = None,
+        host: HostProfile | None = None,
         runner: object | None = None,
     ) -> None:
         if not command:
@@ -75,6 +84,11 @@ class SubprocessWorker:
         self._spec = spec
         self._command = tuple(command)
         self._timeout = timeout_seconds
+        # Measured once at construction rather than per run: reading the GPU spawns a process,
+        # and a machine does not grow RAM between two experiments. Only measured when there is
+        # something to check, so a worker without declared requirements pays nothing.
+        self._requirements = requirements
+        self._host = host if requirements is None else (host or HostProfile.measure(node()))
         # Injected for tests, exactly as the HTTP transports do it: the production path is
         # exercised without spawning anything.
         self._runner = runner or subprocess.run
@@ -83,8 +97,31 @@ class SubprocessWorker:
     def spec(self) -> WorkerSpec:
         return self._spec
 
+    def _require_capable_host(self) -> None:
+        """Refuse to start work this machine cannot carry (#38).
+
+        Checked before the subprocess is spawned, not after it fails. A Kronos job that starts
+        on a 512MB host does not fail cleanly -- it thrashes onto swap and takes the always-on
+        control plane with it, and the broker, risk engine and reconciliation live there.
+
+        Raises `NoCapableHost` rather than `WorkerFailure`, deliberately. A caller retrying a
+        failed worker or moving to the next one is doing the right thing for a worker that
+        broke, and the wrong thing for a machine that cannot run it: nothing ran, and running it
+        again here will not change that.
+        """
+        if self._requirements is None or self._host is None:
+            return
+        reason = unmet_requirement(self._requirements, self._host)
+        if reason is not None:
+            raise NoCapableHost(
+                f"{self._spec.name}@{self._spec.version} declares {self._requirements.name} "
+                f"and this host cannot run it: {reason}",
+                unmet={self._host.name: reason},
+            )
+
     def run(self, request: WorkerInput, *, now: datetime) -> WorkerResult:
         """Invoke the worker and return its result, or raise. Never returns a partial one."""
+        self._require_capable_host()
         payload = request.model_dump_json()
         try:
             completed = self._runner(  # type: ignore[operator]

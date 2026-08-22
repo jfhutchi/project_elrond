@@ -92,6 +92,10 @@ the watchdog's.
 - **The move itself has not happened.** This records the topology, the measurements and the
   enforcement. Elrond's durable state still lives where it lived, and migrating it is a separate
   operator-visible step that should not happen silently.
-- **Placement is not yet wired into dispatch.** `place()` is correct and tested; nothing calls
-  it on the path that actually starts a worker. Until it does, this is a rule that exists rather
-  than a rule that runs.
+- **The move itself is the remaining step.** Placement now runs on dispatch: a `SubprocessWorker`
+  given `requirements=` checks this host *before* spawning the subprocess and raises
+  `NoCapableHost` rather than starting work the machine cannot carry. It raises rather than
+  returning a failure deliberately -- a caller retrying a broken worker is doing the right
+  thing, and a caller retrying an incapable host is not, because nothing ran and running it
+  again here will not change that. A worker declaring no requirements is not gated, so existing
+  workers are unaffected.

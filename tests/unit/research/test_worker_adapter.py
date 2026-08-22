@@ -12,6 +12,7 @@ from decimal import Decimal
 import pytest
 
 from quantbot.research.budget import BudgetGovernor, Cap, Resource
+from quantbot.research.placement import KRONOS_INFERENCE, NoCapableHost
 from quantbot.research.registry import DataRole
 from quantbot.research.worker_adapter import (
     SubprocessWorker,
@@ -84,6 +85,88 @@ def runner_returning(output: str, *, code: int = 0):
         return FakeCompleted(returncode=code, stdout=output)
 
     return run
+
+
+def undersized_host():
+    """A measured Pi Zero W. Measured, so the refusal is about capacity and not provenance."""
+    from quantbot.research import placement  # noqa: PLC0415
+
+    return placement.HostProfile(
+        name="pi-zero-w",
+        architecture="armv6l",
+        cpu_cores=1,
+        total_memory_mb=434,
+        gpu_vram_mb=0,
+        provenance=placement.HostProvenance.MEASURED,
+        _token=placement._MEASURED,
+    )
+
+
+def test_a_worker_is_refused_before_it_starts_on_a_host_that_cannot_carry_it() -> None:
+    """#38: the check runs before the subprocess, not after it fails.
+
+    A Kronos job that starts on a 512MB host does not fail cleanly. It thrashes onto a microSD
+    and takes the always-on control plane with it, and the broker, risk engine and
+    reconciliation live there. By the time it has failed, the damage is the point.
+    """
+    started: list[object] = []
+
+    def runner(command, **kwargs):
+        started.append(command)
+        raise AssertionError("the worker must not be started on an incapable host")
+
+    worker = SubprocessWorker(
+        spec(),
+        ["kronos", "run"],
+        requirements=KRONOS_INFERENCE,
+        host=undersized_host(),
+        runner=runner,
+    )
+
+    with pytest.raises(NoCapableHost) as raised:
+        worker.run(request(), now=NOW)
+
+    assert started == [], "the subprocess was spawned before the host was checked"
+    assert "pi-zero-w" in raised.value.unmet
+
+
+def test_a_capable_host_runs_the_worker_normally() -> None:
+    """The refusal has to be about capacity, or it is just a broken adapter."""
+    from quantbot.research import placement  # noqa: PLC0415
+
+    worker_spec = spec()
+    capable = placement.HostProfile(
+        name="omen-wsl2",
+        architecture="x86_64",
+        cpu_cores=32,
+        total_memory_mb=15847,
+        gpu_vram_mb=16376,
+        provenance=placement.HostProvenance.MEASURED,
+        _token=placement._MEASURED,
+    )
+    worker = SubprocessWorker(
+        worker_spec,
+        ["kronos", "run"],
+        requirements=KRONOS_INFERENCE,
+        host=capable,
+        runner=runner_returning(result_payload(worker_spec)),
+    )
+
+    assert worker.run(request(), now=NOW).search_cardinality == 4200
+
+
+def test_a_worker_declaring_no_requirements_is_not_gated() -> None:
+    """Existing workers must keep working.
+
+    A capability system that silently blocks everything that predates it would be removed, and
+    the check that matters would go with it.
+    """
+    worker_spec = spec()
+    worker = SubprocessWorker(
+        worker_spec, ["rd-agent", "run"], runner=runner_returning(result_payload(worker_spec))
+    )
+
+    assert worker.run(request(), now=NOW).worker.name == "rd-agent"
 
 
 def test_a_worker_result_is_returned_with_its_provenance() -> None:
