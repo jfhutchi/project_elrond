@@ -270,6 +270,10 @@ def measurement_from_signal(
             # harness and says nothing about the code that computed the signal -- the one input
             # that most determines the result and the only one nobody reviewed.
             diagnostics=run.code.provenance,
+            # The source itself, not only its digest. A manifest recording `code_sha256`
+            # identifies which code ran and cannot run it; a bundle that cannot be re-executed
+            # is a record of a result rather than a reproducible one.
+            reproduction_inputs={"experiment.py": run.code.source},
         )
 
     return measure

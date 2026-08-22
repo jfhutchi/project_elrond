@@ -637,3 +637,43 @@ def test_a_run_that_did_not_complete_is_a_defect_and_never_a_finding(
     # And it still points at the bundle, so the failure is as traceable as a success.
     assert record.evidence_hash == result.manifest.manifest_hash
     assert "ZeroDivisionError" in record.statement
+
+
+def test_a_run_that_stored_nothing_promises_no_rerun(
+    database: Database, manifests: Path
+) -> None:
+    """An ordinary measurement carries no source, so its bundle must not describe a rerun.
+
+    Surfaced by a surviving mutation: every generated-experiment test supplies reproduction
+    inputs, so emitting the command unconditionally was indistinguishable from emitting it when
+    a rerun is actually possible.
+
+    A manifest naming `reproduce-experiment` for a bundle with nothing stored beside it is worse
+    than an empty field. An empty field says reproduction is unavailable; a command that finds
+    no inputs says somebody checked and it works, right up until a person runs it.
+    """
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+    code, environment = provenance()
+
+    def measurement(_plan, _access) -> Measured:
+        return Measured(
+            effect=Decimal("2.4"), test_statistic=Decimal("4.0"), probes_run=plan.probes
+        )
+
+    with database.transaction() as session:
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            plan,
+            registration,
+            measurement,
+            now=NOW,
+            code=code,
+            environment=environment,
+            applied_costs=COSTS,
+            design=DESIGN,
+        )
+
+    assert result.manifest.reproduction_command == (), (
+        "a bundle with nothing stored beside it must not claim it can be rerun"
+    )
+    assert not (manifests / f"{result.manifest.experiment_id}.inputs").exists()

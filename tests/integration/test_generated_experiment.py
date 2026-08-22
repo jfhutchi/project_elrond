@@ -322,6 +322,27 @@ def test_a_registration_reaches_a_manifest_through_generated_code(
     # It is the digest of the source that actually executed, not of something rebuilt later.
     assert diagnostics["code_sha256"] == generated.sha256
 
+    # 6. The bundle carries what a rerun needs (#18).
+    #
+    # `reproduction_command` sat empty for weeks deliberately: `verify-manifest` checks
+    # invariants and is not a re-execution, and a command in that field that does not reproduce
+    # the result reads as reproducibility somebody verified. It is populated now because the
+    # bundle finally carries the model-authored source rather than only its hash -- a digest
+    # identifies code and cannot run it.
+    assert result.manifest.reproduction_command, "no rerun is described"
+    assert "reproduce-experiment" in result.manifest.reproduction_command
+    # Keyed on the experiment id, not the manifest path: the path derives from the manifest
+    # hash, so a path inside the manifest would change the hash that named it.
+    assert result.manifest.experiment_id in result.manifest.reproduction_command
+
+    inputs = result.manifest_path.parent / f"{result.manifest.experiment_id}.inputs"
+    assert inputs.is_dir(), "the source a rerun needs is not beside the bundle"
+    stored = (inputs / "experiment.py").read_text(encoding="utf-8")
+    assert stored.strip(), "an empty source would reproduce nothing"
+    assert hashlib.sha256(stored.encode("utf-8")).hexdigest() == generated.sha256, (
+        "the stored source is not the one that produced this result"
+    )
+
 
 class _StubResponse:
     """Stands in for the model call. The sandbox is real; only the author is fixed."""
@@ -358,3 +379,22 @@ def _provenance():
         ),
         capture_environment(host_class="test"),
     )
+
+
+def test_a_measurement_cannot_choose_where_the_runner_writes(tmp_path: Path) -> None:
+    """Input names come from a measurement, and for a generated experiment that is downstream
+    of model-authored code.
+
+    A name like `../../.env` would let it pick a destination outside the bundle. Refused rather
+    than sanitised: a silently rewritten filename is one nobody can match back to the manifest
+    that references it.
+    """
+    from quantbot.research.runner import ExperimentRunError, ExperimentRunner
+
+    for hostile in ("../escape.py", "nested/experiment.py", r"..\windows.py"):
+        with pytest.raises(ExperimentRunError, match="plain filename"):
+            ExperimentRunner._write_inputs(tmp_path / "x.inputs", {hostile: "print(1)"})
+
+    # A plain name is written, so the refusal is specific rather than a blanket one.
+    ExperimentRunner._write_inputs(tmp_path / "ok.inputs", {"experiment.py": "print(1)"})
+    assert (tmp_path / "ok.inputs" / "experiment.py").exists()

@@ -106,6 +106,11 @@ class Measured:
     test_statistic: Decimal | None = None
     confidence_low: Decimal | None = None
     confidence_high: Decimal | None = None
+    #: Files a rerun needs, by name. For a generated experiment this is the model-authored
+    #: source: the manifest records its digest, and a digest identifies code without being able
+    #: to run it. Written beside the bundle so the bundle is self-contained -- reproduction that
+    #: depends on somebody having kept a file elsewhere is reproduction on trust.
+    reproduction_inputs: Mapping[str, str] = field(default_factory=dict)
     #: Probes that actually ran. The runner checks this against the plan rather than trusting it.
     probes_run: tuple[str, ...] = ()
     #: Probes that ran and objected.
@@ -246,7 +251,15 @@ class ExperimentRunner:
         resources = _usage(started_at, cpu_before, tracemalloc)
         outcome = self._grade(plan, measured, now=now)
         return self._record(
-            plan, registration, outcome, code, environment, applied_costs, design, resources
+            plan,
+            registration,
+            outcome,
+            code,
+            environment,
+            applied_costs,
+            design,
+            resources,
+            measured.reproduction_inputs,
         )
 
     def _spend(self, plan: ExperimentPlan, *, now: datetime) -> ProtectedAccess:
@@ -354,6 +367,7 @@ class ExperimentRunner:
         applied_costs: Mapping[str, str],
         design: ExperimentDesign,
         resources: ResourceUsage,
+        measured_inputs: Mapping[str, str] | None = None,
     ) -> RunResult:
         """Build the bundle, write it, and only then hand back the outcome (#18).
 
@@ -369,13 +383,45 @@ class ExperimentRunner:
         is there for humans reading the directory.
         """
         manifest = self._manifest(
-            plan, registration, outcome, code, environment, applied_costs, design, resources
+            plan,
+            registration,
+            outcome,
+            code,
+            environment,
+            applied_costs,
+            design,
+            resources,
+            reproducible=bool(measured_inputs),
         )
         destination = self._manifests / (
             f"{plan.hypothesis_id}-v{plan.hypothesis_version}-{manifest.manifest_hash[:16]}.json"
         )
         write_experiment_manifest(destination, manifest)
+        # Named by experiment id, matching what `reproduction_command` tells a reader to ask
+        # for, so the command and the directory cannot drift apart.
+        self._write_inputs(self._manifests / f"{manifest.experiment_id}.inputs", measured_inputs)
         return RunResult(outcome=outcome, manifest=manifest, manifest_path=destination)
+
+    @staticmethod
+    def _write_inputs(directory: Path, inputs: Mapping[str, str] | None) -> None:
+        """Write the files a rerun needs, in a directory named for the bundle.
+
+        Refuses a name containing a path separator or a parent reference. The names come from a
+        measurement, and for a generated experiment the measurement is downstream of
+        model-authored code -- a name like `../../.env` would let it choose where to write. It
+        is refused rather than sanitised, because a silently rewritten filename is one nobody
+        can match back to the manifest that references it.
+        """
+        if not inputs:
+            return
+        directory.mkdir(parents=True, exist_ok=True)
+        for name, content in inputs.items():
+            if "/" in name or "\\" in name or Path(name).name != name:
+                raise ExperimentRunError(
+                    f"reproduction input {name!r} is not a plain filename; a measurement does "
+                    "not choose where the runner writes"
+                )
+            (directory / name).write_text(content, encoding="utf-8")
 
     def _manifest(
         self,
@@ -387,6 +433,7 @@ class ExperimentRunner:
         applied_costs: Mapping[str, str],
         design: ExperimentDesign,
         resources: ResourceUsage,
+        reproducible: bool = False,
     ) -> ExperimentManifest:
         """Build the provenance bundle (#18), as CONFIRMATORY because a plan is registered.
 
@@ -395,15 +442,16 @@ class ExperimentRunner:
         claim is the true one.
         """
         window = _plan_window(plan.datasets)
+        experiment_id = content_id(
+            {
+                "hypothesis": plan.hypothesis_id,
+                "version": plan.hypothesis_version,
+                "registration": plan.registration_hash,
+                "completed_at": outcome.completed_at.isoformat(),
+            }
+        )
         return ExperimentManifest(
-            experiment_id=content_id(
-                {
-                    "hypothesis": plan.hypothesis_id,
-                    "version": plan.hypothesis_version,
-                    "registration": plan.registration_hash,
-                    "completed_at": outcome.completed_at.isoformat(),
-                }
-            ),
+            experiment_id=experiment_id,
             git_commit=code.git_commit,
             data_hash=content_id([snapshot.content_hash for snapshot in plan.datasets]),
             configuration_hash=plan.registration_hash,
@@ -443,6 +491,20 @@ class ExperimentRunner:
             code=code,
             environment=environment,
             resources=resources,
+            # Honest now that the bundle carries what a rerun needs. It stayed empty for
+            # weeks on purpose: `verify-manifest` checks invariants and is not a re-execution,
+            # and a command here that does not reproduce the result reads as reproducibility
+            # somebody verified.
+            #
+            # Keyed on the experiment id rather than the manifest path, for two reasons. The
+            # path is derived from the manifest hash, so putting it inside the manifest would
+            # change the hash that named it -- the field cannot describe its own location. And
+            # an id survives the directory being moved, which a path does not.
+            reproduction_command=(
+                ("quantbot", "reproduce-experiment", "--experiment", experiment_id)
+                if reproducible
+                else ()
+            ),
         )
 
 
