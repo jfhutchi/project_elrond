@@ -61,6 +61,48 @@ def extract(state: dict[str, Any]) -> dict[str, str]:
     return out
 
 
+def installed_revision(repository: str, expected: str) -> str:
+    """Read the revision from the checkout itself, and refuse a mismatch.
+
+    The parent used to pass the expected revision in and the child echoed it back, which proved
+    only that the child returned the string it was given. That is a worker self-reporting its
+    own provenance -- the exact pattern #23 closed for search cardinality, rebuilt here by the
+    person who closed it.
+
+    `git rev-parse HEAD` in the installed checkout is measured from the dependency. A dirty tree
+    is refused too: a modified checkout is not the revision it claims to be.
+    """
+    import subprocess  # noqa: PLC0415
+
+    try:
+        head = subprocess.run(
+            ["git", "-C", repository, "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=False,
+            shell=False,
+            timeout=60,
+        )
+        dirty = subprocess.run(
+            ["git", "-C", repository, "status", "--porcelain=v1", "--untracked-files=no"],
+            capture_output=True,
+            text=True,
+            check=False,
+            shell=False,
+            timeout=60,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise WorkerRefused("could not read the installed TradingAgents revision") from error
+    if head.returncode != 0:
+        raise WorkerRefused("the TradingAgents repository does not report a revision")
+    actual = head.stdout.strip()
+    if actual != expected:
+        raise WorkerRefused(f"the installed TradingAgents is {actual}, not the reviewed {expected}")
+    if dirty.returncode == 0 and dirty.stdout.strip():
+        raise WorkerRefused("the TradingAgents checkout is modified; it is not the pinned code")
+    return actual
+
+
 def encode(payload: dict[str, Any]) -> str:
     """Serialise the payload, refusing if any conclusion survived into it.
 
@@ -82,7 +124,8 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="tradingagents-worker")
     parser.add_argument("--ticker", required=True)
     parser.add_argument("--trade-date", required=True)
-    parser.add_argument("--revision", required=True)
+    parser.add_argument("--repository", required=True)
+    parser.add_argument("--expect-revision", required=True)
     args = parser.parse_args(argv)
 
     # Imported dynamically, as the Kronos worker does. TradingAgents is not an Elrond
@@ -101,7 +144,7 @@ def main(argv: list[str] | None = None) -> int:
     payload = {
         "ticker": args.ticker,
         "trade_date": args.trade_date,
-        "revision": args.revision,
+        "revision": installed_revision(args.repository, args.expect_revision),
         "debate": extract(dict(state)),
     }
     sys.stdout.write(encode(payload) + "\n")

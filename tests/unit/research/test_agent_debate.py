@@ -140,16 +140,26 @@ def test_a_debate_cannot_be_cited_as_evidence() -> None:
         )
 
 
-def test_the_debate_is_dated_to_the_session_it_discusses_not_to_now() -> None:
-    """`retrieved_at` is when we ran it; `published_at` is what it is about.
+def test_a_generated_debate_is_not_knowable_before_it_was_generated() -> None:
+    """Reversed provenance, caught by Sol's review of this file.
 
-    Using `now` for both would let a backtest read a debate about 2026-08-12 while standing
-    earlier than that date.
+    The first version set `published_at` from the trade date and a test asserted it, with a
+    docstring claiming that prevented look-ahead. It does the opposite: `known_by` gates on
+    `published_at`, so a debate written on the 22nd about the 12th was mechanically knowable on
+    the 12th. A generated artifact did not exist on the date it discusses, and in a historical
+    simulation that is direct leakage.
+
+    The subject date lives in the URI and the title, where it cannot be mistaken for
+    availability.
     """
     source = TradingAgentsSourceProvider.to_sources(payload(), now=NOW)[0]
+    subject = datetime(2026, 8, 12, tzinfo=UTC)
 
-    assert source.published_at == datetime(2026, 8, 12, tzinfo=UTC)
+    assert source.published_at == NOW
     assert source.retrieved_at == NOW
+    assert source.known_by(NOW) is True
+    assert source.known_by(subject) is False, "a debate is knowable before it was written"
+    assert "2026-08-12" in source.uri and "2026-08-12" in source.title
 
 
 def test_a_different_framework_revision_is_refused() -> None:
@@ -207,9 +217,13 @@ def test_the_child_sees_a_local_endpoint_and_no_credentials() -> None:
 
 def test_an_interpreter_inside_the_elrond_tree_is_refused(tmp_path: Path) -> None:
     """The boundary is the only thing making it acceptable to run this code at all."""
+    checkout = tmp_path / "ta"
+    (checkout / ".git").mkdir(parents=True)
+
     with pytest.raises(ValueError, match="outside the Elrond tree"):
         TradingAgentsSourceProvider(
             python_executable=Path(__file__).resolve(),
+            repository=checkout,
             cache_directory=tmp_path,
             endpoint="http://localhost:11434/v1",
             model="mistral:7b",
@@ -234,3 +248,59 @@ def test_the_payload_guard_refuses_a_conclusion_that_survived_extraction() -> No
         leaked = {"ticker": "SPY", "debate": {"bull_history": f"see {forbidden} above"}}
         with pytest.raises(WorkerRefused, match="the boundary leaked"):
             encode(leaked)
+
+
+def test_a_historical_session_is_refused_because_upstream_owns_retrieval(tmp_path) -> None:
+    """The framework fetches its own sources, so it cannot be asked about the past.
+
+    Elrond cannot hand it a point-in-time bundle and cannot establish what it read. Asked about
+    an earlier session it would fetch *today's* material and report the result as analysis of
+    that session, which is contamination rather than a stale source. Forward-only until
+    upstream can accept an Elrond-owned bundle.
+    """
+    checkout = tmp_path / "ta"
+    (checkout / ".git").mkdir(parents=True)
+    interpreter = tmp_path / "python"
+    interpreter.touch()
+    provider = TradingAgentsSourceProvider(
+        python_executable=interpreter,
+        repository=checkout,
+        cache_directory=tmp_path / "cache",
+        endpoint="http://localhost:11434/v1",
+        model="mistral:7b",
+    )
+
+    with pytest.raises(TradingAgentsUnavailable, match="forward-only"):
+        provider.fetch("SPY", "2026-08-12", now=NOW)
+
+
+def test_the_framework_revision_is_measured_from_the_checkout_not_echoed(tmp_path) -> None:
+    """A worker asserting its own provenance is the pattern #23 closed, rebuilt here by me.
+
+    The parent used to pass the expected revision in and verify the echo, which proved only
+    that the child returned the string it was given.
+    """
+    import subprocess  # noqa: PLC0415
+
+    from quantbot.research.agent_debate_worker import installed_revision  # noqa: PLC0415
+
+    repo = tmp_path / "checkout"
+    repo.mkdir()
+    subprocess.run(["git", "init", "--quiet", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.email", "t@t"], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "t"], check=True)
+    (repo / "f.txt").write_text("x", encoding="utf-8")
+    subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+    subprocess.run(["git", "-C", str(repo), "commit", "--quiet", "-m", "x"], check=True)
+    head = subprocess.run(
+        ["git", "-C", str(repo), "rev-parse", "HEAD"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+
+    assert installed_revision(str(repo), head) == head
+
+    with pytest.raises(WorkerRefused, match="not the reviewed"):
+        installed_revision(str(repo), "0" * 40)
+
+    (repo / "f.txt").write_text("modified", encoding="utf-8")
+    with pytest.raises(WorkerRefused, match="modified"):
+        installed_revision(str(repo), head)

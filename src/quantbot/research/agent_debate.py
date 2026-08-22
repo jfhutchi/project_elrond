@@ -40,7 +40,7 @@ import os
 import shutil
 import subprocess
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 from quantbot.research.sources import Source, SourceHealth, SourceKind
@@ -104,6 +104,7 @@ class TradingAgentsSourceProvider:
         self,
         *,
         python_executable: str | Path,
+        repository: str | Path,
         cache_directory: str | Path,
         endpoint: str,
         model: str,
@@ -119,6 +120,10 @@ class TradingAgentsSourceProvider:
             raise ValueError("the TradingAgents interpreter must be outside the Elrond tree")
         if timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
+        repo = Path(repository).expanduser().absolute()
+        if not (repo / ".git").is_dir():
+            raise ValueError("repository must be the TradingAgents git checkout")
+        self._repository = repo
         self._interpreter = interpreter
         self._cache = Path(cache_directory).expanduser().absolute()
         self._endpoint = endpoint
@@ -144,7 +149,25 @@ class TradingAgentsSourceProvider:
         return staged
 
     def fetch(self, ticker: str, trade_date: str, *, now: datetime) -> tuple[Source, ...]:
-        """Run the graph and return its debate as derived source records, or raise."""
+        """Run the graph and return its debate as derived source records, or raise.
+
+        **Refuses a historical session.** The upstream graph owns its own retrieval -- it calls
+        its own news, fundamentals and macro tools -- so Elrond cannot hand it a point-in-time
+        bundle and cannot establish what it read. Asked about a past date it would fetch
+        *today's* material and present the result as analysis of that date, which is
+        contamination rather than a stale source.
+
+        So this is forward-only: it may be asked about the current session, never an earlier
+        one. Supplying an Elrond-owned immutable bundle and disabling upstream acquisition is
+        the change that would lift this, and it needs upstream support that does not exist.
+        """
+        session_date = date.fromisoformat(trade_date)
+        if session_date < now.date():
+            raise TradingAgentsUnavailable(
+                f"{trade_date} is in the past and this framework fetches its own sources: it "
+                "would read today's material and report it as analysis of that session. "
+                "TradingAgents is forward-only until Elrond can supply the bundle it reads"
+            )
         self._cache.mkdir(parents=True, exist_ok=True)
         worker = self._stage_worker()
         try:
@@ -157,7 +180,9 @@ class TradingAgentsSourceProvider:
                     ticker,
                     "--trade-date",
                     trade_date,
-                    "--revision",
+                    "--repository",
+                    str(self._repository),
+                    "--expect-revision",
                     TRADINGAGENTS_REVISION,
                 ],
                 capture_output=True,
@@ -218,11 +243,15 @@ class TradingAgentsSourceProvider:
                     source_id=f"tradingagents:{ticker}:{trade_date}:{key}:{digest[:12]}",
                     kind=SourceKind.ALTERNATIVE,
                     uri=f"tradingagents://{revision}/{ticker}/{trade_date}/{key}",
-                    title=f"{_SPEAKERS.get(key, key)} on {ticker}",
+                    title=f"{_SPEAKERS.get(key, key)} on {ticker}, session {trade_date}",
                     publisher=_SPEAKERS.get(key, "TradingAgents"),
-                    # The debate is about this trading date, and is knowable no earlier. Using
-                    # `now` would let a backtest read it before the date it discusses.
-                    published_at=datetime.fromisoformat(f"{trade_date}T00:00:00+00:00"),
+                    # The generation time, NOT the session it discusses. `known_by` gates on
+                    # `published_at`, so dating it to `trade_date` made a debate written on the
+                    # 22nd mechanically knowable on the 12th -- reversed provenance and direct
+                    # look-ahead in any historical simulation. A generated artifact did not
+                    # exist on the date it talks about. The subject date is preserved in the
+                    # URI and the title, where it cannot be mistaken for availability.
+                    published_at=now,
                     retrieved_at=now,
                     content_hash=digest,
                     parser_version=PARSER_VERSION,
