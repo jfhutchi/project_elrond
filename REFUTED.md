@@ -99,6 +99,27 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
 
 ## Structural limits that bound all future work
 
+* **The Kronos shadow-forecast dataset cannot resolve forecast-quality questions at effect sizes
+  worth acting on.** H-2026-026 asked whether `inconsistent_candles` predicts a forecast's own
+  absolute error — the mechanism asserted when the OHLC validator was removed. Pre-registered
+  2026-08-22 with a null calibration run first (shifted-signal Spearman **+0.0034**, so the
+  pipeline manufactures no correlation of its own). The deterministic critic returned `PROCEED`
+  on the feature-shift probe and **the power gate refused the registration**:
+
+  > an expected `INFORMATION_COEFFICIENT` of 0.15 needs **4,485 observations** to clear the
+  > t=2.910 bar for 69 cumulative trials, and only 688 are available — **57.3 independent** after
+  > 12x variance inflation. Smallest detectable effect: **0.375**.
+
+  688 forecasts are 23 correlated ETFs in each of 30 windows, not 688 draws. **`UNDERPOWERED`,
+  not `REFUTED`:** the mechanism may well be real and this data cannot say. The aligned
+  correlation was deliberately **not computed** — the power analysis had already established
+  that any value below 0.375 is uninterpretable, and publishing a number under that ceiling
+  invites it being quoted later without it.
+
+  Resolving it needs roughly **7x more independent windows**, i.e. years of forecasts, or a
+  design with less within-window clustering. The refusal cost nothing: no registration was
+  stored, the trial count stayed at 68, and the window stayed `UNTOUCHED`.
+
 * **A spent data window read as fresh capacity until 2026-08-22, and the first diagnosis of it
   was wrong.** `window_consumption` counted only registered-hypothesis rows, of which there were
   none, so SIP US equities 2016-2026 reported `UNTOUCHED`. Now seeded via
