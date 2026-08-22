@@ -84,6 +84,12 @@ class Verdict(StrEnum):
 #: Verdicts that mean "we could not test this", which must never be read as "we tested this".
 NOT_TESTED = frozenset({Verdict.UNDERPOWERED, Verdict.UNECONOMIC})
 
+#: Verdicts that invalidate a claim, so a deployment resting on one is no longer an edge
+#: candidate. `IMPOSSIBLE` is included because a mechanism that cannot be done at all is not a
+#: mechanism awaiting evidence; `LITERATURE_REFUTED` because REFUTED.md #13 is exactly that and
+#: it is a real reason not to keep accruing qualification against the claim.
+REFUTING = frozenset({Verdict.REFUTED, Verdict.LITERATURE_REFUTED, Verdict.IMPOSSIBLE})
+
 
 class Relation(StrEnum):
     REFUTES = "REFUTES"
@@ -258,6 +264,35 @@ class ResearchMemory:
                 for row in self._session.execute(statement).mappings()
             )
             if pattern in record.subject.lower() or pattern in record.statement.lower()
+        ]
+
+    def findings_for(self, hypothesis_id: str) -> list[ResearchRecord]:
+        """Every record filed against one hypothesis, oldest first.
+
+        Lineage, not keywords. `recall()` matches text, which is right for "what do we know
+        about momentum" and wrong for "has the claim behind this deployment been refuted": a
+        strategy id that happens to appear in someone's prose would answer yes, and a refutation
+        phrased without the id would answer no. Both errors matter -- the second silently.
+        """
+        rows = self._session.execute(
+            select(research_records)
+            .where(research_records.c.hypothesis_id == hypothesis_id)
+            .order_by(research_records.c.recorded_at, research_records.c.record_id)
+        ).mappings()
+        return [ResearchRecord.model_validate_json(str(row["document_json"])) for row in rows]
+
+    def refutations_of(self, hypothesis_id: str) -> list[ResearchRecord]:
+        """Findings that invalidate the claim, excluding the ones that only failed to test it.
+
+        `UNDERPOWERED` and `UNECONOMIC` are deliberately not here. They are in `NOT_TESTED` for
+        the reason this module refuses to file them as refutations in the first place: they say
+        the data could not resolve the mechanism, and blocking a deployment on one would read
+        the absence of evidence as evidence of absence at the gate rather than in the record.
+        """
+        return [
+            record
+            for record in self.findings_for(hypothesis_id)
+            if record.kind is RecordKind.FINDING and record.verdict in REFUTING
         ]
 
     def structural_limits(self) -> list[ResearchRecord]:
@@ -443,6 +478,7 @@ __all__ = [
     "Relation",
     "ResearchMemory",
     "ResearchRecord",
+    "REFUTING",
     "Verdict",
     "WindowConsumption",
     "import_refuted_markdown",

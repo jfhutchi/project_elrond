@@ -22,11 +22,13 @@ from quantbot.domain import (
 )
 from quantbot.research.builder import OutcomeVerdict
 from quantbot.research.manifest import ExecutionPath, StatisticalTest
+from quantbot.research.memory import RecordKind, ResearchMemory, ResearchRecord, Verdict
 from quantbot.research.power import PowerVerdict
 from quantbot.research.promotion import (
     ALLOWED_PROMOTIONS,
     MINIMUM_FORWARD_DAYS,
     MINIMUM_FORWARD_TRADES,
+    DeploymentRole,
     ForwardEvidence,
     ForwardObservation,
     ForwardVerdict,
@@ -1142,6 +1144,7 @@ def test_forward_evidence_cannot_be_assembled_by_a_caller(ledger_db: Database) -
             strategy_version="1.3.0",
             configuration_hash="cfg-abc",
             assessed_at=NOW,
+            role=DeploymentRole.EDGE_CANDIDATE,
             forward_days=MINIMUM_FORWARD_DAYS,
             forward_trades=MINIMUM_FORWARD_TRADES,
             luck_threshold_z=Decimal("2.905"),
@@ -1274,3 +1277,137 @@ def test_the_equity_mark_is_attributed_to_the_session_it_closed(ledger_db: Datab
     assert evidence.statistics is not None
     # Thirty qualified sessions, twenty-nine consecutive pairs, none dropped.
     assert evidence.statistics.paired_sessions == MINIMUM_FORWARD_DAYS - 1
+
+
+def _refute(session, hypothesis_id: str, *, verdict: Verdict = Verdict.REFUTED) -> None:
+    """File a refutation against a hypothesis the way a completed research cycle would."""
+    ResearchMemory(session).record(
+        ResearchRecord(
+            record_id=f"refuted-{hypothesis_id}",
+            kind=RecordKind.FINDING,
+            subject="momentum ranking",
+            statement=(
+                "The momentum ranking carries no measurable information: alpha against SPY is "
+                "0.10%/yr at t=0.05 and top-minus-bottom is t=0.77 against a 2.87 bar."
+            ),
+            verdict=verdict,
+            hypothesis_id=hypothesis_id,
+            hypothesis_version=1,
+            source="REFUTED.md #22",
+            recorded_at=NOW,
+        )
+    )
+
+
+def test_a_refuted_mechanism_stops_being_an_edge_candidate(ledger_db: Database) -> None:
+    """#53's core path, and the deployed rotation's actual future.
+
+    Real paper days keep arriving after a mechanism is refuted, because the daemon runs beside
+    the research system rather than under it. Those days are worth having -- they are where
+    slippage, reconciliation and recovery evidence comes from -- and they must not become credit
+    toward a label about edge. Authentic execution cannot rehabilitate a mechanism by existing.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        before = forward_evidence(
+            session, hypothesis_id=claim, max_drawdown_limit_bps=2000
+        )
+        assert before.role is DeploymentRole.EDGE_CANDIDATE
+        assert before.supported, before.explain()
+
+        _refute(session, claim)
+        after = forward_evidence(session, hypothesis_id=claim, max_drawdown_limit_bps=2000)
+
+    # Same account, same fills, same profit. The claim is what changed.
+    assert after.statistics == before.statistics
+    assert after.role is DeploymentRole.OPERATIONAL_BASELINE
+    assert not after.supported
+    assert any("is refuted by" in reason for reason in after.blocking)
+
+
+def test_an_untestable_verdict_is_not_a_refutation(ledger_db: Database) -> None:
+    """`UNDERPOWERED` does not block, and that is not an oversight.
+
+    It says the data could not resolve the mechanism. Blocking on it would read absence of
+    evidence as evidence of absence at the gate -- the collapse research memory refuses to let
+    happen in the record, arriving through the back door instead.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        ResearchMemory(session).record(
+            ResearchRecord(
+                record_id="underpowered-1",
+                kind=RecordKind.FINDING,
+                subject="momentum ranking",
+                statement="688 forecasts cannot resolve an IC of 0.15; 4,485 are needed.",
+                verdict=Verdict.UNDERPOWERED,
+                hypothesis_id=claim,
+                hypothesis_version=1,
+                source="H-2026-026",
+                recorded_at=NOW,
+            )
+        )
+        evidence = forward_evidence(
+            session, hypothesis_id=claim, max_drawdown_limit_bps=2000
+        )
+
+    assert evidence.role is DeploymentRole.EDGE_CANDIDATE
+    assert evidence.supported, evidence.explain()
+
+
+def test_a_deployment_with_no_registration_is_an_operational_baseline(
+    ledger_db: Database,
+) -> None:
+    """The role is derived from durable state, so nobody has to remember to set it."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=400, benchmark_daily_bps=1
+        )
+        evidence = forward_evidence(session)
+
+    assert evidence.role is DeploymentRole.OPERATIONAL_BASELINE
+    assert "OPERATIONAL_BASELINE" in evidence.explain()
+
+
+def test_the_refutation_trigger_follows_lineage_rather_than_prose(ledger_db: Database) -> None:
+    """A refutation of a *different* hypothesis must not block this one.
+
+    #53 asks for the trigger to be registered lineage rather than text matching against
+    REFUTED.md, and the two disagree in both directions: a strategy id appearing in unrelated
+    prose would block wrongly, and a refutation phrased without the id would fail to block --
+    silently, which is the worse half.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        _refute(session, "H-2026-999-some-other-question")
+        evidence = forward_evidence(
+            session, hypothesis_id=claim, max_drawdown_limit_bps=2000
+        )
+
+    assert evidence.role is DeploymentRole.EDGE_CANDIDATE
+    assert evidence.supported, evidence.explain()

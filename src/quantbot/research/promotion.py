@@ -60,6 +60,7 @@ from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.research.builder import ExperimentOutcome, OutcomeVerdict
 from quantbot.research.critic import hidden_beta
 from quantbot.research.manifest import VALID_FOR, ExecutionPath
+from quantbot.research.memory import ResearchMemory
 from quantbot.research.power import (
     Estimand,
     PowerAssessment,
@@ -303,6 +304,28 @@ class PromotionState(FrozenModel):
         return self.stage is Stage.LIVE_REVIEW_ELIGIBLE
 
 
+class DeploymentRole(StrEnum):
+    """What a paper deployment is *for*, derived rather than declared (#53).
+
+    Keeping the refuted momentum rotation trading is useful and legitimate: it exercises the
+    daemon, produces real fills, and is where slippage, reconciliation and recovery evidence
+    comes from. What it must not do is convert that operational usefulness into progress toward
+    a label about edge, and the count-based gate plus a state machine that runs beside the
+    broker made exactly that path available -- refuted mechanism, plus real days, plus thirty
+    trades, equals something that reads like qualification.
+
+    Derived from durable state rather than stored as a column nobody updates. A deployment is an
+    edge candidate exactly while a frozen registration stands behind it and nothing has refuted
+    the claim; the moment either stops being true the answer changes on its own, which a flag
+    set at deployment time would not.
+    """
+
+    #: Runs paper orders to exercise the machinery. Accrues operational evidence and no other kind.
+    OPERATIONAL_BASELINE = "OPERATIONAL_BASELINE"
+    #: A live, non-refuted registered claim is accumulating forward evidence against it.
+    EDGE_CANDIDATE = "EDGE_CANDIDATE"
+
+
 class ForwardVerdict(StrEnum):
     """What the forward account actually says about the claim (#47).
 
@@ -384,6 +407,7 @@ class ForwardEvidence:
     strategy_version: str
     configuration_hash: str
     assessed_at: datetime
+    role: DeploymentRole
     forward_days: int
     forward_trades: int
     luck_threshold_z: Decimal
@@ -400,6 +424,7 @@ class ForwardEvidence:
         strategy_version: str,
         configuration_hash: str,
         assessed_at: datetime,
+        role: DeploymentRole,
         forward_days: int,
         forward_trades: int,
         luck_threshold_z: Decimal,
@@ -419,6 +444,7 @@ class ForwardEvidence:
         object.__setattr__(self, "strategy_version", strategy_version)
         object.__setattr__(self, "configuration_hash", configuration_hash)
         object.__setattr__(self, "assessed_at", assessed_at)
+        object.__setattr__(self, "role", role)
         object.__setattr__(self, "forward_days", forward_days)
         object.__setattr__(self, "forward_trades", forward_trades)
         object.__setattr__(self, "luck_threshold_z", luck_threshold_z)
@@ -435,9 +461,10 @@ class ForwardEvidence:
     def explain(self) -> str:
         """The verdict with every reason behind it, including the checks that did not run."""
         reasons = [*self.blocking, *(f"not assessed: {item}" for item in self.unassessed)]
+        headline = f"{self.role.value}/{self.verdict.value}"
         if not reasons:
-            return self.verdict.value
-        return f"{self.verdict.value}: " + "; ".join(reasons)
+            return headline
+        return f"{headline}: " + "; ".join(reasons)
 
 
 def _session_equity(
@@ -649,6 +676,7 @@ def assess_forward_evidence(
     threshold = luck_threshold(cumulative_trials)
     blocking: list[str] = []
     unassessed: list[str] = []
+    refuted = False
 
     if days < MINIMUM_FORWARD_DAYS:
         blocking.append(f"{days} of {MINIMUM_FORWARD_DAYS} authentic forward days")
@@ -689,6 +717,16 @@ def assess_forward_evidence(
             cumulative_trials=cumulative_trials,
             assessed_at=assessed_at,
         )
+        refutations = ResearchMemory(session).refutations_of(hypothesis_id or "")
+        refuted = bool(refutations)
+        if refutations:
+            blocking.append(
+                "the claim behind this deployment is refuted by "
+                + ", ".join(record.record_id for record in refutations)
+                + "; authentic paper days do not rehabilitate a mechanism by existing, and a "
+                "new question about it needs a new registration rather than a reinterpretation "
+                "of a deployment already running"
+            )
         if claim.estimand is not Estimand.SHARPE:
             unassessed.append(
                 f"the frozen estimand is {claim.estimand.value}, which this gate cannot express "
@@ -731,11 +769,17 @@ def assess_forward_evidence(
                 f"{threshold} bar; a positive excess that is index exposure is not an edge"
             )
 
+    role = (
+        DeploymentRole.EDGE_CANDIDATE
+        if registration is not None and not refuted
+        else DeploymentRole.OPERATIONAL_BASELINE
+    )
     return ForwardEvidence(
         strategy_id=strategy_id,
         strategy_version=strategy_version,
         configuration_hash=configuration_hash,
         assessed_at=assessed_at,
+        role=role,
         forward_days=days,
         forward_trades=trades,
         luck_threshold_z=threshold,
@@ -919,6 +963,7 @@ __all__ = [
     "MINIMUM_FORWARD_DAYS",
     "MINIMUM_FORWARD_TRADES",
     "MINIMUM_PAIRED_SESSIONS",
+    "DeploymentRole",
     "ForwardEvidence",
     "ForwardObservation",
     "ForwardStatistics",
