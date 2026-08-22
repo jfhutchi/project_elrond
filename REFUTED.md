@@ -99,6 +99,20 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
 
 ## Structural limits that bound all future work
 
+* **TradingAgents output is not reproducible, and its data layer fails open.** Verified
+  2026-08-22 by running it (pinned `a33fd4c0`) against local Ollama with `mistral:7b`. Two
+  identical invocations -- same ticker, same date, same config -- returned **`Hold`** and then
+  **`Buy`**. No seed is exposed for the debate, so under #18 a TradingAgents artifact can record
+  what it said and never that a rerun would say it again.
+
+  Separately, Reddit fetches returned HTTP 429 twice and the run continued to a confident
+  directional call, logging the failure and reporting anyway. **An unreachable source read as
+  "no evidence" rather than as an outage** -- the failure #4 exists to prevent. Any integration
+  must supply its own point-in-time sources rather than trusting these fetchers.
+
+  Neither is a reason to reject the framework; the bull/bear debate is still the part worth
+  having. Both are reasons its output can never be confirmatory evidence on its own.
+
 * **The Kronos shadow-forecast dataset cannot resolve forecast-quality questions at effect sizes
   worth acting on.** H-2026-026 asked whether `inconsistent_candles` predicts a forecast's own
   absolute error — the mechanism asserted when the OHLC validator was removed. Pre-registered

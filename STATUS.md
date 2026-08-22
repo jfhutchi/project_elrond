@@ -1183,6 +1183,12 @@ and **not installed**.
       Sol's unanswered question on OHLC ordering is recorded disagreement in the thread, not an
       unmet criterion. The aligned correlation stays uncomputed: below the 0.375 detectable
       effect it is uninterpretable, and a number under that ceiling gets quoted without it.
+- [ ] **Wrap the upstream TradingAgents framework (#37).** Proven runnable here: pinned
+      `a33fd4c0`, own venv, local Ollama, no vendor API key needed — my earlier "blocked on API
+      keys" claim was wrong and came from reading rather than running. The design is specified
+      on #37: its debate becomes *source material* for `SemanticWorker`, not a `SemanticAnalysis`
+      of its own, because real bull/bear text is saturated with "buy"/"sell" and would trip the
+      leaked-call refusal on every analysis.
 - [ ] **TradingAgents criterion 9 (#37):** whether it improves downstream hypothesis quality.
       Needs the scheduled loop and hypotheses on both sides.
 - [ ] Crypto sleeve blocked on a second Alpaca paper account (**operator action**)
