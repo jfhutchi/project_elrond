@@ -510,6 +510,25 @@ def _posix_memory_mb(pid: int) -> float | None:
         return round(total, 2)
 
 
+def _kernel_memory_refusal(stderr: str) -> str | None:
+    """`"memory"` when the child died because the kernel refused it an allocation.
+
+    On POSIX the ceiling is enforced twice: the parent polls, and `RLIMIT_AS` is set on the
+    child. The rlimit is meant to be the backstop, but a script allocating in 20MB steps fills
+    hundreds of megabytes inside one 0.2s poll interval, so the kernel routinely wins the race --
+    and then the run was correctly *contained* and incorrectly *reported*, with no reason at all.
+    A contained runaway that reports `None` reads exactly like a script that failed for its own
+    reasons, which is the distinction the whole `terminated_reason` field exists to carry.
+
+    The signal is the traceback, because an address-space refusal surfaces in the child as an
+    ordinary `MemoryError` rather than a signal: nothing in the exit status distinguishes it. A
+    script could print the word deliberately and mislabel its own failure; the consequence is a
+    wrong reason on a run that failed either way, since `ok` is already False on both paths.
+    That is worth accepting to avoid reporting a real containment as an unexplained crash.
+    """
+    return "memory" if sys.platform != "win32" and "MemoryError" in stderr else None
+
+
 def _memory_mb(process: subprocess.Popen[bytes]) -> float | None:
     """Working set of the child AND its descendants, in MB. None when it cannot be determined.
 
@@ -638,13 +657,16 @@ class SandboxRunner:
                 process.kill()
                 out, err = process.communicate()
             duration = time.monotonic() - started
+            stderr = err.decode("utf-8", "replace")
+            if reason is None and process.returncode != 0:
+                reason = _kernel_memory_refusal(stderr)
 
             artifacts = _collect(paths.outputs, self._policy.max_output_bytes)
             return SandboxResult(
                 ok=reason is None and process.returncode == 0,
                 exit_code=process.returncode,
                 stdout=out.decode("utf-8", "replace"),
-                stderr=err.decode("utf-8", "replace"),
+                stderr=stderr,
                 duration_seconds=duration,
                 peak_memory_mb=peak_memory,
                 artifacts=artifacts,
