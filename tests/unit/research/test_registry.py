@@ -1671,3 +1671,88 @@ def test_a_verified_count_at_registration_must_come_from_a_registered_window(
 
     assert refused.value.reason is RefusalReason.UNVERIFIED_SAMPLE
     assert "no registered window covers" in refused.value.detail
+
+
+def test_a_second_vendor_for_the_same_observations_does_not_get_a_fresh_budget(
+    database: Database,
+) -> None:
+    """#40: the multiple-testing burden attaches to the observations, not to the vendor.
+
+    Found by GPT-5.6 Sol reviewing my own review of NexusTrade. I had written that a data lake is
+    new statistical budget; the correction is that a different vendor serving the *same*
+    historical outcomes and dates is not. That turned out to describe a real hole rather than
+    only a conceptual one: `window_consumption` matched the dataset name, so a hypothesis
+    registered against another vendor's label for SPY dailies would have reported UNTOUCHED
+    against a window cycles 2-10 had exhausted.
+
+    A gate keyed on a string the registrant chooses is the defect class this project keeps
+    finding.
+    """
+    from quantbot.research.datasets import equivalent_datasets, observation_identity
+
+    # The two names observe the same series.
+    assert observation_identity("sip-us-equities-daily") == observation_identity(
+        "alpaca-us-equities-daily"
+    )
+    assert "alpaca-us-equities-daily" in equivalent_datasets("sip-us-equities-daily")
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(available_observations=2669), now=NOW)
+        registry.consume(
+            "H-2026-001",
+            1,
+            dataset="sip-us-equities-daily",
+            role=DataRole.PROTECTED_EVALUATION,
+            now=NOW,
+        )
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        under_its_own_name = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+        under_another_vendor = registry.window_consumption(
+            "alpaca-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+
+    assert under_its_own_name.trials > 0
+    assert under_another_vendor.trials == under_its_own_name.trials, (
+        "renaming the vendor must not refill the budget"
+    )
+    assert under_another_vendor.consumers == under_its_own_name.consumers
+
+
+def test_an_unrecognised_dataset_is_its_own_budget_rather_than_pooled(
+    database: Database,
+) -> None:
+    """The conservative direction here is the opposite of most defaults in this project.
+
+    Pooling an unclassified dataset into an existing identity would charge it a budget it never
+    spent and refuse research that should proceed. A dataset nobody has classified is treated as
+    new, and declaring an alias is a deliberate act by somebody who checked that the observations
+    really are the same.
+    """
+    from quantbot.research.datasets import equivalent_datasets, observation_identity
+
+    assert observation_identity("fred-macro-daily-brand-new") == "fred-macro-daily-brand-new"
+    assert equivalent_datasets("something-nobody-declared") == ("something-nobody-declared",)
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(available_observations=2669), now=NOW)
+        registry.consume(
+            "H-2026-001",
+            1,
+            dataset="sip-us-equities-daily",
+            role=DataRole.PROTECTED_EVALUATION,
+            now=NOW,
+        )
+
+    with database.transaction() as session:
+        unrelated = HypothesisRegistry(session).window_consumption(
+            "jp-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
+        )
+
+    assert unrelated.trials == 0, "an independent source must start untouched"
+    assert unrelated.status == "UNTOUCHED"

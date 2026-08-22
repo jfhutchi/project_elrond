@@ -56,6 +56,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
 from quantbot.research.critic import Critique
+from quantbot.research.datasets import equivalent_datasets
 from quantbot.research.manifest import canonical_result_json
 from quantbot.research.power import (
     EffectSpecification,
@@ -876,7 +877,12 @@ class HypothesisRegistry:
                 & (hypothesis_data_windows.c.version == hypotheses.c.version),
             )
             .where(
-                hypothesis_data_windows.c.dataset == dataset,
+                # Every dataset name observing the same series, not just the one asked about
+                # (#40). Matching the literal name is a gate keyed on a string the registrant
+                # chooses: `nexustrade-us-equities-daily` over 2016-2026 would report UNTOUCHED
+                # while `sip-us-equities-daily` over the same span is EXHAUSTED. The burden
+                # attaches to the observations, not to the vendor.
+                hypothesis_data_windows.c.dataset.in_(equivalent_datasets(dataset)),
                 hypothesis_data_windows.c.start_date <= end.isoformat(),
                 hypothesis_data_windows.c.end_date >= start.isoformat(),
                 hypothesis_data_windows.c.state == WindowState.CONSUMED.value,
