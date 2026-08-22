@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import subprocess
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -324,6 +325,89 @@ def test_subprocess_provider_stages_worker_and_scrubs_application_secrets(
     assert captured["cwd"] == cache.resolve()
     assert json.loads(str(captured["input"]))["request_id"] == request.request_id
     assert result == expected
+
+
+def _symlinks_available(directory: Path) -> bool:
+    """Whether this platform lets an unprivileged process create a symlink.
+
+    Windows refuses without a privilege, and its venvs copy the interpreter rather than
+    symlinking it, so the property the next two tests describe cannot arise there. The gate is
+    on the platform where the behaviour exists, not a convenience skip: on POSIX -- where both
+    `python -m venv` and `uv venv` symlink by default -- these always run.
+    """
+    target = directory / "target"
+    target.touch()
+    try:
+        os.symlink(target, directory / "probe")
+    except (OSError, NotImplementedError):
+        return False
+    return True
+
+
+def test_a_symlinked_venv_interpreter_is_launched_at_the_symlink_not_its_target(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Resolving the interpreter launches the base interpreter, and every forecast then fails.
+
+    `python -m venv` symlinks `bin/python` to the base interpreter by default on POSIX, and
+    `uv venv` always does. The base interpreter has none of the pinned worker packages, so a
+    provider that resolved the path would fail the environment attestation on every request --
+    while looking correctly configured. The venv is identified by its path, not by its target.
+    """
+    if not _symlinks_available(tmp_path):
+        pytest.skip("platform does not support unprivileged symlinks")
+
+    base = tmp_path / "base" / "bin"
+    base.mkdir(parents=True)
+    base_python = base / "python3.11"
+    base_python.touch()
+    venv_bin = tmp_path / "venv" / "bin"
+    venv_bin.mkdir(parents=True)
+    venv_python = venv_bin / "python"
+    os.symlink(base_python, venv_python)
+
+    captured: dict[str, object] = {}
+
+    def fake_run(*args: object, **kwargs: object) -> subprocess.CompletedProcess[str]:
+        captured["command"] = args[0]
+        return subprocess.CompletedProcess(args=args, returncode=1, stdout="", stderr="")
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    provider = KronosSignalProvider(
+        python_executable=venv_python,
+        kronos_repository=tmp_path,
+        cache_directory=tmp_path / "hf-cache",
+    )
+    with pytest.raises(ForecastProviderError):
+        provider.forecast(make_request())
+
+    command = captured["command"]
+    assert isinstance(command, list)
+    assert Path(command[0]) == venv_python, "the base interpreter was launched, not the venv"
+
+
+def test_an_interpreter_symlink_pointing_into_the_elrond_tree_is_refused(
+    tmp_path: Path,
+) -> None:
+    """Not resolving the path must not cost the containment guarantee.
+
+    A symlink sitting outside the tree whose target is inside it would launch Elrond's own
+    interpreter, which can import the registry and the ledger -- exactly what the worker
+    boundary exists to prevent.
+    """
+    if not _symlinks_available(tmp_path):
+        pytest.skip("platform does not support unprivileged symlinks")
+
+    inside_tree = Path(__file__).resolve()  # this test file lives in the Elrond tree
+    disguised = tmp_path / "innocent-python"
+    os.symlink(inside_tree, disguised)
+
+    with pytest.raises(ValueError, match="outside the Elrond working tree"):
+        KronosSignalProvider(
+            python_executable=disguised,
+            kronos_repository=tmp_path,
+            cache_directory=tmp_path / "hf-cache",
+        )
 
 
 def test_forecast_ledger_is_immutable_idempotent_and_has_no_active_tables(

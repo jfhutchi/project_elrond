@@ -140,6 +140,41 @@ Remove-Item Env:HF_HOME
 
 The worker verifies the downloaded `config.json` and single Safetensors file before loading them.
 
+### Linux / WSL equivalent
+
+The same setup on POSIX, which is where the worker has actually been exercised:
+
+```bash
+ELROND_REPO=/path/to/project_elrond
+WORKER_ROOT="$HOME/quantbot-kronos-worker"
+
+uv venv "$WORKER_ROOT/venv" --python 3.11
+VIRTUAL_ENV="$WORKER_ROOT/venv" uv pip install -r "$ELROND_REPO/requirements-kronos-worker.txt"
+
+git clone https://github.com/shiyu-coder/Kronos.git "$WORKER_ROOT/Kronos"
+git -C "$WORKER_ROOT/Kronos" checkout 67b630e67f6a18c9e9be918d9b4337c960db1e9a
+
+HF_HOME="$WORKER_ROOT/cache" "$WORKER_ROOT/venv/bin/python" - <<'EOF'
+from huggingface_hub import snapshot_download
+snapshot_download("NeoQuasar/Kronos-small", revision="901c26c1332695a2a8f243eb2f37243a37bea320")
+snapshot_download("NeoQuasar/Kronos-Tokenizer-base", revision="0e0117387f39004a9016484a186a908917e22426")
+EOF
+```
+
+**Install Torch from PyPI, not the CPU wheel index.** `torch==2.5.1` from the CPU index reports
+its version as `2.5.1+cpu`, which is not the pinned string, and the worker refuses the
+environment. The refusal is correct -- a different build is a different environment -- but the
+failure surfaces as a bare `WORKER_FAILED`, so it is worth knowing before debugging it. The
+default PyPI wheel bundles CUDA libraries and still runs on CPU; expect roughly 3 GB installed.
+
+Worker stderr is deliberately never reflected into records or CLI output, so a failing worker
+reports only `WORKER_FAILED`. To see why, run the staged worker directly:
+
+```bash
+cd "$WORKER_ROOT/cache"
+env -i HF_HOME="$PWD" HF_HUB_OFFLINE=1 TOKENIZERS_PARALLELISM=false TRANSFORMERS_OFFLINE=1   "$WORKER_ROOT/venv/bin/python" -I -B kronos-worker-*.py   --kronos-repository "$WORKER_ROOT/Kronos" --git-executable "$(command -v git)" < request.json
+```
+
 ## Dry run and shadow run
 
 Use a read-only source database that already contains production-format daily bars. The dry run
@@ -193,10 +228,14 @@ evaluator; this integration does not import or execute the protected strategy to
 ## Known limitations and honest evidence status
 
 - No model weights, external Kronos checkout, or dedicated worker environment are shipped with the
-  repository. On the implementation workstation those prerequisites were absent, so no real Kronos
-  inference, latency, CPU/GPU memory, or forecast value is claimed. Successful real runs persist
-  model initialization time, inference time, and peak process memory. The GPU field remains null;
-  GPU measurement is deferred with the CPU-only first integration.
+  repository; each operator stages their own. Real inference has now been exercised on the
+  operator's machine (WSL2 Ubuntu, Python 3.11.15, Torch 2.5.1, CPU only), through
+  `KronosSignalProvider` rather than by calling the model directly: 64 daily bars in, horizon 3,
+  2 sample paths, model initialization 0.23 s, inference 0.18 s, peak process memory 660 MB. The
+  GPU field remains null; GPU measurement is deferred with the CPU-only first integration.
+- **That run establishes plumbing and cost, not forecast value.** The input was a synthetic price
+  series, so the numbers above say what the integration costs to run and nothing about whether
+  Kronos predicts anything. No forecast accuracy is claimed anywhere in this document.
 - The process boundary scrubs application credentials, stages the worker outside the checkout,
   makes Elrond unimportable, disables common socket/process APIs before upstream imports, and runs
   with local-only artifacts. This is defense in depth, not an OS sandbox/chroot. On Windows it does

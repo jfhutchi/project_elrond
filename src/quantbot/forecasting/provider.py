@@ -94,10 +94,16 @@ class KronosSignalProvider:
             raise ValueError("kronos_repository must be an existing directory")
         cache = Path(cache_directory).expanduser().resolve()
         source_root = Path(__file__).resolve().parents[3]
-        worker_python = Path(python_executable).expanduser().resolve()
+        # Absolutised but deliberately not symlink-resolved. `python -m venv` symlinks its
+        # interpreter by default on POSIX, and `uv venv` always does, so resolving would launch
+        # the *base* interpreter -- which has none of the pinned worker packages and fails the
+        # attestation on every request. The venv is identified by the path, not by its target.
+        worker_python = Path(python_executable).expanduser().absolute()
         if not worker_python.is_file():
             raise ValueError("python_executable must be an existing dedicated interpreter")
-        if _inside(worker_python, source_root):
+        # Containment is still checked against the target: a symlink sitting outside the tree
+        # that points into it would otherwise launch Elrond's own interpreter.
+        if _inside(worker_python, source_root) or _inside(worker_python.resolve(), source_root):
             raise ValueError("python_executable must be outside the Elrond working tree")
         git_raw = shutil.which("git")
         if git_raw is None:
