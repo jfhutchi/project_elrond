@@ -22,11 +22,24 @@ version: 1
 # --------------------------------------------------------------------------------------------
 # Status
 # --------------------------------------------------------------------------------------------
-# PROVISIONAL until the operator ratifies it. The values below are not invented: every one is
-# transcribed from rules already recorded in STATUS.md and CLAUDE.md, which is why freezing them
-# is bookkeeping rather than a policy decision an agent made. But transcription is not
-# ratification, and the difference decides whether a candidate may be presented for human
-# live review -- so it is a field rather than a footnote.
+# PROVISIONAL until the operator ratifies it, and PROVISIONAL is not a formality here.
+#
+# An earlier version of this file said every value below was transcribed from rules already
+# recorded in STATUS.md and CLAUDE.md. That was too strong. Each value is now marked:
+#
+#   [TRANSCRIBED] the value already exists as a rule elsewhere in this repository; writing it
+#                 down here is bookkeeping.
+#   [PROPOSED]    an agent picked this number. It is defensible and it is not yet a decision
+#                 the operator has made.
+#
+# Nothing reaches PAPER_QUALIFIED or LIVE_REVIEW_ELIGIBLE while this says PROVISIONAL. Both are
+# statements that evidence cleared a bar, and neither is worth anything while the party writing
+# the bar is also the party announcing it was cleared.
+#
+# To ratify: set status to RATIFIED and fill ratified_by and ratified_at. `ratified_by` must be
+# a person -- a value that reads as an automated identity is refused at load. Ratifying does not
+# change the objective's identity hash, so evidence measured against these values stays valid;
+# changing any value above does, and forces reassessment.
 status: PROVISIONAL
 ratified_by: null
 ratified_at: null
@@ -42,12 +55,16 @@ authored_at: "2026-08-22"
 #   maximise net benchmark-relative growth
 #   subject to the hard constraints below
 #
-# BENCHMARK_RELATIVE_GROWTH, not TERMINAL_WEALTH: the project's own record is that the deployed
-# rotation is beta 0.71 with alpha t=0.05, and a fractional SPY position reproduces it to 0.05
-# CAGR points. Judged on terminal wealth alone, holding more index reads as an improvement.
+# [PROPOSED] BENCHMARK_RELATIVE_GROWTH, not TERMINAL_WEALTH: the project's own record is that
+# the deployed rotation is beta 0.71 with alpha t=0.05, and a fractional SPY position reproduces
+# it to 0.05 CAGR points, so on terminal wealth alone holding more index reads as an improvement.
+# That argument is good and it does not settle the question. A drawdown-constrained growth
+# objective is the obvious alternative and the operator may well prefer it: this file expresses
+# the drawdown limit as a hard constraint rather than as part of what is being maximised, and
+# which of those two shapes is right is a decision about risk appetite, not about statistics.
 objective: BENCHMARK_RELATIVE_GROWTH
 
-# SPY. It is the benchmark every measurement in REFUTED.md is already against, and it is the
+# [TRANSCRIBED] SPY. The benchmark every measurement in REFUTED.md is already against, and the
 # simplest thing the operator could do instead of running any of this.
 benchmark_symbol: SPY
 
@@ -61,35 +78,47 @@ simplest_compliant_baseline: "SPY buy-and-hold, sized to the drawdown constraint
 # --------------------------------------------------------------------------------------------
 # The live paper account. Capacity is judged against the range, not the current balance:
 # an edge that exists only at $100 of notional is not an edge worth the machinery.
+# [TRANSCRIBED] the live paper account balance.
 target_capital_usd: 100
+# [PROPOSED] nothing in the repository fixes the upper end. The number matters because capacity
+# is judged against the range rather than the current balance -- an edge that exists only at $100
+# of notional is not an edge worth the machinery -- so the operator's real intent should replace
+# this before anything is qualified against it.
 intended_capital_range_usd: [100, 10000]
 
+# [TRANSCRIBED] everything the broker integration and the data providers actually support.
 permitted_asset_classes: [US_EQUITY, US_ETF]
 
-# The deployed risk ladder: entry halts at 15%, liquidation at 20%. The constraint is the entry
-# halt, because a strategy that reaches it stops being able to earn the drawdown back --
-# STATUS.md records that the halt has no exit.
+# [TRANSCRIBED] the deployed risk ladder: entry halts at 15%, liquidation at 20%. The constraint
+# is the entry halt, because a strategy that reaches it stops being able to earn the drawdown
+# back -- STATUS.md records that the halt has no exit.
 max_drawdown_bps: 1500
 
-# Reg T caps initial equity leverage at 2x; the drawdown rule caps it near 1x; and constant
-# leverage above ~3.5x measured bankrupt. Long-only, unlevered.
+# [TRANSCRIBED] Reg T caps initial equity leverage at 2x; the drawdown rule caps it near 1x; and
+# constant leverage above ~3.5x measured bankrupt (REFUTED.md). Long-only, unlevered.
 max_gross_exposure_bps: 10000
 max_leverage: 1.0
 
 # --------------------------------------------------------------------------------------------
 # What "meaningfully better" means, frozen before anything is compared
 # --------------------------------------------------------------------------------------------
-# 100bps a year of benchmark-relative return. Below that the comparison is not worth the
-# operational risk of running an autonomous system at all, and the number has to be written
-# down before a candidate is measured or it becomes whatever the candidate scored.
+# [PROPOSED] 100bps a year of benchmark-relative return. The *need* for some threshold is not a
+# policy choice -- without one, any difference is meaningful and the comparison is unfalsifiable
+# -- but the level is, and this level is an agent's guess at what would be worth the operational
+# risk of running an autonomous system. It has to be written down before a candidate is measured
+# or it becomes whatever the candidate scored; it also has to be the operator's number.
 minimum_meaningful_improvement_bps: 100
 
-# Turnover has to pay for itself. Measured NBBO on this universe is ~1.1bps median, and the
-# deployed cost model still charges 5bps per side pending a real slippage sample (n>=30).
+# [PROPOSED] turnover has to pay for itself, but 12 round trips a year is an agent's cap and not
+# a rule this repository records anywhere. The deployed rotation's own turnover was never
+# measured against it.
 max_annual_turnover: 12
+# [TRANSCRIBED] the deployed cost model charges 5bps per side pending a real slippage sample
+# (n>=30). Measured NBBO on this universe is ~1.1bps median, so this is conservative on purpose.
 assumed_round_trip_cost_bps: 10.0
 
-# Long enough that a single regime cannot decide the answer.
+# [PROPOSED] long enough that a single regime cannot decide the answer -- but "long enough" is a
+# judgement about how much of the operator's patience an unproven system is owed, not a fact.
 evaluation_horizon_years: 3
 
 # Not modelled. Recorded so that "tax was not considered" is a stated scope limit rather than

@@ -43,11 +43,14 @@ strategy, so they are not observations of this one.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import math
+import re
 import statistics
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
@@ -75,7 +78,7 @@ from quantbot.research.power import (
     quantize,
 )
 from quantbot.research.power import assess as assess_power
-from quantbot.research.registry import DataRole, HypothesisRegistry
+from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
 from quantbot.storage.repositories import PromotionEvent, PromotionRecord, StorageRepository
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -295,8 +298,31 @@ def survivor_objections(outcome: ExperimentOutcome) -> tuple[str, ...]:
     return tuple(objections)
 
 
+#: Stages that assert something economic about a strategy rather than something procedural.
+#: Both are read by a dashboard, a later agent and an operator as "the paper evidence supports
+#: this", so both have to name the claim, the mandate and the assessment behind them.
+ECONOMIC_STAGES = frozenset({Stage.PAPER_QUALIFIED, Stage.LIVE_REVIEW_ELIGIBLE})
+
+
 class PromotionState(FrozenModel):
-    """Where a strategy has got to, and why it last moved."""
+    """Where a strategy has got to, why it last moved, and what claim it is carrying.
+
+    **The claim is part of the state, and that is the point of this class changing (#53).** It
+    used to be an argument: `promote()` took a `hypothesis_id` at paper qualification and asked
+    research memory whether *that* registration had been refuted. A caller holding the question
+    could therefore pick a convenient unrefuted one and turn a refuted deployment into an edge
+    candidate -- the shape `docs/research-architecture.md` catalogues over and over, *a gate
+    reading its input from the thing it is supposed to constrain*.
+
+    So the binding happens once, at `REGISTERED`, which is the transition that means "a claim has
+    been frozen for this strategy". Nothing later may supply a different one; a strategy that
+    wants a new claim goes back to `CANDIDATE`, which drops the binding and everything above it.
+
+    `objective_identity` and `evidence_identity` are the same argument applied to the mandate and
+    to the assessment. A stage is not provenance: an auditor reading `PAPER_QUALIFIED` should be
+    able to say exactly which forward assessment, under exactly which economic objective,
+    justified it -- and `ECONOMIC_STAGES` cannot be represented at all without both.
+    """
 
     strategy_id: Text
     stage: Stage
@@ -305,6 +331,42 @@ class PromotionState(FrozenModel):
     reason: Text
     actor: Text
     updated_at: datetime
+    #: The frozen registration this strategy is testing, bound at `REGISTERED`.
+    hypothesis_id: str | None = None
+    hypothesis_version: int | None = Field(default=None, ge=1)
+    #: The mandate the qualifying assessment was judged under. Set only by qualification.
+    objective_identity: str | None = None
+    #: The hash of that assessment, so the record names it rather than merely implying one.
+    evidence_identity: str | None = None
+
+    @model_validator(mode="after")
+    def validate_state(self) -> Self:
+        if (self.hypothesis_id is None) != (self.hypothesis_version is None):
+            raise ValueError("a bound claim needs both a hypothesis id and a version")
+        if self.stage in ECONOMIC_STAGES:
+            missing = [
+                name
+                for name, value in (
+                    ("a bound hypothesis", self.hypothesis_id),
+                    ("the objective it was judged under", self.objective_identity),
+                    ("the forward assessment that justified it", self.evidence_identity),
+                )
+                if not value
+            ]
+            if missing:
+                raise ValueError(
+                    f"{self.stage.value} is an economic claim and this state cannot name "
+                    + ", ".join(missing)
+                    + "; a stage is not provenance"
+                )
+        return self
+
+    @property
+    def claim(self) -> tuple[str, int] | None:
+        """The bound registration, or `None` while nothing is frozen behind this strategy."""
+        if self.hypothesis_id is None or self.hypothesis_version is None:
+            return None
+        return (self.hypothesis_id, self.hypothesis_version)
 
     @property
     def eligible_for_human_review(self) -> bool:
@@ -378,6 +440,10 @@ class ForwardStatistics(FrozenModel):
     benchmark_symbol: Text
     #: Consecutive session pairs where both an account equity mark and a benchmark close exist.
     paired_sessions: int = Field(ge=MINIMUM_PAIRED_SESSIONS)
+    #: Pairs discarded because a known exchange session sat between the two dates. Reported
+    #: rather than silently dropped: it is the count of sessions this deployment did not
+    #: qualify, and an operator reading a clean statistic should see how much was skipped.
+    sessions_gapped: int = Field(default=0, ge=0)
     #: Annualised information ratio of the excess return series -- the benchmark-relative form,
     #: because a strategy earning 4% while its benchmark earns 8% has positive P&L and negative
     #: value, and absolute P&L cannot tell those apart.
@@ -421,6 +487,10 @@ class ForwardEvidence:
     #: Which frozen objective this was judged against. A verdict that cannot name its mandate is
     #: a verdict whose success criterion could have been chosen after the fact.
     objective_identity: str
+    #: The claim this window was measured against, read from the strategy's durable binding
+    #: rather than taken from whoever asked for the assessment.
+    hypothesis_id: str | None
+    hypothesis_version: int | None
     role: DeploymentRole
     forward_days: int
     forward_trades: int
@@ -439,6 +509,8 @@ class ForwardEvidence:
         configuration_hash: str,
         assessed_at: datetime,
         objective_identity: str,
+        hypothesis_id: str | None,
+        hypothesis_version: int | None,
         role: DeploymentRole,
         forward_days: int,
         forward_trades: int,
@@ -460,6 +532,8 @@ class ForwardEvidence:
         object.__setattr__(self, "configuration_hash", configuration_hash)
         object.__setattr__(self, "assessed_at", assessed_at)
         object.__setattr__(self, "objective_identity", objective_identity)
+        object.__setattr__(self, "hypothesis_id", hypothesis_id)
+        object.__setattr__(self, "hypothesis_version", hypothesis_version)
         object.__setattr__(self, "role", role)
         object.__setattr__(self, "forward_days", forward_days)
         object.__setattr__(self, "forward_trades", forward_trades)
@@ -469,6 +543,44 @@ class ForwardEvidence:
         object.__setattr__(self, "blocking", tuple(blocking))
         object.__setattr__(self, "unassessed", tuple(unassessed))
         object.__setattr__(self, "verdict", verdict)
+
+    @property
+    def identity(self) -> str:
+        """A hash of everything this assessment asserts, so a promotion can name it (#47).
+
+        `PAPER_QUALIFIED` used to be its own provenance: the stage said a strategy had earned
+        something and nothing durable said what. An auditor asking "which forward assessment
+        justified this, under which mandate, against which claim" had only the free-text reason
+        to go on, and a re-run months later would produce a different number with no way to tell
+        that it had.
+
+        Every field is inside the hash, including `blocking` and `unassessed`. Two assessments
+        reaching the same verdict for different reasons are different assessments.
+        """
+        payload = {
+            "strategy_id": self.strategy_id,
+            "strategy_version": self.strategy_version,
+            "configuration_hash": self.configuration_hash,
+            "assessed_at": self.assessed_at.astimezone(UTC).isoformat(),
+            "objective_identity": self.objective_identity,
+            "hypothesis_id": self.hypothesis_id,
+            "hypothesis_version": self.hypothesis_version,
+            "role": self.role.value,
+            "forward_days": self.forward_days,
+            "forward_trades": self.forward_trades,
+            "luck_threshold_z": str(self.luck_threshold_z),
+            "statistics": (
+                None if self.statistics is None else json.loads(self.statistics.model_dump_json())
+            ),
+            "power": None if self.power is None else json.loads(self.power.model_dump_json()),
+            "blocking": list(self.blocking),
+            "unassessed": list(self.unassessed),
+            "verdict": self.verdict.value,
+        }
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return f"forward-evidence-{digest[:32]}"
 
     @property
     def supported(self) -> bool:
@@ -513,19 +625,59 @@ def _benchmark_closes(
     return closes
 
 
+def _known_sessions(session: Session, *, strategy_id: str, symbol: str) -> tuple[date, ...]:
+    """Every exchange session this database can see, whether or not the strategy qualified it.
+
+    Two independent sources, unioned, because each one misses a different failure:
+
+    * **Benchmark closes.** A bar exists for every session the exchange held, so a session the
+      deployment skipped entirely still appears here.
+    * **`qualification_days` rows of either flag.** The trading system writes a row for a session
+      it *saw*, qualified or not, so a session the market held and the daemon failed on is
+      visible even if the benchmark data is short.
+
+    Neither alone is the exchange calendar and neither needs to be. The question this answers is
+    narrow: "is there a session we know about between these two dates?" -- and any evidence that
+    there is, is enough to refuse the pair.
+    """
+    repository = StorageRepository(session)
+    sessions = {
+        bar.timestamp.astimezone(XNYS_TIMEZONE).date()
+        for bar in repository.list_bars(symbol=symbol)
+    }
+    sessions.update(day.trading_date for day in repository.list_qualification_days(strategy_id))
+    return tuple(sorted(sessions))
+
+
 def _paired_returns(
     ordered_dates: Sequence[date],
     equity: Mapping[date, Decimal],
     benchmark: Mapping[date, Decimal],
-) -> tuple[tuple[float, ...], tuple[float, ...]]:
-    """Consecutive-session returns for both series, kept only where both sides exist.
+    *,
+    known_sessions: Sequence[date],
+) -> tuple[tuple[float, ...], tuple[float, ...], int]:
+    """Adjacent-session returns for both series, kept only where both sides exist.
 
     Paired by construction. An unpaired comparison of a strategy against the index it holds is
     the error that made cycle 11's overnight premium look significant at t=2.74 where the paired
     figure is 0.63 (`REFUTED.md` #17).
+
+    **Adjacent, not merely consecutive in the list (#47).** `ordered_dates` holds the sessions
+    this deployment *qualified*, and a session it failed on leaves no entry. Zipping the list
+    against itself then produces a pair spanning that gap, and a two- or three-session return
+    gets divided by one session's worth of variance and annualised at 252. Every statistic below
+    inflates: the mean excess, the t, the Sharpe and the drawdown all read as though the market
+    moved that much in a day.
+
+    A gapped pair is dropped rather than rescaled. Rescaling would need a dependence model for a
+    multi-session return that this gate does not have, and would quietly re-admit the same
+    arithmetic through a coefficient; dropping loses sample size, which is the direction that
+    fails closed. The count comes back so it can be reported instead of vanishing.
     """
+    position = {day: index for index, day in enumerate(known_sessions)}
     strategy_returns: list[float] = []
     benchmark_returns: list[float] = []
+    gapped = 0
     for previous, current in zip(ordered_dates, ordered_dates[1:], strict=False):
         equity_before = equity.get(previous)
         equity_after = equity.get(current)
@@ -537,9 +689,15 @@ def _paired_returns(
             continue
         if equity_before <= 0 or close_before <= 0:
             continue
+        before, after = position.get(previous), position.get(current)
+        if before is None or after is None or after - before != 1:
+            # Unknown to both session sources is treated as a gap for the same reason a known
+            # gap is: an unverifiable adjacency claim is not an adjacency.
+            gapped += 1
+            continue
         strategy_returns.append(float(equity_after / equity_before - 1))
         benchmark_returns.append(float(close_after / close_before - 1))
-    return tuple(strategy_returns), tuple(benchmark_returns)
+    return tuple(strategy_returns), tuple(benchmark_returns), gapped
 
 
 def _max_drawdown_bps(ordered_dates: Sequence[date], equity: Mapping[date, Decimal]) -> Decimal:
@@ -562,6 +720,7 @@ def _forward_statistics(
     benchmark_returns: Sequence[float],
     drawdown_bps: Decimal,
     sessions_per_year: int,
+    sessions_gapped: int = 0,
 ) -> ForwardStatistics | None:
     count = len(strategy_returns)
     if count < MINIMUM_PAIRED_SESSIONS:
@@ -580,6 +739,7 @@ def _forward_statistics(
     return ForwardStatistics(
         benchmark_symbol=benchmark_symbol,
         paired_sessions=count,
+        sessions_gapped=sessions_gapped,
         excess_sharpe=quantize(mean_excess / spread * math.sqrt(sessions_per_year)),
         excess_t=quantize(mean_excess / (spread / math.sqrt(count))),
         excess_bps_per_year=quantize(mean_excess * sessions_per_year * 10000),
@@ -614,6 +774,55 @@ def _forward_verdict(
     return ForwardVerdict.FORWARD_EDGE_SUPPORTED
 
 
+def bound_claim(session: Session, strategy_id: str) -> tuple[str, int] | None:
+    """The registration this strategy durably says it is testing, or `None`.
+
+    Read from `promotion_state`, which is written only by the ladder and only at `REGISTERED`.
+    That is the whole of #53's fix: the relationship between a deployment and the claim behind
+    it is a durable fact about the deployment, not a parameter of the question being asked
+    about it.
+    """
+    record = StorageRepository(session).get_promotion(strategy_id)
+    if record is None or record.hypothesis_id is None or record.hypothesis_version is None:
+        return None
+    return (record.hypothesis_id, record.hypothesis_version)
+
+
+#: Words long enough to be a topic rather than a connective. Four characters drops "the", "and",
+#: "spy" and "etf"; it keeps "momentum", "overnight", "volatility", "carry", "reversal".
+_LINEAGE_WORD = re.compile(r"[a-z]{4,}")
+
+
+def _lineage_terms(registration: Registration) -> frozenset[str]:
+    """What a legacy refutation would have to be about for it to be about this claim."""
+    draft = registration.draft
+    return frozenset(_LINEAGE_WORD.findall(draft.family_id.lower()))
+
+
+def deployment_role(session: Session, strategy_id: str) -> DeploymentRole:
+    """What this paper deployment is *for*, derived from durable state (#53).
+
+    `EDGE_CANDIDATE` exactly while three things hold at once: the strategy is bound to a frozen
+    registration, that registration exists, and research memory holds no refutation of it. The
+    moment any one stops being true the answer changes on its own -- which a flag written at
+    deployment time would not, because the person filing a refutation is the person least likely
+    to be thinking about the promotion ladder.
+
+    Exported because the dashboard needs the same answer as the gate. Two computations of "is
+    this an edge candidate" would eventually disagree, and the one on the operator's screen is
+    the one that would be believed.
+    """
+    bound = bound_claim(session, strategy_id)
+    if bound is None:
+        return DeploymentRole.OPERATIONAL_BASELINE
+    hypothesis_id, version = bound
+    if HypothesisRegistry(session).get(hypothesis_id, version) is None:
+        return DeploymentRole.OPERATIONAL_BASELINE
+    if ResearchMemory(session).refutations_of(hypothesis_id):
+        return DeploymentRole.OPERATIONAL_BASELINE
+    return DeploymentRole.EDGE_CANDIDATE
+
+
 def assess_forward_evidence(
     session: Session,
     *,
@@ -623,8 +832,6 @@ def assess_forward_evidence(
     account_id: str,
     objective: EconomicObjective,
     assessed_at: datetime,
-    hypothesis_id: str | None = None,
-    hypothesis_version: int = 1,
 ) -> ForwardEvidence:
     """Read what the forward account says about the frozen claim, and refuse to flatter it.
 
@@ -664,16 +871,23 @@ def assess_forward_evidence(
     smaller improvement threshold. Freezing them one level above the experiment is #54's whole
     point -- a system that can search definitions of success will find one.
 
-    Neither the claim nor the luck bar is an argument. Both are read here: the effect
-    specification comes from the frozen registration named by `hypothesis_id`, and the burden
-    comes from the registry as it stands *now* rather than as it stood when the hypothesis was
-    filed. A caller able to hand this function an `EffectSpecification` could declare a large
-    expected effect, and a large expected effect needs a small sample -- which is the fail-open
-    direction, and the exact shape `docs/research-architecture.md` catalogues five times.
+    **Nothing about the claim is an argument any more.** Which hypothesis stands behind this
+    deployment is read from `promotion_state`; the effect specification is read from that
+    registration; and the luck bar is read from the registry as it stands *now* rather than as
+    it stood when the hypothesis was filed. This function used to take a `hypothesis_id`, and
+    #53's review found the hole that leaves: a caller could offer a convenient unrefuted
+    registration and a refuted deployment would come back `EDGE_CANDIDATE`. A caller able to
+    hand this function an `EffectSpecification` could go further and declare a large expected
+    effect, which needs a small sample -- the fail-open direction, and the exact shape
+    `docs/research-architecture.md` catalogues five times.
     """
+    bound = bound_claim(session, strategy_id)
+    hypothesis_id, hypothesis_version = bound if bound is not None else (None, None)
     registry = HypothesisRegistry(session)
     registration = (
-        registry.get(hypothesis_id, hypothesis_version) if hypothesis_id is not None else None
+        registry.get(hypothesis_id, hypothesis_version)
+        if hypothesis_id is not None and hypothesis_version is not None
+        else None
     )
     claim = registration.draft.effect if registration is not None else None
     cumulative_trials = registry.cumulative_trials()
@@ -693,12 +907,18 @@ def assess_forward_evidence(
     wanted = frozenset(ordered_dates)
     equity = _session_equity(session, account_id=account_id, dates=wanted)
     benchmark = _benchmark_closes(session, symbol=objective.benchmark_symbol, dates=wanted)
-    strategy_returns, benchmark_returns = _paired_returns(ordered_dates, equity, benchmark)
+    strategy_returns, benchmark_returns, gapped = _paired_returns(
+        ordered_dates,
+        equity,
+        benchmark,
+        known_sessions=_known_sessions(
+            session, strategy_id=strategy_id, symbol=objective.benchmark_symbol
+        ),
+    )
 
     threshold = luck_threshold(cumulative_trials)
     blocking: list[str] = []
     unassessed: list[str] = []
-    refuted = False
 
     if days < MINIMUM_FORWARD_DAYS:
         blocking.append(f"{days} of {MINIMUM_FORWARD_DAYS} authentic forward days")
@@ -715,6 +935,7 @@ def assess_forward_evidence(
             if claim is not None
             else DEFAULT_SESSIONS_PER_YEAR
         ),
+        sessions_gapped=gapped,
     )
     if report is None:
         blocking.append(
@@ -732,15 +953,15 @@ def assess_forward_evidence(
     else:
         power = assess_power(
             hypothesis_id=hypothesis_id or strategy_id,
-            version=hypothesis_version,
+            version=hypothesis_version or 1,
             stage="FORWARD_QUALIFICATION",
             specification=claim,
             observations_available=max(len(strategy_returns), 1),
             cumulative_trials=cumulative_trials,
             assessed_at=assessed_at,
         )
-        refutations = ResearchMemory(session).refutations_of(hypothesis_id or "")
-        refuted = bool(refutations)
+        memory = ResearchMemory(session)
+        refutations = memory.refutations_of(hypothesis_id or "")
         if refutations:
             blocking.append(
                 "the claim behind this deployment is refuted by "
@@ -748,6 +969,25 @@ def assess_forward_evidence(
                 + "; authentic paper days do not rehabilitate a mechanism by existing, and a "
                 "new question about it needs a new registration rather than a reinterpretation "
                 "of a deployment already running"
+            )
+        # #53.7: an exact-id lookup is right for work registered under this schema and blind to
+        # everything imported from REFUTED.md, which predates hypothesis ids entirely. Absence
+        # of a matching id is therefore not evidence that a known-refuted mechanism is clean --
+        # and the quiet version of that mistake is the one that promotes something. These land
+        # in `unassessed`, which blocks support without claiming a refutation: what is true is
+        # that nobody has decided whether these findings are about this claim.
+        unlinked = (
+            memory.unlinked_refutations(_lineage_terms(registration))
+            if registration is not None
+            else []
+        )
+        if unlinked:
+            unassessed.append(
+                "refutations carrying no hypothesis lineage share this claim's subject matter "
+                "and have not been adjudicated against it: "
+                + ", ".join(f"{record.record_id} ({record.subject})" for record in unlinked)
+                + "; they predate registration, so an exact-id lookup finding nothing says "
+                "nothing about them"
             )
         if claim.estimand is not Estimand.SHARPE:
             unassessed.append(
@@ -771,6 +1011,12 @@ def assess_forward_evidence(
             f"{len(incidents)} unresolved integrity incident(s) stand over this evidence window"
         )
 
+    # #54: `PAPER_QUALIFIED` is already an economic-success label, and an agent that writes
+    # the hurdle and then announces its evidence cleared it has not been gated. This used to
+    # apply only at `LIVE_REVIEW_ELIGIBLE`. The forward numbers below are still computed and
+    # still reported -- observing continues, and the evidence accrues -- but the verdict cannot
+    # read as support until the operator owns the definition of success it is measured against.
+    blocking.extend(objective.ratification_objections())
     if objective.objective is not Objective.BENCHMARK_RELATIVE_GROWTH:
         # The measurement below is a benchmark-relative one. Reporting it against a mandate
         # asking for something else would be answering a question nobody asked and calling it
@@ -805,18 +1051,15 @@ def assess_forward_evidence(
                 f"{threshold} bar; a positive excess that is index exposure is not an edge"
             )
 
-    role = (
-        DeploymentRole.EDGE_CANDIDATE
-        if registration is not None and not refuted
-        else DeploymentRole.OPERATIONAL_BASELINE
-    )
     return ForwardEvidence(
         strategy_id=strategy_id,
         strategy_version=strategy_version,
         configuration_hash=configuration_hash,
         assessed_at=assessed_at,
         objective_identity=objective.identity,
-        role=role,
+        hypothesis_id=hypothesis_id,
+        hypothesis_version=hypothesis_version,
+        role=deployment_role(session, strategy_id),
         forward_days=days,
         forward_trades=trades,
         luck_threshold_z=threshold,
@@ -847,6 +1090,8 @@ def promote(
     observations: LedgerObservations | None = None,
     evidence: ForwardEvidence | None = None,
     objective: EconomicObjective | None = None,
+    hypothesis_id: str | None = None,
+    hypothesis_version: int = 1,
     integrity_clear: bool = True,
 ) -> PromotionState:
     """Move a strategy up, refusing every stage it has not earned.
@@ -858,6 +1103,14 @@ def promote(
     counts are an **authenticity** floor -- real sessions happened and nobody invented them --
     and `evidence` is the **economic** question those sessions were supposed to answer. Thirty
     losing trades satisfy the first completely.
+
+    **`hypothesis_id` is accepted at exactly one transition, `REGISTERED`, and refused at every
+    other (#53).** That is the difference between a claim a strategy carries and a claim
+    supplied by whoever is asking for the promotion. The old signature took the id at paper
+    qualification, so a caller could offer a convenient unrefuted registration for a strategy
+    whose real mechanism had been refuted, and the gate would dutifully find no refutation of
+    the thing it was handed. Re-binding is refused too: a strategy that needs a different claim
+    goes back to `CANDIDATE`, which drops the binding and everything earned above it.
     """
     if target not in ALLOWED_PROMOTIONS[state.stage]:
         raise PromotionRefused(
@@ -868,6 +1121,45 @@ def promote(
     if not integrity_clear:
         raise PromotionRefused(
             state.strategy_id, target, "an unresolved evidence-integrity violation stands"
+        )
+
+    update: dict[str, object] = {
+        "stage": target,
+        "reason": reason,
+        "actor": actor,
+        "updated_at": now,
+        # `PAPER_QUALIFIED -> PAPER_OBSERVATION` and `RESEARCH_SURVIVOR -> REGISTERED` are in the
+        # transition table, so this function walks downward too, and a stage a strategy no
+        # longer holds must not leave its provenance behind for the next reader. Applied first
+        # so the `PAPER_QUALIFIED` branch below writes over it with the real values.
+        **_dropped_by(target),
+    }
+
+    if target is Stage.REGISTERED:
+        if hypothesis_id is None:
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                "REGISTERED means a claim has been frozen for this strategy, so it needs the "
+                "registration it is testing; a deployment with no claim behind it can never be "
+                "anything but an operational baseline",
+            )
+        if state.claim is not None and state.claim != (hypothesis_id, hypothesis_version):
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                f"already bound to {state.hypothesis_id} v{state.hypothesis_version}; a "
+                "different claim is a different question, and swapping one in here is how a "
+                "refuted mechanism acquires an unrefuted alibi. Demote to CANDIDATE first",
+            )
+        update["hypothesis_id"] = hypothesis_id
+        update["hypothesis_version"] = hypothesis_version
+    elif hypothesis_id is not None:
+        raise PromotionRefused(
+            state.strategy_id,
+            target,
+            "the claim behind a strategy is bound at REGISTERED and read thereafter; supplying "
+            "one here would let the caller choose which claim the gate checks",
         )
 
     if target is Stage.RESEARCH_SURVIVOR:
@@ -912,6 +1204,17 @@ def promote(
                 "forward evidence comes from assess_forward_evidence(); an object assembled by "
                 "a caller is not a measurement, whatever it reports"
             )
+        if evidence.strategy_id != state.strategy_id:
+            # Version and configuration were checked here and the identity itself was not, so
+            # an assessment of a *different strategy* on the same version and config hash
+            # transferred cleanly. Two strategies sharing a config is not exotic -- it is what
+            # a fork, a rename or an A/B deployment looks like (#47).
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                f"the evidence measures {evidence.strategy_id}, not {state.strategy_id}; a "
+                "matching version and configuration hash is not a matching strategy",
+            )
         if (evidence.strategy_version, evidence.configuration_hash) != (
             state.strategy_version,
             state.configuration_hash,
@@ -923,14 +1226,33 @@ def promote(
                 f"{evidence.configuration_hash} and this strategy is now "
                 f"{state.strategy_version}/{state.configuration_hash}",
             )
+        if state.claim is None:
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                "no frozen claim is bound to this strategy, so there is nothing for the forward "
+                "window to have supported; qualification is a statement about a hypothesis",
+            )
+        if (evidence.hypothesis_id, evidence.hypothesis_version) != state.claim:
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                f"the evidence was measured against {evidence.hypothesis_id} "
+                f"v{evidence.hypothesis_version} and this strategy is bound to "
+                f"{state.hypothesis_id} v{state.hypothesis_version}",
+            )
         if not evidence.supported:
             raise PromotionRefused(state.strategy_id, target, evidence.explain())
+        # The provenance the stage on its own does not carry: which assessment, under which
+        # mandate. Both are recorded on the state and on the append-only event, so a later
+        # audit can answer "what justified this" without re-deriving it from a free-text reason.
+        update["objective_identity"] = evidence.objective_identity
+        update["evidence_identity"] = evidence.identity
 
     if target is Stage.LIVE_REVIEW_ELIGIBLE:
-        # The last rung before a human looks. It is the one place the mandate's *ratification*
-        # matters rather than merely its contents: everything below can be judged against a
-        # transcribed objective, but putting a candidate in front of the operator as satisfying
-        # their objective requires that they said it was theirs.
+        # The last rung before a human looks. Ratification is checked at `PAPER_QUALIFIED` too
+        # now (#54), so what this rung adds is *sameness*: the mandate offered here has to be
+        # the one the qualifying assessment was measured against.
         if objective is None:
             raise PromotionRefused(
                 state.strategy_id,
@@ -938,13 +1260,41 @@ def promote(
                 "no economic objective was supplied; a candidate cannot be offered for human "
                 "review without naming the mandate it satisfies",
             )
-        objections = objective.live_review_objections()
+        objections = objective.ratification_objections()
         if objections:
             raise PromotionRefused(state.strategy_id, target, "; ".join(objections))
+        if objective.identity != state.objective_identity:
+            # A looser mandate must force reassessment rather than inherit qualification. The
+            # identity covers every policy value and excludes ratification metadata, so this
+            # fires when the *rules* moved and stays quiet when only the signature arrived.
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                f"qualified under {state.objective_identity} and offered for review under "
+                f"{objective.identity}; the objective moved, so the forward window has not "
+                "been judged against the objective it is about to be presented as meeting",
+            )
 
-    return state.model_copy(
-        update={"stage": target, "reason": reason, "actor": actor, "updated_at": now}
-    )
+    return state.model_copy(update=update)
+
+
+def _dropped_by(target: Stage) -> dict[str, object]:
+    """What a strategy stops carrying when it falls to `target`.
+
+    Below `PAPER_QUALIFIED` there is no qualifying assessment any more, so the mandate and
+    evidence identities go with it -- leaving them would let a stale `evidence_identity` sit on
+    a strategy whose claim has since died and read as provenance for a stage it no longer holds.
+    At `CANDIDATE` the binding itself goes, which is what makes `CANDIDATE` the one honest route
+    to a different hypothesis.
+    """
+    dropped: dict[str, object] = {}
+    if _rank(target) < _rank(Stage.PAPER_QUALIFIED):
+        dropped["objective_identity"] = None
+        dropped["evidence_identity"] = None
+    if target is Stage.CANDIDATE:
+        dropped["hypothesis_id"] = None
+        dropped["hypothesis_version"] = None
+    return dropped
 
 
 def demote(
@@ -960,7 +1310,13 @@ def demote(
             state.strategy_id, target, f"{target.value} is not below {state.stage.value}"
         )
     return state.model_copy(
-        update={"stage": target, "reason": reason, "actor": actor, "updated_at": now}
+        update={
+            "stage": target,
+            "reason": reason,
+            "actor": actor,
+            "updated_at": now,
+            **_dropped_by(target),
+        }
     )
 
 
@@ -986,6 +1342,10 @@ def material_change(
             "reason": "material change; forward qualification restarted",
             "actor": "promotion-ladder",
             "updated_at": now,
+            # The binding survives -- the claim is about a mechanism, and editing a config does
+            # not ask a different question. The qualification does not: it was measured on a
+            # strategy that no longer exists.
+            **_dropped_by(demoted),
         }
     )
 
@@ -1014,9 +1374,11 @@ def forward_progress(
 
 __all__ = [
     "ALLOWED_PROMOTIONS",
+    "ECONOMIC_STAGES",
     "MINIMUM_FORWARD_DAYS",
     "MINIMUM_FORWARD_TRADES",
     "MINIMUM_PAIRED_SESSIONS",
+    "REFUTED_CLAIM_FLOOR",
     "DeploymentRole",
     "ForwardEvidence",
     "ForwardObservation",
@@ -1029,9 +1391,12 @@ __all__ = [
     "PromotionState",
     "Stage",
     "assess_forward_evidence",
+    "bound_claim",
     "count_forward_days",
     "demote",
     "demote_on_integrity_incidents",
+    "demote_on_refuted_claims",
+    "deployment_role",
     "forward_progress",
     "material_change",
     "observe_forward_days",
@@ -1128,6 +1493,55 @@ def demote_on_integrity_incidents(
     return IntegritySweep(demoted=tuple(demoted), unattributed=tuple(unattributed))
 
 
+#: Where a strategy lands when the claim behind it is refuted. It keeps trading paper -- the
+#: fills, the reconciliation and the recovery evidence are all still worth having -- and stops
+#: being a candidate for anything.
+REFUTED_CLAIM_FLOOR = Stage.PAPER_OBSERVATION
+
+
+def demote_on_refuted_claims(
+    session: Session,
+    *,
+    now: datetime,
+    actor: str = "claim-invalidation-sweep",
+) -> tuple[PromotionState, ...]:
+    """Drop every qualified strategy whose bound claim has since been refuted (#53).
+
+    `deployment_role` already answers correctly the next time anything asks. That is not enough:
+    the next thing to ask might be a qualification attempt months away, and in the meantime the
+    dashboard, the status file and any agent reading `promotion_state` all see `PAPER_QUALIFIED`
+    on a strategy whose mechanism died. A derived answer nobody derives is a stale answer.
+
+    Only the two economic stages are swept. A strategy at `SHADOW` or `PAPER_OBSERVATION` is not
+    claiming anything a refutation contradicts, and demoting it further would stop the
+    operational evidence #53 explicitly asks to preserve. The forward observations themselves
+    are never touched: the sessions happened, and deleting them would be its own fabrication.
+    """
+    repository = StorageRepository(session)
+    ladder = PromotionLedger(session)
+    memory = ResearchMemory(session)
+    demoted: list[PromotionState] = []
+    for record in repository.list_promotions():
+        if Stage(record.stage) not in ECONOMIC_STAGES or record.hypothesis_id is None:
+            continue
+        refutations = memory.refutations_of(record.hypothesis_id)
+        if not refutations:
+            continue
+        demoted.append(
+            ladder.demote(
+                record.strategy_id,
+                REFUTED_CLAIM_FLOOR,
+                actor=actor,
+                reason=(
+                    f"{record.hypothesis_id} refuted by "
+                    + ", ".join(item.record_id for item in refutations)
+                ),
+                now=now,
+            )
+        )
+    return tuple(demoted)
+
+
 class PromotionLedger:
     """The durable ladder: load where a strategy is, apply the rules, record that it moved.
 
@@ -1158,6 +1572,10 @@ class PromotionLedger:
             reason=record.reason,
             actor=record.actor,
             updated_at=record.updated_at,
+            hypothesis_id=record.hypothesis_id,
+            hypothesis_version=record.hypothesis_version,
+            objective_identity=record.objective_identity,
+            evidence_identity=record.evidence_identity,
         )
 
     def enter(self, state: PromotionState) -> PromotionState:
@@ -1166,12 +1584,25 @@ class PromotionLedger:
         Re-entering would silently discard everything the strategy had earned, and would do it
         through the same call that legitimately starts one -- so it is refused rather than
         treated as an upsert.
+
+        Entering *at* an economic stage is refused outright. Every gate in this module hangs off
+        `promote()`, and a strategy inserted straight into `PAPER_QUALIFIED` would have passed
+        none of them while carrying a state that says it passed all of them. Entering lower is
+        legitimate -- a deployment that already exists has to get onto the ladder somehow -- and
+        it claims nothing.
         """
         if self._repository.get_promotion(state.strategy_id) is not None:
             raise PromotionRefused(
                 state.strategy_id,
                 state.stage,
                 "already on the ladder; use promote or demote rather than re-entering",
+            )
+        if state.stage in ECONOMIC_STAGES:
+            raise PromotionRefused(
+                state.strategy_id,
+                state.stage,
+                f"{state.stage.value} is earned through promote(), which reads the forward "
+                "ledger; entering at it would assert a qualification no gate ever ran",
             )
         self._save(state, direction="PROMOTION")
         return state
@@ -1209,8 +1640,16 @@ class PromotionLedger:
         test walks `src/` and fails if anything in production passes it, the same arrangement
         `issue_measured_readiness` uses: the boundary is that exactly one path reaches it, and
         that is checked rather than assumed.
+
+        `hypothesis_id` is forwarded to `promote()`, which accepts it only at `REGISTERED`. It
+        is deliberately *not* forwarded to `assess_forward_evidence`, which reads the binding
+        out of `promotion_state` instead: the claim behind a deployment is a durable fact about
+        the deployment, and a gate told which claim to check is not checking anything (#53).
         """
         state = self._require(strategy_id)
+        if hypothesis_id is not None:
+            kwargs["hypothesis_id"] = hypothesis_id
+            kwargs["hypothesis_version"] = hypothesis_version
         # Only once the move is legal. An illegal transition should say so, rather than
         # complaining about the inputs of a stage it was never going to reach.
         if target is Stage.LIVE_REVIEW_ELIGIBLE and target in ALLOWED_PROMOTIONS[state.stage]:
@@ -1271,8 +1710,6 @@ class PromotionLedger:
                 account_id=account_id,
                 objective=objective,
                 assessed_at=assessed_at,
-                hypothesis_id=hypothesis_id,
-                hypothesis_version=hypothesis_version,
             )
         moved = promote(state, target, **kwargs)  # type: ignore[arg-type]
         self._save(moved, direction="PROMOTION")
@@ -1306,6 +1743,10 @@ class PromotionLedger:
                 reason=state.reason,
                 actor=state.actor,
                 updated_at=state.updated_at,
+                hypothesis_id=state.hypothesis_id,
+                hypothesis_version=state.hypothesis_version,
+                objective_identity=state.objective_identity,
+                evidence_identity=state.evidence_identity,
             ),
             direction=direction,
         )

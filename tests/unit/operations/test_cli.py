@@ -309,9 +309,12 @@ def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach
             occurred_at=moment,
         )
         PromotionLedger(session).enter(
+            # PAPER_OBSERVATION rather than PAPER_QUALIFIED: an economic stage is now earned
+            # through `promote()` reading the ledger and cannot be entered at. The sweep drops
+            # anything above `INTEGRITY_FLOOR`, so what is under test is unchanged.
             PromotionState(
                 strategy_id="adaptive-momentum",
-                stage=Stage.PAPER_QUALIFIED,
+                stage=Stage.PAPER_OBSERVATION,
                 strategy_version="1.3.0",
                 configuration_hash="cfg-abc",
                 reason="seeded",
@@ -332,7 +335,7 @@ def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach
     assert main(["integrity-sweep", "--dry-run"], context=context, output=dry) == 0
     with database.transaction() as session:
         unchanged = PromotionLedger(session).current("adaptive-momentum")
-    assert unchanged is not None and unchanged.stage is Stage.PAPER_QUALIFIED, (
+    assert unchanged is not None and unchanged.stage is Stage.PAPER_OBSERVATION, (
         "--dry-run must not move anything"
     )
 

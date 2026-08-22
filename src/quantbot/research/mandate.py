@@ -20,12 +20,26 @@ and the content hash makes it visible to the code, and both are needed for the a
 requirement: a change creates a new version prospectively and never retroactively relabels
 evidence gathered under the old one.
 
-**`PROVISIONAL` is load-bearing.** `config/economic-objective-v1.yaml` transcribes rules already
-recorded in `STATUS.md` and `CLAUDE.md`, which is why writing it down is bookkeeping rather than
-an agent setting the project's goals. Transcription is not ratification, though, and the
-difference is exactly what decides whether a candidate may be put in front of a human for live
-review. So it is a field, `ratified()` is a method, and an unratified mandate freezes the
-objective without authorising anything.
+**`PROVISIONAL` is load-bearing, and it is not merely bookkeeping.** An earlier version of this
+module said every value in `config/economic-objective-v1.yaml` was transcribed from rules already
+recorded in `STATUS.md` and `CLAUDE.md`. That was too strong, and #54's review said so: the
+drawdown ceiling, the leverage cap and the benchmark are transcriptions, but the intended capital
+range, the 100bps improvement threshold, the turnover cap, the three-year horizon and the choice
+of `BENCHMARK_RELATIVE_GROWTH` over a drawdown-constrained growth objective are **proposals**. They
+are defensible; they are still policy an agent picked.
+
+So an unratified mandate freezes the objective and authorises nothing -- not live review, and
+**not `PAPER_QUALIFIED` either**. `PAPER_QUALIFIED` is already an economic-success label, and an
+agent that can write the hurdle and then announce its evidence cleared it has not been gated at
+all; it has been asked politely.
+
+**Ratification does not change the objective's identity.** `content_hash` covers the economic
+content only -- the objective, the benchmark, the constraints, the thresholds -- and excludes
+`status`, `ratified_by`, `ratified_at` and the authorship fields. That is the lifecycle #54 asked
+to be made explicit rather than left accidental: ratifying is the operator accepting a fixed set
+of policy values, so it must not silently turn one economic objective into a different one and
+invalidate evidence gathered under it. Changing any *policy* value does change the identity, which
+is the half that has to keep working.
 """
 
 from __future__ import annotations
@@ -78,6 +92,42 @@ class MandateError(ValueError):
     """Raised when the objective cannot be read, or reads as something it must not."""
 
 
+#: Fields describing the mandate's *lifecycle and provenance* rather than its economic content.
+#: Excluded from `content_hash` so that ratifying a set of policy values does not change which
+#: set of policy values it is (#54). A candidate assessed under identity X stays assessed under
+#: identity X when the operator signs it; the alternative silently invalidates evidence at the
+#: exact moment the objective becomes usable.
+LIFECYCLE_FIELDS = frozenset(
+    {"status", "ratified_by", "ratified_at", "authored_by", "authored_at"}
+)
+
+#: Substrings that mark a ratifier as automated. Ratification is the one act in this file that
+#: only a human may perform, and an agent naming itself as the ratifier is the honest version of
+#: the failure -- so it is the version that gets refused. This does not stop an agent typing the
+#: operator's name; nothing in software can. It stops ratification happening as a side effect of
+#: an agent tidying a config, which is how it would actually occur.
+#:
+#: Substring matching over-matches -- "Solomon" and "Abbott" contain "sol" and "bot" -- and that
+#: direction is deliberate. A false refusal costs a human one edit and says exactly why; a false
+#: acceptance is an agent having set this project's definition of success. The error names the
+#: substring it matched so the fix is obvious.
+_AUTOMATED_RATIFIER = (
+    "claude",
+    "gpt",
+    "opus",
+    "sonnet",
+    "haiku",
+    "codex",
+    "sol",
+    "agent",
+    "llm",
+    "bot",
+    "copilot",
+    "assistant",
+    "automation",
+)
+
+
 class EconomicObjective(BaseModel):
     """The frozen deployment mandate. Immutable, versioned, and hashed.
 
@@ -123,6 +173,15 @@ class EconomicObjective(BaseModel):
         ratification = (self.ratified_by, self.ratified_at)
         if self.status is MandateStatus.RATIFIED and any(item is None for item in ratification):
             raise ValueError("a ratified mandate records who ratified it and when")
+        if self.status is MandateStatus.RATIFIED:
+            ratifier = (self.ratified_by or "").lower()
+            automated = [mark for mark in _AUTOMATED_RATIFIER if mark in ratifier]
+            if automated:
+                raise ValueError(
+                    f"{self.ratified_by!r} reads as an automated ratifier ({automated[0]!r}): "
+                    "an agent may propose what this project optimises and may not ratify it, "
+                    "because a hurdle written and signed by the same party is not a hurdle"
+                )
         if self.status is not MandateStatus.RATIFIED and any(
             item is not None for item in ratification
         ):
@@ -136,10 +195,18 @@ class EconomicObjective(BaseModel):
 
     @property
     def content_hash(self) -> str:
-        """SHA256 of the canonical objective, so a candidate can name what it was judged under."""
+        """SHA256 of the *economic content*, so a candidate can name what it was judged under.
+
+        `LIFECYCLE_FIELDS` are excluded deliberately. The identity answers "which set of policy
+        values was this measured against", and the operator signing an unchanged set of values
+        does not change which set they are. Every policy field is inside the hash, so loosening
+        the drawdown ceiling or the improvement threshold does produce a different objective --
+        which is the direction that has to keep working.
+        """
         payload: dict[str, Any] = json.loads(self.model_dump_json())
+        content = {key: value for key, value in payload.items() if key not in LIFECYCLE_FIELDS}
         return hashlib.sha256(
-            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(content, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
 
     @property
@@ -149,8 +216,15 @@ class EconomicObjective(BaseModel):
     def ratified(self) -> bool:
         return self.status is MandateStatus.RATIFIED
 
-    def live_review_objections(self) -> tuple[str, ...]:
-        """Why this mandate cannot yet back a human live-review claim.
+    def ratification_objections(self) -> tuple[str, ...]:
+        """Why this mandate cannot back a claim that a strategy met the project's objective.
+
+        Read at both `PAPER_QUALIFIED` and `LIVE_REVIEW_ELIGIBLE`, because both are statements
+        that evidence cleared a bar and neither is safe while an agent still owns the bar. The
+        earlier design let qualification proceed on a provisional mandate and required
+        ratification only at the last rung; #54's review challenged that and was right --
+        `PAPER_QUALIFIED` is the label a dashboard, a later agent and an operator all read as
+        "the paper evidence supports this".
 
         Separated from `ratified()` because the caller needs the reason, not the boolean: an
         operator told "not eligible" without being told the objective is still unratified will
@@ -163,9 +237,11 @@ class EconomicObjective(BaseModel):
             )
         if not self.ratified():
             return (
-                f"{self.identity} is {self.status.value}: the economic objective it freezes was "
-                "transcribed from the project's own documents rather than ratified by the "
-                "operator, and only the operator decides what this project is optimising",
+                f"{self.identity} is {self.status.value}: several of the values it freezes -- the "
+                "intended capital range, the minimum meaningful improvement, the turnover cap, "
+                "the evaluation horizon and the choice of objective itself -- are proposals an "
+                "agent wrote rather than decisions the operator made, and a hurdle set and "
+                "cleared by the same party is not a hurdle",
             )
         return ()
 
@@ -198,6 +274,7 @@ def load_economic_objective(path: str | Path = DEFAULT_MANDATE_PATH) -> Economic
 
 __all__ = [
     "DEFAULT_MANDATE_PATH",
+    "LIFECYCLE_FIELDS",
     "EconomicObjective",
     "MandateError",
     "MandateStatus",

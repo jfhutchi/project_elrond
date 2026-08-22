@@ -44,15 +44,17 @@ def test_the_projects_objective_loads_and_says_what_it_is_optimising() -> None:
 def test_the_shipped_objective_is_not_yet_the_operators() -> None:
     """`PROVISIONAL` is the honest state and it has consequences.
 
-    Every value in the file is transcribed from STATUS.md and CLAUDE.md, which is why writing it
-    down is bookkeeping rather than an agent choosing the project's goals. Transcription is not
-    ratification, and only the operator decides what this project is optimising.
+    An earlier version of this test said every value in the file was transcribed from STATUS.md
+    and CLAUDE.md, so freezing them was bookkeeping. #54's review disagreed and was right: the
+    capital range, the improvement threshold, the turnover cap, the horizon and the choice of
+    objective are proposals an agent wrote. Only the operator decides what this project is
+    optimising, and until they do, nothing here may claim to have met it.
     """
     frozen = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
 
     assert frozen.status is MandateStatus.PROVISIONAL
     assert not frozen.ratified()
-    objections = frozen.live_review_objections()
+    objections = frozen.ratification_objections()
     assert objections, "an unratified objective must not back a human live-review claim"
     assert "PROVISIONAL" in objections[0]
 
@@ -68,11 +70,11 @@ def test_a_ratified_objective_clears_live_review_and_a_superseded_one_does_not()
         }
     )
     assert ratified.ratified()
-    assert ratified.live_review_objections() == ()
+    assert ratified.ratification_objections() == ()
 
     superseded = frozen.model_copy(update={"status": MandateStatus.SUPERSEDED})
-    assert superseded.live_review_objections()
-    assert "superseded" in superseded.live_review_objections()[0]
+    assert superseded.ratification_objections()
+    assert "superseded" in superseded.ratification_objections()[0]
 
 
 def test_claimed_ratification_without_a_ratifier_is_refused() -> None:
@@ -146,3 +148,88 @@ def test_only_the_ladder_reads_a_mandate_from_anywhere_but_disk() -> None:
         "a mandate loaded from a caller-chosen path is a definition of success a caller chose: "
         f"{callers}"
     )
+
+
+PROPOSED_BY_AN_AGENT = (
+    "intended_capital_range_usd",
+    "minimum_meaningful_improvement_bps",
+    "max_annual_turnover",
+    "evaluation_horizon_years",
+    "objective",
+)
+
+
+def test_every_value_an_agent_chose_says_so_in_the_file() -> None:
+    """The five values #54's review could not trace to an operator decision are marked.
+
+    A mandate whose comments claim more provenance than it has is worse than one with no
+    comments: an operator skimming it for what still needs deciding would find nothing, ratify
+    it, and have ratified an agent's guesses at what the project is for. The marking is the
+    deliverable, so it is what gets pinned.
+    """
+    lines = (REPOSITORY / DEFAULT_MANDATE_PATH).read_text(encoding="utf-8").splitlines()
+    for key in PROPOSED_BY_AN_AGENT:
+        index = next(i for i, line in enumerate(lines) if line.startswith(f"{key}:"))
+        preamble: list[str] = []
+        while index and lines[index - 1].startswith("#"):
+            index -= 1
+            preamble.append(lines[index])
+        assert any("[PROPOSED]" in line for line in preamble), (
+            f"{key} is a policy value an agent chose and the file does not say so"
+        )
+
+
+def test_ratifying_does_not_change_which_objective_it_is() -> None:
+    """The lifecycle #54 asked to be explicit rather than accidental.
+
+    If ratification changed the content hash, the operator's signature would invalidate every
+    assessment made against the values they were signing -- at the exact moment those values
+    became usable. Policy edits must change the identity; the signature must not.
+    """
+    frozen = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
+    ratified = frozen.model_copy(
+        update={
+            "status": MandateStatus.RATIFIED,
+            "ratified_by": "hutch",
+            "ratified_at": date(2026, 8, 22),
+        }
+    )
+
+    assert ratified.identity == frozen.identity
+    assert ratified.content_hash == frozen.content_hash
+    # And the half that has to keep working: a policy edit is a different objective.
+    assert frozen.model_copy(update={"max_annual_turnover": 24}).identity != frozen.identity
+    assert (
+        frozen.model_copy(update={"minimum_meaningful_improvement_bps": 1}).identity
+        != frozen.identity
+    )
+
+
+def test_an_agent_cannot_ratify_the_projects_objective() -> None:
+    """`ratified_by` naming an automated identity is refused (#54).
+
+    This cannot stop an agent typing the operator's name, and nothing in software can. It stops
+    the realistic version: a coding agent that has just written a mandate flipping `status` to
+    RATIFIED as part of tidying it up, honestly signing its own work.
+    """
+    frozen = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
+    for ratifier in ("claude-opus-5", "GPT-5.6 Sol", "research-agent", "elrond-bot"):
+        with pytest.raises(ValueError, match="automated ratifier"):
+            EconomicObjective.model_validate(
+                frozen.model_dump()
+                | {
+                    "status": MandateStatus.RATIFIED,
+                    "ratified_by": ratifier,
+                    "ratified_at": date(2026, 8, 22),
+                }
+            )
+
+    # A person still can, or the check would be a ban rather than a boundary.
+    assert EconomicObjective.model_validate(
+        frozen.model_dump()
+        | {
+            "status": MandateStatus.RATIFIED,
+            "ratified_by": "hutch",
+            "ratified_at": date(2026, 8, 22),
+        }
+    ).ratified()
