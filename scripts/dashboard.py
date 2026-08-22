@@ -738,7 +738,18 @@ def build(out: Path) -> None:
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     win_note = f"win rate {win_rate:.0f}%" if win_rate is not None else "none closed yet"
 
-    page = f"""<title>QuantBot Instrument Panel</title>
+    # A doctype and a charset, both load-bearing rather than boilerplate.
+    #
+    # The page carries UTF-8 -- em-dashes for missing values, "·" separators -- and
+    # `python -m http.server` sends `text/html` with no charset parameter, so a browser falls
+    # back to a locale default and renders them as mojibake. Without the doctype it also renders
+    # in quirks mode, which changes box sizing under the panel layout.
+    #
+    # Found by fetching the deployed page and looking at the bytes rather than at a screenshot.
+    page = f"""<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>QuantBot Instrument Panel</title>
 <style>
 :root {{
   --ground: #F2F4F6; --panel: #FFFFFF; --edge: #D5DCE2; --ink: #1A2027;

@@ -729,3 +729,25 @@ def test_the_control_link_appears_only_when_a_control_surface_is_configured(
     with_link = render(ledger, monkeypatch)
     assert 'href="http://192.168.1.118:8081/"' in with_link
     assert "control</a>" in with_link
+
+
+def test_the_page_declares_its_encoding_and_a_doctype(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Both load-bearing, both found by reading the deployed bytes rather than a screenshot.
+
+    The page carries UTF-8 -- em-dashes for missing values, middot separators -- and
+    `python -m http.server` sends `text/html` with no charset parameter. Without a declaration a
+    browser falls back to a locale default and renders them as mojibake, which is how a "—" in
+    the "last moved" column became a replacement character on the live Pi.
+
+    Without the doctype the page renders in quirks mode, which changes box sizing under the
+    panel layout.
+    """
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    assert page.lstrip().lower().startswith("<!doctype html>")
+    assert '<meta charset="utf-8">' in page.lower()
+    # And the page really does contain the non-ASCII this protects.
+    assert any(ord(ch) > 127 for ch in page), "nothing here needed the declaration"
