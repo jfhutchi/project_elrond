@@ -99,6 +99,7 @@ statistical confidence.
 | [REFUTED.md](REFUTED.md) | **Read before proposing research.** Every idea already measured and killed |
 | [docs/agent-runbook.md](docs/agent-runbook.md) | Operating the paper-trading system |
 | [deploy/pi/README.md](deploy/pi/README.md) | Deployment, dashboard, and the operator control surface |
+| [deploy/omen/README.md](deploy/omen/README.md) | Bringing the coordinator up on WSL2, and the operator steps it deliberately leaves |
 | [docs/runtime-topology.md](docs/runtime-topology.md) | Which machine runs what, measured, and why the Pi Zero W is not the coordinator |
 | [docs/kronos-shadow.md](docs/kronos-shadow.md) | The Kronos forecasting worker: setup, limits, and what it does not establish |
 

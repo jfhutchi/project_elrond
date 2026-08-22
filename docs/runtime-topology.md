@@ -100,9 +100,10 @@ everything predating it would be removed, and the check that matters would go wi
 
 ## Not done yet
 
-- **Automatic recovery after a Windows reboot or WSL restart** is not implemented. The Pi's
-  services recover through systemd; the coordinator's do not yet, because the coordinator is not
-  yet the thing running the daemon.
+- **Automatic recovery is prepared, not installed.** WSL2 here runs systemd and lingering is
+  already enabled, so the mechanism exists. The user units and an install script that refuses to
+  half-deploy live in [`deploy/omen/`](../deploy/omen/README.md). Running them is an operator
+  step because it changes persistent configuration on the machine.
 - **The move itself has not happened.** This records the topology, the measurements and the
   enforcement. Elrond's durable state still lives where it lived, and migrating it is a separate
   operator-visible step that should not happen silently.
