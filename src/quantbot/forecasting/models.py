@@ -234,19 +234,42 @@ def calculate_request_id(
 
 
 class ForecastCandle(FrozenModel):
+    """One sampled candle, recorded as the model produced it.
+
+    OHLC ordering is deliberately **not** enforced. Kronos samples open, high, low and close
+    independently, so nothing constrains them to be mutually consistent, and it emits a candle
+    whose low exceeds its close about 4.35% of the time (measured over 460 real candles).
+
+    Rejecting on ordering therefore discarded whole artifacts as normal model behaviour: 61% of
+    real forecasts at 4 samples x horizon 5, and effectively all of them at settings large enough
+    to estimate dispersion, since survival is `(1 - 0.0435) ** (samples * horizon)`. Worse, the
+    loss is not random -- a less certain model produces wider, more inconsistent candles, so the
+    survivors were the cases the model found easy, and the dispersion statistic was measured only
+    over those. That is a selection effect on evidence.
+
+    The check also could not do what it was for. Ordering validation is inherited from real-bar
+    semantics, where a violation means corrupt data; here the generating process violates it
+    routinely, so it cannot discriminate corruption from sampling.
+
+    What still discriminates is kept: positive finite prices here, and `request_id` identity,
+    digest-pinned artifacts, the runtime environment hash, path count and horizon length above.
+    Inconsistency is counted into `ForecastFeatures.inconsistent_candles` instead, which makes
+    "do forecasts containing inconsistent candles score worse?" a question the evidence can
+    answer rather than one the filter has already decided.
+    """
+
     open: Decimal = Field(gt=0, allow_inf_nan=False)
     high: Decimal = Field(gt=0, allow_inf_nan=False)
     low: Decimal = Field(gt=0, allow_inf_nan=False)
     close: Decimal = Field(gt=0, allow_inf_nan=False)
     volume: Decimal = Field(ge=0, allow_inf_nan=False)
 
-    @model_validator(mode="after")
-    def validate_ohlc(self) -> Self:
-        if self.high < max(self.open, self.low, self.close):
-            raise ValueError("forecast high violates OHLC ordering")
-        if self.low > min(self.open, self.high, self.close):
-            raise ValueError("forecast low violates OHLC ordering")
-        return self
+    @property
+    def ohlc_is_consistent(self) -> bool:
+        """Whether this candle could have been a real bar."""
+        return self.high >= max(self.open, self.low, self.close) and self.low <= min(
+            self.open, self.high, self.close
+        )
 
 
 class WorkerForecast(FrozenModel):
@@ -280,6 +303,10 @@ class ForecastFeatures(FrozenModel):
     low_excursion: FiniteDecimal
     direction: ForecastDirection
     sample_terminal_return_dispersion: FiniteDecimal
+    #: How many sampled candles could not have been real bars. `None` means the artifact predates
+    #: this measurement -- deliberately not `0`, which would claim a clean forecast that was never
+    #: checked.
+    inconsistent_candles: int | None = Field(default=None, ge=0)
 
 
 def derive_forecast_features(
@@ -310,6 +337,9 @@ def derive_forecast_features(
         low_excursion=low_excursion / actual_close - 1,
         direction=direction,
         sample_terminal_return_dispersion=variance.sqrt(),
+        inconsistent_candles=sum(
+            1 for path in worker.sample_paths for candle in path if not candle.ohlc_is_consistent
+        ),
     )
 
 

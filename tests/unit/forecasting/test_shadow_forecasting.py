@@ -410,6 +410,96 @@ def test_an_interpreter_symlink_pointing_into_the_elrond_tree_is_refused(
         )
 
 
+def _inconsistent_worker(request_id: str) -> WorkerForecast:
+    """A real Kronos shape: one candle whose low sits above its close.
+
+    Taken from an actual QQQ artifact -- Kronos returned low=711.75 with close=710.41 on a
+    90-bar lookback. It samples OHLC independently, so nothing makes them agree.
+    """
+    clean = ForecastCandle(open="101", high="106", low="99", close="105", volume="1000")
+    impossible = ForecastCandle(
+        open="719.18", high="723.26", low="711.75", close="710.41", volume="1000"
+    )
+    return WorkerForecast(
+        request_id=request_id,
+        sample_paths=((clean, impossible), (clean, clean)),
+        model_revision=KronosConfig().model_revision,
+        tokenizer_revision=KronosConfig().tokenizer_revision,
+        kronos_code_revision=KronosConfig().kronos_code_revision,
+        generated_at=AS_OF + timedelta(minutes=2),
+        runtime_environment_hash="env-sha256",
+        device="cpu",
+        model_initialization_seconds=Decimal("1.25"),
+        inference_seconds=Decimal("0.75"),
+        peak_process_memory_bytes=1234,
+    )
+
+
+def test_an_internally_inconsistent_candle_is_recorded_and_counted_not_discarded() -> None:
+    """Rejecting these threw away 61% of real forecasts, and not at random.
+
+    Kronos violates OHLC ordering on 4.35% of candles as ordinary behaviour, so one bad candle
+    anywhere voided the whole artifact. The survivors were the cases the model found easy, which
+    made the dispersion statistic a measurement of the filter rather than of the model.
+    """
+    request = make_request()
+
+    record = ForecastRecord.succeeded(request, _inconsistent_worker(request.request_id))
+
+    assert record.status is ForecastStatus.SUCCESS
+    assert record.features is not None
+    assert record.features.inconsistent_candles == 1, "the count must be exact, not a flag"
+
+
+def test_a_clean_forecast_counts_zero_rather_than_leaving_it_unmeasured() -> None:
+    """`0` and "not measured" are different claims and must not collapse into each other."""
+    record = make_success_record()
+
+    assert record.features is not None
+    assert record.features.inconsistent_candles == 0
+
+
+def test_features_from_before_this_measurement_read_back_as_unmeasured() -> None:
+    """A stored artifact with no count must not read as a clean one.
+
+    Defaulting to 0 would assert a property of an artifact nobody ever checked.
+    """
+    stored = {
+        "terminal_return_mean": "0.01",
+        "terminal_return_median": "0.01",
+        "high_excursion": "0.02",
+        "low_excursion": "-0.02",
+        "direction": "UP",
+        "sample_terminal_return_dispersion": "0.001",
+    }
+
+    features = ForecastFeatures.model_validate(stored)
+
+    assert features.inconsistent_candles is None
+
+
+def test_the_checks_that_still_discriminate_a_corrupt_worker_are_kept() -> None:
+    """Dropping ordering must not become dropping validation.
+
+    Ordering could not tell corruption from sampling. A non-positive or non-finite price still
+    can, and so can a path count that disagrees with what was requested.
+    """
+    for impossible in ({"close": "0"}, {"close": "-1"}, {"high": "NaN"}, {"volume": "-1"}):
+        candle = {"open": "101", "high": "106", "low": "99", "close": "105", "volume": "1000"}
+        candle.update(impossible)
+        with pytest.raises(ValidationError):
+            ForecastCandle(**candle)
+
+    request = make_request()
+    single_path = make_worker_forecast(request.request_id).sample_paths[:1]
+    truncated = make_worker_forecast(request.request_id).model_copy(
+        update={"sample_paths": single_path}
+    )
+
+    with pytest.raises(ValueError, match="sample count does not match"):
+        ForecastRecord.succeeded(request, truncated)
+
+
 def test_forecast_ledger_is_immutable_idempotent_and_has_no_active_tables(
     tmp_path: Path,
 ) -> None:
