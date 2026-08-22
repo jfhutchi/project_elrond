@@ -163,6 +163,8 @@ def compare(left: ExperimentManifest, right: ExperimentManifest) -> list[Differe
                 )
             )
 
+    differences.extend(_compare_workers(left, right))
+
     if left.results != right.results:
         differences.append(Difference("results", "differ", "differ"))
     elif left.inputs_hash != right.inputs_hash:
@@ -175,6 +177,57 @@ def compare(left: ExperimentManifest, right: ExperimentManifest) -> list[Differe
                 "identical despite different inputs -- the run may not exercise what changed",
             )
         )
+    return differences
+
+
+def _compare_workers(left: ExperimentManifest, right: ExperimentManifest) -> list[Difference]:
+    """Explain how two runs' external workers differ (#18).
+
+    Without this a manifest whose Kronos checkpoint changed, or whose semantic analysis ran over
+    a revised source bundle, compared as identical -- the two runs would claim to be the same
+    experiment while one of them had been re-inferred under different weights.
+
+    Workers are keyed by name rather than position: reordering the list is not a change, and a
+    worker appearing or disappearing is.
+    """
+    differences: list[Difference] = []
+    before = {worker.name: worker for worker in left.workers}
+    after = {worker.name: worker for worker in right.workers}
+    for name in sorted(set(before) | set(after)):
+        left_worker, right_worker = before.get(name), after.get(name)
+        if left_worker == right_worker:
+            continue
+        if left_worker is None or right_worker is None:
+            differences.append(
+                Difference(
+                    f"workers[{name}]",
+                    "absent" if left_worker is None else "present",
+                    "absent" if right_worker is None else "present",
+                )
+            )
+            continue
+        if left_worker.fingerprint != right_worker.fingerprint:
+            # Named separately from the fields below so a reader sees the conclusion -- these
+            # are not the same inference -- before the list of what moved.
+            differences.append(
+                Difference(
+                    f"workers[{name}].fingerprint",
+                    left_worker.fingerprint,
+                    right_worker.fingerprint,
+                )
+            )
+        for key in sorted(set(left_worker.configuration) | set(right_worker.configuration)):
+            first = left_worker.configuration.get(key, "absent")
+            second = right_worker.configuration.get(key, "absent")
+            if first != second:
+                differences.append(Difference(f"workers[{name}].{key}", first, second))
+        for field in ("artifact_id", "input_hash", "as_of", "search_cardinality"):
+            first_value = getattr(left_worker, field)
+            second_value = getattr(right_worker, field)
+            if first_value != second_value:
+                differences.append(
+                    Difference(f"workers[{name}].{field}", str(first_value), str(second_value))
+                )
     return differences
 
 

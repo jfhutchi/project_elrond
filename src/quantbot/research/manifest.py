@@ -261,15 +261,61 @@ class ModelProvenance(FrozenModel):
 
 
 class WorkerProvenance(FrozenModel):
-    """An external research engine. Undisclosed search cardinality bars confirmatory use."""
+    """An external research engine. Undisclosed search cardinality bars confirmatory use.
+
+    `name` and `version` say which engine ran. They do not say *what it ran as*, and for a model
+    or agent worker that is the whole question: the same Kronos version with a different
+    checkpoint, or the same TradingAgents revision with a different prompt or a later source
+    bundle, is a different experiment wearing the same label (#18).
+
+    So identity is carried explicitly. `configuration` holds revisions and hashes rather than
+    prompts or credentials, because a prompt change must be *visible* without the prompt being
+    published. `input_hash` identifies the exact input the worker saw, and `as_of` the point in
+    time those inputs were knowable -- re-running a historical semantic analysis over revised
+    sources produces a different `input_hash`, so it cannot silently claim equivalence to the
+    original point-in-time artifact.
+    """
 
     name: Text
     version: Text
     search_cardinality: int | None = None
+    #: Content-addressed identity of the exact artifact the worker returned. Distinguishes a
+    #: cached original from a fresh inference: a rerun that reproduces this id ran nothing new.
+    artifact_id: Text | None = None
+    #: Checkpoint/tokenizer revisions, prompt-template hashes, agent composition, sampling
+    #: parameters, seeds. Identities and hashes only.
+    configuration: Mapping[str, Text] = Field(default_factory=dict)
+    #: Identity of the worker's input snapshot.
+    input_hash: Text | None = None
+    #: When the inputs were knowable, not when they were fetched.
+    as_of: datetime | None = None
+    produced_at: datetime | None = None
 
     @property
     def exploratory_only(self) -> bool:
         return self.search_cardinality is None
+
+    @property
+    def fingerprint(self) -> str:
+        """Identity of engine, configuration and input together.
+
+        Two runs sharing a fingerprint used the same worker on the same inputs under the same
+        configuration. Any checkpoint, prompt, seed or source change moves it, which is what
+        makes an equivalence claim mechanically checkable rather than asserted.
+
+        `search_cardinality` is excluded: it is a property of how much was searched around this
+        artifact, not of what produced it, and it can be measured after the fact.
+        """
+        return content_id(
+            {
+                "artifact_id": self.artifact_id,
+                "as_of": None if self.as_of is None else self.as_of.isoformat(),
+                "configuration": dict(self.configuration),
+                "input_hash": self.input_hash,
+                "name": self.name,
+                "version": self.version,
+            }
+        )
 
 
 class ResourceUsage(FrozenModel):
