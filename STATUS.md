@@ -1176,13 +1176,13 @@ and **not installed**.
       checkout and this session had no working SSH credential for it.
 - [ ] **Move the ledger to the coordinator and start the daemon there** — **operator action**,
       sequence in `deploy/omen/README.md`. Deliberately not scripted.
-- [ ] **Kronos criterion 9 (#36):** a Kronos hypothesis pre-registered *before* measurement and
-      run through #19/#7/#8/#14/#18/#16. Cannot be retrofitted onto the completed study without
-      violating pre-registration. The earlier reason given here -- "not while the luck bar is
-      understated" -- was based on a claim since retracted; the bar was always correct.
-      The remaining reason is narrower and still holds: **registration permanently spends trial
-      budget**, so filing a hypothesis nobody intends to research, purely to demonstrate the
-      plumbing, raises the bar for real work to tick a box. Do it with a question worth asking.
+- [x] **~~Kronos criterion 9 (#36)~~ — CLOSED 2026-08-22.** H-2026-026 pre-registered before
+      measurement, critic `PROCEED`, and the power gate refused it `UNDERPOWERED`: an IC of 0.15
+      needs 4,485 observations against 688 available (57.3 independent after 12x inflation).
+      The refusal cost nothing — trials still 68, window still `UNTOUCHED`. **#36 is closed**;
+      Sol's unanswered question on OHLC ordering is recorded disagreement in the thread, not an
+      unmet criterion. The aligned correlation stays uncomputed: below the 0.375 detectable
+      effect it is uninterpretable, and a number under that ceiling gets quoted without it.
 - [ ] **TradingAgents criterion 9 (#37):** whether it improves downstream hypothesis quality.
       Needs the scheduled loop and hypotheses on both sides.
 - [ ] Crypto sleeve blocked on a second Alpaca paper account (**operator action**)
