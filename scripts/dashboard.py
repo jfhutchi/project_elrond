@@ -39,6 +39,7 @@ from quantbot.research.promotion import (
     MINIMUM_FORWARD_DAYS,
     MINIMUM_FORWARD_TRADES,
     Stage,
+    deployment_role,
     forward_progress,
     observe_forward_days,
 )
@@ -198,7 +199,7 @@ def _pipeline_rows(tasks: list[ResearchTask]) -> list[tuple[str, int, str, str]]
     ]
 
 
-def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
+def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str, str]]:
     """Where each strategy stands on the ladder, and precisely what it has not yet earned (#15).
 
     The stage comes from `promotion_state` and the forward counters from the durable ledger via
@@ -209,6 +210,14 @@ def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
 
     Gates that need an experiment outcome are reported as needing one rather than being scored.
     An unmeasured gate shown as satisfied is worse than an unmeasured gate shown as unknown.
+
+    The **role** column is the operator-visible half of #53. A deployment that keeps trading
+    after its mechanism is refuted is legitimate and useful -- it is where slippage,
+    reconciliation and recovery evidence comes from -- but a panel showing only a stage and a
+    rising day count reads as progress toward an edge. `deployment_role` is the same function
+    the gate uses, called here rather than reimplemented: two computations of "is this an edge
+    candidate" would eventually disagree, and the one on the operator's screen is the one that
+    would be believed.
     """
     repository = StorageRepository(session)
     rows: list[tuple[str, str, str, str, str]] = []
@@ -231,6 +240,7 @@ def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
             (
                 record.strategy_id,
                 stage.value,
+                deployment_role(session, record.strategy_id).value,
                 f"{record.strategy_version} / {record.configuration_hash[:12]}",
                 f"{days}/{MINIMUM_FORWARD_DAYS} days, {trades}/{MINIMUM_FORWARD_TRADES} trades",
                 _unmet_gates(stage, days=days, trades=trades),
@@ -567,7 +577,9 @@ def _pipeline_row(stage: str, count: int, meaning: str, last: str) -> str:
     )
 
 
-def _ladder_row(strategy: str, stage: str, identity: str, progress: str, unmet: str) -> str:
+def _ladder_row(
+    strategy: str, stage: str, role: str, identity: str, progress: str, unmet: str
+) -> str:
     """One strategy's position. The tone tracks how much trust the stage implies."""
     tone = {
         "LIVE_REVIEW_ELIGIBLE": "warn",
@@ -579,6 +591,7 @@ def _ladder_row(strategy: str, stage: str, identity: str, progress: str, unmet: 
         "<tr>"
         f"<td class='mono'>{_esc(strategy)}</td>"
         f"<td>{_pill(stage, tone)}</td>"
+        f"<td>{_pill(role, 'good' if role == 'EDGE_CANDIDATE' else 'warn')}</td>"
         f"<td class='mono'>{_esc(identity)}</td>"
         f"<td>{_esc(progress)}</td>"
         f"<td>{_esc(unmet)}</td>"
@@ -743,7 +756,7 @@ def build(out: Path) -> None:
         4, "No protected evaluation window is claimed"
     )
     ladder_rows = "".join(_ladder_row(*row) for row in ladder) or _empty(
-        5, "No strategy is on the promotion ladder"
+        6, "No strategy is on the promotion ladder"
     )
     compute_rows = "".join(_compute_row(*row) for row in compute) or _empty(
         4, "No sandboxed compute has been charged to any budget"
@@ -760,7 +773,7 @@ def build(out: Path) -> None:
     # days is the whole argument against confusing the two, and it only lands when they are
     # next to each other rather than two panels apart. Read from the ladder rows, so it cannot
     # disagree with the panel below.
-    forward_days = max((int(row[3].split("/")[0]) for row in ladder), default=0)
+    forward_days = max((int(row[4].split("/")[0]) for row in ladder), default=0)
 
     # `attention()` decides what matters; this only renders it. The panel is driven by the same
     # durable state as everything else -- the trial spend, the task states, the kill switch and
@@ -1075,14 +1088,18 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
   <section>
     <h2>Promotion ladder</h2>
     <div class="scroll"><table id="panel-ladder">
-      <thead><tr><th>Strategy</th><th>Stage</th><th>Version / config</th>
+      <thead><tr><th>Strategy</th><th>Stage</th><th>Role</th><th>Version / config</th>
         <th>Forward evidence</th><th>Unmet gates</th></tr></thead>
       <tbody>{ladder_rows}</tbody>
     </table></div>
     <p class="caveat">Stage comes from the durable ladder and the forward counters are read from
       the trading ledger, not supplied. There is no stage after LIVE_REVIEW_ELIGIBLE: the
       transition table has no destination past it, so no agent can move a strategy into live
-      trading. Backtest volume is not forward evidence and never appears in these counters.</p>
+      trading. Backtest volume is not forward evidence and never appears in these counters.
+      <strong>Role</strong> is derived, not declared: EDGE_CANDIDATE only while a frozen
+      registration stands behind the strategy and nothing has refuted it. An
+      OPERATIONAL_BASELINE keeps producing useful execution evidence and accrues no credit
+      toward an edge, however many days it runs.</p>
   </section>
 
   <section>

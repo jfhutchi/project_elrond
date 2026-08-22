@@ -356,6 +356,10 @@ def _seed_ladder(session: object) -> None:
             reason="seeded for the dashboard test",
             actor="operator",
             updated_at=NOW,
+            # No registration is bound, which is the deployed rotation's actual position: it
+            # runs, it produces execution evidence, and no frozen claim stands behind it.
+            hypothesis_id=None,
+            hypothesis_version=None,
         )
     )
 
@@ -499,6 +503,10 @@ def test_the_ladder_panel_counts_forward_evidence_the_ledger_supports_and_no_mor
     # And the gap named, in the units the operator has to wait out.
     assert f"{30 - LADDER_DAYS} more forward days" in row, row
     assert f"{30 - LADDER_FILLS} more trades" in row, row
+    # #53.6: the role is on the operator's screen, not only inside the gate. Nothing is bound
+    # to this deployment, so a rising day count is operational evidence and not edge progress.
+    assert "OPERATIONAL_BASELINE" in row, row
+    assert "EDGE_CANDIDATE" not in row, row
 
 
 def test_the_ladder_panel_never_offers_a_route_to_live_trading(
