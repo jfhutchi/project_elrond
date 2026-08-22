@@ -185,3 +185,102 @@ user-owned checkout hits exactly that. Re-pin it when you update the code.
 journalctl -u quantbot -f
 journalctl -u quantbot --since "1 hour ago"
 ```
+
+---
+
+## The dashboard, served over the LAN
+
+`scripts/dashboard.py` generates a self-contained HTML file; it is not a server. Two systemd
+units turn that into a page you can navigate to:
+
+| Unit | Job |
+|---|---|
+| `dashboard-refresh.timer` / `.service` | Regenerates `reports/index.html` every five minutes |
+| `dashboard.service` | Serves `reports/` with `python -m http.server` on port 8080 |
+
+```bash
+sudo install -m 644 dashboard.service dashboard-refresh.service dashboard-refresh.timer /etc/systemd/system/
+```
+
+```bash
+sudo systemctl daemon-reload && sudo systemctl enable --now dashboard.service dashboard-refresh.timer
+```
+
+Then browse to `http://<pi-address>:8080`.
+
+### Why it is split into two units
+
+The process **listening on the network holds no credentials** — `dashboard.service` has no
+`EnvironmentFile`. The process holding the Alpaca keys, `dashboard-refresh.service`, listens on
+nothing. Whichever one an attacker reaches, they do not get both the network and the secrets.
+
+`python -m http.server` cannot execute anything, has no upload path, and cannot escape its
+directory. That is why it is the right tool: serving a generated file needs a file server, and
+anything more capable is attack surface for no benefit. The unit also sets `IPAddressDeny=any`
+with LAN ranges allowed, so a compromised file server cannot phone home.
+
+### Two mistakes already made here, so they are not made again
+
+- **`$EXIT_STATUS` in `ExecStopPost` is expanded by systemd**, not by `/bin/sh`. A cleanup that
+  compared it to `"0"` was comparing an empty string and deleted every page, including the
+  successful ones. The refresh now renders to a sibling temp file and `mv`s it into place on
+  success — atomic, so a request mid-render never sees half a page, and there is no variable to
+  get wrong.
+- **`OnBootSec=` with `OnUnitActiveSec=` fired once and then reported
+  `NextElapseUSecMonotonic=infinity`.** It would never have run again and the page would have sat
+  there looking current forever. `Persistent=` is also inert on monotonic timers. It is now
+  `OnCalendar=*:0/5`, verified by reading `NextElapse` after enabling rather than by assuming the
+  syntax was right.
+
+### Security
+
+- **There is no authentication on the page.** Anyone on the LAN can see account equity, open
+  positions and fills. The generated HTML is scanned for credentials before serving and contains
+  none, but the *contents* are still private financial state.
+- **Never port-forward 8080.** This is a LAN page. It is not hardened for the internet and
+  nothing about it pretends to be.
+
+---
+
+## The operator control surface
+
+The dashboard can show the kill switch; `operations/control.py` is what lets a browser act on it.
+
+**Engaging and clearing are deliberately asymmetric.**
+
+- **Engage is unconditional.** Stopping is always safe, it is the direction you reach for when
+  something looks wrong, and a stop button that can refuse is a stop button that fails when it
+  matters. A reason is required — an unexplained halt is one the next person clears out of
+  frustration.
+- **Clear is verified and cannot be talked into it.** It runs `measure_readiness`, which probes
+  the broker, the ledger and market-data freshness, and refuses unless the conditions actually
+  hold. The endpoint has no way to construct the evidence type, so the worst any caller can do is
+  ask.
+
+A refused clear returns the blocking reasons and the probe detail at HTTP 409 — the request was
+understood and answered, and the answer is that conditions do not permit it. Being told only
+"no" is how somebody starts looking for a way around a control.
+
+### The token is not authentication
+
+It stops a stray request or a device on the LAN blundering into the trading system. It does not
+make this safe to expose beyond the LAN. Generate one on the Pi and keep it out of the
+repository:
+
+```bash
+python3 -c "import secrets; print(secrets.token_urlsafe(32))"
+```
+
+A missing and a wrong token are refused identically, because distinguishing them tells a caller
+which half they got right, and the comparison is byte-for-byte so a wrong token cannot be
+narrowed down by timing.
+
+### What it deliberately cannot do
+
+Two actions exist: engage and clear. There is no submit-order, no disable-risk, no
+resolve-incident, no promote. Each of those is a decision that should cost more than a click, and
+a control surface grows by accretion unless the list is short and deliberate.
+
+**Clearing the kill switch from a browser does not lower the bar for clearing it.** The same
+probes run as from the CLI. If reconciliation is stale or the broker is unreachable, the button
+refuses and tells you which — which is the only version of that button worth having.
