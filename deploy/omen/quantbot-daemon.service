@@ -1,0 +1,48 @@
+[Unit]
+Description=Elrond paper-trading daemon (coordinator)
+Documentation=https://github.com/jfhutchi/project_elrond
+# WSL2 brings networking up through its own path; `network-online.target` is reached, but the
+# NAT interface can lag it briefly. The daemon's own health checks handle a slow first cycle;
+# the ordering here just avoids provoking one on every boot.
+After=network-online.target
+Wants=network-online.target
+
+# Restart rate limit lives in [Unit]. systemd ignores these keys in [Service] with only a log
+# line, which is how the Pi deployment ran without a limit in force on its first day.
+#
+# A daemon that fails at startup and restarts instantly forever hammers the broker API until the
+# account is rate-limited, turning a small fault into an outage.
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+WorkingDirectory=%h/project_elrond
+
+# Mode 600, outside the repository. A unit file is world-readable; a credential in one is
+# published to every user on the host.
+EnvironmentFile=%h/.config/quantbot/quantbot.env
+
+ExecStart=%h/project_elrond/.venv/bin/quantbot daemon
+
+Restart=always
+RestartSec=5
+
+# This process makes decisions on session boundaries. Fail loudly rather than trade against a
+# wrong clock.
+Environment=TZ=UTC
+Environment=PYTHONUNBUFFERED=1
+
+# The kill switch and the ledger are the safety mechanisms; keep the blast radius small anyway.
+# `ProtectSystem`/`ProtectHome` are unavailable to user units on this systemd, so the isolation
+# here is what a user unit can actually enforce rather than a copy of the Pi's list that would
+# silently do nothing.
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=quantbot
+
+[Install]
+WantedBy=default.target

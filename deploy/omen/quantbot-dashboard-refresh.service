@@ -1,0 +1,26 @@
+[Unit]
+Description=Render the Elrond dashboard page
+Documentation=https://github.com/jfhutchi/project_elrond
+
+[Service]
+Type=oneshot
+WorkingDirectory=%h/project_elrond
+EnvironmentFile=%h/.config/quantbot/quantbot.env
+
+# Rendered to a temporary file and moved into place, so a reader never sees a half-written page
+# and a failed render leaves the last good one standing.
+#
+# This is not a stylistic choice. The Pi's first version used `ExecStopPost` with `$EXIT_STATUS`
+# to clean up on failure; systemd expands that variable itself rather than passing it to the
+# shell, and the result deleted every successfully rendered page. An atomic move has no failure
+# path to handle.
+ExecStart=/bin/sh -c '%h/project_elrond/.venv/bin/python %h/project_elrond/scripts/dashboard.py %h/project_elrond/reports/.index.html.new && mv -f %h/project_elrond/reports/.index.html.new %h/project_elrond/reports/index.html'
+
+Environment=TZ=UTC
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=quantbot-dashboard-refresh

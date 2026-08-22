@@ -1,0 +1,33 @@
+[Unit]
+Description=Elrond operations dashboard (coordinator, loopback only)
+Documentation=https://github.com/jfhutchi/project_elrond
+After=network-online.target
+Wants=network-online.target
+StartLimitBurst=5
+StartLimitIntervalSec=120
+
+[Service]
+Type=simple
+WorkingDirectory=%h/project_elrond
+
+# Serves a static directory, exactly as on the Pi. The page is rendered by the refresh timer;
+# this process holds no credential and touches no ledger.
+#
+# Bound to loopback, unlike the Pi's 0.0.0.0. The coordinator is a laptop that joins untrusted
+# networks; a dashboard reachable from a coffee-shop LAN is a different decision from one
+# reachable from the operator's own machine, and it is not one to make by copying a unit file.
+ExecStart=/usr/bin/python3 -m http.server 8080 --bind 127.0.0.1 --directory %h/project_elrond/reports
+
+Restart=always
+RestartSec=5
+Environment=TZ=UTC
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=true
+PrivateTmp=true
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=quantbot-dashboard
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,15 @@
+[Unit]
+Description=Refresh the Elrond dashboard every five minutes
+Documentation=https://github.com/jfhutchi/project_elrond
+
+[Timer]
+# Wall-clock, not monotonic. A monotonic `OnUnitActiveSec` timer whose unit has never run
+# reports NextElapse=infinity and never fires -- which is what the Pi's first timer did.
+OnCalendar=*:0/5
+# Catches up after the machine was asleep or WSL was shut down. `Persistent` only affects
+# `OnCalendar` timers, which is the other reason this is not monotonic.
+Persistent=true
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
