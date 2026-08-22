@@ -8,11 +8,19 @@ import shutil
 import subprocess
 from collections.abc import Mapping
 from pathlib import Path
+from platform import node
 from typing import Protocol
 
 from pydantic import ValidationError
 
 from quantbot.forecasting.models import ForecastRequest, WorkerForecast
+from quantbot.placement import (
+    KRONOS_INFERENCE,
+    HostProfile,
+    JobRequirements,
+    NoCapableHost,
+    unmet_requirement,
+)
 
 
 class ForecastProviderError(RuntimeError):
@@ -84,7 +92,29 @@ class KronosSignalProvider:
         kronos_repository: str | Path,
         cache_directory: str | Path,
         timeout_seconds: int = 300,
+        requirements: JobRequirements | None = KRONOS_INFERENCE,
+        host: HostProfile | None = None,
     ) -> None:
+        """Refuse to construct a provider on a host that cannot carry the inference (#38).
+
+        Checked here rather than at forecast time so it fails before staging a worker artifact,
+        and defaulted to enforcing rather than opt-in. `KRONOS_INFERENCE` existed for a while
+        and was referenced by nothing: the gate was written, tested, and wired only into
+        `SubprocessWorker`, which Kronos does not use. A requirement no code path consults is
+        documentation.
+
+        Passing `requirements=None` disables it, which is a visible decision in a call site
+        rather than a silent default.
+        """
+        if requirements is not None:
+            profile = host or HostProfile.measure(node())
+            reason = unmet_requirement(requirements, profile)
+            if reason is not None:
+                raise NoCapableHost(
+                    f"this host cannot run {requirements.name}: {reason}. Kronos inference on an "
+                    "undersized host thrashes the machine the trading control plane runs on",
+                    unmet={profile.name: reason},
+                )
         if not str(python_executable).strip():
             raise ValueError("python_executable must not be empty")
         if timeout_seconds <= 0:

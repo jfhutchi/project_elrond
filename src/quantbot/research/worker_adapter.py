@@ -40,13 +40,13 @@ from pydantic import ValidationError
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from quantbot.research.budget import BudgetGovernor, Resource
-from quantbot.research.placement import (
+from quantbot.placement import (
     HostProfile,
     JobRequirements,
     NoCapableHost,
     unmet_requirement,
 )
+from quantbot.research.budget import BudgetGovernor, Resource
 from quantbot.research.workers import (
     ResearchWorker,
     WorkerFailure,

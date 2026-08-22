@@ -325,7 +325,7 @@ def _placement_rows() -> list[tuple[str, str, str, str]]:
     copied from somewhere, and the entire point of `HostProfile.measure` is that a host does not
     get to describe itself -- so the panel shows what it can prove and says so.
     """
-    from quantbot.research.placement import (
+    from quantbot.placement import (
         CONTROL_PLANE,
         KRONOS_INFERENCE,
         SEMANTIC_ANALYSIS,

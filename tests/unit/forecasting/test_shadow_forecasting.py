@@ -500,6 +500,63 @@ def test_the_checks_that_still_discriminate_a_corrupt_worker_are_kept() -> None:
         ForecastRecord.succeeded(request, truncated)
 
 
+def _pi_zero() -> object:
+    """A measured Pi Zero W profile."""
+    from quantbot import placement  # noqa: PLC0415
+
+    return placement.HostProfile(
+        name="pi-zero-w",
+        architecture="armv6l",
+        cpu_cores=1,
+        total_memory_mb=434,
+        gpu_vram_mb=0,
+        provenance=placement.HostProvenance.MEASURED,
+        _token=placement._MEASURED,
+    )
+
+
+def test_kronos_refuses_to_construct_on_a_host_that_cannot_carry_it(tmp_path: Path) -> None:
+    """#38's rule, applied to the job it was written for.
+
+    `KRONOS_INFERENCE` existed for a while and was referenced by nothing: the gate was written,
+    tested, and wired only into `SubprocessWorker`, which Kronos does not use. A requirement no
+    code path consults is documentation, and the flagship heavy job was ungated.
+
+    Refused at construction so it fails before staging a worker artifact onto the machine.
+    """
+    from quantbot.placement import NoCapableHost  # noqa: PLC0415
+
+    worker_python = tmp_path / "worker-python"
+    worker_python.touch()
+
+    with pytest.raises(NoCapableHost, match="kronos-inference"):
+        KronosSignalProvider(
+            python_executable=worker_python,
+            kronos_repository=tmp_path,
+            cache_directory=tmp_path / "hf-cache",
+            host=_pi_zero(),
+        )
+
+
+def test_the_host_gate_can_be_waived_but_only_out_loud(tmp_path: Path) -> None:
+    """A default-on gate needs an escape hatch, or callers route around the whole module.
+
+    `requirements=None` is a visible decision at a call site rather than a silent default.
+    """
+    worker_python = tmp_path / "worker-python"
+    worker_python.touch()
+
+    provider = KronosSignalProvider(
+        python_executable=worker_python,
+        kronos_repository=tmp_path,
+        cache_directory=tmp_path / "hf-cache",
+        requirements=None,
+        host=_pi_zero(),
+    )
+
+    assert Path(provider._python_executable) == worker_python
+
+
 def test_forecast_ledger_is_immutable_idempotent_and_has_no_active_tables(
     tmp_path: Path,
 ) -> None:

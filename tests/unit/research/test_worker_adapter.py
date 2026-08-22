@@ -11,8 +11,8 @@ from decimal import Decimal
 
 import pytest
 
+from quantbot.placement import KRONOS_INFERENCE, NoCapableHost
 from quantbot.research.budget import BudgetGovernor, Cap, Resource
-from quantbot.research.placement import KRONOS_INFERENCE, NoCapableHost
 from quantbot.research.registry import DataRole
 from quantbot.research.worker_adapter import (
     SubprocessWorker,
@@ -89,7 +89,7 @@ def runner_returning(output: str, *, code: int = 0):
 
 def undersized_host():
     """A measured Pi Zero W. Measured, so the refusal is about capacity and not provenance."""
-    from quantbot.research import placement  # noqa: PLC0415
+    from quantbot import placement  # noqa: PLC0415
 
     return placement.HostProfile(
         name="pi-zero-w",
@@ -132,7 +132,7 @@ def test_a_worker_is_refused_before_it_starts_on_a_host_that_cannot_carry_it() -
 
 def test_a_capable_host_runs_the_worker_normally() -> None:
     """The refusal has to be about capacity, or it is just a broken adapter."""
-    from quantbot.research import placement  # noqa: PLC0415
+    from quantbot import placement  # noqa: PLC0415
 
     worker_spec = spec()
     capable = placement.HostProfile(

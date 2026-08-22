@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from quantbot.research.placement import (
+from quantbot.placement import (
     CONTROL_PLANE,
     KRONOS_INFERENCE,
     SEMANTIC_ANALYSIS,
@@ -38,7 +38,7 @@ def measured(name: str, specs: dict[str, object], **overrides: object) -> HostPr
     under the test, which would make every assertion a description of the CI runner rather than
     of the rule.
     """
-    from quantbot.research import placement  # noqa: PLC0415
+    from quantbot import placement  # noqa: PLC0415
 
     fields: dict[str, object] = {"name": name, **specs, **overrides}
     return HostProfile(
