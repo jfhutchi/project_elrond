@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import html
 import os
+import platform
 import sys
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -193,8 +194,7 @@ def _pipeline_rows(tasks: list[ResearchTask]) -> list[tuple[str, int, str, str]]
         if not latest[stage] or task.updated_at.isoformat() > latest[stage]:
             latest[stage] = task.updated_at.isoformat()
     return [
-        (stage, counts[stage], _stage_meaning(stage), latest[stage][:16] or "—")
-        for stage in order
+        (stage, counts[stage], _stage_meaning(stage), latest[stage][:16] or "—") for stage in order
     ]
 
 
@@ -316,6 +316,35 @@ def _compute_rows(session: Session) -> list[tuple[str, str, int, str]]:
         (str(key), f"{Decimal(str(total)):.1f}", int(count), str(last)[:16])
         for key, total, count, last in rows
     ]
+
+
+def _placement_rows() -> list[tuple[str, str, str, str]]:
+    """What this host can and cannot be asked to run (#38).
+
+    Only this machine is measured. A row for the Pi or the RTX desktop would be a description
+    copied from somewhere, and the entire point of `HostProfile.measure` is that a host does not
+    get to describe itself -- so the panel shows what it can prove and says so.
+    """
+    from quantbot.research.placement import (
+        CONTROL_PLANE,
+        KRONOS_INFERENCE,
+        SEMANTIC_ANALYSIS,
+        WATCHDOG,
+        HostProfile,
+        unmet_requirement,
+    )
+
+    endpoint = os.environ.get("QUANTBOT_MODEL_ENDPOINT")
+    host = HostProfile.measure(platform.node() or "this-host", model_endpoint=endpoint)
+    capacity = (
+        f"{host.architecture} / {host.cpu_cores or '?'} cores / "
+        f"{host.total_memory_mb or '?'}MB / {host.gpu_vram_mb or 0}MB VRAM"
+    )
+    rows: list[tuple[str, str, str, str]] = []
+    for job in (CONTROL_PLANE, WATCHDOG, KRONOS_INFERENCE, SEMANTIC_ANALYSIS):
+        reason = unmet_requirement(job, host)
+        rows.append((job.name, capacity, "no" if reason else "yes", reason or ""))
+    return rows
 
 
 def _override_rows(session: Session) -> list[tuple[str, str, str, str]]:
@@ -572,6 +601,21 @@ def _compute_row(budget_key: str, seconds: str, runs: int, last: str) -> str:
     )
 
 
+def _placement_row(job: str, capacity: str, permitted: str, reason: str) -> str:
+    """A refusal is informational, not an alarm.
+
+    Toned `ok` when the job can run here and neutral when it cannot: this host being unable to
+    serve every workload is the design, not a fault, and colouring it red would train the
+    operator to ignore the panel.
+    """
+    return (
+        f"<tr><td class='mono'>{_esc(job)}</td>"
+        f"<td class='mono'>{_esc(capacity)}</td>"
+        f"<td>{_pill(permitted, 'ok' if permitted == 'yes' else 'muted')}</td>"
+        f"<td>{_esc(reason)}</td></tr>"
+    )
+
+
 def _override_row(who: str, scope: str, note: str, when: str) -> str:
     """An override is always warn-toned. It is not an error, and it is never routine."""
     return (
@@ -629,9 +673,7 @@ def build(out: Path) -> None:
         kill_state, kill_note = "armed", "trading permitted"
     control_url = os.environ.get("QUANTBOT_CONTROL_URL", "")
     if control_url:
-        kill_note += (
-            f' &middot; <a href="{_esc(control_url)}" style="color:#8ab4f8">control</a>'
-        )
+        kill_note += f' &middot; <a href="{_esc(control_url)}" style="color:#8ab4f8">control</a>'
     signals = durable.get("signals", []) if durable.get("available") else []
     registrations = durable.get("registrations", []) if durable.get("available") else []
     records = durable.get("records", []) if durable.get("available") else []
@@ -709,6 +751,10 @@ def build(out: Path) -> None:
     override_rows = "".join(_override_row(*row) for row in budget_overrides) or _empty(
         4, "No budget cap has been overridden"
     )
+    # Measured here, at render time, rather than read from the durable store. Capacity is a
+    # property of the machine drawing the page; a cached figure would describe whatever host
+    # last wrote it, which on a two-host deployment is the wrong one about half the time.
+    placement_rows = "".join(_placement_row(*row) for row in _placement_rows())
     # The single most useful juxtaposition this page can show: how much research has been done
     # against how much forward evidence exists. Seventeen cycles beside a handful of trading
     # days is the whole argument against confusing the two, and it only lands when they are
@@ -996,6 +1042,20 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
       <p class="caveat">Compute is renewable, so the useful question is what it has been
         costing rather than what is left. A killed run is charged in full: it used the clock.</p>
     </section>
+    <section>
+      <h2>What this host may run</h2>
+      <div class="scroll"><table id="panel-placement">
+        <thead><tr><th>Job</th><th>Measured capacity</th><th>Here?</th><th>Why not</th></tr></thead>
+        <tbody>{placement_rows}</tbody>
+      </table></div>
+      <p class="caveat">Measured on this machine, never declared: a host does not get to
+        describe itself. A job with no capable host is refused rather than degraded onto the
+        nearest one, because a refused research job is recoverable and a downed control plane
+        is not.</p>
+    </section>
+  </div>
+
+  <div class="cols">
     <section>
       <h2>Budget overrides</h2>
       <div class="scroll"><table id="panel-overrides">
