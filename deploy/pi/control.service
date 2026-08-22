@@ -1,0 +1,39 @@
+[Unit]
+Description=Elrond operator control surface (kill switch)
+Documentation=file:///home/jfhutchi/quantbot/deploy/pi/README.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=jfhutchi
+WorkingDirectory=/home/jfhutchi/quantbot
+
+# The token, and only the token. Deliberately NOT the daemon's EnvironmentFile: this process
+# needs the ledger, not the broker keys. Without an adapter `measure_readiness` reports BROKER
+# as unprobed, which blocks a clear and says so -- a browser can always stop trading, and
+# resuming stays a CLI action where the broker is configured. That is the conservative default;
+# see the README for how to widen it deliberately.
+EnvironmentFile=/etc/quantbot/control.env
+Environment=QUANTBOT_DB_PATH=/home/jfhutchi/quantbot-data/quantbot.db
+Environment=TZ=UTC
+
+ExecStart=/home/jfhutchi/quantbot/.venv/bin/python /home/jfhutchi/quantbot/scripts/control_server.py 8081
+
+Restart=on-failure
+RestartSec=10
+
+ProtectSystem=strict
+# The ledger directory is the only thing it writes to.
+ReadWritePaths=/home/jfhutchi/quantbot-data
+PrivateTmp=true
+NoNewPrivileges=true
+PrivateDevices=true
+RestrictSUIDSGID=true
+# LAN only. A control surface that can reach the internet is one that can be reached from it
+# through anything that goes wrong in between.
+IPAddressAllow=localhost 192.168.0.0/16 10.0.0.0/8 172.16.0.0/12
+IPAddressDeny=any
+
+[Install]
+WantedBy=multi-user.target
