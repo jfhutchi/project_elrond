@@ -21,6 +21,12 @@ from quantbot.domain import (
     TimeInForce,
 )
 from quantbot.research.builder import OutcomeVerdict
+from quantbot.research.mandate import (
+    EconomicObjective,
+    MandateStatus,
+    Objective,
+    load_economic_objective,
+)
 from quantbot.research.manifest import ExecutionPath, StatisticalTest
 from quantbot.research.memory import RecordKind, ResearchMemory, ResearchRecord, Verdict
 from quantbot.research.power import PowerVerdict
@@ -416,7 +422,6 @@ def test_the_durable_ladder_reads_forward_evidence_and_refuses_to_be_told_it(
                     reason="I brought my own",
                     now=NOW,
                     account_id=ACCOUNT,
-                    benchmark_symbol=BENCHMARK,
                     **{supplied: hand_built(MINIMUM_FORWARD_DAYS)},
                 )
 
@@ -442,7 +447,6 @@ def test_the_durable_ladder_reads_forward_evidence_and_refuses_to_be_told_it(
                 reason="the counts agree",
                 now=NOW,
                 account_id=ACCOUNT,
-                benchmark_symbol=BENCHMARK,
             )
 
 
@@ -805,7 +809,7 @@ def test_a_repeated_sweep_records_no_second_move(ledger_db: Database) -> None:
 #: exercise the supported path at all is to declare an effect nobody could have.
 RESOLVABLE_AT_THIRTY_SESSIONS = Decimal("12.0")
 
-BENCHMARK = "SPY"
+BENCHMARK = load_economic_objective().benchmark_symbol
 ACCOUNT = "paper-account-1"
 
 
@@ -817,6 +821,8 @@ def seed_prices(
     benchmark_daily_bps: int,
     account_id: str = ACCOUNT,
     jitter_bps: int = 3,
+    dip_bps: int = 0,
+    dip_on: int = 10,
 ) -> None:
     """An account equity path and a benchmark close path over the same sessions.
 
@@ -834,7 +840,8 @@ def seed_prices(
     for index in range(days):
         trading_date = date(2026, 8, 19) + timedelta(days=index)
         jitter = jitter_bps if index % 2 == 0 else -jitter_bps
-        equity *= 1 + Decimal(strategy_daily_bps + jitter) / 10000
+        move = -dip_bps if (dip_bps and index == dip_on) else strategy_daily_bps + jitter
+        equity *= 1 + Decimal(move) / 10000
         close *= 1 + Decimal(benchmark_daily_bps - jitter) / 10000
         equity = equity.quantize(Decimal("0.0001"))
         close = close.quantize(Decimal("0.0001"))
@@ -892,13 +899,24 @@ def freeze_claim(
     return hypothesis_id
 
 
+def objective(**overrides: object) -> EconomicObjective:
+    """The project's own frozen mandate unless a test is about changing it.
+
+    Loaded from `config/` rather than hand-built, so a change to the operator's objective that
+    breaks these assumptions shows up here instead of quietly diverging from the file the
+    production path reads.
+    """
+    frozen = load_economic_objective()
+    return frozen.model_copy(update=overrides) if overrides else frozen
+
+
 def forward_evidence(session, **overrides: object) -> ForwardEvidence:
     kwargs: dict[str, object] = {
         "strategy_id": "adaptive-momentum",
         "strategy_version": "1.3.0",
         "configuration_hash": "cfg-abc",
         "account_id": ACCOUNT,
-        "benchmark_symbol": BENCHMARK,
+        "objective": objective(),
         "assessed_at": NOW,
     }
     kwargs.update(overrides)
@@ -1049,9 +1067,7 @@ def test_an_unresolved_integrity_incident_blocks_qualification(ledger_db: Databa
             session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=300, benchmark_daily_bps=1
         )
         _raise_incident(session, incident_id="incident-1", severity="CRITICAL")
-        evidence = forward_evidence(
-            session, hypothesis_id=freeze_claim(session), max_drawdown_limit_bps=5000
-        )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
 
     assert not evidence.supported
     assert any("unresolved integrity incident" in reason for reason in evidence.blocking)
@@ -1060,20 +1076,35 @@ def test_an_unresolved_integrity_incident_blocks_qualification(ledger_db: Databa
 def test_a_check_that_did_not_run_blocks_rather_than_passing(ledger_db: Database) -> None:
     """`unassessed` is a refusal, not a footnote.
 
-    With no frozen drawdown limit the forward drawdown was not compared to anything, and this
-    project has been burned repeatedly by a check that quietly did nothing looking exactly like
-    a check that passed.
+    This gate measures benchmark-relative growth. Pointed at a mandate that asks for terminal
+    wealth it has not answered the question it was asked, and reporting the number it happens to
+    have would be answering a different question and calling it agreement. This project has been
+    burned repeatedly by a check that quietly did nothing looking exactly like a check that
+    passed, so silence is blocking.
     """
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
         seed_prices(
-            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=300, benchmark_daily_bps=1
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
         )
-        without_limit = forward_evidence(session, hypothesis_id=freeze_claim(session))
+        claim = freeze_claim(session)
+        answered = forward_evidence(session, hypothesis_id=claim)
+        mismatched = forward_evidence(
+            session,
+            hypothesis_id=claim,
+            objective=objective(objective=Objective.TERMINAL_WEALTH),
+        )
 
-    assert without_limit.unassessed
-    assert not without_limit.supported
-    assert "not assessed" in without_limit.explain()
+    # The measurement is identical. Only the question changed.
+    assert answered.supported, answered.explain()
+    assert mismatched.statistics == answered.statistics
+    assert mismatched.unassessed
+    assert not mismatched.supported
+    assert "not assessed" in mismatched.explain()
 
 
 def test_an_excess_that_is_only_beta_does_not_qualify(ledger_db: Database) -> None:
@@ -1125,9 +1156,7 @@ def test_an_excess_that_is_only_beta_does_not_qualify(ledger_db: Database) -> No
                 ],
                 provider="test",
             )
-        evidence = forward_evidence(
-            session, hypothesis_id=freeze_claim(session), max_drawdown_limit_bps=9000
-        )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
 
     assert evidence.statistics is not None
     assert evidence.statistics.beta > Decimal("1.5")
@@ -1144,6 +1173,7 @@ def test_forward_evidence_cannot_be_assembled_by_a_caller(ledger_db: Database) -
             strategy_version="1.3.0",
             configuration_hash="cfg-abc",
             assessed_at=NOW,
+            objective_identity="economic-objective-v1-deadbeefdeadbeef",
             role=DeploymentRole.EDGE_CANDIDATE,
             forward_days=MINIMUM_FORWARD_DAYS,
             forward_trades=MINIMUM_FORWARD_TRADES,
@@ -1233,9 +1263,7 @@ def test_the_supported_path_exists_and_needs_an_effect_nobody_has(ledger_db: Dat
             benchmark_daily_bps=1,
             jitter_bps=1,
         )
-        evidence = forward_evidence(
-            session, hypothesis_id=freeze_claim(session), max_drawdown_limit_bps=2000
-        )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
 
         assert evidence.power is not None
         assert evidence.power.cleared, evidence.explain()
@@ -1251,9 +1279,7 @@ def test_the_supported_path_exists_and_needs_an_effect_nobody_has(ledger_db: Dat
             reason="the forward window agrees",
             now=NOW,
             account_id=ACCOUNT,
-            benchmark_symbol=BENCHMARK,
             hypothesis_id="H-2026-047",
-            max_drawdown_limit_bps=2000,
         )
 
     assert moved.stage is Stage.PAPER_QUALIFIED
@@ -1317,14 +1343,12 @@ def test_a_refuted_mechanism_stops_being_an_edge_candidate(ledger_db: Database) 
             jitter_bps=1,
         )
         claim = freeze_claim(session)
-        before = forward_evidence(
-            session, hypothesis_id=claim, max_drawdown_limit_bps=2000
-        )
+        before = forward_evidence(session, hypothesis_id=claim)
         assert before.role is DeploymentRole.EDGE_CANDIDATE
         assert before.supported, before.explain()
 
         _refute(session, claim)
-        after = forward_evidence(session, hypothesis_id=claim, max_drawdown_limit_bps=2000)
+        after = forward_evidence(session, hypothesis_id=claim)
 
     # Same account, same fills, same profit. The claim is what changed.
     assert after.statistics == before.statistics
@@ -1363,9 +1387,7 @@ def test_an_untestable_verdict_is_not_a_refutation(ledger_db: Database) -> None:
                 recorded_at=NOW,
             )
         )
-        evidence = forward_evidence(
-            session, hypothesis_id=claim, max_drawdown_limit_bps=2000
-        )
+        evidence = forward_evidence(session, hypothesis_id=claim)
 
     assert evidence.role is DeploymentRole.EDGE_CANDIDATE
     assert evidence.supported, evidence.explain()
@@ -1405,9 +1427,139 @@ def test_the_refutation_trigger_follows_lineage_rather_than_prose(ledger_db: Dat
         )
         claim = freeze_claim(session)
         _refute(session, "H-2026-999-some-other-question")
-        evidence = forward_evidence(
-            session, hypothesis_id=claim, max_drawdown_limit_bps=2000
-        )
+        evidence = forward_evidence(session, hypothesis_id=claim)
 
     assert evidence.role is DeploymentRole.EDGE_CANDIDATE
     assert evidence.supported, evidence.explain()
+
+
+def test_the_last_rung_refuses_an_objective_the_operator_has_not_ratified() -> None:
+    """`LIVE_REVIEW_ELIGIBLE` is where the mandate's ratification starts to matter.
+
+    Everything below it can be judged against an objective transcribed from the project's own
+    documents. Putting a candidate in front of the operator *as satisfying their objective*
+    cannot: only they decide what this project is optimising, and the shipped mandate says
+    PROVISIONAL precisely so that this refuses rather than assuming.
+    """
+    qualified = state(Stage.PAPER_QUALIFIED)
+    provisional = load_economic_objective()
+    assert not provisional.ratified()
+
+    with pytest.raises(PromotionRefused, match="PROVISIONAL"):
+        promote(
+            qualified,
+            Stage.LIVE_REVIEW_ELIGIBLE,
+            actor="director",
+            reason="every gate is clear",
+            now=NOW,
+            objective=provisional,
+        )
+
+    with pytest.raises(PromotionRefused, match="no economic objective was supplied"):
+        promote(
+            qualified,
+            Stage.LIVE_REVIEW_ELIGIBLE,
+            actor="director",
+            reason="no mandate named",
+            now=NOW,
+        )
+
+    ratified = provisional.model_copy(
+        update={
+            "status": MandateStatus.RATIFIED,
+            "ratified_by": "hutch",
+            "ratified_at": date(2026, 8, 22),
+        }
+    )
+    moved = promote(
+        qualified,
+        Stage.LIVE_REVIEW_ELIGIBLE,
+        actor="director",
+        reason="every gate is clear and the objective is the operator's",
+        now=NOW,
+        objective=ratified,
+    )
+    assert moved.stage is Stage.LIVE_REVIEW_ELIGIBLE
+    # Still terminal. Ratifying an objective does not create a destination past human review.
+    assert ALLOWED_PROMOTIONS[Stage.LIVE_REVIEW_ELIGIBLE] == frozenset()
+
+
+def test_the_evidence_names_the_objective_it_was_judged_under(ledger_db: Database) -> None:
+    """A verdict that cannot name its mandate is one whose success criterion could have moved."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=30, benchmark_daily_bps=5
+        )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
+
+    assert evidence.objective_identity == load_economic_objective().identity
+    assert evidence.objective_identity.startswith("economic-objective-v1-")
+
+
+def test_a_real_but_trivial_edge_is_not_a_meaningful_one(ledger_db: Database) -> None:
+    """The mandate's improvement threshold, doing the job a t-statistic cannot.
+
+    A tiny benchmark-relative edge can be statistically clean and still not worth the
+    operational risk of running an autonomous trading system. How small is too small is an
+    operator judgement, so it is written down in advance rather than settled once a candidate's
+    number is on the table.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        generous = forward_evidence(session, hypothesis_id=claim)
+        demanding = forward_evidence(
+            session,
+            hypothesis_id=claim,
+            objective=objective(minimum_meaningful_improvement_bps=10_000_000),
+        )
+
+    assert generous.supported, generous.explain()
+    assert demanding.statistics == generous.statistics
+    assert not demanding.supported
+    assert any("calls meaningful" in reason for reason in demanding.blocking)
+
+
+def test_a_profitable_window_that_breached_the_drawdown_ceiling_does_not_qualify(
+    ledger_db: Database,
+) -> None:
+    """The constraint half of the mandate, which the return half cannot speak for.
+
+    This window is unambiguously good on every return measure: the excess clears the luck bar by
+    a wide margin, the sample is powered, and the improvement is enormous. It also dropped
+    through the drawdown ceiling on the way. `max_drawdown_bps` is a hard constraint, so a
+    candidate that violated it is not compared on return at all -- and weakening a drawdown
+    control to let a profitable backtest through is the specific move REFUTED.md exists to catch.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=200,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+            dip_bps=300,
+        )
+        claim = freeze_claim(session)
+        tolerant = forward_evidence(
+            session, hypothesis_id=claim, objective=objective(max_drawdown_bps=1500)
+        )
+        strict = forward_evidence(
+            session, hypothesis_id=claim, objective=objective(max_drawdown_bps=100)
+        )
+
+    assert strict.statistics is not None
+    assert strict.statistics.max_drawdown_bps > 100
+    assert strict.statistics.excess_t > strict.luck_threshold_z
+    assert tolerant.supported, tolerant.explain()
+    assert not strict.supported
+    assert any("breaches the" in reason for reason in strict.blocking)

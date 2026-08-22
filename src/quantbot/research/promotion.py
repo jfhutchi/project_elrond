@@ -50,6 +50,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from pathlib import Path
 from types import MappingProxyType
 from typing import Annotated, Self
 
@@ -59,6 +60,12 @@ from sqlalchemy.orm import Session
 from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.research.builder import ExperimentOutcome, OutcomeVerdict
 from quantbot.research.critic import hidden_beta
+from quantbot.research.mandate import (
+    EconomicObjective,
+    MandateError,
+    Objective,
+    load_economic_objective,
+)
 from quantbot.research.manifest import VALID_FOR, ExecutionPath
 from quantbot.research.memory import ResearchMemory
 from quantbot.research.power import (
@@ -377,6 +384,10 @@ class ForwardStatistics(FrozenModel):
     excess_sharpe: Decimal
     #: t on the mean excess return, compared against the frozen luck bar rather than against 1.96.
     excess_t: Decimal
+    #: Annualised excess return in basis points. The mandate's "meaningfully better" threshold
+    #: is written in these units, because a Sharpe cannot answer "is this worth the operational
+    #: risk of running an autonomous system" and a number of basis points a year can.
+    excess_bps_per_year: Decimal
     #: Cycle 15 in one number: the deployed rotation is beta 0.71 with alpha t=0.05, and SPY held
     #: at 0.71x reproduces it with no trading at all. A positive excess that is entirely beta is
     #: not an edge, so beta-adjusted alpha has to clear the bar as well as the raw excess.
@@ -407,6 +418,9 @@ class ForwardEvidence:
     strategy_version: str
     configuration_hash: str
     assessed_at: datetime
+    #: Which frozen objective this was judged against. A verdict that cannot name its mandate is
+    #: a verdict whose success criterion could have been chosen after the fact.
+    objective_identity: str
     role: DeploymentRole
     forward_days: int
     forward_trades: int
@@ -424,6 +438,7 @@ class ForwardEvidence:
         strategy_version: str,
         configuration_hash: str,
         assessed_at: datetime,
+        objective_identity: str,
         role: DeploymentRole,
         forward_days: int,
         forward_trades: int,
@@ -444,6 +459,7 @@ class ForwardEvidence:
         object.__setattr__(self, "strategy_version", strategy_version)
         object.__setattr__(self, "configuration_hash", configuration_hash)
         object.__setattr__(self, "assessed_at", assessed_at)
+        object.__setattr__(self, "objective_identity", objective_identity)
         object.__setattr__(self, "role", role)
         object.__setattr__(self, "forward_days", forward_days)
         object.__setattr__(self, "forward_trades", forward_trades)
@@ -566,6 +582,7 @@ def _forward_statistics(
         paired_sessions=count,
         excess_sharpe=quantize(mean_excess / spread * math.sqrt(sessions_per_year)),
         excess_t=quantize(mean_excess / (spread / math.sqrt(count))),
+        excess_bps_per_year=quantize(mean_excess * sessions_per_year * 10000),
         beta=quantize(report.beta),
         alpha_bps_per_session=quantize(report.alpha_per_period * 10000),
         alpha_t=quantize(report.alpha_t),
@@ -604,11 +621,10 @@ def assess_forward_evidence(
     strategy_version: str,
     configuration_hash: str,
     account_id: str,
-    benchmark_symbol: str,
+    objective: EconomicObjective,
     assessed_at: datetime,
     hypothesis_id: str | None = None,
     hypothesis_version: int = 1,
-    max_drawdown_limit_bps: int | None = None,
 ) -> ForwardEvidence:
     """Read what the forward account says about the frozen claim, and refuse to flatter it.
 
@@ -642,6 +658,12 @@ def assess_forward_evidence(
     the spread is already inside the numbers -- the one respect in which forward evidence is
     cheaper to judge honestly than a backtest.
 
+    The benchmark and the drawdown limit come from the frozen `objective` rather than from
+    arguments, and so does what "meaningfully better" means. Those three are precisely the knobs
+    a caller could turn to make a candidate pass: a different benchmark, a looser drawdown, a
+    smaller improvement threshold. Freezing them one level above the experiment is #54's whole
+    point -- a system that can search definitions of success will find one.
+
     Neither the claim nor the luck bar is an argument. Both are read here: the effect
     specification comes from the frozen registration named by `hypothesis_id`, and the burden
     comes from the registry as it stands *now* rather than as it stood when the hypothesis was
@@ -670,7 +692,7 @@ def assess_forward_evidence(
     ordered_dates = sorted({observation.trading_date for observation in observations})
     wanted = frozenset(ordered_dates)
     equity = _session_equity(session, account_id=account_id, dates=wanted)
-    benchmark = _benchmark_closes(session, symbol=benchmark_symbol, dates=wanted)
+    benchmark = _benchmark_closes(session, symbol=objective.benchmark_symbol, dates=wanted)
     strategy_returns, benchmark_returns = _paired_returns(ordered_dates, equity, benchmark)
 
     threshold = luck_threshold(cumulative_trials)
@@ -684,7 +706,7 @@ def assess_forward_evidence(
         blocking.append(f"{trades} of {MINIMUM_FORWARD_TRADES} forward trades")
 
     report = _forward_statistics(
-        benchmark_symbol=benchmark_symbol,
+        benchmark_symbol=objective.benchmark_symbol,
         strategy_returns=strategy_returns,
         benchmark_returns=benchmark_returns,
         drawdown_bps=_max_drawdown_bps(ordered_dates, equity),
@@ -696,8 +718,8 @@ def assess_forward_evidence(
     )
     if report is None:
         blocking.append(
-            f"{len(strategy_returns)} paired sessions against {benchmark_symbol}, below the "
-            f"{MINIMUM_PAIRED_SESSIONS} any statistic needs"
+            f"{len(strategy_returns)} paired sessions against {objective.benchmark_symbol}, "
+            f"below the {MINIMUM_PAIRED_SESSIONS} any statistic needs"
         )
 
     power: PowerAssessment | None = None
@@ -749,13 +771,27 @@ def assess_forward_evidence(
             f"{len(incidents)} unresolved integrity incident(s) stand over this evidence window"
         )
 
-    if max_drawdown_limit_bps is None:
-        unassessed.append("forward drawdown against a frozen limit; none was supplied")
-    elif report is not None and report.max_drawdown_bps > max_drawdown_limit_bps:
-        blocking.append(
-            f"forward drawdown of {report.max_drawdown_bps}bps breaches the frozen "
-            f"{max_drawdown_limit_bps}bps limit"
+    if objective.objective is not Objective.BENCHMARK_RELATIVE_GROWTH:
+        # The measurement below is a benchmark-relative one. Reporting it against a mandate
+        # asking for something else would be answering a question nobody asked and calling it
+        # agreement.
+        unassessed.append(
+            f"{objective.identity} maximises {objective.objective.value}, and this gate measures "
+            "benchmark-relative growth; the window was not judged against the frozen objective"
         )
+    if report is not None:
+        if report.max_drawdown_bps > objective.max_drawdown_bps:
+            blocking.append(
+                f"forward drawdown of {report.max_drawdown_bps}bps breaches the "
+                f"{objective.max_drawdown_bps}bps ceiling in {objective.identity}"
+            )
+        if report.excess_bps_per_year < objective.minimum_meaningful_improvement_bps:
+            blocking.append(
+                f"{report.excess_bps_per_year}bps a year of benchmark-relative return is below "
+                f"the {objective.minimum_meaningful_improvement_bps}bps {objective.identity} "
+                "calls meaningful; a difference too small to be worth the operational risk is "
+                "not an edge whatever its t-statistic"
+            )
 
     if report is not None:
         if abs(report.excess_t) < threshold:
@@ -779,6 +815,7 @@ def assess_forward_evidence(
         strategy_version=strategy_version,
         configuration_hash=configuration_hash,
         assessed_at=assessed_at,
+        objective_identity=objective.identity,
         role=role,
         forward_days=days,
         forward_trades=trades,
@@ -809,6 +846,7 @@ def promote(
     outcome: ExperimentOutcome | None = None,
     observations: LedgerObservations | None = None,
     evidence: ForwardEvidence | None = None,
+    objective: EconomicObjective | None = None,
     integrity_clear: bool = True,
 ) -> PromotionState:
     """Move a strategy up, refusing every stage it has not earned.
@@ -887,6 +925,22 @@ def promote(
             )
         if not evidence.supported:
             raise PromotionRefused(state.strategy_id, target, evidence.explain())
+
+    if target is Stage.LIVE_REVIEW_ELIGIBLE:
+        # The last rung before a human looks. It is the one place the mandate's *ratification*
+        # matters rather than merely its contents: everything below can be judged against a
+        # transcribed objective, but putting a candidate in front of the operator as satisfying
+        # their objective requires that they said it was theirs.
+        if objective is None:
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                "no economic objective was supplied; a candidate cannot be offered for human "
+                "review without naming the mandate it satisfies",
+            )
+        objections = objective.live_review_objections()
+        if objections:
+            raise PromotionRefused(state.strategy_id, target, "; ".join(objections))
 
     return state.model_copy(
         update={"stage": target, "reason": reason, "actor": actor, "updated_at": now}
@@ -1128,10 +1182,9 @@ class PromotionLedger:
         target: Stage,
         *,
         account_id: str | None = None,
-        benchmark_symbol: str | None = None,
         hypothesis_id: str | None = None,
         hypothesis_version: int = 1,
-        max_drawdown_limit_bps: int | None = None,
+        objective_path: str | Path | None = None,
         **kwargs: object,
     ) -> PromotionState:
         """Move a strategy up and persist it, or refuse and persist nothing.
@@ -1146,14 +1199,36 @@ class PromotionLedger:
         ignored: silently discarding an argument a caller believed was doing something is how a
         control becomes decorative.
 
-        What a caller *does* supply is where to look -- the account holding the money, the
-        benchmark the claim is relative to, the registration that froze the claim, and the
-        drawdown limit it was sized to. Naming a source cannot flatter the answer; supplying one
-        can.
+        What a caller *does* supply is where to look -- the account holding the money and the
+        registration that froze the claim. Naming a source cannot flatter the answer; supplying
+        one can. The benchmark, the drawdown ceiling and the threshold for "meaningfully better"
+        come from the frozen economic objective on disk, because those are the three knobs that
+        would make a candidate pass if a caller held them.
+
+        `objective_path` exists for tests, which need a mandate that is not the operator's. A
+        test walks `src/` and fails if anything in production passes it, the same arrangement
+        `issue_measured_readiness` uses: the boundary is that exactly one path reaches it, and
+        that is checked rather than assumed.
         """
         state = self._require(strategy_id)
         # Only once the move is legal. An illegal transition should say so, rather than
         # complaining about the inputs of a stage it was never going to reach.
+        if target is Stage.LIVE_REVIEW_ELIGIBLE and target in ALLOWED_PROMOTIONS[state.stage]:
+            if "objective" in kwargs:
+                raise PromotionRefused(
+                    strategy_id,
+                    target,
+                    "the economic objective is read from disk, not supplied; a caller holding "
+                    "it holds the definition of success",
+                )
+            try:
+                kwargs["objective"] = (
+                    load_economic_objective()
+                    if objective_path is None
+                    else load_economic_objective(objective_path)
+                )
+            except MandateError as error:
+                raise PromotionRefused(strategy_id, target, str(error)) from error
         if target is Stage.PAPER_QUALIFIED and target in ALLOWED_PROMOTIONS[state.stage]:
             for supplied in ("observations", "evidence"):
                 if supplied in kwargs:
@@ -1162,13 +1237,21 @@ class PromotionLedger:
                         target,
                         f"forward {supplied} are read from the durable ledger, not supplied",
                     )
-            if account_id is None or benchmark_symbol is None:
+            if account_id is None:
                 raise PromotionRefused(
                     strategy_id,
                     target,
-                    "paper qualification needs an account to read equity from and a benchmark "
-                    "to be relative to; absolute P&L cannot tell +4% against +8% from an edge",
+                    "paper qualification needs an account to read equity from; absolute P&L "
+                    "cannot tell +4% against +8% from an edge, and neither can no P&L",
                 )
+            try:
+                objective = (
+                    load_economic_objective()
+                    if objective_path is None
+                    else load_economic_objective(objective_path)
+                )
+            except MandateError as error:
+                raise PromotionRefused(strategy_id, target, str(error)) from error
             kwargs["observations"] = observe_forward_days(
                 self._session,
                 strategy_id=strategy_id,
@@ -1186,11 +1269,10 @@ class PromotionLedger:
                 strategy_version=state.strategy_version,
                 configuration_hash=state.configuration_hash,
                 account_id=account_id,
-                benchmark_symbol=benchmark_symbol,
+                objective=objective,
                 assessed_at=assessed_at,
                 hypothesis_id=hypothesis_id,
                 hypothesis_version=hypothesis_version,
-                max_drawdown_limit_bps=max_drawdown_limit_bps,
             )
         moved = promote(state, target, **kwargs)  # type: ignore[arg-type]
         self._save(moved, direction="PROMOTION")
