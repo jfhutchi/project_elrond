@@ -1016,6 +1016,11 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
       <p class="caveat">Reserved and consumed are different facts. A reservation is a claim on
         data nobody has looked at yet and it lapses; a consumption is permanent, because
         contamination is a fact about what was seen rather than about a record.</p>
+      <p class="caveat">This table shows rows in the ledger. It is <strong>not</strong> the whole
+        picture of what has been spent: cycles 2&ndash;10 put roughly 68 candidate evaluations
+        against SIP US equities 2016&ndash;2026 before this registry existed, so
+        <code>window_consumption</code> reports that range <strong>EXHAUSTED</strong> while no row
+        here claims it. Ask the registry, not this table, before assuming a range is free.</p>
     </section>
   </div>
 
