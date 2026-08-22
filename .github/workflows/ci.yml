@@ -1,0 +1,69 @@
+# The independent merge gate (#49).
+#
+# Every number this project publishes about its own software has so far been self-reported by
+# the agent that wrote the code. The repository's governing rule is that a gate must not trust
+# the party that benefits from it passing, and "1,332 tests pass" was the last claim still
+# exempt from it. This runs the same three commands somewhere the author does not control.
+#
+# No secrets are referenced anywhere in this file. That is deliberate and load-bearing: the
+# suite must be incapable of reaching a broker, so it is never handed the means to.
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    # The required status check to protect `main` with is "checks".
+    name: checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      # A test that reaches for real credentials should fail loudly rather than find some.
+      QUANTBOT_LIVE_TRADING: "false"
+      UV_LINK_MODE: copy
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install
+
+      # --frozen, so a lockfile that no longer matches pyproject.toml is a failure rather than
+      # a silent resolution against something nobody reviewed.
+      - name: Sync the locked environment
+        run: uv sync --frozen --group dev
+
+      - name: Lint
+        run: uv run ruff check src tests
+
+      - name: Type-check
+        run: uv run mypy src
+
+      - name: Test
+        run: uv run pytest
+
+      # A suite that writes into the working tree has state it did not declare, and the next
+      # run is no longer starting where this one did.
+      - name: The suite left the tree clean
+        run: |
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "the test run modified tracked or untracked files:"
+            git status --porcelain
+            exit 1
+          fi

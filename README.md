@@ -126,6 +126,30 @@ leaves the test green, the test is measuring something else.
 
 ---
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `ruff check src tests`, `mypy src` and `pytest` on every push
+and pull request, then fails if the suite left the working tree dirty. The required status
+check to protect `main` with is named **`checks`**.
+
+It references **no secrets**. The suite must be incapable of reaching a broker, so it is never
+handed the means to.
+
+This exists because a green suite reported by the agent that wrote the code is the last claim
+in the project still exempt from its own rule: *a gate must not trust the party that benefits
+from it passing.*
+
+**Operator action outstanding:** `main` is currently unprotected. To require the gate:
+
+```bash
+gh api -X PUT repos/jfhutchi/project_elrond/branches/main/protection   -F required_status_checks[strict]=true   -F 'required_status_checks[contexts][]=checks'   -F enforce_admins=false   -F required_pull_request_reviews=null   -F restrictions=null   -F allow_force_pushes=false
+```
+
+Left to the operator deliberately: branch protection is a repository setting, and an agent
+changing the rules it is judged by is the shape of defect this file is full of.
+
+---
+
 ## Status
 
 Engineering on the v0.2 research architecture is in progress; forward paper evidence is
