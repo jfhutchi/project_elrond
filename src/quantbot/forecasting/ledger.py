@@ -11,7 +11,7 @@ from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
 from quantbot.domain import Bar
-from quantbot.forecasting.evaluation import score_forecast
+from quantbot.forecasting.evaluation import UnscoreableForecast, score_forecast
 from quantbot.forecasting.models import (
     BaselineScore,
     ForecastEvaluation,
@@ -144,7 +144,9 @@ def _require_canonical_evaluation(forecast: ForecastRecord, evaluation: Forecast
             outcome_adjustment_metadata=_json_object(evaluation.outcome_adjustment_metadata_json),
             evaluated_at=evaluation.evaluated_at,
         )
-    except (TypeError, ValueError) as exc:
+    except (TypeError, ValueError, UnscoreableForecast) as exc:
+        # An evaluation whose own outcome bars cannot reproduce it is not canonical, whether the
+        # re-derivation failed on a malformed bar or on a target its bars never covered.
         raise StateConflictError(
             "evaluation does not match the canonical score for its linked forecast"
         ) from exc

@@ -19,6 +19,22 @@ from quantbot.forecasting.models import (
 )
 
 
+class UnscoreableForecast(RuntimeError):
+    """A forecast whose targets can never be realized, as distinct from not yet realized.
+
+    Raised rather than returned so a caller cannot treat it as "keep waiting". Scoring never
+    substitutes a nearby session for a missing one -- the forecast was registered against exact
+    timestamps and scoring against different ones would be scoring a different forecast.
+    """
+
+    def __init__(
+        self, message: str, *, forecast_id: str, missing_targets: tuple[datetime, ...]
+    ) -> None:
+        super().__init__(message)
+        self.forecast_id = forecast_id
+        self.missing_targets = missing_targets
+
+
 def _canonical_json(value: object) -> str:
     return json.dumps(value, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
 
@@ -82,8 +98,22 @@ def score_forecast(
     if len({bar.timestamp for bar in matching}) != len(matching):
         raise ValueError("duplicate outcome bar timestamps are not allowed")
     by_timestamp = {bar.timestamp: bar for bar in matching}
-    if any(timestamp not in by_timestamp for timestamp in targets):
-        return None
+    if missing := [timestamp for timestamp in targets if timestamp not in by_timestamp]:
+        # Reaching here means `available_at >= targets[-1]`: the outcome vintage already covers
+        # the whole target window and the bar still is not in it. That is unreachable, not
+        # pending, and returning None would make the two indistinguishable -- a forecast waiting
+        # forever on a session that never happened, reported as success-shaped emptiness.
+        #
+        # Default targets skip weekends but deliberately do not guess exchange holidays, so this
+        # fires several times a year. Not guessing is right; a forecast silently stuck because of
+        # it is not.
+        raise UnscoreableForecast(
+            f"{forecast.forecast_id} registered {len(missing)} target(s) with no bar in an "
+            f"outcome vintage that already covers them: "
+            f"{', '.join(timestamp.isoformat() for timestamp in missing)}",
+            forecast_id=forecast.forecast_id,
+            missing_targets=tuple(missing),
+        )
     selected = [by_timestamp[timestamp] for timestamp in targets]
     source_close = snapshot.bars[-1].close
     realized = selected[-1].close / source_close - 1

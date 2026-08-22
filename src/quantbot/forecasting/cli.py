@@ -21,7 +21,7 @@ from quantbot.forecasting.database import (
     ForecastDatabase,
     UnsupportedForecastSchemaVersionError,
 )
-from quantbot.forecasting.evaluation import score_forecast
+from quantbot.forecasting.evaluation import UnscoreableForecast, score_forecast
 from quantbot.forecasting.ledger import ForecastLedger
 from quantbot.forecasting.models import (
     ForecastRecord,
@@ -347,6 +347,7 @@ def _score(args: argparse.Namespace, *, context: ShadowCLIContext) -> tuple[int,
         raise FileNotFoundError("forecast database does not exist")
     database = ForecastDatabase(args.forecast_database)
     evaluations: list[dict[str, object]] = []
+    unscoreable_forecasts: list[dict[str, object]] = []
     try:
         with database.transaction() as session:
             ledger = ForecastLedger(session)
@@ -372,17 +373,31 @@ def _score(args: argparse.Namespace, *, context: ShadowCLIContext) -> tuple[int,
                     provider=forecast.request.snapshot.provider,
                     adjustment_metadata_json=(forecast.request.snapshot.adjustment_metadata_json),
                 )
-                evaluation = score_forecast(
-                    forecast,
-                    outcome_bars=bars,
-                    outcome_provider=forecast.request.snapshot.provider,
-                    outcome_vintage_id=args.outcome_vintage_id,
-                    outcome_available_at=outcome_available_at,
-                    outcome_adjustment_metadata=json.loads(
-                        forecast.request.snapshot.adjustment_metadata_json
-                    ),
-                    evaluated_at=evaluated_at,
-                )
+                try:
+                    evaluation = score_forecast(
+                        forecast,
+                        outcome_bars=bars,
+                        outcome_provider=forecast.request.snapshot.provider,
+                        outcome_vintage_id=args.outcome_vintage_id,
+                        outcome_available_at=outcome_available_at,
+                        outcome_adjustment_metadata=json.loads(
+                            forecast.request.snapshot.adjustment_metadata_json
+                        ),
+                        evaluated_at=evaluated_at,
+                    )
+                except UnscoreableForecast as unscoreable:
+                    # Reported rather than raised: one forecast stuck on a holiday must not stop
+                    # the rest of the batch from scoring, and it must not vanish either.
+                    unscoreable_forecasts.append(
+                        {
+                            "forecast_id": unscoreable.forecast_id,
+                            "missing_targets": [
+                                timestamp.isoformat() for timestamp in unscoreable.missing_targets
+                            ],
+                            "symbol": forecast.request.snapshot.symbol,
+                        }
+                    )
+                    continue
                 if evaluation is None:
                     continue
                 ledger.save_evaluation(evaluation)
@@ -396,7 +411,15 @@ def _score(args: argparse.Namespace, *, context: ShadowCLIContext) -> tuple[int,
                 )
     finally:
         database.close()
-    return 0, {"evaluations": evaluations, "ok": True, "shadow_only": True}
+    # `ok` stays true: an unreachable target is a reported fact about the forecast, not a
+    # failure of this command. It is surfaced so nobody reads an empty evaluation list as
+    # "not mature yet" when the window has already closed.
+    return 0, {
+        "evaluations": evaluations,
+        "ok": True,
+        "shadow_only": True,
+        "unscoreable": unscoreable_forecasts,
+    }
 
 
 def main(

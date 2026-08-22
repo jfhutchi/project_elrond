@@ -236,6 +236,15 @@ evaluator; this integration does not import or execute the protected strategy to
 - **Those runs establish plumbing and cost, not forecast value.** They say what the integration
   costs to run and nothing about whether Kronos predicts anything. No forecast accuracy is
   claimed anywhere in this document.
+- **Default targets skip weekends but deliberately do not guess exchange holidays**, so a horizon
+  spanning one registers a session that never happens. Scoring never substitutes a nearby session:
+  the forecast was registered against exact timestamps, and scoring against different ones would
+  score a different forecast. It now reports the forecast as `unscoreable` with the missing target
+  timestamps rather than returning an empty evaluation list, which previously made a permanently
+  stuck forecast indistinguishable from one that was merely immature. Observed for real: an
+  `as_of` of 2026-07-01 registered 2026-07-03, the observed Independence Day, and all 23 forecasts
+  waited forever while `score` reported success. Pass explicit `--future-timestamp` values from an
+  authoritative calendar to avoid it.
 - **Kronos samples OHLC independently, and 4.35% of sampled candles could not have been real
   bars** -- typically a low above the close. Measured over 460 candles from 23 symbols. Sampled
   candles are therefore recorded as the model produced them rather than validated against

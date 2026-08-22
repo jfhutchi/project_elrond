@@ -14,7 +14,7 @@ from sqlalchemy import inspect
 
 from quantbot.domain import Bar
 from quantbot.forecasting.database import ForecastDatabase
-from quantbot.forecasting.evaluation import score_forecast
+from quantbot.forecasting.evaluation import UnscoreableForecast, score_forecast
 from quantbot.forecasting.ledger import ForecastLedger
 from quantbot.forecasting.models import (
     BaselineScore,
@@ -642,7 +642,9 @@ def test_scoring_waits_for_exact_targets_and_point_in_time_availability() -> Non
     }
     cutoff = AS_OF + timedelta(days=4, hours=1)
 
-    assert (
+    # Bars 1 and 2 are not the targets, and the vintage already covers the window -- so these
+    # targets never traded rather than not having traded yet. See the dedicated test below.
+    with pytest.raises(UnscoreableForecast):
         score_forecast(
             record,
             outcome_bars=[_outcome_bar(1), _outcome_bar(2)],
@@ -650,8 +652,6 @@ def test_scoring_waits_for_exact_targets_and_point_in_time_availability() -> Non
             evaluated_at=cutoff,
             **common,
         )
-        is None
-    )
     assert (
         score_forecast(
             record,
@@ -670,6 +670,59 @@ def test_scoring_waits_for_exact_targets_and_point_in_time_availability() -> Non
             evaluated_at=cutoff,
             **common,
         )
+
+
+def test_a_target_that_can_never_arrive_is_reported_not_waited_on() -> None:
+    """A holiday makes a forecast unscoreable forever, and it used to look like "not yet".
+
+    Default targets skip weekends but deliberately do not guess exchange holidays, so a horizon
+    spanning one registers a session that never happens. Observed for real: an `as_of` of
+    2026-07-01 registered 2026-07-03, the observed Independence Day, and `score` returned
+    `{"evaluations": [], "ok": true}` -- a success-shaped response for work that can never
+    complete.
+
+    Refusing to substitute a nearby session is right; the forecast was registered against exact
+    timestamps and scoring against different ones would score a different forecast. Being silent
+    about it is not.
+    """
+    record = make_success_record()
+    late = AS_OF + timedelta(days=9)
+
+    with pytest.raises(UnscoreableForecast) as raised:
+        score_forecast(
+            record,
+            outcome_bars=[_outcome_bar(3)],  # the second target never traded
+            outcome_provider=SOURCE_PROVIDER,
+            outcome_vintage_id="outcome-vintage-1",
+            outcome_adjustment_metadata=SOURCE_METADATA,
+            outcome_available_at=late,
+            evaluated_at=late,
+        )
+
+    assert raised.value.missing_targets == (AS_OF + timedelta(days=4),)
+    assert raised.value.forecast_id == record.forecast_id
+
+
+def test_a_target_that_has_simply_not_happened_yet_still_waits() -> None:
+    """The distinction has to cut both ways, or it is just a crash.
+
+    Before the outcome vintage covers the window, a missing bar means "not yet" and scoring must
+    keep waiting rather than declare the forecast dead.
+    """
+    record = make_success_record()
+    early = AS_OF + timedelta(days=1, hours=1)
+
+    result = score_forecast(
+        record,
+        outcome_bars=[_outcome_bar(3)],
+        outcome_provider=SOURCE_PROVIDER,
+        outcome_vintage_id="outcome-vintage-1",
+        outcome_adjustment_metadata=SOURCE_METADATA,
+        outcome_available_at=early,
+        evaluated_at=early,
+    )
+
+    assert result is None, "an immature forecast must wait, not be declared unscoreable"
 
 
 def test_evaluation_baselines_are_deeply_immutable() -> None:
