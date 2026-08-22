@@ -303,6 +303,25 @@ def test_a_registration_reaches_a_manifest_through_generated_code(
     # Sharpe in this result came out of `BacktestEngine.run`.
     assert plan.execution_path is ExecutionPath.PRODUCTION_ENGINE
 
+    # 5. The bundle says which source computed the number (#18).
+    #
+    # `CodeProvenance.git_commit` describes the harness. For a generated experiment the input
+    # that most determines the result is the model-authored source, and it is the one nobody
+    # reviewed -- a manifest recording only the commit would describe everything about the run
+    # except the part worth checking. The digest, the model and the prompt hash now travel with
+    # it, so a later reader can tell two runs apart when the harness is identical and the
+    # generated code is not.
+    diagnostics = {
+        key.removeprefix("diagnostic:"): value["value"]
+        for key, value in result.manifest.results.items()
+        if key.startswith("diagnostic:")
+    }
+    assert diagnostics["code_sha256"], "the manifest does not say which source ran"
+    assert diagnostics["model"], "nor which model wrote it"
+    assert diagnostics["prompt_template_hash"], "nor under which prompt"
+    # It is the digest of the source that actually executed, not of something rebuilt later.
+    assert diagnostics["code_sha256"] == generated.sha256
+
 
 class _StubResponse:
     """Stands in for the model call. The sandbox is real; only the author is fixed."""

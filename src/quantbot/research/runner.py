@@ -415,6 +415,13 @@ class ExperimentRunner:
             neighborhood_grid=dict(design.neighborhood_grid),
             ablations=tuple(design.ablations),
             results={
+                # Diagnostics were computed, attached to the outcome, and dropped here. For a
+                # generated experiment they carry the code digest and the model that wrote it,
+                # so discarding them meant the bundle could not say what produced the number.
+                # Namespaced rather than merged into `primary`, so a diagnostic key can never
+                # collide with a result key and quietly overwrite a verdict.
+                **{f"diagnostic:{key}": {"value": value}
+                   for key, value in sorted(outcome.diagnostics.items())},
                 "primary": {
                     "verdict": outcome.verdict.value,
                     "effect": "" if outcome.effect is None else str(outcome.effect),

@@ -265,6 +265,11 @@ def measurement_from_signal(
             effect=result.metrics.sharpe,
             probes_run=tuple(ran),
             probes_failed=tuple(failed),
+            # Which source actually ran, which model wrote it, under which prompt. Without this
+            # the manifest for a generated experiment records a git commit that describes the
+            # harness and says nothing about the code that computed the signal -- the one input
+            # that most determines the result and the only one nobody reviewed.
+            diagnostics=run.code.provenance,
         )
 
     return measure
