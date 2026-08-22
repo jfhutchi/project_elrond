@@ -29,6 +29,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 from datetime import datetime
 
+from sqlalchemy.orm import Session
+
+from quantbot.forecasting.burden import forecast_burden
 from quantbot.forecasting.models import ForecastRecord, ForecastStatus
 from quantbot.research.hindsight import HindsightAssessment
 from quantbot.research.manifest import WorkerProvenance, content_id
@@ -170,4 +173,33 @@ def semantic_provenance(
     )
 
 
-__all__ = ["KRONOS_WORKER", "SEMANTIC_WORKER", "kronos_provenance", "semantic_provenance"]
+def measured_kronos_provenance(session: Session, record: ForecastRecord) -> WorkerProvenance:
+    """Kronos provenance whose search burden is counted from the forecast ledger.
+
+    The difference from passing `search_cardinality` by hand is the whole point of #23: this
+    number is derived from `model_forecasts` rows, not asserted by the party that benefits from a
+    smaller one. A caller that swept twenty lookbacks and kept the best has twenty rows, and this
+    counts twenty whether or not it mentions them.
+
+    The count covers every configuration run against this symbol, because the burden a result
+    carries is the search it came out of, not the single configuration that won.
+    """
+    burden = forecast_burden(session, symbols=[record.request.snapshot.symbol])
+    if burden.configurations == 0:
+        # The record has to be in the ledger it is being counted against. A zero here means it is
+        # not, and reporting a burden of zero for an inference that demonstrably happened would
+        # be the most flattering possible answer to a question nobody could check.
+        raise ValueError(
+            f"forecast {record.forecast_id} is not present in the ledger being counted; a "
+            "measured burden cannot be taken from a ledger that does not hold the artifact"
+        )
+    return kronos_provenance(record, search_cardinality=burden.configurations)
+
+
+__all__ = [
+    "KRONOS_WORKER",
+    "SEMANTIC_WORKER",
+    "kronos_provenance",
+    "measured_kronos_provenance",
+    "semantic_provenance",
+]

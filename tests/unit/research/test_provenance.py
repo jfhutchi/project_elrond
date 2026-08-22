@@ -217,6 +217,47 @@ def test_a_forecast_that_produced_no_inference_has_no_provenance_to_record() -> 
         kronos_provenance(record)
 
 
+def test_the_search_burden_is_counted_from_rows_not_taken_on_trust(tmp_path) -> None:
+    """The #23 property, applied to the manifest linkage.
+
+    A caller that swept several configurations and kept the best has as many rows as it swept.
+    `measured_kronos_provenance` counts them; nothing lets the sweeping party name a smaller
+    number. Here two configurations are run and both are found, from the ledger, without either
+    being declared.
+    """
+    from quantbot.forecasting.database import ForecastDatabase  # noqa: PLC0415
+    from quantbot.forecasting.ledger import ForecastLedger  # noqa: PLC0415
+    from quantbot.research.provenance import measured_kronos_provenance  # noqa: PLC0415
+
+    swept = [forecast_record(), forecast_record(config=KronosConfig(sample_count=2, seed=99))]
+    database = ForecastDatabase(tmp_path / "forecast.db")
+    try:
+        with database.transaction() as session:
+            ledger = ForecastLedger(session)
+            for entry in swept:
+                ledger.save_forecast(entry)
+
+            worker = measured_kronos_provenance(session, swept[0])
+
+        assert worker.search_cardinality == 2, "a swept configuration went uncounted"
+        assert worker.exploratory_only is False
+    finally:
+        database.close()
+
+
+def test_a_burden_cannot_be_taken_from_a_ledger_that_lacks_the_artifact(tmp_path) -> None:
+    """Zero would be the most flattering possible answer to a question nobody could check."""
+    from quantbot.forecasting.database import ForecastDatabase  # noqa: PLC0415
+    from quantbot.research.provenance import measured_kronos_provenance  # noqa: PLC0415
+
+    database = ForecastDatabase(tmp_path / "empty.db")
+    try:
+        with database.transaction() as session, pytest.raises(ValueError, match="not present"):
+            measured_kronos_provenance(session, forecast_record())
+    finally:
+        database.close()
+
+
 # --- semantic ---------------------------------------------------------------------------------
 
 CUTOFF = date(2024, 6, 1)
