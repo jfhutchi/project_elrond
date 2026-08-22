@@ -11,12 +11,21 @@ consuming macro series and SEC filings without knowing which is which.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import pytest
 
+from quantbot.domain import Bar
+from quantbot.market_data.equities import EquityProvider
 from quantbot.market_data.fred import FredProvider
+from quantbot.market_data.instruments import (
+    AssetClass,
+    CorporateAction,
+    CorporateActionKind,
+    Instrument,
+    InstrumentUniverse,
+)
 from quantbot.market_data.pointintime import (
     Capability,
     Observation,
@@ -151,3 +160,122 @@ def test_the_provider_itself_refuses_a_wrong_capability_not_only_the_helper() ->
         )
     with pytest.raises(UnsupportedCapability):
         fred.observations("PAYEMS", capability=Capability.FUNDAMENTALS, retrieved_at=RETRIEVED)
+
+
+def instrument(
+    identifier: str, symbol: str, *, listed: date, delisted: date | None = None
+) -> Instrument:
+    return Instrument(
+        instrument_id=identifier,
+        symbol=symbol,
+        venue="XNYS",
+        asset_class=AssetClass.EQUITY,
+        exposure_market="US equity",
+        listed_on=listed,
+        delisted_on=delisted,
+    )
+
+
+def equity_provider() -> EquityProvider:
+    """Two names live in 2019, one of which stopped trading before the record ends.
+
+    The delisted one is the whole point. A universe assembled today from names that still trade
+    would never contain it, and no number in the resulting study would show that it was missing.
+    """
+    universe = InstrumentUniverse(
+        [
+            instrument("us-survivor", "AAA", listed=date(2015, 1, 2)),
+            instrument("us-gone", "BBB", listed=date(2015, 1, 2), delisted=date(2020, 6, 30)),
+        ]
+    )
+    bars = {
+        "AAA": [
+            Bar(
+                symbol="AAA",
+                timestamp=datetime(2019, 3, day, tzinfo=UTC),
+                open="100",
+                high="101",
+                low="99",
+                close="100",
+                volume="1000",
+                adjustment="1",
+            )
+            for day in (1, 4, 5)
+        ]
+    }
+    return EquityProvider(
+        bars,
+        universe,
+        session_close=lambda moment: moment.replace(hour=21, minute=0),
+        actions=[
+            CorporateAction(
+                instrument_id="us-survivor",
+                kind=CorporateActionKind.SPLIT,
+                announced_on=date(2019, 3, 4),
+                effective_on=date(2019, 3, 20),
+                factor="2",
+            )
+        ],
+    )
+
+
+def test_equity_and_macro_answer_the_same_study_function() -> None:
+    """Sol's box, named exactly: equity/ETF and macro through one retrieval interface.
+
+    `usable_at` is the study. It branches on nothing -- it is handed a provider and a capability
+    and asks. Two entirely different source families, one call.
+    """
+    macro = FredProvider(ScriptedFred())
+    equities = equity_provider()
+
+    macro_count = usable_at(
+        macro, "PAYEMS", Capability.MACRO_SERIES, datetime(2026, 5, 1, tzinfo=UTC)
+    )
+    equity_count = usable_at(equities, "AAA", Capability.BARS, datetime(2019, 3, 6, tzinfo=UTC))
+
+    assert macro_count > 0, "the macro series was readable through the shared surface"
+    assert equity_count > 0, "so were the bars, through the same function"
+
+
+def test_survivorship_is_measurable_rather_than_asserted() -> None:
+    """Sol's second box: survivorship exercised end to end, not declared small.
+
+    The universe as of 2019 contains a name that stopped trading in 2020. A study assembled from
+    today's survivors would silently drop it, and every cross-sectional number would be
+    flattering in a way nothing in the output reveals. `survivorship_bias` makes the exposure a
+    number the study can look at and refuse to proceed on.
+    """
+    equities = equity_provider()
+    as_of = datetime(2019, 6, 30, tzinfo=UTC)
+
+    members = equities.instruments(as_of=as_of)
+    exposure = equities.survivorship_bias(as_of=as_of)
+
+    assert {item.symbol for item in members} == {"AAA", "BBB"}, "the delisted name is present"
+    assert exposure == pytest.approx(0.5), "half the 2019 universe did not survive"
+
+    # And after the delisting it is genuinely gone, so membership is a function of time rather
+    # than a fixed list with a flag nobody reads.
+    later = equities.instruments(as_of=datetime(2021, 1, 4, tzinfo=UTC))
+    assert {item.symbol for item in later} == {"AAA"}
+
+
+def test_a_corporate_action_is_filtered_by_announcement_not_effect() -> None:
+    """Adjusting on the effective date uses an announcement the market had not seen.
+
+    The split here is announced on the 4th and effective on the 20th. A backtest deciding on the
+    10th may know about it; one deciding on the 1st may not, and a provider that filtered on
+    `effective_on` would hand it to both.
+    """
+    equities = equity_provider()
+
+    before = equities.corporate_actions(
+        "us-survivor", knowable_by=datetime(2019, 3, 1, tzinfo=UTC)
+    )
+    after = equities.corporate_actions(
+        "us-survivor", knowable_by=datetime(2019, 3, 10, tzinfo=UTC)
+    )
+
+    assert before == (), "an unannounced action must not be visible"
+    assert len(after) == 1, "an announced action is visible before it takes effect"
+    assert after[0].effective_on > date(2019, 3, 10), "and it has not taken effect yet"
