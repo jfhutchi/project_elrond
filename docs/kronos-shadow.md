@@ -233,9 +233,19 @@ evaluator; this integration does not import or execute the protected strategy to
   `KronosSignalProvider` rather than by calling the model directly: 64 daily bars in, horizon 3,
   2 sample paths, model initialization 0.23 s, inference 0.18 s, peak process memory 660 MB. The
   GPU field remains null; GPU measurement is deferred with the CPU-only first integration.
-- **That run establishes plumbing and cost, not forecast value.** The input was a synthetic price
-  series, so the numbers above say what the integration costs to run and nothing about whether
-  Kronos predicts anything. No forecast accuracy is claimed anywhere in this document.
+- **Those runs establish plumbing and cost, not forecast value.** They say what the integration
+  costs to run and nothing about whether Kronos predicts anything. No forecast accuracy is
+  claimed anywhere in this document.
+- **Kronos samples OHLC independently, and 4.35% of sampled candles could not have been real
+  bars** -- typically a low above the close. Measured over 460 candles from 23 symbols. Sampled
+  candles are therefore recorded as the model produced them rather than validated against
+  real-bar ordering, and the violation count is persisted per forecast in
+  `ForecastFeatures.inconsistent_candles`. Enforcing ordering discarded 61% of real forecasts at
+  4 samples x horizon 5, and effectively all of them at settings large enough to estimate
+  dispersion; worse, the loss correlated with model uncertainty, so the survivors were a biased
+  subset. The count is `None` for artifacts written before the measurement existed, which is not
+  the same claim as `0`. Whether inconsistent forecasts score worse is an open question the
+  recorded counts make answerable.
 - The process boundary scrubs application credentials, stages the worker outside the checkout,
   makes Elrond unimportable, disables common socket/process APIs before upstream imports, and runs
   with local-only artifacts. This is defense in depth, not an OS sandbox/chroot. On Windows it does
