@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import os
 from collections.abc import Awaitable
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -371,7 +372,7 @@ class RunOnceCycle:
                         occurred_at=finished_at,
                         reasons=("UNHANDLED_OPERATIONAL_EXCEPTION",),
                         message="Unhandled exception during operational cycle",
-                        detail={"exception_type": type(error).__name__},
+                        detail=_exception_detail(error),
                     )
                     self._finish(
                         run_id,
@@ -381,3 +382,44 @@ class RunOnceCycle:
                     )
                 self._metrics.increment("quantbot_unhandled_exceptions_total")
                 raise
+
+
+def _exception_detail(error: BaseException) -> dict[str, object]:
+    """What an incident needs to be diagnosable a day later, carrying nothing that could be data.
+
+    The kill switch halted trading on 2026-08-20 with `exception_type: StateConflictError` and
+    nothing else. That is enough to know something conflicted and not enough to know *what*, and
+    by the time anybody looked the journal had rotated. An incident that stops the system should
+    carry its own explanation, because the surrounding logs are not guaranteed to still exist.
+
+    **The exception message is still not persisted**, and that is deliberate rather than
+    inherited. My first attempt stored a redacted message and the redactor did not catch the
+    planted value -- which is the whole argument against storing it: a filter over arbitrary text
+    fails open, and the failure is silent and permanent. A broker error can echo a request URL
+    and a URL can carry a key.
+
+    What is added instead is the origin frame, which is derived from *code* rather than from
+    data. `cycle.py:299` cannot contain a credential no matter what the exception was carrying,
+    and it points at the exact line, which is most of what the message would have told you.
+    """
+    detail: dict[str, object] = {"exception_type": type(error).__name__}
+    frame = _origin(error)
+    if frame is not None:
+        detail["origin"] = frame
+    return detail
+
+
+def _origin(error: BaseException) -> str | None:
+    """The deepest frame belonging to this package, as `file:line`.
+
+    A full traceback would be more complete and would also be where a credential is most likely
+    to surface, in a local variable repr. The file and line are enough to find the code.
+    """
+    trace = error.__traceback__
+    found: str | None = None
+    while trace is not None:
+        filename = trace.tb_frame.f_code.co_filename
+        if f"{os.sep}quantbot{os.sep}" in filename:
+            found = f"{Path(filename).name}:{trace.tb_lineno}"
+        trace = trace.tb_next
+    return found

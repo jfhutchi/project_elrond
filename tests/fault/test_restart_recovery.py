@@ -79,5 +79,10 @@ async def test_unhandled_exception_is_captured_without_message_and_re_raised(
         assert run is not None and run.status == "ERROR"
         assert incidents[0].message == "Unhandled exception during operational cycle"
         assert "credential-looking" not in str(incidents[0].detail)
+        # The origin is derived from code rather than from data, so it cannot carry a credential
+        # whatever the exception held -- and it is what makes the incident diagnosable once the
+        # journal has rotated. A halt that says only "StateConflictError" happened on 2026-08-20
+        # and was not enough to find the cause.
+        assert str(incidents[0].detail["origin"]).startswith("cycle.py:")
     assert KillSwitchController(database).get().engaged is True
     database.close()
