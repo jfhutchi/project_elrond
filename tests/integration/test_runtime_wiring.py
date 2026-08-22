@@ -49,6 +49,7 @@ from quantbot.runtime import (
 )
 from quantbot.storage import Database, StorageRepository
 from quantbot.strategy import StrategyConfig, load_strategy_config
+from tests.support import measured
 
 ACCOUNT_ID = "paper-account-1"
 UNIVERSE = ("SPY", "QQQ", "TLT", "GLD")
@@ -370,7 +371,7 @@ async def test_wired_cycle_reconciles_syncs_data_and_submits_a_risk_sized_order(
     database = Database(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="test fixture readiness",
-        evidence=_ready_evidence(),
+        measured=measured(),
         updated_at=NOW,
     )
     cycle, strategy, broker_transport = _build_cycle(tmp_path, config, database)
@@ -404,7 +405,7 @@ async def test_rerunning_the_same_trading_day_never_submits_a_duplicate_order(
     database = Database(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="test fixture readiness",
-        evidence=_ready_evidence(),
+        measured=measured(),
         updated_at=NOW,
     )
     cycle, strategy, broker = _build_cycle(tmp_path, config, database)

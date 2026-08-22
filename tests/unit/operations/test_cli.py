@@ -10,6 +10,7 @@ from quantbot.domain import ReconciliationStatus
 from quantbot.operations.cycle import PAPER_SMOKE_ACKNOWLEDGEMENT, authorize_paper_smoke
 from quantbot.operations.kill_switch import KillSwitchController, ReadinessEvidence
 from quantbot.storage import Database, StorageRepository
+from tests.support import measured
 
 
 @pytest.mark.parametrize(
@@ -138,7 +139,7 @@ def test_cli_paper_smoke_refuses_an_empty_reconciliation_ledger(tmp_path: Path) 
     database = Database(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="all paper gates verified",
-        evidence=_ready_evidence(),
+        measured=measured(),
         updated_at=datetime(2026, 8, 14, 21, 5, tzinfo=UTC),
     )
     invocations: list[str] = []

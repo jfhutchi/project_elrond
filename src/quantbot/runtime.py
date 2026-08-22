@@ -58,6 +58,7 @@ from quantbot.operations import (
     LedgerSyncingRecovery,
     MarketDataSettings,
     MarketDataSync,
+    MeasuredReadiness,
     OperationalMetrics,
     QualificationTracker,
     ReadinessEvidence,
@@ -65,6 +66,7 @@ from quantbot.operations import (
     SessionCalendar,
     StrategyDataError,
     evaluate_operational_health,
+    measure_readiness,
 )
 from quantbot.reporting import (
     ProjectStatusContext,
@@ -661,11 +663,31 @@ def build_cli_context(
     reconciled = (
         latest is not None and latest.status is ReconciliationStatus.RECONCILED and not latest.diffs
     )
+    async def _measure() -> MeasuredReadiness:
+        """Probe the world at the moment somebody asks to resume trading.
+
+        Deferred rather than computed when the context is built: readiness is a fact about
+        *now*, and a value captured at process start would be minutes or hours stale by the
+        time a clear is attempted. The broker round trip is the whole point, so it happens on
+        demand.
+        """
+        return await measure_readiness(
+            active.database,
+            active.broker,
+            paper_mode=active.settings.TRADING_MODE.value == "PAPER",
+            expected_account_id=active.settings.EXPECTED_ACCOUNT_ID,
+            # The sizing caps came from the strategy config, which means they parsed and
+            # validated on the way in. That is what this condition actually establishes.
+            risk_caps_valid=True,
+            now=datetime.now(UTC),
+        )
+
     return CLIContext(
         settings=active.settings,
         database=active.database,
         handlers=handlers,
         reported_account_id=active.settings.EXPECTED_ACCOUNT_ID,
+        measure=_measure,
         clearance_evidence=ReadinessEvidence(
             paper_mode=active.settings.TRADING_MODE.value == "PAPER",
             account_verified=active.settings.EXPECTED_ACCOUNT_ID is not None,

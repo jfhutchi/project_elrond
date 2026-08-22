@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import os
 import sys
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import TextIO
+from typing import Any, TextIO
 
 from quantbot.config import Settings
 from quantbot.domain import ReconciliationStatus
 from quantbot.operations import (
     KillSwitchController,
+    MeasuredReadiness,
     ReadinessEvidence,
     authorize_paper_smoke,
 )
@@ -46,6 +48,10 @@ class CLIContext:
     handlers: Mapping[str, CommandHandler]
     reported_account_id: str | None = None
     clearance_evidence: ReadinessEvidence | None = None
+    #: Probes the world and returns measured readiness. `None` when this context was built
+    #: without a broker, in which case clearing is refused rather than falling back to a
+    #: declared evidence object -- which is the defect `readiness.py` was written to remove.
+    measure: Callable[[], Coroutine[Any, Any, MeasuredReadiness]] | None = None
 
 
 def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
@@ -175,17 +181,19 @@ def main(
             if args.kill_action == "engage":
                 state = controller.engage(reason=args.reason, updated_at=now)
             else:
-                evidence = active.clearance_evidence or ReadinessEvidence(
-                    paper_mode=False,
-                    account_verified=False,
-                    broker_healthy=False,
-                    data_healthy=False,
-                    risk_healthy=False,
-                    reconciliation_successful=False,
-                )
+                if active.measure is None:
+                    # No fallback to a declared evidence object. A context without a broker
+                    # cannot establish that it is safe to resume, and saying so is the honest
+                    # answer; manufacturing all-False evidence would produce the same refusal
+                    # for a reason that reads like a measurement.
+                    raise RuntimeError(
+                        "this context cannot measure readiness, so it cannot clear the kill "
+                        "switch; run where the broker is configured"
+                    )
+                measured = asyncio.run(active.measure())
                 state = controller.clear(
                     reason=args.reason,
-                    evidence=evidence,
+                    measured=measured,
                     updated_at=now,
                 )
             result = {"ok": True, "engaged": state.engaged, "reason": state.reason}

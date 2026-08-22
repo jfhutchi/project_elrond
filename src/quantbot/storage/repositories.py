@@ -596,6 +596,16 @@ class StorageRepository:
             adjustment=decode_decimal(str(row["adjustment"])),
         )
 
+    def latest_bar_timestamp(self) -> datetime | None:
+        """When the newest stored bar is for, or None if none are stored.
+
+        A scalar aggregate rather than `list_bars()` and a max: the readiness probe runs on every
+        clearance attempt and loading the whole bar table to find one timestamp would make a
+        safety check expensive enough that somebody eventually caches it.
+        """
+        newest = self._session.execute(select(func.max(bars.c.timestamp))).scalar_one_or_none()
+        return None if newest is None else decode_utc(str(newest))
+
     def record_signal(
         self,
         signal_id: str,

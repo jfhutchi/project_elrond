@@ -22,10 +22,11 @@ from quantbot.operations.cycle import (
     RunOnceCycle,
     SubmissionRequest,
 )
-from quantbot.operations.kill_switch import KillSwitchController, ReadinessEvidence
+from quantbot.operations.kill_switch import KillSwitchController
 from quantbot.operations.metrics import OperationalMetrics
 from quantbot.risk import DrawdownState, OrderPurpose
 from quantbot.storage import Database, StorageRepository
+from tests.support import measured
 
 NOW = datetime(2026, 8, 14, 21, 5, tzinfo=UTC)
 
@@ -179,14 +180,7 @@ class FakeSubmitter:
 def _clear(database: Database) -> None:
     KillSwitchController(database).clear(
         reason="test ready",
-        evidence=ReadinessEvidence(
-            paper_mode=True,
-            account_verified=True,
-            broker_healthy=True,
-            data_healthy=True,
-            risk_healthy=True,
-            reconciliation_successful=True,
-        ),
+        measured=measured(),
         updated_at=NOW,
     )
 

@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from tests.support import measured
 
 from quantbot.operations.kill_switch import (
     KillSwitchClearBlocked,
@@ -35,7 +36,7 @@ def test_new_database_starts_engaged_and_clear_cannot_bypass_other_gates(
     with pytest.raises(KillSwitchClearBlocked) as error:
         controller.clear(
             reason="operator requested",
-            evidence=_ready(data_healthy=False),
+            measured=measured(data_healthy=False),
             updated_at=NOW,
         )
 
@@ -48,7 +49,7 @@ def test_clear_and_hard_failure_engagement_survive_restart(tmp_path: Path) -> No
     path = tmp_path / "quantbot.db"
     database = Database(path)
     controller = KillSwitchController(database)
-    controller.clear(reason="all paper gates verified", evidence=_ready(), updated_at=NOW)
+    controller.clear(reason="all paper gates verified", measured=measured(), updated_at=NOW)
     assert controller.get().engaged is False
     controller.engage_hard_failure("RECONCILIATION_FAILED", updated_at=NOW)
     assert controller.get().engaged is True

@@ -20,6 +20,7 @@ from quantbot.operations.health import (
 from quantbot.operations.kill_switch import (
     KillSwitchClearBlocked,
     KillSwitchController,
+    MeasuredReadiness,
     ReadinessEvidence,
 )
 from quantbot.operations.metrics import OperationalMetrics
@@ -54,6 +55,8 @@ __all__ = [
     "HealthInputs",
     "KillSwitchClearBlocked",
     "KillSwitchController",
+    "MeasuredReadiness",
+    "measure_readiness",
     "LedgerSyncingRecovery",
     "MarketDataSettings",
     "MarketDataSync",
@@ -73,3 +76,5 @@ __all__ = [
     "next_cycle_at",
     "warmup_sessions",
 ]
+
+from quantbot.operations.readiness import measure_readiness
