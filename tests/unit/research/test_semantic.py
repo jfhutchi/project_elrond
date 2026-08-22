@@ -297,3 +297,38 @@ def test_the_worker_is_handed_its_sources_rather_than_fetching_them() -> None:
     engine.run(worker_input("a specific mandate"), now=NOW)
 
     assert seen == ["a specific mandate"], "the worker did not receive the caller's mandate"
+
+
+def test_the_semantic_worker_cannot_reach_the_broker_risk_or_kill_switch() -> None:
+    """#37: TradingAgents cannot call order paths, mutate trading state, or clear kill switches.
+
+    Asserted against the transitive import closure rather than by reading the code, because the
+    dangerous version of this failure is a helper three modules away that someone adds later
+    without noticing what it drags in. A worker that can import the kill switch is one refactor
+    from being able to clear it, and the policy saying it will not is not a mechanism.
+
+    Run in a fresh interpreter, and that detail is the test. The first version cleared the
+    trading modules out of `sys.modules` and re-imported the worker -- but the worker was itself
+    already cached, so nothing re-executed and the check passed with `KillSwitchController`
+    imported at the top of the module under test. It measured nothing for as long as it existed.
+
+    The reverse direction -- the trading path not importing research -- is pinned separately in
+    the budget suite. Both are needed: that one protects the account from research, this one
+    protects the account from the worker.
+    """
+    import subprocess  # noqa: PLC0415
+    import sys  # noqa: PLC0415
+
+    probe = (
+        "import sys; import quantbot.research.semantic; "
+        "bad=sorted(m for m in sys.modules if m.startswith(("
+        "'quantbot.brokers','quantbot.execution','quantbot.risk','quantbot.operations'))); "
+        "print(','.join(bad))"
+    )
+    completed = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
+    )
+
+    assert completed.stdout.strip() == "", (
+        "importing the semantic worker pulled in trading modules: " + completed.stdout.strip()
+    )
