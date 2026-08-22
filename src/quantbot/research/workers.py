@@ -58,6 +58,10 @@ class WorkerCapability(StrEnum):
     BACKTEST = "BACKTEST"
     #: Can run its own search over shuffled or synthetic null data. The most valuable one.
     NULL_CALIBRATION = "NULL_CALIBRATION"
+    #: Reads source text and proposes confounders and falsification tests (#37). Named as a
+    #: capability of its own because it is not mining: it evaluates no candidate against
+    #: outcomes, and a worker that claims it must not be handed a factor-mining mandate.
+    SEMANTIC_ANALYSIS = "SEMANTIC_ANALYSIS"
 
 
 class UnsupportedSemantics(RuntimeError):

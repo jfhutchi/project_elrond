@@ -25,6 +25,7 @@ from quantbot.research.models import (
 from quantbot.research.semantic import (
     SemanticAnalysis,
     SemanticRefused,
+    SemanticResearchWorker,
     SemanticWorker,
     analysis_record,
 )
@@ -113,7 +114,7 @@ def test_a_directional_call_is_refused_even_hidden_in_another_field() -> None:
 
 
 def test_ordinary_words_containing_a_directional_term_are_not_refused() -> None:
-    """"Buyer" and "buyback" appear in honest fundamental analysis.
+    """ "Buyer" and "buyback" appear in honest fundamental analysis.
 
     A check that fired on those would refuse most real analyses, and a refusal that fires on
     everything is one somebody removes -- which loses the check that matters.
@@ -171,9 +172,7 @@ def test_the_record_carries_the_reason_the_analysis_was_allowed() -> None:
     Storing one without the other is storing a claim without the reason it is allowed to be a
     claim -- and a later reader could not tell a checked analysis from an unchecked one.
     """
-    analysis, assessment, response = worker(USEFUL).analyse(
-        "Margins persist.", FORWARD, now=NOW
-    )
+    analysis, assessment, response = worker(USEFUL).analyse("Margins persist.", FORWARD, now=NOW)
 
     record = analysis_record(analysis, assessment, response)
 
@@ -202,3 +201,99 @@ def test_the_schema_has_no_field_for_a_recommendation() -> None:
     }
     for forbidden in ("recommendation", "action", "signal", "direction", "rating", "conviction"):
         assert forbidden not in fields
+
+
+# --- the generic worker boundary (#11, #37) ---------------------------------------------------
+
+
+def worker_input(mandate: str = "Margin expansion at these names persists for three quarters."):
+    from quantbot.research.workers import DataRole, WorkerInput  # noqa: PLC0415
+
+    return WorkerInput(
+        mandate=mandate,
+        datasets=("news:example-wire",),
+        data_roles=frozenset({DataRole.DISCOVERY}),
+        trial_budget=50,
+    )
+
+
+def adapter(answer: dict[str, object], *, sources=FORWARD, cutoff: date | None = CUTOFF):
+    return SemanticResearchWorker(
+        worker(answer, cutoff=cutoff),
+        lambda _request: sources,
+        version="critic-model:1",
+        configuration_hash="f" * 64,
+    )
+
+
+def test_the_semantic_worker_satisfies_the_generic_research_worker_contract() -> None:
+    """#37: TradingAgents is invoked through #11, not through a path of its own.
+
+    Not tidiness. Budget admission, search accounting and orchestration are written against this
+    contract, so a worker reached any other way is a worker none of them can see.
+    """
+    from quantbot.research.workers import ResearchWorker, WorkerCapability  # noqa: PLC0415
+
+    engine: ResearchWorker = adapter(USEFUL)
+
+    result = engine.run(worker_input(), now=NOW)
+
+    assert WorkerCapability.SEMANTIC_ANALYSIS in engine.spec.capabilities
+    assert result.metrics["preserved_disagreements"] == "1"
+    assert result.artifacts["analysis.json"]
+
+
+def test_one_call_is_one_disclosed_candidate() -> None:
+    """An agent whose search costs the budget nothing is the laundering path, reopened.
+
+    Cardinality one per call is what makes a prompt sweep cost as many trials as it swept. It
+    also makes the spec confirmatory-eligible, which is a statement about the burden being
+    accountable -- not about the analysis being evidence.
+    """
+    from quantbot.research.workers import WorkerTrust  # noqa: PLC0415
+
+    engine = adapter(USEFUL)
+
+    assert engine.run(worker_input(), now=NOW).search_cardinality == 1
+    assert engine.spec.trust is WorkerTrust.CONFIRMATORY_ELIGIBLE
+
+
+def test_a_refused_analysis_does_not_become_a_worker_result() -> None:
+    """A result recording a rejected analysis reads later as though the hypothesis was reviewed."""
+    smuggled = dict(USEFUL, confounders=["sector beta", "overall this is a strong buy for Q3"])
+
+    with pytest.raises(SemanticRefused):
+        adapter(smuggled).run(worker_input(), now=NOW)
+
+
+def test_an_unverifiable_cutoff_marks_the_result_unsupported_rather_than_clean() -> None:
+    """`unsupported` is non-empty, which forces the result exploratory downstream.
+
+    The analysis may be perfectly good. Nothing can establish that, and "nobody could check" is
+    a different claim from "checked and fine".
+    """
+    from quantbot.research.hindsight import HindsightRefused  # noqa: PLC0415
+
+    # The confirmatory path refuses outright, which is the stronger behaviour and already
+    # tested above. This pins that the adapter would not have quietly reported it as clean.
+    with pytest.raises(HindsightRefused):
+        adapter(USEFUL, cutoff=None).run(worker_input(), now=NOW)
+
+
+def test_the_worker_is_handed_its_sources_rather_than_fetching_them() -> None:
+    """A worker that finds its own inputs decides its own point-in-time boundary.
+
+    That boundary is the thing #45 exists to enforce, so the loader is the caller's.
+    """
+    seen: list[object] = []
+
+    def loader(request):
+        seen.append(request.mandate)
+        return FORWARD
+
+    engine = SemanticResearchWorker(
+        worker(USEFUL), loader, version="critic-model:1", configuration_hash="f" * 64
+    )
+    engine.run(worker_input("a specific mandate"), now=NOW)
+
+    assert seen == ["a specific mandate"], "the worker did not receive the caller's mandate"

@@ -32,14 +32,21 @@ the burden is counted from records rather than disclosed, as #23 requires.
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from quantbot.research.hindsight import HindsightAssessment, require_no_hindsight
+from quantbot.research.manifest import content_id
 from quantbot.research.models import ModelResponse, ModelRole, ModelRuntime, PromptTemplate
 from quantbot.research.sources import Source
+from quantbot.research.workers import (
+    WorkerCapability,
+    WorkerInput,
+    WorkerResult,
+    WorkerSpec,
+)
 
 ANALYSIS_PROMPT = PromptTemplate(
     name="semantic-falsification",
@@ -171,6 +178,85 @@ class SemanticWorker:
         return analysis, assessment, response
 
 
+class SemanticResearchWorker:
+    """`SemanticWorker` behind the generic worker boundary (#11, #37).
+
+    The issue asks that TradingAgents be invoked through `ResearchWorker` rather than through a
+    bespoke path, and the reason is not tidiness: orchestration, budget admission and search
+    accounting are written against that contract, so a worker reached any other way is a worker
+    none of them can see.
+
+    **Cardinality is one per call, disclosed.** That makes the spec `CONFIRMATORY_ELIGIBLE`, and
+    it is worth being precise about what that does and does not mean. It means the burden this
+    worker creates is accountable and gets charged to the family's trial budget -- an
+    `EXPLORATORY_ONLY` worker spends nothing, which for an agent that sweeps prompts would be
+    the laundering path #23 closed for miners, reopened. It does **not** mean the analysis is
+    evidence. Whether a semantic output can support a confirmatory claim is decided by the
+    hindsight assessment and by the fact that its outputs are confounders and falsification
+    tests -- questions for Elrond to answer, not answers.
+
+    The worker is handed sources by a loader rather than fetching them. A research worker that
+    goes looking for its own inputs decides its own point-in-time boundary, and the boundary is
+    the thing #45 exists to enforce.
+    """
+
+    def __init__(
+        self,
+        worker: SemanticWorker,
+        source_loader: Callable[[WorkerInput], Sequence[Source]],
+        *,
+        version: str,
+        configuration_hash: str,
+    ) -> None:
+        self._worker = worker
+        self._load = source_loader
+        self._spec = WorkerSpec(
+            name="semantic",
+            version=version,
+            capabilities=frozenset({WorkerCapability.SEMANTIC_ANALYSIS}),
+            configuration_hash=configuration_hash,
+            discloses_search_cardinality=True,
+        )
+
+    @property
+    def spec(self) -> WorkerSpec:
+        return self._spec
+
+    def run(self, request: WorkerInput, *, now: datetime) -> WorkerResult:
+        """Analyse the mandate against loaded sources, or raise.
+
+        Never returns a partial result. A refusal -- contaminated sources, a leaked directional
+        call, an analysis with nothing to add -- propagates, because a `WorkerResult` recording
+        an analysis that was rejected would read later as though the hypothesis had been
+        reviewed.
+        """
+        self._spec.require(WorkerCapability.SEMANTIC_ANALYSIS)
+        started_at = now
+        sources = list(self._load(request))
+        analysis, assessment, response = self._worker.analyse(request.mandate, sources, now=now)
+        return WorkerResult(
+            worker=self._spec,
+            request=request,
+            started_at=started_at,
+            finished_at=now,
+            # One prompt, one model, one source bundle: one candidate evaluated. A caller
+            # sweeping prompts calls this once per sweep and is charged once per sweep.
+            search_cardinality=1,
+            metrics={
+                "confounders": str(len(analysis.confounders)),
+                "falsification_tests": str(len(analysis.falsification_tests)),
+                "preserved_disagreements": str(len(analysis.disagreements)),
+                "unsupported_claims": str(len(analysis.unsupported_claims)),
+                "sources_reviewed": str(len(sources)),
+            },
+            artifacts={"analysis.json": content_id(analysis.model_dump(mode="json"))},
+            # What the worker could not express, which forces the result exploratory. A model
+            # with no recorded cutoff is exactly that case: the analysis may be fine and nothing
+            # can establish that it is.
+            unsupported=() if assessment.usable_as_evidence else ("hindsight_unverified",),
+        )
+
+
 def _directional(analysis: SemanticAnalysis) -> str | None:
     """Find a directional call that leaked into a field not meant to carry one.
 
@@ -224,6 +310,7 @@ __all__ = [
     "DIRECTIONAL_TERMS",
     "SemanticAnalysis",
     "SemanticRefused",
+    "SemanticResearchWorker",
     "SemanticWorker",
     "analysis_record",
 ]
