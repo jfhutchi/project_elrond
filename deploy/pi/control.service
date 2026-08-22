@@ -17,6 +17,11 @@ WorkingDirectory=/home/jfhutchi/quantbot
 EnvironmentFile=/etc/quantbot/control.env
 Environment=QUANTBOT_DB_PATH=/home/jfhutchi/quantbot-data/quantbot.db
 Environment=TZ=UTC
+# Python block-buffers stdout when it is not a TTY, so startup and progress messages sat
+# in a buffer and never reached the journal -- the service looked silent while it was
+# working. A log you cannot see during the thirty seconds a Pi Zero takes to import
+# SQLAlchemy is a log that is missing exactly when you want it.
+Environment=PYTHONUNBUFFERED=1
 
 ExecStart=/home/jfhutchi/quantbot/.venv/bin/python /home/jfhutchi/quantbot/scripts/control_server.py 8081
 

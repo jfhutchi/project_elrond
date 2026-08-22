@@ -16,6 +16,11 @@ EnvironmentFile=/etc/quantbot/quantbot.env
 # dashboard pointed at a different ledger from the one being traded would report confidently
 # on the wrong database.
 Environment=TZ=UTC
+# Python block-buffers stdout when it is not a TTY, so startup and progress messages sat
+# in a buffer and never reached the journal -- the service looked silent while it was
+# working. A log you cannot see during the thirty seconds a Pi Zero takes to import
+# SQLAlchemy is a log that is missing exactly when you want it.
+Environment=PYTHONUNBUFFERED=1
 
 # Writes index.html so the server offers the dashboard at `/` rather than a directory listing.
 # Reads only, so it is safe while the daemon holds the writer lock -- which is why this is a
