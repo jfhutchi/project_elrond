@@ -262,6 +262,41 @@ def test_research_status_reports_being_unconfigured_rather_than_failing(
 
     assert parsed.command == "research-status"
 
+def test_research_capacity_reports_the_equity_window_as_spent(tmp_path: Path) -> None:
+    """#50, through the real command: the answer before deciding to spend compute.
+
+    An operator or a research director asking "is there anything left to test this on" gets the
+    honest answer on an empty database, because the 68 trials cycles 2-10 spent predate the
+    registry and no row records them. The command reports and cannot spend: there is no flag on
+    it that reserves or consumes anything.
+    """
+    import json
+
+    database = Database(tmp_path / "quantbot.db")
+    context = CLIContext(
+        settings=_ready_settings(),
+        database=database,
+        handlers={},
+        reported_account_id="paper-1",
+        clearance_evidence=_ready_evidence(),
+    )
+    output = StringIO()
+
+    assert main(["research-capacity", "--as-of", "2026-08-22"], context=context, output=output) == 0
+    payload = json.loads(output.getvalue())
+    database.close()
+
+    by_identity = {row["observation_identity"]: row for row in payload["sources"]}
+    equities = by_identity["us-equities-daily"]
+    assert equities["status"] == "EXHAUSTED"
+    assert equities["trials_spent"] == 68
+    assert sorted(equities["datasets"]) == ["alpaca-us-equities-daily", "sip-us-equities-daily"]
+    assert equities["unsearched_from"] == "2026-08-22"
+    assert by_identity["crypto-daily"]["status"] == "AVAILABLE"
+    assert by_identity["options-implied-daily"]["status"] == "UNSUPPORTED"
+    assert "engineering capability is not statistical capacity" in payload["note"]
+
+
 def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach(
     tmp_path: Path,
 ) -> None:

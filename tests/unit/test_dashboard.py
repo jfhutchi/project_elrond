@@ -509,6 +509,35 @@ def test_the_ladder_panel_counts_forward_evidence_the_ledger_supports_and_no_mor
     assert "EDGE_CANDIDATE" not in row, row
 
 
+def test_the_capacity_panel_says_the_equity_window_is_spent_on_an_empty_store(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#50: the panel beside it counts rows, and the rows do not include cycles 2-10.
+
+    This is the one panel that is *not* empty on an empty database, and deliberately: 68 trials
+    were spent against SIP US equities 2016-2026 before the registry existed, so a store with no
+    rows still has no fresh equity budget. A capacity view that rendered empty here would tell an
+    operator the opposite of the truth.
+    """
+    page = render(ledger, monkeypatch)
+    rows = _rows(page, "panel-capacity")
+
+    equities = [row for row in rows if "us-equities-daily" in row]
+    assert len(equities) == 1, "one observation identity, one row -- not one row per vendor"
+    assert "EXHAUSTED" in equities[0]
+    assert "68 trials" in equities[0]
+
+    crypto = [row for row in rows if "crypto-daily" in row]
+    assert crypto and "AVAILABLE" in crypto[0], "crypto is not spent by the equity search"
+
+    options = [row for row in rows if "options-implied-daily" in row]
+    assert options and "UNSUPPORTED" in options[0], "a capability with no provider is not capacity"
+
+    # And the page says the distinction in words, because the number alone gets misread as
+    # "the data platform is finished, so there is data to test on".
+    assert "Engineering capability is not statistical capacity" in page
+
+
 def test_the_ladder_panel_never_offers_a_route_to_live_trading(
     ledger: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

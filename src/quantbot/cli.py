@@ -9,7 +9,7 @@ import os
 import sys
 from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
@@ -74,6 +74,11 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     registered = commands.add_parser("hypotheses")
     registered.add_argument("--family")
     commands.add_parser("research-status")
+    # Reports only. Naming a source cannot spend it, and there is deliberately no flag here
+    # that reserves or consumes anything: this command exists to be run before deciding to
+    # spend, and a command that spent while answering would defeat its own purpose.
+    capacity = commands.add_parser("research-capacity")
+    capacity.add_argument("--as-of", dest="as_of")
     sweep = commands.add_parser("integrity-sweep")
     # Acts by default, unlike `register-hypothesis`. The polarity is deliberate: this
     # command *reduces* trust, and a safety control that does nothing unless someone
@@ -259,6 +264,50 @@ def main(
                 },
                 "actionable_now": ready,
                 "note": ("research-status reports and never advances; use the cycle for that"),
+            }
+        elif args.command == "research-capacity":
+            # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.capacity import capacity_inventory
+
+            as_of = (
+                date.fromisoformat(args.as_of)
+                if getattr(args, "as_of", None)
+                else datetime.now(UTC).date()
+            )
+            with active.database.transaction() as session:
+                inventory = capacity_inventory(session, as_of=as_of)
+            result = {
+                "ok": True,
+                "as_of": as_of.isoformat(),
+                "sources": [
+                    {
+                        "observation_identity": row.observation_identity,
+                        "datasets": list(row.aliases),
+                        "asset_class": row.source.asset_class.value,
+                        "capability": row.source.capability.value,
+                        "status": row.status.value,
+                        "usable_for_confirmation": row.usable_for_confirmation,
+                        "trials_spent": row.trials,
+                        "consumers": list(row.consumers),
+                        "by_family": dict(row.by_family),
+                        "reserved_by": list(row.reserved_by),
+                        "unsearched_from": (
+                            None
+                            if row.unconsumed_from is None
+                            else row.unconsumed_from.isoformat()
+                        ),
+                        "point_in_time": row.source.point_in_time,
+                        "answers": row.source.answers,
+                    }
+                    for row in inventory
+                ],
+                # Named rather than left to be inferred. #50 exists because "the data platform
+                # is finished" was read as "there is fresh statistical budget", and the two
+                # facts are unrelated.
+                "note": (
+                    "engineering capability is not statistical capacity; a source reporting "
+                    "EXHAUSTED stays exhausted when another provider serves the same dates"
+                ),
             }
         elif args.command == "research-cycle":
             # Function-scope import for the same reason as the other research commands.

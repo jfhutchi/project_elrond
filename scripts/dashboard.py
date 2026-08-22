@@ -21,7 +21,7 @@ import html
 import os
 import platform
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -31,6 +31,7 @@ from sqlalchemy.orm import Session
 
 from quantbot.reporting import analyze_fills
 from quantbot.research.budget import Resource
+from quantbot.research.capacity import capacity_inventory
 from quantbot.research.dashboard import Alert, BudgetPanel, attention, luck_bar_at
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import ResearchMemory, ResearchRecord
@@ -100,7 +101,9 @@ def _durable() -> dict[str, object]:
         signals = repository.list_signals()
         account_id = os.environ.get("EXPECTED_ACCOUNT_ID", "")
         equity = repository.list_equity_snapshots(account_id=account_id) if account_id else []
-        research = _research(session)
+        # The clock is passed in rather than read inside, so the capacity panel's "what is
+        # left to search from" date is the same one the rest of this page was rendered against.
+        research = _research(session, as_of=datetime.now(UTC).date())
     database.close()
     analysis = analyze_fills(fills)
     return {
@@ -118,7 +121,7 @@ def _durable() -> dict[str, object]:
     }
 
 
-def _research(session: Session) -> dict[str, object]:
+def _research(session: Session, *, as_of: date) -> dict[str, object]:
     """Research state, read from the durable stores and from nowhere else.
 
     Each entry maps to one table: `hypotheses`, `research_records`, `research_tasks`, and the
@@ -132,6 +135,7 @@ def _research(session: Session) -> dict[str, object]:
         "tasks": ResearchDirector(session).by_state(),
         "trials": _trials_by_budget(session),
         "windows": _protected_windows(session),
+        "capacity": _capacity_rows(session, as_of=as_of),
         "ladder": _promotion_rows(session),
         "compute": _compute_rows(session),
         "overrides": _override_rows(session),
@@ -273,6 +277,32 @@ def _unmet_gates(stage: Stage, *, days: int, trades: int) -> str:
         else:
             unmet.append(f"{target.value}: operator decision")
     return "; ".join(unmet)
+
+
+def _capacity_rows(session: Session, *, as_of: date) -> list[tuple[str, str, str, str, str]]:
+    """What confirmatory evidence is left, by observation identity (#50).
+
+    The panel beside this one shows registry *rows*, and says so: it cannot see the 68 trials
+    cycles 2-10 spent before the registry existed, and it keys on the dataset name a registrant
+    chose. This one answers the question an operator actually has -- is there anything left to
+    test a claim on -- keyed by what a dataset observes rather than by what it is called, so a
+    second vendor for the same dates does not appear as a second budget.
+    """
+    return [
+        (
+            row.observation_identity,
+            row.source.asset_class.value,
+            row.status.value,
+            f"{row.trials} trials"
+            + (f", reserved by {len(row.reserved_by)}" if row.reserved_by else ""),
+            (
+                f"unsearched sessions from {row.unconsumed_from.isoformat()}"
+                if row.unconsumed_from is not None
+                else row.source.answers
+            ),
+        )
+        for row in capacity_inventory(session, as_of=as_of)
+    ]
 
 
 def _protected_windows(session: Session) -> list[tuple[str, str, str, str, str]]:
@@ -545,6 +575,27 @@ def _task_row(task: ResearchTask) -> str:
     )
 
 
+def _capacity_row(identity: str, asset_class: str, status: str, spend: str, note: str) -> str:
+    """One observation identity. The tone says whether a confirmatory answer is still possible."""
+    tone = {
+        "AVAILABLE": "good",
+        "RESERVED": "warn",
+        "PARTIALLY_CONSUMED": "warn",
+        "EXHAUSTED": "bad",
+        "UNSUPPORTED": "quiet",
+        "QUALITY_BLOCKED": "bad",
+    }.get(status, "warn")
+    return (
+        "<tr>"
+        f"<td class='mono'>{_esc(identity)}</td>"
+        f"<td>{_esc(asset_class)}</td>"
+        f"<td>{_pill(status, tone)}</td>"
+        f"<td>{_esc(spend)}</td>"
+        f"<td class='quiet-text'>{_esc(note)}</td>"
+        "</tr>"
+    )
+
+
 def _window_row(dataset: str, start: str, end: str, state: str, holder: str) -> str:
     """One protected window. The tone says whether the data is still available."""
     tone = {"CONSUMED": "bad", "RESERVED": "warn", "RELEASED": "good"}.get(state, "warn")
@@ -751,6 +802,10 @@ def build(out: Path) -> None:
     pipeline_rows = "".join(_pipeline_row(*row) for row in _pipeline_rows(tasks))
     trial_rows = "".join(_trial_row(key, count) for key, count in trials) or _empty(
         3, "No trials recorded against any budget"
+    )
+    capacity = durable.get("capacity", []) if durable.get("available") else []
+    capacity_rows = "".join(_capacity_row(*row) for row in capacity) or _empty(
+        5, "No data sources are declared"
     )
     window_rows = "".join(_window_row(*row) for row in windows) or _empty(
         4, "No protected evaluation window is claimed"
@@ -1021,6 +1076,24 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
         candidate evaluated against the same data, and no amount of compute buys it back.</p>
     </section>
     <section>
+      <h2>Statistical capacity</h2>
+      <div class="scroll"><table id="panel-capacity">
+        <thead><tr><th>Observations</th><th>Asset class</th><th>Status</th><th>Spent</th>
+          <th>What it can answer</th></tr></thead>
+        <tbody>{capacity_rows}</tbody>
+      </table></div>
+      <p class="caveat">Keyed by <strong>what a dataset observes</strong>, not by what it is
+        called. Two providers serving the same market outcomes are one row and one budget: vendor
+        diversity establishes data correctness and can repair a bad bar, and it does not duplicate
+        the market event.</p>
+      <p class="caveat"><strong>Engineering capability is not statistical capacity.</strong>
+        Finishing a data platform does not replenish an exhausted evidence budget. SIP US equities
+        2016&ndash;2026 cost 68 trials and is spent; what accrues from here is one session a day.
+        Crypto is new data for crypto and cross-asset questions and is <em>not</em> new evidence
+        for a US-equity-specific effect. A capability with no provider behind it reads
+        UNSUPPORTED rather than available.</p>
+    </section>
+    <section>
       <h2>Protected evaluation windows</h2>
       <div class="scroll"><table id="panel-windows">
         <thead><tr><th>Dataset</th><th>Range</th><th>State</th><th>Claimed by</th></tr></thead>
@@ -1033,7 +1106,8 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
         picture of what has been spent: cycles 2&ndash;10 put roughly 68 candidate evaluations
         against SIP US equities 2016&ndash;2026 before this registry existed, so
         <code>window_consumption</code> reports that range <strong>EXHAUSTED</strong> while no row
-        here claims it. Ask the registry, not this table, before assuming a range is free.</p>
+        here claims it. <strong>Read the statistical-capacity panel above instead</strong> before
+        assuming a range is free; it accounts for pre-registry spend and for vendor renames.</p>
     </section>
   </div>
 

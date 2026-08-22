@@ -1239,6 +1239,38 @@ mandate, a frozen non-refuted claim, an adequately powered window, and a benchma
 beta-adjusted result clearing the 2.905 luck bar. On thirty sessions that requires an annualised
 excess Sharpe past 12. **No strategy here has one, and saying so is the point.**
 
+## 6cc. What is actually left to test on (#50)
+
+**2026-08-22.** `quantbot research-capacity`, and a statistical-capacity panel on the dashboard.
+
+The question it answers is the one nothing answered: **what observations remain unused for
+confirmatory testing, and which claims can legitimately use them.** `window_consumption` could
+already say whether a range someone named was spent; that is a different question from the one an
+operator has before deciding whether a search is worth running, and #50 was opened because the
+gap let "the data platform is finished" be read as "there is fresh statistical budget".
+
+On an empty database today:
+
+| observations | status | note |
+|---|---|---|
+| `us-equities-daily` (SIP + Alpaca) | **EXHAUSTED**, 68 trials | unsearched sessions from 2026-08-22 |
+| `crypto-daily` | AVAILABLE | crypto and cross-asset questions only |
+| `us-macro-monthly` (FRED + ALFRED) | AVAILABLE | real capacity, with vintages |
+| `sec-edgar-filings` | AVAILABLE | cycles 2-10 never looked at filings |
+| `options-implied-daily` | **UNSUPPORTED** | declared in two enums, served by nothing |
+
+Four things it refuses to do, each of which would overstate what is left: count two vendors of the
+same dates as two budgets, report a capability with no provider as capacity, let crypto sessions
+read as equity evidence, or let a source with no vintages answer a backtest.
+
+**The only new equity capacity is time.** Nobody searched a session that had not happened, so the
+equity row reports unsearched sessions accruing from the day after the last one spent. That is
+real, and it is one session a day against a window that cost 68 trials. Seven protections,
+mutation-checked.
+
+**What this does not do.** It does not create capacity, and the honest headline is that there is
+almost none for a US equity claim. That is the finding, not a limitation of the tool.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30).

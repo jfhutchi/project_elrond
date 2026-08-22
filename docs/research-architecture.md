@@ -242,6 +242,43 @@ counting toward edge qualification, and they remain available as execution evide
 
 ---
 
+## Statistical capacity
+
+`quantbot.research.capacity` answers the question `window_consumption` does not:
+
+> What observations remain unused for confirmatory testing, and what classes of hypotheses can
+> legitimately use them?
+
+`window_consumption` answers "is *this* range spent" for a range someone already knows to ask
+about. That is the wrong shape for the decision it feeds, which is whether an expensive search is
+worth starting at all. Read `quantbot research-capacity`, or the dashboard's statistical-capacity
+panel, before believing that a completed data-platform issue created research budget.
+
+**Declared sources, derived status.** `DATA_SOURCES` is hand-maintained for the same reason
+`OBSERVATION_ALIASES` is: what a dataset observes, and which claims it can bear on, is a judgement
+somebody makes and is accountable for. Everything else on a row — consumption, exhaustion, who
+spent it, which family, what is reserved, what remains — is computed from durable state.
+
+Four things the inventory refuses to do, each of which would overstate what is left:
+
+| Would say | Actually |
+|---|---|
+| Two vendors serving the same dates are two budgets | One observation identity, one row, one budget |
+| A capability the enum declares is capacity | `UNSUPPORTED` until a provider serves it |
+| Crypto sessions confirm a US-equity claim | A different market is a different question |
+| A source with no vintages can answer a backtest | `QUALITY_BLOCKED`: it says what is true now |
+
+**The only new equity capacity is time.** SIP US equities 2016–2026 cost 68 trials and is spent.
+A rolling feed keeps producing sessions, and nobody searched a session that had not happened, so
+each row reports `unconsumed_from` — the day after the last searched one. That is real and it is
+one session a day, which is the point of showing it as a date rather than as a status.
+
+`discovery.admissible` is the mechanical half: it refuses a candidate whose declared windows are
+exhausted, before the power gate and the critic, so a search that could never be confirmed does
+not reach the expensive stages.
+
+---
+
 ## Statistical machinery
 
 - Jobson–Korkie–Memmel variance for Sharpe differences, because two series of the same asset are
