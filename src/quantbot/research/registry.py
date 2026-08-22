@@ -1054,6 +1054,16 @@ class HypothesisRegistry:
                 f"search run {draft.search_run_id!r}, which recorded {recorded}",
             )
 
+    def cumulative_trials(self) -> int:
+        """The multiple-testing burden as it stands right now.
+
+        Public because the luck bar is not only a registration-time concern. Forward
+        qualification deflates against the burden *at the moment it judges*, the same rule
+        `verify_for_execution` applies: every registration since raises the bar, and a gate
+        quoting the burden frozen months ago quotes a bar the project has already spent past.
+        """
+        return self._cumulative_trials(0)
+
     def _cumulative_trials(self, search_cardinality: int) -> int:
         """Everything this project has ever spent, plus what the incoming draft spends."""
         spent = self._session.execute(
