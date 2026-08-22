@@ -341,6 +341,11 @@ class Registration(FrozenModel):
     #: Prior spend plus this one's search cardinality. Counted, not declared.
     cumulative_trials: int
     power: PowerAssessment
+    #: Whether the registration-time power assessment ran against a counted sample or the
+    #: registrant's planning figure (#35). False is not a defect -- it is the ordinary case for a
+    #: hypothesis filed before anyone loaded data -- but it changes what the assessment means,
+    #: and a reader of a frozen registration should not have to guess which one they are holding.
+    sample_verified_at_registration: bool = False
     #: The critique that let this through, frozen with it. Immutable for the same reason the
     #: prediction is: a review that can be revised after the result is not a review.
     critique: Critique
@@ -466,6 +471,7 @@ class HypothesisRegistry:
         now: datetime,
         critique: Critique,
         override: PowerOverride | None = None,
+        observed: ObservedSample | None = None,
     ) -> Registration:
         """Freeze a hypothesis, or refuse it. Refusal is the useful half.
 
@@ -520,12 +526,37 @@ class HypothesisRegistry:
 
         self._verify_measured_search(draft)
         trials = self._cumulative_trials(draft.search_cardinality)
+
+        # #35, resolved: a verified count is *accepted* here and not *required*.
+        #
+        # Sol argued registration should demand one; I argued the declared figure is right at a
+        # gate where nobody has counted anything yet. Both positions had a real cost behind them
+        # and the resolution takes the cost seriously rather than splitting the difference.
+        #
+        # Requiring it makes filing a question mean loading a dataset, and an expensive
+        # pre-registration step is one agents route around -- which loses more validity than the
+        # overstatement it prevents. Never accepting it leaves a real hole: an inflated
+        # `available_observations` gets an underpowered hypothesis past this gate, and every
+        # registration permanently raises the luck bar for the ones after it, so the trial budget
+        # is spent on a hypothesis that will die at execution clearance anyway. That harm is
+        # *not* bounded by reservation expiry, which is the part of my original argument that was
+        # wrong.
+        #
+        # So: a caller that already holds the snapshot passes the count and gets the stronger
+        # gate. A caller filing a question does not, and the registration records that its power
+        # was assessed provisionally. Nobody gains anything by overstating -- the execution gate
+        # still refuses without a verified count -- and nobody pays to pre-register.
+        if observed is not None:
+            self._verify_sample_against(draft.windows, observed, draft.hypothesis_id)
+        observations = (
+            draft.available_observations if observed is None else observed.observations
+        )
         assessment = assess(
             hypothesis_id=draft.hypothesis_id,
             version=draft.version,
             stage=REGISTRATION,
             specification=draft.effect,
-            observations_available=draft.available_observations,
+            observations_available=observations,
             cumulative_trials=trials,
             assessed_at=now,
             override=override,
@@ -542,6 +573,7 @@ class HypothesisRegistry:
             registered_at=now,
             cumulative_trials=trials,
             power=assessment,
+            sample_verified_at_registration=observed is not None,
             critique=critique,
             reserved_until=now.date() + timedelta(days=RESERVATION_DAYS),
         )
@@ -647,42 +679,9 @@ class HypothesisRegistry:
                 f"{hypothesis_id} v{version} cannot be cleared for execution without a verified"
                 " observation count; the declared figure is a planning number, not evidence",
             )
-        declared_datasets = {window.dataset for window in registration.draft.windows}
-        if observed.dataset not in declared_datasets:
-            raise RegistrationRefused(
-                RefusalReason.UNVERIFIED_SAMPLE,
-                f"{hypothesis_id} v{version} counted {observed.observations} observations from"
-                f" {observed.dataset!r}, which is not among its registered datasets"
-                f" {sorted(declared_datasets)}",
-            )
-        # Matching the dataset is not enough: the count has to come from the range the
-        # registration froze. Otherwise a hypothesis registered on 2016-2026 can be cleared by a
-        # count taken over 1990-2026 of the same dataset, which is the declared-sample defect
-        # this check exists to close, wearing a verified label.
-        #
-        # Containment rather than equality, deliberately. Counting *fewer* observations than the
-        # window spans is the honest case -- data is missing at the edges, a feature needs
-        # warm-up, a symbol lists late -- and that is exactly what verification is meant to
-        # surface. Counting more is the attack.
-        covering = [
-            window
-            for window in registration.draft.windows
-            if window.dataset == observed.dataset
-            and window.start <= observed.start_date
-            and observed.end_date <= window.end
-        ]
-        if not covering:
-            spans = ", ".join(
-                f"{window.role.value} {window.start.isoformat()}..{window.end.isoformat()}"
-                for window in registration.draft.windows
-                if window.dataset == observed.dataset
-            )
-            raise RegistrationRefused(
-                RefusalReason.UNVERIFIED_SAMPLE,
-                f"{hypothesis_id} v{version} counted {observed.observations} observations over"
-                f" {observed.start_date.isoformat()}..{observed.end_date.isoformat()} on"
-                f" {observed.dataset!r}, which no registered window covers ({spans})",
-            )
+        self._verify_sample_against(
+            registration.draft.windows, observed, f"{hypothesis_id} v{version}"
+        )
         observations = observed.observations
         assessment = assess(
             hypothesis_id=hypothesis_id,
@@ -933,6 +932,54 @@ class HypothesisRegistry:
             .mappings()
             .one_or_none()
         )
+
+    @staticmethod
+    def _verify_sample_against(
+        windows: Sequence[DataWindow], observed: ObservedSample, subject: str
+    ) -> None:
+        """Check a counted sample against the windows a hypothesis actually declared (#19, #35).
+
+        Shared by registration and execution clearance rather than written twice. Two copies of a
+        rule this specific drift, and the direction they drift is toward the more permissive one
+        -- whichever copy somebody edits while chasing a failing test.
+
+        Matching the dataset is not enough: the count has to come from the range that was frozen.
+        A hypothesis registered on 2016-2026 must not be satisfied by a count taken over
+        1990-2026 of the same dataset, which is the declared-sample defect wearing a verified
+        label.
+
+        Containment rather than equality, deliberately. Counting *fewer* observations than the
+        window spans is the honest case -- data missing at the edges, a feature needing warm-up, a
+        symbol listing late -- and surfacing that is what verification is for. Counting more is
+        the attack.
+        """
+        declared = {window.dataset for window in windows}
+        if observed.dataset not in declared:
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{subject} counted {observed.observations} observations from"
+                f" {observed.dataset!r}, which is not among its registered datasets"
+                f" {sorted(declared)}",
+            )
+        covering = [
+            window
+            for window in windows
+            if window.dataset == observed.dataset
+            and window.start <= observed.start_date
+            and observed.end_date <= window.end
+        ]
+        if not covering:
+            spans = ", ".join(
+                f"{window.role.value} {window.start.isoformat()}..{window.end.isoformat()}"
+                for window in windows
+                if window.dataset == observed.dataset
+            )
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{subject} counted {observed.observations} observations over"
+                f" {observed.start_date.isoformat()}..{observed.end_date.isoformat()} on"
+                f" {observed.dataset!r}, which no registered window covers ({spans})",
+            )
 
     def _verify_measured_search(self, draft: HypothesisDraft) -> None:
         """A MEASURED count must match the record it names (#23).

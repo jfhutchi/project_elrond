@@ -1583,3 +1583,91 @@ def test_an_overstated_registration_reserves_nothing_permanent(database: Databas
         "the multiple-testing burden counts consumed windows, so an unexecuted registration "
         "costs the next hypothesis nothing"
     )
+
+
+def test_a_verified_count_at_registration_catches_an_overstatement_early(
+    database: Database,
+) -> None:
+    """#35, resolved: a verified count is accepted at registration and not required.
+
+    The hole this closes is one my original position missed. An inflated
+    `available_observations` gets an underpowered hypothesis past the registration gate, and
+    *every* registration permanently raises the luck bar for the ones after it -- so trial budget
+    is spent on a hypothesis that will die at execution clearance anyway. Reservation expiry does
+    not bound that, because the burden is not a reservation.
+
+    A caller holding the snapshot can now pay for the stronger gate. One that is only filing a
+    question still does not have to.
+    """
+    overstated = make_draft(
+        effect=sharpe_effect(expected=Decimal("1.0")), available_observations=9000
+    )
+
+    # Declared: the planning figure carries it through, and the registration says so.
+    with database.transaction() as session:
+        provisional = register(HypothesisRegistry(session), overstated, now=NOW)
+    assert provisional.sample_verified_at_registration is False
+
+    # The identical draft against a counted sample of 40. A second database, because the first
+    # registration already reserved the protected window and contamination would refuse this one
+    # before the power gate ever saw it -- which would prove nothing about the sample.
+    second = Database(database.path.parent / "second.db")
+    try:
+        with second.transaction() as session, pytest.raises(RegistrationRefused) as refused:
+            HypothesisRegistry(session).register(
+                overstated, now=NOW, critique=cleared(), observed=counted(40)
+            )
+    finally:
+        second.close()
+
+    assert refused.value.reason in {
+        RefusalReason.UNDERPOWERED,
+        RefusalReason.UNECONOMIC,
+    }, refused.value.reason
+
+
+def test_a_registration_records_which_kind_of_assessment_it_got(database: Database) -> None:
+    """False is not a defect; it is the ordinary case. But a reader must not have to guess.
+
+    A frozen registration that was assessed against a planning number and one assessed against a
+    counted sample are different artifacts, and the difference is invisible unless it is stored.
+    """
+    with database.transaction() as session:
+        verified = HypothesisRegistry(session).register(
+            make_draft(available_observations=2669),
+            now=NOW,
+            critique=cleared(),
+            observed=counted(2669),
+        )
+
+    assert verified.sample_verified_at_registration is True
+    # And it survives the freeze, rather than being a transient of the call.
+    assert '"sample_verified_at_registration":true' in verified.model_dump_json().replace(
+        " ", ""
+    )
+
+
+def test_a_verified_count_at_registration_must_come_from_a_registered_window(
+    database: Database,
+) -> None:
+    """The same containment rule as execution, because it is the same helper.
+
+    Two copies of a rule this specific drift toward the more permissive one -- whichever copy
+    somebody edits while chasing a failing test -- so registration and execution share it.
+    """
+    wider = ObservedSample(
+        observations=9000,
+        dataset="sip-us-equities-daily",
+        start_date=date(1990, 1, 2),
+        end_date=date(2026, 8, 18),
+        method="every session since 1990",
+        counted_at=NOW,
+    )
+
+    with database.transaction() as session, pytest.raises(RegistrationRefused) as refused:
+        HypothesisRegistry(session).register(
+            make_draft(available_observations=2669), now=NOW, critique=cleared(), observed=wider
+        )
+
+    assert refused.value.reason is RefusalReason.UNVERIFIED_SAMPLE
+    assert "no registered window covers" in refused.value.detail
