@@ -28,6 +28,7 @@ import os
 import platform
 import shutil
 import subprocess
+import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -256,7 +257,7 @@ def _total_memory_mb() -> int | None:
         else:
             if isinstance(pages, int) and isinstance(page_size, int) and pages > 0:
                 return pages * page_size // (1024 * 1024)
-    if platform.system() == "Windows":
+    if sys.platform == "win32":
 
         class _MemoryStatus(ctypes.Structure):
             _fields_ = [

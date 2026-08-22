@@ -129,8 +129,15 @@ leaves the test green, the test is measuring something else.
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs `ruff check src tests`, `mypy src` and `pytest` on every push
-and pull request, then fails if the suite left the working tree dirty. The required status
-check to protect `main` with is named **`checks`**.
+and pull request, on **ubuntu-latest and windows-latest**, then fails if the suite left the
+working tree dirty. The required status checks to protect `main` with are
+**`checks (ubuntu-latest)`** and **`checks (windows-latest)`**.
+
+Both runners, and its first run is why rather than a guess: `mypy src` had been reported clean
+for months and fails with seven errors on Linux, because `msvcrt.locking` and `ctypes.windll`
+sit behind `os.name` / `platform.system()` guards that mypy does not narrow. The claim was true
+on the author's machine and nowhere else. Elrond runs on Windows (the coordinator) and Linux
+(the Pi, WSL2); one runner only ever checked one half.
 
 It references **no secrets**. The suite must be incapable of reaching a broker, so it is never
 handed the means to.

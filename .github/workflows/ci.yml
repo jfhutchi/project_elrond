@@ -25,9 +25,20 @@ concurrency:
 
 jobs:
   checks:
-    # The required status check to protect `main` with is "checks".
+    # Both, and the first run proved why rather than assumed it. `mypy src` was reported clean
+    # for months; on Linux it fails with seven errors, because `msvcrt.locking` and
+    # `ctypes.windll` are Windows-only symbols behind `os.name`/`platform.system()` guards that
+    # mypy does not narrow. The claim was true on the author's machine and nowhere else. Elrond
+    # runs on Windows (the coordinator) and Linux (the Pi, WSL2), so one runner checks one half.
+    #
+    # The required status checks to protect `main` with are "checks (ubuntu-latest)" and
+    # "checks (windows-latest)".
     name: checks
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     timeout-minutes: 30
     env:
       # A test that reaches for real credentials should fail loudly rather than find some.
@@ -61,6 +72,7 @@ jobs:
       # A suite that writes into the working tree has state it did not declare, and the next
       # run is no longer starting where this one did.
       - name: The suite left the tree clean
+        shell: bash
         run: |
           if [ -n "$(git status --porcelain)" ]; then
             echo "the test run modified tracked or untracked files:"
