@@ -265,9 +265,15 @@ def main(
             from quantbot.research.cycle import actionable, drain
             from quantbot.research.director import ResearchDirector, TaskState
             from quantbot.research.memory import ResearchMemory
+            from quantbot.research.prior import load_prior_findings
             from quantbot.research.stages import novelty_stage
 
             with active.database.transaction() as session:
+                # Load what the project already knows before deciding anything. The novelty gate
+                # reads memory, and on 2026-08-22 the live store was empty while REFUTED.md held
+                # twenty-four settled findings -- so the gate passed questions this project had
+                # already answered. Idempotent, so running it every cycle costs one query.
+                seeded = load_prior_findings(ResearchMemory(session))
                 director = ResearchDirector(session)
                 # The stages that can be decided mechanically. Scouting, critique and experiment
                 # design need a model or a measurement; `actionable()` treats a state with no
@@ -280,6 +286,7 @@ def main(
                     result = {
                         "ok": True,
                         "committed": False,
+                        "prior_findings_loaded": seeded,
                         "runnable_now": [task.task_id for task, _ in runnable],
                         "stages_available": sorted(state.value for state in stages),
                         "note": "nothing advanced; re-run with --commit to act",
