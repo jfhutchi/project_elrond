@@ -99,18 +99,16 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
 
 ## Structural limits that bound all future work
 
-* **The v0.2 trial counter and window ledger do not carry the burden of cycles 1-17, and the
-  luck bar is therefore too low.** Found 2026-08-22 by checking a claim rather than repeating
-  it. The v0.2 registry had no registered hypotheses, no recorded trials and no claimed
-  windows, so `window_consumption` reported the exhausted SIP equity window as `UNTOUCHED` and
-  `sqrt(2 ln N)` was evaluated at N near zero. The twenty-five settled findings are now seeded
-  into research memory, so the **novelty** gate works and will block a repeat with a citation.
-  The **trial burden and consumed windows are still empty**, because both attach to registered
-  hypotheses and seeding them would mean inventing registrations for experiments this schema
-  never saw. Until that is decided (see #2), **treat any v0.2 result as exploratory: the bar it
-  cleared is not the bar it owed.** The real burden is at least 43 trials by cycle 8 and the
-  equity window is spent.
+* **A spent data window read as fresh capacity until 2026-08-22, and the first diagnosis of it
+  was wrong.** `window_consumption` counted only registered-hypothesis rows, of which there were
+  none, so SIP US equities 2016-2026 reported `UNTOUCHED`. Now seeded via
+  `PRIOR_WINDOW_CONSUMPTION` and reporting `EXHAUSTED` at 68 trials.
 
+  The instructive part is the misdiagnosis. The first version of this entry claimed the **luck
+  bar** was also understated. It was not: `PRIOR_TRIALS = 68` had been seeded all along, and an
+  empty registry correctly returns a 2.905 bar. That claim was published to #2 and this file
+  before being checked by running the code, and it was wrong in the alarming direction. **Read
+  the constant before reporting the alarm.**
 * **Span, not sample size, is what buys statistical power — so the exhausted equity window is
   the *weakest* data available, not the best.** The limit above was always stated in years, and
   that is not an accident of phrasing: for an annualised Sharpe the sampling frequency cancels,

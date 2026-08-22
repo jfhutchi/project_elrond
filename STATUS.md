@@ -2,33 +2,34 @@
 
 ## START HERE
 
-### ⚠ SEVERITY-1 (PARTLY FIXED 2026-08-22): the v0.2 luck bar is too low
+### ⚠ FIXED 2026-08-22: a spent data window read as fresh capacity
 
-**The v0.2 evidence ledgers were empty while `REFUTED.md` held 24 settled findings.** Read from
-the running system, not inferred: no research records, no registered hypotheses, no recorded
-trials, no claimed windows. `window_consumption` reported the exhausted SIP equity window as
-`UNTOUCHED`.
+**Corrected claim.** An earlier version of this block said the v0.2 luck bar was too low. **That
+was wrong**, and the error is instructive: `PRIOR_TRIALS = 68` was already seeded in
+`HypothesisRegistry`, so an empty registry reports 68 cumulative trials and a **2.905** bar,
+matching cycle 17. Verified by running it, after publishing the wrong version.
 
-Section 6z of this file said the window would answer `EXHAUSTED` *"once seeded"*. It was never
-seeded. So every gate built on that store was reading an empty table, and:
+**What was actually broken.** `window_consumption` counted only `hypothesis_data_windows` rows,
+and there were none — so the equity window cycles 2-10 spent reported **`UNTOUCHED`**. The bar
+was right and the capacity was wrong: a new hypothesis would have been judged against the
+correct threshold while being told a spent window was fresh.
 
-- a question already answered as **REFUTED #22 (t=0.05)** passed the novelty gate;
-- the equity window looked untouched though cycles 2–7 consumed it;
-- **`sqrt(2 ln N)` was evaluated at N near zero** against a real burden of 43+ trials.
+Section 6z of this file said the window would answer `EXHAUSTED` *"once seeded"*. Nothing seeded
+it, and that sentence sat here through eight subsequent issues.
 
-The third is the dangerous one. A spurious result clears a bar it never earned while every gate
-reports green.
+**Fixed:** `PRIOR_WINDOW_CONSUMPTION` records the pre-registry consumption as a constant — the
+counterpart `PRIOR_TRIALS` always had. SIP US equities 2016-2026 now reports `EXHAUSTED` at 68
+trials on an empty registry, and a vendor rename does not reset it (#40).
 
-**Fixed:** the 25 settled findings are seeded (`quantbot.research.prior`) and `research-cycle`
-loads them before deciding anything. The novelty gate now blocks with a citation.
+Recorded as a constant rather than as synthetic registrations: the trials were really spent, so
+recording them is bookkeeping, while inventing hypothesis rows for experiments this schema never
+saw would be fabricated provenance a later agent would read as real.
 
-**Not fixed:** the trial burden and consumed windows attach to *registered hypotheses*. Seeding
-them means inventing registrations for experiments this schema never saw, which is fabricated
-provenance. Two options are on #2 for the operator; until one is chosen, **treat any v0.2 result
-as exploratory — the bar it cleared is not the bar it owed.**
+**Also fixed:** research memory was genuinely empty, so the novelty gate had nothing to recall
+and a question answered as REFUTED #22 (t=0.05) passed it. The 25 settled findings are now
+seeded (`quantbot.research.prior`) and loaded by `research-cycle`.
 
-**Not deployed:** the Pi runs an older checkout, so its store is still empty.
-
+**Not deployed:** the Pi runs an older checkout.
 
 ### ⚠ SEVERITY-1 (FIX BUILT, NOT DEPLOYED): the drawdown halt is a trap
 

@@ -337,10 +337,19 @@ def window_state(
         )
 
 
+"""Pre-registry consumption is seeded by default (`PRIOR_WINDOW_CONSUMPTION`), so the tests
+below that exercise row accounting pass `prior_windows=()` to isolate the mechanism from the
+real-world seed. `test_the_seeded_equity_window_reports_exhausted_on_an_empty_registry` covers
+the seed itself.
+"""
+
+
 def test_registering_reserves_a_window_rather_than_spending_it(database: Database) -> None:
     """Freezing a claim is not looking at the data, and only looking spends the holdout."""
     with database.transaction() as session:
-        registration = register(HypothesisRegistry(session), make_draft(), now=NOW)
+        registration = register(
+            HypothesisRegistry(session, prior_windows=()), make_draft(), now=NOW
+        )
 
     row = window_state(database)
     assert row["state"] == WindowState.RESERVED.value
@@ -351,7 +360,7 @@ def test_registering_reserves_a_window_rather_than_spending_it(database: Databas
     # And the trial burden on that range is unspent, so `discovery.admissible` does not read a
     # registered-but-never-run hypothesis as having exhausted the window.
     with database.transaction() as session:
-        consumption = HypothesisRegistry(session).window_consumption(
+        consumption = HypothesisRegistry(session, prior_windows=()).window_consumption(
             SIP, date(2016, 1, 4), date(2026, 8, 18)
         )
     assert consumption.trials == 0
@@ -424,7 +433,7 @@ def test_a_crash_after_the_handoff_still_spends_the_window(database: Database) -
     the holdout is spent anyway -- state, timestamp, and trial burden all as if it had run.
     """
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         register(registry, make_draft(), now=NOW)
         # The handoff: protected data is about to be given to the experiment.
         registry.consume("H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION, now=NOW)
@@ -436,7 +445,7 @@ def test_a_crash_after_the_handoff_still_spends_the_window(database: Database) -
     assert row["state"] == WindowState.CONSUMED.value
     assert row["consumed_at"] == encode_utc(NOW)
     with database.transaction() as session:
-        consumption = HypothesisRegistry(session).window_consumption(
+        consumption = HypothesisRegistry(session, prior_windows=()).window_consumption(
             SIP, date(2016, 1, 4), date(2026, 8, 18)
         )
     assert consumption.trials == 1
@@ -890,7 +899,7 @@ def test_a_genuinely_different_universe_is_not_treated_as_a_repeat(database: Dat
 def test_window_consumption_answers_untouched_partial_and_exhausted(database: Database) -> None:
     """The structural limit REFUTED.md states in prose, made queryable."""
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         virgin = registry.window_consumption(
             "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
         )
@@ -899,7 +908,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert virgin.usable
 
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         register(
             registry,
             make_draft(
@@ -917,7 +926,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
             now=NOW,
         )
     with database.transaction() as session:
-        partial = HypothesisRegistry(session).window_consumption(
+        partial = HypothesisRegistry(session, prior_windows=()).window_consumption(
             "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
         )
     assert partial.status == "PARTIALLY_CONSUMED"
@@ -925,7 +934,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
     assert partial.consumers == ("H-2026-001 v1",)
 
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         register(
             registry,
             make_draft(
@@ -948,7 +957,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
             now=NOW,
         )
     with database.transaction() as session:
-        spent = HypothesisRegistry(session).window_consumption(
+        spent = HypothesisRegistry(session, prior_windows=()).window_consumption(
             "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 18)
         )
     assert spent.status == "EXHAUSTED"
@@ -958,7 +967,7 @@ def test_window_consumption_answers_untouched_partial_and_exhausted(database: Da
 def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Database) -> None:
     """Consumption is per range, not per dataset. Otherwise one run retires a data source."""
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         register(
             registry,
             make_draft(
@@ -977,7 +986,7 @@ def test_a_disjoint_range_of_a_spent_dataset_is_still_untouched(database: Databa
             now=NOW,
         )
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         old = registry.window_consumption(
             "sip-us-equities-daily", date(2016, 1, 4), date(2020, 12, 31)
         )
@@ -1338,7 +1347,7 @@ def test_window_consumption_says_which_family_spent_the_budget(database: Databas
         ("2022-01-03", "2024-12-31", "mean-reversion"),
     )
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         for index, (start, end, family) in enumerate(spans):
             register(
                 registry,
@@ -1425,7 +1434,7 @@ def test_two_families_jointly_exhaust_a_range_neither_could_alone(database: Data
         ("2021-01-04", "2024-12-31", "mean-reversion"),
     )
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
         for index, (start, end, family) in enumerate(spans):
             register(
                 registry,
@@ -1497,9 +1506,7 @@ def test_no_route_through_the_gate_is_opened_by_overstating_an_input(
         counted_at=NOW,
     )
     with database.transaction() as session, pytest.raises(RegistrationRefused) as widened:
-        HypothesisRegistry(session).verify_for_execution(
-            "H-2026-001", 1, now=NOW, observed=wider
-        )
+        HypothesisRegistry(session).verify_for_execution("H-2026-001", 1, now=NOW, observed=wider)
     assert widened.value.reason is RefusalReason.UNVERIFIED_SAMPLE
     assert "no registered window covers" in widened.value.detail
 
@@ -1560,10 +1567,10 @@ def test_an_overstated_registration_reserves_nothing_permanent(database: Databas
         effect=sharpe_effect(expected=Decimal("1.0")), available_observations=10_000
     )
     with database.transaction() as session:
-        register(HypothesisRegistry(session), inflated, now=NOW)
+        register(HypothesisRegistry(session, prior_windows=()), inflated, now=NOW)
 
     with database.transaction() as session:
-        registry = HypothesisRegistry(session)
+        registry = HypothesisRegistry(session, prior_windows=())
 
         # 1. Execution clearance refuses it, because the verified count is what that gate uses.
         with pytest.raises(RegistrationRefused) as refused:
@@ -1642,9 +1649,7 @@ def test_a_registration_records_which_kind_of_assessment_it_got(database: Databa
 
     assert verified.sample_verified_at_registration is True
     # And it survives the freeze, rather than being a transient of the call.
-    assert '"sample_verified_at_registration":true' in verified.model_dump_json().replace(
-        " ", ""
-    )
+    assert '"sample_verified_at_registration":true' in verified.model_dump_json().replace(" ", "")
 
 
 def test_a_verified_count_at_registration_must_come_from_a_registered_window(
@@ -1756,3 +1761,38 @@ def test_an_unrecognised_dataset_is_its_own_budget_rather_than_pooled(
 
     assert unrelated.trials == 0, "an independent source must start untouched"
     assert unrelated.status == "UNTOUCHED"
+
+
+def test_the_seeded_equity_window_reports_exhausted_on_an_empty_registry(
+    database: Database,
+) -> None:
+    """The window cycles 2-10 spent must not read as fresh capacity (#2).
+
+    `PRIOR_TRIALS` already seeded the luck bar, so an empty registry correctly reported 68
+    cumulative trials and a 2.905 bar. `window_consumption` counted only rows, so the same
+    registry reported the exhausted equity window as UNTOUCHED -- the bar was right and the
+    capacity was wrong, and a new hypothesis would have been told the spent window was fresh.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        spent = registry.window_consumption(
+            "sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 21)
+        )
+        renamed = registry.window_consumption(
+            "alpaca-us-equities-daily", date(2016, 1, 4), date(2026, 8, 21)
+        )
+        later = registry.window_consumption(
+            "sip-us-equities-daily", date(2030, 1, 2), date(2031, 1, 3)
+        )
+        elsewhere = registry.window_consumption("crypto-daily", date(2016, 1, 4), date(2026, 8, 21))
+
+    assert spent.status == "EXHAUSTED"
+    assert spent.trials == 68
+    # Named so a reader can see who spent it, and deliberately not shaped like a hypothesis id.
+    assert any("pre-v0.2" in consumer for consumer in spent.consumers)
+    # `by_family` attributes spend to a v0.2 family; pre-registry work belongs to none.
+    assert spent.by_family == {}
+
+    assert renamed.status == "EXHAUSTED", "a vendor rename must not reset a spent window (#40)"
+    assert later.status == "UNTOUCHED", "consumption is per range, not per dataset"
+    assert elsewhere.status == "UNTOUCHED", "another asset class is untouched capacity"

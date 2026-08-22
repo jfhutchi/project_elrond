@@ -96,6 +96,25 @@ DUPLICATE_OVERLAP = 0.8
 #: and why the number sits here.
 EXHAUSTED_TRIALS = 40
 
+#: Consumption that happened before this registry existed, as (dataset, start, end, trials).
+#:
+#: The counterpart to `PRIOR_TRIALS`, and it was missing. `PRIOR_TRIALS` correctly seeds the
+#: luck bar so an empty registry still reports 68 cumulative trials -- but `window_consumption`
+#: counted only rows, so the window cycles 2-10 spent reported `UNTOUCHED`. The bar was right
+#: and the capacity was wrong: a new hypothesis would have been judged against the correct
+#: 2.905 threshold while being told the exhausted window was fresh.
+#:
+#: Recorded as a constant rather than as synthetic registrations. The trials were really spent,
+#: so recording them is bookkeeping; inventing hypothesis rows for experiments this schema never
+#: saw would be fabricated provenance, and later agents would read them as real.
+PRIOR_WINDOW_CONSUMPTION: tuple[tuple[str, date, date, int], ...] = (
+    ("sip-us-equities-daily", date(2016, 1, 4), date(2026, 8, 21), 68),
+)
+
+#: How a pre-registry consumer is named in `WindowConsumption.consumers`. Deliberately not
+#: shaped like a hypothesis id, so nobody can mistake it for a row they can go and read.
+PRIOR_CONSUMER = "cycles 2-10 (pre-v0.2, see REFUTED.md)"
+
 #: How long a registration's claim on its declared windows blocks other registrations (#22).
 #: Long enough that a hypothesis actually being worked on keeps its holdout, short enough that an
 #: abandoned one stops sterilising the data within a research cycle. A reservation must lapse
@@ -461,9 +480,16 @@ class ObservedSample(FrozenModel):
 class HypothesisRegistry:
     """Freeze, retrieve, and re-verify registrations inside one caller-owned transaction."""
 
-    def __init__(self, session: Session, *, prior_trials: int = PRIOR_TRIALS) -> None:
+    def __init__(
+        self,
+        session: Session,
+        *,
+        prior_trials: int = PRIOR_TRIALS,
+        prior_windows: tuple[tuple[str, date, date, int], ...] = PRIOR_WINDOW_CONSUMPTION,
+    ) -> None:
         self._session = session
         self._prior_trials = prior_trials
+        self._prior_windows = prior_windows
 
     def register(
         self,
@@ -891,6 +917,16 @@ class HypothesisRegistry:
         consumers: list[str] = []
         by_family: dict[str, int] = {}
         trials = 0
+        # Consumption that predates this registry, for any prior range overlapping the query.
+        # Without this the equity window cycles 2-10 spent reported UNTOUCHED (#2).
+        for name, prior_start, prior_end, prior_trials in self._prior_windows:
+            if name in equivalent_datasets(dataset) and prior_start <= end and prior_end >= start:
+                trials += prior_trials
+                # Named in `consumers` so a reader can see who spent the window, but kept out
+                # of `by_family`: that mapping attributes spend to a v0.2 research family, and
+                # pre-registry work belongs to none of them. Inventing a family for it would
+                # make a made-up attribution look like a measured one.
+                consumers.append(PRIOR_CONSUMER)
         for row in rows:
             consumers.append(f"{row['hypothesis_id']} v{row['version']}")
             spent = int(row["search_cardinality"])
