@@ -1172,16 +1172,17 @@ and **not installed**.
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
-- [ ] **Decide how the v0.2 trial burden is carried** — reconstruct registrations for cycles
-      1–17, or declare a v0.2 epoch and rely on `REFUTED.md`. **Operator/Sol decision**, see #2.
-      Until then the luck bar is too low and results are exploratory.
 - [ ] **Deploy the seeded findings to the Pi.** Its store is still empty; it runs an older
       checkout and this session had no working SSH credential for it.
 - [ ] **Move the ledger to the coordinator and start the daemon there** — **operator action**,
       sequence in `deploy/omen/README.md`. Deliberately not scripted.
 - [ ] **Kronos criterion 9 (#36):** a Kronos hypothesis pre-registered *before* measurement and
       run through #19/#7/#8/#14/#18/#16. Cannot be retrofitted onto the completed study without
-      violating pre-registration, and should not be run while the luck bar is understated.
+      violating pre-registration. The earlier reason given here -- "not while the luck bar is
+      understated" -- was based on a claim since retracted; the bar was always correct.
+      The remaining reason is narrower and still holds: **registration permanently spends trial
+      budget**, so filing a hypothesis nobody intends to research, purely to demonstrate the
+      plumbing, raises the bar for real work to tick a box. Do it with a question worth asking.
 - [ ] **TradingAgents criterion 9 (#37):** whether it improves downstream hypothesis quality.
       Needs the scheduled loop and hypotheses on both sides.
 - [ ] Crypto sleeve blocked on a second Alpaca paper account (**operator action**)
