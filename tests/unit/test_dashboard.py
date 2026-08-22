@@ -643,3 +643,89 @@ def test_compute_spend_and_the_overrides_that_exceeded_it_both_render(
     overrides = [row for row in _rows(page, "panel-overrides") if "WALL_SECONDS" in row]
     assert overrides, "the overrun has to be visible somewhere"
     assert all("compute-accounting" in row for row in overrides)
+
+
+def test_the_research_pipeline_panel_shows_every_stage_including_empty_ones(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The funnel is the one panel whose zeros are the message.
+
+    "Nothing is running" is a fact an operator needs. A funnel that omits its empty stages
+    silently redraws itself every time the system changes shape, which is precisely what a
+    funnel exists to make obvious.
+    """
+    from quantbot.research.director import TaskState
+
+    populate(ledger)
+    page = render(ledger, monkeypatch)
+
+    rows = _rows(page, "panel-pipeline")
+    assert len(rows) == len(list(TaskState)), "every stage, not only the occupied ones"
+
+    body = " ".join(rows)
+    for state in TaskState:
+        assert state.value in body, state.value
+
+    # The seeded task is BLOCKED, so that row carries the count and the others are zero.
+    blocked = next(row for row in rows if "BLOCKED" in row)
+    assert ">1<" in blocked.replace(" ", ""), blocked
+
+
+def test_every_pipeline_stage_carries_an_explanation(ledger: Path) -> None:
+    """A new stage must not reach the page unexplained.
+
+    UNDERPOWERED sitting beside REFUTED with no gloss is how "the data could not resolve this"
+    gets read as "this does not work", and that misreading permanently retires a live idea.
+    """
+    from quantbot.research.director import TaskState
+
+    dashboard = _dashboard()
+    for state in TaskState:
+        meaning = dashboard._stage_meaning(state.value)
+        assert meaning and meaning != state.value.lower(), (
+            f"{state.value} has no explanation and would render as its own name"
+        )
+
+    # And the distinction that matters is actually drawn.
+    assert "not a refutation" in dashboard._stage_meaning("UNDERPOWERED")
+
+
+def test_the_kill_switch_readout_carries_the_reason_not_only_the_state(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """"ENGAGED" alone sends an operator to the journal.
+
+    The reason usually tells them whether it is a data problem, a reconciliation problem or a
+    deliberate stop — which is the difference between acting now and reading logs first. The
+    live Pi has been halted on RECONCILIATION_FAILED for days; that string is the whole message.
+    """
+    from quantbot.operations.kill_switch import KillSwitchController
+
+    populate(ledger)
+    database = Database(ledger / "quantbot.db")
+    KillSwitchController(database).engage(reason="RECONCILIATION_FAILED", updated_at=NOW)
+    database.close()
+
+    page = render(ledger, monkeypatch)
+
+    assert "ENGAGED" in page
+    assert "RECONCILIATION_FAILED" in page
+
+
+def test_the_control_link_appears_only_when_a_control_surface_is_configured(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A link to a control surface that is not running is worse than no link.
+
+    It sends somebody to a dead page during the minutes they are trying to stop trading, so the
+    URL is read from the environment rather than assumed from the dashboard's own host.
+    """
+    populate(ledger)
+
+    monkeypatch.delenv("QUANTBOT_CONTROL_URL", raising=False)
+    assert "control</a>" not in render(ledger, monkeypatch)
+
+    monkeypatch.setenv("QUANTBOT_CONTROL_URL", "http://192.168.1.118:8081/")
+    with_link = render(ledger, monkeypatch)
+    assert 'href="http://192.168.1.118:8081/"' in with_link
+    assert "control</a>" in with_link

@@ -139,6 +139,65 @@ def _research(session: Session) -> dict[str, object]:
 _ORDER = tuple(Stage)
 
 
+#: Ordering comes from `TaskState` itself, not from a list here. A literal would be a second
+#: place to remember a new stage, and the one that gets forgotten -- the funnel would silently
+#: stop showing a stage that exists. `TaskState` is already declared in pipeline order.
+def _pipeline_order() -> tuple[str, ...]:
+    return tuple(state.value for state in TaskState)
+
+
+def _stage_meaning(stage: str) -> str:
+    """What a stage means for an operator deciding whether to intervene.
+
+    Glossary, not data: it explains enum members rather than holding research state. The two
+    that matter are the terminal ones. `UNDERPOWERED` sitting beside `REFUTED` with no
+    explanation is how "the data could not resolve this" gets read as "this does not work", and
+    that misreading permanently retires a live idea.
+
+    A stage with no entry falls back to its own name rather than to silence, and a test asserts
+    every `TaskState` has one -- so adding a stage cannot leave it unexplained on the page.
+    """
+    return {
+        "PROPOSED": "waiting to be worked",
+        "SCOUTING": "gathering sources",
+        "CRITIQUE": "under adversarial review",
+        "REGISTERED": "frozen, awaiting execution",
+        "EXPERIMENTING": "running",
+        "REVIEW": "result awaiting judgement",
+        "PROMOTABLE": "earned a promotion",
+        "SURVIVED": "cleared its registered test",
+        "UNDERPOWERED": "the data could not resolve it - not a refutation",
+        "REFUTED": "measured and rejected",
+        "BLOCKED": "stopped; needs a person",
+    }.get(stage, stage.lower())
+
+
+def _pipeline_rows(tasks: list[ResearchTask]) -> list[tuple[str, int, str, str]]:
+    """The research funnel: how many questions sit at each stage, and what that stage means.
+
+    Rendered from the task list already loaded rather than a second query, so the funnel and the
+    task panel below it cannot disagree about how many tasks exist.
+
+    Stages with no tasks are still shown. An empty `EXPERIMENTING` row is information -- it says
+    nothing is running -- and a funnel that omits its empty stages silently redraws itself every
+    time the system changes shape, which is the one thing a funnel is supposed to make obvious.
+    """
+    order = _pipeline_order()
+    counts: dict[str, int] = dict.fromkeys(order, 0)
+    latest: dict[str, str] = dict.fromkeys(order, "")
+    for task in tasks:
+        stage = task.state.value
+        if stage not in counts:
+            continue
+        counts[stage] += 1
+        if not latest[stage] or task.updated_at.isoformat() > latest[stage]:
+            latest[stage] = task.updated_at.isoformat()
+    return [
+        (stage, counts[stage], _stage_meaning(stage), latest[stage][:16] or "—")
+        for stage in order
+    ]
+
+
 def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
     """Where each strategy stands on the ladder, and precisely what it has not yet earned (#15).
 
@@ -460,6 +519,25 @@ def _window_row(dataset: str, start: str, end: str, state: str, holder: str) -> 
     )
 
 
+def _pipeline_row(stage: str, count: int, meaning: str, last: str) -> str:
+    """One funnel stage. Terminal states are toned by what they mean, not by whether they moved."""
+    tone = {
+        "BLOCKED": "bad",
+        "REFUTED": "warn",
+        "UNDERPOWERED": "warn",
+        "SURVIVED": "good",
+        "PROMOTABLE": "good",
+    }.get(stage, "quiet" if count == 0 else "good")
+    return (
+        "<tr>"
+        f"<td>{_pill(stage, tone)}</td>"
+        f"<td class='num'>{count}</td>"
+        f"<td>{_esc(meaning)}</td>"
+        f"<td class='mono'>{_esc(last)}</td>"
+        "</tr>"
+    )
+
+
 def _ladder_row(strategy: str, stage: str, identity: str, progress: str, unmet: str) -> str:
     """One strategy's position. The tone tracks how much trust the stage implies."""
     tone = {
@@ -538,6 +616,22 @@ def build(out: Path) -> None:
     completed = durable.get("completed", ()) if durable.get("available") else ()
     reconciliation = durable.get("reconciliation") if durable.get("available") else None
     kill = durable.get("kill") if durable.get("available") else None
+    # The reason is the useful half. "ENGAGED" alone sends an operator to the journal; the
+    # reason usually tells them whether it is a data problem, a reconciliation problem or a
+    # deliberate stop. `control_url` is read from the environment rather than guessed, because a
+    # link to a control surface that is not there is worse than no link.
+    if kill is None:
+        kill_state, kill_note = "unknown", "no durable state was readable"
+    elif kill.engaged:
+        kill_state = "ENGAGED"
+        kill_note = _esc(kill.reason or "no reason recorded")
+    else:
+        kill_state, kill_note = "armed", "trading permitted"
+    control_url = os.environ.get("QUANTBOT_CONTROL_URL", "")
+    if control_url:
+        kill_note += (
+            f' &middot; <a href="{_esc(control_url)}" style="color:#8ab4f8">control</a>'
+        )
     signals = durable.get("signals", []) if durable.get("available") else []
     registrations = durable.get("registrations", []) if durable.get("available") else []
     records = durable.get("records", []) if durable.get("available") else []
@@ -597,6 +691,9 @@ def build(out: Path) -> None:
         4, "No research records stored"
     )
     task_rows = "".join(_task_row(t) for t in tasks) or _empty(4, "No research tasks")
+    # Always rendered, empty store or not: the funnel is the one panel whose zeros are the
+    # message. "Nothing is running" is a fact an operator needs, not an absence to hide.
+    pipeline_rows = "".join(_pipeline_row(*row) for row in _pipeline_rows(tasks))
     trial_rows = "".join(_trial_row(key, count) for key, count in trials) or _empty(
         3, "No trials recorded against any budget"
     )
@@ -766,6 +863,9 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
       <div class="v" style="font-size:15px">{len(registrations)} registered &middot;
         {forward_days}/30 days</div>
       <div class="note">backtest volume is not forward evidence</div></div>
+    <div class="readout"><div class="k">Kill switch</div>
+      <div class="v" style="font-size:15px">{kill_state}</div>
+      <div class="note">{kill_note}</div></div>
     <div class="readout"><div class="k">Research models</div>
       <div class="v" style="font-size:15px">{_esc(model_detail)}</div>
       <div class="note">configuration, not a health check</div></div>
@@ -861,6 +961,18 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
         contamination is a fact about what was seen rather than about a record.</p>
     </section>
   </div>
+
+  <section>
+    <h2>Research pipeline</h2>
+    <div class="scroll"><table id="panel-pipeline">
+      <thead><tr><th>Stage</th><th class="num">Tasks</th><th>Means</th>
+        <th>Last moved</th></tr></thead>
+      <tbody>{pipeline_rows}</tbody>
+    </table></div>
+    <p class="caveat">UNDERPOWERED is not a refutation — it means the data could not resolve the
+      question, and the mechanism may still be real. A crashed stage becomes BLOCKED, never
+      REFUTED: an infrastructure failure is not a research finding.</p>
+  </section>
 
   <div class="cols">
     <section>
