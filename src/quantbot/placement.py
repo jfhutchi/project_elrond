@@ -28,7 +28,10 @@ import os
 import platform
 import shutil
 import subprocess
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 from typing import Self
 
@@ -43,6 +46,55 @@ class HostProvenance(StrEnum):
     #: Written down by a human or a config file. Useful for describing a host that is currently
     #: switched off; never sufficient to receive a job.
     DECLARED = "DECLARED"
+
+
+#: How recently an endpoint must have answered for its capability to count as current. A
+#: `HostProfile` is measured once and can be held for the life of a worker, so a verification
+#: from an hour ago is a fact about an hour ago.
+ENDPOINT_FRESHNESS = timedelta(minutes=15)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelEndpointStatus:
+    """Whether a model endpoint actually answered, and when.
+
+    A configured URL is not a capability. `has_local_model_endpoint` used to be
+    `bool(model_endpoint)`, which admitted a dead, stale or misconfigured endpoint as a measured
+    property -- inside the one module whose whole argument is that capacity is measured rather
+    than declared. Sol caught it; it was mine.
+    """
+
+    url: str
+    reachable: bool
+    verified_at: datetime | None = None
+    detail: str = ""
+
+    def is_current(self, now: datetime) -> bool:
+        """Reachable, and verified recently enough that the answer still describes now."""
+        if not self.reachable or self.verified_at is None:
+            return False
+        return now - self.verified_at <= ENDPOINT_FRESHNESS
+
+
+def probe_model_endpoint(
+    url: str, *, now: datetime, timeout_seconds: float = 5.0
+) -> ModelEndpointStatus:
+    """Ask the endpoint whether it is there, rather than assuming its URL implies it.
+
+    An OpenAI-compatible `/models` listing is the cheapest request that distinguishes a live
+    runtime from an open port. A failure is recorded rather than raised: a host without a model
+    endpoint is a normal host, and the job that needs one is refused by `unmet_requirement`.
+    """
+    listing = url.rstrip("/") + "/models"
+    try:
+        with urllib.request.urlopen(listing, timeout=timeout_seconds) as response:
+            reachable = 200 <= response.status < 300
+            detail = f"HTTP {response.status}"
+    except (urllib.error.URLError, OSError, ValueError) as error:
+        return ModelEndpointStatus(url=url, reachable=False, detail=type(error).__name__)
+    return ModelEndpointStatus(
+        url=url, reachable=reachable, verified_at=now if reachable else None, detail=detail
+    )
 
 
 class NoCapableHost(RuntimeError):
@@ -69,20 +121,34 @@ class HostProfile:
     cpu_cores: int | None
     total_memory_mb: int | None
     gpu_vram_mb: int | None
-    has_local_model_endpoint: bool = False
+    model_endpoint: ModelEndpointStatus | None = None
     provenance: HostProvenance = HostProvenance.DECLARED
     _token: object | None = field(default=None, repr=False, compare=False)
 
     @classmethod
-    def measure(cls, name: str, *, model_endpoint: str | None = None) -> Self:
-        """Read this machine. The only route to a profile that can receive work."""
+    def measure(
+        cls,
+        name: str,
+        *,
+        model_endpoint: str | None = None,
+        now: datetime | None = None,
+    ) -> Self:
+        """Read this machine. The only route to a profile that can receive work.
+
+        Probes the model endpoint when one is given, rather than recording that a string was
+        supplied. A single short-timeout request, skipped entirely when no endpoint is
+        configured, so a host with no model runtime pays nothing for the check.
+        """
+        moment = now or datetime.now(UTC)
         return cls(
             name=name,
             architecture=platform.machine().lower(),
             cpu_cores=os.cpu_count(),
             total_memory_mb=_total_memory_mb(),
             gpu_vram_mb=_gpu_vram_mb(),
-            has_local_model_endpoint=bool(model_endpoint),
+            model_endpoint=(
+                None if not model_endpoint else probe_model_endpoint(model_endpoint, now=moment)
+            ),
             provenance=HostProvenance.MEASURED,
             _token=_MEASURED,
         )
@@ -110,7 +176,9 @@ class JobRequirements:
     requires_local_model_endpoint: bool = False
 
 
-def unmet_requirement(job: JobRequirements, host: HostProfile) -> str | None:
+def unmet_requirement(
+    job: JobRequirements, host: HostProfile, *, now: datetime | None = None
+) -> str | None:
     """Why this host cannot run this job, or `None` if it can.
 
     Returned rather than raised so a caller can report every host's reason at once. An operator
@@ -133,12 +201,24 @@ def unmet_requirement(job: JobRequirements, host: HostProfile) -> str | None:
     if job.minimum_gpu_vram_mb:
         if host.gpu_vram_mb is None or host.gpu_vram_mb < job.minimum_gpu_vram_mb:
             return f"needs {job.minimum_gpu_vram_mb}MB VRAM, host reports {host.gpu_vram_mb}"
-    if job.requires_local_model_endpoint and not host.has_local_model_endpoint:
-        return "needs a local model endpoint, host has none"
+    if job.requires_local_model_endpoint:
+        endpoint = host.model_endpoint
+        if endpoint is None:
+            return "needs a local model endpoint, host has none configured"
+        if not endpoint.reachable:
+            return (
+                f"needs a local model endpoint; {endpoint.url} did not answer ({endpoint.detail})"
+            )
+        if not endpoint.is_current(now or datetime.now(UTC)):
+            # Stale blocks for the same reason unknown blocks: a verification from an hour ago
+            # is a fact about an hour ago, and this profile may have been held that long.
+            return f"the endpoint check for {endpoint.url} is stale; re-measure the host"
     return None
 
 
-def place(job: JobRequirements, hosts: list[HostProfile]) -> HostProfile:
+def place(
+    job: JobRequirements, hosts: list[HostProfile], *, now: datetime | None = None
+) -> HostProfile:
     """Choose a host that satisfies the job, or refuse.
 
     Refuses rather than picking the closest match. Degrading a GPU job onto a 512MB ARM host is
@@ -151,7 +231,7 @@ def place(job: JobRequirements, hosts: list[HostProfile]) -> HostProfile:
     unmet: dict[str, str] = {}
     capable: list[HostProfile] = []
     for host in hosts:
-        reason = unmet_requirement(job, host)
+        reason = unmet_requirement(job, host, now=now)
         if reason is None:
             capable.append(host)
         else:
@@ -260,6 +340,9 @@ WATCHDOG = JobRequirements(name="watchdog", minimum_cores=1, minimum_memory_mb=1
 
 __all__ = [
     "CONTROL_PLANE",
+    "ENDPOINT_FRESHNESS",
+    "ModelEndpointStatus",
+    "probe_model_endpoint",
     "WATCHDOG",
     "KRONOS_INFERENCE",
     "SEMANTIC_ANALYSIS",

@@ -9,6 +9,8 @@ that.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 import pytest
 
 from quantbot.placement import (
@@ -28,6 +30,8 @@ from quantbot.placement import (
 #: Zero W's published specification; it is the one host here that cannot run the measurement.
 OMEN = {"architecture": "amd64", "cpu_cores": 32, "total_memory_mb": 32486, "gpu_vram_mb": 16376}
 WSL = {"architecture": "x86_64", "cpu_cores": 32, "total_memory_mb": 15847, "gpu_vram_mb": 16376}
+NOW = datetime(2026, 8, 22, 12, tzinfo=UTC)
+
 PI_ZERO = {"architecture": "armv6l", "cpu_cores": 1, "total_memory_mb": 434, "gpu_vram_mb": 0}
 
 
@@ -145,15 +149,65 @@ def test_an_unreadable_gpu_is_not_treated_as_a_working_one() -> None:
     assert unmet_requirement(training, measured("omen", OMEN)) is None
 
 
-def test_semantic_work_needs_a_model_endpoint_not_merely_a_big_machine() -> None:
-    """Capacity is not capability. A 32GB host with no endpoint still cannot serve a model."""
-    without = measured("omen-wsl2", WSL)
-    with_endpoint = measured("omen-wsl2", WSL, has_local_model_endpoint=True)
+def test_semantic_work_needs_a_reachable_endpoint_not_a_configured_one() -> None:
+    """Capacity is not capability, and a URL is not an endpoint.
 
-    assert unmet_requirement(SEMANTIC_ANALYSIS, without) == (
-        "needs a local model endpoint, host has none"
+    This was `bool(model_endpoint)`: any non-empty string counted as a measured capability, so a
+    dead or misconfigured runtime read as available -- inside the module whose whole argument is
+    that capacity is measured rather than declared. Sol caught it in review.
+    """
+    from quantbot.placement import ModelEndpointStatus  # noqa: PLC0415
+
+    live = ModelEndpointStatus(
+        url="http://localhost:11434/v1", reachable=True, verified_at=NOW, detail="HTTP 200"
     )
-    assert unmet_requirement(SEMANTIC_ANALYSIS, with_endpoint) is None
+    dead = ModelEndpointStatus(url="http://localhost:11434/v1", reachable=False, detail="URLError")
+
+    none_configured = measured("omen-wsl2", WSL)
+    unreachable = measured("omen-wsl2", WSL, model_endpoint=dead)
+    reachable = measured("omen-wsl2", WSL, model_endpoint=live)
+
+    assert "none configured" in (
+        unmet_requirement(SEMANTIC_ANALYSIS, none_configured, now=NOW) or ""
+    )
+    assert "did not answer" in (unmet_requirement(SEMANTIC_ANALYSIS, unreachable, now=NOW) or "")
+    assert unmet_requirement(SEMANTIC_ANALYSIS, reachable, now=NOW) is None
+
+
+def test_a_stale_endpoint_check_blocks_rather_than_carrying_forward() -> None:
+    """A profile is measured once and can be held for the life of a worker.
+
+    So a verification from an hour ago is a fact about an hour ago. Stale blocks for the same
+    reason unknown blocks: the alternative is dispatching work to a runtime that answered once.
+    """
+    from datetime import timedelta  # noqa: PLC0415
+
+    from quantbot.placement import ENDPOINT_FRESHNESS, ModelEndpointStatus  # noqa: PLC0415
+
+    verified = ModelEndpointStatus(
+        url="http://localhost:11434/v1", reachable=True, verified_at=NOW, detail="HTTP 200"
+    )
+    host = measured("omen-wsl2", WSL, model_endpoint=verified)
+
+    assert unmet_requirement(SEMANTIC_ANALYSIS, host, now=NOW) is None
+    later = NOW + ENDPOINT_FRESHNESS + timedelta(seconds=1)
+    assert "stale" in (unmet_requirement(SEMANTIC_ANALYSIS, host, now=later) or "")
+
+
+def test_a_probe_of_an_unreachable_endpoint_records_the_failure_rather_than_raising() -> None:
+    """A host without a model endpoint is a normal host, not an error.
+
+    The refusal belongs at placement, where it names the job that cannot run, rather than as an
+    exception from measuring a machine.
+    """
+    from quantbot.placement import probe_model_endpoint  # noqa: PLC0415
+
+    # Port 1 is reserved and never listening; no network is reached beyond loopback.
+    status = probe_model_endpoint("http://127.0.0.1:1/v1", now=NOW, timeout_seconds=2.0)
+
+    assert status.reachable is False
+    assert status.verified_at is None
+    assert status.detail
 
 
 def test_the_smallest_sufficient_host_wins() -> None:
