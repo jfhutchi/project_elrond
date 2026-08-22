@@ -26,9 +26,11 @@ caller that can count rows. Absent, `exploratory_only` is true and #11 marks the
 
 from __future__ import annotations
 
+import json
 from collections.abc import Sequence
 from datetime import datetime
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from quantbot.forecasting.burden import forecast_burden
@@ -38,6 +40,8 @@ from quantbot.research.manifest import WorkerProvenance, content_id
 from quantbot.research.models import ModelResponse
 from quantbot.research.semantic import SemanticAnalysis
 from quantbot.research.sources import Source
+from quantbot.storage import encode_utc
+from quantbot.storage.schema import search_runs
 
 KRONOS_WORKER = "kronos"
 SEMANTIC_WORKER = "semantic"
@@ -196,10 +200,121 @@ def measured_kronos_provenance(session: Session, record: ForecastRecord) -> Work
     return kronos_provenance(record, search_cardinality=burden.configurations)
 
 
+def record_semantic_analysis(
+    session: Session,
+    provenance: WorkerProvenance,
+    sources: Sequence[Source],
+    *,
+    hypothesis_id: str,
+    started_at: datetime,
+    finished_at: datetime,
+) -> str:
+    """Persist one semantic analysis as a durable search record (#23, #37).
+
+    One call is one search of cardinality one. A caller that sweeps five prompts and keeps the
+    best answer leaves five rows, and the burden it carries is five whether or not it says so.
+    That is the entire point: an agent's search volume has to be countable from records rather
+    than disclosed by the agent, because the party that swept is the party that benefits from a
+    smaller number.
+
+    Reuses `search_runs` rather than adding a table. A source bundle genuinely is data the
+    worker searched over, and its publication range genuinely is the window that search spent,
+    so nothing here is forced into a column that means something else.
+
+    Append-only, inheriting `record_search_run`'s reasoning: a search that happened cannot
+    un-happen, and a count that can be revised downward is a count that can be understated.
+    """
+    if not sources:
+        raise ValueError("a semantic analysis over no sources has no search to record")
+    if provenance.name != SEMANTIC_WORKER:
+        raise ValueError(f"{provenance.name} is not a semantic analysis")
+    search_id = f"semantic:{hypothesis_id}:{provenance.artifact_id}"
+    existing = session.execute(
+        select(search_runs.c.search_id).where(search_runs.c.search_id == search_id)
+    ).one_or_none()
+    if existing is not None:
+        # The same analysis over the same bundle under the same configuration is the same
+        # search. Counting it twice would overstate the burden, which is its own dishonesty.
+        return search_id
+
+    published = sorted(source.published_at for source in sources)
+    session.execute(
+        search_runs.insert().values(
+            search_id=search_id,
+            actor=SEMANTIC_WORKER,
+            actor_version=provenance.version,
+            candidates_evaluated=1,
+            dataset=f"sources:{provenance.input_hash}",
+            data_role="DISCOVERY",
+            start_date=published[0].date().isoformat(),
+            end_date=published[-1].date().isoformat(),
+            started_at=encode_utc(started_at),
+            finished_at=encode_utc(finished_at),
+            configuration_hash=provenance.fingerprint,
+            detail_json=json.dumps(
+                {
+                    "artifact_id": provenance.artifact_id,
+                    "configuration": dict(provenance.configuration),
+                    "hypothesis_id": hypothesis_id,
+                    "sources": sorted(source.source_id for source in sources),
+                },
+                sort_keys=True,
+            ),
+        )
+    )
+    return search_id
+
+
+def measured_semantic_cardinality(session: Session, *, hypothesis_id: str) -> int:
+    """Count the semantic analyses run against one hypothesis, from rows.
+
+    Keyed on the hypothesis rather than the source bundle, deliberately. A sweep that varies the
+    sources as well as the prompt has searched more, not less, and keying on the bundle would
+    quietly drop every variation onto its own untouched counter -- the understatement this
+    accounting exists to prevent.
+
+    Filtered in Python rather than through `json_extract` so the query does not depend on the
+    SQLite build. Semantic analyses are expensive enough that this table stays small; when it
+    does not, this wants an index and a column rather than a cleverer query.
+    """
+    rows = session.execute(
+        select(search_runs.c.candidates_evaluated, search_runs.c.detail_json).where(
+            search_runs.c.actor == SEMANTIC_WORKER
+        )
+    ).all()
+    return sum(
+        int(evaluated)
+        for evaluated, detail in rows
+        if json.loads(str(detail)).get("hypothesis_id") == hypothesis_id
+    )
+
+
+def measured_semantic_provenance(
+    session: Session, provenance: WorkerProvenance, *, hypothesis_id: str
+) -> WorkerProvenance:
+    """Attach the counted burden to a semantic analysis's provenance.
+
+    Refuses a count of zero for the same reason the Kronos counterpart does: the analysis has to
+    be in the ledger it is being counted against, and a burden of zero for work that
+    demonstrably happened is the most flattering possible answer to a question nobody could
+    check.
+    """
+    counted = measured_semantic_cardinality(session, hypothesis_id=hypothesis_id)
+    if counted == 0:
+        raise ValueError(
+            f"no semantic analysis is recorded against {hypothesis_id}; a measured burden "
+            "cannot be taken from a ledger that does not hold the artifact"
+        )
+    return provenance.model_copy(update={"search_cardinality": counted})
+
+
 __all__ = [
     "KRONOS_WORKER",
     "SEMANTIC_WORKER",
     "kronos_provenance",
     "measured_kronos_provenance",
+    "measured_semantic_cardinality",
+    "measured_semantic_provenance",
+    "record_semantic_analysis",
     "semantic_provenance",
 ]

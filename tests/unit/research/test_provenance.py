@@ -372,6 +372,145 @@ def test_a_contaminated_analysis_has_no_provenance_to_record() -> None:
         semantic_provenance(ANALYSIS, assessment, response(), [pre_cutoff], as_of=AS_OF)
 
 
+def semantic_ledger(tmp_path):
+    """A research database with the `search_runs` table this counting reuses."""
+    from quantbot.storage.database import Database  # noqa: PLC0415
+
+    return Database(tmp_path / "research.db")
+
+
+def test_each_semantic_call_leaves_a_row_so_a_sweep_cannot_hide(tmp_path) -> None:
+    """A caller that swept five prompts and kept the best has searched five times.
+
+    Nothing recorded the calls before this, so a sweep cost the multiple-testing budget nothing
+    and the luck bar every later hypothesis is judged against stayed where it was. That is the
+    laundering path #23 exists to close, and an agent worker is the easiest place to reopen it.
+    """
+    from quantbot.research.provenance import (  # noqa: PLC0415
+        measured_semantic_cardinality,
+        record_semantic_analysis,
+    )
+
+    database = semantic_ledger(tmp_path)
+    try:
+        with database.transaction() as session:
+            for index in range(5):
+                swept = semantic([source("post-1"), source("post-2")]).model_copy(
+                    update={"artifact_id": f"sweep-{index}"}
+                )
+                record_semantic_analysis(
+                    session,
+                    swept,
+                    [source("post-1"), source("post-2")],
+                    hypothesis_id="H-2026-001",
+                    started_at=AS_OF,
+                    finished_at=AS_OF,
+                )
+
+            assert measured_semantic_cardinality(session, hypothesis_id="H-2026-001") == 5
+    finally:
+        database.close()
+
+
+def test_varying_the_sources_does_not_start_a_fresh_counter(tmp_path) -> None:
+    """A sweep that changes the sources as well as the prompt has searched more, not less.
+
+    Keying the count on the source bundle would drop each variation onto its own untouched
+    counter, which is the understatement this accounting exists to prevent.
+    """
+    from quantbot.research.provenance import (  # noqa: PLC0415
+        measured_semantic_cardinality,
+        record_semantic_analysis,
+    )
+
+    database = semantic_ledger(tmp_path)
+    try:
+        with database.transaction() as session:
+            for index, bundle in enumerate(
+                ([source("post-1")], [source("post-2")], [source("post-1"), source("post-2")])
+            ):
+                record_semantic_analysis(
+                    session,
+                    semantic(bundle).model_copy(update={"artifact_id": f"bundle-{index}"}),
+                    bundle,
+                    hypothesis_id="H-2026-001",
+                    started_at=AS_OF,
+                    finished_at=AS_OF,
+                )
+
+            assert measured_semantic_cardinality(session, hypothesis_id="H-2026-001") == 3
+    finally:
+        database.close()
+
+
+def test_the_same_analysis_recorded_twice_is_counted_once(tmp_path) -> None:
+    """Overstating a burden is its own dishonesty.
+
+    The same configuration over the same bundle producing the same artifact is one search, and
+    a retry or a replayed transaction must not inflate the luck bar.
+    """
+    from quantbot.research.provenance import (  # noqa: PLC0415
+        measured_semantic_cardinality,
+        record_semantic_analysis,
+    )
+
+    database = semantic_ledger(tmp_path)
+    try:
+        with database.transaction() as session:
+            sources = [source("post-1")]
+            for _ in range(3):
+                record_semantic_analysis(
+                    session,
+                    semantic(sources),
+                    sources,
+                    hypothesis_id="H-2026-001",
+                    started_at=AS_OF,
+                    finished_at=AS_OF,
+                )
+
+            assert measured_semantic_cardinality(session, hypothesis_id="H-2026-001") == 1
+    finally:
+        database.close()
+
+
+def test_another_hypothesis_burden_is_not_borrowed(tmp_path) -> None:
+    """Counting across hypotheses would charge a question for searching somebody else did."""
+    from quantbot.research.provenance import (  # noqa: PLC0415
+        measured_semantic_cardinality,
+        record_semantic_analysis,
+    )
+
+    database = semantic_ledger(tmp_path)
+    try:
+        with database.transaction() as session:
+            sources = [source("post-1")]
+            record_semantic_analysis(
+                session,
+                semantic(sources),
+                sources,
+                hypothesis_id="H-2026-001",
+                started_at=AS_OF,
+                finished_at=AS_OF,
+            )
+
+            assert measured_semantic_cardinality(session, hypothesis_id="H-2026-002") == 0
+    finally:
+        database.close()
+
+
+def test_an_unrecorded_semantic_analysis_cannot_claim_a_measured_burden(tmp_path) -> None:
+    from quantbot.research.provenance import measured_semantic_provenance  # noqa: PLC0415
+
+    database = semantic_ledger(tmp_path)
+    try:
+        with database.transaction() as session, pytest.raises(ValueError, match="no semantic"):
+            measured_semantic_provenance(
+                session, semantic([source("post-1")]), hypothesis_id="H-2026-001"
+            )
+    finally:
+        database.close()
+
+
 # --- comparison -------------------------------------------------------------------------------
 
 
