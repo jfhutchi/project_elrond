@@ -2,6 +2,34 @@
 
 ## START HERE
 
+### ⚠ SEVERITY-1 (PARTLY FIXED 2026-08-22): the v0.2 luck bar is too low
+
+**The v0.2 evidence ledgers were empty while `REFUTED.md` held 24 settled findings.** Read from
+the running system, not inferred: no research records, no registered hypotheses, no recorded
+trials, no claimed windows. `window_consumption` reported the exhausted SIP equity window as
+`UNTOUCHED`.
+
+Section 6z of this file said the window would answer `EXHAUSTED` *"once seeded"*. It was never
+seeded. So every gate built on that store was reading an empty table, and:
+
+- a question already answered as **REFUTED #22 (t=0.05)** passed the novelty gate;
+- the equity window looked untouched though cycles 2–7 consumed it;
+- **`sqrt(2 ln N)` was evaluated at N near zero** against a real burden of 43+ trials.
+
+The third is the dangerous one. A spurious result clears a bar it never earned while every gate
+reports green.
+
+**Fixed:** the 25 settled findings are seeded (`quantbot.research.prior`) and `research-cycle`
+loads them before deciding anything. The novelty gate now blocks with a citation.
+
+**Not fixed:** the trial burden and consumed windows attach to *registered hypotheses*. Seeding
+them means inventing registrations for experiments this schema never saw, which is fabricated
+provenance. Two options are on #2 for the operator; until one is chosen, **treat any v0.2 result
+as exploratory — the bar it cleared is not the bar it owed.**
+
+**Not deployed:** the Pi runs an older checkout, so its store is still empty.
+
+
 ### ⚠ SEVERITY-1 (FIX BUILT, NOT DEPLOYED): the drawdown halt is a trap
 
 **The design defect is real and unchanged.** Once equity is 15% below its high-water mark,
@@ -846,8 +874,11 @@ same boundary from the trading side.
 
 ## 6z. Where v0.2 stands, and what to do next
 
-Branch `claude/roadmap-2-issue-5-185afc`. 766 tests; `ruff` and `mypy --strict` clean. Read this
-section first if you are resuming.
+Branch `elrond-v0.2`. **1,315 tests**; `ruff` and `mypy` clean across 144 source files. Read
+this section first if you are resuming.
+
+**Updated 2026-08-22.** The table below was written when four issues were outstanding; all four
+shipped, and so did #36, #37 and #38's enforcement. See `## 6aa` for what changed.
 
 ### Shipped
 
@@ -872,9 +903,11 @@ Schema is at V6 with revisions 0001–0006. Every revision declares its own tabl
 
 ### Not built
 
-**#13 Discovery Engine, #11 External Workers, #15 Dashboard, #16 Promotion Ladder.**
+~~**#13 Discovery Engine, #11 External Workers, #15 Dashboard, #16 Promotion Ladder.**~~
+All four shipped; this section is kept for the reasoning, not the status.
 
-Nothing calls an LLM anywhere in this system. `ModelRuntime` is wired and unused; the critic is
+~~Nothing calls an LLM anywhere in this system.~~ Superseded: #9 was exercised against a live
+Ollama endpoint and the semantic worker (#37) ran against `mistral:7b`. `ModelRuntime` is wired and unused; the critic is
 deterministic and names the five judgment dimensions it did not assess. No autonomous loop runs:
 each gate is callable, none is driven.
 
@@ -886,11 +919,10 @@ the runtime remains infrastructure waiting for #13 and #3 to have something to r
 
 ### The next action
 
-#13 in the stated order. Note before starting it: a discovery engine against an **exhausted**
-holdout produces well-documented noise. `window_consumption("sip-us-equities-daily", ...)` will
-answer `EXHAUSTED` for 2016–2026 US equities once seeded, and #14 will refuse the trials. That
-is the system working, and it means #13's value depends on #17 delivering a genuinely new asset
-class first — which needs a provider integration that could not be exercised offline here.
+**Superseded — see `## 6aa`.** The note below was right about the mechanism and wrong about the
+state: it said `window_consumption` "will answer `EXHAUSTED` ... once seeded", and nobody
+seeded it. That sentence is the earliest written trace of the severity-1 at the top of this
+file, and it sat here unactioned through eight subsequent issues.
 
 Worth raising with the operator rather than deciding unilaterally.
 
@@ -1077,9 +1109,80 @@ Charged with realistic autocorrelation (ρ=0.30 for macro, 0.05 for equities), s
 is the honest one rather than the iid one. Free macro history is roughly **twice the
 resolution** of the window this project has already spent.
 
+## 6aa. External workers, measured (2026-08-22) — #36, #37, #38, #18
+
+### Kronos runs, and does not work
+
+First real inference on this machine, through the production provider and CLI, on 6,969 Alpaca
+IEX daily bars. Three defects found only by running it:
+
+- **`.resolve()` on the interpreter path** followed the venv symlink to the base interpreter, so
+  every forecast failed the environment attestation. `python -m venv` symlinks by default on
+  POSIX and `uv venv` always does; Windows venvs copy, which is why it was never seen.
+- **OHLC validation discarded 61% of real forecasts.** Kronos samples O/H/L/C independently and
+  4.35% of candles could not be real bars. One bad candle voided the whole artifact, and the
+  loss correlated with model uncertainty — a selection effect on the dispersion statistic.
+  Now counted into `ForecastFeatures.inconsistent_candles` rather than enforced.
+- **Unscoreable forecasts waited forever.** A horizon spanning a holiday registers a session
+  that never trades; scoring returned `None`, the same value it returns for "not mature yet".
+  Now `UnscoreableForecast`, naming the missing targets.
+
+**The result: REFUTED.md #25.** 42 non-overlapping 5-day windows, 30 scored, 688 forecasts.
+Direction **0.501**. On absolute error it **loses to predicting zero** (paired t = −2.53, worse
+in 21 of 30 windows, against a 1.79 luck bar). The unknown training cutoff means the window may
+be in-sample, which would flatter it; it lost anyway. Scope: zero-shot, unfine-tuned, daily
+bars, horizon 5, ETFs, one configuration.
+
+**12 of 42 windows were unscoreable**, all holidays — roughly a quarter of windows are lost
+without an authoritative exchange calendar.
+
+### What else shipped
+
+| area | what it enforces |
+|---|---|
+| #18 provenance | `WorkerProvenance` carries checkpoint, prompt, input hash and a `fingerprint`; a revised source cannot claim equivalence to the original artifact. **#18 closed.** |
+| #23 burden | `measured_kronos_provenance` and `measured_semantic_cardinality` count rows; a prompt sweep costs what it spent |
+| #37 boundary | `SemanticResearchWorker` satisfies `ResearchWorker`; an import test pins that it cannot reach the broker or kill switch |
+| #38 placement | `quantbot.placement` refuses a job the host cannot carry, measured not declared; `KronosSignalProvider` is gated at construction |
+| #6 memory | the 25 settled findings are seeded and loaded by `research-cycle` |
+
+### Three tests of mine that measured nothing
+
+Recorded because the pattern matters more than the instances, and all three passed before the
+mutation exposed them:
+
+1. **An import-isolation test** cleared `sys.modules` and re-imported the worker — which was
+   already cached, so nothing re-executed. It passed with `KillSwitchController` imported into
+   the module under test. Now runs in a fresh interpreter.
+2. **A fingerprint test** never pinned `input_hash`, because both adapters already encode the
+   input in the artifact id. Redundancy in the happy path is not coverage.
+3. **A seeding idempotency test** pinned its own clock while the CLI passed `datetime.now`, so
+   every re-seed conflicted and the *second* `research-cycle` of the day crashed. Found by
+   running the CLI twice, not by the suite.
+
+### Hardware, measured
+
+`omen-windows` amd64 / 32 cores / 32,486 MB / 16,376 MB VRAM. `omen-wsl2` sees 15,847 MB — a
+`.wslconfig` default, not a limit. The Omen has its own 16 GB GPU, so Kronos does not depend on
+the RTX desktop being powered on. The Pi is ~434 MB usable, which does not meet the control
+plane's 512 MB floor and does meet the watchdog's. `deploy/omen/` holds units that are written
+and **not installed**.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
+- [ ] **Decide how the v0.2 trial burden is carried** — reconstruct registrations for cycles
+      1–17, or declare a v0.2 epoch and rely on `REFUTED.md`. **Operator/Sol decision**, see #2.
+      Until then the luck bar is too low and results are exploratory.
+- [ ] **Deploy the seeded findings to the Pi.** Its store is still empty; it runs an older
+      checkout and this session had no working SSH credential for it.
+- [ ] **Move the ledger to the coordinator and start the daemon there** — **operator action**,
+      sequence in `deploy/omen/README.md`. Deliberately not scripted.
+- [ ] **Kronos criterion 9 (#36):** a Kronos hypothesis pre-registered *before* measurement and
+      run through #19/#7/#8/#14/#18/#16. Cannot be retrofitted onto the completed study without
+      violating pre-registration, and should not be run while the luck bar is understated.
+- [ ] **TradingAgents criterion 9 (#37):** whether it improves downstream hypothesis quality.
+      Needs the scheduled loop and hypotheses on both sides.
 - [ ] Crypto sleeve blocked on a second Alpaca paper account (**operator action**)
 - [ ] Exposure normalisation for asset-class sleeves — research, **not yet pre-registered**
 - [ ] Fills are ingested from the REST ledger once per cycle; the push trade stream is not held
