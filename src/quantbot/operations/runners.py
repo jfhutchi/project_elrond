@@ -47,19 +47,27 @@ from quantbot.market_data.calendar import (
 )
 from quantbot.operations.cycle import CycleStrategyResult, DataSyncResult, SubmissionRequest
 from quantbot.risk import (
+    CandidateDirection,
     DrawdownState,
     EntrySizingRequest,
     OrderPurpose,
+    PortfolioVetoDecision,
     PortfolioVetoPolicy,
     PositionRiskInput,
+    RejectedCandidate,
+    RejectionReason,
     RiskApproval,
     RiskReservation,
+    as_rows,
     build_portfolio_risk_state,
     build_veto_inputs,
     calculate_drawdown,
+    candidate_id,
     evaluate_portfolio_vetoes,
+    observation_id,
     size_entry,
 )
+from quantbot.risk.shadow import session_of
 from quantbot.storage import Database, StorageRepository
 from quantbot.strategy import (
     MonthlyRoster,
@@ -746,6 +754,10 @@ class AdaptiveMomentumRunner:
                             signal_date=evaluation_at.date(),
                             created_at=now,
                             opened_at=opened_at,
+                            # Content and provenance of this particular candidate, established
+                            # before any gate rules on it. Rerun-stable, and it changes when the
+                            # evidence the decision saw changes (#57).
+                            candidate_key=decision.bar_set_hash,
                         )
 
                 if request is not None and repository.get_order_intent(
@@ -854,6 +866,7 @@ class AdaptiveMomentumRunner:
         signal_date: date,
         created_at: datetime,
         opened_at: Mapping[str, datetime],
+        candidate_key: str,
     ) -> tuple[SubmissionRequest | None, tuple[str, ...]]:
         if decision_price is None or stop_distance is None or stop_distance <= 0:
             return None, ("ENTRY_INPUTS_UNAVAILABLE",)
@@ -920,6 +933,20 @@ class AdaptiveMomentumRunner:
             # none, because downsizing past a concentration limit still adds the exposure the
             # limit exists to bound. Nothing is reserved, so the next symbol sees the capacity
             # this order did not take.
+            #
+            # The refusal is kept (#57). Until now a rejection survived only as a free-text
+            # string inside the signal payload, which cannot answer "how often did this rule
+            # refuse, and at what settings" -- so nothing could tell a valuable veto from an
+            # unnecessary one. `COUNTERFACTUAL_UNAVAILABLE` is the honest state: what would have
+            # happened is not knowable until the horizon elapses.
+            self._record_rejection(
+                repository,
+                symbol=symbol,
+                reference_price=decision_price,
+                observed_at=created_at,
+                candidate_key=candidate_key,
+                vetoes=vetoes,
+            )
             return None, vetoes.reasons
         reservations.append(
             RiskReservation(
@@ -948,6 +975,67 @@ class AdaptiveMomentumRunner:
             ),
             (),
         )
+
+    def _record_rejection(
+        self,
+        repository: StorageRepository,
+        *,
+        symbol: str,
+        reference_price: Decimal,
+        observed_at: datetime,
+        candidate_key: str,
+        vetoes: PortfolioVetoDecision,
+    ) -> None:
+        """Keep one refusal and every rule that refused it, so #57 can eventually judge them.
+
+        One event, many reasons. A candidate refused by three vetoes is one observation, not
+        three: counting reasons as observations would inflate the sample threefold, which is the
+        manufacture of sample size that killed cycle 11's overnight result.
+
+        Idempotent by construction. The id is content-addressed on strategy, symbol, session and
+        the refusing gates, so re-running a session cannot record the same refusal twice.
+        """
+        session_date = session_of(observed_at)
+        # Read from the promotion record, never from a caller. The recurring defect in this
+        # project is a gate accepting the identity it is meant to constrain, and a shadow record
+        # that took its claim lineage as an argument would reintroduce it one table over (#57).
+        promotion = repository.get_promotion(self._identity.strategy_id)
+        reasons = [
+            RejectionReason(
+                gate_id=rejection.veto.value,
+                gate_version=rejection.policy_version,
+                rule_parameters_hash=rejection.rule_parameters_hash,
+                detail=rejection.reason,
+            )
+            for rejection in vetoes.rejections
+        ]
+        candidate = candidate_id(
+            strategy_id=self._identity.strategy_id,
+            configuration_hash=self._identity.configuration_hash,
+            symbol=symbol,
+            session_date=session_date,
+            candidate_key=candidate_key,
+        )
+        observation = RejectedCandidate(
+            observation_id=observation_id(
+                candidate=candidate,
+                policy_identity=self._veto_policy.identity,
+            ),
+            candidate_id=candidate,
+            strategy_id=self._identity.strategy_id,
+            configuration_hash=self._identity.configuration_hash,
+            symbol=symbol,
+            # Every entry this strategy proposes is long; a short would need its own direction
+            # rather than inheriting this one.
+            direction=CandidateDirection.LONG,
+            observed_at=observed_at,
+            session_date=session_date,
+            reference_price=reference_price,
+            reasons=tuple(reasons),
+            hypothesis_id=None if promotion is None else promotion.hypothesis_id,
+        )
+        parent, reason_rows = as_rows(observation)
+        repository.record_rejected_candidate(parent, reason_rows)
 
     def _known_stop(
         self,

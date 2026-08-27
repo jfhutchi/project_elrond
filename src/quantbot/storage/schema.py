@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 metadata = MetaData(
     naming_convention={
@@ -600,6 +600,62 @@ Index(
     "ix_promotion_events_strategy",
     promotion_events.c.strategy_id,
     promotion_events.c.occurred_at,
+)
+
+
+# --- Risk: what Elrond refused, so the refusing can be judged (#57) -------------------------
+#
+# Two tables, and the second is the point. `rejected_candidates` is one row per refusal event;
+# `rejection_reasons` is one row per rule that refused it. A single entry can be refused by four
+# vetoes at once, and storing those as four events would inflate the sample fourfold -- the
+# manufacture of sample size that killed cycle 11's overnight result.
+#
+# The counterfactual outcome is deliberately absent beyond a state column: what was refused is
+# known at decision time, and what would have happened is not known until the horizon elapses.
+rejected_candidates = Table(
+    "rejected_candidates",
+    metadata,
+    Column("observation_id", String(128), primary_key=True),
+    # Which decision this was, independent of what any gate concluded (#57).
+    Column("candidate_id", String(128), nullable=False),
+    Column("strategy_id", String(128), nullable=False),
+    Column("configuration_hash", String(128), nullable=False),
+    Column("symbol", String(32), nullable=False),
+    Column("direction", String(8), nullable=False),
+    Column("observed_at", String(40), nullable=False),
+    Column("session_date", String(10), nullable=False),
+    Column("reference_price", Text, nullable=False),
+    Column("hypothesis_id", String(128)),
+    # Context this project cannot yet produce (#59, #56), nullable so absence is recorded.
+    Column("market_regime_snapshot_id", String(128)),
+    Column("catalyst_snapshot_id", String(128)),
+    Column("anomaly_event_id", String(128)),
+    Column("portfolio_snapshot_id", String(128)),
+    Column("state", String(32), nullable=False),
+    Column("unavailable_reason", Text, nullable=False),
+)
+
+# `rule_parameters_hash` lives here rather than on the event because it is what makes an analysis
+# honest across a threshold change: outcomes recorded under different parameters are different
+# datasets, and grouping on the hash stops one rule being judged on another's evidence.
+rejection_reasons = Table(
+    "rejection_reasons",
+    metadata,
+    Column("observation_id", String(128), primary_key=True),
+    Column("gate_id", String(64), primary_key=True),
+    Column("gate_version", Integer, nullable=False),
+    Column("rule_parameters_hash", String(128), nullable=False),
+    Column("detail", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["observation_id"],
+        ["rejected_candidates.observation_id"],
+        ondelete="CASCADE",
+    ),
+)
+Index(
+    "ix_rejection_reasons_gate_id",
+    rejection_reasons.c.gate_id,
+    rejection_reasons.c.rule_parameters_hash,
 )
 
 

@@ -46,6 +46,8 @@ from quantbot.storage.schema import (
     qualification_days,
     reconciliation_diffs,
     reconciliation_runs,
+    rejected_candidates,
+    rejection_reasons,
     runs,
     signals,
     strategy_deployments,
@@ -547,6 +549,72 @@ class StorageRepository:
             )
             for row in rows
         ]
+
+    def record_rejected_candidate(
+        self,
+        observation: Mapping[str, object],
+        reasons: Sequence[Mapping[str, object]],
+    ) -> bool:
+        """Store one refusal and every rule that refused it. Idempotent by observation id.
+
+        Returns False on an exact repeat rather than raising: the same session re-evaluated
+        produces the same content-addressed id, and a second write of the same refusal would
+        double the sample without anything new having happened. A repeat that *differs* raises,
+        because two different refusals cannot share an id.
+
+        Reasons are written as their own rows so a gate-level count can be taken from the child
+        table and a candidate-level count from the parent. Those are different numbers, and a
+        schema that could only answer the larger one would overstate how much a gate has been
+        tested (#57).
+        """
+        observation_id = str(observation["observation_id"])
+        existing = (
+            self._session.execute(
+                select(rejected_candidates).where(
+                    rejected_candidates.c.observation_id == observation_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            stored = {key: existing[key] for key in observation}
+            if stored != dict(observation):
+                raise StateConflictError(
+                    f"rejected candidate {observation_id} already recorded with different data"
+                )
+            return False
+        self._session.execute(rejected_candidates.insert().values(**dict(observation)))
+        for reason in reasons:
+            self._session.execute(rejection_reasons.insert().values(**dict(reason)))
+        return True
+
+    def list_rejected_candidates(
+        self, *, strategy_id: str | None = None
+    ) -> list[tuple[Mapping[str, object], list[Mapping[str, object]]]]:
+        """Every refusal with its reasons, oldest first.
+
+        Returns rows rather than models so `storage` keeps not importing `risk`, the same
+        boundary `PromotionRecord` holds against `research`.
+        """
+        statement = select(rejected_candidates).order_by(
+            rejected_candidates.c.observed_at, rejected_candidates.c.observation_id
+        )
+        if strategy_id is not None:
+            statement = statement.where(rejected_candidates.c.strategy_id == strategy_id)
+        found: list[tuple[Mapping[str, object], list[Mapping[str, object]]]] = []
+        for row in self._session.execute(statement).mappings().all():
+            reasons = (
+                self._session.execute(
+                    select(rejection_reasons)
+                    .where(rejection_reasons.c.observation_id == row["observation_id"])
+                    .order_by(rejection_reasons.c.gate_id)
+                )
+                .mappings()
+                .all()
+            )
+            found.append((dict(row), [dict(reason) for reason in reasons]))
+        return found
 
     def save_bars(
         self,
