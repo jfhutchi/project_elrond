@@ -1033,6 +1033,10 @@ stage drops to `RESEARCH_SURVIVOR`.
 Demotion is deliberately not gated. A system slow to stop trusting something is worse than one
 occasionally too quick.
 
+**Superseded in part by 6bb.** The counting described above is intact; what has changed is that
+clearing it is no longer sufficient, and that the claim behind a strategy is no longer something
+a caller supplies.
+
 ## 6w. Research dashboard: what changed, what is blocked, what is left (#15)
 
 `quantbot.research.dashboard` — the data behind the view, not the view. `scripts/dashboard.py`
@@ -1171,9 +1175,203 @@ the RTX desktop being powered on. The Pi is ~434 MB usable, which does not meet 
 plane's 512 MB floor and does meet the watchdog's. `deploy/omen/` holds units that are written
 and **not installed**.
 
+## 6bb. What a deployment is allowed to claim, and who gets to define success (#46, #47, #53, #54)
+
+**2026-08-22.** `PAPER_QUALIFIED` used to be reachable on 30 authentic forward days and 30
+trades. Those are *authenticity* facts — real sessions happened, nobody invented them — and they
+say nothing about money. A strategy could lose on all thirty trades and satisfy the rule. The
+stage name was a stronger claim than the mechanism behind it, which matters because a dashboard,
+a later agent and an operator all read `PAPER_QUALIFIED` as "the paper evidence supports this".
+
+Six defects, five of them found by GPT-5.6 Sol reviewing the half-finished branch. All are the
+same shape the project keeps producing: **a gate reading its input from the thing it constrains.**
+
+| Defect | Was | Now |
+|---|---|---|
+| The claim behind a deployment | `hypothesis_id` supplied at qualification | Bound at `REGISTERED`, read from `promotion_state`, refused as an argument anywhere else |
+| Evidence identity | version + config checked, `strategy_id` not | Exact strategy identity required; a fork sharing a config no longer transfers |
+| Qualification provenance | The stage, and a free-text reason | `objective_identity` + `evidence_identity` on the state **and** the append-only event |
+| Who defines success | Ratification required only at `LIVE_REVIEW_ELIGIBLE` | Required at `PAPER_QUALIFIED` too; an agent may not clear a bar it wrote |
+| A later mandate | Inherited the earlier qualification | Identity must match; a policy edit forces reassessment |
+| Session pairing | Consecutive *qualified* dates | Adjacent *exchange* sessions; a gap is dropped and counted, not annualised |
+
+**The claim is now part of the strategy, not part of the question.** Before, a strategy whose
+mechanism was refuted could be offered a different, unrefuted registration, and the gate would
+faithfully report finding no refutation of the thing it had been handed. `promotion_state` carries
+`hypothesis_id`/`hypothesis_version`, written only by the `REGISTERED` transition; re-binding is
+refused, and the only honest route to a different claim is back down to `CANDIDATE`, which costs
+everything above it.
+
+**An agent cannot ratify its own mandate.** `config/economic-objective-v1.yaml` stays
+`PROVISIONAL`, and every value is now marked `[TRANSCRIBED]` or `[PROPOSED]`. Sol was right that
+the earlier "every value is transcribed" claim was too strong: the intended capital range, the
+100bps improvement threshold, the 12x turnover cap, the 3-year horizon and the choice of
+`BENCHMARK_RELATIVE_GROWTH` over a drawdown-constrained objective are proposals an agent wrote.
+A `RATIFIED` mandate naming an automated `ratified_by` is refused at load. **Ratifying is an
+operator action and it is the thing standing between this system and a `PAPER_QUALIFIED` label.**
+
+Ratification does **not** change the objective's content hash — the identity covers the policy
+values and excludes `status`, `ratified_by`, `ratified_at` and authorship. Otherwise the
+operator's signature would invalidate every assessment made against the values they were signing,
+at the exact moment those values became usable. Editing any policy value does change it.
+
+**`DeploymentRole` is on the operator's screen.** `OPERATIONAL_BASELINE` vs `EDGE_CANDIDATE` is
+derived from durable state and now renders in the promotion panel. The deployed momentum rotation
+has no frozen registration behind it, so it reads `OPERATIONAL_BASELINE`: it keeps producing real
+fills, slippage and reconciliation evidence, and accrues nothing toward a claim about edge however
+long it runs. `demote_on_refuted_claims` runs the derivation rather than waiting for the next
+qualification attempt to notice — a derived answer nobody derives is a stale answer.
+
+**A legacy refutation with no lineage is not read as a clean record.** `refutations_of` queries
+`hypothesis_id`, which is right for anything registered under this schema and blind to everything
+imported from `REFUTED.md`. Those findings predate hypothesis ids, so no exact lookup will ever
+match one, and reading that silence as "never refuted" is the half of the defect that promotes
+something. Unlinked refuting findings sharing a claim's family now land in `unassessed`, which
+blocks support without asserting a refutation — what is true is narrower: nobody has adjudicated
+whether they bear on this claim.
+
+**Twelve protections, each mutation-checked.** Every one was deleted in turn and the test named
+after it went red; a test that passes with the mechanism removed is measuring something else.
+
+**What this does not do.** It does not make any strategy closer to qualifying. It makes the label
+mean what it says, which in practice moves `PAPER_QUALIFIED` further away: it now needs a ratified
+mandate, a frozen non-refuted claim, an adequately powered window, and a benchmark-relative
+beta-adjusted result clearing the 2.905 luck bar. On thirty sessions that requires an annualised
+excess Sharpe past 12. **No strategy here has one, and saying so is the point.**
+
+## 6cc. What is actually left to test on (#50)
+
+**2026-08-22.** `quantbot research-capacity`, and a statistical-capacity panel on the dashboard.
+
+The question it answers is the one nothing answered: **what observations remain unused for
+confirmatory testing, and which claims can legitimately use them.** `window_consumption` could
+already say whether a range someone named was spent; that is a different question from the one an
+operator has before deciding whether a search is worth running, and #50 was opened because the
+gap let "the data platform is finished" be read as "there is fresh statistical budget".
+
+On an empty database today:
+
+| observations | status | note |
+|---|---|---|
+| `us-equities-daily` (SIP + Alpaca) | **EXHAUSTED**, 68 trials | unsearched sessions from 2026-08-22 |
+| `crypto-daily` | AVAILABLE | crypto and cross-asset questions only |
+| `us-macro-monthly` (FRED + ALFRED) | AVAILABLE | real capacity, with vintages |
+| `sec-edgar-filings` | AVAILABLE | cycles 2-10 never looked at filings |
+| `options-implied-daily` | **UNSUPPORTED** | declared in two enums, served by nothing |
+
+Four things it refuses to do, each of which would overstate what is left: count two vendors of the
+same dates as two budgets, report a capability with no provider as capacity, let crypto sessions
+read as equity evidence, or let a source with no vintages answer a backtest.
+
+**The only new equity capacity is time — and it is counted in sessions, not days.** The first
+version of this derived new capacity from the calendar: the day after the last consumed date.
+GPT-5.6 Sol's review predicted the defect and it was real — on 2026-08-22 the equity row reported
+"unsearched sessions from 2026-08-22", a **Saturday**. A weekend is not capacity, and neither is
+a holiday, an outage, or a gap the vendor never served. Capacity is now the set of sessions the
+database actually holds bars for, attributed by provider prefix; a source with no local
+observation store claims none. Nine protections, mutation-checked.
+
+**The Research Director now consumes it.** `discovery.admissible` existed and was reachable only
+from `bridge.draft_from_candidate`, which no production path imports — a rule rather than a
+mechanism. `capacity_stage` wraps the PROPOSED handler and blocks before the memory query when no
+source has confirmatory capacity left. It is a **project-wide** gate rather than a per-claim one,
+because a `ResearchTask` declares no data windows; matching a question to a dataset by reading its
+text would be exactly the semantic guess `datasets.py` refuses. Per-claim admission arrives when
+tasks declare windows.
+
+**What this does not do.** It does not create capacity, and the honest headline is that there is
+almost none for a US equity claim. That is the finding, not a limitation of the tool.
+
+## 6dd. Engineering progress is not profitability progress (#52)
+
+**2026-08-22.** `quantbot.research.milestone`, reported by `quantbot research-status` and by an
+edge-progress panel on the dashboard.
+
+Every number this project has reported about itself moves when code ships: issues closed, gates
+built, tests passing, frameworks integrated. None of them move when the market says something.
+That asymmetry is a project-management failure mode with a name — issue closure becomes a
+surrogate objective — and #52 was opened because a long list of completed architecture issues
+visually overwhelms the fact that the economic thesis is unproven.
+
+Six levels, derived from durable state, so a milestone cannot be reached by writing about it:
+
+| | reached when | today |
+|---|---|---|
+| M0 | the platform has honestly refuted things | **yes**, once research memory is seeded |
+| M1 | a frozen candidate cleared the survivor gate, unrefuted | no |
+| M2 | that claim spans several instruments and survived robustness | no |
+| M3 | authentic forward sessions accrue against it | no |
+| M4 | `PAPER_QUALIFIED` under #47, capital economics under #51 | no, and blocked |
+| M5 | every gate clear, a human may look | no |
+
+**The project is at M0.** That is not a setback and it is not new; it is the first time anything
+reported it as a number rather than as a paragraph somebody has to read.
+
+**M4 cannot clear at all yet, and says so.** It carries a permanent `unassessed` entry naming
+#51: the paper account holds $100, the mandate's range reaches $10,000, and no amount of forward
+evidence at the smaller size distinguishes an effect that survives at scale from one that does
+not. An unassessed check blocks, so M4 will not pass until that is measured.
+
+**Three rules make the ladder hard to flatter.** It is contiguous, so forward evidence with no
+surviving candidate behind it reports M0 rather than M3. `unassessed` blocks. And a reached level
+must name an artifact — "nothing blocks it" is not "something shows it". Eight protections,
+mutation-checked.
+
+**Before a new integration**, `docs/research-architecture.md` now asks three questions: which
+milestone does this unblock, what cheaper thing answers the same question, and what measurable
+result would cause us to reject it. A review convention rather than a machine check, written down
+so a reviewer has something specific to hold a proposal against.
+
+**`NO_EDGE_ESTABLISHED` is a destination.** The report says so when the project sits at M0 with no
+clean confirmatory capacity left. That is a research result, and having a name for it is what
+stops the alternative: adding another framework because nothing else can be said.
+
+## 6ee. The bundle named a command that did not exist (#48)
+
+**2026-08-27.** Found while scoping #48, and it is the same defect class as everything else on
+this branch: **every reproducible manifest recorded `quantbot reproduce-experiment --experiment
+<id>` in `reproduction_command`, and no such command existed.** An instruction inside the
+evidence record, pointing at nothing.
+
+Worse, the bundle recorded *what to run* and nothing about *what it would need*. A reader seeing
+the `.inputs` directory beside a manifest had no way to tell whether it was complete, whether a
+file had been edited since, or whether it was even the right directory.
+
+**Fixed both halves.** `ExperimentManifest.reproduction_inputs` records each input's name, byte
+count and content hash, taken from the content in memory at run time rather than from disk
+afterwards. The two fields are one claim: a command with no recorded inputs and inputs with no
+command are both refused at construction, so the old bundles' shape is unrepresentable.
+
+`quantbot reproduce-experiment` now exists and reports **readiness**, failing closed three ways:
+a missing or altered input blocks; a dirty original tree with no preserved patch blocks
+permanently (`git_commit=<sha>, dirty=true` does not describe code nobody committed); a
+dependency-lock difference is drift and never silent.
+
+**It refuses to claim a reproduction.** `performed` is a field on the report, always false, and
+the five capabilities #48 still needs are listed by name. A clean readiness report must not read
+like a completed rerun to somebody skimming.
+
+**#48 stays open, and its own first criterion says why.** It asks that one real historical
+confirmatory experiment be rerun from its manifest. **There is no such manifest** — nothing
+outside an integration test has ever written one, which is exactly consistent with the project
+standing at M0. A reproducer built now could only ever be exercised against a synthetic fixture,
+and this repository's rule is that an unexercised feature is an unclaimable one.
+
+Eight protections, mutation-checked.
+
 ## 7. Open items
 
-- [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30)
+- [ ] **#48 reproducibility is blocked on there being a confirmatory experiment to reproduce.**
+      The readiness half is built and exercised (§6ee); the reproducer needs a real manifest,
+      which needs a confirmatory run, which needs M1. Not blocked on engineering.
+- [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30).
+      Note that the window is now an authenticity floor rather than the qualification: see 6bb.
+- [ ] **Ratify or replace `config/economic-objective-v1.yaml` — operator action, and it blocks
+      `PAPER_QUALIFIED` entirely.** Five values in it are marked `[PROPOSED]` because an agent
+      chose them, not the operator. Nothing may be labelled an economic success against a bar
+      this system wrote for itself. Set `status: RATIFIED` with a human `ratified_by`, or edit
+      the values first — editing creates a new identity and forces reassessment, which is
+      intended.
 - [ ] **Deploy the seeded findings to the Pi.** Its store is still empty; it runs an older
       checkout and this session had no working SSH credential for it.
 - [ ] **Move the ledger to the coordinator and start the daemon there** — **operator action**,

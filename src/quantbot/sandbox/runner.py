@@ -24,6 +24,23 @@ Limits are honest about their strength. Wall-clock is hard, from the subprocess 
 is polled by the parent and enforced by killing the process tree, which is real but not
 instantaneous. Process count cannot be capped on Windows without a Job Object; grandchildren are
 caught by tree termination at the next poll. `policy.py` records this in full.
+
+**Both halves of that were Windows-only until CI ran the suite on Linux.** `_memory_mb` shelled
+out to PowerShell and `_terminate_tree` to `taskkill`; neither exists there, so the probe
+returned `None` on every poll -- and the monitor is written to decline to act on `None` rather
+than kill a healthy run. The memory ceiling was therefore **completely inert on Linux** while
+`SandboxPolicy.memory_mb` still read like a control, and the tree kill degraded to killing the
+direct child so a script that spawned helpers outlived it.
+
+That was not academic. The runaway-allocation test allocates 20MB a loop; with no ceiling it
+reached the kernel OOM killer and took the whole CI job down with SIGTERM before any assertion
+ran. The coordinator this project is migrating to is WSL2 Ubuntu, so Linux is the platform that
+matters most for it.
+
+POSIX now gets both, and one more thing Windows cannot have: `RLIMIT_AS` is set on the child at
+a multiple of the ceiling as a **backstop**. The poll still reports the reason, because a reason
+is evidence and a `MemoryError` traceback is not; the rlimit exists so that a child allocating
+faster than the poll interval hits a wall the kernel put there instead of the host's swap.
 """
 
 from __future__ import annotations
@@ -35,11 +52,13 @@ import json
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import sysconfig
 import tempfile
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -412,6 +431,104 @@ def _collect(outputs: Path, limit: int) -> tuple[Artifact, ...]:
     return tuple(collected)
 
 
+#: How much slack the kernel ceiling gets over the polled one. The poll is meant to fire first
+#: and report `memory`; this only catches a child allocating faster than `poll_interval_seconds`.
+#: Too tight and a legitimate spike between polls dies with a MemoryError instead of a reason;
+#: too loose and the host absorbs the difference.
+_RLIMIT_HEADROOM = 2
+
+
+def _posix_child_limits(memory_mb: int) -> Callable[[], None]:
+    """Return a `preexec_fn` applying an address-space ceiling to the child, on POSIX only.
+
+    Soft *and* hard are set together. A process may raise its own soft limit up to the hard one,
+    so setting the soft limit alone leaves the generated script holding the knob -- which is the
+    same shape as a sandbox whose escape is `importlib.reload`.
+
+    The `sys.platform` guard is what lets mypy check this on Linux and skip it on Windows. The
+    defect this whole change is about was a Windows-only implementation nobody type-checked on
+    the other platform, and writing the replacement so that only one platform checks it would
+    reproduce that exactly.
+    """
+    if sys.platform == "win32":
+        raise RuntimeError("address-space limits are a POSIX facility")
+    else:
+        import resource
+
+        ceiling = memory_mb * _RLIMIT_HEADROOM * 1024 * 1024
+
+        def apply() -> None:  # pragma: no cover - runs between fork and exec in the child
+            resource.setrlimit(resource.RLIMIT_AS, (ceiling, ceiling))
+            os.setsid()
+
+        return apply
+
+
+def _posix_memory_mb(pid: int) -> float | None:
+    """Resident set of a process and its descendants, in MB, read from `/proc`.
+
+    `/proc` rather than a helper binary: `ps` output is locale- and platform-shaped, and this
+    probe returning `None` is indistinguishable from a healthy run, which is exactly how the
+    ceiling came to be inert here in the first place.
+    """
+    if sys.platform == "win32":
+        raise RuntimeError("/proc is a POSIX facility")
+    else:
+        children: dict[int, list[int]] = {}
+        resident: dict[int, float] = {}
+        for entry in Path("/proc").iterdir():
+            if not entry.name.isdigit():
+                continue
+            try:
+                stat = (entry / "stat").read_text(encoding="utf-8", errors="replace")
+                # The comm field is parenthesised and may itself contain spaces, so split on
+                # the last ") " rather than tokenising the whole line.
+                fields = stat.rsplit(") ", 1)
+                if len(fields) != 2:
+                    continue
+                columns = fields[1].split()
+                parent = int(columns[1])
+                # Column 23 of /proc/pid/stat counting from the field after the comm, in pages.
+                pages = int(columns[21])
+            except (OSError, ValueError, IndexError):
+                continue
+            children.setdefault(parent, []).append(int(entry.name))
+            resident[int(entry.name)] = pages * os.sysconf("SC_PAGE_SIZE") / (1024 * 1024)
+
+        if pid not in resident:
+            return None
+        total = 0.0
+        frontier = [pid]
+        seen: set[int] = set()
+        while frontier:
+            current = frontier.pop()
+            if current in seen:
+                continue
+            seen.add(current)
+            total += resident.get(current, 0.0)
+            frontier.extend(children.get(current, ()))
+        return round(total, 2)
+
+
+def _kernel_memory_refusal(stderr: str) -> str | None:
+    """`"memory"` when the child died because the kernel refused it an allocation.
+
+    On POSIX the ceiling is enforced twice: the parent polls, and `RLIMIT_AS` is set on the
+    child. The rlimit is meant to be the backstop, but a script allocating in 20MB steps fills
+    hundreds of megabytes inside one 0.2s poll interval, so the kernel routinely wins the race --
+    and then the run was correctly *contained* and incorrectly *reported*, with no reason at all.
+    A contained runaway that reports `None` reads exactly like a script that failed for its own
+    reasons, which is the distinction the whole `terminated_reason` field exists to carry.
+
+    The signal is the traceback, because an address-space refusal surfaces in the child as an
+    ordinary `MemoryError` rather than a signal: nothing in the exit status distinguishes it. A
+    script could print the word deliberately and mislabel its own failure; the consequence is a
+    wrong reason on a run that failed either way, since `ok` is already False on both paths.
+    That is worth accepting to avoid reporting a real containment as an unexplained crash.
+    """
+    return "memory" if sys.platform != "win32" and "MemoryError" in stderr else None
+
+
 def _memory_mb(process: subprocess.Popen[bytes]) -> float | None:
     """Working set of the child AND its descendants, in MB. None when it cannot be determined.
 
@@ -423,31 +540,41 @@ def _memory_mb(process: subprocess.Popen[bytes]) -> float | None:
     escape the ceiling, and only a tree walk sees those.
 
     Returning None on any failure means the monitor declines to act rather than killing a healthy
-    run on a parse error; a false positive destroys a legitimate experiment.
+    run on a parse error; a false positive destroys a legitimate experiment. The cost of that
+    choice is that a probe which never works looks exactly like a healthy run, which is what
+    happened on Linux for as long as this function was PowerShell and nothing else.
     """
-    # Built by concatenation, not str.format: the PowerShell braces would be read as fields.
-    script = (
-        "$ids=@(" + str(process.pid) + ");$i=0;"
-        "while($i -lt $ids.Count){"
-        "$kids=Get-CimInstance Win32_Process "
-        "-Filter \"ParentProcessId=$($ids[$i])\" -ErrorAction SilentlyContinue;"
-        "foreach($k in $kids){if($ids -notcontains $k.ProcessId){$ids+=$k.ProcessId}};$i++};"
-        "$t=0;foreach($id in $ids){"
-        "$p=Get-CimInstance Win32_Process -Filter \"ProcessId=$id\" "
-        "-ErrorAction SilentlyContinue;"
-        "if($p){$t+=$p.WorkingSetSize}};[math]::Round($t/1MB,2)"
-    )
-    try:
-        out = subprocess.run(  # noqa: S603 - fixed executable, integer pid interpolated
-            ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
-            capture_output=True, text=True, timeout=20, check=False,
-        ).stdout.strip()
-    except (OSError, subprocess.SubprocessError):
-        return None
-    try:
-        return float(out.splitlines()[-1]) if out else None
-    except (ValueError, IndexError):
-        return None
+    # Both halves live inside the platform branch rather than one being a fallthrough, so that
+    # each is analysed on the runner that executes it and neither reads as dead code on the
+    # other. That is not tidiness: the first attempt at this fix put the POSIX path behind an
+    # early return, which type-checked on Windows and failed on Linux with the Windows half
+    # unreachable -- the same asymmetry, one platform along.
+    if sys.platform == "win32":
+        # By concatenation, not str.format: the PowerShell braces would be read as fields.
+        script = (
+            "$ids=@(" + str(process.pid) + ");$i=0;"
+            "while($i -lt $ids.Count){"
+            "$kids=Get-CimInstance Win32_Process "
+            "-Filter \"ParentProcessId=$($ids[$i])\" -ErrorAction SilentlyContinue;"
+            "foreach($k in $kids){if($ids -notcontains $k.ProcessId){$ids+=$k.ProcessId}};$i++};"
+            "$t=0;foreach($id in $ids){"
+            "$p=Get-CimInstance Win32_Process -Filter \"ProcessId=$id\" "
+            "-ErrorAction SilentlyContinue;"
+            "if($p){$t+=$p.WorkingSetSize}};[math]::Round($t/1MB,2)"
+        )
+        try:
+            out = subprocess.run(  # noqa: S603 - fixed executable, integer pid interpolated
+                ["powershell", "-NoProfile", "-NonInteractive", "-Command", script],
+                capture_output=True, text=True, timeout=20, check=False,
+            ).stdout.strip()
+        except (OSError, subprocess.SubprocessError):
+            return None
+        try:
+            return float(out.splitlines()[-1]) if out else None
+        except (ValueError, IndexError):
+            return None
+    else:
+        return _posix_memory_mb(process.pid)
 
 
 class SandboxRunner:
@@ -517,6 +644,11 @@ class SandboxRunner:
                 env=_child_environment(),
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
+                preexec_fn=(  # noqa: PLW1509 - the point is to run before exec, in the child
+                    None
+                    if sys.platform == "win32"
+                    else _posix_child_limits(self._policy.memory_mb)
+                ),
             )
             reason, peak_memory = self._supervise(process)
             try:
@@ -525,13 +657,16 @@ class SandboxRunner:
                 process.kill()
                 out, err = process.communicate()
             duration = time.monotonic() - started
+            stderr = err.decode("utf-8", "replace")
+            if reason is None and process.returncode != 0:
+                reason = _kernel_memory_refusal(stderr)
 
             artifacts = _collect(paths.outputs, self._policy.max_output_bytes)
             return SandboxResult(
                 ok=reason is None and process.returncode == 0,
                 exit_code=process.returncode,
                 stdout=out.decode("utf-8", "replace"),
-                stderr=err.decode("utf-8", "replace"),
+                stderr=stderr,
                 duration_seconds=duration,
                 peak_memory_mb=peak_memory,
                 artifacts=artifacts,
@@ -573,12 +708,26 @@ class SandboxRunner:
 
     @staticmethod
     def _terminate_tree(process: subprocess.Popen[bytes]) -> None:
-        try:
-            subprocess.run(  # noqa: S603 - fixed command, integer pid
-                ["taskkill", "/F", "/T", "/PID", str(process.pid)],
-                capture_output=True, timeout=15, check=False,
-            )
-        except (OSError, subprocess.SubprocessError):
-            pass
+        """Kill the child and everything it started, on both platforms.
+
+        On POSIX the child is given its own session by `_posix_child_limits`, so the process
+        group is the tree and `killpg` reaches all of it. Falling through to `process.kill()`
+        alone -- which is what happened here before, because `taskkill` does not exist on Linux
+        -- kills the direct child and leaves its helpers running against the same ceiling the
+        run was stopped for.
+        """
+        if sys.platform == "win32":
+            try:
+                subprocess.run(  # noqa: S603 - fixed command, integer pid
+                    ["taskkill", "/F", "/T", "/PID", str(process.pid)],
+                    capture_output=True, timeout=15, check=False,
+                )
+            except (OSError, subprocess.SubprocessError):
+                pass
+        else:
+            try:
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            except (OSError, ProcessLookupError):
+                pass
         if process.poll() is None:
             process.kill()

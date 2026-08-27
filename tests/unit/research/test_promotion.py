@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
+import yaml
 
 from quantbot.domain import (
+    Account,
+    Bar,
     BrokerOrder,
     Fill,
     IntentState,
@@ -18,32 +23,62 @@ from quantbot.domain import (
     TimeInForce,
 )
 from quantbot.research.builder import OutcomeVerdict
+from quantbot.research.mandate import (
+    DEFAULT_MANDATE_PATH,
+    EconomicObjective,
+    MandateStatus,
+    Objective,
+    load_economic_objective,
+)
 from quantbot.research.manifest import ExecutionPath, StatisticalTest
+from quantbot.research.memory import RecordKind, ResearchMemory, ResearchRecord, Verdict
+from quantbot.research.power import PowerVerdict
 from quantbot.research.promotion import (
     ALLOWED_PROMOTIONS,
+    ECONOMIC_STAGES,
     MINIMUM_FORWARD_DAYS,
+    MINIMUM_FORWARD_TRADES,
+    DeploymentRole,
+    ForwardEvidence,
     ForwardObservation,
+    ForwardVerdict,
     LedgerObservations,
     PromotionLedger,
     PromotionRefused,
     PromotionState,
     Stage,
+    assess_forward_evidence,
     count_forward_days,
     demote,
     demote_on_integrity_incidents,
+    demote_on_refuted_claims,
+    deployment_role,
     forward_progress,
     material_change,
     observe_forward_days,
     promote,
     survivor_objections,
 )
-from quantbot.research.registry import DataRole
+from quantbot.research.registry import DataRole, HypothesisRegistry
 from quantbot.storage import Database, StorageRepository
 from tests.unit.research.test_builder import (  # reuse the compiled plan and outcome fixtures
     outcome,
 )
+from tests.unit.research.test_registry import (  # a frozen claim, frozen the way the registry does
+    make_draft,
+    register,
+    sharpe_effect,
+    window,
+)
 
 NOW = datetime(2026, 8, 18, 14, 30, tzinfo=UTC)
+
+REPOSITORY = Path(__file__).resolve().parents[3]
+
+#: The registration the fixture strategy is testing. A deployment carrying no claim is a
+#: legitimate state -- `OPERATIONAL_BASELINE` -- but it is not the common one, so it is opted
+#: into with `hypothesis_id=None` rather than being the default.
+CLAIM_ID = "H-2026-047"
 
 
 def state(stage: Stage = Stage.REGISTERED, **overrides: object) -> PromotionState:
@@ -55,7 +90,17 @@ def state(stage: Stage = Stage.REGISTERED, **overrides: object) -> PromotionStat
         "reason": "fixture",
         "actor": "director",
         "updated_at": NOW,
+        "hypothesis_id": CLAIM_ID,
+        "hypothesis_version": 1,
     }
+    if stage in ECONOMIC_STAGES:
+        # An economic stage cannot be represented without naming what justified it, so a fixture
+        # standing at one has to name something. These are placeholders and the tests that care
+        # about the real values earn them through `qualify()`.
+        fields["objective_identity"] = load_economic_objective(
+            REPOSITORY / DEFAULT_MANDATE_PATH
+        ).identity
+        fields["evidence_identity"] = "forward-evidence-" + "f" * 32
     fields.update(overrides)
     return PromotionState(**fields)
 
@@ -85,6 +130,7 @@ def seed_ledger(
     strategy_id: str = "adaptive-momentum",
     version: str = "1.3.0",
     config: str = "cfg-abc",
+    unqualified: frozenset[int] | set[int] = frozenset(),
 ) -> None:
     """Write the durable facts a real trading day leaves behind.
 
@@ -104,9 +150,15 @@ def seed_ledger(
     )
     for index in range(days):
         trading_date = date(2026, 8, 19) + timedelta(days=index)
+        if index in unqualified:
+            # A session the trading system saw and did not qualify: the daemon was down, the
+            # reconciliation failed, the feed was stale. The row exists with the flag off, which
+            # is how the gap is visible at all.
+            repository.record_qualification_day(strategy_id, trading_date, qualified=False)
+            continue
         repository.record_qualification_day(strategy_id, trading_date, qualified=True)
         for trade in range(trades_each):
-            suffix = f"{index}-{trade}"
+            suffix = f"{strategy_id}-{index}-{trade}"
             repository.create_order_intent(
                 OrderIntent(
                     intent_id=f"intent-{suffix}",
@@ -263,22 +315,25 @@ def test_paper_qualification_needs_the_full_authentic_window(ledger_db: Database
             )
         assert "30 and 30 required" in str(error.value)
 
+    # And clearing the floor is where the authenticity question ends, not where qualification
+    # begins. Thirty days and thirty trades used to reach PAPER_QUALIFIED on their own; now the
+    # same call refuses, because nothing has said whether any of it made money (#47).
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
-        qualified = promote(
-            one_day,
-            Stage.PAPER_QUALIFIED,
-            actor="director",
-            reason="window complete",
-            now=NOW,
-            observations=observe_forward_days(
-                session,
-                strategy_id="adaptive-momentum",
-                strategy_version="1.3.0",
-                configuration_hash="cfg-abc",
-            ),
-        )
-    assert qualified.stage is Stage.PAPER_QUALIFIED
+        with pytest.raises(PromotionRefused, match="no measured forward evidence"):
+            promote(
+                one_day,
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="window complete",
+                now=NOW,
+                observations=observe_forward_days(
+                    session,
+                    strategy_id="adaptive-momentum",
+                    strategy_version="1.3.0",
+                    configuration_hash="cfg-abc",
+                ),
+            )
 
 
 def test_thirty_sessions_without_trading_is_not_qualification(ledger_db: Database) -> None:
@@ -386,25 +441,43 @@ def test_the_durable_ladder_reads_forward_evidence_and_refuses_to_be_told_it(
         ladder = PromotionLedger(session)
         ladder.enter(state(Stage.PAPER_OBSERVATION))
 
-        with pytest.raises(PromotionRefused, match="read from the durable ledger, not supplied"):
+        for supplied in ("observations", "evidence"):
+            with pytest.raises(
+                PromotionRefused, match="read from the durable ledger, not supplied"
+            ):
+                ladder.promote(
+                    "adaptive-momentum",
+                    Stage.PAPER_QUALIFIED,
+                    actor="director",
+                    reason="I brought my own",
+                    now=NOW,
+                    account_id=ACCOUNT,
+                    **{supplied: hand_built(MINIMUM_FORWARD_DAYS)},
+                )
+
+        # Where to look is a caller's to say; what was found is not. Without an account and a
+        # benchmark there is nothing to read the economics out of, and absolute P&L cannot tell
+        # +4% against +8% from an edge.
+        with pytest.raises(PromotionRefused, match="needs an account to read equity from"):
             ladder.promote(
                 "adaptive-momentum",
                 Stage.PAPER_QUALIFIED,
                 actor="director",
-                reason="I brought my own",
+                reason="just the counts, please",
                 now=NOW,
-                observations=hand_built(MINIMUM_FORWARD_DAYS),
             )
 
-        moved = ladder.promote(
-            "adaptive-momentum",
-            Stage.PAPER_QUALIFIED,
-            actor="director",
-            reason="the ledger agrees",
-            now=NOW,
-        )
-
-    assert moved.stage is Stage.PAPER_QUALIFIED
+        # The ledger looks, and refuses on what it finds: no prices were ever written, so there
+        # is no statistic and no frozen claim behind this deployment.
+        with pytest.raises(PromotionRefused, match="no frozen economic claim"):
+            ladder.promote(
+                "adaptive-momentum",
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="the counts agree",
+                now=NOW,
+                account_id=ACCOUNT,
+            )
 
 
 def test_a_material_change_restarts_the_window_by_excluding_the_old_days(
@@ -585,6 +658,7 @@ def test_re_entering_the_ladder_is_refused_rather_than_silently_resetting(ledger
             actor="hutch",
             reason="registered",
             now=NOW,
+            hypothesis_id=CLAIM_ID,
         )
         with pytest.raises(PromotionRefused, match="already on the ladder"):
             ledger.enter(_entry())
@@ -645,14 +719,18 @@ def test_an_unresolved_integrity_incident_demotes_out_of_the_forward_track(
 ) -> None:
     """#16: `demote()` was ungated and nothing called it when an incident landed.
 
-    So the ladder could report a strategy as PAPER_QUALIFIED while its own reconciliation was
-    failing, which is the exact failure the ladder exists to prevent. A rule nobody invokes is
-    not a control.
+    So the ladder could report a strategy as accumulating qualification while its own
+    reconciliation was failing, which is the exact failure the ladder exists to prevent. A rule
+    nobody invokes is not a control.
+
+    Staged at `PAPER_OBSERVATION` rather than `PAPER_QUALIFIED` because `enter()` now refuses an
+    economic stage outright -- the only route to one is `promote()`, reading the ledger. The
+    sweep is indifferent: it drops anything standing above `INTEGRITY_FLOOR`.
     """
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
         ladder = PromotionLedger(session)
-        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        ladder.enter(state(Stage.PAPER_OBSERVATION))
         _raise_incident(session, incident_id="INC-1")
 
         sweep = demote_on_integrity_incidents(session, now=NOW)
@@ -672,7 +750,7 @@ def test_demotion_does_not_erase_the_forward_evidence_that_really_happened(
     """
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
-        PromotionLedger(session).enter(state(Stage.PAPER_QUALIFIED))
+        PromotionLedger(session).enter(state(Stage.PAPER_OBSERVATION))
         _raise_incident(session, incident_id="INC-1")
         demote_on_integrity_incidents(session, now=NOW)
 
@@ -699,14 +777,14 @@ def test_an_informational_or_resolved_incident_demotes_nothing(ledger_db: Databa
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
         ladder = PromotionLedger(session)
-        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        ladder.enter(state(Stage.PAPER_OBSERVATION))
         _raise_incident(session, incident_id="INC-INFO", severity="INFO")
         _raise_incident(session, incident_id="INC-FIXED", severity="ERROR", resolved=True)
 
         sweep = demote_on_integrity_incidents(session, now=NOW)
 
         assert sweep.clean
-        assert ladder.current("adaptive-momentum").stage is Stage.PAPER_QUALIFIED
+        assert ladder.current("adaptive-momentum").stage is Stage.PAPER_OBSERVATION
 
 
 def test_an_incident_nobody_can_attribute_is_reported_rather_than_dropped(
@@ -721,7 +799,7 @@ def test_an_incident_nobody_can_attribute_is_reported_rather_than_dropped(
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
         ladder = PromotionLedger(session)
-        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        ladder.enter(state(Stage.PAPER_OBSERVATION))
         _raise_incident(session, incident_id="INC-ORPHAN", strategy_id=None)
 
         sweep = demote_on_integrity_incidents(session, now=NOW)
@@ -730,7 +808,7 @@ def test_an_incident_nobody_can_attribute_is_reported_rather_than_dropped(
         assert sweep.unattributed == ("INC-ORPHAN",)
         assert not sweep.clean, "nothing demoted is not the same as nothing wrong"
         # It belongs to no strategy, so no strategy is moved for it.
-        assert ladder.current("adaptive-momentum").stage is Stage.PAPER_QUALIFIED
+        assert ladder.current("adaptive-momentum").stage is Stage.PAPER_OBSERVATION
 
 
 def test_a_repeated_sweep_records_no_second_move(ledger_db: Database) -> None:
@@ -738,7 +816,7 @@ def test_a_repeated_sweep_records_no_second_move(ledger_db: Database) -> None:
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
         ladder = PromotionLedger(session)
-        ladder.enter(state(Stage.PAPER_QUALIFIED))
+        ladder.enter(state(Stage.PAPER_OBSERVATION))
         _raise_incident(session, incident_id="INC-1")
 
         first = demote_on_integrity_incidents(session, now=NOW)
@@ -752,3 +830,1292 @@ def test_a_repeated_sweep_records_no_second_move(ledger_db: Database) -> None:
             if event.direction == "DEMOTION"
         ]
     assert len(demotions) == 1, "one incident, one recorded demotion"
+
+
+# ---------------------------------------------------------------------------------------------
+# Forward economic evidence (#47). Thirty authentic days are an authenticity fact; the tests
+# below are about the separate question of whether those days say anything.
+# ---------------------------------------------------------------------------------------------
+
+#: 68 cumulative trials put the luck bar at 2.905, and a SHARPE claim needs
+#: `(z*sqrt(252)/SR)^2` sessions, so ~29 paired sessions can only resolve an annualised Sharpe
+#: of about 8.5. No strategy has one. That is not a fixture convenience -- it is the finding:
+#: **a thirty-session window cannot support any edge claim worth making**, and the only way to
+#: exercise the supported path at all is to declare an effect nobody could have.
+RESOLVABLE_AT_THIRTY_SESSIONS = Decimal("12.0")
+
+BENCHMARK = load_economic_objective().benchmark_symbol
+ACCOUNT = "paper-account-1"
+
+
+def seed_prices(
+    session,
+    *,
+    days: int,
+    strategy_daily_bps: int,
+    benchmark_daily_bps: int,
+    account_id: str = ACCOUNT,
+    jitter_bps: int = 3,
+    dip_bps: int = 0,
+    dip_on: int = 10,
+) -> None:
+    """An account equity path and a benchmark close path over the same sessions.
+
+    Both series get a little alternating jitter so the excess has a dispersion to divide by. A
+    constant excess has no sampling distribution, and `_forward_statistics` refuses it rather
+    than reporting an infinite t -- which would be the most flattering arithmetic available here.
+
+    The equity mark is stamped at 20:05 New York, i.e. after the close, which is the shape the
+    real cycle writes. Its UTC date is therefore the *following* day, and a gate keying on that
+    would credit a session that had not happened.
+    """
+    repository = StorageRepository(session)
+    equity = Decimal("100")
+    close = Decimal("500")
+    for index in range(days):
+        trading_date = date(2026, 8, 19) + timedelta(days=index)
+        jitter = jitter_bps if index % 2 == 0 else -jitter_bps
+        move = -dip_bps if (dip_bps and index == dip_on) else strategy_daily_bps + jitter
+        equity *= 1 + Decimal(move) / 10000
+        close *= 1 + Decimal(benchmark_daily_bps - jitter) / 10000
+        equity = equity.quantize(Decimal("0.0001"))
+        close = close.quantize(Decimal("0.0001"))
+        repository.save_account_snapshot(
+            f"snap-{index}",
+            Account(
+                account_id=account_id,
+                cash=Decimal("1"),
+                buying_power=Decimal("1"),
+                equity=equity,
+                currency="USD",
+            ),
+            (),
+            captured_at=datetime.combine(
+                trading_date, time(20, 5), tzinfo=ZoneInfo("America/New_York")
+            ).astimezone(UTC),
+        )
+        repository.save_bars(
+            [
+                Bar(
+                    symbol=BENCHMARK,
+                    timestamp=datetime.combine(
+                        trading_date, time(16, 0), tzinfo=ZoneInfo("America/New_York")
+                    ).astimezone(UTC),
+                    open=close,
+                    high=close,
+                    low=close,
+                    close=close,
+                    volume=Decimal("1000"),
+                    adjustment=Decimal("1"),
+                )
+            ],
+            provider="test",
+        )
+
+
+def freeze_claim(
+    session,
+    *,
+    expected: Decimal = RESOLVABLE_AT_THIRTY_SESSIONS,
+    hypothesis_id: str = CLAIM_ID,
+    family_id: str = "trend-following",
+    universe: tuple[str, ...] = ("SPY",),
+    features: tuple[str, ...] = ("close_sma_200",),
+) -> str:
+    """Freeze a real registration, because the gate reads the claim rather than accepting one."""
+    registry = HypothesisRegistry(session)
+    register(
+        registry,
+        make_draft(
+            hypothesis_id=hypothesis_id,
+            family_id=family_id,
+            universe=universe,
+            features=features,
+            effect=sharpe_effect(expected=expected),
+            windows=(
+                window(DataRole.FORWARD_PAPER, "2026-08-19", "2026-12-31", dataset="alpaca-paper"),
+            ),
+        ),
+    )
+    return hypothesis_id
+
+
+RATIFICATION = {
+    "status": MandateStatus.RATIFIED,
+    "ratified_by": "hutch",
+    "ratified_at": date(2026, 8, 22),
+}
+
+
+def objective(**overrides: object) -> EconomicObjective:
+    """The project's own frozen mandate, **ratified**, unless a test is about changing it.
+
+    Loaded from `config/` rather than hand-built, so a change to the operator's objective that
+    breaks these assumptions shows up here instead of quietly diverging from the file the
+    production path reads.
+
+    Ratified by default because the shipped file is `PROVISIONAL` and a provisional mandate now
+    blocks `FORWARD_EDGE_SUPPORTED` outright (#54). Every test below that is *about* something
+    else needs the mandate out of its way; the ones about ratification pass their own. Note that
+    ratification does not change the identity, so assertions naming the objective still hold.
+    """
+    frozen = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH).model_copy(
+        update=RATIFICATION
+    )
+    return frozen.model_copy(update=overrides) if overrides else frozen
+
+
+@pytest.fixture
+def ratified_objective(tmp_path: Path) -> Path:
+    """The shipped mandate with an operator signature on it, on disk, for the ledger to load.
+
+    Written to `tmp_path` rather than by editing `config/economic-objective-v1.yaml`: ratifying
+    the real file to make a test pass is precisely the agent self-ratification #54 forbids, and
+    a test suite that does it would have normalised the thing the rule exists to prevent.
+    """
+    payload = yaml.safe_load((REPOSITORY / DEFAULT_MANDATE_PATH).read_text(encoding="utf-8"))
+    payload |= {"status": "RATIFIED", "ratified_by": "hutch", "ratified_at": "2026-08-22"}
+    location = tmp_path / "ratified-objective.yaml"
+    location.write_text(yaml.safe_dump(payload), encoding="utf-8")
+    return location
+
+
+def forward_evidence(session, *, hypothesis_id: str | None = None, **overrides: object):
+    """The ledger's answer, with the claim bound the way `REGISTERED` binds it.
+
+    `assess_forward_evidence` takes no `hypothesis_id` any more: it reads the binding off
+    `promotion_state`. So this helper *writes* the binding instead of passing it, which is #53's
+    fix expressed as a fixture -- there is no longer any way for a caller to nominate the claim
+    a gate checks.
+    """
+    strategy_id = str(overrides.get("strategy_id", "adaptive-momentum"))
+    ladder = PromotionLedger(session)
+    if ladder.current(strategy_id) is None:
+        ladder.enter(
+            state(
+                Stage.PAPER_OBSERVATION,
+                strategy_id=strategy_id,
+                hypothesis_id=hypothesis_id,
+                hypothesis_version=None if hypothesis_id is None else 1,
+            )
+        )
+    kwargs: dict[str, object] = {
+        "strategy_id": "adaptive-momentum",
+        "strategy_version": "1.3.0",
+        "configuration_hash": "cfg-abc",
+        "account_id": ACCOUNT,
+        "objective": objective(),
+        "assessed_at": NOW,
+    }
+    kwargs.update(overrides)
+    return assess_forward_evidence(session, **kwargs)  # type: ignore[arg-type]
+
+
+def qualify(session, *, objective_path: Path, hypothesis_id: str = CLAIM_ID) -> PromotionState:
+    """Take a strategy to `PAPER_QUALIFIED` through the real gates, because there is no shortcut.
+
+    `enter()` refuses an economic stage and `promote()` reads the ledger, so a test that wants a
+    genuinely qualified strategy has to seed one the way production would produce one: authentic
+    days, real fills, an equity path, a frozen claim and a ratified mandate.
+    """
+    seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+    seed_prices(
+        session,
+        days=MINIMUM_FORWARD_DAYS,
+        strategy_daily_bps=120,
+        benchmark_daily_bps=1,
+        jitter_bps=1,
+    )
+    freeze_claim(session, hypothesis_id=hypothesis_id)
+    ladder = PromotionLedger(session)
+    ladder.enter(state(Stage.PAPER_OBSERVATION, hypothesis_id=hypothesis_id))
+    return ladder.promote(
+        "adaptive-momentum",
+        Stage.PAPER_QUALIFIED,
+        actor="director",
+        reason="the forward window agrees",
+        now=NOW,
+        account_id=ACCOUNT,
+        objective_path=objective_path,
+    )
+
+
+def test_thirty_days_of_losing_trades_satisfy_the_count_and_qualify_for_nothing(
+    ledger_db: Database,
+) -> None:
+    """The defect #47 names, in one test.
+
+    Every authenticity fact is present: a deployment, thirty qualified sessions, thirty fills
+    reached through `order_intents`. The strategy lost money on all of them. Before this gate
+    existed that combination reached `PAPER_QUALIFIED`, a label an operator reads as "the paper
+    evidence supports this".
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, trades_each=1)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=-20,
+            benchmark_daily_bps=5,
+        )
+        claim = freeze_claim(session)
+        evidence = forward_evidence(session, hypothesis_id=claim)
+
+        assert evidence.forward_days == MINIMUM_FORWARD_DAYS
+        assert evidence.forward_trades == MINIMUM_FORWARD_TRADES
+        assert evidence.verdict is ForwardVerdict.FORWARD_NEGATIVE
+        assert not evidence.supported
+
+        with pytest.raises(PromotionRefused, match="FORWARD_NEGATIVE"):
+            promote(
+                state(Stage.PAPER_OBSERVATION),
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="thirty days and thirty trades",
+                now=NOW,
+                observations=observe_forward_days(
+                    session,
+                    strategy_id="adaptive-momentum",
+                    strategy_version="1.3.0",
+                    configuration_hash="cfg-abc",
+                ),
+                evidence=evidence,
+            )
+
+
+def test_profit_that_loses_to_its_own_benchmark_is_not_an_edge(ledger_db: Database) -> None:
+    """+4% against the benchmark's +8% is positive P&L and negative value.
+
+    Absolute forward profit cannot tell those apart, which is why the estimand is the excess
+    return and not the return.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=13,
+            benchmark_daily_bps=26,
+        )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
+
+    assert evidence.statistics is not None
+    assert evidence.statistics.excess_sharpe < 0
+    assert evidence.verdict is ForwardVerdict.FORWARD_NEGATIVE
+
+
+def test_an_underpowered_forward_window_is_not_a_refutation(ledger_db: Database) -> None:
+    """`UNDERPOWERED` is not `REFUTED` here either, and the order of the checks is why.
+
+    A claim of an annualised Sharpe of 1.0 needs about 2,100 sessions at this luck bar. Thirty
+    cannot resolve it in either direction, so the verdict is decided *before* the point estimate
+    is consulted -- reading power off the result is the post-hoc power fallacy, and recording an
+    unresolvable window as a refutation teaches a later agent that a mechanism was tested when
+    it never was.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=-40, benchmark_daily_bps=10
+        )
+        claim = freeze_claim(session, expected=Decimal("1.0"), hypothesis_id="H-2026-048")
+        evidence = forward_evidence(session, hypothesis_id=claim)
+
+    assert evidence.verdict is ForwardVerdict.FORWARD_UNDERPOWERED
+    assert evidence.power is not None
+    assert evidence.power.verdict is PowerVerdict.UNDERPOWERED
+    # Losing badly, and still not a refutation: the window could not have said either way.
+    assert evidence.statistics is not None
+    assert evidence.statistics.excess_sharpe < 0
+    assert evidence.verdict is not ForwardVerdict.FORWARD_NEGATIVE
+
+
+def test_a_deployment_with_no_frozen_claim_can_never_be_supported(ledger_db: Database) -> None:
+    """The currently deployed rotation's exact situation (#53, #54).
+
+    Its mechanism is refuted as `REFUTED.md` #22 -- the momentum ranking carries no measurable
+    information -- and it keeps trading, legitimately, as an operational baseline. Authentic
+    paper days cannot rehabilitate a mechanism by existing, and with no frozen estimand there is
+    no success criterion except one chosen after seeing the P&L.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=400, benchmark_daily_bps=1
+        )
+        evidence = forward_evidence(session)
+
+    assert evidence.verdict is ForwardVerdict.FORWARD_INCONCLUSIVE
+    assert any("no frozen economic claim" in reason for reason in evidence.blocking)
+    assert not evidence.supported
+
+
+def test_the_trade_count_cannot_inflate_the_independent_sample(ledger_db: Database) -> None:
+    """Thirty fills on three sessions are not thirty observations.
+
+    The unit of evidence is the session, so multiplying fills changes the authenticity counter
+    and leaves the statistical one alone. This gate is the one most exposed to the confusion,
+    because the trade count sits right there in the qualification rule.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, trades_each=1)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=30, benchmark_daily_bps=5
+        )
+        claim = freeze_claim(session)
+        thin = forward_evidence(session, hypothesis_id=claim)
+
+    # The same sessions, ten times the fills. Nothing new happened in the market.
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, trades_each=10)
+        fat = forward_evidence(session, hypothesis_id=claim)
+
+    assert fat.forward_trades == thin.forward_trades * 10
+    assert thin.statistics is not None and fat.statistics is not None
+    assert fat.statistics.paired_sessions == thin.statistics.paired_sessions
+    assert fat.statistics.excess_t == thin.statistics.excess_t
+
+
+def test_an_unresolved_integrity_incident_blocks_qualification(ledger_db: Database) -> None:
+    """An incident casts doubt on the evidence, so the evidence does not qualify while it stands."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=300, benchmark_daily_bps=1
+        )
+        _raise_incident(session, incident_id="incident-1", severity="CRITICAL")
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
+
+    assert not evidence.supported
+    assert any("unresolved integrity incident" in reason for reason in evidence.blocking)
+
+
+def test_a_check_that_did_not_run_blocks_rather_than_passing(ledger_db: Database) -> None:
+    """`unassessed` is a refusal, not a footnote.
+
+    This gate measures benchmark-relative growth. Pointed at a mandate that asks for terminal
+    wealth it has not answered the question it was asked, and reporting the number it happens to
+    have would be answering a different question and calling it agreement. This project has been
+    burned repeatedly by a check that quietly did nothing looking exactly like a check that
+    passed, so silence is blocking.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        answered = forward_evidence(session, hypothesis_id=claim)
+        mismatched = forward_evidence(
+            session,
+            hypothesis_id=claim,
+            objective=objective(objective=Objective.TERMINAL_WEALTH),
+        )
+
+    # The measurement is identical. Only the question changed.
+    assert answered.supported, answered.explain()
+    assert mismatched.statistics == answered.statistics
+    assert mismatched.unassessed
+    assert not mismatched.supported
+    assert "not assessed" in mismatched.explain()
+
+
+def test_an_excess_that_is_only_beta_does_not_qualify(ledger_db: Database) -> None:
+    """Cycle 15's finding as a gate.
+
+    A levered benchmark tracker beats the benchmark by construction and adds nothing. Its excess
+    return is real and its beta-adjusted alpha is not, so both have to clear the bar rather than
+    either one.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        repository = StorageRepository(session)
+        equity = Decimal("100")
+        close = Decimal("500")
+        for index in range(MINIMUM_FORWARD_DAYS):
+            trading_date = date(2026, 8, 19) + timedelta(days=index)
+            move = Decimal(60 if index % 3 else -50) / 10000
+            close *= 1 + move
+            equity *= 1 + move * 2  # exactly 2x the benchmark: all beta, no alpha
+            repository.save_account_snapshot(
+                f"snap-{index}",
+                Account(
+                    account_id=ACCOUNT,
+                    cash=Decimal("1"),
+                    buying_power=Decimal("1"),
+                    equity=equity.quantize(Decimal("0.0001")),
+                    currency="USD",
+                ),
+                (),
+                captured_at=datetime.combine(
+                    trading_date, time(20, 5), tzinfo=ZoneInfo("America/New_York")
+                ).astimezone(UTC),
+            )
+            quantized = close.quantize(Decimal("0.0001"))
+            repository.save_bars(
+                [
+                    Bar(
+                        symbol=BENCHMARK,
+                        timestamp=datetime.combine(
+                            trading_date, time(16, 0), tzinfo=ZoneInfo("America/New_York")
+                        ).astimezone(UTC),
+                        open=quantized,
+                        high=quantized,
+                        low=quantized,
+                        close=quantized,
+                        volume=Decimal("1000"),
+                        adjustment=Decimal("1"),
+                    )
+                ],
+                provider="test",
+            )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
+
+    assert evidence.statistics is not None
+    assert evidence.statistics.beta > Decimal("1.5")
+    assert abs(evidence.statistics.alpha_t) < evidence.luck_threshold_z
+    assert not evidence.supported
+    assert any("index exposure is not an edge" in reason for reason in evidence.blocking)
+
+
+def test_forward_evidence_cannot_be_assembled_by_a_caller(ledger_db: Database) -> None:
+    """The measurement is the type, the same way it is for `LedgerObservations`."""
+    with pytest.raises(TypeError, match="cannot be constructed, only measured"):
+        ForwardEvidence(
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+            assessed_at=NOW,
+            objective_identity="economic-objective-v1-deadbeefdeadbeef",
+            hypothesis_id=CLAIM_ID,
+            hypothesis_version=1,
+            role=DeploymentRole.EDGE_CANDIDATE,
+            forward_days=MINIMUM_FORWARD_DAYS,
+            forward_trades=MINIMUM_FORWARD_TRADES,
+            luck_threshold_z=Decimal("2.905"),
+            statistics=None,
+            power=None,
+            blocking=(),
+            unassessed=(),
+            verdict=ForwardVerdict.FORWARD_EDGE_SUPPORTED,
+            token=object(),
+        )
+
+    class Convincing:
+        supported = True
+        verdict = ForwardVerdict.FORWARD_EDGE_SUPPORTED
+        strategy_version = "1.3.0"
+        configuration_hash = "cfg-abc"
+
+        def explain(self) -> str:
+            return "everything is fine"
+
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        observations = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+    with pytest.raises(TypeError, match="not a measurement"):
+        promote(
+            state(Stage.PAPER_OBSERVATION),
+            Stage.PAPER_QUALIFIED,
+            actor="director",
+            reason="my object says so",
+            now=NOW,
+            observations=observations,
+            evidence=Convincing(),  # type: ignore[arg-type]
+        )
+
+
+def test_evidence_measured_for_a_different_configuration_does_not_transfer(
+    ledger_db: Database,
+) -> None:
+    """A material change restarts the window, and stale evidence must not survive it."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=300, benchmark_daily_bps=1
+        )
+        evidence = forward_evidence(
+            session, hypothesis_id=freeze_claim(session), configuration_hash="cfg-superseded"
+        )
+        observations = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+
+    with pytest.raises(PromotionRefused, match="the evidence measures"):
+        promote(
+            state(Stage.PAPER_OBSERVATION),
+            Stage.PAPER_QUALIFIED,
+            actor="director",
+            reason="reusing the old measurement",
+            now=NOW,
+            observations=observations,
+            evidence=evidence,
+        )
+
+
+def test_the_supported_path_exists_and_needs_an_effect_nobody_has(
+    ledger_db: Database, ratified_objective: Path
+) -> None:
+    """A gate that always refuses teaches nothing, so the reachable case is pinned too.
+
+    It takes an annualised excess Sharpe past 12 to clear both the power requirement and the
+    2.905 luck bar on thirty sessions. Read this test as the arithmetic of the window rather
+    than as a plausible strategy: it is the honest reason `PAPER_QUALIFIED` will stay out of
+    reach for a long time, and the reason the thirty-day rule was never an economic test.
+    """
+    with ledger_db.transaction() as session:
+        moved = qualify(session, objective_path=ratified_objective)
+        evidence = forward_evidence(session, hypothesis_id=CLAIM_ID)
+
+        assert evidence.power is not None
+        assert evidence.power.cleared, evidence.explain()
+        assert evidence.verdict is ForwardVerdict.FORWARD_EDGE_SUPPORTED, evidence.explain()
+        assert evidence.supported
+
+    assert moved.stage is Stage.PAPER_QUALIFIED
+    # The stage is not the provenance. The record names the assessment and the mandate.
+    assert moved.evidence_identity == evidence.identity
+    assert moved.objective_identity == load_economic_objective(
+        REPOSITORY / DEFAULT_MANDATE_PATH
+    ).identity
+    assert moved.claim == (CLAIM_ID, 1)
+
+
+def test_the_equity_mark_is_attributed_to_the_session_it_closed(ledger_db: Database) -> None:
+    """A mark written at 20:05 New York is stored as the next UTC day.
+
+    `docs/research-architecture.md` records this off-by-one for fill attribution, which is why
+    trades are credited by `signal_date`. Equity has the same hazard and no `signal_date` to
+    lean on: keyed by UTC date, every mark lands one session late, the first and last sessions
+    fall off the ends, and the returns are silently shifted by one day against the benchmark.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=30, benchmark_daily_bps=5
+        )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
+
+    assert evidence.statistics is not None
+    # Thirty qualified sessions, twenty-nine consecutive pairs, none dropped.
+    assert evidence.statistics.paired_sessions == MINIMUM_FORWARD_DAYS - 1
+
+
+def _refute(session, hypothesis_id: str, *, verdict: Verdict = Verdict.REFUTED) -> None:
+    """File a refutation against a hypothesis the way a completed research cycle would."""
+    ResearchMemory(session).record(
+        ResearchRecord(
+            record_id=f"refuted-{hypothesis_id}",
+            kind=RecordKind.FINDING,
+            subject="momentum ranking",
+            statement=(
+                "The momentum ranking carries no measurable information: alpha against SPY is "
+                "0.10%/yr at t=0.05 and top-minus-bottom is t=0.77 against a 2.87 bar."
+            ),
+            verdict=verdict,
+            hypothesis_id=hypothesis_id,
+            hypothesis_version=1,
+            source="REFUTED.md #22",
+            recorded_at=NOW,
+        )
+    )
+
+
+def test_a_refuted_mechanism_stops_being_an_edge_candidate(ledger_db: Database) -> None:
+    """#53's core path, and the deployed rotation's actual future.
+
+    Real paper days keep arriving after a mechanism is refuted, because the daemon runs beside
+    the research system rather than under it. Those days are worth having -- they are where
+    slippage, reconciliation and recovery evidence comes from -- and they must not become credit
+    toward a label about edge. Authentic execution cannot rehabilitate a mechanism by existing.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        before = forward_evidence(session, hypothesis_id=claim)
+        assert before.role is DeploymentRole.EDGE_CANDIDATE
+        assert before.supported, before.explain()
+
+        _refute(session, claim)
+        after = forward_evidence(session, hypothesis_id=claim)
+
+    # Same account, same fills, same profit. The claim is what changed.
+    assert after.statistics == before.statistics
+    assert after.role is DeploymentRole.OPERATIONAL_BASELINE
+    assert not after.supported
+    assert any("is refuted by" in reason for reason in after.blocking)
+
+
+def test_an_untestable_verdict_is_not_a_refutation(ledger_db: Database) -> None:
+    """`UNDERPOWERED` does not block, and that is not an oversight.
+
+    It says the data could not resolve the mechanism. Blocking on it would read absence of
+    evidence as evidence of absence at the gate -- the collapse research memory refuses to let
+    happen in the record, arriving through the back door instead.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        ResearchMemory(session).record(
+            ResearchRecord(
+                record_id="underpowered-1",
+                kind=RecordKind.FINDING,
+                subject="momentum ranking",
+                statement="688 forecasts cannot resolve an IC of 0.15; 4,485 are needed.",
+                verdict=Verdict.UNDERPOWERED,
+                hypothesis_id=claim,
+                hypothesis_version=1,
+                source="H-2026-026",
+                recorded_at=NOW,
+            )
+        )
+        evidence = forward_evidence(session, hypothesis_id=claim)
+
+    assert evidence.role is DeploymentRole.EDGE_CANDIDATE
+    assert evidence.supported, evidence.explain()
+
+
+def test_a_deployment_with_no_registration_is_an_operational_baseline(
+    ledger_db: Database,
+) -> None:
+    """The role is derived from durable state, so nobody has to remember to set it."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=400, benchmark_daily_bps=1
+        )
+        evidence = forward_evidence(session)
+
+    assert evidence.role is DeploymentRole.OPERATIONAL_BASELINE
+    assert "OPERATIONAL_BASELINE" in evidence.explain()
+
+
+def test_the_refutation_trigger_follows_lineage_rather_than_prose(ledger_db: Database) -> None:
+    """A refutation of a *different* hypothesis must not block this one.
+
+    #53 asks for the trigger to be registered lineage rather than text matching against
+    REFUTED.md, and the two disagree in both directions: a strategy id appearing in unrelated
+    prose would block wrongly, and a refutation phrased without the id would fail to block --
+    silently, which is the worse half.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        _refute(session, "H-2026-999-some-other-question")
+        evidence = forward_evidence(session, hypothesis_id=claim)
+
+    assert evidence.role is DeploymentRole.EDGE_CANDIDATE
+    assert evidence.supported, evidence.explain()
+
+
+def test_the_last_rung_refuses_an_objective_the_operator_has_not_ratified() -> None:
+    """`LIVE_REVIEW_ELIGIBLE` is where the mandate's ratification starts to matter.
+
+    Everything below it can be judged against an objective transcribed from the project's own
+    documents. Putting a candidate in front of the operator *as satisfying their objective*
+    cannot: only they decide what this project is optimising, and the shipped mandate says
+    PROVISIONAL precisely so that this refuses rather than assuming.
+    """
+    qualified = state(Stage.PAPER_QUALIFIED)
+    provisional = load_economic_objective()
+    assert not provisional.ratified()
+
+    with pytest.raises(PromotionRefused, match="PROVISIONAL"):
+        promote(
+            qualified,
+            Stage.LIVE_REVIEW_ELIGIBLE,
+            actor="director",
+            reason="every gate is clear",
+            now=NOW,
+            objective=provisional,
+        )
+
+    with pytest.raises(PromotionRefused, match="no economic objective was supplied"):
+        promote(
+            qualified,
+            Stage.LIVE_REVIEW_ELIGIBLE,
+            actor="director",
+            reason="no mandate named",
+            now=NOW,
+        )
+
+    ratified = provisional.model_copy(
+        update={
+            "status": MandateStatus.RATIFIED,
+            "ratified_by": "hutch",
+            "ratified_at": date(2026, 8, 22),
+        }
+    )
+    moved = promote(
+        qualified,
+        Stage.LIVE_REVIEW_ELIGIBLE,
+        actor="director",
+        reason="every gate is clear and the objective is the operator's",
+        now=NOW,
+        objective=ratified,
+    )
+    assert moved.stage is Stage.LIVE_REVIEW_ELIGIBLE
+    # Still terminal. Ratifying an objective does not create a destination past human review.
+    assert ALLOWED_PROMOTIONS[Stage.LIVE_REVIEW_ELIGIBLE] == frozenset()
+
+
+def test_the_evidence_names_the_objective_it_was_judged_under(ledger_db: Database) -> None:
+    """A verdict that cannot name its mandate is one whose success criterion could have moved."""
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=30, benchmark_daily_bps=5
+        )
+        evidence = forward_evidence(session, hypothesis_id=freeze_claim(session))
+
+    assert evidence.objective_identity == load_economic_objective().identity
+    assert evidence.objective_identity.startswith("economic-objective-v1-")
+
+
+def test_a_real_but_trivial_edge_is_not_a_meaningful_one(ledger_db: Database) -> None:
+    """The mandate's improvement threshold, doing the job a t-statistic cannot.
+
+    A tiny benchmark-relative edge can be statistically clean and still not worth the
+    operational risk of running an autonomous trading system. How small is too small is an
+    operator judgement, so it is written down in advance rather than settled once a candidate's
+    number is on the table.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session)
+        generous = forward_evidence(session, hypothesis_id=claim)
+        demanding = forward_evidence(
+            session,
+            hypothesis_id=claim,
+            objective=objective(minimum_meaningful_improvement_bps=10_000_000),
+        )
+
+    assert generous.supported, generous.explain()
+    assert demanding.statistics == generous.statistics
+    assert not demanding.supported
+    assert any("calls meaningful" in reason for reason in demanding.blocking)
+
+
+def test_a_profitable_window_that_breached_the_drawdown_ceiling_does_not_qualify(
+    ledger_db: Database,
+) -> None:
+    """The constraint half of the mandate, which the return half cannot speak for.
+
+    This window is unambiguously good on every return measure: the excess clears the luck bar by
+    a wide margin, the sample is powered, and the improvement is enormous. It also dropped
+    through the drawdown ceiling on the way. `max_drawdown_bps` is a hard constraint, so a
+    candidate that violated it is not compared on return at all -- and weakening a drawdown
+    control to let a profitable backtest through is the specific move REFUTED.md exists to catch.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=200,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+            dip_bps=300,
+        )
+        claim = freeze_claim(session)
+        tolerant = forward_evidence(
+            session, hypothesis_id=claim, objective=objective(max_drawdown_bps=1500)
+        )
+        strict = forward_evidence(
+            session, hypothesis_id=claim, objective=objective(max_drawdown_bps=100)
+        )
+
+    assert strict.statistics is not None
+    assert strict.statistics.max_drawdown_bps > 100
+    assert strict.statistics.excess_t > strict.luck_threshold_z
+    assert tolerant.supported, tolerant.explain()
+    assert not strict.supported
+    assert any("breaches the" in reason for reason in strict.blocking)
+
+
+# ---------------------------------------------------------------------------------------------
+# Trust binding (#46, #47, #53, #54). Everything below exists because a gate was reading its
+# input from the thing it was meant to constrain. Each test is written to fail if the specific
+# binding it names is removed -- not to pass because some other rule happened to refuse.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_evidence_for_another_strategy_does_not_transfer(ledger_db: Database) -> None:
+    """Same version, same configuration hash, different strategy (#47.1).
+
+    `promote()` checked version and configuration and not the identity itself, so an assessment
+    of a *different strategy* transferred cleanly whenever the two shared a config -- which is
+    what a fork, a rename or an A/B deployment looks like, not an exotic case. The two here are
+    deliberately identical in every field the old check looked at.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, strategy_id="momentum-twin")
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, strategy_id="adaptive-momentum")
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=300, benchmark_daily_bps=1
+        )
+        twin_evidence = forward_evidence(
+            session, hypothesis_id=freeze_claim(session), strategy_id="momentum-twin"
+        )
+        ours = observe_forward_days(
+            session,
+            strategy_id="adaptive-momentum",
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+
+    # Identical on everything the previous check compared.
+    assert twin_evidence.strategy_version == "1.3.0"
+    assert twin_evidence.configuration_hash == "cfg-abc"
+
+    with pytest.raises(PromotionRefused, match="not adaptive-momentum"):
+        promote(
+            state(Stage.PAPER_OBSERVATION),
+            Stage.PAPER_QUALIFIED,
+            actor="director",
+            reason="the twin did well",
+            now=NOW,
+            observations=ours,
+            evidence=twin_evidence,
+        )
+
+
+def test_the_claim_behind_a_strategy_cannot_be_supplied_at_qualification(
+    ledger_db: Database, ratified_objective: Path
+) -> None:
+    """#53's core defect: the caller chose which claim the gate checked.
+
+    A refuted deployment offered a different, unrefuted registration used to come back
+    `EDGE_CANDIDATE`, because `assess_forward_evidence` asked research memory about the id it was
+    handed. Now the id is not an argument anywhere on the qualification path -- it is read from
+    `promotion_state`, where only `REGISTERED` writes it.
+    """
+    with ledger_db.transaction() as session:
+        qualify(session, objective_path=ratified_objective)
+        freeze_claim(
+            session,
+            hypothesis_id="H-2026-999-a-clean-question",
+            universe=("QQQ",),
+            features=("close_sma_050",),
+        )
+        _refute(session, CLAIM_ID)
+        ladder = PromotionLedger(session)
+        ladder.demote(
+            "adaptive-momentum",
+            Stage.PAPER_OBSERVATION,
+            actor="director",
+            reason="claim refuted",
+            now=NOW,
+        )
+
+        # The alibi is refused at the door rather than quietly used.
+        with pytest.raises(PromotionRefused, match="bound at REGISTERED"):
+            ladder.promote(
+                "adaptive-momentum",
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="this other hypothesis is fine",
+                now=NOW,
+                account_id=ACCOUNT,
+                objective_path=ratified_objective,
+                hypothesis_id="H-2026-999-a-clean-question",
+            )
+
+        # And with no id to offer, the real one is what gets checked.
+        with pytest.raises(PromotionRefused, match="is refuted by"):
+            ladder.promote(
+                "adaptive-momentum",
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="the days are real",
+                now=NOW,
+                account_id=ACCOUNT,
+                objective_path=ratified_objective,
+            )
+
+        assert deployment_role(session, "adaptive-momentum") is DeploymentRole.OPERATIONAL_BASELINE
+
+
+def test_a_bound_claim_cannot_be_swapped_without_going_back_to_candidate(
+    ledger_db: Database,
+) -> None:
+    """Binding happens once. Re-binding is the same defect wearing the legitimate transition."""
+    with ledger_db.transaction() as session:
+        ladder = PromotionLedger(session)
+        ladder.enter(state(Stage.CANDIDATE, hypothesis_id=None, hypothesis_version=None))
+        ladder.promote(
+            "adaptive-momentum",
+            Stage.REGISTERED,
+            actor="director",
+            reason="claim frozen",
+            now=NOW,
+            hypothesis_id=CLAIM_ID,
+        )
+        assert ladder.current("adaptive-momentum").claim == (CLAIM_ID, 1)
+
+        # `RESEARCH_SURVIVOR -> REGISTERED` is a legal transition, so it is where a swap would
+        # actually be attempted: drop back a rung and re-register under a friendlier claim.
+        with pytest.raises(PromotionRefused, match="already bound"):
+            promote(
+                state(Stage.RESEARCH_SURVIVOR),
+                Stage.REGISTERED,
+                actor="director",
+                reason="a nicer claim",
+                now=NOW,
+                hypothesis_id="H-2026-999-a-clean-question",
+            )
+
+        # `CANDIDATE` is the honest route, and it costs everything above it.
+        ladder.demote(
+            "adaptive-momentum",
+            Stage.CANDIDATE,
+            actor="director",
+            reason="asking a different question",
+            now=NOW,
+        )
+        assert ladder.current("adaptive-momentum").claim is None
+        rebound = ladder.promote(
+            "adaptive-momentum",
+            Stage.REGISTERED,
+            actor="director",
+            reason="a different question, registered",
+            now=NOW,
+            hypothesis_id="H-2026-999-a-clean-question",
+        )
+        assert rebound.claim == ("H-2026-999-a-clean-question", 1)
+
+
+def test_stepping_back_down_the_ladder_drops_the_qualification_it_no_longer_holds() -> None:
+    """`PAPER_QUALIFIED -> PAPER_OBSERVATION` is a legal transition, so `promote()` walks down.
+
+    Leaving `evidence_identity` and `objective_identity` on the state would put provenance for a
+    stage the strategy no longer holds in front of the next reader -- the same stale-display
+    problem #53 names, arriving through the promotion path rather than the demotion one.
+    """
+    stepped = promote(
+        state(Stage.PAPER_QUALIFIED),
+        Stage.PAPER_OBSERVATION,
+        actor="director",
+        reason="back to observing",
+        now=NOW,
+    )
+    assert stepped.evidence_identity is None
+    assert stepped.objective_identity is None
+    # The claim is about a mechanism and survives; only the qualification is gone.
+    assert stepped.claim == (CLAIM_ID, 1)
+
+
+def test_registered_without_a_claim_is_refused() -> None:
+    """`REGISTERED` means a claim was frozen. Reaching it with none is a contradiction."""
+    with pytest.raises(PromotionRefused, match="needs the registration it is testing"):
+        promote(
+            state(Stage.CANDIDATE, hypothesis_id=None, hypothesis_version=None),
+            Stage.REGISTERED,
+            actor="director",
+            reason="registered, allegedly",
+            now=NOW,
+        )
+
+
+def test_a_gap_between_qualified_sessions_is_not_one_days_return(ledger_db: Database) -> None:
+    """A session the deployment failed on must not be absorbed into its neighbour (#47.6).
+
+    `_paired_returns` zipped the *qualified* dates against themselves, so a missing session in
+    the middle produced a pair spanning two sessions of market movement divided by one session's
+    variance and annualised at 252. Every statistic downstream inflates: mean excess, t, Sharpe
+    and drawdown.
+
+    Thirty sessions with the fifteenth unqualified: twenty-nine dates, twenty-eight naive pairs,
+    twenty-seven adjacent ones. Deleting the adjacency check puts this back to twenty-eight.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS, unqualified={15})
+        seed_prices(
+            session, days=MINIMUM_FORWARD_DAYS, strategy_daily_bps=30, benchmark_daily_bps=5
+        )
+        gapped = forward_evidence(session, hypothesis_id=freeze_claim(session))
+
+    assert gapped.statistics is not None
+    assert gapped.statistics.paired_sessions == MINIMUM_FORWARD_DAYS - 3
+    assert gapped.statistics.sessions_gapped == 1
+    # The benchmark bar for the skipped session exists, which is how the gap is detectable at
+    # all: the deployment did not trade a session the exchange held.
+    assert gapped.forward_days == MINIMUM_FORWARD_DAYS - 1
+
+
+def test_a_provisional_mandate_cannot_certify_its_own_success(
+    ledger_db: Database, ratified_objective: Path
+) -> None:
+    """#54: an agent that writes the hurdle may not also announce its evidence cleared it.
+
+    The forward numbers are still computed and still reported -- observing continues and the
+    evidence accrues -- so this is not a refusal to measure. It is a refusal to call the
+    measurement a success against a definition of success nobody outside the system chose.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        freeze_claim(session)
+        ladder = PromotionLedger(session)
+        ladder.enter(state(Stage.PAPER_OBSERVATION))
+
+        with pytest.raises(PromotionRefused, match="PROVISIONAL"):
+            ladder.promote(
+                "adaptive-momentum",
+                Stage.PAPER_QUALIFIED,
+                actor="director",
+                reason="my own bar, cleared",
+                now=NOW,
+                account_id=ACCOUNT,
+                objective_path=REPOSITORY / DEFAULT_MANDATE_PATH,
+            )
+
+        # The measurement itself is unaffected: the numbers are the same, and everything except
+        # the label is still available to an operator watching the window.
+        provisional = forward_evidence(
+            session,
+            hypothesis_id=CLAIM_ID,
+            objective=objective(status=MandateStatus.PROVISIONAL, ratified_by=None,
+                                ratified_at=None),
+        )
+        assert provisional.statistics is not None
+        assert provisional.power is not None and provisional.power.cleared
+        assert not provisional.supported
+        assert provisional.verdict is ForwardVerdict.FORWARD_INCONCLUSIVE
+
+        # The operator signs it, nothing else changes, and the same window qualifies.
+        moved = ladder.promote(
+            "adaptive-momentum",
+            Stage.PAPER_QUALIFIED,
+            actor="director",
+            reason="the operator's bar, cleared",
+            now=NOW,
+            account_id=ACCOUNT,
+            objective_path=ratified_objective,
+        )
+
+    assert moved.stage is Stage.PAPER_QUALIFIED
+
+
+def test_a_later_mandate_forces_reassessment_rather_than_inheriting_qualification(
+    ledger_db: Database, ratified_objective: Path, tmp_path: Path
+) -> None:
+    """#47.4 / #54.3: `LIVE_REVIEW_ELIGIBLE` must name the mandate that backed qualification.
+
+    A looser objective ratified after the fact would otherwise inherit a qualification measured
+    against the stricter one -- the retroactive relabelling the versioning exists to prevent,
+    arriving through the promotion path instead of through the file.
+    """
+    looser = yaml.safe_load(ratified_objective.read_text(encoding="utf-8"))
+    looser["minimum_meaningful_improvement_bps"] = 1
+    relaxed = tmp_path / "relaxed-objective.yaml"
+    relaxed.write_text(yaml.safe_dump(looser), encoding="utf-8")
+
+    with ledger_db.transaction() as session:
+        qualified = qualify(session, objective_path=ratified_objective)
+        ladder = PromotionLedger(session)
+
+        with pytest.raises(PromotionRefused, match="the objective moved"):
+            ladder.promote(
+                "adaptive-momentum",
+                Stage.LIVE_REVIEW_ELIGIBLE,
+                actor="director",
+                reason="a friendlier bar",
+                now=NOW,
+                objective_path=relaxed,
+            )
+
+        offered = ladder.promote(
+            "adaptive-momentum",
+            Stage.LIVE_REVIEW_ELIGIBLE,
+            actor="director",
+            reason="the same objective it was judged under",
+            now=NOW,
+            objective_path=ratified_objective,
+        )
+
+    assert offered.stage is Stage.LIVE_REVIEW_ELIGIBLE
+    # The provenance survives the move rather than being reset by it.
+    assert offered.evidence_identity == qualified.evidence_identity
+    assert offered.objective_identity == qualified.objective_identity
+
+
+def test_a_refuted_claim_demotes_a_strategy_that_already_qualified(
+    ledger_db: Database, ratified_objective: Path
+) -> None:
+    """#53.4: recomputing the role at the next attempt leaves a dead claim on display.
+
+    The next qualification attempt might be months away. Until then the dashboard, the status
+    file and any agent reading `promotion_state` all see `PAPER_QUALIFIED` on a strategy whose
+    mechanism has been refuted. A derived answer nobody derives is a stale answer.
+    """
+    with ledger_db.transaction() as session:
+        qualify(session, objective_path=ratified_objective)
+        ladder = PromotionLedger(session)
+        assert ladder.current("adaptive-momentum").stage is Stage.PAPER_QUALIFIED
+
+        # Nothing refuted yet: the sweep is not simply demoting everything it sees.
+        assert demote_on_refuted_claims(session, now=NOW) == ()
+
+        _refute(session, CLAIM_ID)
+        demoted = demote_on_refuted_claims(session, now=NOW)
+
+        assert [item.strategy_id for item in demoted] == ["adaptive-momentum"]
+        current = ladder.current("adaptive-momentum")
+        assert current.stage is Stage.PAPER_OBSERVATION
+        assert CLAIM_ID in current.reason
+        # The qualification it no longer holds is not left lying on the record.
+        assert current.evidence_identity is None
+        assert current.objective_identity is None
+
+        # It keeps trading, and the sessions it really traded are untouched (#53.5).
+        days, trades = count_forward_days(
+            observe_forward_days(
+                session,
+                strategy_id="adaptive-momentum",
+                strategy_version="1.3.0",
+                configuration_hash="cfg-abc",
+            ),
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+        assert (days, trades) == (MINIMUM_FORWARD_DAYS, MINIMUM_FORWARD_DAYS)
+        # And a second sweep records no second move.
+        assert demote_on_refuted_claims(session, now=NOW) == ()
+
+
+def test_a_refutation_with_no_lineage_is_not_read_as_a_clean_record(ledger_db: Database) -> None:
+    """#53.7: `REFUTED.md` predates hypothesis ids, so no exact lookup will ever match one.
+
+    Reading that silence as "this mechanism has never been refuted" is the quiet half of the
+    defect, and the half that promotes something. The finding lands in `unassessed` rather than
+    `blocking` because what is actually true is narrower than a refutation: nobody has decided
+    whether this record bears on this claim.
+    """
+    with ledger_db.transaction() as session:
+        seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
+        seed_prices(
+            session,
+            days=MINIMUM_FORWARD_DAYS,
+            strategy_daily_bps=120,
+            benchmark_daily_bps=1,
+            jitter_bps=1,
+        )
+        claim = freeze_claim(session, family_id="momentum-rotation")
+        ResearchMemory(session).record(
+            ResearchRecord(
+                record_id="refuted-md-22",
+                kind=RecordKind.FINDING,
+                subject="momentum rotation ranking",
+                statement=(
+                    "The momentum ranking carries no measurable information: top-minus-bottom "
+                    "is t=0.77 against a 2.87 bar."
+                ),
+                verdict=Verdict.REFUTED,
+                source="REFUTED.md #22",
+                recorded_at=NOW,
+            )
+        )
+        evidence = forward_evidence(session, hypothesis_id=claim)
+
+    assert not evidence.supported
+    assert evidence.verdict is ForwardVerdict.FORWARD_INCONCLUSIVE
+    assert any("refuted-md-22" in item for item in evidence.unassessed), evidence.explain()
+    # Not a refutation: an exact-id lookup still finds nothing, and the gate does not pretend it
+    # did. `blocking` would be the claim that this record settles the question.
+    assert not any("is refuted by" in item for item in evidence.blocking)
+
+
+def test_a_strategy_cannot_be_inserted_at_a_stage_that_claims_an_edge(
+    ledger_db: Database,
+) -> None:
+    """Every gate hangs off `promote()`. `enter()` must not be a way around all of them."""
+    with ledger_db.transaction() as session:
+        ladder = PromotionLedger(session)
+        for stage in ECONOMIC_STAGES:
+            with pytest.raises(PromotionRefused, match="no gate ever ran"):
+                ladder.enter(state(stage))
+        # Below them, entering is how an existing deployment joins the ladder at all.
+        assert ladder.enter(state(Stage.PAPER_OBSERVATION)).stage is Stage.PAPER_OBSERVATION
+
+
+def test_an_economic_stage_cannot_be_represented_without_its_provenance() -> None:
+    """The model refuses the shape, so no code path can produce a qualification with no source."""
+    for stage in ECONOMIC_STAGES:
+        for missing in ("hypothesis_id", "objective_identity", "evidence_identity"):
+            blanked: dict[str, object] = {missing: None}
+            if missing == "hypothesis_id":
+                blanked["hypothesis_version"] = None
+            with pytest.raises(ValueError, match="a stage is not provenance"):
+                state(stage, **blanked)
+
+
+def test_the_qualifying_assessment_is_durable_on_the_event_not_just_the_state(
+    ledger_db: Database, ratified_objective: Path
+) -> None:
+    """#46.5: an audit must be able to say what justified the stage on the day it was granted.
+
+    The current row is a current value. If only it carried the assessment, a later demotion and
+    re-promotion would overwrite the answer to "what did this qualify on", and the append-only
+    history -- the thing the ladder's whole claim rests on -- would not contain it.
+    """
+    with ledger_db.transaction() as session:
+        qualified = qualify(session, objective_path=ratified_objective)
+        history = PromotionLedger(session).history("adaptive-momentum")
+        # Recomputed independently rather than compared against the value that was stored. The
+        # two agreeing is the claim; comparing the stored value with itself would pass just as
+        # well if the ladder had written a constant.
+        recomputed = forward_evidence(session, hypothesis_id=CLAIM_ID)
+
+    granted = [event for event in history if event.to_stage == Stage.PAPER_QUALIFIED.value]
+    assert len(granted) == 1
+    assert granted[0].evidence_identity == recomputed.identity
+    assert granted[0].evidence_identity == qualified.evidence_identity
+    assert granted[0].objective_identity == recomputed.objective_identity
+    assert granted[0].hypothesis_id == CLAIM_ID

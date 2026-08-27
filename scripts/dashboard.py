@@ -21,7 +21,7 @@ import html
 import os
 import platform
 import sys
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 
@@ -31,14 +31,17 @@ from sqlalchemy.orm import Session
 
 from quantbot.reporting import analyze_fills
 from quantbot.research.budget import Resource
+from quantbot.research.capacity import capacity_inventory
 from quantbot.research.dashboard import Alert, BudgetPanel, attention, luck_bar_at
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import ResearchMemory, ResearchRecord
+from quantbot.research.milestone import MilestoneReport, assess_milestone
 from quantbot.research.promotion import (
     ALLOWED_PROMOTIONS,
     MINIMUM_FORWARD_DAYS,
     MINIMUM_FORWARD_TRADES,
     Stage,
+    deployment_role,
     forward_progress,
     observe_forward_days,
 )
@@ -99,7 +102,9 @@ def _durable() -> dict[str, object]:
         signals = repository.list_signals()
         account_id = os.environ.get("EXPECTED_ACCOUNT_ID", "")
         equity = repository.list_equity_snapshots(account_id=account_id) if account_id else []
-        research = _research(session)
+        # The clock is passed in rather than read inside, so the capacity panel's "what is
+        # left to search from" date is the same one the rest of this page was rendered against.
+        research = _research(session, as_of=datetime.now(UTC).date())
     database.close()
     analysis = analyze_fills(fills)
     return {
@@ -117,7 +122,7 @@ def _durable() -> dict[str, object]:
     }
 
 
-def _research(session: Session) -> dict[str, object]:
+def _research(session: Session, *, as_of: date) -> dict[str, object]:
     """Research state, read from the durable stores and from nowhere else.
 
     Each entry maps to one table: `hypotheses`, `research_records`, `research_tasks`, and the
@@ -131,6 +136,8 @@ def _research(session: Session) -> dict[str, object]:
         "tasks": ResearchDirector(session).by_state(),
         "trials": _trials_by_budget(session),
         "windows": _protected_windows(session),
+        "capacity": _capacity_rows(session, as_of=as_of),
+        "milestone": assess_milestone(session, as_of=as_of),
         "ladder": _promotion_rows(session),
         "compute": _compute_rows(session),
         "overrides": _override_rows(session),
@@ -198,7 +205,7 @@ def _pipeline_rows(tasks: list[ResearchTask]) -> list[tuple[str, int, str, str]]
     ]
 
 
-def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
+def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str, str]]:
     """Where each strategy stands on the ladder, and precisely what it has not yet earned (#15).
 
     The stage comes from `promotion_state` and the forward counters from the durable ledger via
@@ -209,6 +216,14 @@ def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
 
     Gates that need an experiment outcome are reported as needing one rather than being scored.
     An unmeasured gate shown as satisfied is worse than an unmeasured gate shown as unknown.
+
+    The **role** column is the operator-visible half of #53. A deployment that keeps trading
+    after its mechanism is refuted is legitimate and useful -- it is where slippage,
+    reconciliation and recovery evidence comes from -- but a panel showing only a stage and a
+    rising day count reads as progress toward an edge. `deployment_role` is the same function
+    the gate uses, called here rather than reimplemented: two computations of "is this an edge
+    candidate" would eventually disagree, and the one on the operator's screen is the one that
+    would be believed.
     """
     repository = StorageRepository(session)
     rows: list[tuple[str, str, str, str, str]] = []
@@ -231,6 +246,7 @@ def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str]]:
             (
                 record.strategy_id,
                 stage.value,
+                deployment_role(session, record.strategy_id).value,
                 f"{record.strategy_version} / {record.configuration_hash[:12]}",
                 f"{days}/{MINIMUM_FORWARD_DAYS} days, {trades}/{MINIMUM_FORWARD_TRADES} trades",
                 _unmet_gates(stage, days=days, trades=trades),
@@ -263,6 +279,33 @@ def _unmet_gates(stage: Stage, *, days: int, trades: int) -> str:
         else:
             unmet.append(f"{target.value}: operator decision")
     return "; ".join(unmet)
+
+
+def _capacity_rows(session: Session, *, as_of: date) -> list[tuple[str, str, str, str, str]]:
+    """What confirmatory evidence is left, by observation identity (#50).
+
+    The panel beside this one shows registry *rows*, and says so: it cannot see the 68 trials
+    cycles 2-10 spent before the registry existed, and it keys on the dataset name a registrant
+    chose. This one answers the question an operator actually has -- is there anything left to
+    test a claim on -- keyed by what a dataset observes rather than by what it is called, so a
+    second vendor for the same dates does not appear as a second budget.
+    """
+    return [
+        (
+            row.observation_identity,
+            row.source.asset_class.value,
+            row.status.value,
+            f"{row.trials} trials"
+            + (f", reserved by {len(row.reserved_by)}" if row.reserved_by else ""),
+            (
+                f"{len(row.unsearched_sessions)} unsearched session(s) from "
+                f"{row.unsearched_sessions[0].isoformat()}"
+                if row.unsearched_sessions
+                else row.source.answers
+            ),
+        )
+        for row in capacity_inventory(session, as_of=as_of)
+    ]
 
 
 def _protected_windows(session: Session) -> list[tuple[str, str, str, str, str]]:
@@ -535,6 +578,38 @@ def _task_row(task: ResearchTask) -> str:
     )
 
 
+def _milestone_row(level: str, reached: bool, detail: str) -> str:
+    """One edge milestone. The tone is about evidence, never about effort."""
+    return (
+        "<tr>"
+        f"<td class='mono'>{_esc(level)}</td>"
+        f"<td>{_pill('reached' if reached else 'not reached', 'good' if reached else 'warn')}</td>"
+        f"<td class='quiet-text'>{_esc(detail)}</td>"
+        "</tr>"
+    )
+
+
+def _capacity_row(identity: str, asset_class: str, status: str, spend: str, note: str) -> str:
+    """One observation identity. The tone says whether a confirmatory answer is still possible."""
+    tone = {
+        "AVAILABLE": "good",
+        "RESERVED": "warn",
+        "PARTIALLY_CONSUMED": "warn",
+        "EXHAUSTED": "bad",
+        "UNSUPPORTED": "quiet",
+        "QUALITY_BLOCKED": "bad",
+    }.get(status, "warn")
+    return (
+        "<tr>"
+        f"<td class='mono'>{_esc(identity)}</td>"
+        f"<td>{_esc(asset_class)}</td>"
+        f"<td>{_pill(status, tone)}</td>"
+        f"<td>{_esc(spend)}</td>"
+        f"<td class='quiet-text'>{_esc(note)}</td>"
+        "</tr>"
+    )
+
+
 def _window_row(dataset: str, start: str, end: str, state: str, holder: str) -> str:
     """One protected window. The tone says whether the data is still available."""
     tone = {"CONSUMED": "bad", "RESERVED": "warn", "RELEASED": "good"}.get(state, "warn")
@@ -567,7 +642,9 @@ def _pipeline_row(stage: str, count: int, meaning: str, last: str) -> str:
     )
 
 
-def _ladder_row(strategy: str, stage: str, identity: str, progress: str, unmet: str) -> str:
+def _ladder_row(
+    strategy: str, stage: str, role: str, identity: str, progress: str, unmet: str
+) -> str:
     """One strategy's position. The tone tracks how much trust the stage implies."""
     tone = {
         "LIVE_REVIEW_ELIGIBLE": "warn",
@@ -579,6 +656,7 @@ def _ladder_row(strategy: str, stage: str, identity: str, progress: str, unmet: 
         "<tr>"
         f"<td class='mono'>{_esc(strategy)}</td>"
         f"<td>{_pill(stage, tone)}</td>"
+        f"<td>{_pill(role, 'good' if role == 'EDGE_CANDIDATE' else 'warn')}</td>"
         f"<td class='mono'>{_esc(identity)}</td>"
         f"<td>{_esc(progress)}</td>"
         f"<td>{_esc(unmet)}</td>"
@@ -739,11 +817,46 @@ def build(out: Path) -> None:
     trial_rows = "".join(_trial_row(key, count) for key, count in trials) or _empty(
         3, "No trials recorded against any budget"
     )
+    milestone = durable.get("milestone") if durable.get("available") else None
+    if isinstance(milestone, MilestoneReport):
+        milestone_level = (
+            "BELOW_M0" if milestone.current is None else milestone.current.value.split("_")[0]
+        )
+        stuck = milestone.next_check
+        milestone_note = (
+            "every edge gate is clear"
+            if stuck is None
+            else f"stuck on {stuck.level.value.split('_')[0]}"
+        )
+    else:
+        # Not "M0". A database that could not be read has not demonstrated anything, and the
+        # cheerful default is how an unreadable store reads as a working platform.
+        milestone_level = "unknown"
+        milestone_note = "no durable store to read it from"
+    capacity = durable.get("capacity", []) if durable.get("available") else []
+    capacity_rows = "".join(_capacity_row(*row) for row in capacity) or _empty(
+        5, "No data sources are declared"
+    )
+    milestone_rows = (
+        "".join(
+            _milestone_row(
+                check.level.value,
+                check.reached,
+                "; ".join(
+                    [*check.evidence, *check.blocking,
+                     *(f"not assessed: {item}" for item in check.unassessed)]
+                ),
+            )
+            for check in milestone.checks
+        )
+        if isinstance(milestone, MilestoneReport)
+        else _empty(3, "No durable store to assess edge progress from")
+    )
     window_rows = "".join(_window_row(*row) for row in windows) or _empty(
         4, "No protected evaluation window is claimed"
     )
     ladder_rows = "".join(_ladder_row(*row) for row in ladder) or _empty(
-        5, "No strategy is on the promotion ladder"
+        6, "No strategy is on the promotion ladder"
     )
     compute_rows = "".join(_compute_row(*row) for row in compute) or _empty(
         4, "No sandboxed compute has been charged to any budget"
@@ -760,7 +873,7 @@ def build(out: Path) -> None:
     # days is the whole argument against confusing the two, and it only lands when they are
     # next to each other rather than two panels apart. Read from the ladder rows, so it cannot
     # disagree with the panel below.
-    forward_days = max((int(row[3].split("/")[0]) for row in ladder), default=0)
+    forward_days = max((int(row[4].split("/")[0]) for row in ladder), default=0)
 
     # `attention()` decides what matters; this only renders it. The panel is driven by the same
     # durable state as everything else -- the trial spend, the task states, the kill switch and
@@ -916,6 +1029,9 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
     <div class="readout"><div class="k">Watchdog</div>
       <div class="v" style="font-size:15px">{_esc(supervisor_detail)}</div>
       <div class="note">restarts a dead daemon; never lifts a halt</div></div>
+    <div class="readout"><div class="k">Profitability milestone</div>
+      <div class="v" style="font-size:15px">{_esc(milestone_level)}</div>
+      <div class="note">{_esc(milestone_note)}</div></div>
     <div class="readout"><div class="k">Research vs forward</div>
       <div class="v" style="font-size:15px">{len(registrations)} registered &middot;
         {forward_days}/30 days</div>
@@ -1008,6 +1124,41 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
         candidate evaluated against the same data, and no amount of compute buys it back.</p>
     </section>
     <section>
+      <h2>Edge progress</h2>
+      <div class="scroll"><table id="panel-milestone">
+        <thead><tr><th>Milestone</th><th>Reached</th><th>Evidence, or what is missing</th></tr>
+        </thead>
+        <tbody>{milestone_rows}</tbody>
+      </table></div>
+      <p class="caveat"><strong>Engineering progress is not profitability progress.</strong>
+        Every other panel on this page moves when code ships. This one moves only when evidence
+        about the market changes, and it is derived from durable state rather than from a status
+        file &mdash; a milestone cannot be reached by writing about it.</p>
+      <p class="caveat">The ladder is contiguous: a level is reached only when every level below
+        it is. A level that could not be assessed does not pass, which is why M4 will not clear
+        while intended-capital execution capacity (#51) is unmeasured. Concluding
+        <strong>NO_EDGE_ESTABLISHED</strong> is a legitimate research result, not a software
+        failure.</p>
+    </section>
+    <section>
+      <h2>Statistical capacity</h2>
+      <div class="scroll"><table id="panel-capacity">
+        <thead><tr><th>Observations</th><th>Asset class</th><th>Status</th><th>Spent</th>
+          <th>What it can answer</th></tr></thead>
+        <tbody>{capacity_rows}</tbody>
+      </table></div>
+      <p class="caveat">Keyed by <strong>what a dataset observes</strong>, not by what it is
+        called. Two providers serving the same market outcomes are one row and one budget: vendor
+        diversity establishes data correctness and can repair a bad bar, and it does not duplicate
+        the market event.</p>
+      <p class="caveat"><strong>Engineering capability is not statistical capacity.</strong>
+        Finishing a data platform does not replenish an exhausted evidence budget. SIP US equities
+        2016&ndash;2026 cost 68 trials and is spent; what accrues from here is one session a day.
+        Crypto is new data for crypto and cross-asset questions and is <em>not</em> new evidence
+        for a US-equity-specific effect. A capability with no provider behind it reads
+        UNSUPPORTED rather than available.</p>
+    </section>
+    <section>
       <h2>Protected evaluation windows</h2>
       <div class="scroll"><table id="panel-windows">
         <thead><tr><th>Dataset</th><th>Range</th><th>State</th><th>Claimed by</th></tr></thead>
@@ -1020,7 +1171,8 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
         picture of what has been spent: cycles 2&ndash;10 put roughly 68 candidate evaluations
         against SIP US equities 2016&ndash;2026 before this registry existed, so
         <code>window_consumption</code> reports that range <strong>EXHAUSTED</strong> while no row
-        here claims it. Ask the registry, not this table, before assuming a range is free.</p>
+        here claims it. <strong>Read the statistical-capacity panel above instead</strong> before
+        assuming a range is free; it accounts for pre-registry spend and for vendor renames.</p>
     </section>
   </div>
 
@@ -1075,14 +1227,18 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
   <section>
     <h2>Promotion ladder</h2>
     <div class="scroll"><table id="panel-ladder">
-      <thead><tr><th>Strategy</th><th>Stage</th><th>Version / config</th>
+      <thead><tr><th>Strategy</th><th>Stage</th><th>Role</th><th>Version / config</th>
         <th>Forward evidence</th><th>Unmet gates</th></tr></thead>
       <tbody>{ladder_rows}</tbody>
     </table></div>
     <p class="caveat">Stage comes from the durable ladder and the forward counters are read from
       the trading ledger, not supplied. There is no stage after LIVE_REVIEW_ELIGIBLE: the
       transition table has no destination past it, so no agent can move a strategy into live
-      trading. Backtest volume is not forward evidence and never appears in these counters.</p>
+      trading. Backtest volume is not forward evidence and never appears in these counters.
+      <strong>Role</strong> is derived, not declared: EDGE_CANDIDATE only while a frozen
+      registration stands behind the strategy and nothing has refuted it. An
+      OPERATIONAL_BASELINE keeps producing useful execution evidence and accrues no credit
+      toward an edge, however many days it runs.</p>
   </section>
 
   <section>

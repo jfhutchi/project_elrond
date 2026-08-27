@@ -20,9 +20,25 @@ It has appeared at least five times, in five unrelated modules:
 | #16 promotion | Has it traded 30 forward days? | `ForwardObservation` objects a caller could build |
 | #18 provenance | Is the result traceable? | A manifest the caller could decline to persist |
 | #38 kill switch | Is it safe to resume? | `BROKER_HEALTHY=true` in a dotenv |
+| #53 deployment role | Has this claim been refuted? | `hypothesis_id`, chosen by the caller asking |
+| #54 economic success | Did the forward window clear the bar? | A mandate the agent wrote itself |
 
 None of these were *missing* controls. Each was a real, correct control fed by a claim. A gate
 that validates a number it was handed by the party who benefits from the number is decoration.
+
+The last two rows are the same shape one level up, and they are worth stating separately because
+the fix is different. #53 was not a value a caller could inflate; it was a *relationship* — which
+hypothesis stands behind a deployment — supplied at the moment it was checked. A strategy whose
+mechanism had been refuted could be offered a different, unrefuted registration and the gate
+would faithfully report finding no refutation of the thing it had been handed. #54 is the same
+move against the success criterion rather than the evidence: an agent that writes the hurdle and
+then announces its evidence cleared it has not been gated, it has been asked politely.
+
+**A relationship is fixed by making it durable, not by making it a token.** The claim behind a
+strategy is now written to `promotion_state` at `REGISTERED` and read everywhere after; the id is
+refused as an argument at every other transition. A definition of success is fixed by requiring a
+signature from outside the system: `PAPER_QUALIFIED` and `LIVE_REVIEW_ELIGIBLE` both require a
+`RATIFIED` mandate, and a `ratified_by` that reads as an automated identity is refused at load.
 
 ---
 
@@ -187,10 +203,146 @@ the trading system wrote, and fills reached through `order_intents`. Trades are 
 `signal_date` rather than a UTC timestamp, because a fill at 20:00 Eastern is stored as 00:00 UTC
 the next day and would credit a session that had not happened.
 
+Clearing that floor is **authenticity, not economics**. Thirty losing trades satisfy it
+completely. `PAPER_QUALIFIED` additionally requires `assess_forward_evidence` to return
+`FORWARD_EDGE_SUPPORTED`: a benchmark-relative, beta-adjusted, adequately powered, positive result
+on a claim frozen before the window opened, measured against a **ratified** economic objective.
+
+Session returns are paired on **adjacent exchange sessions**, not on consecutive entries in the
+list of qualified dates. A session the deployment failed on leaves no entry, and zipping the list
+against itself turns two sessions of market movement into one session's return — inflating the
+mean, the t, the Sharpe and the drawdown together. Adjacency is checked against the union of
+benchmark bar dates and `qualification_days` rows of either flag; a pair spanning a known session
+is dropped and counted rather than rescaled.
+
+Three durable facts hang off the promotion record and nothing else may supply them:
+
+| Field | Written at | Answers |
+|---|---|---|
+| `hypothesis_id` / `hypothesis_version` | `REGISTERED` | What claim is this strategy testing? |
+| `objective_identity` | `PAPER_QUALIFIED` | Which economic objective was it judged under? |
+| `evidence_identity` | `PAPER_QUALIFIED` | Which forward assessment justified the stage? |
+
+An economic stage cannot be represented without all three, `enter()` refuses to place a strategy
+at one, and `LIVE_REVIEW_ELIGIBLE` refuses a mandate whose identity differs from the one that
+backed qualification — so a looser objective forces reassessment instead of inheriting a label.
+
+`DeploymentRole` distinguishes an `OPERATIONAL_BASELINE` from an `EDGE_CANDIDATE` and is derived
+from those durable facts rather than stored as a flag. Keeping a refuted strategy trading is
+legitimate and useful — it is where slippage, reconciliation and recovery evidence comes from —
+but it must not convert running time into progress toward a claim about edge.
+`demote_on_refuted_claims` runs the derivation rather than waiting for the next qualification
+attempt to notice, because a derived answer nobody derives is a stale answer.
+
 An unresolved integrity incident demotes a strategy out of the forward track. Demotion does
 **not** erase forward evidence — the ledger is unchanged, so resolving and re-promoting restores
 days that really happened. An incident casts doubt on evidence; it does not make sessions
-un-occur.
+un-occur. The same is true of demotion on a refuted claim: the sessions happened, they stop
+counting toward edge qualification, and they remain available as execution evidence.
+
+---
+
+## Edge progress, kept separate from engineering progress
+
+`quantbot.research.milestone`. Six levels, derived from durable state, reported by
+`quantbot research-status` beside the task queue and by the dashboard's edge-progress panel.
+
+The failure mode it exists for is a project-management one: infrastructure and model integrations
+are easy to measure and alpha is not, so issue closure quietly becomes a surrogate objective and a
+long list of completed architecture issues visually overwhelms an unproven economic thesis.
+
+| Level | Reached when | Derived from |
+|---|---|---|
+| M0 | the platform has run experiments and honestly refuted them | refutations in research memory |
+| M1 | a frozen candidate cleared the survivor gate, unrefuted | `promotion_state` at or above `RESEARCH_SURVIVOR` with a live claim |
+| M2 | the claim spans several instruments and a finding records it surviving | registry universe plus a `SURVIVED` record |
+| M3 | authentic forward sessions accrue against that claim | the trading ledger |
+| M4 | `PAPER_QUALIFIED` under #47, with capital economics under #51 | the ladder, plus a measurement that does not exist yet |
+| M5 | every gate clear and a human may look — still not authorisation | `LIVE_REVIEW_ELIGIBLE` |
+
+Three rules make it hard to flatter:
+
+- **Contiguous.** A level counts only when every level below it does. Forward evidence with no
+  surviving candidate behind it reports M0, not M3.
+- **`unassessed` blocks.** M4 carries one permanently until #51 lands: the paper account holds
+  $100 and the mandate's range reaches $10,000, and no amount of evidence at the smaller size
+  distinguishes an effect that survives at scale from one that does not.
+- **A reached level names an artifact.** "Nothing blocks it" is not "something shows it".
+
+M2 rests on one inference worth stating: probe results are not stored in a queryable table, so it
+reads the probe *requirement* a multi-instrument universe implies rather than the probe list that
+ran. `compile_experiment` adds `cross-asset-generality` exactly when the universe is wider than
+one instrument, and `survivor_objections` refuses a survivor whose planned probes did not all
+pass. A second experiment compiler would break that chain, and
+`test_a_multi_instrument_registration_implies_the_generality_probe` is what fails when it does.
+
+### Before a new integration or subsystem
+
+Answer three questions in the issue, before implementing:
+
+1. **Which profitability milestone does this unblock?** "It is interesting" is not a level.
+2. **What cheaper thing would answer the same question?** Usually a power calculation.
+3. **What measurable result would cause us to reject or defer it?** Decide the bounded rejection
+   test before running it, for the same reason a hypothesis is frozen before it is measured.
+
+Worked examples, from #52: RD-Agent/Qlib may unblock M1 by generating genuinely novel factors —
+but only where clean confirmatory capacity exists, which is now a query rather than a guess.
+Moving the coordinator off the Pi protects M3/M4 evidence collection and does not itself advance
+M1. Another dashboard feature advances nothing unless it exposes a decision-critical measurement.
+
+This is a review convention, not a machine check: nothing in the code can tell whether an issue's
+stated milestone is honest. It is written down so a reviewer has something specific to hold an
+architecture proposal against.
+
+### `NO_EDGE_ESTABLISHED` is a destination
+
+`MilestoneReport.no_edge_established` reports when the project sits at M0 with no clean
+confirmatory capacity left. That is a research result, not a software failure, and having a name
+for it is what stops the alternative — adding another framework because the ladder has no way to
+say stop.
+
+---
+
+## Statistical capacity
+
+`quantbot.research.capacity` answers the question `window_consumption` does not:
+
+> What observations remain unused for confirmatory testing, and what classes of hypotheses can
+> legitimately use them?
+
+`window_consumption` answers "is *this* range spent" for a range someone already knows to ask
+about. That is the wrong shape for the decision it feeds, which is whether an expensive search is
+worth starting at all. Read `quantbot research-capacity`, or the dashboard's statistical-capacity
+panel, before believing that a completed data-platform issue created research budget.
+
+**Declared sources, derived status.** `DATA_SOURCES` is hand-maintained for the same reason
+`OBSERVATION_ALIASES` is: what a dataset observes, and which claims it can bear on, is a judgement
+somebody makes and is accountable for. Everything else on a row — consumption, exhaustion, who
+spent it, which family, what is reserved, what remains — is computed from durable state.
+
+Four things the inventory refuses to do, each of which would overstate what is left:
+
+| Would say | Actually |
+|---|---|
+| Two vendors serving the same dates are two budgets | One observation identity, one row, one budget |
+| A capability the enum declares is capacity | `UNSUPPORTED` until a provider serves it |
+| Crypto sessions confirm a US-equity claim | A different market is a different question |
+| A source with no vintages can answer a backtest | `QUALITY_BLOCKED`: it says what is true now |
+
+**The only new equity capacity is time, counted in sessions rather than days.** SIP US equities
+2016–2026 cost 68 trials and is spent. A rolling feed keeps producing sessions, and nobody
+searched a session that had not happened — so each row reports the session dates the database
+actually holds observations for, after the last consumed one, attributed by `bars.provider`
+prefix. An earlier version derived this from the calendar and reported a Saturday as capacity;
+sessions exist when there is a bar for them and not otherwise, and a source with no local
+observation store claims none.
+
+`capacity_stage` is the pre-compute gate: it wraps the director's PROPOSED handler and blocks
+before the memory query when no source has confirmatory capacity left, so a search that could
+never be confirmed does not reach the expensive stages. It is **project-wide, not per-claim** —
+a `ResearchTask` declares no data windows, and matching a question to a dataset by reading its
+text would be the semantic guess `datasets.py` refuses. `discovery.admissible` is the per-claim
+version and applies once a candidate declares windows.
 
 ---
 
@@ -214,6 +366,46 @@ a return) that must fail.
 
 ## Reproducibility
 
+**The bundle named a command that did not exist.** Every reproducible manifest recorded
+`quantbot reproduce-experiment --experiment <id>` in `reproduction_command`, and no CLI
+implemented it — an instruction inside the evidence record whose whole authority is that its
+claims are mechanical.
+
+The command exists now and does what can honestly be done today: it reports whether a frozen
+bundle *could* be re-executed, and states in the same object that it did not try.
+
+    quantbot reproduce-experiment --experiment <id> [--manifests DIR] [--patch FILE]
+
+Three things fail closed:
+
+| Condition | Result |
+|---|---|
+| A recorded input is missing, edited or truncated | blocks |
+| The original ran dirty with no preserved patch | blocks, permanently |
+| A dependency-lock difference | reported as drift, never silent |
+
+Inputs are checked by hash against **the bytes the runner wrote**, recorded in the manifest at
+run time as `reproduction_inputs`. Before that field existed the bundle claimed reproducibility
+and recorded nothing about what a rerun would need, so a reader could not tell whether the
+`.inputs` directory beside it was complete, edited, or the right directory at all. The manifest
+now refuses to hold one half without the other: a command with no recorded inputs and inputs with
+no command are both unrepresentable.
+
+`performed` is a field on the report rather than an omission. A report that merely never mentions
+running the experiment reads, to a hurried reader, exactly like one that ran it and found no
+differences — and that reader is the one deciding whether to trust the evidence.
+
+**What is still missing, listed by name in `OUTSTANDING`** so a clean readiness report cannot be
+mistaken for a reproduction: resolving dataset snapshots back to bytes, reconstructing the
+compiled plan, executing it through the authoritative path, producing a new manifest and
+comparing, and replaying a frozen external-worker artifact rather than re-running its inference.
+
+**#48 stays open**, and its first acceptance criterion is the reason. It asks that one real
+historical confirmatory experiment be rerun from its manifest. There is no such manifest: nothing
+outside an integration test has ever produced one, which is consistent with the project standing
+at M0 with no confirmatory experiment to its name. A reproducer built now could only be exercised
+against a synthetic fixture, and a feature nobody has exercised is a feature nobody may claim.
+
 Every confirmatory run writes an immutable manifest **before** returning; the runner cannot be
 constructed without a directory to write to. Both the success and crash paths record, because an
 archive that only keeps what worked is the selection bias this project exists to resist.
@@ -222,9 +414,11 @@ archive that only keeps what worked is the selection bias this project exists to
 surfaced rather than folded into the pass — a check that quietly did nothing because the result
 lacked the figure it needs looks exactly like a check that passed.
 
-`reproduction_command` is deliberately **empty**. Nothing can yet re-execute a compiled plan, and
-an unrunnable reproduction command is worse than an absent one because it reads as
-reproducibility somebody verified.
+An earlier version of this section said `reproduction_command` was deliberately empty, on the
+grounds that an unrunnable reproduction command is worse than an absent one because it reads as
+reproducibility somebody verified. The reasoning was right and the description was **wrong**: the
+runner populated the field whenever a measurement produced inputs, so the bundle had been making
+exactly the claim this paragraph warned against. That is what the section above fixes.
 
 ---
 

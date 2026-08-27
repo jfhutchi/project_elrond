@@ -10,6 +10,7 @@ import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -387,3 +388,36 @@ def test_prepare_fails_closed_if_a_child_sys_path_is_inside_repository(
 
     with pytest.raises(SandboxError, match="sys.path.*repository"):
         runner._prepare(tmp_path, "print('must not execute')", {})
+
+
+def test_the_memory_probe_actually_reads_a_number_on_this_platform() -> None:
+    """The probe has to work, not merely exist.
+
+    `_memory_mb` returns `None` when it cannot measure, and the monitor is written to decline to
+    act on `None` rather than kill a healthy run. That is the right default and it has one nasty
+    consequence: a probe that never works is indistinguishable from a run that never breached.
+
+    It happened. `_memory_mb` shelled out to PowerShell, so on Linux every poll returned `None`
+    and `SandboxPolicy.memory_mb` enforced nothing at all while still reading like a control.
+    Nothing failed, because the only assertion anywhere was that a breaching run gets killed --
+    and on Linux the runaway simply ran until the kernel OOM killer took the host with it.
+
+    So this asserts the probe against a process that certainly exists and certainly occupies
+    memory: the interpreter running the test.
+    """
+    import os
+    import subprocess
+    import sys
+
+    from quantbot.sandbox.runner import _memory_mb
+
+    class _Self:
+        pid = os.getpid()
+
+    measured = _memory_mb(cast("subprocess.Popen[bytes]", _Self()))
+
+    assert measured is not None, (
+        f"the memory probe cannot measure anything on {sys.platform}, so the sandbox's memory "
+        "ceiling is inert here and every poll will decline to act"
+    )
+    assert measured > 1.0, f"{measured}MB is not a plausible reading for a Python interpreter"

@@ -379,7 +379,7 @@ def _candle_from_mapping(value: object) -> dict[str, str]:
 
 
 def _peak_process_memory_bytes() -> int | None:
-    if os.name == "nt":
+    if sys.platform == "win32":
         import ctypes
         from ctypes import wintypes
 
@@ -405,14 +405,18 @@ def _peak_process_memory_bytes() -> int | None:
             counters.cb,
         )
         return int(counters.PeakWorkingSetSize) if success else None
-    try:
-        import resource
-    except ImportError:
-        return None
-    resource_module: Any = resource
-    maximum = resource_module.getrusage(resource_module.RUSAGE_SELF).ru_maxrss
-    multiplier = 1 if platform.system() == "Darwin" else 1024
-    return int(maximum * multiplier)
+    else:
+        # `else`, not a fallthrough. The guard is `sys.platform` so that mypy narrows it and
+        # checks each half on the platform that runs it -- and once it narrows, anything after
+        # a branch that always returns reads as unreachable rather than as the other platform.
+        try:
+            import resource
+        except ImportError:
+            return None
+        resource_module: Any = resource
+        maximum = resource_module.getrusage(resource_module.RUSAGE_SELF).ru_maxrss
+        multiplier = 1 if platform.system() == "Darwin" else 1024
+        return int(maximum * multiplier)
 
 
 def _run_forecast(

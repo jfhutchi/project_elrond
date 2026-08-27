@@ -206,6 +206,15 @@ def _decode_json(value: object) -> dict[str, object]:
     return cast(dict[str, object], loaded)
 
 
+def _optional_str(value: object) -> str | None:
+    """A nullable text column, kept nullable. `str(None)` is the string "None"."""
+    return None if value is None else str(value)
+
+
+def _optional_int(value: object) -> int | None:
+    return None if value is None else int(str(value))
+
+
 def _row_matches(row: RowMapping, payload: Mapping[str, object]) -> bool:
     return all(row[key] == value for key, value in payload.items())
 
@@ -419,6 +428,10 @@ class StorageRepository:
             reason=record.reason,
             actor=record.actor,
             occurred_at=record.updated_at,
+            hypothesis_id=record.hypothesis_id,
+            hypothesis_version=record.hypothesis_version,
+            objective_identity=record.objective_identity,
+            evidence_identity=record.evidence_identity,
         )
         self._session.execute(
             promotion_events.insert().values(
@@ -431,6 +444,10 @@ class StorageRepository:
                 reason=event.reason,
                 actor=event.actor,
                 occurred_at=encode_utc(event.occurred_at),
+                hypothesis_id=event.hypothesis_id,
+                hypothesis_version=event.hypothesis_version,
+                objective_identity=event.objective_identity,
+                evidence_identity=event.evidence_identity,
             )
         )
         values = {
@@ -440,6 +457,10 @@ class StorageRepository:
             "reason": record.reason,
             "actor": record.actor,
             "updated_at": encode_utc(record.updated_at),
+            "hypothesis_id": record.hypothesis_id,
+            "hypothesis_version": record.hypothesis_version,
+            "objective_identity": record.objective_identity,
+            "evidence_identity": record.evidence_identity,
         }
         if previous is None:
             self._session.execute(
@@ -491,6 +512,10 @@ class StorageRepository:
             reason=str(row["reason"]),
             actor=str(row["actor"]),
             updated_at=decode_utc(str(row["updated_at"])),
+            hypothesis_id=_optional_str(row["hypothesis_id"]),
+            hypothesis_version=_optional_int(row["hypothesis_version"]),
+            objective_identity=_optional_str(row["objective_identity"]),
+            evidence_identity=_optional_str(row["evidence_identity"]),
         )
 
     def list_promotion_events(self, strategy_id: str) -> list[PromotionEvent]:
@@ -515,6 +540,10 @@ class StorageRepository:
                 reason=str(row["reason"]),
                 actor=str(row["actor"]),
                 occurred_at=decode_utc(str(row["occurred_at"])),
+                hypothesis_id=_optional_str(row["hypothesis_id"]),
+                hypothesis_version=_optional_int(row["hypothesis_version"]),
+                objective_identity=_optional_str(row["objective_identity"]),
+                evidence_identity=_optional_str(row["evidence_identity"]),
             )
             for row in rows
         ]
@@ -1732,6 +1761,12 @@ class PromotionRecord:
     reason: str
     actor: str
     updated_at: datetime
+    #: The frozen registration this strategy is testing, bound at REGISTERED by the ladder.
+    hypothesis_id: str | None = None
+    hypothesis_version: int | None = None
+    #: The economic objective and the forward assessment that justified an economic stage.
+    objective_identity: str | None = None
+    evidence_identity: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -1747,3 +1782,7 @@ class PromotionEvent:
     reason: str
     actor: str
     occurred_at: datetime
+    hypothesis_id: str | None = None
+    hypothesis_version: int | None = None
+    objective_identity: str | None = None
+    evidence_identity: str | None = None

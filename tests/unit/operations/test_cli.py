@@ -262,6 +262,45 @@ def test_research_status_reports_being_unconfigured_rather_than_failing(
 
     assert parsed.command == "research-status"
 
+def test_research_capacity_reports_the_equity_window_as_spent(tmp_path: Path) -> None:
+    """#50, through the real command: the answer before deciding to spend compute.
+
+    An operator or a research director asking "is there anything left to test this on" gets the
+    honest answer on an empty database, because the 68 trials cycles 2-10 spent predate the
+    registry and no row records them. The command reports and cannot spend: there is no flag on
+    it that reserves or consumes anything.
+    """
+    import json
+
+    database = Database(tmp_path / "quantbot.db")
+    context = CLIContext(
+        settings=_ready_settings(),
+        database=database,
+        handlers={},
+        reported_account_id="paper-1",
+        clearance_evidence=_ready_evidence(),
+    )
+    output = StringIO()
+
+    assert main(["research-capacity", "--as-of", "2026-08-22"], context=context, output=output) == 0
+    payload = json.loads(output.getvalue())
+    database.close()
+
+    by_identity = {row["observation_identity"]: row for row in payload["sources"]}
+    equities = by_identity["us-equities-daily"]
+    assert equities["status"] == "EXHAUSTED"
+    assert equities["trials_spent"] == 68
+    assert sorted(equities["datasets"]) == ["alpaca-us-equities-daily", "sip-us-equities-daily"]
+    # No bars are stored, so there are no sessions to have gone unsearched. The first version
+    # of this asserted "2026-08-22" -- the calendar day after the last consumed one, and a
+    # Saturday. Capacity is observations, not dates (#50).
+    assert equities["unsearched_sessions"] == 0
+    assert equities["unsearched_from"] is None
+    assert by_identity["crypto-daily"]["status"] == "AVAILABLE"
+    assert by_identity["options-implied-daily"]["status"] == "UNSUPPORTED"
+    assert "engineering capability is not statistical capacity" in payload["note"]
+
+
 def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach(
     tmp_path: Path,
 ) -> None:
@@ -309,9 +348,12 @@ def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach
             occurred_at=moment,
         )
         PromotionLedger(session).enter(
+            # PAPER_OBSERVATION rather than PAPER_QUALIFIED: an economic stage is now earned
+            # through `promote()` reading the ledger and cannot be entered at. The sweep drops
+            # anything above `INTEGRITY_FLOOR`, so what is under test is unchanged.
             PromotionState(
                 strategy_id="adaptive-momentum",
-                stage=Stage.PAPER_QUALIFIED,
+                stage=Stage.PAPER_OBSERVATION,
                 strategy_version="1.3.0",
                 configuration_hash="cfg-abc",
                 reason="seeded",
@@ -332,7 +374,7 @@ def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach
     assert main(["integrity-sweep", "--dry-run"], context=context, output=dry) == 0
     with database.transaction() as session:
         unchanged = PromotionLedger(session).current("adaptive-momentum")
-    assert unchanged is not None and unchanged.stage is Stage.PAPER_QUALIFIED, (
+    assert unchanged is not None and unchanged.stage is Stage.PAPER_OBSERVATION, (
         "--dry-run must not move anything"
     )
 

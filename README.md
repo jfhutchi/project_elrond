@@ -126,6 +126,68 @@ leaves the test green, the test is measuring something else.
 
 ---
 
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `ruff check src tests`, `mypy` for **both** platforms, and
+`pytest`, on every push and pull request, on **ubuntu-latest and windows-latest**, then fails if
+the suite left the working tree dirty. The required status checks to protect `main` with are
+**`checks (ubuntu-latest)`** and **`checks (windows-latest)`**.
+
+Both runners, and its first run is why rather than a guess: `mypy src` had been reported clean
+for months and fails with seven errors on Linux, because `msvcrt.locking` and `ctypes.windll`
+sit behind `os.name` / `platform.system()` guards that mypy does not narrow. The claim was true
+on the author's machine and nowhere else. Elrond runs on Windows (the coordinator) and Linux
+(the Pi, WSL2); one runner only ever checked one half.
+
+Before pushing, check the half your machine does not:
+
+```bash
+uv run mypy --platform linux src && uv run mypy --platform win32 src
+```
+
+It references **no secrets**. The suite must be incapable of reaching a broker, so it is never
+handed the means to.
+
+This exists because a green suite reported by the agent that wrote the code is the last claim
+in the project still exempt from its own rule: *a gate must not trust the party that benefits
+from it passing.*
+
+**Operator action outstanding:** `main` is currently unprotected. To require the gate:
+
+```bash
+gh api -X PUT repos/jfhutchi/project_elrond/branches/main/protection -F required_status_checks[strict]=true -F 'required_status_checks[contexts][]=checks (ubuntu-latest)' -F 'required_status_checks[contexts][]=checks (windows-latest)' -F enforce_admins=false -F required_pull_request_reviews=null -F restrictions=null -F allow_force_pushes=false
+```
+
+The two contexts are named exactly as above, verified against a real run's job names rather
+than guessed from the job key. An earlier version of this command required a context called
+`checks`, which is the *job* id and not a status any run reports: branch protection would have
+waited forever for a check that never arrives, and the gate would have read as configured while
+blocking everything. A matrix job reports one context per cell, `<job name> (<matrix value>)`.
+
+Left to the operator deliberately: branch protection is a repository setting, and an agent
+changing the rules it is judged by is the shape of defect this file is full of.
+
+---
+
+## Two kinds of progress, and only one of them is the point
+
+**Engineering progress** is what most of this repository measures: issues closed, gates built,
+frameworks integrated, panels added. It moves when code ships.
+
+**Profitability progress** is a separate ladder, `quantbot.research.milestone`, running M0 to M5.
+It moves only when evidence about the market changes, and it is derived from durable state rather
+than from prose — a milestone cannot be reached by writing about it. `quantbot research-status`
+reports both side by side, and the dashboard's edge-progress panel shows the ladder with the
+reason it is stuck.
+
+The project is at **M0** on a store whose research memory has been seeded — the platform runs
+valid experiments and honestly refutes them — and **BELOW_M0** on one that has not, because a
+platform that has never recorded a refutation has not shown it can reject anything. Either way
+**no candidate edge has been established**, and no level above M1 is close. Concluding
+`NO_EDGE_ESTABLISHED` is a legitimate research result, not a software failure.
+
+---
+
 ## Status
 
 Engineering on the v0.2 research architecture is in progress; forward paper evidence is

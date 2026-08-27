@@ -24,6 +24,7 @@ from typing import Protocol
 
 from sqlalchemy.orm import Session
 
+from quantbot.research.capacity import capacity_inventory
 from quantbot.research.critic import (
     Critic,
     CriticVerdict,
@@ -59,6 +60,58 @@ class LiteratureScout(Protocol):
 #: deliberately absent: "the data could not resolve this" is not an answer, and blocking on it
 #: would make a thin sample permanently retire a live idea.
 SETTLED = frozenset({Verdict.REFUTED, Verdict.LITERATURE_REFUTED})
+
+
+def capacity_stage(session: Session, then: StageHandler) -> StageHandler:
+    """Refuse to advance a question when there is nowhere left to confirm anything (#50).
+
+    #50 asks that the Research Director be able to reject or defer a search *before* compute is
+    spent, because the cheapest correct outcome of a question with no clean confirmatory capacity
+    is `BLOCKED — NO CLEAN CONFIRMATORY CAPACITY`, not an expensive search followed by an
+    attractive result that can never be confirmed.
+
+    Nothing consumed the capacity inventory before this. `discovery.admissible` existed and was
+    reachable only from `bridge.draft_from_candidate`, which no production path imports -- so the
+    gate was a rule rather than a mechanism, which is the shape this project keeps finding.
+
+    **A project-wide gate, not a per-claim one, and the difference is deliberate.** A
+    `ResearchTask` carries a question and no declared data windows, so this handler cannot know
+    which source a particular question would need. It therefore answers the only question it
+    honestly can: does *any* source still have confirmatory capacity? Pretending to match a
+    question to a dataset by reading its text would be the semantic guess `datasets.py` refuses
+    for the same reason -- a wrong match in the permissive direction hands out significance that
+    was already spent. Per-claim admission arrives when tasks declare windows; until then this
+    catches the case that actually stops the project, and says so.
+
+    Wraps rather than replaces the next handler, because capacity is cheaper to check than
+    novelty and a question that cannot be confirmed anywhere should not consume a memory query
+    either.
+    """
+
+    def handle(task: ResearchTask) -> StageResult:
+        usable = [
+            row
+            for row in capacity_inventory(session, as_of=datetime.now(UTC).date())
+            if row.usable_for_confirmation
+        ]
+        if not usable:
+            return StageResult(
+                next_state=TaskState.BLOCKED,
+                reason=(
+                    "no clean confirmatory capacity remains on any declared source, so this "
+                    "question could only ever be answered exploratorily; a search now would "
+                    "spend compute on a result nothing could confirm"
+                ),
+                detail={
+                    "sources": ", ".join(
+                        f"{row.observation_identity}={row.status.value}"
+                        for row in capacity_inventory(session, as_of=datetime.now(UTC).date())
+                    )
+                },
+            )
+        return then(task)
+
+    return handle
 
 
 def novelty_stage(memory: ResearchMemory) -> StageHandler:

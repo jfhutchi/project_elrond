@@ -318,6 +318,24 @@ class WorkerProvenance(FrozenModel):
         )
 
 
+class ReproductionInput(FrozenModel):
+    """One file a rerun needs, and the hash of what it contained (#48).
+
+    The bundle used to name a reproduction command and record nothing about what that command
+    would need. A reader could see the `.inputs` directory beside it and had no way to tell
+    whether it was complete, whether a file had been edited since, or whether it was the right
+    directory at all -- which makes "this is reproducible" a claim with no mechanism behind it,
+    the shape this project keeps finding.
+
+    Recorded at manifest time from the content in memory, so the hash describes what the runner
+    wrote rather than what is on disk now. That difference is the entire point of checking.
+    """
+
+    name: Text
+    content_hash: Text
+    bytes: int = Field(ge=0)
+
+
 class ResourceUsage(FrozenModel):
     started_at: datetime
     finished_at: datetime
@@ -371,6 +389,10 @@ class ExperimentManifest(FrozenModel):
     #: Argv that reproduces this run, recorded so the bundle is actionable rather than merely
     #: descriptive.
     reproduction_command: tuple[str, ...] = ()
+    #: The files that command needs, with their hashes. Empty exactly when
+    #: `reproduction_command` is empty -- a command with nothing recorded beside it is an
+    #: instruction to run something whose inputs nobody can check (#48).
+    reproduction_inputs: tuple[ReproductionInput, ...] = ()
 
     @field_validator("experiment_id", "git_commit", "data_hash", "configuration_hash")
     @classmethod
@@ -378,6 +400,24 @@ class ExperimentManifest(FrozenModel):
         if not value or value != value.strip():
             raise ValueError("manifest identity fields must be nonempty without whitespace")
         return value
+
+    @model_validator(mode="after")
+    def validate_reproduction(self) -> Self:
+        """A reproduction command and its inputs travel together or not at all.
+
+        Either half alone is a false signal in opposite directions: a command with no recorded
+        inputs tells a reader to run something nobody can verify the inputs of, and inputs with
+        no command record files nothing will ever ask for.
+        """
+        if bool(self.reproduction_command) != bool(self.reproduction_inputs):
+            raise ValueError(
+                "a reproduction command and its recorded inputs are the same claim; "
+                "one without the other says the bundle is reproducible and does not show it"
+            )
+        names = [item.name for item in self.reproduction_inputs]
+        if len(names) != len(set(names)):
+            raise ValueError("reproduction inputs must be named uniquely")
+        return self
 
     @model_validator(mode="after")
     def validate_research_matrix(self) -> Self:

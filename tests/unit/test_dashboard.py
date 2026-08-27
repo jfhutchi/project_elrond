@@ -356,6 +356,10 @@ def _seed_ladder(session: object) -> None:
             reason="seeded for the dashboard test",
             actor="operator",
             updated_at=NOW,
+            # No registration is bound, which is the deployed rotation's actual position: it
+            # runs, it produces execution evidence, and no frozen claim stands behind it.
+            hypothesis_id=None,
+            hypothesis_version=None,
         )
     )
 
@@ -499,6 +503,39 @@ def test_the_ladder_panel_counts_forward_evidence_the_ledger_supports_and_no_mor
     # And the gap named, in the units the operator has to wait out.
     assert f"{30 - LADDER_DAYS} more forward days" in row, row
     assert f"{30 - LADDER_FILLS} more trades" in row, row
+    # #53.6: the role is on the operator's screen, not only inside the gate. Nothing is bound
+    # to this deployment, so a rising day count is operational evidence and not edge progress.
+    assert "OPERATIONAL_BASELINE" in row, row
+    assert "EDGE_CANDIDATE" not in row, row
+
+
+def test_the_capacity_panel_says_the_equity_window_is_spent_on_an_empty_store(
+    ledger: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#50: the panel beside it counts rows, and the rows do not include cycles 2-10.
+
+    This is the one panel that is *not* empty on an empty database, and deliberately: 68 trials
+    were spent against SIP US equities 2016-2026 before the registry existed, so a store with no
+    rows still has no fresh equity budget. A capacity view that rendered empty here would tell an
+    operator the opposite of the truth.
+    """
+    page = render(ledger, monkeypatch)
+    rows = _rows(page, "panel-capacity")
+
+    equities = [row for row in rows if "us-equities-daily" in row]
+    assert len(equities) == 1, "one observation identity, one row -- not one row per vendor"
+    assert "EXHAUSTED" in equities[0]
+    assert "68 trials" in equities[0]
+
+    crypto = [row for row in rows if "crypto-daily" in row]
+    assert crypto and "AVAILABLE" in crypto[0], "crypto is not spent by the equity search"
+
+    options = [row for row in rows if "options-implied-daily" in row]
+    assert options and "UNSUPPORTED" in options[0], "a capability with no provider is not capacity"
+
+    # And the page says the distinction in words, because the number alone gets misread as
+    # "the data platform is finished, so there is data to test on".
+    assert "Engineering capability is not statistical capacity" in page
 
 
 def test_the_ladder_panel_never_offers_a_route_to_live_trading(

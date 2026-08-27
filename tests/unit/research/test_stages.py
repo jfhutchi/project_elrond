@@ -12,7 +12,7 @@ from quantbot.research.cycle import actionable, drain
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import RecordKind, ResearchMemory, ResearchRecord, Verdict
 from quantbot.research.scout import LiteratureSearch, SourceUnavailable
-from quantbot.research.stages import novelty_stage, scouting_stage
+from quantbot.research.stages import capacity_stage, novelty_stage, scouting_stage
 from quantbot.storage import Database
 
 NOW = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
@@ -243,3 +243,81 @@ def test_an_outage_blocks_the_task_and_is_recorded_as_an_outage(database: Databa
     # carry a contact or a key in some proxy formats.
     assert "SourceUnavailable" in recorded[0][1]
     assert "export.arxiv.org" not in recorded[0][1]
+
+
+# ---------------------------------------------------------------------------------------------
+# The capacity gate (#50). `discovery.admissible` existed and was reachable only from a module
+# no production path imported, so the rule that a search should not run where nothing could
+# confirm it was a rule rather than a mechanism.
+# ---------------------------------------------------------------------------------------------
+
+
+def test_a_question_advances_while_any_source_still_has_confirmatory_capacity(
+    database: Database,
+) -> None:
+    """The gate is not simply refusing everything: crypto, macro and filings are untouched."""
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        open_task(director, "task-capacity-ok", "Do overnight returns follow volume shocks?")
+        handler = capacity_stage(session, novelty_stage(ResearchMemory(session)))
+
+        result = handler(director.by_state()[0])
+
+    assert result.next_state is TaskState.SCOUTING
+
+
+def test_a_question_is_blocked_before_compute_when_nothing_can_confirm_it(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#50's cheapest correct outcome, and the one nothing produced before.
+
+    An expensive search followed by an attractive result that can never be confirmed is strictly
+    worse than refusing at the door: it spends compute *and* permanently raises the luck bar for
+    everything registered afterwards.
+
+    Every declared source is driven to a state with no usable capacity rather than mocking the
+    gate, so what is under test is the handler reading the inventory rather than a stub.
+    """
+    import quantbot.research.stages as stages
+
+    monkeypatch.setattr(stages, "capacity_inventory", lambda session, *, as_of: ())
+
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        open_task(director, "task-no-capacity", "Does momentum work on US equities?")
+        handler = capacity_stage(session, novelty_stage(ResearchMemory(session)))
+
+        result = handler(director.by_state()[0])
+
+    assert result.next_state is TaskState.BLOCKED
+    assert "no clean confirmatory capacity" in result.reason
+    assert "exploratorily" in result.reason
+
+
+def test_the_capacity_gate_runs_before_the_memory_query(database: Database) -> None:
+    """Cheaper first. A question nothing could confirm should not consume a memory query either.
+
+    Asserted by giving the inner handler something that would fail loudly if reached, rather
+    than by reading the implementation.
+    """
+    import quantbot.research.stages as stages
+
+    reached: list[str] = []
+
+    def inner(task: ResearchTask) -> object:
+        reached.append(task.task_id)
+        raise AssertionError("the novelty query ran despite there being nowhere to confirm")
+
+    original = stages.capacity_inventory
+    stages.capacity_inventory = lambda session, *, as_of: ()  # type: ignore[assignment]
+    try:
+        with database.transaction() as session:
+            director = ResearchDirector(session)
+            open_task(director, "task-order", "Anything at all?")
+            handler = capacity_stage(session, inner)  # type: ignore[arg-type]
+            result = handler(director.by_state()[0])
+    finally:
+        stages.capacity_inventory = original  # type: ignore[assignment]
+
+    assert reached == [], "the inner handler must not have been called"
+    assert result.next_state is TaskState.BLOCKED

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib
 import os
+import sys
 import threading
 from pathlib import Path
 from types import TracebackType
@@ -76,7 +77,7 @@ class SingleWriterLock:
 
     @staticmethod
     def _lock_handle(handle: BinaryIO) -> None:
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
@@ -86,7 +87,7 @@ class SingleWriterLock:
 
     @staticmethod
     def _unlock_handle(handle: BinaryIO) -> None:
-        if os.name == "nt":
+        if sys.platform == "win32":
             import msvcrt
 
             msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
