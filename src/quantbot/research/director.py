@@ -155,6 +155,15 @@ class ResearchTask(FrozenModel):
     parent_task_id: str | None = None
     #: Tasks that must finish before this one may start.
     depends_on: tuple[Text, ...] = ()
+    #: Datasets this question needs to be answered **confirmatorily**, by declared name from
+    #: `capacity.DATA_SOURCES`. Structured on purpose: Sol's #50 review is explicit that claim
+    #: applicability must not be inferred by parsing the question text, because a wrong match in
+    #: the permissive direction hands out significance that was already spent.
+    #:
+    #: Empty means undeclared, which is checked project-wide rather than waved through -- see
+    #: `stages.capacity_stage`. It is not persisted separately: the task round-trips through
+    #: `document_json`, so an existing row deserialises as undeclared.
+    required_datasets: tuple[Text, ...] = ()
     attempts: int = Field(default=0, ge=0)
     created_at: datetime
     updated_at: datetime

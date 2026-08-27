@@ -33,6 +33,7 @@ from quantbot.research.critic import (
     disagreements,
 )
 from quantbot.research.cycle import StageHandler, StageResult
+from quantbot.research.datasets import observation_identity
 from quantbot.research.director import ResearchTask, TaskState
 from quantbot.research.memory import RecordKind, ResearchMemory, Verdict
 from quantbot.research.registry import (
@@ -74,14 +75,23 @@ def capacity_stage(session: Session, then: StageHandler) -> StageHandler:
     reachable only from `bridge.draft_from_candidate`, which no production path imports -- so the
     gate was a rule rather than a mechanism, which is the shape this project keeps finding.
 
-    **A project-wide gate, not a per-claim one, and the difference is deliberate.** A
-    `ResearchTask` carries a question and no declared data windows, so this handler cannot know
-    which source a particular question would need. It therefore answers the only question it
-    honestly can: does *any* source still have confirmatory capacity? Pretending to match a
-    question to a dataset by reading its text would be the semantic guess `datasets.py` refuses
-    for the same reason -- a wrong match in the permissive direction hands out significance that
-    was already spent. Per-claim admission arrives when tasks declare windows; until then this
-    catches the case that actually stops the project, and says so.
+    **Per-claim when the task declares its datasets, project-wide when it does not.** Sol's #50
+    review set the condition for closing that gap: extend the contract so a question declares
+    what it needs, and *do not* implement claim matching by parsing natural-language task text,
+    because a wrong permissive semantic match hands out significance that was already spent.
+
+    So `ResearchTask.required_datasets` is structured data, and this handler reads it rather than
+    the question:
+
+    * **Declared** -- every named dataset must still have confirmatory capacity. All of them, not
+      any: a claim needing two sources needs both, and passing on the strength of the one that
+      happens to be unspent would be the permissive direction again.
+    * **A declared name that is not a known source blocks.** A typo must not classify as "no
+      constraint"; that is the failure where a mistake buys unlimited capacity.
+    * **Undeclared** -- falls back to the project-wide question, which is the only one that can be
+      answered honestly without knowing what the claim is about: does *any* source still have
+      confirmatory capacity? That is weaker than per-claim admission and it is not nothing, and
+      the reason string says which of the two ran so a reader is never guessing.
 
     Wraps rather than replaces the next handler, because capacity is cheaper to check than
     novelty and a question that cannot be confirmed anywhere should not consume a memory query
@@ -89,12 +99,48 @@ def capacity_stage(session: Session, then: StageHandler) -> StageHandler:
     """
 
     def handle(task: ResearchTask) -> StageResult:
-        usable = [
-            row
-            for row in capacity_inventory(session, as_of=datetime.now(UTC).date())
-            if row.usable_for_confirmation
-        ]
-        if not usable:
+        inventory = capacity_inventory(session, as_of=datetime.now(UTC).date())
+        described = ", ".join(
+            f"{row.observation_identity}={row.status.value}" for row in inventory
+        )
+
+        if task.required_datasets:
+            by_identity = {
+                observation_identity(row.source.dataset): row for row in inventory
+            }
+            unknown = [
+                name
+                for name in task.required_datasets
+                if observation_identity(name) not in by_identity
+            ]
+            if unknown:
+                return StageResult(
+                    next_state=TaskState.BLOCKED,
+                    reason=(
+                        f"{', '.join(sorted(unknown))} is not a declared source, so the capacity "
+                        "this question would spend cannot be identified; an unrecognised name "
+                        "must not read as an unconstrained one"
+                    ),
+                    detail={"sources": described},
+                )
+            spent = [
+                name
+                for name in task.required_datasets
+                if not by_identity[observation_identity(name)].usable_for_confirmation
+            ]
+            if spent:
+                return StageResult(
+                    next_state=TaskState.BLOCKED,
+                    reason=(
+                        f"{', '.join(sorted(spent))} has no clean confirmatory capacity left, and "
+                        "this question declared it as required; a search now would spend compute "
+                        "on a result nothing could confirm"
+                    ),
+                    detail={"sources": described},
+                )
+            return then(task)
+
+        if not any(row.usable_for_confirmation for row in inventory):
             return StageResult(
                 next_state=TaskState.BLOCKED,
                 reason=(
@@ -102,12 +148,7 @@ def capacity_stage(session: Session, then: StageHandler) -> StageHandler:
                     "question could only ever be answered exploratorily; a search now would "
                     "spend compute on a result nothing could confirm"
                 ),
-                detail={
-                    "sources": ", ".join(
-                        f"{row.observation_identity}={row.status.value}"
-                        for row in capacity_inventory(session, as_of=datetime.now(UTC).date())
-                    )
-                },
+                detail={"sources": described},
             )
         return then(task)
 

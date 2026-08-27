@@ -338,11 +338,27 @@ sessions exist when there is a bar for them and not otherwise, and a source with
 observation store claims none.
 
 `capacity_stage` is the pre-compute gate: it wraps the director's PROPOSED handler and blocks
-before the memory query when no source has confirmatory capacity left, so a search that could
-never be confirmed does not reach the expensive stages. It is **project-wide, not per-claim** —
-a `ResearchTask` declares no data windows, and matching a question to a dataset by reading its
-text would be the semantic guess `datasets.py` refuses. `discovery.admissible` is the per-claim
-version and applies once a candidate declares windows.
+before the memory query when the capacity a question needs is already spent, so a search that
+could never be confirmed does not reach the expensive stages.
+
+**It is per-claim when the task declares its datasets, and project-wide when it does not.**
+`ResearchTask.required_datasets` names sources from `DATA_SOURCES` as **structured data** — never
+inferred from the question text, because a wrong permissive semantic match hands out significance
+that was already spent, which is the same reason `datasets.py` refuses to guess.
+
+Three rules make the declared path hard to flatter:
+
+- **Every named dataset must still have capacity, not merely one of them.** A claim needing two
+  sources needs both; advancing on whichever happens to be unspent is the permissive direction.
+- **An unrecognised name blocks.** A typo must not read as "no constraint", or the cheapest route
+  past the gate would be to misspell the source a question depends on.
+- **The undeclared fallback still gates.** It asks the only question answerable without knowing
+  what the claim is about — does *any* source still have confirmatory capacity — and the reason
+  string names which of the two checks ran, so a reader is never guessing.
+
+The difference is not cosmetic. On an inventory where US equities are exhausted and macro is
+untouched, the project-wide gate advances an equity question on the strength of macro capacity.
+The declared path refuses it.
 
 ---
 

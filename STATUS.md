@@ -1273,11 +1273,19 @@ observation store claims none. Nine protections, mutation-checked.
 
 **The Research Director now consumes it.** `discovery.admissible` existed and was reachable only
 from `bridge.draft_from_candidate`, which no production path imports — a rule rather than a
-mechanism. `capacity_stage` wraps the PROPOSED handler and blocks before the memory query when no
-source has confirmatory capacity left. It is a **project-wide** gate rather than a per-claim one,
-because a `ResearchTask` declares no data windows; matching a question to a dataset by reading its
-text would be exactly the semantic guess `datasets.py` refuses. Per-claim admission arrives when
-tasks declare windows.
+mechanism. `capacity_stage` wraps the PROPOSED handler and blocks before the memory query when the
+capacity a question needs is already spent.
+
+**Per-claim admission landed on 2026-08-27**, which was Sol's condition for closing #50.
+`ResearchTask.required_datasets` declares the sources a confirmatory question needs, as
+structured data — never inferred from the question text, because a wrong permissive match hands
+out significance that was already spent. Every declared source must still have capacity, an
+unrecognised name blocks rather than meaning "no constraint", and a task that declares nothing
+still gets the weaker project-wide check. The field rides in `document_json`, so no migration.
+
+The difference is not cosmetic: where US equities are exhausted and macro is untouched, the
+project-wide gate advances an equity question on macro capacity and the declared path refuses it.
+Five protections, mutation-checked.
 
 **What this does not do.** It does not create capacity, and the honest headline is that there is
 almost none for a US equity claim. That is the finding, not a limitation of the tool.

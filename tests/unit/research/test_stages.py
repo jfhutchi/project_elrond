@@ -25,13 +25,19 @@ def database(tmp_path) -> Iterator[Database]:
     db.close()
 
 
-def open_task(director: ResearchDirector, task_id: str, question: str) -> None:
+def open_task(
+    director: ResearchDirector,
+    task_id: str,
+    question: str,
+    required_datasets: tuple[str, ...] = (),
+) -> None:
     director.open_task(
         ResearchTask(
             task_id=task_id,
             state=TaskState.PROPOSED,
             question=question,
             family_id="momentum",
+            required_datasets=required_datasets,
             created_at=NOW,
             updated_at=NOW,
         ),
@@ -292,6 +298,159 @@ def test_a_question_is_blocked_before_compute_when_nothing_can_confirm_it(
     assert result.next_state is TaskState.BLOCKED
     assert "no clean confirmatory capacity" in result.reason
     assert "exploratorily" in result.reason
+
+
+class FakeRow:
+    """Enough of a `CapacityRow` for the gate: an identity, a status and whether it is usable.
+
+    Driving the real inventory to a chosen per-source state needs consumption records for every
+    declared source, which would test the inventory rather than the gate. The gate's contract is
+    exactly these three attributes.
+    """
+
+    def __init__(self, dataset: str, usable: bool) -> None:
+        self.source = type("Source", (), {"dataset": dataset})()
+        self.observation_identity = dataset
+        self.status = type("Status", (), {"value": "AVAILABLE" if usable else "EXHAUSTED"})()
+        self.usable_for_confirmation = usable
+
+
+#: US equities spent, macro untouched. The two gates disagree on this inventory, which is what
+#: makes it worth testing: the project-wide one advances an equity question on macro capacity.
+MIXED = (FakeRow("sip-us-equities-daily", False), FakeRow("fred-macro-monthly", True))
+
+
+def test_a_declared_dataset_is_checked_specifically_rather_than_project_wide(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Sol's condition for closing #50: a question declares what it needs, in structured data.
+
+    The project-wide gate passes whenever *anything* is unspent, which is weaker than it sounds.
+    A question about US equities advancing on the strength of untouched macro capacity is exactly
+    the significance-already-spent failure the inventory exists to prevent.
+    """
+    import quantbot.research.stages as stages
+
+    monkeypatch.setattr(stages, "capacity_inventory", lambda session, *, as_of: MIXED)
+
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        open_task(
+            director,
+            "task-declared-spent",
+            "Does momentum work on US equities?",
+            required_datasets=("sip-us-equities-daily",),
+        )
+        open_task(
+            director,
+            "task-declared-open",
+            "Do macro regimes shift with policy?",
+            required_datasets=("fred-macro-monthly",),
+        )
+        handler = capacity_stage(session, novelty_stage(ResearchMemory(session)))
+        tasks = {task.task_id: task for task in director.by_state()}
+
+        spent = handler(tasks["task-declared-spent"])
+        available = handler(tasks["task-declared-open"])
+
+    assert spent.next_state is TaskState.BLOCKED
+    assert "sip-us-equities-daily" in spent.reason
+    assert "declared it as required" in spent.reason
+
+    # Same inventory, and the gate is not simply refusing everything.
+    assert available.next_state is TaskState.SCOUTING
+
+
+def test_every_declared_dataset_must_have_capacity_not_merely_one(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A claim needing two sources needs both.
+
+    Advancing on the strength of whichever happens to be unspent is the permissive direction, and
+    it is the sort of `any`-where-`all`-was-meant that reads correct at a glance.
+    """
+    import quantbot.research.stages as stages
+
+    monkeypatch.setattr(stages, "capacity_inventory", lambda session, *, as_of: MIXED)
+
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        open_task(
+            director,
+            "task-needs-both",
+            "Do macro regimes change equity momentum?",
+            required_datasets=("fred-macro-monthly", "sip-us-equities-daily"),
+        )
+        handler = capacity_stage(session, novelty_stage(ResearchMemory(session)))
+        result = handler(director.by_state()[0])
+
+    assert result.next_state is TaskState.BLOCKED
+    assert "sip-us-equities-daily" in result.reason
+
+
+def test_an_unrecognised_declared_dataset_blocks_rather_than_meaning_no_constraint(
+    database: Database,
+) -> None:
+    """A typo must not buy unlimited capacity.
+
+    If an unknown name were skipped, the cheapest route past this gate would be to misspell the
+    source a question depends on, and the mistake would present as a clean advance.
+    """
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        open_task(
+            director,
+            "task-typo",
+            "Does momentum work on US equities?",
+            required_datasets=("sip-us-equities-dialy",),
+        )
+        handler = capacity_stage(session, novelty_stage(ResearchMemory(session)))
+        result = handler(director.by_state()[0])
+
+    assert result.next_state is TaskState.BLOCKED
+    assert "not a declared source" in result.reason
+    assert "must not read as an unconstrained one" in result.reason
+
+
+def test_an_undeclared_question_still_gets_the_project_wide_gate(
+    database: Database, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fallback is weaker, not absent, and declaring nothing must not skip the check."""
+    import quantbot.research.stages as stages
+
+    monkeypatch.setattr(stages, "capacity_inventory", lambda session, *, as_of: ())
+
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        open_task(director, "task-undeclared", "Anything at all?")
+        handler = capacity_stage(session, novelty_stage(ResearchMemory(session)))
+        result = handler(director.by_state()[0])
+
+    assert result.next_state is TaskState.BLOCKED
+    assert "any declared source" in result.reason
+
+
+def test_a_declaration_survives_the_round_trip_through_durable_state(
+    database: Database,
+) -> None:
+    """The gate reads the stored task, not the object a caller built.
+
+    `required_datasets` rides in `document_json`, so it needs no migration -- and a field that
+    serialised but did not deserialise would make every stored task read as undeclared, silently
+    downgrading every per-claim check to the weaker project-wide one.
+    """
+    with database.transaction() as session:
+        open_task(
+            ResearchDirector(session),
+            "task-round-trip",
+            "Does momentum work on US equities?",
+            required_datasets=("sip-us-equities-daily",),
+        )
+
+    with database.transaction() as session:
+        stored = ResearchDirector(session).by_state()[0]
+
+    assert stored.required_datasets == ("sip-us-equities-daily",)
 
 
 def test_the_capacity_gate_runs_before_the_memory_query(database: Database) -> None:
