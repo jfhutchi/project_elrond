@@ -17,7 +17,13 @@ from quantbot.brokers import (
 from quantbot.brokers.base import BrokerModel
 from quantbot.config import Settings
 from quantbot.domain import BrokerOrder, IntentState, OrderIntent, ReconciliationStatus
-from quantbot.risk import DrawdownState, OrderGateDecision, OrderPurpose, evaluate_order_gate
+from quantbot.risk import (
+    DrawdownState,
+    OrderGateDecision,
+    OrderPurpose,
+    PortfolioVetoDecision,
+    evaluate_order_gate,
+)
 from quantbot.storage import Database, StorageRepository
 
 
@@ -119,6 +125,7 @@ class ExecutionCoordinator:
         market_eligible: bool,
         drawdown: DrawdownState | None,
         risk_approved: bool | None,
+        vetoes: PortfolioVetoDecision | None,
     ) -> OrderGateDecision:
         with self._database.transaction() as session:
             repository = StorageRepository(session)
@@ -144,6 +151,7 @@ class ExecutionCoordinator:
             market_eligible,
             drawdown=drawdown,
             risk_approved=risk_approved,
+            vetoes=vetoes,
         )
         reasons = list(decision.reasons)
         if not account_snapshot.order_entry_allowed:
@@ -194,6 +202,7 @@ class ExecutionCoordinator:
         market_eligible: bool,
         drawdown: DrawdownState | None,
         risk_approved: bool | None,
+        vetoes: PortfolioVetoDecision | None = None,
     ) -> SubmissionResult:
         """Submit once, then recover or retry only under the bounded same-ID policy."""
         if intent.state is not IntentState.RISK_APPROVED:
@@ -206,6 +215,7 @@ class ExecutionCoordinator:
             market_eligible,
             drawdown,
             risk_approved,
+            vetoes,
         )
         if not initial_gate.allowed:
             raise OrderSubmissionBlocked(initial_gate)
@@ -227,6 +237,7 @@ class ExecutionCoordinator:
             market_eligible,
             drawdown,
             risk_approved,
+            vetoes,
         )
         if not fresh_gate.allowed:
             self._transition(intent.intent_id, IntentState.ERROR, IntentState.ORDER_CREATED)

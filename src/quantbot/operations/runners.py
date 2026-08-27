@@ -50,11 +50,14 @@ from quantbot.risk import (
     DrawdownState,
     EntrySizingRequest,
     OrderPurpose,
+    PortfolioVetoPolicy,
     PositionRiskInput,
     RiskApproval,
     RiskReservation,
     build_portfolio_risk_state,
+    build_veto_inputs,
     calculate_drawdown,
+    evaluate_portfolio_vetoes,
     size_entry,
 )
 from quantbot.storage import Database, StorageRepository
@@ -402,6 +405,7 @@ class AdaptiveMomentumRunner:
         identity: StrategyIdentity,
         sessions: SessionCalendar,
         market_data: MarketDataSettings | None = None,
+        veto_policy: PortfolioVetoPolicy | None = None,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -410,6 +414,10 @@ class AdaptiveMomentumRunner:
         self._identity = identity
         self._sessions = sessions
         self._market_data = market_data or MarketDataSettings()
+        # Defaults rather than optional: an absent policy must mean the shipped limits, not no
+        # limits. `PortfolioVetoPolicy` refuses to be constructed with an unimplemented veto
+        # enabled, so the default cannot claim protection it does not have (#58).
+        self._veto_policy = veto_policy or PortfolioVetoPolicy()
         self._clock = clock
         self._run_id: str | None = None
 
@@ -877,6 +885,42 @@ class AdaptiveMomentumRunner:
         if not isinstance(sized, RiskApproval):
             return None, sized.reasons
         position_value = sized.quantity * decision_price
+        # Vetoed **before** the reservation, and the ordering is the fix for a defect this had
+        # when first written: reserving first meant a refused order still consumed a position
+        # slot and its gross exposure for the rest of the cycle, so a veto on one symbol
+        # silently starved every symbol evaluated after it. A reservation is a claim on capacity
+        # for an order that is going to be submitted, and a vetoed order is not one.
+        #
+        # Evaluated here rather than in the coordinator because this is the only place that
+        # holds a reference price: a market-order intent carries no notional, and a
+        # participation or net-exposure rule cannot be computed without one (#58).
+        vetoes = evaluate_portfolio_vetoes(
+            build_veto_inputs(
+                symbol=symbol,
+                equity=account.equity,
+                positions=list(broker_positions.values()),
+                order_quantity=sized.quantity,
+                order_price=decision_price,
+                equity_marks=[
+                    (snapshot.captured_at, snapshot.equity)
+                    for snapshot in repository.list_equity_snapshots(
+                        account_id=account.account_id
+                    )
+                ],
+                symbol_bars=[(bar.timestamp, bar.volume) for bar in repository.list_bars(
+                    symbol=symbol
+                )],
+                observed_at=created_at,
+                volume_sessions=self._veto_policy.minimum_volume_sessions,
+            ),
+            self._veto_policy,
+        )
+        if not vetoes.allowed:
+            # Refused, not resized. A cap that binds returns a smaller order; a veto returns
+            # none, because downsizing past a concentration limit still adds the exposure the
+            # limit exists to bound. Nothing is reserved, so the next symbol sees the capacity
+            # this order did not take.
+            return None, vetoes.reasons
         reservations.append(
             RiskReservation(
                 reservation_id=f"{signal_date.isoformat()}:{symbol}",
@@ -900,6 +944,7 @@ class AdaptiveMomentumRunner:
                 market_eligible=True,
                 drawdown=drawdown,
                 risk_approved=True,
+                vetoes=vetoes,
             ),
             (),
         )

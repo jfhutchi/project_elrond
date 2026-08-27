@@ -22,7 +22,7 @@ from quantbot.operations.kill_switch import (
 )
 from quantbot.operations.metrics import OperationalMetrics
 from quantbot.operations.qualification import QualificationTracker
-from quantbot.risk import DrawdownState, OrderPurpose
+from quantbot.risk import DrawdownState, OrderPurpose, PortfolioVetoDecision
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
 
 PAPER_SMOKE_ACKNOWLEDGEMENT = "I_ACKNOWLEDGE_ONE_PAPER_SMOKE_ORDER"
@@ -44,6 +44,10 @@ class SubmissionRequest(OperationsModel):
     market_eligible: bool
     drawdown: DrawdownState | None
     risk_approved: bool | None
+    #: Portfolio hard vetoes, evaluated where the reference price and portfolio state live (#58).
+    #: `None` on a non-entry purpose, where a veto must not apply: blocking an exit or a
+    #: liquidation would trap capital in the state the rule exists to avoid.
+    vetoes: PortfolioVetoDecision | None = None
 
 
 class CycleStrategyResult(OperationsModel):
@@ -95,6 +99,7 @@ class OrderSubmitter(Protocol):
         market_eligible: bool,
         drawdown: DrawdownState | None,
         risk_approved: bool | None,
+        vetoes: PortfolioVetoDecision | None,
     ) -> Awaitable[SubmissionResult]: ...
 
 
@@ -335,6 +340,7 @@ class RunOnceCycle:
                         market_eligible=request.market_eligible,
                         drawdown=request.drawdown,
                         risk_approved=request.risk_approved,
+                        vetoes=request.vetoes,
                     )
                     submitted += 1
                 finished_at = self._finished_at(started_at)

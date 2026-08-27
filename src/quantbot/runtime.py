@@ -74,7 +74,13 @@ from quantbot.reporting import (
     build_project_status,
     build_weekly_report,
 )
-from quantbot.risk import OrderPurpose, calculate_drawdown
+from quantbot.risk import (
+    OrderPurpose,
+    PortfolioVetoPolicy,
+    build_veto_inputs,
+    calculate_drawdown,
+    evaluate_portfolio_vetoes,
+)
 from quantbot.storage import Database, StateConflictError, StorageRepository
 from quantbot.strategy import (
     StrategyConfig,
@@ -602,12 +608,52 @@ async def _paper_smoke(runtime: Runtime) -> dict[str, object]:
             occurred_at=now,
             detail={"client_order_id": client_order_id, "quantity": "1"},
         )
+    # The smoke order is an ENTRY, so the portfolio vetoes apply to it exactly as they do to a
+    # strategy entry. The operator's acknowledgement is the *risk approval* for one share; it is
+    # not an override of the portfolio limits, and a one-share order that breaches a daily loss
+    # limit or trades on stale data is the order least worth forcing through.
+    positions = await runtime.broker.get_positions()
+    with runtime.database.transaction() as session:
+        repository = StorageRepository(session)
+        equity_marks = [
+            (snapshot.captured_at, snapshot.equity)
+            for snapshot in repository.list_equity_snapshots(
+                account_id=account.account.account_id
+            )
+        ]
+        symbol_bars = [
+            (bar.timestamp, bar.volume)
+            for bar in repository.list_bars(symbol=runtime.config.benchmark_symbol)
+        ]
+    policy = PortfolioVetoPolicy()
+    reference = next(
+        (position.market_price for position in positions if position.symbol == intent.symbol),
+        None,
+    )
+    vetoes = evaluate_portfolio_vetoes(
+        build_veto_inputs(
+            symbol=intent.symbol,
+            equity=account.account.equity,
+            positions=positions,
+            order_quantity=intent.quantity,
+            # No held position means no reference price from the broker. Zero notional is the
+            # honest value for the net-exposure term rather than a guessed mark: it understates
+            # this single share's exposure and cannot overstate anyone else's.
+            order_price=reference if reference is not None else Decimal("0"),
+            equity_marks=equity_marks,
+            symbol_bars=symbol_bars,
+            observed_at=now,
+            volume_sessions=policy.minimum_volume_sessions,
+        ),
+        policy,
+    )
     result = await runtime.coordinator.submit(
         intent,
         purpose=OrderPurpose.ENTRY,
         market_eligible=True,
         drawdown=drawdown,
         risk_approved=True,
+        vetoes=vetoes,
     )
     return {
         "ok": True,

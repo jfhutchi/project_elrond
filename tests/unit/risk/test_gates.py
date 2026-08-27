@@ -13,6 +13,10 @@ from quantbot.domain import BrokerEnvironment, Position, TradingMode
 from quantbot.risk import (
     DrawdownState,
     OrderPurpose,
+    PortfolioVetoDecision,
+    PortfolioVetoPolicy,
+    VetoName,
+    VetoRejection,
     build_liquidation_plan,
     calculate_drawdown,
     evaluate_order_gate,
@@ -50,6 +54,22 @@ def drawdown(fraction: str) -> DrawdownState:
     )
 
 
+def clean_vetoes(symbol: str = "SPY") -> PortfolioVetoDecision:
+    """A veto decision where nothing refused.
+
+    Supplied by the entry tests above so each keeps testing the thing it is named after. The
+    gate refuses an entry with no veto decision at all, which is its own test below.
+    """
+    policy = PortfolioVetoPolicy()
+    return PortfolioVetoDecision(
+        symbol=symbol,
+        policy_version=policy.version,
+        rule_parameters_hash=policy.identity,
+        evaluated=tuple(sorted(policy.enabled, key=lambda item: item.value)),
+        rejections=(),
+    )
+
+
 def test_safe_paper_entry_is_allowed() -> None:
     decision = evaluate_order_gate(
         safe_paper_settings(),
@@ -59,6 +79,7 @@ def test_safe_paper_entry_is_allowed() -> None:
         market_eligible=True,
         drawdown=drawdown("0"),
         risk_approved=True,
+        vetoes=clean_vetoes(),
     )
 
     assert decision.allowed is True
@@ -78,6 +99,7 @@ def test_drawdown_halt_blocks_entries_but_not_strategy_exits() -> None:
         True,
         drawdown=halted,
         risk_approved=True,
+        vetoes=clean_vetoes(),
     )
     strategy_exit = evaluate_order_gate(
         safe_paper_settings(),
@@ -121,6 +143,7 @@ def test_entry_requires_explicit_risk_approval() -> None:
         True,
         drawdown=drawdown("0"),
         risk_approved=False,
+        vetoes=clean_vetoes(),
     )
 
     assert decision.allowed is False
@@ -201,6 +224,7 @@ def test_live_mode_requires_live_credentials_and_acknowledgement() -> None:
         True,
         drawdown=drawdown("0"),
         risk_approved=True,
+        vetoes=clean_vetoes(),
     )
     blocked = evaluate_order_gate(
         settings.model_copy(update={"LIVE_TRADING_ACKNOWLEDGED": False}),
@@ -210,6 +234,7 @@ def test_live_mode_requires_live_credentials_and_acknowledgement() -> None:
         True,
         drawdown=drawdown("0"),
         risk_approved=True,
+        vetoes=clean_vetoes(),
     )
 
     assert allowed.allowed is True
@@ -246,3 +271,106 @@ def test_blocked_forced_liquidation_remains_required_and_is_not_falsely_executed
     assert len(plan.instructions) == 1
     assert gate.allowed is False
     assert gate.reasons == ("KILL_SWITCH_ENGAGED",)
+
+
+def test_an_entry_with_no_veto_decision_is_refused_rather_than_allowed() -> None:
+    """An unevaluated control must not read as a passed one (#58).
+
+    This is the whole reason `vetoes` defaults to `None` rather than to a permissive decision:
+    the default exists so the parameter could be added without rewriting every call site, not so
+    a caller can skip it. A gate that allows when nobody ran the check is indistinguishable from
+    a gate that is not there.
+    """
+    blocked = evaluate_order_gate(
+        safe_paper_settings(),
+        "PA-123",
+        OrderPurpose.ENTRY,
+        False,
+        True,
+        drawdown=drawdown("0"),
+        risk_approved=True,
+    )
+
+    assert not blocked.allowed
+    assert "PORTFOLIO_VETOES_NOT_EVALUATED" in blocked.reasons
+
+
+def test_a_refusing_veto_blocks_the_entry_and_names_itself() -> None:
+    """Every refusing veto's reason reaches the decision, so #57 can attribute the rejection."""
+    policy = PortfolioVetoPolicy()
+    refused = PortfolioVetoDecision(
+        symbol="SPY",
+        policy_version=policy.version,
+        rule_parameters_hash=policy.identity,
+        evaluated=(VetoName.DAILY_LOSS, VetoName.LIQUIDITY),
+        rejections=(
+            VetoRejection(
+                veto=VetoName.DAILY_LOSS,
+                policy_version=policy.version,
+                rule_parameters_hash=policy.identity,
+                reason="down 6000 against a 500 limit",
+            ),
+            VetoRejection(
+                veto=VetoName.LIQUIDITY,
+                policy_version=policy.version,
+                rule_parameters_hash=policy.identity,
+                reason="200bps of average daily volume",
+            ),
+        ),
+    )
+
+    decision = evaluate_order_gate(
+        safe_paper_settings(),
+        "PA-123",
+        OrderPurpose.ENTRY,
+        False,
+        True,
+        drawdown=drawdown("0"),
+        risk_approved=True,
+        vetoes=refused,
+    )
+
+    assert not decision.allowed
+    assert any("DAILY_LOSS" in reason for reason in decision.reasons)
+    assert any("LIQUIDITY" in reason for reason in decision.reasons), (
+        "a veto that never reached the decision cannot be evaluated for whether it was worth "
+        "having"
+    )
+
+
+def test_a_veto_never_blocks_an_exit_or_a_liquidation() -> None:
+    """Blocking an exit would rebuild the absorbing halt one layer up.
+
+    `STATUS.md` records the severity-1 defect: once the drawdown halt engages, a strategy that
+    cannot take positions cannot earn the drawdown back. A concentration or loss veto that also
+    refused exits would trap capital in exactly the state the veto exists to avoid.
+    """
+    policy = PortfolioVetoPolicy()
+    refused = PortfolioVetoDecision(
+        symbol="SPY",
+        policy_version=policy.version,
+        rule_parameters_hash=policy.identity,
+        evaluated=(VetoName.DAILY_LOSS,),
+        rejections=(
+            VetoRejection(
+                veto=VetoName.DAILY_LOSS,
+                policy_version=policy.version,
+                rule_parameters_hash=policy.identity,
+                reason="down 6000 against a 500 limit",
+            ),
+        ),
+    )
+
+    exit_decision = evaluate_order_gate(
+        safe_paper_settings(),
+        "PA-123",
+        OrderPurpose.STRATEGY_EXIT,
+        False,
+        True,
+        drawdown=drawdown("0"),
+        risk_approved=None,
+        vetoes=refused,
+    )
+
+    assert exit_decision.allowed, "a veto must not trap a position it cannot size into"
+    assert not any("DAILY_LOSS" in reason for reason in exit_decision.reasons)
