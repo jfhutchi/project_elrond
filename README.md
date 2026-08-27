@@ -180,9 +180,11 @@ than from prose — a milestone cannot be reached by writing about it. `quantbot
 reports both side by side, and the dashboard's edge-progress panel shows the ladder with the
 reason it is stuck.
 
-The project is at **M0**: the platform runs valid experiments and honestly refutes them, and **no
-candidate edge has been established**. Concluding `NO_EDGE_ESTABLISHED` is a legitimate research
-result, not a software failure.
+The project is at **M0** on a store whose research memory has been seeded — the platform runs
+valid experiments and honestly refutes them — and **BELOW_M0** on one that has not, because a
+platform that has never recorded a refutation has not shown it can reject anything. Either way
+**no candidate edge has been established**, and no level above M1 is close. Concluding
+`NO_EDGE_ESTABLISHED` is a legitimate research result, not a software failure.
 
 ---
 
