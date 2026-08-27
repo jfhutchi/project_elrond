@@ -156,8 +156,9 @@ class FakeSubmitter:
         market_eligible: bool,
         drawdown: DrawdownState | None,
         risk_approved: bool | None,
+        vetoes: object = None,
     ) -> SubmissionResult:
-        _ = purpose, market_eligible, drawdown, risk_approved
+        _ = purpose, market_eligible, drawdown, risk_approved, vetoes
         self.calls.append("submit")
         accepted = intent.model_copy(update={"state": IntentState.BROKER_ACCEPTED})
         return SubmissionResult(

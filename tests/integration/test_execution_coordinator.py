@@ -18,10 +18,32 @@ from quantbot.domain import (
     TimeInForce,
 )
 from quantbot.execution import ExecutionCoordinator, OrderSubmissionBlocked
-from quantbot.risk import DrawdownState, OrderPurpose
+from quantbot.risk import (
+    DrawdownState,
+    OrderPurpose,
+    PortfolioVetoDecision,
+    PortfolioVetoPolicy,
+)
 from quantbot.storage import Database, StorageRepository
 
 NOW = datetime(2026, 8, 14, 14, 30, tzinfo=UTC)
+
+
+def clean_vetoes(symbol: str = "SPY") -> PortfolioVetoDecision:
+    """A decision where every enabled veto ran and none refused.
+
+    Supplied only on the ENTRY call. The exit and liquidation calls below deliberately pass
+    nothing: a veto must not apply to them, and if one ever did these tests would start failing
+    for the right reason.
+    """
+    policy = PortfolioVetoPolicy()
+    return PortfolioVetoDecision(
+        symbol=symbol,
+        policy_version=policy.version,
+        rule_parameters_hash=policy.identity,
+        evaluated=tuple(sorted(policy.enabled, key=lambda item: item.value)),
+        rejections=(),
+    )
 
 
 def _settings() -> Settings:
@@ -151,6 +173,7 @@ async def test_intent_is_durable_before_single_broker_submission(tmp_path: Path)
     result = await coordinator.submit(
         intent,
         purpose=OrderPurpose.ENTRY,
+        vetoes=clean_vetoes(),
         market_eligible=True,
         drawdown=_drawdown(),
         risk_approved=True,

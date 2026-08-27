@@ -346,6 +346,64 @@ version and applies once a candidate declares windows.
 
 ---
 
+## Portfolio hard vetoes
+
+`quantbot.risk.vetoes`. Rules that **reject rather than resize** (#58).
+
+Everything in `risk/sizing.py` is a cap: when it binds, the order goes through smaller. That is
+right for per-trade risk and wrong for concentration — downsizing a position that breaches a
+sector limit still adds sector exposure. So the vetoes are a separate type from `SizingCapName`,
+and the separation is the protection: an edit cannot turn a veto into a haircut without changing
+which enum it belongs to.
+
+They compose in `evaluate_order_gate` beside the kill switch and the drawdown halt, and apply to
+`ENTRY` only. A veto that blocked an exit or a liquidation would rebuild the absorbing halt
+`STATUS.md` records as a severity-1 defect, one layer up.
+
+| Veto | Refuses when | Needs |
+|---|---|---|
+| `NET_EXPOSURE` | \|long − short\| breaches the ceiling | positions, equity |
+| `STALE_MARKET_DATA` | the newest observation is too old, or stamped in the future | bar timestamps |
+| `DAILY_LOSS` | down more than the limit from the session's opening equity | an equity mark from this session |
+| `LIQUIDITY` | the order is too large a share of average daily volume | 20 sessions of volume |
+
+**Fail closed, and name the missing input.** An enabled veto that cannot measure rejects, and
+reports `unmeasured` so an operator fixes the cause rather than the threshold. That includes the
+reference price: the first version of the paper-smoke path substituted zero when a symbol was not
+already held, which let a real proposed entry contribute no projected exposure while
+`NET_EXPOSURE` reported itself as evaluated. Zero is not a conservative stand-in for an unknown
+price — it is the most permissive value the term can take. A missing price is now
+`REFERENCE_PRICE_UNAVAILABLE` and refuses. `evaluate_order_gate`
+refuses an entry with no veto decision at all (`PORTFOLIO_VETOES_NOT_EVALUATED`) — the optional
+parameter exists so it could be added without rewriting every call site, not so it can be skipped.
+
+**Versioned identity on every rejection.** #57 asks rejections to carry `gate_id`, `gate_version`
+and `rule_parameters_hash` so a counterfactual study can attribute an outcome to a rule *at
+particular settings*. Every rejection carries all three, and every veto speaks even when an
+earlier one refused — a reason that never reached the decision cannot be evaluated.
+
+**Which vetoes are enforced is operator policy.** The default enables `NET_EXPOSURE` and
+`STALE_MARKET_DATA`, which a thin ledger can always answer. `DAILY_LOSS` and `LIQUIDITY` are
+implemented and tested and **off by default**, because on a fresh ledger they correctly refuse
+everything and would halt the entries this project needs to accumulate forward evidence at all.
+Turning them on is the operator's call, exactly as ratifying the economic mandate is.
+
+**Two vetoes are declared and unimplemented.** `SECTOR_CONCENTRATION` and
+`CORRELATION_CONCENTRATION` are members of the enum with no evaluator, and the policy **refuses to
+be configured with either enabled**. There is no sector classification in this repository, and
+classifying a historical position by a symbol's sector as of today is look-ahead inside the risk
+layer: a study of whether the sector veto helped would be using information the veto could not
+have had. They wait on point-in-time context (#59).
+
+**A defect worth recording.** The staleness ceiling first shipped at 900 seconds, which encoded an
+intraday assumption into a system that decides once per session on daily bars — the newest
+observation is always the previous close, so it refused every entry and the wired-cycle
+integration test caught it. The default is four days: a long weekend passes, a feed genuinely
+behind does not. Calendar seconds remain a coarse proxy for "sessions behind"; the precise rule
+needs the exchange calendar.
+
+---
+
 ## Statistical machinery
 
 - Jobson–Korkie–Memmel variance for Sharpe differences, because two series of the same asset are

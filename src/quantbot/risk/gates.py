@@ -1,7 +1,19 @@
-"""Operational and risk-policy gates for automatic order purposes."""
+"""Operational and risk-policy gates for automatic order purposes.
+
+**The portfolio vetoes compose here rather than inside sizing, and that is the point (#58).**
+`size_entry` returns a quantity; a veto has no opinion about quantity, and letting a
+concentration rule reduce a size would defeat what it is for. So the vetoes join the same
+allow/deny the kill switch and the drawdown halt already join, and their reasons travel in the
+same list.
+
+**A veto applies to `ENTRY` only.** A rule that blocked a strategy exit or a drawdown
+liquidation would trap capital in exactly the state the rule exists to avoid -- the absorbing
+halt `STATUS.md` records as a severity-1 defect, rebuilt one layer up.
+"""
 
 from quantbot.config import Settings, validate_trading_safety
 from quantbot.risk.models import DrawdownState, OrderGateDecision, OrderPurpose
+from quantbot.risk.vetoes import PortfolioVetoDecision
 
 
 def evaluate_order_gate(
@@ -13,8 +25,15 @@ def evaluate_order_gate(
     *,
     drawdown: DrawdownState | None,
     risk_approved: bool | None,
+    vetoes: PortfolioVetoDecision | None = None,
 ) -> OrderGateDecision:
-    """Compose operational safety with purpose-specific risk policy."""
+    """Compose operational safety with purpose-specific risk policy.
+
+    `vetoes` is optional and its absence is **not** treated as approval: an entry evaluated with
+    no veto decision reports `PORTFOLIO_VETOES_NOT_EVALUATED` and is refused. A control that
+    passes when nobody ran it is the shape this project keeps finding, and the default exists so
+    the parameter can be added without rewriting every call site -- not so it can be skipped.
+    """
     effective_settings = settings.model_copy(
         update={"KILL_SWITCH": settings.KILL_SWITCH or durable_kill_switch_engaged}
     )
@@ -30,6 +49,13 @@ def evaluate_order_gate(
             reasons.append("DRAWDOWN_ENTRY_HALT")
         if risk_approved is not True:
             reasons.append("RISK_NOT_APPROVED")
+        if vetoes is None:
+            reasons.append("PORTFOLIO_VETOES_NOT_EVALUATED")
+        else:
+            # Every refusing veto, not the first. #57 studies rejection *reasons*, and a reason
+            # that never reached the decision cannot be evaluated for whether it was worth
+            # having.
+            reasons.extend(vetoes.reasons)
     elif purpose is OrderPurpose.DRAWDOWN_LIQUIDATION and (
         drawdown is None or not drawdown.liquidation_required
     ):

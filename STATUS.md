@@ -1359,8 +1359,59 @@ and this repository's rule is that an unexercised feature is an unclaimable one.
 
 Eight protections, mutation-checked.
 
+## 6ff. Rules that reject rather than resize (#58)
+
+**2026-08-27.** `quantbot.risk.vetoes`, wired into `evaluate_order_gate` and evaluated where the
+reference price lives.
+
+**Most of #58 already existed**, which is worth saying before the new part. Per-trade risk,
+position value, gross exposure, buying power, stop-distance-aware sizing, `max_positions` as a
+hard rejection, and fail-closed behaviour on missing drawdown state or risk approval are all in
+`risk/sizing.py` and `risk/gates.py` today. Re-listing them as new work is how engineering volume
+becomes apparent progress, which #52 exists to prevent.
+
+**What is new is the distinction between a cap and a veto.** A cap that binds downsizes the order;
+a veto refuses it. Downsizing past a concentration limit still adds the exposure the limit exists
+to bound, so these are a separate type from `SizingCapName` — and the separation is the
+protection.
+
+Four implemented: `NET_EXPOSURE` (gross was capped, net was not), `STALE_MARKET_DATA`,
+`DAILY_LOSS` (keyed on the **Eastern** session, the same off-by-one that already cost this project
+correct fill attribution), and `LIQUIDITY` (participation in average daily volume).
+
+**Which are enforced is operator policy, and the default is deliberately partial.** `DAILY_LOSS`
+needs an equity mark from the current session; `LIQUIDITY` needs twenty sessions of volume. On a
+fresh ledger neither exists, so both correctly refuse — and enabling them by default would halt
+the entries this project needs in order to accumulate forward evidence at all. The default enables
+the two a thin ledger can always answer; the other two are implemented, tested, and **off until
+the operator turns them on**. Same shape as the economic mandate: an agent may propose the values,
+the operator decides.
+
+**Sector and correlation are declared and unimplemented, and the policy refuses to enable them.**
+There is no sector classification anywhere in this repository, and classifying a historical
+position by a symbol's sector as of today is look-ahead inside the risk layer — #57 would then be
+measuring the counterfactual value of a rule that could never have existed. They wait on #59.
+
+**A defect of mine, found by the integration suite.** The staleness ceiling shipped at 900 seconds,
+which encodes an intraday assumption into a system that decides once per session on daily bars.
+The newest observation is always the previous close, so it refused every entry and the wired-cycle
+test caught it immediately. Now four days — a long weekend passes, a feed genuinely behind does
+not. Calendar seconds are still a coarse proxy for "sessions behind".
+
+**Every rejection carries `gate_id`, `gate_version` and `rule_parameters_hash`** so #57 can
+attribute an outcome to a rule at particular settings, and every veto speaks even when an earlier
+one refused — a reason that never reached the decision cannot be evaluated. Fourteen protections,
+mutation-checked.
+
+**This creates no alpha and the milestone ladder does not move.** If #52's ladder ever advances
+because risk gates were added, that is a bug in the ladder.
+
 ## 7. Open items
 
+- [ ] **Decide whether to enable `DAILY_LOSS` and `LIQUIDITY` portfolio vetoes — operator
+      action (#58).** Both are implemented and tested and default to off. Enabling them halts
+      entries until the ledger holds an equity mark for the current session and twenty sessions
+      of volume per symbol, which is correct fail-closed behaviour and a real trading pause.
 - [ ] **#48 reproducibility is blocked on there being a confirmatory experiment to reproduce.**
       The readiness half is built and exercised (§6ee); the reproducer needs a real manifest,
       which needs a confirmatory run, which needs M1. Not blocked on engineering.

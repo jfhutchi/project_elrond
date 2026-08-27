@@ -74,7 +74,13 @@ from quantbot.reporting import (
     build_project_status,
     build_weekly_report,
 )
-from quantbot.risk import OrderPurpose, calculate_drawdown
+from quantbot.risk import (
+    OrderPurpose,
+    PortfolioVetoPolicy,
+    build_veto_inputs,
+    calculate_drawdown,
+    evaluate_portfolio_vetoes,
+)
 from quantbot.storage import Database, StateConflictError, StorageRepository
 from quantbot.strategy import (
     StrategyConfig,
@@ -602,12 +608,57 @@ async def _paper_smoke(runtime: Runtime) -> dict[str, object]:
             occurred_at=now,
             detail={"client_order_id": client_order_id, "quantity": "1"},
         )
+    # The smoke order is an ENTRY, so the portfolio vetoes apply to it exactly as they do to a
+    # strategy entry. The operator's acknowledgement is the *risk approval* for one share; it is
+    # not an override of the portfolio limits, and a one-share order that breaches a daily loss
+    # limit or trades on stale data is the order least worth forcing through.
+    positions = await runtime.broker.get_positions()
+    with runtime.database.transaction() as session:
+        repository = StorageRepository(session)
+        equity_marks = [
+            (snapshot.captured_at, snapshot.equity)
+            for snapshot in repository.list_equity_snapshots(
+                account_id=account.account.account_id
+            )
+        ]
+        stored_bars = repository.list_bars(symbol=runtime.config.benchmark_symbol)
+        symbol_bars = [(bar.timestamp, bar.volume) for bar in stored_bars]
+        # The last durable close, which is a price the decision could actually have seen.
+        last_close = stored_bars[-1].close if stored_bars else None
+    policy = PortfolioVetoPolicy()
+    # A held position's mark first, then the last stored close, then **nothing**. The first
+    # version of this substituted `Decimal("0")` when the symbol was not held, which let a real
+    # proposed entry contribute zero projected exposure while `NET_EXPOSURE` reported itself as
+    # evaluated -- a fail-open inside the subsystem whose rule is that a missing risk input
+    # rejects. Found by GPT-5.6 Sol reviewing #60. A missing price is now unmeasured, and the
+    # veto refuses with `REFERENCE_PRICE_UNAVAILABLE`.
+    reference = next(
+        (position.market_price for position in positions if position.symbol == intent.symbol),
+        None,
+    )
+    if reference is None:
+        reference = last_close
+    vetoes = evaluate_portfolio_vetoes(
+        build_veto_inputs(
+            symbol=intent.symbol,
+            equity=account.account.equity,
+            positions=positions,
+            order_quantity=intent.quantity,
+            order_price=reference,
+            equity_marks=equity_marks,
+            symbol_bars=symbol_bars,
+            observed_at=now,
+            volume_sessions=policy.minimum_volume_sessions,
+        ),
+        policy,
+    )
     result = await runtime.coordinator.submit(
         intent,
         purpose=OrderPurpose.ENTRY,
         market_eligible=True,
         drawdown=drawdown,
         risk_approved=True,
+        vetoes=vetoes,
     )
     return {
         "ok": True,
