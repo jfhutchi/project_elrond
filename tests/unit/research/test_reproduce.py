@@ -240,6 +240,7 @@ def test_the_bundle_is_found_by_reading_manifests_not_by_guessing_filenames(
 
 def test_the_command_runs_end_to_end_and_refuses_to_claim_a_reproduction(
     tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """#48 asks that `reproduction_command` be populated only after the command is exercised.
 
@@ -251,6 +252,11 @@ def test_the_command_runs_end_to_end_and_refuses_to_claim_a_reproduction(
     from io import StringIO
 
     from quantbot.cli import main
+
+    # The CLI opens a database for every command, and `QUANTBOT_DB_PATH` is read from the ambient
+    # environment. Without this the test reaches into whatever store the operator's shell points
+    # at -- a live one, on the machine this runs on.
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
 
     path, written = bundle(tmp_path)
     assert written.reproduction_command[:2] == ("quantbot", "reproduce-experiment")
@@ -272,11 +278,15 @@ def test_the_command_runs_end_to_end_and_refuses_to_claim_a_reproduction(
     assert "#48 remains open" in payload["note"]
 
 
-def test_the_command_reports_a_missing_bundle_rather_than_raising(tmp_path: Path) -> None:
+def test_the_command_reports_a_missing_bundle_rather_than_raising(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """An operator asking about an id that is not there needs an answer, not a traceback."""
     from io import StringIO
 
     from quantbot.cli import main
+
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
 
     output = StringIO()
     code = main(
@@ -285,5 +295,10 @@ def test_the_command_reports_a_missing_bundle_rather_than_raising(tmp_path: Path
     )
     payload = json.loads(output.getvalue())
 
-    assert code != 0 or payload["ok"] is False
+    # Both, not either. `code != 0 or ok is False` would pass on a command that exited zero
+    # while reporting failure, or exited nonzero while claiming success -- and the point of this
+    # test is that the two agree.
+    assert code == 2
+    assert payload["ok"] is False
+    assert "nope" in payload["error"]
     assert payload["reproduction_performed"] is False
