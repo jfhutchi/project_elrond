@@ -368,7 +368,12 @@ They compose in `evaluate_order_gate` beside the kill switch and the drawdown ha
 | `LIQUIDITY` | the order is too large a share of average daily volume | 20 sessions of volume |
 
 **Fail closed, and name the missing input.** An enabled veto that cannot measure rejects, and
-reports `unmeasured` so an operator fixes the cause rather than the threshold. `evaluate_order_gate`
+reports `unmeasured` so an operator fixes the cause rather than the threshold. That includes the
+reference price: the first version of the paper-smoke path substituted zero when a symbol was not
+already held, which let a real proposed entry contribute no projected exposure while
+`NET_EXPOSURE` reported itself as evaluated. Zero is not a conservative stand-in for an unknown
+price — it is the most permissive value the term can take. A missing price is now
+`REFERENCE_PRICE_UNAVAILABLE` and refuses. `evaluate_order_gate`
 refuses an entry with no veto decision at all (`PORTFOLIO_VETOES_NOT_EVALUATED`) — the optional
 parameter exists so it could be added without rewriting every call site, not so it can be skipped.
 

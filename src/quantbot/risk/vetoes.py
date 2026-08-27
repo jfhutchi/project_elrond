@@ -167,8 +167,11 @@ class PortfolioVetoInputs(VetoModel):
     equity: FiniteDecimal = Field(gt=0)
     #: Signed market value across open positions: long positive, short negative.
     committed_net_exposure: FiniteDecimal
-    #: Signed market value this order would add.
-    order_net_exposure: FiniteDecimal
+    #: Signed market value this order would add. `None` when no reference price could be
+    #: measured, which **rejects**: substituting zero would let a real proposed entry contribute
+    #: nothing to projected exposure while `NET_EXPOSURE` still reported itself as evaluated.
+    #: That is the fail-open this module exists to refuse, and it shipped here first (#58).
+    order_net_exposure: FiniteDecimal | None
     #: Shares this order would trade.
     order_quantity: NonNegativeDecimal
 
@@ -246,6 +249,14 @@ def _reject(
 def _net_exposure(
     inputs: PortfolioVetoInputs, policy: PortfolioVetoPolicy
 ) -> VetoRejection | None:
+    if inputs.order_net_exposure is None:
+        return _reject(
+            VetoName.NET_EXPOSURE,
+            policy,
+            f"no reference price could be measured for {inputs.symbol}, so the exposure this "
+            "order would add is unknown; a missing price is not a zero one",
+            unmeasured="REFERENCE_PRICE_UNAVAILABLE",
+        )
     projected = abs(inputs.committed_net_exposure + inputs.order_net_exposure)
     ceiling = inputs.equity * Decimal(policy.max_net_exposure_bps) / BASIS_POINTS
     if projected > ceiling:
@@ -399,7 +410,7 @@ def build_veto_inputs(
     equity: Decimal,
     positions: Sequence[Position],
     order_quantity: Decimal,
-    order_price: Decimal,
+    order_price: Decimal | None,
     equity_marks: Sequence[tuple[datetime, Decimal]],
     symbol_bars: Sequence[tuple[datetime, Decimal]],
     observed_at: datetime,
@@ -417,7 +428,8 @@ def build_veto_inputs(
 
     An input that cannot be derived comes back `None` rather than defaulted, and the veto that
     needs it then rejects. Substituting a plausible value here would put the failure somewhere
-    nobody looks.
+    nobody looks -- and a zero reference price is the worst version of it, because zero is not a
+    conservative guess: it makes a real order contribute no exposure at all.
     """
     session = session_date_of(observed_at)
     opening: Decimal | None = None
@@ -446,7 +458,9 @@ def build_veto_inputs(
         symbol=symbol,
         equity=equity,
         committed_net_exposure=net,
-        order_net_exposure=order_quantity * order_price,
+        # `None` propagates rather than collapsing to zero. A caller with no price has an
+        # unmeasured input, and the veto that needs it says so.
+        order_net_exposure=None if order_price is None else order_quantity * order_price,
         order_quantity=order_quantity,
         session_date=session,
         session_opening_equity=opening,

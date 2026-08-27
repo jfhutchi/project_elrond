@@ -621,25 +621,30 @@ async def _paper_smoke(runtime: Runtime) -> dict[str, object]:
                 account_id=account.account.account_id
             )
         ]
-        symbol_bars = [
-            (bar.timestamp, bar.volume)
-            for bar in repository.list_bars(symbol=runtime.config.benchmark_symbol)
-        ]
+        stored_bars = repository.list_bars(symbol=runtime.config.benchmark_symbol)
+        symbol_bars = [(bar.timestamp, bar.volume) for bar in stored_bars]
+        # The last durable close, which is a price the decision could actually have seen.
+        last_close = stored_bars[-1].close if stored_bars else None
     policy = PortfolioVetoPolicy()
+    # A held position's mark first, then the last stored close, then **nothing**. The first
+    # version of this substituted `Decimal("0")` when the symbol was not held, which let a real
+    # proposed entry contribute zero projected exposure while `NET_EXPOSURE` reported itself as
+    # evaluated -- a fail-open inside the subsystem whose rule is that a missing risk input
+    # rejects. Found by GPT-5.6 Sol reviewing #60. A missing price is now unmeasured, and the
+    # veto refuses with `REFERENCE_PRICE_UNAVAILABLE`.
     reference = next(
         (position.market_price for position in positions if position.symbol == intent.symbol),
         None,
     )
+    if reference is None:
+        reference = last_close
     vetoes = evaluate_portfolio_vetoes(
         build_veto_inputs(
             symbol=intent.symbol,
             equity=account.account.equity,
             positions=positions,
             order_quantity=intent.quantity,
-            # No held position means no reference price from the broker. Zero notional is the
-            # honest value for the net-exposure term rather than a guessed mark: it understates
-            # this single share's exposure and cannot overstate anyone else's.
-            order_price=reference if reference is not None else Decimal("0"),
+            order_price=reference,
             equity_marks=equity_marks,
             symbol_bars=symbol_bars,
             observed_at=now,

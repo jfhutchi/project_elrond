@@ -409,3 +409,71 @@ def test_volume_history_is_counted_in_sessions_not_rows() -> None:
     assert built.volume_sessions == 2, "three rows across two sessions is two sessions"
     # And the duplicated day's volume is its total, not one of the two rows.
     assert built.average_daily_volume == Decimal("1000000")
+
+
+def test_a_new_symbol_entry_cannot_clear_net_exposure_on_a_fabricated_zero() -> None:
+    """The fail-open GPT-5.6 Sol found in #60, pinned so it cannot come back.
+
+    The paper-smoke path substituted `Decimal("0")` as the reference price when the symbol was
+    not already held. `build_veto_inputs` then computed `order_net_exposure = quantity * 0`, so a
+    real proposed entry contributed **nothing** to projected exposure while `NET_EXPOSURE`
+    reported itself as evaluated — a fail-open inside the one subsystem whose stated rule is that
+    a missing risk input rejects.
+
+    Zero is not a conservative substitute for an unknown price. It is the single most permissive
+    value available for this term.
+    """
+    # A book already at the ceiling. A genuinely zero-notional order would sit inside it.
+    at_the_limit = inputs(
+        committed_net_exposure=Decimal("100000"),
+        order_net_exposure=Decimal("0"),
+    )
+    assert evaluate_portfolio_vetoes(at_the_limit, policy(max_net_exposure_bps=10000)).allowed, (
+        "a zero-notional order is inside the ceiling, which is exactly why zero was dangerous"
+    )
+
+    # The same book, with the price genuinely unmeasured, must refuse.
+    unmeasured = inputs(
+        committed_net_exposure=Decimal("100000"),
+        order_net_exposure=None,
+    )
+    decision = evaluate_portfolio_vetoes(unmeasured, policy(max_net_exposure_bps=10000))
+
+    assert not decision.allowed
+    assert refused(decision) == {VetoName.NET_EXPOSURE}
+    assert decision.rejections[0].unmeasured == "REFERENCE_PRICE_UNAVAILABLE"
+    assert "not a zero one" in decision.rejections[0].reason
+
+
+def test_the_builder_propagates_a_missing_price_rather_than_collapsing_it() -> None:
+    """`build_veto_inputs` is where the substitution happened, so it is where this is pinned.
+
+    A caller with no reference price has an unmeasured input. The builder must carry that
+    through as `None` so the veto can refuse, rather than multiplying the quantity by a stand-in
+    and handing the veto a number that looks measured.
+    """
+    without_price = build_veto_inputs(
+        symbol="SPY",
+        equity=Decimal("100000"),
+        positions=[],
+        order_quantity=Decimal("1"),
+        order_price=None,
+        equity_marks=[],
+        symbol_bars=[],
+        observed_at=NOW,
+        volume_sessions=20,
+    )
+    assert without_price.order_net_exposure is None
+
+    with_price = build_veto_inputs(
+        symbol="SPY",
+        equity=Decimal("100000"),
+        positions=[],
+        order_quantity=Decimal("2"),
+        order_price=Decimal("500"),
+        equity_marks=[],
+        symbol_bars=[],
+        observed_at=NOW,
+        volume_sessions=20,
+    )
+    assert with_price.order_net_exposure == Decimal("1000")
