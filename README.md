@@ -169,6 +169,23 @@ changing the rules it is judged by is the shape of defect this file is full of.
 
 ---
 
+## Two kinds of progress, and only one of them is the point
+
+**Engineering progress** is what most of this repository measures: issues closed, gates built,
+frameworks integrated, panels added. It moves when code ships.
+
+**Profitability progress** is a separate ladder, `quantbot.research.milestone`, running M0 to M5.
+It moves only when evidence about the market changes, and it is derived from durable state rather
+than from prose — a milestone cannot be reached by writing about it. `quantbot research-status`
+reports both side by side, and the dashboard's edge-progress panel shows the ladder with the
+reason it is stuck.
+
+The project is at **M0**: the platform runs valid experiments and honestly refutes them, and **no
+candidate edge has been established**. Concluding `NO_EDGE_ESTABLISHED` is a legitimate research
+result, not a software failure.
+
+---
+
 ## Status
 
 Engineering on the v0.2 research architecture is in progress; forward paper evidence is

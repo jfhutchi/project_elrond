@@ -242,6 +242,67 @@ counting toward edge qualification, and they remain available as execution evide
 
 ---
 
+## Edge progress, kept separate from engineering progress
+
+`quantbot.research.milestone`. Six levels, derived from durable state, reported by
+`quantbot research-status` beside the task queue and by the dashboard's edge-progress panel.
+
+The failure mode it exists for is a project-management one: infrastructure and model integrations
+are easy to measure and alpha is not, so issue closure quietly becomes a surrogate objective and a
+long list of completed architecture issues visually overwhelms an unproven economic thesis.
+
+| Level | Reached when | Derived from |
+|---|---|---|
+| M0 | the platform has run experiments and honestly refuted them | refutations in research memory |
+| M1 | a frozen candidate cleared the survivor gate, unrefuted | `promotion_state` at or above `RESEARCH_SURVIVOR` with a live claim |
+| M2 | the claim spans several instruments and a finding records it surviving | registry universe plus a `SURVIVED` record |
+| M3 | authentic forward sessions accrue against that claim | the trading ledger |
+| M4 | `PAPER_QUALIFIED` under #47, with capital economics under #51 | the ladder, plus a measurement that does not exist yet |
+| M5 | every gate clear and a human may look — still not authorisation | `LIVE_REVIEW_ELIGIBLE` |
+
+Three rules make it hard to flatter:
+
+- **Contiguous.** A level counts only when every level below it does. Forward evidence with no
+  surviving candidate behind it reports M0, not M3.
+- **`unassessed` blocks.** M4 carries one permanently until #51 lands: the paper account holds
+  $100 and the mandate's range reaches $10,000, and no amount of evidence at the smaller size
+  distinguishes an effect that survives at scale from one that does not.
+- **A reached level names an artifact.** "Nothing blocks it" is not "something shows it".
+
+M2 rests on one inference worth stating: probe results are not stored in a queryable table, so it
+reads the probe *requirement* a multi-instrument universe implies rather than the probe list that
+ran. `compile_experiment` adds `cross-asset-generality` exactly when the universe is wider than
+one instrument, and `survivor_objections` refuses a survivor whose planned probes did not all
+pass. A second experiment compiler would break that chain, and
+`test_a_multi_instrument_registration_implies_the_generality_probe` is what fails when it does.
+
+### Before a new integration or subsystem
+
+Answer three questions in the issue, before implementing:
+
+1. **Which profitability milestone does this unblock?** "It is interesting" is not a level.
+2. **What cheaper thing would answer the same question?** Usually a power calculation.
+3. **What measurable result would cause us to reject or defer it?** Decide the bounded rejection
+   test before running it, for the same reason a hypothesis is frozen before it is measured.
+
+Worked examples, from #52: RD-Agent/Qlib may unblock M1 by generating genuinely novel factors —
+but only where clean confirmatory capacity exists, which is now a query rather than a guess.
+Moving the coordinator off the Pi protects M3/M4 evidence collection and does not itself advance
+M1. Another dashboard feature advances nothing unless it exposes a decision-critical measurement.
+
+This is a review convention, not a machine check: nothing in the code can tell whether an issue's
+stated milestone is honest. It is written down so a reviewer has something specific to hold an
+architecture proposal against.
+
+### `NO_EDGE_ESTABLISHED` is a destination
+
+`MilestoneReport.no_edge_established` reports when the project sits at M0 with no clean
+confirmatory capacity left. That is a research result, not a software failure, and having a name
+for it is what stops the alternative — adding another framework because the ladder has no way to
+say stop.
+
+---
+
 ## Statistical capacity
 
 `quantbot.research.capacity` answers the question `window_consumption` does not:

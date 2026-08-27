@@ -1271,6 +1271,50 @@ mutation-checked.
 **What this does not do.** It does not create capacity, and the honest headline is that there is
 almost none for a US equity claim. That is the finding, not a limitation of the tool.
 
+## 6dd. Engineering progress is not profitability progress (#52)
+
+**2026-08-22.** `quantbot.research.milestone`, reported by `quantbot research-status` and by an
+edge-progress panel on the dashboard.
+
+Every number this project has reported about itself moves when code ships: issues closed, gates
+built, tests passing, frameworks integrated. None of them move when the market says something.
+That asymmetry is a project-management failure mode with a name — issue closure becomes a
+surrogate objective — and #52 was opened because a long list of completed architecture issues
+visually overwhelms the fact that the economic thesis is unproven.
+
+Six levels, derived from durable state, so a milestone cannot be reached by writing about it:
+
+| | reached when | today |
+|---|---|---|
+| M0 | the platform has honestly refuted things | **yes**, once research memory is seeded |
+| M1 | a frozen candidate cleared the survivor gate, unrefuted | no |
+| M2 | that claim spans several instruments and survived robustness | no |
+| M3 | authentic forward sessions accrue against it | no |
+| M4 | `PAPER_QUALIFIED` under #47, capital economics under #51 | no, and blocked |
+| M5 | every gate clear, a human may look | no |
+
+**The project is at M0.** That is not a setback and it is not new; it is the first time anything
+reported it as a number rather than as a paragraph somebody has to read.
+
+**M4 cannot clear at all yet, and says so.** It carries a permanent `unassessed` entry naming
+#51: the paper account holds $100, the mandate's range reaches $10,000, and no amount of forward
+evidence at the smaller size distinguishes an effect that survives at scale from one that does
+not. An unassessed check blocks, so M4 will not pass until that is measured.
+
+**Three rules make the ladder hard to flatter.** It is contiguous, so forward evidence with no
+surviving candidate behind it reports M0 rather than M3. `unassessed` blocks. And a reached level
+must name an artifact — "nothing blocks it" is not "something shows it". Eight protections,
+mutation-checked.
+
+**Before a new integration**, `docs/research-architecture.md` now asks three questions: which
+milestone does this unblock, what cheaper thing answers the same question, and what measurable
+result would cause us to reject it. A review convention rather than a machine check, written down
+so a reviewer has something specific to hold a proposal against.
+
+**`NO_EDGE_ESTABLISHED` is a destination.** The report says so when the project sits at M0 with no
+clean confirmatory capacity left. That is a research result, and having a name for it is what
+stops the alternative: adding another framework because nothing else can be said.
+
 ## 7. Open items
 
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30).

@@ -227,6 +227,7 @@ def main(
             )
             from quantbot.research.cycle import actionable
             from quantbot.research.director import ResearchDirector
+            from quantbot.research.milestone import assess_milestone
 
             try:
                 configuration = model_configuration()
@@ -250,11 +251,43 @@ def main(
                 # queue, and deliberately does not advance it. A status command that moved
                 # research forward would be the worst possible place to spend a trial.
                 ready = len(actionable(director, {}))
+                milestone = assess_milestone(session, as_of=datetime.now(UTC).date())
 
             result = {
                 "ok": True,
                 "models": models,
                 "blocked_by": blocked_by,
+                # #52: the two numbers side by side, because only one of them was ever
+                # reported. Task counts and model wiring move when engineering happens;
+                # `profitability` moves only when evidence about the market changes, and a
+                # long list of closed architecture issues otherwise reads as progress toward
+                # an edge.
+                "profitability": {
+                    "milestone": (
+                        "BELOW_M0" if milestone.current is None else milestone.current.value
+                    ),
+                    "stuck_on": (
+                        None
+                        if milestone.next_check is None
+                        else milestone.next_check.explain()
+                    ),
+                    "candidate_edges": list(milestone.candidate_edges),
+                    "forward_supported_edges": list(milestone.forward_supported),
+                    "clean_confirmatory_capacity": list(milestone.clean_capacity),
+                    # A legitimate destination, not a failure. Naming it is what stops the
+                    # alternative: adding another framework because nothing else can be said.
+                    "no_edge_established": milestone.no_edge_established,
+                    "levels": [
+                        {
+                            "level": check.level.value,
+                            "reached": check.reached,
+                            "evidence": list(check.evidence),
+                            "blocking": list(check.blocking),
+                            "unassessed": list(check.unassessed),
+                        }
+                        for check in milestone.checks
+                    ],
+                },
                 "tasks": {
                     "total": len(tasks),
                     "by_state": {

@@ -35,6 +35,7 @@ from quantbot.research.capacity import capacity_inventory
 from quantbot.research.dashboard import Alert, BudgetPanel, attention, luck_bar_at
 from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 from quantbot.research.memory import ResearchMemory, ResearchRecord
+from quantbot.research.milestone import MilestoneReport, assess_milestone
 from quantbot.research.promotion import (
     ALLOWED_PROMOTIONS,
     MINIMUM_FORWARD_DAYS,
@@ -136,6 +137,7 @@ def _research(session: Session, *, as_of: date) -> dict[str, object]:
         "trials": _trials_by_budget(session),
         "windows": _protected_windows(session),
         "capacity": _capacity_rows(session, as_of=as_of),
+        "milestone": assess_milestone(session, as_of=as_of),
         "ladder": _promotion_rows(session),
         "compute": _compute_rows(session),
         "overrides": _override_rows(session),
@@ -575,6 +577,17 @@ def _task_row(task: ResearchTask) -> str:
     )
 
 
+def _milestone_row(level: str, reached: bool, detail: str) -> str:
+    """One edge milestone. The tone is about evidence, never about effort."""
+    return (
+        "<tr>"
+        f"<td class='mono'>{_esc(level)}</td>"
+        f"<td>{_pill('reached' if reached else 'not reached', 'good' if reached else 'warn')}</td>"
+        f"<td class='quiet-text'>{_esc(detail)}</td>"
+        "</tr>"
+    )
+
+
 def _capacity_row(identity: str, asset_class: str, status: str, spend: str, note: str) -> str:
     """One observation identity. The tone says whether a confirmatory answer is still possible."""
     tone = {
@@ -803,9 +816,40 @@ def build(out: Path) -> None:
     trial_rows = "".join(_trial_row(key, count) for key, count in trials) or _empty(
         3, "No trials recorded against any budget"
     )
+    milestone = durable.get("milestone") if durable.get("available") else None
+    if isinstance(milestone, MilestoneReport):
+        milestone_level = (
+            "BELOW_M0" if milestone.current is None else milestone.current.value.split("_")[0]
+        )
+        stuck = milestone.next_check
+        milestone_note = (
+            "every edge gate is clear"
+            if stuck is None
+            else f"stuck on {stuck.level.value.split('_')[0]}"
+        )
+    else:
+        # Not "M0". A database that could not be read has not demonstrated anything, and the
+        # cheerful default is how an unreadable store reads as a working platform.
+        milestone_level = "unknown"
+        milestone_note = "no durable store to read it from"
     capacity = durable.get("capacity", []) if durable.get("available") else []
     capacity_rows = "".join(_capacity_row(*row) for row in capacity) or _empty(
         5, "No data sources are declared"
+    )
+    milestone_rows = (
+        "".join(
+            _milestone_row(
+                check.level.value,
+                check.reached,
+                "; ".join(
+                    [*check.evidence, *check.blocking,
+                     *(f"not assessed: {item}" for item in check.unassessed)]
+                ),
+            )
+            for check in milestone.checks
+        )
+        if isinstance(milestone, MilestoneReport)
+        else _empty(3, "No durable store to assess edge progress from")
     )
     window_rows = "".join(_window_row(*row) for row in windows) or _empty(
         4, "No protected evaluation window is claimed"
@@ -984,6 +1028,9 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
     <div class="readout"><div class="k">Watchdog</div>
       <div class="v" style="font-size:15px">{_esc(supervisor_detail)}</div>
       <div class="note">restarts a dead daemon; never lifts a halt</div></div>
+    <div class="readout"><div class="k">Profitability milestone</div>
+      <div class="v" style="font-size:15px">{_esc(milestone_level)}</div>
+      <div class="note">{_esc(milestone_note)}</div></div>
     <div class="readout"><div class="k">Research vs forward</div>
       <div class="v" style="font-size:15px">{len(registrations)} registered &middot;
         {forward_days}/30 days</div>
@@ -1074,6 +1121,23 @@ footer {{ margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--edge)
       </table></div>
       <p class="caveat">Trials are the one budget that never refills. The bar rises with every
         candidate evaluated against the same data, and no amount of compute buys it back.</p>
+    </section>
+    <section>
+      <h2>Edge progress</h2>
+      <div class="scroll"><table id="panel-milestone">
+        <thead><tr><th>Milestone</th><th>Reached</th><th>Evidence, or what is missing</th></tr>
+        </thead>
+        <tbody>{milestone_rows}</tbody>
+      </table></div>
+      <p class="caveat"><strong>Engineering progress is not profitability progress.</strong>
+        Every other panel on this page moves when code ships. This one moves only when evidence
+        about the market changes, and it is derived from durable state rather than from a status
+        file &mdash; a milestone cannot be reached by writing about it.</p>
+      <p class="caveat">The ladder is contiguous: a level is reached only when every level below
+        it is. A level that could not be assessed does not pass, which is why M4 will not clear
+        while intended-capital execution capacity (#51) is unmeasured. Concluding
+        <strong>NO_EDGE_ESTABLISHED</strong> is a legitimate research result, not a software
+        failure.</p>
     </section>
     <section>
       <h2>Statistical capacity</h2>

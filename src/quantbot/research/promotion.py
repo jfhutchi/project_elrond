@@ -1353,8 +1353,17 @@ def material_change(
 _ORDER = tuple(Stage)
 
 
-def _rank(stage: Stage) -> int:
+def stage_rank(stage: Stage) -> int:
+    """How far up the ladder a stage sits. Public so nothing needs a second copy of the order.
+
+    `Stage` is declared in ladder order and this reads it, rather than a literal list somebody
+    has to remember to update -- the shape that produced the funnel silently dropping a stage.
+    """
     return _ORDER.index(stage)
+
+
+#: The internal spelling, kept because it reads better inside comparisons in this module.
+_rank = stage_rank
 
 
 def forward_progress(
@@ -1401,6 +1410,7 @@ __all__ = [
     "material_change",
     "observe_forward_days",
     "promote",
+    "stage_rank",
     "survivor_objections",
 ]
 
