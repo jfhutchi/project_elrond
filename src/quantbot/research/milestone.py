@@ -47,6 +47,7 @@ from enum import StrEnum
 from sqlalchemy.orm import Session
 
 from quantbot.research.capacity import CapacityStatus, capacity_inventory
+from quantbot.research.capital import CapacityAssessment
 from quantbot.research.memory import RecordKind, ResearchMemory, Verdict
 from quantbot.research.promotion import (
     MINIMUM_FORWARD_DAYS,
@@ -370,14 +371,19 @@ def _forward_observed_check(
     )
 
 
-def _forward_supported_check(session: Session) -> MilestoneCheck:
-    """`PAPER_QUALIFIED` under #47, plus the capacity question #51 asks and nothing answers.
+def _forward_supported_check(
+    session: Session, capacity: CapacityAssessment | None = None
+) -> MilestoneCheck:
+    """`PAPER_QUALIFIED` under #47, plus the capacity question #51 asks.
 
-    The `unassessed` entry is permanent until #51 lands, and that is the point. The paper account
-    holds $100. An effect that survives at $100 of notional and dies at $10,000 is not an edge
-    worth the machinery, and no amount of forward evidence at the smaller size distinguishes the
-    two. Reporting M4 without it would be exactly the surrogate-objective failure this module
-    exists to prevent.
+    The paper account holds $100. An effect that survives at $100 of notional and dies at $10,000
+    is not an edge worth the machinery, and no amount of forward evidence at the smaller size
+    distinguishes the two.
+
+    **The gate reads an assessment, not an issue number.** Closing #51 must not open M4; a
+    capacity assessment that *says the edge survives across the mandate* opens it. So `capacity`
+    is `None` until one is computed -- which is still the state today -- and a computed one that
+    does not support intended capital blocks with its own reasons rather than a generic string.
     """
     qualified = [
         record.strategy_id
@@ -385,20 +391,28 @@ def _forward_supported_check(session: Session) -> MilestoneCheck:
         if stage_rank(Stage(record.stage)) >= stage_rank(Stage.PAPER_QUALIFIED)
     ]
     blocking: list[str] = []
+    unassessed: list[str] = []
     if not qualified:
         blocking.append(
             "no strategy has reached PAPER_QUALIFIED, which under #47 needs a measured, "
             "benchmark-relative, adequately powered positive result against a ratified mandate"
         )
+    if capacity is None:
+        unassessed.append(
+            "intended-capital execution capacity (#51): the paper account holds $100 and the "
+            "mandate's range reaches $10,000; nothing has measured whether an effect survives "
+            "at the size it would be traded at"
+        )
+    elif not capacity.supports_intended_capital:
+        # A computed assessment that says the edge dies is a *result*, not an absent check, so
+        # it blocks rather than sitting in `unassessed`. The distinction matters: one is "nobody
+        # looked", the other is "somebody looked and the answer was no".
+        blocking.append(f"intended-capital capacity (#51): {capacity.explain()}")
     return MilestoneCheck(
         level=Milestone.M4_FORWARD_EDGE_SUPPORTED,
         evidence=tuple(qualified),
         blocking=tuple(blocking),
-        unassessed=(
-            "intended-capital execution capacity (#51): the paper account holds $100 and the "
-            "mandate's range reaches $10,000; nothing yet measures whether an effect survives "
-            "at the size it would be traded at",
-        ),
+        unassessed=tuple(unassessed),
     )
 
 
@@ -421,7 +435,9 @@ def _live_review_check(session: Session) -> MilestoneCheck:
     )
 
 
-def assess_milestone(session: Session, *, as_of: date) -> MilestoneReport:
+def assess_milestone(
+    session: Session, *, as_of: date, capacity: CapacityAssessment | None = None
+) -> MilestoneReport:
     """Where the project's economic thesis stands, derived from durable state alone.
 
     Nothing here reads a prose status file, a version number or a count of closed issues. Those
@@ -434,7 +450,7 @@ def assess_milestone(session: Session, *, as_of: date) -> MilestoneReport:
         _candidate_check(survivors),
         _generalises_check(session, survivors),
         _forward_observed_check(session, survivors),
-        _forward_supported_check(session),
+        _forward_supported_check(session, capacity),
         _live_review_check(session),
     )
     inventory = capacity_inventory(session, as_of=as_of)
