@@ -298,8 +298,9 @@ def _capacity_rows(session: Session, *, as_of: date) -> list[tuple[str, str, str
             f"{row.trials} trials"
             + (f", reserved by {len(row.reserved_by)}" if row.reserved_by else ""),
             (
-                f"unsearched sessions from {row.unconsumed_from.isoformat()}"
-                if row.unconsumed_from is not None
+                f"{len(row.unsearched_sessions)} unsearched session(s) from "
+                f"{row.unsearched_sessions[0].isoformat()}"
+                if row.unsearched_sessions
                 else row.source.answers
             ),
         )

@@ -350,6 +350,36 @@ def test_no_edge_established_is_a_destination_rather_than_a_failure(
 
     assert exhausted.no_edge_established
     assert exhausted.current is Milestone.M0_RESEARCH_PLATFORM_OPERATIONAL
+    # An unsupported capability does not suppress the conclusion -- it qualifies it. A system
+    # that can never say "no edge" while any capability is unimplemented always has a reason to
+    # keep going, which is the dishonesty in the other direction.
+    assert "options-implied-daily" in exhausted.capacity_unavailable
+
+
+def test_an_inventory_that_answered_nothing_cannot_produce_the_conclusion(
+    database: Database,
+) -> None:
+    """#52.6: the project's most consequential statement must not come from a broken query.
+
+    "We searched everywhere and found nothing" and "we could not see anywhere to search" are
+    different statements, and only the first is a finding. An empty inventory is the loudest
+    possible version of the second.
+    """
+    import quantbot.research.milestone as milestone_module
+
+    original = milestone_module.capacity_inventory
+    milestone_module.capacity_inventory = lambda session, *, as_of: ()  # type: ignore[assignment]
+    try:
+        with database.transaction() as session:
+            refute(session)
+            report = assess_milestone(session, as_of=TODAY)
+    finally:
+        milestone_module.capacity_inventory = original  # type: ignore[assignment]
+
+    assert report.current is Milestone.M0_RESEARCH_PLATFORM_OPERATIONAL
+    assert report.clean_capacity == ()
+    assert report.capacity_undetermined == ("no sources were inventoried at all",)
+    assert not report.no_edge_established, "a broken inventory is not a research result"
 
 
 def test_a_milestone_is_never_reached_without_a_named_artifact() -> None:

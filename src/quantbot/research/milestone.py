@@ -116,6 +116,16 @@ class MilestoneReport:
     #: Observation identities with confirmatory capacity left, for the resource-allocation
     #: question: is there anywhere left to test the next idea?
     clean_capacity: tuple[str, ...]
+    #: Why the capacity picture could not be trusted, when it could not. Reserved for the
+    #: genuinely indeterminate case -- an inventory that answered nothing -- and deliberately
+    #: *not* used for `UNSUPPORTED` or `QUALITY_BLOCKED`, which are determinate answers about a
+    #: known state. Keeps "we searched everything" apart from "we could not see anything",
+    #: which `no_edge_established` must never confuse (#52).
+    capacity_undetermined: tuple[str, ...] = ()
+    #: Research directions the project cannot currently reach at all: a declared capability with
+    #: no provider behind it. Not a reason to suppress the conclusion, and a reason to qualify
+    #: it -- "no edge established" means on what this project can currently search.
+    capacity_unavailable: tuple[str, ...] = ()
 
     @property
     def current(self) -> Milestone | None:
@@ -148,12 +158,29 @@ class MilestoneReport:
     def no_edge_established(self) -> bool:
         """Whether the honest conclusion available today is that there is no edge.
 
-        Not a failure state and not automatic: it reports that the project has searched what it
-        can search and found nothing, which is a research result. Having a name for it is what
-        stops the alternative -- adding another framework because nothing else can be said.
+        Three conditions, and the third is the one #52's review asked for. It reports that the
+        project has searched what it can search and found nothing -- a research result, not a
+        failure. So it must not fire because the *inventory* is broken:
+
+        * the ladder is at its bottom rung, and
+        * no source has clean confirmatory capacity left, and
+        * the inventory actually answered.
+
+        `UNSUPPORTED` and `QUALITY_BLOCKED` do **not** suppress it. They are determinate answers
+        about a known state, and treating them as indeterminate would make this conclusion
+        unreachable for as long as any capability is unimplemented -- a system that can never say
+        "no edge" always has a reason to keep going, which is the failure in the other
+        direction. They are reported in `capacity_unavailable` so the conclusion reads as what
+        it is: no edge established on what this project can currently search.
+
+        Without the third, an empty or unreadable inventory would produce this project's most
+        consequential conclusion by accident. "We searched everywhere and found nothing" and
+        "we could not see anywhere to search" are different statements, and only the first is a
+        finding. Having a name for the first is what stops the alternative -- adding another
+        framework because nothing else can be said.
         """
         at_the_bottom = self.current is Milestone.M0_RESEARCH_PLATFORM_OPERATIONAL
-        return at_the_bottom and not self.clean_capacity
+        return at_the_bottom and not self.clean_capacity and not self.capacity_undetermined
 
     def explain(self) -> str:
         stuck = self.next_check
@@ -410,17 +437,30 @@ def assess_milestone(session: Session, *, as_of: date) -> MilestoneReport:
         _forward_supported_check(session),
         _live_review_check(session),
     )
+    inventory = capacity_inventory(session, as_of=as_of)
     clean = tuple(
         row.observation_identity
-        for row in capacity_inventory(session, as_of=as_of)
+        for row in inventory
         if row.usable_for_confirmation and row.status is not CapacityStatus.EXHAUSTED
     )
+    unavailable = tuple(
+        row.observation_identity
+        for row in inventory
+        if row.status in {CapacityStatus.UNSUPPORTED, CapacityStatus.QUALITY_BLOCKED}
+    )
+    # An inventory that answered nothing is the only genuinely indeterminate case. Treating
+    # `UNSUPPORTED` as indeterminate too would make the conclusion unreachable for as long as
+    # any capability is unimplemented, which is its own dishonesty in the opposite direction:
+    # a system that can never say "no edge" always has a reason to keep going.
+    undetermined = () if inventory else ("no sources were inventoried at all",)
     return MilestoneReport(
         as_of=as_of,
         checks=checks,
         candidate_edges=tuple(label for _, label in survivors),
         forward_supported=checks[4].evidence,
         clean_capacity=clean,
+        capacity_undetermined=undetermined,
+        capacity_unavailable=unavailable,
     )
 
 

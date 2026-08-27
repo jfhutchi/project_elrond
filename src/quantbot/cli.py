@@ -85,6 +85,14 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # remembers a flag is a safety control that does nothing. Demotion is reversible and
     # preserves the forward evidence, so acting wrongly is cheap and not acting is not.
     sweep.add_argument("--dry-run", dest="dry_run", action="store_true")
+    # The command every reproducible bundle already names in `reproduction_command`. Until
+    # this existed the manifest told a reader to run something no CLI implemented.
+    reproduce = commands.add_parser("reproduce-experiment")
+    reproduce.add_argument("--experiment", required=True)
+    reproduce.add_argument("--manifests", default="reports/manifests")
+    # Where a preserved working-tree patch lives, when the original ran dirty. Optional, and its
+    # absence is what makes a dirty run unreproducible rather than merely noted.
+    reproduce.add_argument("--patch")
     verify = commands.add_parser("verify-manifest")
     verify.add_argument("--manifest", required=True)
     verify.add_argument("--against")
@@ -324,6 +332,10 @@ def main(
                         "consumers": list(row.consumers),
                         "by_family": dict(row.by_family),
                         "reserved_by": list(row.reserved_by),
+                        # A count of real sessions, not a date implying an open-ended stream.
+                        # The first version reported "unsearched from <calendar day>", which on
+                        # a Friday-consumed window named a Saturday (#50).
+                        "unsearched_sessions": len(row.unsearched_sessions),
                         "unsearched_from": (
                             None
                             if row.unconsumed_from is None
@@ -348,7 +360,7 @@ def main(
             from quantbot.research.director import ResearchDirector, TaskState
             from quantbot.research.memory import ResearchMemory
             from quantbot.research.prior import load_prior_findings
-            from quantbot.research.stages import novelty_stage
+            from quantbot.research.stages import capacity_stage, novelty_stage
 
             with active.database.transaction() as session:
                 # Load what the project already knows before deciding anything. The novelty gate
@@ -361,7 +373,14 @@ def main(
                 # design need a model or a measurement; `actionable()` treats a state with no
                 # handler as not-actionable rather than as an error, so those tasks stay
                 # visibly stuck instead of being advanced by something that did not run them.
-                stages = {TaskState.PROPOSED: novelty_stage(ResearchMemory(session))}
+                # Capacity first, then novelty. Both are cheap and both can stop a question
+                # before anything expensive runs, but a question nothing could confirm should
+                # not consume a memory query either (#50).
+                stages = {
+                    TaskState.PROPOSED: capacity_stage(
+                        session, novelty_stage(ResearchMemory(session))
+                    )
+                }
                 runnable = actionable(director, stages)
 
                 if not args.commit:
@@ -457,6 +476,55 @@ def main(
                 },
                 "differences": differences,
             }
+        elif args.command == "reproduce-experiment":
+            # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.reproduce import (
+                ManifestNotFound,
+                assess_reproducibility,
+                find_manifest,
+            )
+            from quantbot.research.reproducibility import capture_environment
+
+            try:
+                manifest_path, manifest = find_manifest(
+                    Path(args.manifests), args.experiment
+                )
+            except ManifestNotFound as absent:
+                result = {"ok": False, "error": str(absent), "reproduction_performed": False}
+            else:
+                assessment = assess_reproducibility(
+                    manifest_path,
+                    manifest,
+                    current_lock_hash=capture_environment(host_class="cli").dependency_lock_hash,
+                    preserved_patch=Path(args.patch) if args.patch else None,
+                )
+                result = {
+                    # `ok` is about whether the inputs are recoverable. It is deliberately not
+                    # named `reproduced`: nothing ran.
+                    "ok": assessment.can_attempt,
+                    "experiment_id": assessment.experiment_id,
+                    "manifest": str(assessment.manifest_path),
+                    "manifest_hash": assessment.manifest_hash,
+                    # A field rather than an omission. A report that merely never mentions
+                    # running the experiment reads, to a hurried reader, exactly like one that
+                    # ran it and found no differences.
+                    "reproduction_performed": assessment.performed,
+                    "inputs": [
+                        {
+                            "name": check.name,
+                            "present": check.present,
+                            "intact": check.intact,
+                        }
+                        for check in assessment.inputs
+                    ],
+                    "blocking": list(assessment.blocking),
+                    "drift": list(assessment.drift),
+                    "outstanding_capabilities": list(assessment.outstanding),
+                    "note": (
+                        "this reports whether a rerun could be attempted and does not attempt "
+                        "one; #48 remains open"
+                    ),
+                }
         elif args.command == "integrity-sweep":
             # Function-scope import for the same reason as the other research commands.
             from quantbot.research.promotion import (

@@ -34,6 +34,7 @@ quietly dropping the record of how it was reached.
 
 from __future__ import annotations
 
+import hashlib
 import time
 import tracemalloc
 from collections.abc import Mapping, Sequence
@@ -51,12 +52,50 @@ from quantbot.research.manifest import (
     EnvironmentFingerprint,
     ExperimentManifest,
     ExperimentPeriod,
+    ReproductionInput,
     ResourceUsage,
     content_id,
     write_experiment_manifest,
 )
 from quantbot.research.memory import RecordKind, ResearchRecord, Verdict
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
+
+
+def _refuse_bad_input_name(name: str) -> None:
+    """A reproduction input is a plain filename, not a path.
+
+    The names come from a measurement, and for a generated experiment the measurement is
+    downstream of model-authored code -- a name like `../../.env` would let it choose where the
+    runner writes. Refused rather than sanitised: a silently rewritten filename is one nobody
+    can match back to the manifest that references it.
+    """
+    if "/" in name or "\\" in name or Path(name).name != name or not name.strip():
+        raise ExperimentRunError(
+            f"reproduction input {name!r} is not a plain filename; a measurement does "
+            "not choose where the runner writes"
+        )
+
+
+def _describe_inputs(inputs: Mapping[str, str] | None) -> tuple[ReproductionInput, ...]:
+    """Hash what a rerun will need, from the content in memory rather than from disk.
+
+    Ordered by name so the manifest hash does not depend on dict iteration order, which would
+    make two identical runs produce two different bundles.
+    """
+    if not inputs:
+        return ()
+    described: list[ReproductionInput] = []
+    for name in sorted(inputs):
+        _refuse_bad_input_name(name)
+        encoded = inputs[name].encode("utf-8")
+        described.append(
+            ReproductionInput(
+                name=name,
+                content_hash=hashlib.sha256(encoded).hexdigest(),
+                bytes=len(encoded),
+            )
+        )
+    return tuple(described)
 
 
 class ExperimentRunError(RuntimeError):
@@ -382,6 +421,10 @@ class ExperimentRunner:
         inputs or results produces a different name instead of a conflict. The hypothesis prefix
         is there for humans reading the directory.
         """
+        # Described before anything is written, so the manifest records the bytes the runner is
+        # about to produce rather than whatever is on disk afterwards. A name the measurement
+        # chose badly is refused here, before it can reach either the manifest or the filesystem.
+        recorded_inputs = _describe_inputs(measured_inputs)
         manifest = self._manifest(
             plan,
             registration,
@@ -391,7 +434,7 @@ class ExperimentRunner:
             applied_costs,
             design,
             resources,
-            reproducible=bool(measured_inputs),
+            inputs=recorded_inputs,
         )
         destination = self._manifests / (
             f"{plan.hypothesis_id}-v{plan.hypothesis_version}-{manifest.manifest_hash[:16]}.json"
@@ -406,21 +449,15 @@ class ExperimentRunner:
     def _write_inputs(directory: Path, inputs: Mapping[str, str] | None) -> None:
         """Write the files a rerun needs, in a directory named for the bundle.
 
-        Refuses a name containing a path separator or a parent reference. The names come from a
-        measurement, and for a generated experiment the measurement is downstream of
-        model-authored code -- a name like `../../.env` would let it choose where to write. It
-        is refused rather than sanitised, because a silently rewritten filename is one nobody
-        can match back to the manifest that references it.
+        Names were already refused by `_describe_inputs` before the manifest was built; the
+        check is repeated here rather than assumed, because this method is what touches the
+        filesystem and a guard that lives only in its caller is one call site away from absent.
         """
         if not inputs:
             return
         directory.mkdir(parents=True, exist_ok=True)
         for name, content in inputs.items():
-            if "/" in name or "\\" in name or Path(name).name != name:
-                raise ExperimentRunError(
-                    f"reproduction input {name!r} is not a plain filename; a measurement does "
-                    "not choose where the runner writes"
-                )
+            _refuse_bad_input_name(name)
             (directory / name).write_text(content, encoding="utf-8")
 
     def _manifest(
@@ -433,7 +470,7 @@ class ExperimentRunner:
         applied_costs: Mapping[str, str],
         design: ExperimentDesign,
         resources: ResourceUsage,
-        reproducible: bool = False,
+        inputs: tuple[ReproductionInput, ...] = (),
     ) -> ExperimentManifest:
         """Build the provenance bundle (#18), as CONFIRMATORY because a plan is registered.
 
@@ -502,9 +539,10 @@ class ExperimentRunner:
             # an id survives the directory being moved, which a path does not.
             reproduction_command=(
                 ("quantbot", "reproduce-experiment", "--experiment", experiment_id)
-                if reproducible
+                if inputs
                 else ()
             ),
+            reproduction_inputs=inputs,
         )
 
 

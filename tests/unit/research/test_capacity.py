@@ -8,11 +8,14 @@ look true by the code.
 from __future__ import annotations
 
 import ast
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, time
+from decimal import Decimal
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import pytest
 
+from quantbot.domain import Bar
 from quantbot.market_data.instruments import AssetClass
 from quantbot.market_data.pointintime import Capability
 from quantbot.research.capacity import (
@@ -30,13 +33,45 @@ from quantbot.research.registry import (
     SearchOrigin,
     WindowState,
 )
-from quantbot.storage import Database
+from quantbot.storage import Database, StorageRepository
 from quantbot.storage.schema import hypothesis_data_windows
 from tests.unit.research.test_registry import make_draft, register, window
 
 NOW = datetime(2026, 8, 22, 14, 30, tzinfo=UTC)
 TODAY = NOW.date()
 REPOSITORY = Path(__file__).resolve().parents[3]
+
+#: The provider key shape the bar cache writes: vendor, feed, adjustment, timeframe.
+SIP = "alpaca:sip:split:1Day"
+
+
+def seed_sessions(session, *dates: str, provider: str = SIP) -> None:
+    """Store a daily bar for each session, stamped at the Eastern close.
+
+    This is what makes a session *exist* for capacity purposes. A date with no bar is not a
+    session, which is the whole of the weekend fix: nothing writes a Saturday bar, so nothing
+    can report a Saturday as unsearched capacity.
+    """
+    repository = StorageRepository(session)
+    for day in dates:
+        close = datetime.combine(
+            date.fromisoformat(day), time(16, 0), tzinfo=ZoneInfo("America/New_York")
+        ).astimezone(UTC)
+        repository.save_bars(
+            [
+                Bar(
+                    symbol="SPY",
+                    timestamp=close,
+                    open=Decimal("500"),
+                    high=Decimal("500"),
+                    low=Decimal("500"),
+                    close=Decimal("500"),
+                    volume=Decimal("1000"),
+                    adjustment=Decimal("1"),
+                )
+            ],
+            provider=provider,
+        )
 
 
 @pytest.fixture
@@ -125,31 +160,83 @@ def test_sessions_that_had_not_happened_are_the_only_new_equity_capacity(
     """A rolling feed keeps producing sessions, and nobody searched a session that did not exist.
 
     This is not a loophole in exhaustion; it is the only honest mechanism by which the equity
-    window ever recovers, and the point of reporting it as a date rather than as a status is
-    that an operator can see how little it is. Prior consumption is untouched by it.
+    window ever recovers. Prior consumption is untouched by it.
     """
     with database.transaction() as session:
-        equities = by_identity(session)["us-equities-daily"]
-        # Prior consumption records 2016-01-04 .. 2026-08-21.
-        assert equities.unconsumed_from == date(2026, 8, 22)
+        # Prior consumption records 2016-01-04 .. 2026-08-21 (a Friday).
+        empty = by_identity(session)["us-equities-daily"]
+        assert empty.unsearched_sessions == (), "no stored bars, so no capacity to claim"
+        assert not empty.usable_for_confirmation
+
+        seed_sessions(session, "2026-08-24", "2026-08-25")
+        equities = by_identity(session, as_of=date(2026, 8, 25))["us-equities-daily"]
+
+        assert equities.unsearched_sessions == (date(2026, 8, 24), date(2026, 8, 25))
         assert equities.status is CapacityStatus.EXHAUSTED
         assert equities.usable_for_confirmation, "unsearched sessions are real capacity"
 
-        # A year later, more sessions -- and not one trial of the old spend has been rewritten.
+        # A year later, no new bars -- and not one trial of the old spend has been rewritten.
         later = by_identity(session, as_of=date(2027, 8, 22))["us-equities-daily"]
 
-    assert later.unconsumed_from == date(2026, 8, 22)
+    assert later.unsearched_sessions == equities.unsearched_sessions
     assert later.trials == equities.trials
     assert later.consumers == equities.consumers
 
 
-def test_the_day_the_window_was_spent_is_not_yet_new_capacity(database: Database) -> None:
-    """`unconsumed_from` must be a session after the last searched one, not the same one."""
-    with database.transaction() as session:
-        same_day = by_identity(session, as_of=date(2026, 8, 21))["us-equities-daily"]
+def test_a_weekend_is_not_capacity(database: Database) -> None:
+    """The defect #50's review predicted, pinned so it cannot come back.
 
-    assert same_day.unconsumed_from is None
-    assert not same_day.usable_for_confirmation
+    The first version of this module derived new capacity from the calendar: the day after the
+    last consumed date. Prior consumption ends on Friday 2026-08-21, so on the Saturday it
+    reported "unsearched sessions from 2026-08-22" -- a day the exchange was shut. A weekend is
+    not capacity, and neither is a holiday, an outage, or a gap the vendor never served.
+
+    Capacity is now the set of sessions the database holds observations for. Nothing writes a
+    Saturday bar, so nothing can report one.
+    """
+    with database.transaction() as session:
+        seed_sessions(session, "2026-08-24")
+
+        saturday = by_identity(session, as_of=date(2026, 8, 22))["us-equities-daily"]
+        assert saturday.unsearched_sessions == (), "the exchange was shut"
+        assert not saturday.usable_for_confirmation
+
+        sunday = by_identity(session, as_of=date(2026, 8, 23))["us-equities-daily"]
+        assert sunday.unsearched_sessions == ()
+
+        monday = by_identity(session, as_of=date(2026, 8, 24))["us-equities-daily"]
+        assert monday.unsearched_sessions == (date(2026, 8, 24),)
+        for found in monday.unsearched_sessions:
+            assert found.weekday() < 5
+
+
+def test_a_session_inside_the_consumed_range_is_not_new_capacity(database: Database) -> None:
+    """Storing a bar for a session already searched must not resurrect spent capacity.
+
+    Re-pulling history is the other half of the vendor-rename defect: fetching 2020 again does
+    not make 2020 unsearched, however new the rows are.
+    """
+    with database.transaction() as session:
+        seed_sessions(session, "2020-06-15", "2026-08-21")
+        equities = by_identity(session, as_of=date(2026, 8, 21))["us-equities-daily"]
+
+    assert equities.unsearched_sessions == ()
+    assert not equities.usable_for_confirmation
+
+
+def test_a_source_with_no_local_observations_claims_no_new_sessions(
+    database: Database,
+) -> None:
+    """Conservative by construction: nothing can be confirmed against data that is not here."""
+    with database.transaction() as session:
+        seed_sessions(session, "2026-08-24")
+        inventory = by_identity(session, as_of=date(2026, 8, 24))
+
+    assert inventory["us-equities-daily"].unsearched_sessions == (date(2026, 8, 24),)
+    # The equity bars must not leak into a source that declares no observation store.
+    assert inventory["crypto-daily"].unsearched_sessions == ()
+    assert inventory["us-macro-monthly"].unsearched_sessions == ()
+    assert inventory["sec-edgar-filings"].unsearched_sessions == ()
 
 
 def test_crypto_capacity_is_not_equity_capacity(database: Database) -> None:

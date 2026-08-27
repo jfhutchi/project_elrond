@@ -25,11 +25,18 @@ one budget. Provider diversity establishes data correctness and can repair a bad
 duplicate the market event, and counting it twice would hand out significance that was already
 spent (#40).
 
-**Rolling sources grow.** `latest=None` means the feed keeps producing sessions, and the row
-reports `unconsumed_from` -- the day after the last searched session. That is real new capacity
-and it arrives on its own, without rewriting any prior consumption. It is also the *only* honest
-source of new equity capacity this project currently has, which is worth saying plainly: SIP US
-equities 2016-2026 is exhausted at 68 trials, and what accrues is one session a day.
+**Rolling sources grow, and only by observations that exist.** A feed that keeps producing
+sessions accrues genuinely unsearched ones: nobody searched a session that had not happened. The
+first version of this module derived that from the *calendar* -- the day after the last consumed
+date -- and GPT-5.6 Sol's review predicted the defect before the code shipped, which is what
+happened: on 2026-08-22 the equity row reported "unsearched sessions from 2026-08-22", a
+**Saturday**. A weekend is not capacity, and neither is a holiday, an outage, or a gap in the
+vendor's history.
+
+New capacity is now the set of **session dates the database actually holds observations for**,
+after the last consumed one, attributed to this source by its `bars.provider` prefix. A source
+with no local observation store claims none, which is conservative and correct: the project
+cannot confirm anything against data it does not have.
 
 **`UNSUPPORTED` is derived, not declared.** A capability nothing implements reports as
 unsupported by comparing `DATA_SOURCES` against the capabilities the implemented providers
@@ -47,13 +54,14 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from enum import StrEnum
 from types import MappingProxyType
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.market_data.equities import EQUITY_CAPABILITIES
 from quantbot.market_data.instruments import AssetClass
 from quantbot.market_data.pointintime import Capability
@@ -64,7 +72,8 @@ from quantbot.research.registry import (
     HypothesisRegistry,
     WindowState,
 )
-from quantbot.storage.schema import hypothesis_data_windows
+from quantbot.storage.database import decode_utc
+from quantbot.storage.schema import bars, hypothesis_data_windows
 
 #: Capabilities an implemented provider actually serves, as opposed to ones the enum declares.
 #:
@@ -112,6 +121,12 @@ class DataSource:
     permitted_roles: tuple[DataRole, ...]
     #: What a claim has to be about for these observations to bear on it. Prose on purpose.
     answers: str
+    #: `bars.provider` prefixes whose rows are observations of this source. The provider key is
+    #: composite (`alpaca:sip:split:1Day`), so a prefix identifies a feed without pinning the
+    #: adjustment or timeframe. Empty means the project keeps no local observation store for
+    #: this source, and therefore claims no new sessions for it -- the conservative answer, and
+    #: the true one: nothing can be confirmed against data that is not here.
+    observation_prefixes: tuple[str, ...] = ()
 
     @property
     def observation_identity(self) -> str:
@@ -141,6 +156,7 @@ DATA_SOURCES: tuple[DataSource, ...] = (
             "on momentum, trend, volatility and overnight effects; a new claim about daily "
             "equity prices lands on an exhausted window whatever family it is filed under"
         ),
+        observation_prefixes=("alpaca:sip:", "alpaca:iex:"),
     ),
     DataSource(
         dataset="crypto-daily",
@@ -226,9 +242,9 @@ class CapacityRow:
     trials: int
     consumers: tuple[str, ...]
     by_family: Mapping[str, int]
-    #: The day after the last searched session, when the source still produces sessions and
-    #: that day has arrived. `None` when nothing is left or nothing has been searched.
-    unconsumed_from: date | None
+    #: Session dates this database holds observations for that no search has consumed. Real
+    #: sessions, not calendar days: a weekend has no bar and therefore no capacity.
+    unsearched_sessions: tuple[date, ...]
     #: Registrations holding a live claim on part of this range.
     reserved_by: tuple[str, ...]
 
@@ -237,17 +253,22 @@ class CapacityRow:
         return self.source.observation_identity
 
     @property
+    def unconsumed_from(self) -> date | None:
+        """The first unsearched session, or `None` when there is not one."""
+        return self.unsearched_sessions[0] if self.unsearched_sessions else None
+
+    @property
     def usable_for_confirmation(self) -> bool:
         """Whether a confirmatory experiment against this source could mean anything.
 
-        `unconsumed_from` rescues an exhausted rolling source, and that is not a loophole: a
+        Unsearched sessions rescue an exhausted rolling source, and that is not a loophole: a
         session that had not happened when the searching was done was not searched. It is also
-        not much -- one session a day against a window that cost 68 trials.
+        not much, and the count says how much rather than implying an open-ended stream.
         """
         if self.status in {CapacityStatus.UNSUPPORTED, CapacityStatus.QUALITY_BLOCKED}:
             return False
         if self.status is CapacityStatus.EXHAUSTED:
-            return self.unconsumed_from is not None
+            return bool(self.unsearched_sessions)
         return True
 
     def explain(self) -> str:
@@ -256,9 +277,46 @@ class CapacityRow:
             parts.append(f"{self.trials} trials spent")
         if self.reserved_by:
             parts.append("reserved by " + ", ".join(self.reserved_by))
-        if self.unconsumed_from is not None:
-            parts.append(f"unsearched sessions from {self.unconsumed_from.isoformat()}")
+        if self.unsearched_sessions:
+            parts.append(
+                f"{len(self.unsearched_sessions)} unsearched session(s) from "
+                f"{self.unsearched_sessions[0].isoformat()}"
+            )
         return "; ".join(parts)
+
+
+def _sessions_after(
+    session: Session,
+    *,
+    prefixes: Sequence[str],
+    after: date | None,
+    until: date,
+) -> tuple[date, ...]:
+    """Session dates this database holds observations for, strictly after `after`.
+
+    The answer to "is there anything new to search", made of observations rather than of
+    calendar arithmetic. A Saturday has no bar, so it cannot appear here; neither can a holiday,
+    an outage, or a stretch the vendor never served. `after=None` means nothing has been
+    consumed, in which case every stored session in range is unsearched.
+
+    Keyed on the **Eastern** session date for the reason `_session_equity` is: a daily bar
+    stamped at the close is a different UTC date, and counting by UTC would shift every session
+    by one and invent one at each end.
+    """
+    if not prefixes:
+        return ()
+    statement = select(bars.c.timestamp).where(
+        or_(*(bars.c.provider.startswith(prefix) for prefix in prefixes))
+    )
+    found: set[date] = set()
+    for row in session.execute(statement):
+        session_date = decode_utc(str(row[0])).astimezone(XNYS_TIMEZONE).date()
+        if session_date > until:
+            continue
+        if after is not None and session_date <= after:
+            continue
+        found.add(session_date)
+    return tuple(sorted(found))
 
 
 def _consumed_span(
@@ -343,7 +401,7 @@ def capacity_row(session: Session, source: DataSource, *, as_of: date) -> Capaci
             trials=0,
             consumers=(),
             by_family={},
-            unconsumed_from=None,
+            unsearched_sessions=(),
             reserved_by=(),
         )
     if not source.point_in_time:
@@ -354,7 +412,7 @@ def capacity_row(session: Session, source: DataSource, *, as_of: date) -> Capaci
             trials=0,
             consumers=(),
             by_family={},
-            unconsumed_from=None,
+            unsearched_sessions=(),
             reserved_by=(),
         )
 
@@ -368,15 +426,16 @@ def capacity_row(session: Session, source: DataSource, *, as_of: date) -> Capaci
     if status is CapacityStatus.AVAILABLE and reserved:
         status = CapacityStatus.RESERVED
 
-    unconsumed_from: date | None = None
+    # Observations, not calendar days. The earlier version added a day to the last consumed
+    # date and reported that as capacity, which produced a Saturday -- exactly the defect #50's
+    # review predicted. A session exists when the database holds a bar for it and not otherwise.
     span = _consumed_span(session, aliases=aliases, start=source.earliest, end=end)
-    if span is not None and source.latest is None:
-        # A live feed keeps producing sessions after the searching stopped. Those sessions were
-        # not searched, because they had not happened, and this is the only mechanism by which
-        # an exhausted equity window ever recovers -- one session at a time.
-        candidate = span[1] + timedelta(days=1)
-        if candidate <= as_of:
-            unconsumed_from = candidate
+    unsearched = _sessions_after(
+        session,
+        prefixes=source.observation_prefixes,
+        after=span[1] if span is not None else None,
+        until=min(end, as_of),
+    )
     return CapacityRow(
         source=source,
         aliases=aliases,
@@ -384,7 +443,7 @@ def capacity_row(session: Session, source: DataSource, *, as_of: date) -> Capaci
         trials=consumption.trials,
         consumers=consumption.consumers,
         by_family=consumption.by_family,
-        unconsumed_from=unconsumed_from,
+        unsearched_sessions=unsearched,
         reserved_by=reserved,
     )
 

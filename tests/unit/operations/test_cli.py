@@ -291,7 +291,11 @@ def test_research_capacity_reports_the_equity_window_as_spent(tmp_path: Path) ->
     assert equities["status"] == "EXHAUSTED"
     assert equities["trials_spent"] == 68
     assert sorted(equities["datasets"]) == ["alpaca-us-equities-daily", "sip-us-equities-daily"]
-    assert equities["unsearched_from"] == "2026-08-22"
+    # No bars are stored, so there are no sessions to have gone unsearched. The first version
+    # of this asserted "2026-08-22" -- the calendar day after the last consumed one, and a
+    # Saturday. Capacity is observations, not dates (#50).
+    assert equities["unsearched_sessions"] == 0
+    assert equities["unsearched_from"] is None
     assert by_identity["crypto-daily"]["status"] == "AVAILABLE"
     assert by_identity["options-implied-daily"]["status"] == "UNSUPPORTED"
     assert "engineering capability is not statistical capacity" in payload["note"]

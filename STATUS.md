@@ -1263,10 +1263,21 @@ Four things it refuses to do, each of which would overstate what is left: count 
 same dates as two budgets, report a capability with no provider as capacity, let crypto sessions
 read as equity evidence, or let a source with no vintages answer a backtest.
 
-**The only new equity capacity is time.** Nobody searched a session that had not happened, so the
-equity row reports unsearched sessions accruing from the day after the last one spent. That is
-real, and it is one session a day against a window that cost 68 trials. Seven protections,
-mutation-checked.
+**The only new equity capacity is time — and it is counted in sessions, not days.** The first
+version of this derived new capacity from the calendar: the day after the last consumed date.
+GPT-5.6 Sol's review predicted the defect and it was real — on 2026-08-22 the equity row reported
+"unsearched sessions from 2026-08-22", a **Saturday**. A weekend is not capacity, and neither is
+a holiday, an outage, or a gap the vendor never served. Capacity is now the set of sessions the
+database actually holds bars for, attributed by provider prefix; a source with no local
+observation store claims none. Nine protections, mutation-checked.
+
+**The Research Director now consumes it.** `discovery.admissible` existed and was reachable only
+from `bridge.draft_from_candidate`, which no production path imports — a rule rather than a
+mechanism. `capacity_stage` wraps the PROPOSED handler and blocks before the memory query when no
+source has confirmatory capacity left. It is a **project-wide** gate rather than a per-claim one,
+because a `ResearchTask` declares no data windows; matching a question to a dataset by reading its
+text would be exactly the semantic guess `datasets.py` refuses. Per-claim admission arrives when
+tasks declare windows.
 
 **What this does not do.** It does not create capacity, and the honest headline is that there is
 almost none for a US equity claim. That is the finding, not a limitation of the tool.
@@ -1315,8 +1326,44 @@ so a reviewer has something specific to hold a proposal against.
 clean confirmatory capacity left. That is a research result, and having a name for it is what
 stops the alternative: adding another framework because nothing else can be said.
 
+## 6ee. The bundle named a command that did not exist (#48)
+
+**2026-08-27.** Found while scoping #48, and it is the same defect class as everything else on
+this branch: **every reproducible manifest recorded `quantbot reproduce-experiment --experiment
+<id>` in `reproduction_command`, and no such command existed.** An instruction inside the
+evidence record, pointing at nothing.
+
+Worse, the bundle recorded *what to run* and nothing about *what it would need*. A reader seeing
+the `.inputs` directory beside a manifest had no way to tell whether it was complete, whether a
+file had been edited since, or whether it was even the right directory.
+
+**Fixed both halves.** `ExperimentManifest.reproduction_inputs` records each input's name, byte
+count and content hash, taken from the content in memory at run time rather than from disk
+afterwards. The two fields are one claim: a command with no recorded inputs and inputs with no
+command are both refused at construction, so the old bundles' shape is unrepresentable.
+
+`quantbot reproduce-experiment` now exists and reports **readiness**, failing closed three ways:
+a missing or altered input blocks; a dirty original tree with no preserved patch blocks
+permanently (`git_commit=<sha>, dirty=true` does not describe code nobody committed); a
+dependency-lock difference is drift and never silent.
+
+**It refuses to claim a reproduction.** `performed` is a field on the report, always false, and
+the five capabilities #48 still needs are listed by name. A clean readiness report must not read
+like a completed rerun to somebody skimming.
+
+**#48 stays open, and its own first criterion says why.** It asks that one real historical
+confirmatory experiment be rerun from its manifest. **There is no such manifest** — nothing
+outside an integration test has ever written one, which is exactly consistent with the project
+standing at M0. A reproducer built now could only ever be exercised against a synthetic fixture,
+and this repository's rule is that an unexercised feature is an unclaimable one.
+
+Eight protections, mutation-checked.
+
 ## 7. Open items
 
+- [ ] **#48 reproducibility is blocked on there being a confirmatory experiment to reproduce.**
+      The readiness half is built and exercised (§6ee); the reproducer needs a real manifest,
+      which needs a confirmatory run, which needs M1. Not blocked on engineering.
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30).
       Note that the window is now an authenticity floor rather than the qualification: see 6bb.
 - [ ] **Ratify or replace `config/economic-objective-v1.yaml` — operator action, and it blocks

@@ -329,14 +329,20 @@ Four things the inventory refuses to do, each of which would overstate what is l
 | Crypto sessions confirm a US-equity claim | A different market is a different question |
 | A source with no vintages can answer a backtest | `QUALITY_BLOCKED`: it says what is true now |
 
-**The only new equity capacity is time.** SIP US equities 2016–2026 cost 68 trials and is spent.
-A rolling feed keeps producing sessions, and nobody searched a session that had not happened, so
-each row reports `unconsumed_from` — the day after the last searched one. That is real and it is
-one session a day, which is the point of showing it as a date rather than as a status.
+**The only new equity capacity is time, counted in sessions rather than days.** SIP US equities
+2016–2026 cost 68 trials and is spent. A rolling feed keeps producing sessions, and nobody
+searched a session that had not happened — so each row reports the session dates the database
+actually holds observations for, after the last consumed one, attributed by `bars.provider`
+prefix. An earlier version derived this from the calendar and reported a Saturday as capacity;
+sessions exist when there is a bar for them and not otherwise, and a source with no local
+observation store claims none.
 
-`discovery.admissible` is the mechanical half: it refuses a candidate whose declared windows are
-exhausted, before the power gate and the critic, so a search that could never be confirmed does
-not reach the expensive stages.
+`capacity_stage` is the pre-compute gate: it wraps the director's PROPOSED handler and blocks
+before the memory query when no source has confirmatory capacity left, so a search that could
+never be confirmed does not reach the expensive stages. It is **project-wide, not per-claim** —
+a `ResearchTask` declares no data windows, and matching a question to a dataset by reading its
+text would be the semantic guess `datasets.py` refuses. `discovery.admissible` is the per-claim
+version and applies once a candidate declares windows.
 
 ---
 
@@ -360,6 +366,46 @@ a return) that must fail.
 
 ## Reproducibility
 
+**The bundle named a command that did not exist.** Every reproducible manifest recorded
+`quantbot reproduce-experiment --experiment <id>` in `reproduction_command`, and no CLI
+implemented it — an instruction inside the evidence record whose whole authority is that its
+claims are mechanical.
+
+The command exists now and does what can honestly be done today: it reports whether a frozen
+bundle *could* be re-executed, and states in the same object that it did not try.
+
+    quantbot reproduce-experiment --experiment <id> [--manifests DIR] [--patch FILE]
+
+Three things fail closed:
+
+| Condition | Result |
+|---|---|
+| A recorded input is missing, edited or truncated | blocks |
+| The original ran dirty with no preserved patch | blocks, permanently |
+| A dependency-lock difference | reported as drift, never silent |
+
+Inputs are checked by hash against **the bytes the runner wrote**, recorded in the manifest at
+run time as `reproduction_inputs`. Before that field existed the bundle claimed reproducibility
+and recorded nothing about what a rerun would need, so a reader could not tell whether the
+`.inputs` directory beside it was complete, edited, or the right directory at all. The manifest
+now refuses to hold one half without the other: a command with no recorded inputs and inputs with
+no command are both unrepresentable.
+
+`performed` is a field on the report rather than an omission. A report that merely never mentions
+running the experiment reads, to a hurried reader, exactly like one that ran it and found no
+differences — and that reader is the one deciding whether to trust the evidence.
+
+**What is still missing, listed by name in `OUTSTANDING`** so a clean readiness report cannot be
+mistaken for a reproduction: resolving dataset snapshots back to bytes, reconstructing the
+compiled plan, executing it through the authoritative path, producing a new manifest and
+comparing, and replaying a frozen external-worker artifact rather than re-running its inference.
+
+**#48 stays open**, and its first acceptance criterion is the reason. It asks that one real
+historical confirmatory experiment be rerun from its manifest. There is no such manifest: nothing
+outside an integration test has ever produced one, which is consistent with the project standing
+at M0 with no confirmatory experiment to its name. A reproducer built now could only be exercised
+against a synthetic fixture, and a feature nobody has exercised is a feature nobody may claim.
+
 Every confirmatory run writes an immutable manifest **before** returning; the runner cannot be
 constructed without a directory to write to. Both the success and crash paths record, because an
 archive that only keeps what worked is the selection bias this project exists to resist.
@@ -368,9 +414,11 @@ archive that only keeps what worked is the selection bias this project exists to
 surfaced rather than folded into the pass — a check that quietly did nothing because the result
 lacked the figure it needs looks exactly like a check that passed.
 
-`reproduction_command` is deliberately **empty**. Nothing can yet re-execute a compiled plan, and
-an unrunnable reproduction command is worse than an absent one because it reads as
-reproducibility somebody verified.
+An earlier version of this section said `reproduction_command` was deliberately empty, on the
+grounds that an unrunnable reproduction command is worse than an absent one because it reads as
+reproducibility somebody verified. The reasoning was right and the description was **wrong**: the
+runner populated the field whenever a measurement produced inputs, so the bundle had been making
+exactly the claim this paragraph warned against. That is what the section above fixes.
 
 ---
 
