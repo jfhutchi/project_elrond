@@ -269,13 +269,16 @@ def test_changing_any_limit_changes_the_policy_identity() -> None:
 
 
 def test_an_unimplemented_veto_cannot_be_enabled() -> None:
-    """Sector and correlation have no evaluator, and a veto that reads as enforced is worse.
+    """Correlation has no evaluator, and a veto that reads as enforced is worse than a missing one.
 
-    They are declared in `VetoName` so the gap is a visible member of the enum rather than an
+    It is declared in `VetoName` so the gap is a visible member of the enum rather than an
     absence a reader has to notice, and refused at configuration so nothing can believe the
     portfolio is protected against a concentration nothing measures.
+
+    `EXPOSURE_CONCENTRATION` left this set when #59's classification landed; a name that stayed
+    here after gaining an evaluator would refuse to be enabled forever.
     """
-    assert UNIMPLEMENTED == {VetoName.SECTOR_CONCENTRATION, VetoName.CORRELATION_CONCENTRATION}
+    assert UNIMPLEMENTED == {VetoName.CORRELATION_CONCENTRATION}
     for name in UNIMPLEMENTED:
         with pytest.raises(ValueError, match="has no evaluator"):
             policy(enabled=frozenset({VetoName.NET_EXPOSURE, name}))

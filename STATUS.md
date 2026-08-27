@@ -1406,12 +1406,61 @@ mutation-checked.
 **This creates no alpha and the milestone ladder does not move.** If #52's ladder ever advances
 because risk gates were added, that is a bug in the ladder.
 
+## 6gg. What a concentration limit has to be able to see (#59, slice 1)
+
+**2026-08-27.** `config/exposure-classification-v1.yaml` and `quantbot.risk.exposure`, which turn
+`SECTOR_CONCENTRATION` from a declared-and-unimplemented name into `EXPOSURE_CONCENTRATION` with an
+evaluator behind it.
+
+**The rename is the finding, not the paperwork.** #58 recorded that the sector veto was blocked on
+point-in-time classification, because classifying a historical position by today's sector is
+look-ahead. That reasoning is right for single stocks and does not bind here: all 23 instruments in
+the universe are ETFs, and an ETF's exposure is its published mandate, not a vendor's estimate of a
+company's business. Nothing to license, nothing to revise.
+
+But a *sector* veto would not have caught this portfolio anyway. The roster holds 10 of 23, and the
+dangerous state is not "too much technology" — SPY + QQQ + XLK + IWM + MDY share no sector at all
+and are one bet on US equity beta wearing five tickers. TLT + IEF + TIP is duration. A sector table
+would rate the first of those as perfectly diversified, which is a limit reporting itself as
+enforced while the risk it exists to bound walks straight through it.
+
+So the classification is by **exposure**: asset class, region and sector together, and a symbol
+counts in every group its mandate implies. That can only make the veto more likely to refuse.
+
+**What survives from the original look-ahead objection is that mandates change.** Constituents left
+XLK when Communication Services was created in 2018. The table therefore carries an
+`effective_from` and refuses to classify any decision before it — and that date is a *verification*
+date, not a researched inception date. The table declines to speak about history nobody checked.
+The cost is that the veto cannot be backtested; the cost is correct, because the veto could not
+have run over that history.
+
+**Unknown blocks, which is the whole asymmetry.** An unclassified instrument belongs to no group,
+so it would add to no group's concentration and pass every limit by not being recognised. An
+unclassifiable *held* position blocks too, because it makes every group total an understatement,
+and an understated numerator is the permissive direction. Thirteen protections, mutation-checked.
+
+**It ships disabled, and the threshold deliberately does not bind.** This universe is mostly US
+equity, so a roster can sit near 100% `US_EQUITY` while being exactly what the strategy is designed
+to hold. One global ceiling is too loose for the dominant group and would be far too tight for the
+narrow ones if set for it. Per-group ceilings are the likely next step and are an operator decision
+about risk appetite.
+
+**`CORRELATION_CONCENTRATION` is untouched** and still refuses to be enabled. It needs a frozen
+covariance, which is a different kind of object from a table read off a prospectus.
+
 ## 7. Open items
 
 - [ ] **Decide whether to enable `DAILY_LOSS` and `LIQUIDITY` portfolio vetoes — operator
       action (#58).** Both are implemented and tested and default to off. Enabling them halts
       entries until the ledger holds an equity mark for the current session and twenty sessions
       of volume per symbol, which is correct fail-closed behaviour and a real trading pause.
+- [ ] **Choose exposure-concentration ceilings, or decline to enable the veto — operator
+      action (#59).** `EXPOSURE_CONCENTRATION` is implemented, mutation-checked and off by
+      default, and its shipped ceiling is a placeholder that does not bind. A single global
+      threshold cannot serve both `US_EQUITY` (structurally near 100% for this strategy) and the
+      narrow groups. Setting a limit that can refuse the operator's own orders is not an agent's
+      call. Also open on #59: whether HYG belongs in `US_EQUITY` as well as `CREDIT` — it is
+      classified as both, which is the conservative reading and a contested one.
 - [ ] **#48 reproducibility is blocked on there being a confirmatory experiment to reproduce.**
       The readiness half is built and exercised (§6ee); the reproducer needs a real manifest,
       which needs a confirmatory run, which needs M1. Not blocked on engineering.
