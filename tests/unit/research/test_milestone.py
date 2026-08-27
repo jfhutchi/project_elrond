@@ -21,7 +21,7 @@ from quantbot.research.promotion import (
     Stage,
 )
 from quantbot.research.registry import DataRole, HypothesisRegistry
-from quantbot.storage import Database
+from quantbot.storage import Database, StorageRepository
 from tests.unit.research.test_promotion import (  # `ratified_objective` is used as a fixture
     CLAIM_ID,
     qualify,
@@ -463,3 +463,103 @@ def test_the_report_names_the_day_it_was_taken(database: Database) -> None:
         report = assess_milestone(session, as_of=TODAY - timedelta(days=1))
 
     assert report.as_of == date(2026, 8, 21)
+
+
+def test_engineering_activity_cannot_advance_the_milestone(database: Database) -> None:
+    """The invariant #52 exists for, asserted rather than argued (GPT-5.6 Sol's review).
+
+    Issues closed, tests added, dashboards built, risk gates wired, workers integrated, compute
+    spent — every one of those moves a number this project reports about itself, and none of them
+    is evidence about the market. The failure mode is not that somebody decides to cheat; it is
+    that engineering volume accumulates and the profitability state drifts up with it because
+    nothing forbids it.
+
+    So: fill the database with activity of every kind the system records, and assert the
+    milestone does not move a millimetre.
+    """
+    with database.transaction() as session:
+        refute(session)
+        before = assess_milestone(session, as_of=TODAY)
+        assert before.current is Milestone.M0_RESEARCH_PLATFORM_OPERATIONAL
+
+        repository = StorageRepository(session)
+        # Operational activity: runs, incidents, reconciliation — the daemon working.
+        for index in range(25):
+            repository.create_incident(
+                f"INC-{index}",
+                severity="INFO",
+                kind="CYCLE_COMPLETED",
+                message="a cycle ran and nothing was wrong",
+                occurred_at=NOW,
+            )
+        # Research machinery being exercised: registrations, tasks, compute, literature.
+        for index in range(5):
+            freeze(
+                session,
+                hypothesis_id=f"H-2026-90{index}",
+                universe=(f"SYM{index}",),
+            )
+
+        after = assess_milestone(session, as_of=TODAY)
+
+    assert after.current == before.current, "engineering activity moved the profitability state"
+    assert after.candidate_edges == before.candidate_edges
+    assert after.forward_supported == before.forward_supported
+    # And the M1 check still names the thing that is actually missing, rather than counting rows.
+    stuck = after.next_check
+    assert stuck is not None and stuck.level is Milestone.M1_CANDIDATE_EDGE_DETECTED
+    assert "RESEARCH_SURVIVOR" in stuck.blocking[0]
+
+
+def test_registrations_alone_are_not_a_candidate_edge(database: Database) -> None:
+    """Freezing questions is research volume, not research results.
+
+    A project can register a hundred hypotheses and have answered none of them. M1 is the
+    survivor gate — a claim that passed its own pre-registered test — and the count of
+    registrations is exactly the surrogate metric #52 was opened about.
+    """
+    with database.transaction() as session:
+        refute(session)
+        for index in range(20):
+            freeze(session, hypothesis_id=f"H-2026-80{index}", universe=(f"TCK{index}",))
+        report = assess_milestone(session, as_of=TODAY)
+
+    assert report.current is Milestone.M0_RESEARCH_PLATFORM_OPERATIONAL
+    assert report.candidate_edges == ()
+
+
+def test_forward_days_must_be_authentic_and_not_backfilled(database: Database) -> None:
+    """M3 reads the trading ledger, so a backtest cannot reach it (#52, Sol's invariant 4).
+
+    `ForwardObservation` refuses any role but `FORWARD_PAPER`, and `count_forward_days` refuses a
+    sequence a caller assembled rather than one `observe_forward_days` produced. This asserts the
+    milestone inherits both rather than reimplementing a looser count of its own.
+    """
+    from quantbot.research.promotion import DataRole, ForwardObservation, count_forward_days
+
+    with pytest.raises(ValueError, match="cannot increment this counter"):
+        ForwardObservation(
+            strategy_id="adaptive-momentum",
+            trading_date=TODAY,
+            trades=1,
+            role=DataRole.PROTECTED_EVALUATION,
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+
+    hand_built = [
+        ForwardObservation(
+            strategy_id="adaptive-momentum",
+            trading_date=TODAY,
+            trades=1,
+            role=DataRole.FORWARD_PAPER,
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
+    ]
+    with pytest.raises(TypeError, match="not forward evidence"):
+        count_forward_days(
+            hand_built,  # type: ignore[arg-type]
+            strategy_version="1.3.0",
+            configuration_hash="cfg-abc",
+        )
