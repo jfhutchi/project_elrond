@@ -1488,6 +1488,40 @@ about risk appetite.
 **`CORRELATION_CONCENTRATION` is untouched** and still refuses to be enabled. It needs a frozen
 covariance, which is a different kind of object from a table read off a prospectus.
 
+## 6hh. Opening a database is not permission to rewrite it (#66)
+
+**2026-08-28.** `Database.create` / `Database.migrate`, `MigrationRequiredError`, and a
+`quantbot migrate-database` command that reports before it acts.
+
+**#65 was containment, not the fix, and Sol was right to say so.** The autouse pytest isolation
+stopped the *test suite* pointing at the operator's store. It did not remove the capability that
+made the incident possible: `Database.__init__` ran Alembic to head, so **anything** that
+obtained a connection could upgrade whatever it opened — a diagnostic, a read-only CLI command,
+an experimental checkout carrying an unmerged migration. Acquiring read access granted mutation
+authority as a side effect, which is the governing rule this project applies everywhere else.
+
+Now:
+
+- **Opening an existing store never upgrades it.** A behind-head file raises
+  `MigrationRequiredError`, and the raise happens *before* the engine is created, so nothing has
+  touched the file beyond a read-only preflight.
+- **A file that is absent is still created at head**, because creating a store where none existed
+  cannot damage operator state. The hazard is upgrading one that already holds someone's data.
+- **`Database.migrate` is the only path that may rewrite a store**, and a caller has to name it.
+- **`Database.create` refuses an existing file**, so it cannot become a migration by another name;
+  `Database.migrate` refuses an absent one, so a typo'd path cannot silently produce an empty
+  store and report a successful migration.
+- **A store ahead of this build stays fail-closed and untouched.** There is deliberately no
+  downgrade: rewriting a store to suit an older checkout is the destructive direction.
+- **The CLI reports before it acts.** `quantbot migrate-database` says what it would do and stops;
+  only `--confirm` carries the authority. It is dispatched before any context is built, because
+  building one opens a database — and the store the command exists for is precisely the one that
+  cannot be opened.
+
+The tests assert against the **bytes on disk** rather than the returned object, because "it did
+not migrate" is a claim about the file. Six protections, mutation-checked, including the incident
+itself: a `status` command pointed at a behind-head store now fails and leaves the file byte-identical.
+
 ## 7. Open items
 
 - [ ] **Decide whether to enable `DAILY_LOSS` and `LIQUIDITY` portfolio vetoes — operator

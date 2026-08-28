@@ -53,6 +53,26 @@ class UnsupportedSchemaVersionError(RuntimeError):
         super().__init__(f"Unsupported schema version {actual}; this build supports {supported}")
 
 
+class MigrationRequiredError(RuntimeError):
+    """An existing store is behind head and was opened through a path with no migration authority.
+
+    Raised rather than upgraded (#66). Opening a database is how nearly everything in this
+    project acquires a connection -- a CLI command, a diagnostic, an experimental checkout -- and
+    if opening also migrates, then every one of those holds authority to rewrite operator state
+    as a side effect of wanting to read it. The test suite exercised exactly that and upgraded a
+    live trading store from an unmerged branch.
+    """
+
+    def __init__(self, path: Path, actual: int | None) -> None:
+        self.path = path
+        self.actual = actual
+        super().__init__(
+            f"{path} is at schema version {actual} and this build expects {SCHEMA_VERSION}; "
+            "opening a store does not migrate it. Run `quantbot migrate-database` to upgrade it "
+            "deliberately, after taking a backup"
+        )
+
+
 def encode_decimal(value: Decimal) -> str:
     """Encode a finite Decimal as a unique, non-exponent SQLite string."""
     if not value.is_finite():
@@ -94,16 +114,74 @@ def decode_utc(value: str) -> datetime:
 class Database:
     """A durable SQLite database with fail-fast schema and pragma checks."""
 
-    def __init__(self, path: str | Path, *, busy_timeout_ms: int = 5000) -> None:
+    def __init__(
+        self, path: str | Path, *, busy_timeout_ms: int = 5000, may_migrate: bool = False
+    ) -> None:
+        """Open a store. **Does not upgrade an existing one** unless `may_migrate` is set (#66).
+
+        A file that is absent is created at head, because creating a store where none existed
+        cannot damage operator state -- the hazard this guards is upgrading a store that already
+        holds someone's data. An existing store that is behind head raises
+        `MigrationRequiredError` instead of being migrated.
+
+        Prefer `Database.create` and `Database.migrate` at call sites that mean one of those
+        specifically; they say so in the name, which is the point.
+        """
         if busy_timeout_ms <= 0:
             raise ValueError("busy_timeout_ms must be positive")
         self.path = Path(path).expanduser().resolve()
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.busy_timeout_ms = busy_timeout_ms
+        existed = self.path.exists() and self.path.stat().st_size > 0
         self._stamp_revision, self._pending_upgrade = self._preflight_schema()
+        if existed and self._pending_upgrade and not may_migrate:
+            # Raised *before* the engine is created, so nothing has touched the file beyond the
+            # read-only preflight. Acquiring a connection must not be how a store gets rewritten.
+            raise MigrationRequiredError(self.path, self._observed_version())
         self.engine: Engine = create_engine(f"sqlite+pysqlite:///{self.path.as_posix()}")
         event.listen(self.engine, "connect", self._configure_connection)
         self._initialize_schema()
+
+    @classmethod
+    def create(cls, path: str | Path, *, busy_timeout_ms: int = 5000) -> Database:
+        """Create a new store at head, refusing to touch one that already exists."""
+        location = Path(path).expanduser().resolve()
+        if location.exists() and location.stat().st_size > 0:
+            raise FileExistsError(
+                f"{location} already holds a database; use Database.migrate to upgrade it, or "
+                "Database(...) to open it"
+            )
+        return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+
+    @classmethod
+    def migrate(cls, path: str | Path, *, busy_timeout_ms: int = 5000) -> Database:
+        """Upgrade an existing store to head. The only path in this module that may rewrite one.
+
+        Deliberately not reachable by opening: a caller has to name this to get the authority.
+        """
+        location = Path(path).expanduser().resolve()
+        if not location.exists() or location.stat().st_size == 0:
+            raise FileNotFoundError(
+                f"{location} holds no database to migrate; use Database.create for a new one"
+            )
+        return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+
+    def _observed_version(self) -> int | None:
+        """The version marker as it stands on disk, read without modifying anything."""
+        try:
+            connection = sqlite3.connect(f"file:{self.path.as_posix()}?mode=ro", uri=True)
+        except sqlite3.Error:
+            return None
+        try:
+            row = connection.execute("SELECT version FROM schema_version").fetchone()
+        except sqlite3.Error:
+            return None
+        finally:
+            connection.close()
+        try:
+            return int(row[0]) if row else None
+        except (TypeError, ValueError):
+            return None
 
     def _preflight_schema(self) -> tuple[str | None, bool]:
         """Validate an existing file without changing persistent SQLite settings.

@@ -93,6 +93,16 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # Where a preserved working-tree patch lives, when the original ran dirty. Optional, and its
     # absence is what makes a dirty run unreproducible rather than merely noted.
     reproduce.add_argument("--patch")
+    # The command `MigrationRequiredError` tells the operator to run (#66). Opening a store no
+    # longer upgrades it, so there has to be somewhere the authority deliberately lives.
+    migrate = commands.add_parser("migrate-database")
+    migrate.add_argument(
+        "--database",
+        help="store to upgrade; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
+    )
+    # Refusing by default is the point: an upgrade is not reversible and the operator should have
+    # seen what it would do before it does it.
+    migrate.add_argument("--confirm", action="store_true")
     verify = commands.add_parser("verify-manifest")
     verify.add_argument("--manifest", required=True)
     verify.add_argument("--against")
@@ -165,6 +175,65 @@ def _durable_reconciliation_successful(database: Database) -> bool:
     )
 
 
+def _migrate_database(args: argparse.Namespace, stream: TextIO) -> int:
+    """Upgrade a store to head, deliberately (#66).
+
+    Reports what it would do and stops unless `--confirm` is given. A migration is not
+    reversible, and the incident this exists to prevent happened precisely because a schema
+    upgrade could occur without anyone deciding to perform one.
+    """
+    from quantbot.storage import Database, MigrationRequiredError, UnsupportedSchemaVersionError
+    from quantbot.storage.schema import SCHEMA_VERSION
+
+    path = Path(args.database or os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    payload: dict[str, object] = {
+        "ok": False,
+        "command": "migrate-database",
+        "database": str(path),
+        "target_schema_version": SCHEMA_VERSION,
+        "migrated": False,
+    }
+
+    if not path.exists() or path.stat().st_size == 0:
+        payload["error"] = f"{path} holds no database to migrate"
+        json.dump(payload, stream, sort_keys=True)
+        return 2
+
+    try:
+        # An open that succeeds means there is nothing to do -- and it cannot have migrated
+        # anything, which is the property #66 establishes.
+        Database(path).close()
+    except MigrationRequiredError as behind:
+        payload["current_schema_version"] = behind.actual
+        if not args.confirm:
+            payload["error"] = (
+                f"{path} is at schema version {behind.actual} and would be upgraded to "
+                f"{SCHEMA_VERSION}. Take a backup, then re-run with --confirm"
+            )
+            json.dump(payload, stream, sort_keys=True)
+            return 2
+        Database.migrate(path).close()
+        payload.update(ok=True, migrated=True)
+        json.dump(payload, stream, sort_keys=True)
+        return 0
+    except UnsupportedSchemaVersionError as ahead:
+        # Ahead of this build. There is no downgrade here on purpose: rewriting a store to suit
+        # an older checkout is the destructive direction, and it is the operator's call.
+        payload["current_schema_version"] = ahead.actual
+        payload["error"] = (
+            f"{path} is at schema version {ahead.actual}, ahead of the {SCHEMA_VERSION} this "
+            "build supports. It was written by a newer checkout; reconcile the code rather than "
+            "the store"
+        )
+        json.dump(payload, stream, sort_keys=True)
+        return 2
+
+    payload.update(ok=True, current_schema_version=SCHEMA_VERSION)
+    payload["note"] = "already at head; nothing to migrate"
+    json.dump(payload, stream, sort_keys=True)
+    return 0
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -174,6 +243,13 @@ def main(
     stream = output or sys.stdout
     parser = build_parser(output=stream)
     args = parser.parse_args(argv)
+
+    if args.command == "migrate-database":
+        # Handled before a context exists, because building one opens a database -- and the store
+        # this command is for is precisely the one that cannot be opened. A migration command
+        # that needed a successful open would be unreachable exactly when it was needed.
+        return _migrate_database(args, stream)
+
     owned_context = context is None
     active = context or _default_context()
     try:
