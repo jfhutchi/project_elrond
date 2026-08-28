@@ -264,9 +264,15 @@ Three rules make it hard to flatter:
 
 - **Contiguous.** A level counts only when every level below it does. Forward evidence with no
   surviving candidate behind it reports M0, not M3.
-- **`unassessed` blocks.** M4 carries one permanently until #51 lands: the paper account holds
-  $100 and the mandate's range reaches $10,000, and no amount of evidence at the smaller size
-  distinguishes an effect that survives at scale from one that does not.
+- **`unassessed` blocks.** M4 carries one whenever no capacity assessment has been computed: the
+  paper account holds $100 and the mandate's range reaches $10,000, and no amount of evidence at
+  the smaller size distinguishes an effect that survives at scale from one that does not.
+  **The gate reads an assessment, not an issue number.** Closing #51 does not open M4; a
+  `CapacityAssessment` whose verdict is `SURVIVES_MANDATE` does. The three states stay
+  distinguishable — absent is `unassessed` ("nobody looked"), a computed assessment that does not
+  support intended capital is `blocking` ("somebody looked, and the answer was no"), and only a
+  supporting one clears. Today no production path computes one, so the `unassessed` entry is what
+  an operator sees.
 - **A reached level names an artifact.** "Nothing blocks it" is not "something shows it".
 
 M2 rests on one inference worth stating: probe results are not stored in a queryable table, so it

@@ -1315,10 +1315,24 @@ Six levels, derived from durable state, so a milestone cannot be reached by writ
 **The project is at M0.** That is not a setback and it is not new; it is the first time anything
 reported it as a number rather than as a paragraph somebody has to read.
 
-**M4 cannot clear at all yet, and says so.** It carries a permanent `unassessed` entry naming
-#51: the paper account holds $100, the mandate's range reaches $10,000, and no amount of forward
-evidence at the smaller size distinguishes an effect that survives at scale from one that does
-not. An unassessed check blocks, so M4 will not pass until that is measured.
+**M4 cannot clear at all yet, and says so.** The paper account holds $100, the mandate's range
+reaches $10,000, and no amount of forward evidence at the smaller size distinguishes an effect
+that survives at scale from one that does not. An unassessed check blocks, so M4 will not pass
+until that is measured.
+
+**#51 built the measurement, and did not thereby open the gate.** `assess_capital_capacity`
+evaluates a strategy across a ladder derived from the mandate's own capital range and reports the
+capital at which benchmark-relative edge crosses zero. M4 reads *that assessment* rather than the
+issue's status, so closing #51 clears nothing; a verdict of `SURVIVES_MANDATE` does. A computed
+assessment that says the edge dies moves from `unassessed` to `blocking`, because "somebody
+looked and the answer was no" is a different state from "nobody looked".
+
+No production path computes one yet, and the reason is worth naming rather than leaving implicit:
+annual turnover is not a durable per-strategy field, so every input is available except the one
+that says how many round trips the cost would be charged on. The mandate carries
+`max_annual_turnover`, and substituting that declared ceiling for a measurement is a judgement
+call about conservatism rather than a default to take quietly — so the assessment blocks on the
+missing input instead.
 
 **Three rules make the ladder hard to flatter.** It is contiguous, so forward evidence with no
 surviving candidate behind it reports M0 rather than M3. `unassessed` blocks. And a reached level
