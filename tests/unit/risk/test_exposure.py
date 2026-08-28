@@ -20,6 +20,8 @@ from quantbot.risk.exposure import (
     ExposureClassification,
     ExposureGroup,
     ExposureState,
+    FactorModel,
+    Provenance,
     build_exposure_state,
     load_exposure_classification,
 )
@@ -43,10 +45,10 @@ def table(**overrides: object) -> ExposureClassification:
         "version": 1,
         "source": "issuer fund descriptions",
         "effective_from": VERIFIED,
-        "symbols": {
+        "mandate": {
             "SPY": frozenset({ExposureGroup.US_EQUITY}),
             "XLK": frozenset({ExposureGroup.US_EQUITY, ExposureGroup.TECHNOLOGY}),
-            "TLT": frozenset({ExposureGroup.TREASURY_DURATION}),
+            "TLT": frozenset({ExposureGroup.TREASURY}),
         },
     }
     fields.update(overrides)
@@ -104,7 +106,7 @@ def test_the_shipped_table_classifies_every_symbol_the_strategy_trades() -> None
         (REPOSITORY / "config" / "strategy-v1-2.yaml").read_text(encoding="utf-8")
     )["universe"]
 
-    missing = [symbol for symbol in universe if symbol not in loaded.symbols]
+    missing = [symbol for symbol in universe if symbol not in loaded.mandate]
     assert not missing, f"unclassified universe symbols: {missing}"
 
 
@@ -220,7 +222,7 @@ def test_a_symbol_counts_in_every_group_it_carries() -> None:
     # 5500 committed + 1000 ordered = 6500 against a 5000 ceiling (5000bps of 10000 equity).
     decision = evaluate_portfolio_vetoes(inputs(symbol="XLK", exposure=state), policy())
     assert not decision.allowed
-    assert "US_EQUITY would reach 6500" in decision.rejections[0].reason
+    assert "US_EQUITY (MANDATE) would reach 6500" in decision.rejections[0].reason
     assert decision.rejections[0].unmeasured is None, "a breached limit is not an unmeasured one"
 
 
@@ -297,13 +299,140 @@ def test_two_classification_versions_are_two_studies() -> None:
     assert table(effective_from=date(2026, 1, 2)).identity != base.identity
 
     moved = table(
-        symbols={**dict(base.symbols), "TLT": frozenset({ExposureGroup.CREDIT})}
+        mandate={**dict(base.mandate), "TLT": frozenset({ExposureGroup.CREDIT})}
     )
     assert moved.identity != base.identity, "regrouping a symbol is a new definition"
 
     # The state carries it, so a rejection can be traced to the table that produced it.
     state = build_exposure_state(classification=base, symbol="SPY", positions=[], as_of=SESSION)
     assert state.classification_identity == base.identity
+
+
+def test_a_mandate_claim_and_a_stress_proxy_are_not_the_same_claim() -> None:
+    """Sol's #59 follow-up: issuer mandate and empirical factor carry different evidence.
+
+    HYG holds high-yield credit by mandate and behaves like equity in a drawdown. Both belong in
+    a concentration limit, and recording them identically would let a declared stress assumption
+    borrow the authority of a prospectus.
+    """
+    loaded = load_exposure_classification(REPOSITORY / DEFAULT_CLASSIFICATION_PATH)
+
+    # The mandate says credit and only credit. HYG owns no equities.
+    assert loaded.mandate["HYG"] == frozenset({ExposureGroup.CREDIT})
+
+    # The equity exposure is still measured -- it is why the limit matters in a drawdown -- but
+    # it is labelled as the weaker claim.
+    provenance = loaded.provenance_for("HYG", as_of=VERIFIED)
+    assert provenance is not None
+    assert provenance[ExposureGroup.CREDIT] is Provenance.MANDATE
+    assert provenance[ExposureGroup.US_EQUITY] is Provenance.FACTOR
+
+    # LQD is rate-sensitive and owns no Treasuries, so duration is a factor and not a holding.
+    assert ExposureGroup.TREASURY not in loaded.mandate["LQD"]
+    lqd = loaded.provenance_for("LQD", as_of=VERIFIED)
+    assert lqd is not None and lqd[ExposureGroup.DURATION_FACTOR] is Provenance.FACTOR
+
+
+def test_provenance_is_a_property_of_the_assignment_not_of_the_group() -> None:
+    """`US_EQUITY` is definitional for SPY and inferred for HYG. Same exposure, different evidence.
+
+    Attaching provenance to the group instead would force one label onto both and lose exactly
+    the distinction this split exists to keep.
+    """
+    loaded = load_exposure_classification(REPOSITORY / DEFAULT_CLASSIFICATION_PATH)
+
+    spy = loaded.provenance_for("SPY", as_of=VERIFIED)
+    hyg = loaded.provenance_for("HYG", as_of=VERIFIED)
+    assert spy is not None and hyg is not None
+    assert spy[ExposureGroup.US_EQUITY] is Provenance.MANDATE
+    assert hyg[ExposureGroup.US_EQUITY] is Provenance.FACTOR
+
+    # And when both halves claim the same exposure, the stronger evidence wins the label.
+    # Reporting a definitional exposure as empirically inferred understates what is known, and
+    # would let a study discount a refusal that rested on a prospectus.
+    doubled = table(
+        factor_model=FactorModel(
+            method="declared stress proxy",
+            as_of=VERIFIED,
+            version=1,
+            assignments={"SPY": frozenset({ExposureGroup.US_EQUITY})},
+        )
+    )
+    both = doubled.provenance_for("SPY", as_of=VERIFIED)
+    assert both is not None
+    assert both[ExposureGroup.US_EQUITY] is Provenance.MANDATE
+
+
+def test_a_refusal_says_which_mechanism_it_acted_on() -> None:
+    """#57 compares refusals, and two refusals under different mechanisms are not one dataset."""
+    factored = table(
+        factor_model=FactorModel(
+            method="declared stress proxy",
+            as_of=VERIFIED,
+            version=1,
+            assignments={"TLT": frozenset({ExposureGroup.US_EQUITY})},
+        )
+    )
+    state = build_exposure_state(
+        classification=factored,
+        symbol="TLT",
+        positions=[position("SPY", "4500")],
+        as_of=SESSION,
+    )
+
+    decision = evaluate_portfolio_vetoes(inputs(symbol="TLT", exposure=state), policy())
+
+    assert not decision.allowed
+    assert "US_EQUITY (FACTOR)" in decision.rejections[0].reason, decision.rejections[0].reason
+
+
+def test_the_factor_model_is_versioned_apart_from_the_mandate() -> None:
+    """A stress assumption changing is a new definition, and must not be invisible.
+
+    The mandate half can be stable while the factor half moves; if only the mandate fed the
+    identity, two studies under different stress assumptions would pool into one.
+    """
+    base = table()
+    assert base.factor_model is None
+
+    factored = table(
+        factor_model=FactorModel(
+            method="declared stress proxy",
+            as_of=VERIFIED,
+            version=1,
+            assignments={"TLT": frozenset({ExposureGroup.US_EQUITY})},
+        )
+    )
+    assert factored.identity != base.identity, "adding a stress model is a new definition"
+
+    reassigned = table(
+        factor_model=FactorModel(
+            method="declared stress proxy",
+            as_of=VERIFIED,
+            version=2,
+            assignments={"TLT": frozenset({ExposureGroup.CREDIT})},
+        )
+    )
+    assert reassigned.identity != factored.identity
+    assert reassigned.factor_model is not None
+    assert reassigned.factor_model.identity.startswith("factor-model-v2-")
+
+
+def test_an_instrument_cannot_be_classified_on_stress_behaviour_alone() -> None:
+    """A factor row with no mandate row would classify a symbol entirely on the weaker claim.
+
+    That is the direction that must not happen quietly: the instrument would appear classified,
+    and everything about it would rest on an assumption nobody registered as a mandate.
+    """
+    with pytest.raises(ValueError, match="cannot be classified on stress behaviour alone"):
+        table(
+            factor_model=FactorModel(
+                method="declared stress proxy",
+                as_of=VERIFIED,
+                version=1,
+                assignments={"NVDA": frozenset({ExposureGroup.US_EQUITY})},
+            )
+        )
 
 
 def test_a_symbol_classified_into_nothing_is_refused_at_load() -> None:
@@ -313,7 +442,7 @@ def test_a_symbol_classified_into_nothing_is_refused_at_load() -> None:
     and the symbol must be omitted instead -- where it classifies as unknown and blocks.
     """
     with pytest.raises(ValueError, match="omit it so it classifies as unknown"):
-        table(symbols={"SPY": frozenset()})
+        table(mandate={"SPY": frozenset()})
 
 
 def test_the_input_builder_leaves_exposure_absent_when_no_table_is_supplied() -> None:

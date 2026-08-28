@@ -48,7 +48,12 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from quantbot.domain import Position
 from quantbot.market_data.calendar import XNYS_TIMEZONE
-from quantbot.risk.exposure import ExposureClassification, ExposureState, build_exposure_state
+from quantbot.risk.exposure import (
+    ExposureClassification,
+    ExposureState,
+    Provenance,
+    build_exposure_state,
+)
 
 BASIS_POINTS = Decimal("10000")
 
@@ -441,7 +446,14 @@ def _exposure_concentration(
         if (projected := state.committed_by_group.get(group, Decimal("0")) + added) > ceiling
     ]
     if breached:
-        detail = "; ".join(f"{group.value} would reach {value}" for group, value in breached)
+        # Each breach names how that exposure was assigned. A refusal driven by a prospectus and
+        # one driven by a declared stress proxy are different claims, and #57 cannot pool them
+        # into one dataset if the rejection does not say which it was.
+        detail = "; ".join(
+            f"{group.value} ({state.order_provenance.get(group, Provenance.MANDATE).value}) "
+            f"would reach {value}"
+            for group, value in breached
+        )
         return _reject(
             VetoName.EXPOSURE_CONCENTRATION,
             policy,

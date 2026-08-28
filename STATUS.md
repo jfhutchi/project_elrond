@@ -1493,6 +1493,25 @@ to hold. One global ceiling is too loose for the dominant group and would be far
 narrow ones if set for it. Per-group ceilings are the likely next step and are an operator decision
 about risk appetite.
 
+**Mandate and stress behaviour are now separate claims (Sol's #59 follow-up).** The first version
+of the table mixed them: `HYG: [CREDIT, US_EQUITY]` and `LQD: [CREDIT, TREASURY_DURATION]` recorded
+an empirical stress proxy with the same provenance as a prospectus reading. HYG's equity beta in a
+drawdown is real and is exactly why a concentration limit should see it — and it is not a claim
+that HYG holds equities.
+
+`mandate` is what a fund holds by its published objective. `factor_model` is what it behaves like
+under stress, with its own method, as-of date and version, hashed separately and folded into the
+classification identity so a change to either half makes two studies two studies.
+
+**Provenance belongs to the assignment, not the group.** `US_EQUITY` is definitional for SPY and
+inferred for HYG — the same exposure, different evidence — so it is recorded per edge and a
+rejection reads `US_EQUITY (FACTOR) would reach …`. #57 compares refusals, and two refusals under
+different mechanisms are not one dataset. Where both halves claim the same exposure the mandate
+label wins, because reporting a definitional exposure as inferred understates what is known.
+
+An instrument cannot be classified on stress behaviour alone: a factor row with no mandate row is
+refused at load, since it would rest everything about that symbol on the weaker claim.
+
 **`CORRELATION_CONCENTRATION` is untouched** and still refuses to be enabled. It needs a frozen
 covariance, which is a different kind of object from a table read off a prospectus.
 

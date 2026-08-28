@@ -1,54 +1,62 @@
 # Exposure classification for the traded universe (#59, slice 1).
 #
-# WHAT THIS IS. Each row records the exposures a fund carries **by its published mandate**, not
-# an estimate of what it holds. XLK's sector is what the Technology Select Sector SPDR is for;
-# it is not a vendor's guess about a company's line of business. That is why this table needs no
-# point-in-time equity classification vendor and no licence: for an all-ETF universe the
-# classification is definitional.
+# TWO KINDS OF CLAIM, KEPT APART, because they carry different evidence.
 #
-# WHAT `effective_from` MEANS, AND WHAT IT DOES NOT. It is the date each mandate was read off the
-# issuer's own material -- a **verification date**, not a claim about when the fund's mandate
-# began. Classification is refused for any decision earlier than it, and that refusal blocks.
+# `mandate` is what a fund *is*, read off the issuer's own material. XLK's technology exposure is
+# the Technology Select Sector SPDR's published mandate; it is definitional, needs no vendor and
+# no licence, and does not get revised.
 #
-# The conservatism is deliberate. Fund mandates do change: when Communication Services was created
-# in September 2018, constituents left XLK, so a 2017 portfolio scored against today's XLK would
-# be judged on a composition that did not exist. Rather than research an inception date per fund
-# and carry the risk of getting one wrong, this table simply refuses to speak about anything
-# before it was checked. The cost is that the veto cannot be backtested over history; that cost is
-# correct, because the veto genuinely could not have run over that history.
+# `factor_model` is what a fund *behaves like* under stress. HYG's equity beta in a drawdown is
+# real and is the reason a concentration limit should see it -- but it is an empirical claim,
+# assigned by a declared method with no fitted parameters, and it must not borrow the authority
+# of a prospectus. It carries its own method, as-of date and version so a later study (#57) can
+# say exactly which mechanism a veto used.
 #
-# A SYMBOL MAY CARRY MORE THAN ONE EXPOSURE, and that is the point. QQQ is US equity beta *and*
-# technology-concentrated; TIP is duration *and* inflation-linked. Concentration is measured per
-# group and an instrument counts in every group it belongs to, which can only ever make the veto
-# more likely to refuse. A single-group table would rate SPY + QQQ + XLK + IWM + MDY as five
-# uncorrelated exposures, which is the failure the veto exists to catch.
+# PROVENANCE IS A PROPERTY OF THE ASSIGNMENT, NOT OF THE GROUP. `US_EQUITY` is a mandate claim for
+# SPY and a factor claim for HYG. The same group name means the same exposure either way; what
+# differs is how much evidence stands behind saying this instrument has it.
 #
-# HYG IS THE CONTESTED ROW. High yield is credit by construction and equity beta in a drawdown --
-# precisely when a concentration limit matters. It is classified as both, and this comment exists
-# so that call is visible rather than buried in an assignment. Flagged for review on #59.
+# WHAT `effective_from` MEANS. The date each mandate was read off the issuer's material -- a
+# verification date, not a claim about when the fund's mandate began. Classification is refused
+# for any decision earlier than it, and that refusal blocks.
+#
+# The conservatism is deliberate. Fund mandates change: when Communication Services was created in
+# September 2018, constituents left XLK, so a 2017 portfolio scored against today's XLK would be
+# judged on a composition that did not exist. Rather than research an inception date per fund and
+# carry the risk of getting one wrong, this table refuses to speak about anything before it was
+# checked. The cost is that the veto cannot be backtested; that cost is correct, because the veto
+# genuinely could not have run over that history.
+#
+# A SYMBOL MAY CARRY MORE THAN ONE EXPOSURE and counts in each. Concentration is measured per
+# group, which can only ever make the veto more likely to refuse. A single-group table would rate
+# SPY + QQQ + XLK + IWM + MDY as five uncorrelated exposures, which is the failure the veto exists
+# to catch.
 #
 # UNLISTED SYMBOLS ARE UNKNOWN, AND UNKNOWN BLOCKS. An unclassified instrument belongs to no group
 # and would therefore add to no group's concentration, passing every limit by being unrecognised.
 # That is the fail-open direction, so it rejects instead.
 
-version: 1
+version: 2
 source: "Issuer fund descriptions (State Street Select Sector SPDRs, Invesco, iShares, Vanguard)"
 effective_from: 2026-08-27
 
-symbols:
+# What each fund holds, by its published mandate.
+mandate:
   # Broad US equity.
   SPY: [US_EQUITY]
   IWM: [US_EQUITY]
   MDY: [US_EQUITY]
-  # Nasdaq-100 is US equity beta with a technology concentration it would be dishonest to omit.
-  QQQ: [US_EQUITY, TECHNOLOGY]
+  # The Nasdaq-100 mandate is the largest non-financial Nasdaq listings. It is US equity by
+  # mandate; its technology weight is a consequence, not a stated objective, so that claim moves
+  # to the factor model below.
+  QQQ: [US_EQUITY]
 
   # Non-US equity.
   EFA: [INTERNATIONAL_EQUITY]
   EEM: [EMERGING_EQUITY]
 
-  # US sector equity. Each is US equity beta as well as its sector: a roster of nine sector SPDRs
-  # is not nine independent bets, it is the S&P 500 with extra steps.
+  # US sector equity. Each is US equity as well as its sector -- a roster of nine sector SPDRs is
+  # the index with extra steps -- and both halves are definitional here.
   XLB: [US_EQUITY, MATERIALS]
   XLE: [US_EQUITY, ENERGY]
   XLF: [US_EQUITY, FINANCIALS]
@@ -64,11 +72,37 @@ symbols:
   DBC: [COMMODITY]
   GLD: [PRECIOUS_METAL]
 
-  # Rates.
-  TLT: [TREASURY_DURATION]
-  IEF: [TREASURY_DURATION]
-  TIP: [TREASURY_DURATION, INFLATION_LINKED]
+  # Rates. These hold US Treasury securities, which is a statement about the issuer of what is in
+  # the fund. Interest-rate sensitivity is a behaviour and lives in the factor model.
+  TLT: [TREASURY]
+  IEF: [TREASURY]
+  TIP: [TREASURY, INFLATION_LINKED]
 
-  # Credit. See the note above on HYG.
-  LQD: [CREDIT, TREASURY_DURATION]
-  HYG: [CREDIT, US_EQUITY]
+  # Credit. LQD and HYG hold corporate bonds; neither holds Treasuries, so neither carries a
+  # Treasury mandate however rate-sensitive it is.
+  LQD: [CREDIT]
+  HYG: [CREDIT]
+
+# What each fund behaves like under stress. Empirical, declared rather than fitted, and versioned
+# separately because it is a weaker kind of claim than the block above.
+factor_model:
+  method: "declared stress proxy: documented behaviour under drawdown, no fitted parameters"
+  as_of: 2026-08-27
+  version: 1
+  assignments:
+    # Rate sensitivity. Long Treasuries, intermediate Treasuries, TIPS and investment-grade
+    # credit all move with rates; that is duration, and it is why a book of TLT + IEF + LQD is
+    # more concentrated than three separate mandates suggest.
+    TLT: [DURATION_FACTOR]
+    IEF: [DURATION_FACTOR]
+    TIP: [DURATION_FACTOR]
+    LQD: [DURATION_FACTOR]
+
+    # The contested one, and the reason this section exists. High yield is credit by mandate and
+    # equity beta in a drawdown -- precisely when a concentration limit matters. Recording it as
+    # a factor keeps the risk visible without asserting that HYG holds equities.
+    HYG: [US_EQUITY]
+
+    # The Nasdaq-100's technology weight, which is a property of what the index has come to hold
+    # rather than of what it is mandated to hold.
+    QQQ: [TECHNOLOGY]
