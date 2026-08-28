@@ -19,6 +19,7 @@ from quantbot.research.capital import (
     CapacityVerdict,
     CostLevel,
     CostModel,
+    InstrumentCapacity,
     assess_capital_capacity,
     capital_ladder,
 )
@@ -43,13 +44,22 @@ def objective(**overrides: object):
     return frozen.model_copy(update=overrides) if overrides else frozen
 
 
+def book(*volumes: str, weight: str | None = None):
+    """An equal-weighted book over the given per-session dollar volumes."""
+    share = Decimal(weight) if weight else Decimal(1) / Decimal(len(volumes))
+    return {
+        f"SYM{index}": InstrumentCapacity(weight=share, session_volume_usd=Decimal(volume))
+        for index, volume in enumerate(volumes)
+    }
+
+
 def assess(**overrides: object):
     fields: dict[str, object] = {
         "strategy_id": "adaptive-momentum",
         "objective": objective(),
         "cost_model": CostModel(),
         "gross_excess_bps": Decimal("5000"),
-        "session_volume_usd": Decimal("50000000"),
+        "instruments": book("50000000", "50000000"),
         "turnover": Decimal("12"),
     }
     fields.update(overrides)
@@ -85,7 +95,7 @@ def test_levels_outside_the_mandate_are_context_and_never_scored() -> None:
     beyond = assess(
         ladder=[Decimal("100"), Decimal("10000"), Decimal("100000")],
         gross_excess_bps=Decimal("200"),
-        session_volume_usd=Decimal("20000000"),
+        instruments=book("20000000"),
     )
 
     inside = [rung for rung in beyond.rungs if rung.inside_mandate]
@@ -114,7 +124,7 @@ def test_no_edge_anywhere_is_not_a_capacity_finding() -> None:
 
 def test_the_headline_is_the_capital_where_the_edge_dies() -> None:
     """One number, because a reader given seven rows picks the one they like."""
-    thin = assess(gross_excess_bps=Decimal("200"), session_volume_usd=Decimal("200000"))
+    thin = assess(gross_excess_bps=Decimal("200"), instruments=book("200000"))
 
     assert thin.verdict is CapacityVerdict.EXHAUSTS_INSIDE_MANDATE
     assert thin.breakeven_usd == Decimal("1000")
@@ -147,15 +157,15 @@ def test_every_missing_input_blocks_rather_than_being_substituted() -> None:
     """
     for field, fragment in (
         ("gross_excess_bps", "nothing for capacity to erode"),
-        ("session_volume_usd", "participation at any capital is unknown"),
+        ("instruments", "participation at any capital"),
         ("turnover", "round trips a year"),
     ):
         result = assess(**{field: None})
         assert result.verdict is CapacityVerdict.UNASSESSED, field
         assert any(fragment in item for item in result.blocking), field
 
-    # Zero volume is not deep liquidity, and the guard must not be a `None` check only.
-    assert assess(session_volume_usd=Decimal("0")).verdict is CapacityVerdict.UNASSESSED
+    # An empty book is not a book, and the guard must not be a `None` check only.
+    assert assess(instruments={}).verdict is CapacityVerdict.UNASSESSED
 
 
 def test_cost_cannot_be_lowered_below_the_baseline_without_a_registration() -> None:
@@ -221,7 +231,7 @@ def test_the_verdict_reports_how_much_it_leans_on_the_unfitted_constant() -> Non
     measured it.
     """
     # Deep enough to survive at the assumed stress, thin enough that a harsher one kills it.
-    marginal = assess(gross_excess_bps=Decimal("700"), session_volume_usd=Decimal("900000"))
+    marginal = assess(gross_excess_bps=Decimal("700"), instruments=book("900000"))
 
     assert [point.multiplier for point in marginal.stress_sensitivity] == list(STRESS_MULTIPLIERS)
 
@@ -257,6 +267,102 @@ def test_an_assessment_names_the_mandate_and_the_cost_model_it_used() -> None:
     # And changing an assumption changes the identity, so two results cannot be confused.
     stressed = CostModel(participation_stress_bps=Decimal("2000"))
     assert stressed.identity != CostModel().identity
+
+
+def test_a_configured_commission_actually_changes_the_answer() -> None:
+    """Sol's #51 blocker 1: `commission_per_order` was declared and never charged.
+
+    A cost input that can be configured and has no effect is a false control -- worse than an
+    absent one, because a reader who sets it believes the result accounts for it. And a per-order
+    fee is not a rate: it is a large fraction of a $100 order and a rounding error on a $10,000
+    one, so omitting it made exactly the smallest rungs look cheaper than they are.
+    """
+    free = assess(gross_excess_bps=Decimal("400"), instruments=book("900000"))
+    charged = assess(
+        gross_excess_bps=Decimal("400"),
+        instruments=book("900000"),
+        cost_model=CostModel(commission_per_order=Decimal("1")),
+    )
+
+    smallest_free = free.rungs[0]
+    smallest_charged = charged.rungs[0]
+    assert smallest_charged.execution_drag_bps > smallest_free.execution_drag_bps, (
+        "a configured commission that changes nothing is a control in name only"
+    )
+
+    # And it bites hardest at the bottom of the ladder, which is the capacity claim that matters.
+    def uplift(rungs, index):
+        return rungs[index].execution_drag_bps
+
+    bottom = uplift(charged.rungs, 0) - uplift(free.rungs, 0)
+    top = uplift(charged.rungs, -1) - uplift(free.rungs, -1)
+    assert bottom > top, "a fixed fee is proportionally heavier on a smaller account"
+
+
+def test_participation_is_measured_per_instrument_not_on_the_whole_account() -> None:
+    """Sol's #51 blocker 2: dividing total capital by one volume figure is not portfolio capacity.
+
+    It asks what would happen if the entire account were a single order into a single book, which
+    is neither what the strategy does nor a conservative stand-in for it. Two books with the same
+    *total* liquidity are not equivalent when one holds a sleeve that cannot be filled.
+    """
+    # Same total session volume in both, distributed differently.
+    even = {
+        "A": InstrumentCapacity(weight=Decimal("0.5"), session_volume_usd=Decimal("1000000")),
+        "B": InstrumentCapacity(weight=Decimal("0.5"), session_volume_usd=Decimal("1000000")),
+    }
+    lopsided = {
+        "A": InstrumentCapacity(weight=Decimal("0.5"), session_volume_usd=Decimal("1990000")),
+        "B": InstrumentCapacity(weight=Decimal("0.5"), session_volume_usd=Decimal("10000")),
+    }
+
+    balanced = assess(gross_excess_bps=Decimal("400"), instruments=even)
+    concentrated = assess(gross_excess_bps=Decimal("400"), instruments=lopsided)
+
+    assert concentrated.rungs[-1].execution_drag_bps > balanced.rungs[-1].execution_drag_bps, (
+        "a thin sleeve must cost more than the same dollars spread evenly"
+    )
+
+    # The reported participation is the worst instrument's, not an average that hides it.
+    worst = concentrated.rungs[-1].participation
+    thin_leg = Decimal("10000") * Decimal("0.5") / Decimal("10000")
+    assert worst == thin_leg
+
+    # Drag is a capital-weighted average, not a sum. One instrument taking the whole book, and
+    # two instruments each taking half of a half-sized book, place identically-sized orders into
+    # identically-deep liquidity -- so the portfolio cost must be the same. Summing instead of
+    # weighting would make cost scale with how many tickers the same money is spread over.
+    whole = {"A": InstrumentCapacity(weight=Decimal("1"), session_volume_usd=Decimal("1000000"))}
+    halves = {
+        "A": InstrumentCapacity(weight=Decimal("0.5"), session_volume_usd=Decimal("500000")),
+        "B": InstrumentCapacity(weight=Decimal("0.5"), session_volume_usd=Decimal("500000")),
+    }
+    one = assess(gross_excess_bps=Decimal("400"), instruments=whole).rungs[-1]
+    two = assess(gross_excess_bps=Decimal("400"), instruments=halves).rungs[-1]
+    assert one.participation == two.participation
+    assert one.execution_drag_bps == two.execution_drag_bps, (
+        "spreading the same money over more tickers is not more expensive by itself"
+    )
+
+    # And weight matters, not just liquidity: the same books allocated differently differ.
+    tilted = {
+        "A": InstrumentCapacity(weight=Decimal("0.9"), session_volume_usd=Decimal("1000000")),
+        "B": InstrumentCapacity(weight=Decimal("0.1"), session_volume_usd=Decimal("1000000")),
+    }
+    assert (
+        assess(gross_excess_bps=Decimal("400"), instruments=tilted).rungs[-1].participation
+        > balanced.rungs[-1].participation
+    )
+
+
+def test_an_instrument_cannot_carry_impossible_allocation_or_liquidity() -> None:
+    """The inputs are measurements, so the shapes that cannot be measurements are refused."""
+    with pytest.raises(ValueError):
+        InstrumentCapacity(weight=Decimal("0"), session_volume_usd=Decimal("1000"))
+    with pytest.raises(ValueError):
+        InstrumentCapacity(weight=Decimal("1.5"), session_volume_usd=Decimal("1000"))
+    with pytest.raises(ValueError):
+        InstrumentCapacity(weight=Decimal("0.5"), session_volume_usd=Decimal("0"))
 
 
 def test_m4_reads_the_assessment_rather_than_the_issue_number(tmp_path: Path) -> None:

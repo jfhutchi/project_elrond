@@ -1327,12 +1327,30 @@ issue's status, so closing #51 clears nothing; a verdict of `SURVIVES_MANDATE` d
 assessment that says the edge dies moves from `unassessed` to `blocking`, because "somebody
 looked and the answer was no" is a different state from "nobody looked".
 
-No production path computes one yet, and the reason is worth naming rather than leaving implicit:
-annual turnover is not a durable per-strategy field, so every input is available except the one
-that says how many round trips the cost would be charged on. The mandate carries
+**Two defects in the first version, found by Sol's review of #62 after it merged.** Both were
+false-comfort shapes rather than arithmetic slips, which is why they are recorded here.
+
+`commission_per_order` was a configurable field that `drag_bps` never referenced — a control a
+reader could set while nothing changed. Worse than an absent one, and worst exactly where this
+issue points: a fixed per-order fee is a large fraction of a $100 order and a rounding error on a
+$10,000 one, so omitting it flattered the smallest rungs specifically. It is now charged as
+annualised bps of capital, from the order count the round trips imply.
+
+Participation was `capital / session_volume_usd` — the whole account treated as one order into
+one book. That is not a conservative stand-in for a portfolio; it understates participation for a
+concentrated sleeve and overstates it for a diversified one, and calling it measured portfolio
+capacity would have been the claim this module exists to refuse. The ladder now takes
+`InstrumentCapacity` per symbol — the share of capital it carries and the volume behind it —
+computes participation from the notional each instrument is actually traded at, weights the drag
+by that share, and reports the **worst** instrument's participation, because that is the one that
+binds and an average hides the leg that cannot be filled.
+
+No production path computes an assessment yet, and the reason is worth naming rather than leaving
+implicit: annual turnover is not a durable per-strategy field, and neither is a durable
+per-instrument allocation with point-in-time dollar volume. The mandate carries
 `max_annual_turnover`, and substituting that declared ceiling for a measurement is a judgement
 call about conservatism rather than a default to take quietly — so the assessment blocks on the
-missing input instead.
+missing inputs instead. #51 stays open.
 
 **Three rules make the ladder hard to flatter.** It is contiguous, so forward evidence with no
 surviving candidate behind it reports M0 rather than M3. `unassessed` blocks. And a reached level
