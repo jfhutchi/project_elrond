@@ -18,6 +18,17 @@ from quantbot.risk.models import (
     SizingCaps,
 )
 from quantbot.risk.portfolio import build_liquidation_plan, build_portfolio_risk_state
+from quantbot.risk.shadow import (
+    CandidateDirection,
+    CounterfactualState,
+    GateTally,
+    RejectedCandidate,
+    RejectionReason,
+    as_rows,
+    candidate_id,
+    observation_id,
+    tally_by_gate,
+)
 from quantbot.risk.sizing import (
     MINIMUM_FRACTIONAL_NOTIONAL,
     RiskSizingResult,
@@ -48,13 +59,20 @@ __all__ = [
     "PortfolioVetoDecision",
     "PortfolioVetoInputs",
     "PortfolioVetoPolicy",
+    "CandidateDirection",
+    "CounterfactualState",
+    "GateTally",
+    "RejectedCandidate",
+    "RejectionReason",
     "PositionRiskInput",
     "RiskApproval",
     "RiskRejection",
     "RiskReservation",
     "VetoName",
     "VetoRejection",
+    "as_rows",
     "build_veto_inputs",
+    "candidate_id",
     "evaluate_portfolio_vetoes",
     "RiskSizingResult",
     "SizingCapName",
@@ -64,6 +82,8 @@ __all__ = [
     "calculate_drawdown",
     "evaluate_order_gate",
     "quantize_quantity",
+    "observation_id",
     "session_date_of",
+    "tally_by_gate",
     "size_entry",
 ]
