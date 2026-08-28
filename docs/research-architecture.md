@@ -404,12 +404,36 @@ implemented and tested and **off by default**, because on a fresh ledger they co
 everything and would halt the entries this project needs to accumulate forward evidence at all.
 Turning them on is the operator's call, exactly as ratifying the economic mandate is.
 
-**Two vetoes are declared and unimplemented.** `SECTOR_CONCENTRATION` and
-`CORRELATION_CONCENTRATION` are members of the enum with no evaluator, and the policy **refuses to
-be configured with either enabled**. There is no sector classification in this repository, and
-classifying a historical position by a symbol's sector as of today is look-ahead inside the risk
-layer: a study of whether the sector veto helped would be using information the veto could not
-have had. They wait on point-in-time context (#59).
+**One veto is declared and unimplemented.** `CORRELATION_CONCENTRATION` is a member of the enum
+with no evaluator, and the policy **refuses to be configured with it enabled**. It needs a frozen
+covariance — lookback, source, as-of and method identity all pinned — because a matrix
+reconstructed later is not the object the veto had at decision time.
+
+**`EXPOSURE_CONCENTRATION` landed with #59's first slice, and is named for exposure rather than
+sector deliberately.** The original entry here said sector classification was look-ahead inside the
+risk layer. That is right for single stocks and does not bind for this universe: all 23 instruments
+are ETFs, and an ETF's exposure is its published mandate rather than a vendor's estimate of a
+company's business. What survives from the original objection is that mandates *change*, so
+`config/exposure-classification-v1.yaml` carries an `effective_from` and **refuses to classify any
+decision earlier than it**. The date is a verification date, not an inception date — the table
+declines to speak about history nobody checked, which costs the ability to backtest the veto and
+is correct, because the veto could not have run over that history.
+
+The rename is the substantive part. A sector-shaped rule would rate SPY + QQQ + XLK + IWM + MDY as
+five uncorrelated bets when it is US equity beta wearing five tickers, and a limit that reports
+itself as enforced while the concentration it exists to catch walks through it is worse than no
+limit. A symbol carries every exposure its mandate implies and counts in each, which can only make
+the veto more likely to refuse.
+
+**Unknown blocks**, and that is the whole asymmetry: an unclassified instrument belongs to no
+group, so it would add to no group's concentration and pass every limit by not being recognised.
+An unclassifiable *held* position blocks too, because it makes every group total an understatement.
+
+It ships **disabled**, with a threshold that deliberately does not bind. This universe is mostly US
+equity — a roster of 10 from 23 can be near 100% `US_EQUITY` while being exactly what the strategy
+is designed to hold — so one global ceiling is too loose for the dominant group and would be far
+too tight for the narrow ones if set for it. Per-group ceilings are the likely next step, and
+choosing them is a decision about risk appetite that belongs to the operator.
 
 **A defect worth recording.** The staleness ceiling first shipped at 900 seconds, which encoded an
 intraday assumption into a system that decides once per session on daily bars — the newest

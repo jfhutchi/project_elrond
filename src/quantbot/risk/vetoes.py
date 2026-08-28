@@ -22,15 +22,16 @@ the study cannot say whether that rule was worth having. Each veto reports its n
 version and a hash of the exact parameters that were in force.
 
 **What is deliberately not here.** Sector and correlation concentration are specified in #58 and
-are absent from this module on purpose: there is no sector classification anywhere in this
-repository, and classifying a historical position by a symbol's sector *as of today* is
-look-ahead inside the risk layer. A backtest measuring whether the sector veto helped would then
-be using information the veto could not have had, and #57 would be measuring the counterfactual
-value of a rule that could never have existed. Those two wait on #59's point-in-time context.
+`EXPOSURE_CONCENTRATION` is implemented as of #59's first slice, and is **named for exposure
+rather than sector on purpose**: every instrument in this universe is an ETF, and a sector-shaped
+rule would rate SPY + QQQ + XLK + IWM + MDY as five uncorrelated bets when it is US equity beta
+wearing five tickers. `risk/exposure.py` carries the classification and the argument.
 
-`SECTOR_CONCENTRATION` exists as a name with no evaluator so the gap is visible in the enum
+`CORRELATION_CONCENTRATION` is still a name with no evaluator. It needs a frozen covariance --
+lookback, source, as-of and method identity all pinned -- and a matrix reconstructed later is not
+the object the veto had at decision time. It stays declared so the gap is visible in the enum
 rather than inferred from silence, and `PortfolioVetoPolicy` refuses to be configured with it
-enabled -- an unimplemented veto that reads as enforced is worse than one that reads as missing.
+enabled: an unimplemented veto that reads as enforced is worse than one that reads as missing.
 """
 
 from __future__ import annotations
@@ -47,6 +48,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from quantbot.domain import Position
 from quantbot.market_data.calendar import XNYS_TIMEZONE
+from quantbot.risk.exposure import ExposureClassification, ExposureState, build_exposure_state
 
 BASIS_POINTS = Decimal("10000")
 
@@ -57,25 +59,24 @@ NonNegativeDecimal = Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
 class VetoName(StrEnum):
     """The hard vetoes, named so a rejection can be attributed to one (#57).
 
-    `SECTOR_CONCENTRATION` and `CORRELATION_CONCENTRATION` are declared and unimplemented. They
-    are here rather than omitted so the gap is a visible member of the enum instead of something
-    a reader has to notice is missing, and `PortfolioVetoPolicy` refuses to enable either.
+    `CORRELATION_CONCENTRATION` is declared and unimplemented. It is here rather than omitted so
+    the gap is a visible member of the enum instead of something a reader has to notice is
+    missing, and `PortfolioVetoPolicy` refuses to enable it.
     """
 
     NET_EXPOSURE = "NET_EXPOSURE"
     DAILY_LOSS = "DAILY_LOSS"
     STALE_MARKET_DATA = "STALE_MARKET_DATA"
     LIQUIDITY = "LIQUIDITY"
-    #: Declared, unimplemented, blocked on point-in-time sector data (#59).
-    SECTOR_CONCENTRATION = "SECTOR_CONCENTRATION"
+    #: Concentration in a mandate-defined exposure group (#59). Named for exposure rather
+    #: than sector because sector alone cannot express that SPY and XLK are the same bet.
+    EXPOSURE_CONCENTRATION = "EXPOSURE_CONCENTRATION"
     #: Declared, unimplemented, blocked on a frozen covariance source (#59).
     CORRELATION_CONCENTRATION = "CORRELATION_CONCENTRATION"
 
 
 #: Vetoes with no evaluator behind them. Enabling one is refused rather than ignored.
-UNIMPLEMENTED: frozenset[VetoName] = frozenset(
-    {VetoName.SECTOR_CONCENTRATION, VetoName.CORRELATION_CONCENTRATION}
-)
+UNIMPLEMENTED: frozenset[VetoName] = frozenset({VetoName.CORRELATION_CONCENTRATION})
 
 
 class VetoModel(BaseModel):
@@ -126,6 +127,19 @@ class PortfolioVetoPolicy(VetoModel):
     #: this the average is not an average, and an unmeasurable limit must not allow.
     minimum_volume_sessions: int = Field(default=20, gt=0)
 
+    #: Ceiling on any one exposure group's committed value, in basis points of equity.
+    #:
+    #: **The default does not bind, and that is deliberate rather than an oversight.** This
+    #: universe is mostly US equity: a roster of 10 from 23 can be near 100% `US_EQUITY` while
+    #: being exactly what the strategy is designed to hold. A tight global threshold would refuse
+    #: almost every roster, so the shipped value is a placeholder and the veto ships disabled.
+    #:
+    #: **Recorded limitation:** one threshold across all groups is a blunt instrument here. It is
+    #: too loose to constrain the dominant group and would be too tight for the narrow ones
+    #: (sectors, duration, credit) if set for the dominant one. Per-group ceilings are the likely
+    #: next step; choosing them is an operator decision about risk appetite, not an agent's.
+    max_group_exposure_bps: int = Field(default=10000, gt=0)
+
     #: Vetoes to enforce. Anything absent is not evaluated, which is a policy choice and is
     #: recorded in `identity` so a study can tell one policy from another.
     enabled: frozenset[VetoName] = frozenset(
@@ -137,9 +151,9 @@ class PortfolioVetoPolicy(VetoModel):
         unimplemented = sorted(name.value for name in self.enabled & UNIMPLEMENTED)
         if unimplemented:
             raise ValueError(
-                f"{', '.join(unimplemented)} has no evaluator: it is blocked on point-in-time "
-                "sector/covariance data (#59), and a veto that reads as enforced while doing "
-                "nothing is worse than one that reads as missing"
+                f"{', '.join(unimplemented)} has no evaluator: it is blocked on a frozen "
+                "point-in-time covariance source (#59), and a veto that reads as enforced while "
+                "doing nothing is worse than one that reads as missing"
             )
         return self
 
@@ -187,6 +201,11 @@ class PortfolioVetoInputs(VetoModel):
     #: Average daily volume over `minimum_volume_sessions`, and how many sessions backed it.
     average_daily_volume: NonNegativeDecimal | None = None
     volume_sessions: int = Field(default=0, ge=0)
+
+    #: Committed exposure per mandate-defined group, or `None` when no classification was
+    #: supplied. `None` rejects: concentration measured against a table that is not there would
+    #: report every group at zero, which is the most permissive possible answer.
+    exposure: ExposureState | None = None
 
     @model_validator(mode="after")
     def validate_inputs(self) -> Self:
@@ -365,6 +384,73 @@ def _liquidity(inputs: PortfolioVetoInputs, policy: PortfolioVetoPolicy) -> Veto
     return None
 
 
+def _exposure_concentration(
+    inputs: PortfolioVetoInputs, policy: PortfolioVetoPolicy
+) -> VetoRejection | None:
+    """Refuse an order that would push one mandate-defined exposure past its ceiling.
+
+    Three ways this rejects without a limit being breached, all of them the same rule: an
+    exposure that cannot be measured is not an exposure of zero.
+    """
+    if inputs.exposure is None:
+        return _reject(
+            VetoName.EXPOSURE_CONCENTRATION,
+            policy,
+            f"no exposure classification was supplied for {inputs.symbol}, so committed "
+            "concentration is unknown; an absent table would otherwise report every group at "
+            "zero, which is the most permissive answer available",
+            unmeasured="exposure_classification",
+        )
+    state = inputs.exposure
+    if state.unclassified:
+        # A held position nobody could classify makes every group total an understatement, and an
+        # understated numerator is the permissive direction. This is also what refuses a decision
+        # dated before the classification was verified, which is the anti-look-ahead rule.
+        return _reject(
+            VetoName.EXPOSURE_CONCENTRATION,
+            policy,
+            f"{', '.join(state.unclassified)} could not be classified as of "
+            f"{inputs.session_date.isoformat()}, so every group total understates what is "
+            "actually committed",
+            unmeasured="UNCLASSIFIED_SYMBOL",
+        )
+    if state.order_groups is None:
+        return _reject(
+            VetoName.EXPOSURE_CONCENTRATION,
+            policy,
+            f"{inputs.symbol} carries no known exposure, so the concentration this order would "
+            "add cannot be attributed to any group",
+            unmeasured="UNCLASSIFIED_SYMBOL",
+        )
+    if inputs.order_net_exposure is None:
+        return _reject(
+            VetoName.EXPOSURE_CONCENTRATION,
+            policy,
+            f"no reference price could be measured for {inputs.symbol}, so the value this order "
+            "would add to its exposure groups is unknown",
+            unmeasured="REFERENCE_PRICE_UNAVAILABLE",
+        )
+
+    # Absolute, not signed. Netting a long against a short across two instruments that share an
+    # exposure would report the concentration away.
+    added = abs(inputs.order_net_exposure)
+    ceiling = inputs.equity * Decimal(policy.max_group_exposure_bps) / BASIS_POINTS
+    breached = [
+        (group, projected)
+        for group in sorted(state.order_groups)
+        if (projected := state.committed_by_group.get(group, Decimal("0")) + added) > ceiling
+    ]
+    if breached:
+        detail = "; ".join(f"{group.value} would reach {value}" for group, value in breached)
+        return _reject(
+            VetoName.EXPOSURE_CONCENTRATION,
+            policy,
+            f"{detail} against a {ceiling} ceiling "
+            f"({policy.max_group_exposure_bps}bps of {inputs.equity})",
+        )
+    return None
+
+
 #: Name to evaluator. A veto with no entry here cannot be enabled, which is checked by
 #: `PortfolioVetoPolicy` rather than discovered when it silently allows everything.
 _EVALUATORS = {
@@ -372,6 +458,7 @@ _EVALUATORS = {
     VetoName.DAILY_LOSS: _daily_loss,
     VetoName.STALE_MARKET_DATA: _stale_market_data,
     VetoName.LIQUIDITY: _liquidity,
+    VetoName.EXPOSURE_CONCENTRATION: _exposure_concentration,
 }
 
 
@@ -415,6 +502,7 @@ def build_veto_inputs(
     symbol_bars: Sequence[tuple[datetime, Decimal]],
     observed_at: datetime,
     volume_sessions: int,
+    classification: ExposureClassification | None = None,
 ) -> PortfolioVetoInputs:
     """Assemble measured state from primitives the caller already holds.
 
@@ -468,6 +556,18 @@ def build_veto_inputs(
         observed_at=observed_at,
         average_daily_volume=average_volume,
         volume_sessions=len(volumes),
+        # `None` when no classification was supplied, and the veto that needs it then rejects.
+        # Defaulting to an empty table here would report every group at zero.
+        exposure=(
+            None
+            if classification is None
+            else build_exposure_state(
+                classification=classification,
+                symbol=symbol,
+                positions=positions,
+                as_of=session,
+            )
+        ),
     )
 
 

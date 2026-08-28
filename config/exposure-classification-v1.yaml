@@ -1,0 +1,74 @@
+# Exposure classification for the traded universe (#59, slice 1).
+#
+# WHAT THIS IS. Each row records the exposures a fund carries **by its published mandate**, not
+# an estimate of what it holds. XLK's sector is what the Technology Select Sector SPDR is for;
+# it is not a vendor's guess about a company's line of business. That is why this table needs no
+# point-in-time equity classification vendor and no licence: for an all-ETF universe the
+# classification is definitional.
+#
+# WHAT `effective_from` MEANS, AND WHAT IT DOES NOT. It is the date each mandate was read off the
+# issuer's own material -- a **verification date**, not a claim about when the fund's mandate
+# began. Classification is refused for any decision earlier than it, and that refusal blocks.
+#
+# The conservatism is deliberate. Fund mandates do change: when Communication Services was created
+# in September 2018, constituents left XLK, so a 2017 portfolio scored against today's XLK would
+# be judged on a composition that did not exist. Rather than research an inception date per fund
+# and carry the risk of getting one wrong, this table simply refuses to speak about anything
+# before it was checked. The cost is that the veto cannot be backtested over history; that cost is
+# correct, because the veto genuinely could not have run over that history.
+#
+# A SYMBOL MAY CARRY MORE THAN ONE EXPOSURE, and that is the point. QQQ is US equity beta *and*
+# technology-concentrated; TIP is duration *and* inflation-linked. Concentration is measured per
+# group and an instrument counts in every group it belongs to, which can only ever make the veto
+# more likely to refuse. A single-group table would rate SPY + QQQ + XLK + IWM + MDY as five
+# uncorrelated exposures, which is the failure the veto exists to catch.
+#
+# HYG IS THE CONTESTED ROW. High yield is credit by construction and equity beta in a drawdown --
+# precisely when a concentration limit matters. It is classified as both, and this comment exists
+# so that call is visible rather than buried in an assignment. Flagged for review on #59.
+#
+# UNLISTED SYMBOLS ARE UNKNOWN, AND UNKNOWN BLOCKS. An unclassified instrument belongs to no group
+# and would therefore add to no group's concentration, passing every limit by being unrecognised.
+# That is the fail-open direction, so it rejects instead.
+
+version: 1
+source: "Issuer fund descriptions (State Street Select Sector SPDRs, Invesco, iShares, Vanguard)"
+effective_from: 2026-08-27
+
+symbols:
+  # Broad US equity.
+  SPY: [US_EQUITY]
+  IWM: [US_EQUITY]
+  MDY: [US_EQUITY]
+  # Nasdaq-100 is US equity beta with a technology concentration it would be dishonest to omit.
+  QQQ: [US_EQUITY, TECHNOLOGY]
+
+  # Non-US equity.
+  EFA: [INTERNATIONAL_EQUITY]
+  EEM: [EMERGING_EQUITY]
+
+  # US sector equity. Each is US equity beta as well as its sector: a roster of nine sector SPDRs
+  # is not nine independent bets, it is the S&P 500 with extra steps.
+  XLB: [US_EQUITY, MATERIALS]
+  XLE: [US_EQUITY, ENERGY]
+  XLF: [US_EQUITY, FINANCIALS]
+  XLI: [US_EQUITY, INDUSTRIALS]
+  XLK: [US_EQUITY, TECHNOLOGY]
+  XLP: [US_EQUITY, CONSUMER_STAPLES]
+  XLU: [US_EQUITY, UTILITIES]
+  XLV: [US_EQUITY, HEALTH_CARE]
+  XLY: [US_EQUITY, CONSUMER_DISCRETIONARY]
+
+  # Real assets.
+  VNQ: [REAL_ESTATE]
+  DBC: [COMMODITY]
+  GLD: [PRECIOUS_METAL]
+
+  # Rates.
+  TLT: [TREASURY_DURATION]
+  IEF: [TREASURY_DURATION]
+  TIP: [TREASURY_DURATION, INFLATION_LINKED]
+
+  # Credit. See the note above on HYG.
+  LQD: [CREDIT, TREASURY_DURATION]
+  HYG: [CREDIT, US_EQUITY]
