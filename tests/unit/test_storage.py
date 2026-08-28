@@ -913,7 +913,9 @@ def test_a_v1_database_upgrades_to_head_and_carries_its_ledger_across(tmp_path: 
         connection.exec_driver_sql("INSERT INTO alembic_version (version_num) VALUES ('0001')")
     engine.dispose()
 
-    database = Database(path)
+    # `Database.migrate`, not `Database(...)`: since #66 an ordinary open refuses to upgrade an
+    # existing store, so the authority to rewrite one has to be named at the call site.
+    database = Database.migrate(path)
     try:
         with database.engine.connect() as connection:
             assert (

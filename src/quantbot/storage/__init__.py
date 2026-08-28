@@ -2,6 +2,7 @@
 
 from quantbot.storage.database import (
     Database,
+    MigrationRequiredError,
     UnsupportedSchemaVersionError,
     decode_decimal,
     decode_utc,
@@ -32,6 +33,7 @@ __all__ = [
     "EquitySnapshotRecord",
     "IncidentRecord",
     "KillSwitchState",
+    "MigrationRequiredError",
     "OrderEventRecord",
     "QualificationDayRecord",
     "ReconciliationDiffRecord",
