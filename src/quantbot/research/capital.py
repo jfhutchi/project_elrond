@@ -41,7 +41,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from decimal import Decimal
 from enum import StrEnum
@@ -163,6 +163,18 @@ class CostModel(FrozenModel):
         ).hexdigest()
         return f"cost-model-{self.level.value.lower()}-{digest[:16]}"
 
+    def commission_drag_bps(self, *, capital: Decimal, orders_per_year: Decimal) -> Decimal:
+        """Commission as annualised basis points of capital.
+
+        A per-order fee is not a rate, and it bites hardest exactly where this issue is pointed:
+        a fixed charge is a large fraction of a $100 order and a rounding error on a $10,000 one,
+        so leaving it out of the arithmetic while offering it as a configurable field made the
+        smallest rungs look cheaper than they are.
+        """
+        if capital <= 0:
+            raise ValueError("commission cannot be expressed as a rate on zero capital")
+        return self.commission_per_order * orders_per_year / capital * BASIS_POINTS
+
     def drag_bps(self, *, participation: Decimal, turnover: Decimal) -> Decimal:
         """Annualised execution drag in basis points, for one round trip repeated `turnover`x.
 
@@ -173,6 +185,25 @@ class CostModel(FrozenModel):
         if self.level is CostLevel.PARTICIPATION_STRESS:
             per_side += self.participation_stress_bps * participation
         return per_side * 2 * turnover
+
+
+class InstrumentCapacity(FrozenModel):
+    """One instrument's share of the strategy, and the liquidity behind that share.
+
+    Capacity is a property of **orders**, not of an account. A ladder that divided total capital
+    by a single volume figure would be asking what happens if the whole account were one order
+    into one book -- which is neither what the strategy does nor a conservative stand-in for it,
+    because it understates participation for a concentrated sleeve and overstates it for a
+    diversified one. Sol's #51 review is explicit that the scalar ratio must not be called
+    measured portfolio capacity.
+    """
+
+    #: Fraction of capital this instrument carries. The order notional at a given rung is
+    #: `capital * weight`, which is the number participation has to be measured against.
+    weight: Decimal = Field(gt=0, le=1, allow_inf_nan=False)
+    #: Dollar volume in a session for this instrument. Per symbol, because a book that absorbs
+    #: $10m and one that absorbs $200k are not interchangeable at the same order size.
+    session_volume_usd: Decimal = Field(gt=0, allow_inf_nan=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -271,16 +302,19 @@ def assess_capital_capacity(
     objective: EconomicObjective,
     cost_model: CostModel,
     gross_excess_bps: Decimal | None,
-    session_volume_usd: Decimal | None,
+    instruments: Mapping[str, InstrumentCapacity] | None,
     turnover: Decimal | None,
     ladder: Sequence[Decimal] | None = None,
 ) -> CapacityAssessment:
     """Evaluate the frozen strategy across the capital ladder.
 
-    Every input that can be unavailable is `Decimal | None`, and each one blocks. A capacity
-    answer computed from a substituted turnover or a guessed liquidity is a number with the
-    authority of a measurement and the content of an assumption -- which is the specific failure
-    this issue exists to prevent, one level up from the cost model.
+    Every input that can be unavailable is optional, and each one blocks. A capacity answer
+    computed from a substituted turnover or a guessed liquidity is a number with the authority of
+    a measurement and the content of an assumption -- which is the specific failure this issue
+    exists to prevent, one level up from the cost model.
+
+    `instruments` carries the strategy's allocation and each instrument's traded volume, because
+    capacity is a property of the orders placed rather than of the account total.
     """
     rungs_usd = tuple(ladder) if ladder is not None else capital_ladder(objective)
     low, high = objective.intended_capital_range_usd
@@ -291,10 +325,11 @@ def assess_capital_capacity(
             "no benchmark-relative excess has been measured for this strategy, so there is "
             "nothing for capacity to erode"
         )
-    if session_volume_usd is None or session_volume_usd <= 0:
+    if not instruments:
         blocking.append(
-            "no traded session volume is available for this strategy's instruments, so "
-            "participation at any capital is unknown"
+            "no per-instrument allocation and traded volume is available for this strategy, so "
+            "the notional of the orders it would place -- and therefore participation at any "
+            "capital -- is unknown"
         )
     if turnover is None:
         blocking.append(
@@ -311,7 +346,7 @@ def assess_capital_capacity(
     sensitivity: list[StressPoint] = []
     if not blocking:
         assert gross_excess_bps is not None
-        assert session_volume_usd is not None
+        assert instruments is not None
         assert turnover is not None
         # The same measured inputs for the headline and every stressed variant of it, so the
         # sensitivity cannot silently be computed against different data than the answer.
@@ -320,7 +355,7 @@ def assess_capital_capacity(
             rungs_usd=rungs_usd,
             bounds=(Decimal(low), Decimal(high)),
             gross_excess_bps=gross_excess_bps,
-            session_volume_usd=session_volume_usd,
+            instruments=instruments,
             turnover=turnover,
         )
         rungs = evaluate(cost_model)
@@ -356,20 +391,38 @@ def _rungs_for(
     *,
     bounds: tuple[Decimal, Decimal],
     gross_excess_bps: Decimal,
-    session_volume_usd: Decimal,
+    instruments: Mapping[str, InstrumentCapacity],
     turnover: Decimal,
 ) -> list[LadderRung]:
-    """The ladder under one set of cost assumptions, shared by the headline and its sensitivity."""
+    """The ladder under one set of cost assumptions, shared by the headline and its sensitivity.
+
+    Participation is computed **per instrument** from the notional that instrument would actually
+    be traded at, and the resulting drag is weighted by the share of capital it carries. The
+    reported `participation` is the worst instrument's, because that is the one that binds and an
+    average would hide the sleeve that cannot be filled.
+    """
     low, high = bounds
     rungs = []
+    # Each instrument is entered and exited once per round trip, and there are `turnover` round
+    # trips a year. Commission is charged on orders, so it needs the count rather than a rate.
+    orders_per_year = Decimal(len(instruments)) * 2 * turnover
     for capital in rungs_usd:
-        participation = capital / session_volume_usd
-        drag = cost_model.drag_bps(participation=participation, turnover=turnover)
+        weighted_drag = Decimal("0")
+        worst_participation = Decimal("0")
+        for holding in instruments.values():
+            participation = capital * holding.weight / holding.session_volume_usd
+            worst_participation = max(worst_participation, participation)
+            weighted_drag += holding.weight * cost_model.drag_bps(
+                participation=participation, turnover=turnover
+            )
+        drag = weighted_drag + cost_model.commission_drag_bps(
+            capital=capital, orders_per_year=orders_per_year
+        )
         rungs.append(
             LadderRung(
                 capital_usd=capital,
                 inside_mandate=low <= capital <= high,
-                participation=participation,
+                participation=worst_participation,
                 execution_drag_bps=drag,
                 net_excess_bps=gross_excess_bps - drag,
             )
@@ -410,6 +463,7 @@ __all__ = [
     "CapacityVerdict",
     "CostLevel",
     "CostModel",
+    "InstrumentCapacity",
     "StressPoint",
     "LadderRung",
     "assess_capital_capacity",
