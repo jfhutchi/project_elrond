@@ -23,6 +23,17 @@ than no veto.
 **A symbol may carry several exposures and counts in each.** That is conservative in the only
 safe direction: more ways to trip a limit, never fewer.
 
+**Two kinds of claim, kept apart (Sol, #59).** A mandate exposure is what a fund *is*, read off
+the issuer's material -- definitional, unlicensed, not subject to revision. A factor exposure is
+what a fund *behaves like* under stress: HYG's equity beta in a drawdown is real, and is exactly
+why a concentration limit should see it, but it is an empirical claim assigned by a declared
+method rather than a prospectus. The factor model carries its own method, as-of date and version,
+so a later counterfactual study can say which mechanism a veto actually used.
+
+**Provenance belongs to the assignment, not to the group.** `US_EQUITY` is a mandate claim for SPY
+and a factor claim for HYG. The exposure means the same thing either way; what differs is how much
+evidence stands behind saying this instrument has it -- so it is recorded per edge.
+
 **Unknown blocks.** A symbol absent from the table, or a decision dated before the table was
 verified, is `UNKNOWN`. It must reject rather than proceed, because an unclassified instrument
 belongs to no group and would therefore add to no group's concentration -- passing every limit by
@@ -64,9 +75,14 @@ class ExposureGroup(StrEnum):
     REAL_ESTATE = "REAL_ESTATE"
     COMMODITY = "COMMODITY"
     PRECIOUS_METAL = "PRECIOUS_METAL"
-    TREASURY_DURATION = "TREASURY_DURATION"
+    #: Holds US Treasury securities. A statement about what is *in* the fund; rate sensitivity
+    #: is a behaviour and lives in `DURATION_FACTOR`.
+    TREASURY = "TREASURY"
     INFLATION_LINKED = "INFLATION_LINKED"
     CREDIT = "CREDIT"
+    #: Interest-rate sensitivity. A factor rather than a holding: LQD is rate-sensitive and owns
+    #: no Treasuries, so a book of TLT + IEF + LQD is more concentrated than its mandates suggest.
+    DURATION_FACTOR = "DURATION_FACTOR"
 
     MATERIALS = "MATERIALS"
     ENERGY = "ENERGY"
@@ -77,6 +93,51 @@ class ExposureGroup(StrEnum):
     UTILITIES = "UTILITIES"
     HEALTH_CARE = "HEALTH_CARE"
     CONSUMER_DISCRETIONARY = "CONSUMER_DISCRETIONARY"
+
+
+class Provenance(StrEnum):
+    """How an instrument came to be assigned an exposure.
+
+    Recorded because the two carry different evidence, and a veto that cannot say which one it
+    acted on is a veto whose basis a later study cannot reconstruct.
+    """
+
+    #: Read off the issuer's published mandate. Definitional.
+    MANDATE = "MANDATE"
+    #: Assigned by the declared stress model. Empirical, and weaker.
+    FACTOR = "FACTOR"
+
+
+class FactorModel(BaseModel):
+    """Empirical stress assignments, versioned apart from the mandate table.
+
+    No fitted parameters: the assignments are declared and documented, for the same reason the
+    capital-capacity stress shape is. A coefficient nobody measured, carried around with the
+    authority of one, is the failure both modules are built to refuse.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    method: str = Field(min_length=1)
+    as_of: date
+    version: int = Field(ge=1)
+    assignments: Mapping[str, frozenset[ExposureGroup]]
+
+    @property
+    def identity(self) -> str:
+        payload = {
+            "method": self.method,
+            "as_of": self.as_of.isoformat(),
+            "version": self.version,
+            "assignments": {
+                symbol: sorted(group.value for group in groups)
+                for symbol, groups in sorted(self.assignments.items())
+            },
+        }
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return f"factor-model-v{self.version}-{digest[:16]}"
 
 
 class ClassificationError(RuntimeError):
@@ -99,11 +160,34 @@ class ExposureClassification(BaseModel):
     #: The date the mandates were verified. **Not** an inception date, and classification is
     #: refused before it -- see the module docstring on why this is deliberately conservative.
     effective_from: date
-    symbols: Mapping[str, frozenset[ExposureGroup]]
+    #: What each fund holds by its published mandate.
+    mandate: Mapping[str, frozenset[ExposureGroup]]
+    #: What each fund behaves like under stress. Optional, and its absence is not neutrality --
+    #: it means no empirical claim has been registered, so only mandate exposures are measured.
+    factor_model: FactorModel | None = None
+
+    @property
+    def symbols(self) -> Mapping[str, frozenset[ExposureGroup]]:
+        """Every symbol the table can classify, and every exposure it carries either way."""
+        merged = {symbol: set(groups) for symbol, groups in self.mandate.items()}
+        if self.factor_model is not None:
+            for symbol, groups in self.factor_model.assignments.items():
+                merged.setdefault(symbol, set()).update(groups)
+        return {symbol: frozenset(groups) for symbol, groups in merged.items()}
 
     @model_validator(mode="after")
     def validate_classification(self) -> Self:
-        for symbol, groups in self.symbols.items():
+        if self.factor_model is not None:
+            unknown = sorted(set(self.factor_model.assignments) - set(self.mandate))
+            if unknown:
+                # A factor assignment for an instrument with no mandate row would classify a
+                # symbol entirely on the weaker kind of claim, which is the direction that must
+                # not happen silently.
+                raise ValueError(
+                    f"{', '.join(unknown)} carries a factor assignment with no mandate entry; an "
+                    "instrument cannot be classified on stress behaviour alone"
+                )
+        for symbol, groups in self.mandate.items():
             if not symbol or symbol != symbol.strip().upper():
                 raise ValueError(f"{symbol!r} must be uppercase without surrounding whitespace")
             if not groups:
@@ -121,10 +205,13 @@ class ExposureClassification(BaseModel):
             "version": self.version,
             "source": self.source,
             "effective_from": self.effective_from.isoformat(),
-            "symbols": {
+            "mandate": {
                 symbol: sorted(group.value for group in groups)
-                for symbol, groups in sorted(self.symbols.items())
+                for symbol, groups in sorted(self.mandate.items())
             },
+            # The factor model's identity is folded in rather than its contents, so a change to
+            # either half moves the classification identity and two studies stay two studies.
+            "factor_model": None if self.factor_model is None else self.factor_model.identity,
         }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -141,6 +228,24 @@ class ExposureClassification(BaseModel):
         if as_of < self.effective_from:
             return None
         return self.symbols.get(symbol)
+
+    def provenance_for(
+        self, symbol: str, *, as_of: date
+    ) -> Mapping[ExposureGroup, Provenance] | None:
+        """Each exposure and how it was assigned, or `None` when the symbol is unknown.
+
+        A group claimed by both halves reports `MANDATE`: the stronger evidence wins the label,
+        because saying a definitional exposure was empirically inferred understates what is known.
+        """
+        if self.groups_for(symbol, as_of=as_of) is None:
+            return None
+        found: dict[ExposureGroup, Provenance] = {}
+        if self.factor_model is not None:
+            for group in self.factor_model.assignments.get(symbol, frozenset()):
+                found[group] = Provenance.FACTOR
+        for group in self.mandate.get(symbol, frozenset()):
+            found[group] = Provenance.MANDATE
+        return found
 
 
 def load_exposure_classification(
@@ -184,6 +289,10 @@ class ExposureState(BaseModel):
 
     classification_identity: str
     order_groups: frozenset[ExposureGroup] | None
+    #: How each of the order's exposures was assigned. Empty when the order is unclassified.
+    #: Carried so a rejection can say whether it acted on a prospectus or on a stress model --
+    #: #57 compares refusals, and two refusals under different mechanisms are not one dataset.
+    order_provenance: Mapping[ExposureGroup, Provenance] = {}
     committed_by_group: Mapping[ExposureGroup, FiniteDecimal]
     #: Symbols held or ordered that the table could not classify as of the session.
     unclassified: tuple[str, ...]
@@ -209,6 +318,7 @@ def build_exposure_state(
     unclassified: list[str] = []
 
     order_groups = classification.groups_for(symbol, as_of=as_of)
+    order_provenance = classification.provenance_for(symbol, as_of=as_of) or {}
     if order_groups is None:
         unclassified.append(symbol)
 
@@ -224,6 +334,7 @@ def build_exposure_state(
     return ExposureState(
         classification_identity=classification.identity,
         order_groups=order_groups,
+        order_provenance=order_provenance,
         committed_by_group=committed,
         # Sorted and de-duplicated so the reason text is stable across runs; a rejection reason
         # that reorders between identical inputs is a rejection two studies cannot group on.
@@ -237,6 +348,8 @@ __all__ = [
     "ExposureClassification",
     "ExposureGroup",
     "ExposureState",
+    "FactorModel",
+    "Provenance",
     "build_exposure_state",
     "load_exposure_classification",
 ]
