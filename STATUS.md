@@ -1293,7 +1293,15 @@ almost none for a US equity claim. That is the finding, not a limitation of the 
 ## 6dd. Engineering progress is not profitability progress (#52)
 
 **2026-08-22.** `quantbot.research.milestone`, reported by `quantbot research-status` and by an
-edge-progress panel on the dashboard.
+`quantbot research-status`.
+
+**A correction, since three documents claimed otherwise.** README, `docs/research-architecture.md`
+and this file all described an "edge-progress panel on the dashboard". There is no such panel, and
+there is no dashboard renderer for it to live in — `research.dashboard` exports evidence and budget
+panel *models* and nothing draws them. #52's criterion that dashboard/README/status separate
+engineering from profitability progress is satisfied by `research-status`, which reports both
+ladders side by side; the dashboard half is open, and a document asserting a view that does not
+exist is the reporting version of the defect #52 exists to prevent.
 
 Every number this project has reported about itself moves when code ships: issues closed, gates
 built, tests passing, frameworks integrated. None of them move when the market says something.
