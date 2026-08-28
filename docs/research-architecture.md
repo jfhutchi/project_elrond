@@ -245,7 +245,9 @@ counting toward edge qualification, and they remain available as execution evide
 ## Edge progress, kept separate from engineering progress
 
 `quantbot.research.milestone`. Six levels, derived from durable state, reported by
-`quantbot research-status` beside the task queue and by the dashboard's edge-progress panel.
+`quantbot research-status` beside the task queue. It is **not** on the dashboard:
+`research.dashboard` is a set of panel models with no renderer, and the edge-progress panel this
+line used to promise was never built.
 
 The failure mode it exists for is a project-management one: infrastructure and model integrations
 are easy to measure and alpha is not, so issue closure quietly becomes a surrogate objective and a

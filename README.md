@@ -177,8 +177,13 @@ frameworks integrated, panels added. It moves when code ships.
 **Profitability progress** is a separate ladder, `quantbot.research.milestone`, running M0 to M5.
 It moves only when evidence about the market changes, and it is derived from durable state rather
 than from prose — a milestone cannot be reached by writing about it. `quantbot research-status`
-reports both side by side, and the dashboard's edge-progress panel shows the ladder with the
-reason it is stuck.
+reports both side by side, with the ladder and the reason it is stuck.
+
+The dashboard does **not** carry the ladder. `quantbot.research.dashboard` holds evidence and
+budget panels as data models with no renderer behind them, and earlier revisions of this file
+described an "edge-progress panel" that was never built. A document claiming a view exists is the
+same defect as a milestone reached by writing about it, which is why it is corrected rather than
+quietly dropped.
 
 The project is at **M0** on a store whose research memory has been seeded — the platform runs
 valid experiments and honestly refutes them — and **BELOW_M0** on one that has not, because a
