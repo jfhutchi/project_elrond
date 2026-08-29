@@ -21,7 +21,6 @@ failed open is not.
 
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from enum import StrEnum
 
@@ -240,13 +239,19 @@ def windows_host_notes(capabilities: NodeCapabilities) -> tuple[str, ...]:
 
     None of these block an installation. They exist because a node that silently underperforms
     is worse than one that says what it cannot do.
+
+    Every branch reads `capabilities`, never `sys.platform`. The subject is the node being
+    described, and the machine doing the describing is not it -- a coordinator on Linux planning
+    a Windows worker must still be able to say what that worker cannot run. An earlier version
+    guarded the AMD note with `sys.platform == "win32"` as well, which meant the note appeared
+    only when the analysis happened to run on the same kind of host it was reporting about.
     """
     if capabilities.operating_system != "win32":
         return ()
     notes: list[str] = []
     devices = capabilities.gpus or ()
     amd = [device for device in devices if device.vendor is GpuVendor.AMD and not device.integrated]
-    if amd and sys.platform == "win32":
+    if amd:
         described = ", ".join(f"{device.model}" for device in amd)
         notes.append(
             f"{described} is present but no CUDA runtime exists for it, and ROCm has no "

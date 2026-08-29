@@ -8,7 +8,10 @@ operator's second machine presents.
 
 from __future__ import annotations
 
+import sys
 from datetime import UTC, datetime
+
+import pytest
 
 from quantbot.node.capabilities import (
     CpuInfo,
@@ -275,3 +278,32 @@ def test_windows_notes_explain_the_amd_refusal_without_blocking_it() -> None:
 
 def test_linux_hosts_get_no_windows_notes() -> None:
     assert windows_host_notes(measured(gpus=(OMEN_DISCRETE,), operating_system="linux")) == ()
+
+
+def test_the_notes_describe_the_node_not_the_machine_reading_them(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The subject is the node being described, and the analyst is not it.
+
+    `windows_host_notes` guarded its AMD note with `sys.platform == "win32"` in addition to the
+    node's own measured `operating_system`. Two different questions: one asks what the described
+    machine is, the other asks what the describing machine is. A coordinator on Linux planning a
+    Windows worker must still be able to say what that worker cannot run.
+
+    The original test caught this only because CI runs Linux -- on the Windows host where it was
+    written it passed while the defect was present. This one pins the property on every platform
+    by moving `sys.platform` underneath the call. It fails on any host if the guard returns.
+    """
+    omen = measured(gpus=(OMEN_DISCRETE, OMEN_INTEGRATED), operating_system="win32")
+
+    for analyst in ("linux", "win32", "darwin"):
+        monkeypatch.setattr(sys, "platform", analyst)
+        notes = windows_host_notes(omen)
+        assert any("RX 6650M" in note for note in notes), (
+            f"a node's AMD limitation vanished when the analysis ran on {analyst}"
+        )
+
+    # And the converse: a Linux node gets no Windows notes even when read from Windows.
+    penguin = measured(gpus=(OMEN_DISCRETE,), operating_system="linux")
+    monkeypatch.setattr(sys, "platform", "win32")
+    assert windows_host_notes(penguin) == ()
