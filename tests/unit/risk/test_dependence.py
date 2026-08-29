@@ -1,13 +1,22 @@
 """What moves together, and the ways a correlation limit can be made to say nothing (#58/#59).
 
-The central test here is `test_complete_linkage_does_not_chain_bonds_to_equities`, because it
-pins the finding that changed the design. The obvious implementation of "cluster above a
-threshold" is connected components, and on this universe that puts Treasuries and equities in one
-cluster through credit — a wrong answer that happens to refuse, which is the hardest kind to spot.
+Two tests here pin findings that changed the design rather than confirming it.
+
+`test_complete_linkage_does_not_chain_bonds_to_equities` holds the first. The obvious
+implementation of "cluster above a threshold" is connected components, and on this universe that
+puts Treasuries and equities in one cluster through credit -- a wrong answer that happens to
+refuse, which is the hardest kind to spot.
+
+`test_a_shifted_window_is_excluded_rather_than_silently_correlated` holds the second, reported as
+#84 against the merged implementation. Eligibility was decided by *counting* observations, and
+each symbol then chose its own most recent that many dates, so two symbols could be correlated
+across offset calendars with matching vector lengths and no error anywhere.
 """
 
 from __future__ import annotations
 
+import math
+import statistics
 from datetime import date, timedelta
 from decimal import Decimal
 
@@ -16,6 +25,7 @@ import pytest
 from quantbot.domain import Position
 from quantbot.risk.dependence import (
     DependenceSnapshot,
+    ExclusionReason,
     LinkageMethod,
     MissingDataRule,
     build_dependence_snapshot,
@@ -23,14 +33,15 @@ from quantbot.risk.dependence import (
 )
 
 AS_OF = date(2026, 8, 18)
+#: Ten contiguous dates ending at `AS_OF`. Contiguity is irrelevant to the code -- the window is
+#: whatever the caller's calendar says -- but it keeps the fixtures readable.
+WINDOW = tuple(AS_OF - timedelta(days=offset) for offset in range(9, -1, -1))
 
 
 def snapshot(pairs: dict[str, str], **overrides: object) -> DependenceSnapshot:
     fields: dict[str, object] = {
         "source": "alpaca:sip:split:1Day",
-        "as_of_session": AS_OF,
-        "lookback_sessions": 120,
-        "observations_used": 119,
+        "session_window": WINDOW,
         "coefficients": {key: Decimal(value) for key, value in pairs.items()},
     }
     fields.update(overrides)
@@ -48,12 +59,36 @@ def position(symbol: str, value: str) -> Position:
     )
 
 
+def walk(start: int, steps: list[int]) -> dict[date, Decimal]:
+    """A price series over `WINDOW`, moving by `steps` between consecutive sessions."""
+    prices = [start]
+    for step in steps:
+        prices.append(prices[-1] + step)
+    assert len(prices) == len(WINDOW)
+    return dict(zip(WINDOW, (Decimal(price) for price in prices), strict=True))
+
+
+def pearson_over(left: dict[date, Decimal], right: dict[date, Decimal], days: tuple[date, ...]):
+    """An independent correlation over exactly `days`, for comparing against the builder."""
+
+    def returns(series: dict[date, Decimal]) -> list[float]:
+        prices = [float(series[day]) for day in days]
+        return [math.log(prices[i] / prices[i - 1]) for i in range(1, len(prices))]
+
+    a, b = returns(left), returns(right)
+    mean_a, mean_b = statistics.fmean(a), statistics.fmean(b)
+    spread_a = math.sqrt(sum((v - mean_a) ** 2 for v in a))
+    spread_b = math.sqrt(sum((v - mean_b) ** 2 for v in b))
+    covariance = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b, strict=True))
+    return round(covariance / (spread_a * spread_b), 6)
+
+
 def test_complete_linkage_does_not_chain_bonds_to_equities() -> None:
     """The measurement that decided the method, reproduced from the real coefficients.
 
     These four numbers are what the stored bars actually give over 120 sessions. Under connected
     components, `TLT` and `SPY` land in one cluster despite correlating at 0.45, because credit
-    bridges them: `HYG–SPY` at 0.82 on one side and `LQD–TLT` at 0.90 on the other.
+    bridges them: `HYG-SPY` at 0.82 on one side and `LQD-TLT` at 0.90 on the other.
 
     A concentration limit built on that reports a Treasury position as adding to equity
     concentration. Requiring every pair to clear the threshold is what makes a cluster mean
@@ -100,6 +135,104 @@ def test_complete_linkage_does_not_chain_bonds_to_equities() -> None:
     assert len(clusters) > 1, "complete linkage must not reproduce that single blob"
 
 
+def test_a_shifted_window_is_excluded_rather_than_silently_correlated() -> None:
+    """#84: same number of observations is not the same sample.
+
+    `SHIFTED` holds ten closes, exactly as many as the window has sessions, but one of them is a
+    session before the window and one required session is absent. The superseded implementation
+    admitted it on the count, took its own last ten dates, and handed `_pearson` two vectors of
+    equal length whose index N referred to different sessions in each.
+
+    The fixture is built so that misalignment is not a subtle distortion: read against its own
+    offset dates `SHIFTED` tracks `ANCHOR` almost exactly, and read against the true window it
+    does not exist at all. Nothing raised under the old rule, and the coefficient came back to
+    six decimal places.
+    """
+    steps = [3, -2, 5, -4, 6, -1, 2, -3, 4]
+    anchor = walk(100, steps)
+    partner = walk(200, steps)
+
+    earlier = WINDOW[0] - timedelta(days=1)
+    shifted = {earlier: Decimal("97"), **walk(100, steps)}
+    del shifted[WINDOW[4]]
+    assert len(shifted) == len(WINDOW), "the defect needs a matching observation count"
+
+    built = build_dependence_snapshot(
+        closes={"ANCHOR": anchor, "PARTNER": partner, "SHIFTED": shifted},
+        session_window=WINDOW,
+        source="test",
+    )
+
+    assert built is not None
+    assert built.excluded == {"SHIFTED": ExclusionReason.INCOMPLETE_WINDOW}
+    assert built.coefficient("ANCHOR", "SHIFTED") is None, (
+        "a symbol missing a required session was correlated anyway"
+    )
+    assert built.symbols == {"ANCHOR", "PARTNER"}
+
+
+def test_a_missing_final_session_is_not_backfilled_by_an_older_one() -> None:
+    """The most dangerous shift is the recent one: a stale symbol pretending to be current."""
+    steps = [3, -2, 5, -4, 6, -1, 2, -3, 4]
+    stale = {WINDOW[0] - timedelta(days=1): Decimal("97"), **walk(100, steps)}
+    del stale[WINDOW[-1]]
+
+    built = build_dependence_snapshot(
+        closes={"A": walk(100, steps), "B": walk(50, steps), "STALE": stale},
+        session_window=WINDOW,
+        source="test",
+    )
+
+    assert built is not None
+    assert built.excluded["STALE"] is ExclusionReason.INCOMPLETE_WINDOW
+    assert "STALE" not in built.symbols
+
+
+def test_every_coefficient_is_computed_over_the_window_the_snapshot_carries() -> None:
+    """The alignment property stated positively, against an independently computed number.
+
+    Extra observations outside the window must be ignored rather than absorbed, so a symbol
+    with more history correlates identically to one with exactly the window.
+    """
+    steps = [3, -2, 5, -4, 6, -1, 2, -3, 4]
+    a = walk(100, steps)
+    b = walk(400, [-1, 4, -3, 2, -5, 3, 1, -2, 6])
+    generous = {WINDOW[0] - timedelta(days=offset): Decimal("500") for offset in (1, 2, 3)} | b
+
+    built = build_dependence_snapshot(
+        closes={"A": a, "B": generous}, session_window=WINDOW, source="test"
+    )
+
+    assert built is not None
+    assert built.session_window == WINDOW
+    assert built.coefficient("A", "B") == Decimal(str(pearson_over(a, b, WINDOW)))
+    assert built.excluded == {}
+
+
+def test_a_constant_series_is_excluded_by_name_rather_than_vanishing() -> None:
+    """#84's ambiguity: "no coefficient" had two meanings and recorded neither.
+
+    Zero would say "independent"; the truth is "unanswerable", and they differ at the veto. But
+    a symbol that simply disappeared from `symbols` was indistinguishable from one that was
+    never offered, so the reason is now durable.
+    """
+    steps = [3, -2, 5, -4, 6, -1, 2, -3, 4]
+    built = build_dependence_snapshot(
+        closes={
+            "MOVES": walk(100, steps),
+            "ALSO": walk(60, steps),
+            "FLAT": dict.fromkeys(WINDOW, Decimal("100")),
+        },
+        session_window=WINDOW,
+        source="test",
+    )
+
+    assert built is not None
+    assert built.excluded == {"FLAT": ExclusionReason.NON_VARYING}
+    assert built.coefficient("FLAT", "MOVES") is None
+    assert "FLAT" not in built.symbols
+
+
 def test_a_cluster_requires_every_pair_not_a_path() -> None:
     """Three symbols where two pairs clear and one does not is not one cluster."""
     chained = snapshot({"A|B": "0.95", "B|C": "0.95", "A|C": "0.10"})
@@ -113,8 +246,16 @@ def test_a_cluster_requires_every_pair_not_a_path() -> None:
 
 def test_clustering_is_deterministic_regardless_of_input_order() -> None:
     """A rule whose answer depends on argument order cannot be reproduced from its identity."""
-    measured = snapshot({"A|B": "0.95", "A|C": "0.95", "B|C": "0.95", "A|D": "0.10",
-                         "B|D": "0.10", "C|D": "0.10"})
+    measured = snapshot(
+        {
+            "A|B": "0.95",
+            "A|C": "0.95",
+            "B|C": "0.95",
+            "A|D": "0.10",
+            "B|D": "0.10",
+            "C|D": "0.10",
+        }
+    )
 
     first = measured.clusters(["D", "C", "B", "A"], threshold=Decimal("0.90"))
     second = measured.clusters(["A", "B", "C", "D"], threshold=Decimal("0.90"))
@@ -123,11 +264,7 @@ def test_clustering_is_deterministic_regardless_of_input_order() -> None:
 
 
 def test_an_unmeasured_pair_is_not_an_uncorrelated_pair() -> None:
-    """Absent means unknown, and unknown must not join a cluster.
-
-    Treating a missing coefficient as zero would silently let an unmeasured symbol into any
-    group, which is the permissive direction.
-    """
+    """Absent means unknown, and unknown must not join a cluster."""
     partial = snapshot({"A|B": "0.95"})
 
     assert partial.coefficient("A", "C") is None
@@ -142,23 +279,38 @@ def test_the_identity_covers_everything_that_changes_a_coefficient() -> None:
     """Window, return definition, missing-data rule and method all move the number.
 
     Sol's requirement on #58/#59: a veto's basis must be nameable, and two studies across any of
-    these are two studies.
+    these are two studies. The session window is in there whole rather than as a count and an
+    end date, because two different session sets can share both (#84).
     """
     base = snapshot({"A|B": "0.95"})
 
     assert base.identity.startswith("dependence-v1-")
     for change in (
-        {"lookback_sessions": 60},
-        {"observations_used": 59},
+        {"session_window": WINDOW[2:]},
+        {"session_window": tuple(day - timedelta(days=1) for day in WINDOW)},
         {"source": "another-provider"},
-        {"as_of_session": AS_OF - timedelta(days=1)},
         {"method_version": 2},
-        {"excluded_symbols": ("ZZZ",)},
+        {"excluded": {"ZZZ": ExclusionReason.INCOMPLETE_WINDOW}},
     ):
         assert snapshot({"A|B": "0.95"}, **change).identity != base.identity, change
 
+    # Two windows of the same length ending on the same session, differing in the middle.
+    swapped = (*WINDOW[:4], WINDOW[4] - timedelta(days=30), *WINDOW[5:])
+    assert snapshot({"A|B": "0.95"}, session_window=tuple(sorted(swapped))).identity != (
+        base.identity
+    ), "same count and same as-of session is not the same sample"
+
     # And the coefficients themselves.
     assert snapshot({"A|B": "0.94"}).identity != base.identity
+
+
+def test_derived_window_facts_cannot_disagree_with_the_window() -> None:
+    """`as_of_session`, `lookback_sessions` and `observations_used` are read off, not stored."""
+    measured = snapshot({"A|B": "0.95"})
+
+    assert measured.as_of_session == AS_OF
+    assert measured.lookback_sessions == len(WINDOW)
+    assert measured.observations_used == len(WINDOW) - 1
 
 
 def test_a_pair_key_cannot_carry_two_coefficients() -> None:
@@ -169,58 +321,51 @@ def test_a_pair_key_cannot_carry_two_coefficients() -> None:
         snapshot({"A|A": "1.0"})
 
 
-def test_a_symbol_without_the_full_window_is_excluded_and_named() -> None:
-    """`REQUIRE_COMPLETE`, and the reason `PAIRWISE_COMPLETE` is not offered.
-
-    Pairwise-complete computes each coefficient on whatever sample that pair shares, so one
-    cluster can rest on 120 sessions and another on 12 while the matrix presents both the same.
-    """
-    days = [AS_OF - timedelta(days=offset) for offset in range(9, -1, -1)]
-    closes = {
-        "A": {day: Decimal(100 + index) for index, day in enumerate(days)},
-        "B": {day: Decimal(200 - index) for index, day in enumerate(days)},
-        "SHORT": {day: Decimal(50) for day in days[-3:]},
-    }
-
-    built = build_dependence_snapshot(
-        closes=closes, as_of_session=AS_OF, lookback_sessions=10, source="test"
-    )
-
-    assert built is not None
-    assert built.excluded_symbols == ("SHORT",)
-    assert built.symbols == {"A", "B"}
-    assert built.observations_used == 9
-    assert built.missing_data_rule is MissingDataRule.REQUIRE_COMPLETE
-    assert built.linkage is LinkageMethod.COMPLETE
+def test_a_window_must_be_ordered_and_distinct() -> None:
+    """An unordered window cannot describe the sample its coefficients were computed over."""
+    with pytest.raises(ValueError, match="strictly ascending"):
+        snapshot({"A|B": "0.95"}, session_window=tuple(reversed(WINDOW)))
+    with pytest.raises(ValueError, match="strictly ascending"):
+        snapshot({"A|B": "0.95"}, session_window=(*WINDOW, WINDOW[-1]))
+    with pytest.raises(ValueError, match="at least two sessions"):
+        snapshot({"A|B": "0.95"}, session_window=WINDOW[:1])
 
 
-def test_a_window_that_cannot_be_filled_is_no_snapshot_at_all() -> None:
+def test_a_measured_symbol_missing_a_pair_is_a_construction_error() -> None:
+    """The third meaning of "unmeasured" that `excluded` exists to remove."""
+    with pytest.raises(ValueError, match="third meaning"):
+        snapshot({"A|B": "0.95", "A|C": "0.10"})
+
+
+def test_a_symbol_cannot_be_both_measured_and_excluded() -> None:
+    """Otherwise whether it counts toward a cluster depends on which field is consulted."""
+    with pytest.raises(ValueError, match="both measured and excluded"):
+        snapshot({"A|B": "0.95"}, excluded={"A": ExclusionReason.NON_VARYING})
+
+
+def test_a_window_no_symbol_can_fill_is_no_snapshot_at_all() -> None:
     """A short window is different evidence, not weaker evidence of the same kind."""
-    days = [AS_OF - timedelta(days=offset) for offset in range(4, -1, -1)]
-    closes = {"A": {day: Decimal(100) for day in days}}
+    closes = {"A": dict.fromkeys(WINDOW[:3], Decimal("100"))}
 
     assert (
-        build_dependence_snapshot(
-            closes=closes, as_of_session=AS_OF, lookback_sessions=120, source="test"
-        )
-        is None
+        build_dependence_snapshot(closes=closes, session_window=WINDOW, source="test") is None
     )
+    with pytest.raises(ValueError, match="at least two sessions"):
+        build_dependence_snapshot(closes=closes, session_window=WINDOW[:1], source="test")
 
 
-def test_a_constant_series_has_no_correlation_rather_than_a_zero_one() -> None:
-    """Zero would say "independent"; the truth is "unanswerable", and they differ at the veto."""
-    days = [AS_OF - timedelta(days=offset) for offset in range(4, -1, -1)]
-    closes = {
-        "MOVES": {day: Decimal(100 + index) for index, day in enumerate(days)},
-        "FLAT": {day: Decimal(100) for day in days},
-    }
-
+def test_the_declared_rules_are_the_ones_applied() -> None:
+    """`REQUIRE_COMPLETE` and `COMPLETE` linkage are not configurable away by construction."""
+    steps = [3, -2, 5, -4, 6, -1, 2, -3, 4]
     built = build_dependence_snapshot(
-        closes=closes, as_of_session=AS_OF, lookback_sessions=5, source="test"
+        closes={"A": walk(100, steps), "B": walk(70, [-1, 4, -3, 2, -5, 3, 1, -2, 6])},
+        session_window=WINDOW,
+        source="test",
     )
 
     assert built is not None
-    assert built.coefficient("FLAT", "MOVES") is None
+    assert built.missing_data_rule is MissingDataRule.REQUIRE_COMPLETE
+    assert built.linkage is LinkageMethod.COMPLETE
 
 
 def test_the_state_totals_the_cluster_and_names_what_it_could_not_measure() -> None:

@@ -25,9 +25,32 @@ Requiring **every** pair in a cluster to clear the threshold makes a cluster mea
 needs it to mean. The same data then yields `{IEF, LQD, TLT}` and `{EEM, EFA, SPY}`: duration, and
 global equity beta.
 
+**The window is a list of sessions, not a count of them (#84).** The first version of this module
+admitted a symbol when it held at least `lookback_sessions` observations and then let each symbol
+choose its own most recent that many dates. Two symbols could satisfy that with *different*
+sessions -- one missing a recent bar and carrying an extra older one -- and `_pearson` would zip
+the vectors positionally, correlating Tuesday against Wednesday for the whole window. The counts
+matched, so nothing raised; the coefficient came back to six decimal places and fed a hard veto.
+
+The comment that used to sit above the return calculation said "every surviving symbol shares the
+same session count, so every coefficient rests on the same sample". Same count is not the same
+sample, and writing the invariant down did not establish it. So the snapshot now *carries* the
+exact ordered `session_window` it was computed over, membership is `required <= set(series)`
+against those precise dates, and every vector is built by indexing that tuple in order. The
+window is in the identity, which means two snapshots over different sessions can no longer
+collide, and a misaligned snapshot is no longer constructible rather than merely untested.
+
 **No pairwise-complete missing-data rule, deliberately.** It computes each coefficient on whatever
 sample that pair happens to share, so one cluster can rest on 120 sessions and another on 12 while
-both report three decimal places. A symbol without full history is excluded and named.
+both report three decimal places. A symbol without the full window is excluded and named.
+
+**"No coefficient" means one thing.** A symbol can fail to be measured for two unrelated reasons,
+and the first version let them look identical: an incomplete window put a symbol in
+`excluded_symbols`, while a constant price series simply produced no pair and vanished from
+`symbols` with nothing recording why. `excluded` now maps every dropped symbol to its
+`ExclusionReason`, and a validator requires the surviving symbols to form a *complete* coefficient
+graph -- so a missing pair is a construction error rather than an ambiguity a reader has to
+resolve.
 """
 
 from __future__ import annotations
@@ -62,7 +85,9 @@ class MissingDataRule(StrEnum):
     coefficient rest on a different sample, which a single matrix then presents as comparable.
     """
 
-    #: A symbol without an observation for every session in the window is excluded and named.
+    #: A symbol without an observation for **every session in the window** -- those exact dates,
+    #: not that many dates -- is excluded and named. See the module docstring for the defect this
+    #: wording used to describe without enforcing.
     REQUIRE_COMPLETE = "REQUIRE_COMPLETE"
 
 
@@ -74,12 +99,27 @@ class LinkageMethod(StrEnum):
     COMPLETE = "COMPLETE"
 
 
+class ExclusionReason(StrEnum):
+    """Why a symbol offered to the builder carries no coefficient.
+
+    Two different facts. A symbol the feed has not covered for the whole window may be perfectly
+    well behaved; a symbol whose price never moved has been observed completely and still cannot
+    be correlated with anything. Both refuse at the veto, and an operator reading a refusal is
+    owed the difference.
+    """
+
+    #: The symbol lacks an observation for at least one session in the window.
+    INCOMPLETE_WINDOW = "INCOMPLETE_WINDOW"
+    #: The symbol's return series has zero spread, so correlation is undefined rather than zero.
+    NON_VARYING = "NON_VARYING"
+
+
 class DependenceSnapshot(BaseModel):
-    """Pairwise dependence as of one session, frozen and content-addressed.
+    """Pairwise dependence over one exact session window, frozen and content-addressed.
 
     Everything that changes a coefficient is a field, and every field is in `identity`. Sol's
     requirement on #58 and #59: a veto's basis has to be nameable later, and two studies across a
-    method or window change are two studies.
+    method, a window or a session set are two studies.
     """
 
     model_config = ConfigDict(frozen=True, extra="forbid")
@@ -90,20 +130,25 @@ class DependenceSnapshot(BaseModel):
     missing_data_rule: MissingDataRule = MissingDataRule.REQUIRE_COMPLETE
     #: Where the price series came from, so a provider change is a new snapshot.
     source: str = Field(min_length=1)
-    #: The session this was computed as of. Not a wall-clock time: the window is sessions.
-    as_of_session: date
-    #: Sessions of history requested, and returns actually used. The second is the first minus
-    #: one, and it is recorded rather than inferred so a reader never has to remember which.
-    lookback_sessions: int = Field(ge=2)
-    observations_used: int = Field(ge=1)
+    #: The exact ordered sessions every coefficient was computed over (#84). Not a count and not
+    #: a range: the dates themselves, so "the same sample" is a property of the object rather
+    #: than a claim about it.
+    session_window: tuple[date, ...]
     #: Coefficients keyed `"A|B"` with the pair sorted, so one entry exists per pair.
     coefficients: Mapping[str, Decimal]
-    #: Symbols dropped for incomplete history. Named, because a silently smaller universe is a
-    #: silently weaker claim.
-    excluded_symbols: tuple[str, ...] = ()
+    #: Symbols offered to the builder and dropped, each with why. Named, because a silently
+    #: smaller universe is a silently weaker claim.
+    excluded: Mapping[str, ExclusionReason] = {}
 
     @model_validator(mode="after")
     def validate_snapshot(self) -> Self:
+        if len(self.session_window) < 2:
+            raise ValueError("a correlation window needs at least two sessions")
+        if list(self.session_window) != sorted(set(self.session_window)):
+            raise ValueError(
+                "session_window must be strictly ascending and free of duplicates; an unordered "
+                "or repeated window cannot describe the sample a coefficient was computed over"
+            )
         for key in self.coefficients:
             left, _, right = key.partition("|")
             if not left or not right or left >= right:
@@ -111,15 +156,47 @@ class DependenceSnapshot(BaseModel):
                     f"{key!r} is not a sorted symbol pair; an unsorted or duplicated key would "
                     "let one pair carry two coefficients"
                 )
+        measured = self.symbols
+        expected_pairs = len(measured) * (len(measured) - 1) // 2
+        if len(self.coefficients) != expected_pairs:
+            # Every symbol that survives the builder varies and holds the whole window, so every
+            # pair of survivors is computable. An absent pair would therefore be a third, unnamed
+            # kind of "not measured" -- the ambiguity `excluded` exists to remove.
+            raise ValueError(
+                f"{len(measured)} measured symbols imply {expected_pairs} pairs but "
+                f"{len(self.coefficients)} are present; a missing pair is a third meaning of "
+                '"unmeasured" that no reason field records'
+            )
+        overlap = measured & set(self.excluded)
+        if overlap:
+            raise ValueError(
+                f"{sorted(overlap)} appear both measured and excluded, so whether they count "
+                "toward a cluster depends on which field the reader consults"
+            )
         return self
 
     @property
     def symbols(self) -> frozenset[str]:
+        """Symbols that were actually measured. Everything else is in `excluded` with a reason."""
         found: set[str] = set()
         for key in self.coefficients:
             left, _, right = key.partition("|")
             found.update({left, right})
         return frozenset(found)
+
+    @property
+    def as_of_session(self) -> date:
+        """The window's last session. Derived, so it cannot disagree with the window."""
+        return self.session_window[-1]
+
+    @property
+    def lookback_sessions(self) -> int:
+        return len(self.session_window)
+
+    @property
+    def observations_used(self) -> int:
+        """Returns, which is one fewer than sessions. Derived for the same reason."""
+        return len(self.session_window) - 1
 
     @property
     def identity(self) -> str:
@@ -129,11 +206,13 @@ class DependenceSnapshot(BaseModel):
             "return_definition": self.return_definition.value,
             "missing_data_rule": self.missing_data_rule.value,
             "source": self.source,
-            "as_of_session": self.as_of_session.isoformat(),
-            "lookback_sessions": self.lookback_sessions,
-            "observations_used": self.observations_used,
+            # The whole window, not its endpoints. Two snapshots ending on the same session over
+            # different sessions are different evidence and must not share an identity (#84).
+            "session_window": [day.isoformat() for day in self.session_window],
             "coefficients": {key: str(value) for key, value in sorted(self.coefficients.items())},
-            "excluded_symbols": sorted(self.excluded_symbols),
+            "excluded": {
+                symbol: reason.value for symbol, reason in sorted(self.excluded.items())
+            },
         }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -175,81 +254,82 @@ class DependenceSnapshot(BaseModel):
 def build_dependence_snapshot(
     *,
     closes: Mapping[str, Mapping[date, Decimal]],
-    as_of_session: date,
-    lookback_sessions: int,
+    session_window: Sequence[date],
     source: str,
 ) -> DependenceSnapshot | None:
-    """Compute a snapshot from stored closes, or `None` when the window cannot be filled.
+    """Compute a snapshot over one exact session window, or `None` when nothing survives it.
 
-    `None` rather than a partial answer: a correlation over eleven sessions and one over a
-    hundred are not the same evidence, and a caller that cannot tell them apart will treat them
-    the same. The veto refuses on `None`.
+    `session_window` is the authoritative point-in-time session sequence -- read from the
+    exchange calendar by the caller, not inferred from whichever dates the price series happen
+    to contain. Deriving it from the data would let a feed outage silently redefine the window
+    it is supposed to be measured against, which is the shape of defect #84 reported.
+
+    `None` rather than a partial answer when fewer than two symbols hold the whole window: a
+    correlation over eleven sessions and one over a hundred are not the same evidence, and a
+    caller that cannot tell them apart will treat them the same. The veto refuses on `None`.
     """
-    if lookback_sessions < 2:
+    window = tuple(session_window)
+    if len(window) < 2:
         raise ValueError("a correlation window needs at least two sessions")
 
-    usable = {
-        symbol: series
-        for symbol, series in closes.items()
-        if len([day for day in series if day <= as_of_session]) >= lookback_sessions
-    }
-    excluded = tuple(sorted(set(closes) - set(usable)))
-    if len(usable) < 2:
-        return None
-
-    window: dict[str, list[Decimal]] = {}
-    for symbol, series in usable.items():
-        days = sorted(day for day in series if day <= as_of_session)[-lookback_sessions:]
-        window[symbol] = [series[day] for day in days]
-
-    # Every surviving symbol shares the same session count, so every coefficient rests on the
-    # same sample -- which is the whole point of REQUIRE_COMPLETE.
-    returns = {
-        symbol: [
-            Decimal(str(math.log(float(prices[index]) / float(prices[index - 1]))))
-            for index in range(1, len(prices))
+    required = set(window)
+    excluded: dict[str, ExclusionReason] = {}
+    returns: dict[str, list[float]] = {}
+    for symbol, series in closes.items():
+        if not required <= set(series):
+            excluded[symbol] = ExclusionReason.INCOMPLETE_WINDOW
+            continue
+        # Indexed by the window in order, so index N is the same session for every symbol.
+        prices = [float(series[day]) for day in window]
+        returns[symbol] = [
+            math.log(prices[index] / prices[index - 1]) for index in range(1, len(prices))
         ]
-        for symbol, prices in window.items()
-    }
-    observations = len(next(iter(returns.values())))
-    if observations < 1:
+
+    # Spread is computed once per symbol and reused by every pair, so "this symbol cannot be
+    # correlated" is decided in exactly one place. Deciding it inside the pairwise loop instead
+    # would make a degenerate symbol vanish from some pairs and not others.
+    measured: dict[str, tuple[list[float], float, float]] = {}
+    for symbol, values in returns.items():
+        mean = statistics.fmean(values)
+        spread = math.sqrt(sum((value - mean) ** 2 for value in values))
+        if spread == 0:
+            # Zero would say "independent"; the truth is "unanswerable", and they differ at the
+            # veto -- one permits an order and the other refuses it.
+            excluded[symbol] = ExclusionReason.NON_VARYING
+        else:
+            measured[symbol] = (values, mean, spread)
+
+    if len(measured) < 2:
         return None
 
     coefficients: dict[str, Decimal] = {}
-    ordered = sorted(returns)
+    ordered = sorted(measured)
     for index, left in enumerate(ordered):
         for right in ordered[index + 1 :]:
-            value = _pearson(returns[left], returns[right])
-            if value is not None:
-                coefficients["|".join((left, right))] = value
+            coefficients["|".join((left, right))] = _pearson(measured[left], measured[right])
 
     return DependenceSnapshot(
         source=source,
-        as_of_session=as_of_session,
-        lookback_sessions=lookback_sessions,
-        observations_used=observations,
+        session_window=window,
         coefficients=coefficients,
-        excluded_symbols=excluded,
+        excluded=excluded,
     )
 
 
-def _pearson(left: Sequence[Decimal], right: Sequence[Decimal]) -> Decimal | None:
-    """Correlation, or `None` when a series does not vary.
+def _pearson(
+    left: tuple[list[float], float, float], right: tuple[list[float], float, float]
+) -> Decimal:
+    """Correlation from pre-computed means and spreads.
 
-    A constant series has no correlation with anything, and reporting zero would say "these are
-    independent" when the truth is "this cannot be answered".
+    Total by construction: a symbol whose spread is zero never reaches here, because the builder
+    excluded it as `NON_VARYING` using this same quantity.
     """
-    a = [float(value) for value in left]
-    b = [float(value) for value in right]
-    mean_a, mean_b = statistics.fmean(a), statistics.fmean(b)
-    spread_a = math.sqrt(sum((value - mean_a) ** 2 for value in a))
-    spread_b = math.sqrt(sum((value - mean_b) ** 2 for value in b))
-    if spread_a == 0 or spread_b == 0:
-        return None
-    covariance = sum((x - mean_a) * (y - mean_b) for x, y in zip(a, b, strict=True))
+    values_a, mean_a, spread_a = left
+    values_b, mean_b, spread_b = right
+    covariance = sum(
+        (x - mean_a) * (y - mean_b) for x, y in zip(values_a, values_b, strict=True)
+    )
     return Decimal(str(round(covariance / (spread_a * spread_b), 6)))
-
-
 
 
 class DependenceState(BaseModel):
@@ -304,11 +384,7 @@ def build_dependence_state(
     clusters = snapshot.clusters(measured, threshold=threshold)
     cluster = next(group for group in clusters if symbol in group)
     committed = sum(
-        (
-            abs(position.market_value)
-            for position in positions
-            if position.symbol in cluster
-        ),
+        (abs(position.market_value) for position in positions if position.symbol in cluster),
         Decimal("0"),
     )
     return DependenceState(
@@ -323,6 +399,7 @@ def build_dependence_state(
 __all__ = [
     "DependenceSnapshot",
     "DependenceState",
+    "ExclusionReason",
     "LinkageMethod",
     "MissingDataRule",
     "ReturnDefinition",

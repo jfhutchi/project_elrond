@@ -219,6 +219,19 @@ class PortfolioVetoPolicy(VetoModel):
     correlation_threshold: Decimal = Field(default=Decimal("0.90"), gt=0, le=1)
     max_correlated_cluster_bps: int = Field(default=4000, gt=0)
 
+    #: Sessions of history the dependence snapshot is measured over.
+    #:
+    #: **It lives here, and only here, because two consumers need it to agree (#84).** The data
+    #: sync must fetch at least this many sessions or the veto is permanently unmeasurable, and
+    #: the snapshot builder must measure over exactly this many or the threshold above was
+    #: chosen against a different window. Those were separate constructor arguments "kept in
+    #: step" by a comment, which is a convention rather than an invariant -- and #82 is about to
+    #: put a configuration surface in front of both.
+    #:
+    #: Being a policy field also means changing it changes `identity`, so a refusal measured
+    #: over 120 sessions can never be pooled with one measured over 60.
+    correlation_lookback_sessions: int = Field(default=120, ge=2)
+
     #: Vetoes to enforce. Anything absent is not evaluated, which is a policy choice and is
     #: recorded in `identity` so a study can tell one policy from another.
     #:
