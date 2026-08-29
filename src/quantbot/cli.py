@@ -73,6 +73,13 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
         action_parser.add_argument("--reason", required=True)
     registered = commands.add_parser("hypotheses")
     registered.add_argument("--family")
+    # #82 slice 1. Read-only by construction: this command reports what is in force and why
+    # it cannot be changed here, which is the whole of what the registry can honestly offer
+    # before a control plane exists.
+    config_view = commands.add_parser("config")
+    config_view.add_argument(
+        "--subsystem", help="limit to one subsystem, e.g. risk, broker, safety, market-data"
+    )
     commands.add_parser("research-status")
     # Reports only. Naming a source cannot spend it, and there is deliberately no flag here
     # that reserves or consumes anything: this command exists to be run before deciding to
@@ -182,6 +189,37 @@ def _durable_reconciliation_successful(database: Database) -> bool:
     return (
         latest is not None and latest.status is ReconciliationStatus.RECONCILED and not latest.diffs
     )
+
+
+def _config(args: argparse.Namespace, stream: TextIO) -> int:
+    """Report every operator-relevant setting, its source, and why it is immutable (#82).
+
+    Secrets report as present or absent. Account identifiers report as configured, because this
+    output is meant to be pasteable into an issue and the repository is public.
+    """
+    from quantbot.operations.registry import config_registry
+
+    rows = [
+        row.model_dump(mode="json")
+        for row in config_registry()
+        if args.subsystem is None or row.subsystem == args.subsystem
+    ]
+    json.dump(
+        {
+            "ok": True,
+            "command": "config",
+            "settings": rows,
+            "mutable_at_runtime": 0,
+            "note": (
+                "nothing here is changeable at runtime; Settings is environment-only and the "
+                "policy objects are frozen. Changing a VERSIONED_POLICY value mints a new "
+                "policy version rather than editing the existing one"
+            ),
+        },
+        stream,
+        sort_keys=True,
+    )
+    return 0
 
 
 def _create_database(args: argparse.Namespace, stream: TextIO) -> int:
@@ -299,6 +337,11 @@ def main(
         # this command is for is precisely the one that cannot be opened. A migration command
         # that needed a successful open would be unreachable exactly when it was needed.
         return _migrate_database(args, stream)
+    if args.command == "config":
+        # Before the context, like the database commands: reporting configuration must not
+        # require a working database, since a misconfigured store is one of the things an
+        # operator would run this to diagnose.
+        return _config(args, stream)
     if args.command == "create-database":
         # Same reason, more so: there is nothing to open yet.
         return _create_database(args, stream)
