@@ -366,9 +366,9 @@ def test_a_comparative_sharpe_cannot_be_registered_without_its_benchmark() -> No
     the benchmark can no longer be built, which is what makes the two agree by construction rather
     than by discipline.
     """
-    with pytest.raises(ValidationError, match="Sharpe \*difference\*"):
+    with pytest.raises(ValidationError, match=r"Sharpe \*difference\*"):
         jkm_effect(benchmark_sharpe=None, benchmark_correlation=None)
-    with pytest.raises(ValidationError, match="Sharpe \*difference\*"):
+    with pytest.raises(ValidationError, match=r"Sharpe \*difference\*"):
         jkm_effect(benchmark_correlation=None)
 
 
