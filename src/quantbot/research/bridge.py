@@ -30,6 +30,9 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
 from quantbot.research.discovery import Candidate, DiscoveryMode, admissible
 from quantbot.research.power import EffectSpecification
 from quantbot.research.registry import (
@@ -38,6 +41,7 @@ from quantbot.research.registry import (
     SearchOrigin,
     WindowConsumption,
 )
+from quantbot.storage.schema import search_runs
 
 
 class CandidateNotRegistrable(ValueError):
@@ -53,6 +57,8 @@ def draft_from_candidate(
     hypothesis_id: str,
     consumption: Sequence[WindowConsumption] = (),
     forward_evidence: bool = False,
+    session: Session | None = None,
+    search_run_id: str | None = None,
     attested_by: str | None = None,
 ) -> HypothesisDraft:
     """Turn an admissible candidate into a registrable draft.
@@ -83,7 +89,9 @@ def draft_from_candidate(
             "registering against a subset would freeze a different question"
         )
 
-    origin, attester = _origin_for(candidate, attested_by)
+    origin, attester, cardinality = _origin_for(
+        candidate, session=session, search_run_id=search_run_id, attested_by=attested_by
+    )
     return HypothesisDraft(
         hypothesis_id=hypothesis_id,
         family_id=candidate.family_id,
@@ -101,12 +109,15 @@ def draft_from_candidate(
         primary_estimand=effect.estimand.value,
         effect=effect,
         available_observations=available_observations,
-        # Carried, not restated. If whoever registers the candidate declared this themselves,
-        # a search of five hundred could arrive as a search of one and the multiple-testing
-        # burden would silently under-count (#23).
-        search_cardinality=candidate.search_cardinality,
+        # Read from the durable search record when one is named, and only carried from the
+        # candidate otherwise. If whoever registers the candidate declared this themselves, a
+        # search of five hundred could arrive as a search of one and the multiple-testing burden
+        # would silently under-count (#23) -- so on the measured path the payload does not get a
+        # vote, and editing `candidate.search_cardinality` cannot lower what gets registered.
+        search_cardinality=cardinality,
         search_origin=origin,
         search_attested_by=attester,
+        search_run_id=search_run_id if origin is SearchOrigin.MEASURED else None,
         confounders=candidate.confounders,
         materially_different=candidate.why_different,
         basis=candidate.basis,
@@ -114,22 +125,64 @@ def draft_from_candidate(
     )
 
 
-def _origin_for(candidate: Candidate, attested_by: str | None) -> tuple[SearchOrigin, str | None]:
-    """Where the candidate's trial count came from, in the registry's vocabulary.
+def _origin_for(
+    candidate: Candidate,
+    *,
+    session: Session | None,
+    search_run_id: str | None,
+    attested_by: str | None,
+) -> tuple[SearchOrigin, str | None, int]:
+    """Where the trial count came from, in the registry's vocabulary, and what it is.
 
-    A candidate that searched nothing carries the origin that says so. A candidate that searched
-    data needs a human to stand behind the number, because an agent's unattested self-report is
-    the one origin #23 refuses -- and discovery is an agent.
+    **Measured telemetry is the normal path for a data-dependent candidate (#73).** The rule this
+    replaces required a human to stand behind any data-dependent count, on the grounds that an
+    agent's unattested self-report is the one origin #23 refuses. That was correct when nothing
+    emitted search telemetry. It is now stale and, worse, backwards: a durable `search_runs` row
+    written by the process that did the searching is *stronger* evidence than a person recalling
+    a number, and requiring the weaker one dead-ended autonomous discovery on a signature.
+
+    What #23 actually refuses is a count an agent can choose. That is still refused here, by
+    reading the count from the row rather than from the candidate: on the measured path the
+    payload does not get a vote, so editing `search_cardinality` cannot lower what is registered.
+
+    A candidate with no disclosed burden is **not** blocked pending an attestation. It registers
+    with the origin it can support and is confirmatorily inadmissible on that basis -- the
+    honest outcome, and one nobody has to be woken up for.
     """
     if candidate.search_cardinality == 1 and candidate.mode is not DiscoveryMode.DATA_ANOMALY:
-        return SearchOrigin.NO_DATA_DEPENDENT_SEARCH, None
-    if attested_by is None:
-        raise CandidateNotRegistrable(
-            f"{candidate.candidate_id} reports a search of {candidate.search_cardinality} "
-            "candidates. An agent may not self-report a trial count, so this needs an operator "
-            "attestation naming who is standing behind it"
-        )
-    return SearchOrigin.OPERATOR_ATTESTED, attested_by
+        return SearchOrigin.NO_DATA_DEPENDENT_SEARCH, None, candidate.search_cardinality
+
+    if search_run_id is not None:
+        if session is None:
+            raise CandidateNotRegistrable(
+                f"{candidate.candidate_id} names search run {search_run_id!r} but no session was "
+                "given to read it; a measured origin has to actually read the measurement"
+            )
+        recorded = session.execute(
+            select(search_runs.c.candidates_evaluated).where(
+                search_runs.c.search_id == search_run_id
+            )
+        ).scalar_one_or_none()
+        if recorded is None:
+            # Fail closed. A MEASURED origin naming a run nobody logged is a stronger claim than
+            # a self-report, made on less evidence.
+            raise CandidateNotRegistrable(
+                f"{candidate.candidate_id} cites search run {search_run_id!r}, which is not "
+                "recorded; a measured count must come from a row that exists"
+            )
+        return SearchOrigin.MEASURED, None, int(recorded)
+
+    if attested_by is not None:
+        # Retained for backfill and for a human who genuinely did the searching. No longer the
+        # route an autonomous discovery run is expected to take.
+        return SearchOrigin.OPERATOR_ATTESTED, attested_by, candidate.search_cardinality
+
+    raise CandidateNotRegistrable(
+        f"{candidate.candidate_id} reports a search of {candidate.search_cardinality} candidates "
+        "with no durable search run behind it. An agent may not self-report a trial count, so "
+        "the discovery path must record its search (#23) rather than have someone vouch for the "
+        "number afterwards"
+    )
 
 
 __all__ = ["CandidateNotRegistrable", "draft_from_candidate"]

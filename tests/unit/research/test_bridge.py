@@ -118,21 +118,168 @@ def test_the_search_cardinality_is_carried_not_restated() -> None:
     assert draft.search_attested_by == "hutch"
 
 
-def test_a_searched_candidate_without_an_attestation_is_refused() -> None:
-    """An agent may not self-report a trial count, whatever route it arrives by."""
+def test_a_searched_candidate_with_no_measured_burden_is_refused() -> None:
+    """An agent may not self-report a trial count, whatever route it arrives by.
+
+    What changed with #73 is the remedy, not the rule. The refusal now points at recording the
+    search rather than at finding a person to vouch for the number.
+    """
     mined = candidate(
         mode=DiscoveryMode.DATA_ANOMALY,
         inspected_roles=frozenset({DataRole.DISCOVERY}),
         search_cardinality=500,
     )
 
-    with pytest.raises(CandidateNotRegistrable, match="operator attestation"):
+    with pytest.raises(CandidateNotRegistrable, match="no durable search run"):
         draft_from_candidate(
             mined,
             effect=effect(),
             windows=[window()],
             available_observations=2669,
             hypothesis_id="H-MINED",
+        )
+
+
+def record_search(session, search_id: str, evaluated: int) -> None:
+    """A durable search run, as `record_search_run` would leave it."""
+    from quantbot.storage.database import encode_utc
+    from quantbot.storage.schema import search_runs
+
+    session.execute(
+        search_runs.insert().values(
+            search_id=search_id,
+            actor="anomaly-worker",
+            actor_version="1.0.0",
+            candidates_evaluated=evaluated,
+            dataset=DATASET,
+            start_date="2016-01-04",
+            end_date="2026-08-21",
+            data_role=DataRole.DISCOVERY.value,
+            started_at=encode_utc(NOW),
+            finished_at=encode_utc(NOW),
+            configuration_hash="cfg-1",
+        )
+    )
+
+
+def test_a_measured_search_registers_with_zero_human_interaction(tmp_path) -> None:
+    """#73's headline: durable telemetry is the normal path, not a fallback.
+
+    A data-anomaly candidate backed by a recorded search reaches a registrable draft without
+    anybody attesting to anything, because the row is better evidence than a person's recall.
+    """
+    from quantbot.storage import Database
+
+    mined = candidate(
+        mode=DiscoveryMode.DATA_ANOMALY,
+        inspected_roles=frozenset({DataRole.DISCOVERY}),
+        search_cardinality=500,
+    )
+
+    database = Database(tmp_path / "runs.db")
+    try:
+        with database.transaction() as session:
+            record_search(session, "SR-1", 500)
+
+            draft = draft_from_candidate(
+                mined,
+                effect=effect(),
+                windows=[window()],
+                available_observations=2669,
+                hypothesis_id="H-MINED",
+                session=session,
+                search_run_id="SR-1",
+            )
+    finally:
+        database.close()
+
+    assert draft.search_origin is SearchOrigin.MEASURED
+    assert draft.search_run_id == "SR-1"
+    assert draft.search_cardinality == 500
+    assert draft.search_attested_by is None, "nobody stood behind this, and nobody had to"
+
+
+def test_the_payload_cannot_lower_a_measured_count(tmp_path) -> None:
+    """The count comes from the row, so editing the candidate cannot shrink the burden.
+
+    This is the whole reason #23 refused self-reporting. Reading the row and *then* trusting the
+    payload would have moved the laundering path rather than closing it.
+    """
+    from quantbot.storage import Database
+
+    understated = candidate(
+        mode=DiscoveryMode.DATA_ANOMALY,
+        inspected_roles=frozenset({DataRole.DISCOVERY}),
+        search_cardinality=1,
+    )
+
+    database = Database(tmp_path / "runs.db")
+    try:
+        with database.transaction() as session:
+            record_search(session, "SR-1", 500)
+
+            draft = draft_from_candidate(
+                understated,
+                effect=effect(),
+                windows=[window()],
+                available_observations=2669,
+                hypothesis_id="H-MINED",
+                session=session,
+                search_run_id="SR-1",
+            )
+    finally:
+        database.close()
+
+    assert draft.search_cardinality == 500, "the row decides, not the candidate"
+
+
+def test_citing_a_search_run_that_does_not_exist_fails_closed(tmp_path) -> None:
+    """A MEASURED origin naming a run nobody logged is a stronger claim on less evidence."""
+    from quantbot.storage import Database
+
+    mined = candidate(
+        mode=DiscoveryMode.DATA_ANOMALY,
+        inspected_roles=frozenset({DataRole.DISCOVERY}),
+        search_cardinality=500,
+    )
+
+    database = Database(tmp_path / "runs.db")
+    try:
+        with database.transaction() as session:
+            with pytest.raises(CandidateNotRegistrable, match="not\\s+recorded|is not recorded"):
+                draft_from_candidate(
+                    mined,
+                    effect=effect(),
+                    windows=[window()],
+                    available_observations=2669,
+                    hypothesis_id="H-MINED",
+                    session=session,
+                    search_run_id="SR-MISSING",
+                )
+    finally:
+        database.close()
+
+
+def test_naming_a_run_without_a_session_cannot_claim_it_was_measured() -> None:
+    """A measured origin has to actually read the measurement.
+
+    Accepting the id alone would let `search_run_id` become a label that grants MEASURED without
+    anyone opening the table -- the same shape as trusting the payload.
+    """
+    mined = candidate(
+        mode=DiscoveryMode.DATA_ANOMALY,
+        inspected_roles=frozenset({DataRole.DISCOVERY}),
+        search_cardinality=500,
+    )
+
+    with pytest.raises(CandidateNotRegistrable, match="no session was given"):
+        draft_from_candidate(
+            mined,
+            effect=effect(),
+            windows=[window()],
+            available_observations=2669,
+            hypothesis_id="H-MINED",
+            search_run_id="SR-1",
         )
 
 
