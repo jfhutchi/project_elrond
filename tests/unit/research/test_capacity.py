@@ -76,7 +76,7 @@ def seed_sessions(session, *dates: str, provider: str = SIP) -> None:
 
 @pytest.fixture
 def database(tmp_path: Path):
-    db = Database(tmp_path / "capacity.db")
+    db = Database.create(tmp_path / "capacity.db")
     yield db
     db.close()
 

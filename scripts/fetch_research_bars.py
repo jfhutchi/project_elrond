@@ -45,7 +45,11 @@ async def main() -> int:
     config = load_strategy_config(runtime_paths().config)
     feed = market_data_settings()
     transport = HttpxMarketDataTransport()
-    database = Database(db_path)
+    # This script *populates* a research bar cache, so it is one of the few places that
+    # legitimately bootstraps a store (#86). Named explicitly rather than relying on an open
+    # that creates, which is exactly what ordinary opens no longer do.
+    exists = db_path.exists() and db_path.stat().st_size > 0
+    database = Database(db_path) if exists else Database.create(db_path)
 
     calendar = AlpacaMarketCalendar(api_key=key, api_secret=secret, transport=transport)
     client = AlpacaMarketDataClient(api_key=key, api_secret=secret, transport=transport)

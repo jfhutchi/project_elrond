@@ -48,7 +48,7 @@ REFUTED_MD = Path(__file__).resolve().parents[3] / "REFUTED.md"
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[Database]:
-    db = Database(tmp_path / "memory.db")
+    db = Database.create(tmp_path / "memory.db")
     yield db
     db.close()
 

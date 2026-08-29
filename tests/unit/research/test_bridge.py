@@ -176,7 +176,7 @@ def test_a_measured_search_registers_with_zero_human_interaction(tmp_path) -> No
         search_cardinality=500,
     )
 
-    database = Database(tmp_path / "runs.db")
+    database = Database.create(tmp_path / "runs.db")
     try:
         with database.transaction() as session:
             record_search(session, "SR-1", 500)
@@ -213,7 +213,7 @@ def test_the_payload_cannot_lower_a_measured_count(tmp_path) -> None:
         search_cardinality=1,
     )
 
-    database = Database(tmp_path / "runs.db")
+    database = Database.create(tmp_path / "runs.db")
     try:
         with database.transaction() as session:
             record_search(session, "SR-1", 500)
@@ -243,7 +243,7 @@ def test_citing_a_search_run_that_does_not_exist_fails_closed(tmp_path) -> None:
         search_cardinality=500,
     )
 
-    database = Database(tmp_path / "runs.db")
+    database = Database.create(tmp_path / "runs.db")
     try:
         with database.transaction() as session:
             with pytest.raises(CandidateNotRegistrable, match="not\\s+recorded|is not recorded"):

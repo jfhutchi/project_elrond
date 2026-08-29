@@ -31,7 +31,7 @@ ACCOUNT = "paper-1"
 
 @pytest.fixture
 def database(tmp_path) -> Iterator[Database]:
-    db = Database(tmp_path / "quantbot.db")
+    db = Database.create(tmp_path / "quantbot.db")
     yield db
     db.close()
 

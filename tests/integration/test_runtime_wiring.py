@@ -383,7 +383,7 @@ async def test_the_fetched_window_and_the_measured_window_cannot_drift_apart(
     sides from the single change: the sync refuses to run, and the snapshot refuses to build.
     """
     config = load_strategy_config(_write_config(tmp_path))
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="test fixture readiness", measured=measured(), updated_at=NOW
     )
@@ -433,7 +433,7 @@ async def test_wired_cycle_reconciles_syncs_data_and_submits_a_risk_sized_order(
     tmp_path: Path,
 ) -> None:
     config = load_strategy_config(_write_config(tmp_path))
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="test fixture readiness",
         measured=measured(),
@@ -467,7 +467,7 @@ async def test_rerunning_the_same_trading_day_never_submits_a_duplicate_order(
 ) -> None:
     """Duplicate-order protection: a re-run of the same signal day submits nothing new."""
     config = load_strategy_config(_write_config(tmp_path))
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="test fixture readiness",
         measured=measured(),
@@ -501,6 +501,8 @@ def test_build_runtime_fails_closed_without_paper_credentials(
 ) -> None:
     monkeypatch.setenv("QUANTBOT_CONFIG", str(_write_config(tmp_path)))
     monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
+    # `build_runtime` opens the configured store and no longer creates it (#86).
+    Database.create(tmp_path / "quantbot.db").close()
     # Keep the test hermetic: a developer machine may have real credentials exported.
     monkeypatch.delenv("ALPACA_PAPER_API_KEY", raising=False)
     monkeypatch.delenv("ALPACA_PAPER_API_SECRET", raising=False)
@@ -515,6 +517,8 @@ def test_build_runtime_assembles_every_operational_collaborator(
 ) -> None:
     monkeypatch.setenv("QUANTBOT_CONFIG", str(_write_config(tmp_path)))
     monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
+    # `build_runtime` opens the configured store and no longer creates it (#86).
+    Database.create(tmp_path / "quantbot.db").close()
     monkeypatch.setenv("QUANTBOT_LOCK_PATH", str(tmp_path / "quantbot.lock"))
     monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "0123456789abcdef")
 

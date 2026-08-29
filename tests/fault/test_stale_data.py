@@ -49,7 +49,7 @@ class DisconnectedStreamSync(FakeDataSync):
 async def test_stale_data_halts_before_strategy_and_engages_kill_switch(
     tmp_path: Path,
 ) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _clear(database)
     calls: list[str] = []
     cycle = RunOnceCycle(
@@ -76,7 +76,7 @@ async def test_stale_data_halts_before_strategy_and_engages_kill_switch(
 
 @pytest.mark.asyncio
 async def test_disconnected_trade_stream_halts_before_strategy(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _clear(database)
     calls: list[str] = []
     cycle = RunOnceCycle(

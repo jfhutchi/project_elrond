@@ -177,7 +177,7 @@ def test_database_rejects_paper_evidence_role_for_forecast(tmp_path: Path) -> No
 
 
 def test_forecast_and_active_storage_planes_have_disjoint_authority(tmp_path: Path) -> None:
-    active = Database(tmp_path / "active.db")
+    active = Database.create(tmp_path / "active.db")
     forecast = ForecastDatabase(tmp_path / "forecast.db")
     try:
         active_tables = set(inspect(active.engine).get_table_names())
@@ -191,7 +191,7 @@ def test_forecast_and_active_storage_planes_have_disjoint_authority(tmp_path: Pa
 
 
 def test_forecast_write_leaves_seeded_active_evidence_unchanged(tmp_path: Path) -> None:
-    active = Database(tmp_path / "active.db")
+    active = Database.create(tmp_path / "active.db")
     forecast = ForecastDatabase(tmp_path / "forecast.db")
     as_of = datetime(2026, 8, 14, 20, tzinfo=UTC)
     identity = StrategyIdentity(

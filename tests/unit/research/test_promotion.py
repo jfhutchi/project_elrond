@@ -570,7 +570,7 @@ def test_forward_progress_reports_the_honest_distance(ledger_db: Database) -> No
 
 @pytest.fixture
 def ledger_db(tmp_path):
-    db = Database(tmp_path / "ladder.db")
+    db = Database.create(tmp_path / "ladder.db")
     yield db
     db.close()
 

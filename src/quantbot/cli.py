@@ -103,6 +103,15 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # Refusing by default is the point: an upgrade is not reversible and the operator should have
     # seen what it would do before it does it.
     migrate.add_argument("--confirm", action="store_true")
+    # The other half of the same boundary (#86). Opening a store no longer creates one, so
+    # first-run bootstrap needs a name of its own rather than happening as a side effect of a
+    # status command run against a mistyped path.
+    create = commands.add_parser("create-database")
+    create.add_argument(
+        "--database",
+        help="store to create; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
+    )
+    create.add_argument("--confirm", action="store_true")
     verify = commands.add_parser("verify-manifest")
     verify.add_argument("--manifest", required=True)
     verify.add_argument("--against")
@@ -173,6 +182,47 @@ def _durable_reconciliation_successful(database: Database) -> bool:
     return (
         latest is not None and latest.status is ReconciliationStatus.RECONCILED and not latest.diffs
     )
+
+
+def _create_database(args: argparse.Namespace, stream: TextIO) -> int:
+    """Bootstrap a new store, deliberately (#86).
+
+    Refuses an existing store outright, and refuses to create one without `--confirm`. The
+    second refusal is the useful one: the reason this command exists is that creating a store
+    at the wrong path used to be indistinguishable from opening the right one, so a bootstrap
+    that happened because somebody typed a path wrong would be no better here.
+    """
+    from quantbot.storage import Database
+    from quantbot.storage.schema import SCHEMA_VERSION
+
+    path = Path(args.database or os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    payload: dict[str, object] = {
+        "ok": False,
+        "command": "create-database",
+        "database": str(path.resolve()),
+        "target_schema_version": SCHEMA_VERSION,
+        "created": False,
+    }
+
+    if path.exists() and path.stat().st_size > 0:
+        payload["error"] = f"{path} already holds a database; nothing to create"
+        json.dump(payload, stream, sort_keys=True)
+        return 2
+    if not args.confirm:
+        # The resolved path is echoed rather than the argument, because the mistake this guards
+        # against is usually a relative path resolving somewhere unexpected.
+        payload["error"] = (
+            f"would create a new store at {path.resolve()} with an engaged kill switch. Check "
+            "that path is where you mean, then re-run with --confirm"
+        )
+        json.dump(payload, stream, sort_keys=True)
+        return 2
+
+    Database.create(path).close()
+    payload["ok"] = True
+    payload["created"] = True
+    json.dump(payload, stream, sort_keys=True)
+    return 0
 
 
 def _migrate_database(args: argparse.Namespace, stream: TextIO) -> int:
@@ -249,6 +299,9 @@ def main(
         # this command is for is precisely the one that cannot be opened. A migration command
         # that needed a successful open would be unreachable exactly when it was needed.
         return _migrate_database(args, stream)
+    if args.command == "create-database":
+        # Same reason, more so: there is nothing to open yet.
+        return _create_database(args, stream)
 
     owned_context = context is None
     active = context or _default_context()

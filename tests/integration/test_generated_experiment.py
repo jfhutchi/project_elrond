@@ -97,7 +97,7 @@ print(json.dumps({
 
 @pytest.fixture
 def database(tmp_path) -> Iterator[Database]:
-    db = Database(tmp_path / "generated.db")
+    db = Database.create(tmp_path / "generated.db")
     yield db
     db.close()
 

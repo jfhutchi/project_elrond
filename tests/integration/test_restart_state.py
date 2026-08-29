@@ -30,7 +30,7 @@ def make_unresolved(intent_id: str, state: IntentState) -> OrderIntent:
 
 def test_restart_restores_unresolved_intents_and_safety_state(tmp_path: Path) -> None:
     database_path = tmp_path / "restart.db"
-    first = Database(database_path)
+    first = Database.create(database_path)
     with first.transaction() as session:
         repository = StorageRepository(session)
         repository.create_order_intent(make_unresolved("submitting", IntentState.SUBMITTING))

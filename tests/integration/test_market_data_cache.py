@@ -47,7 +47,7 @@ def report() -> BarValidationReport:
 
 def test_validated_cache_is_durable_idempotent_and_provenance_bound(tmp_path: Path) -> None:
     path = tmp_path / "market-data.db"
-    database = Database(path)
+    database = Database.create(path)
     with database.transaction() as session:
         repository = StorageRepository(session)
         cache = MarketDataCache(repository)

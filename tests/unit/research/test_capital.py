@@ -390,7 +390,7 @@ def test_m4_reads_the_assessment_rather_than_the_issue_number(tmp_path: Path) ->
     from quantbot.storage import Database
 
     moment = datetime(2026, 8, 27, 14, 30, tzinfo=UTC)
-    database = Database(tmp_path / "m4.db")
+    database = Database.create(tmp_path / "m4.db")
     with database.transaction() as session:
         ResearchMemory(session).record(
             ResearchRecord(

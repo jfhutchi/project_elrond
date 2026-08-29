@@ -62,7 +62,7 @@ def test_fresh_forecast_migration_replay_matches_head_metadata(tmp_path: Path) -
 
 def test_forecast_database_rejects_active_or_tampered_schema(tmp_path: Path) -> None:
     active_path = tmp_path / "active.db"
-    active = Database(active_path)
+    active = Database.create(active_path)
     active.close()
     with pytest.raises(UnsupportedForecastSchemaVersionError, match="incompatible"):
         ForecastDatabase(active_path)

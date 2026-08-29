@@ -86,7 +86,7 @@ def test_fill_transition_is_recorded_so_local_open_orders_match_the_broker(
     tmp_path: Path,
 ) -> None:
     """The regression: without this, local keeps one open order the broker does not have."""
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _seed(database)
 
     with database.transaction() as session:
@@ -114,7 +114,7 @@ def test_fill_transition_is_recorded_so_local_open_orders_match_the_broker(
 
 
 def test_repeating_the_same_transition_is_idempotent(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _seed(database)
     filled = _order("filled", "0.161511", "61.92")
 
@@ -127,7 +127,7 @@ def test_repeating_the_same_transition_is_idempotent(tmp_path: Path) -> None:
 
 def test_identity_change_is_rejected_as_a_conflict(tmp_path: Path) -> None:
     """Lifecycle fields may advance; identity may never change."""
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _seed(database)
     tampered = _order("filled", "0.161511", "61.92").model_copy(
         update={"quantity": Decimal("99")}
@@ -148,7 +148,7 @@ def test_a_restamped_submitted_at_is_accepted_not_treated_as_identity(
     it, the broker reported 2026-08-17T13:23. Treating that as identity rejected every
     queued order at the exact moment it filled.
     """
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _seed(database)
     released = _order("filled", "0.161511", "61.92").model_copy(
         update={"submitted_at": datetime(2026, 8, 17, 13, 23, 1, tzinfo=UTC)}
@@ -168,7 +168,7 @@ def test_a_restamped_submitted_at_is_accepted_not_treated_as_identity(
 
 
 def test_updating_an_unknown_order_is_rejected(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
 
     with pytest.raises(RecordNotFoundError, match="broker order not found"):
         with database.transaction() as session:
@@ -183,7 +183,7 @@ def test_reconciliation_snapshots_agree_once_the_transition_is_recorded(
     from quantbot.domain import ReconciliationStatus
     from quantbot.execution import ReconciliationSnapshot, compare_reconciliation
 
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _seed(database)
     account = Account(
         account_id="paper-1",

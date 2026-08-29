@@ -152,7 +152,7 @@ async def _submit(coordinator: ExecutionCoordinator) -> SubmissionResult:
 
 @pytest.mark.asyncio
 async def test_timeout_adopts_order_found_by_same_client_id(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     broker = ScriptedAmbiguousBroker(
         [SubmissionUncertainError("timeout")],
         [_accepted()],
@@ -168,7 +168,7 @@ async def test_timeout_adopts_order_found_by_same_client_id(tmp_path: Path) -> N
 
 @pytest.mark.asyncio
 async def test_definitive_not_found_allows_only_bounded_same_id_retry(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     broker = ScriptedAmbiguousBroker(
         [SubmissionUncertainError("timeout"), _accepted()],
         [None],
@@ -186,7 +186,7 @@ async def test_definitive_not_found_allows_only_bounded_same_id_retry(tmp_path: 
 async def test_retry_rejection_is_looked_up_before_any_rejected_transition(
     tmp_path: Path,
 ) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     broker = ScriptedAmbiguousBroker(
         [
             SubmissionUncertainError("timeout"),
@@ -205,7 +205,7 @@ async def test_retry_rejection_is_looked_up_before_any_rejected_transition(
 
 @pytest.mark.asyncio
 async def test_initial_definitive_rejection_is_not_retried(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     broker = ScriptedAmbiguousBroker(
         [BrokerRequestError("invalid order", status_code=422)],
         [],
@@ -225,7 +225,7 @@ async def test_initial_definitive_rejection_is_not_retried(tmp_path: Path) -> No
 
 @pytest.mark.asyncio
 async def test_exhausted_ambiguity_remains_submission_unknown(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     broker = ScriptedAmbiguousBroker(
         [SubmissionUncertainError("timeout"), SubmissionUncertainError("timeout again")],
         [None, None],

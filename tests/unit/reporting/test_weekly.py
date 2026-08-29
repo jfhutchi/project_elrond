@@ -33,7 +33,7 @@ def _request() -> WeeklyReportRequest:
 
 
 def test_observed_week_without_signals_matches_golden_report(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     with database.transaction() as session:
         StorageRepository(session).record_qualification_day(
             "full-v1:test",
@@ -54,7 +54,7 @@ def test_observed_week_without_signals_matches_golden_report(tmp_path: Path) -> 
 
 
 def test_empty_week_never_fabricates_zero_observations(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
 
     report = build_weekly_report(database, _request())
     rendered = report.render_markdown()
@@ -122,7 +122,7 @@ def test_benchmark_comparison_requires_all_six_named_variants() -> None:
 
 
 def test_weekly_report_counts_durable_operational_evidence(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     observed_at = datetime(2026, 8, 14, 20, tzinfo=UTC)
     identity = StrategyIdentity(
         strategy_id="full-v1:test",

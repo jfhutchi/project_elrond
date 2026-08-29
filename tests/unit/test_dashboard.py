@@ -113,7 +113,7 @@ def render(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> str:
 
 @pytest.fixture
 def ledger(tmp_path: Path) -> Path:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     database.close()
     return tmp_path
 

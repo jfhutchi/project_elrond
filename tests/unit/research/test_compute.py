@@ -32,7 +32,7 @@ KEY = "compute:research"
 
 @pytest.fixture
 def database(tmp_path) -> Iterator[Database]:
-    db = Database(tmp_path / "compute.db")
+    db = Database.create(tmp_path / "compute.db")
     yield db
     db.close()
 

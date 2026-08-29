@@ -37,7 +37,7 @@ NOW = datetime(2026, 8, 17, 20, 5, tzinfo=UTC)
 
 
 def _ledger(tmp_path: Path) -> Database:
-    return Database(tmp_path / "quantbot.db")
+    return Database.create(tmp_path / "quantbot.db")
 
 
 def test_liveness_is_the_lock_not_the_process_table(

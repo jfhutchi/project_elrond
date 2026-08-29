@@ -69,7 +69,7 @@ DESIGN = ExperimentDesign(
 
 @pytest.fixture
 def database(tmp_path) -> Iterator[Database]:
-    db = Database(tmp_path / "runner.db")
+    db = Database.create(tmp_path / "runner.db")
     yield db
     db.close()
 

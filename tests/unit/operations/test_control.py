@@ -27,7 +27,7 @@ TOKEN = "a-sufficiently-long-control-token"
 
 @pytest.fixture
 def database(tmp_path) -> Iterator[Database]:
-    db = Database(tmp_path / "quantbot.db")
+    db = Database.create(tmp_path / "quantbot.db")
     yield db
     db.close()
 

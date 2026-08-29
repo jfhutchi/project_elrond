@@ -54,6 +54,32 @@ class UnsupportedSchemaVersionError(RuntimeError):
         super().__init__(f"Unsupported schema version {actual}; this build supports {supported}")
 
 
+class DatabaseNotFoundError(FileNotFoundError):
+    """The configured store does not exist, and opening one is not authority to create it (#86).
+
+    #66 stopped an ordinary open from *migrating* an existing store. This closes the other half
+    of the same boundary: an ordinary open must not **bootstrap** a missing one either.
+
+    The failure it prevents is quiet. A typo, a wrong working directory, a stale service
+    definition or an unmounted path all resolve to "no file there", and a constructor that
+    creates one turns every such mistake into a pristine empty database that reports itself as
+    healthy. The operator sees a system with no positions rather than a system pointed at the
+    wrong place, and a deployment begins accumulating real state somewhere nobody intended.
+
+    A default-engaged kill switch makes that new store safe to trade from. It does not make it
+    the *right* store, and those are different properties.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = path
+        super().__init__(
+            f"no database at {path}; opening a store does not create one. If this path is "
+            "correct and the system is being installed for the first time, run "
+            "`quantbot create-database` to bootstrap it deliberately. Otherwise the configured "
+            "path is wrong -- check QUANTBOT_DB_PATH and the working directory"
+        )
+
+
 class MigrationRequiredError(RuntimeError):
     """An existing store is behind head and was opened through a path with no migration authority.
 
@@ -116,24 +142,40 @@ class Database:
     """A durable SQLite database with fail-fast schema and pragma checks."""
 
     def __init__(
-        self, path: str | Path, *, busy_timeout_ms: int = 5000, may_migrate: bool = False
+        self,
+        path: str | Path,
+        *,
+        busy_timeout_ms: int = 5000,
+        may_migrate: bool = False,
+        may_create: bool = False,
     ) -> None:
-        """Open a store. **Does not upgrade an existing one** unless `may_migrate` is set (#66).
+        """Open an existing store. Creates nothing and upgrades nothing.
 
-        A file that is absent is created at head, because creating a store where none existed
-        cannot damage operator state -- the hazard this guards is upgrading a store that already
-        holds someone's data. An existing store that is behind head raises
-        `MigrationRequiredError` instead of being migrated.
+        Three operations, three names, and none of them reachable by accident:
 
-        Prefer `Database.create` and `Database.migrate` at call sites that mean one of those
-        specifically; they say so in the name, which is the point.
+        * `Database(path)` requires the store to exist at head. It raises
+          `DatabaseNotFoundError` if the file is missing or empty (#86) and
+          `MigrationRequiredError` if it is behind (#66).
+        * `Database.create(path)` bootstraps a new store and refuses an existing one.
+        * `Database.migrate(path)` upgrades an existing store and refuses a missing one.
+
+        The earlier version of this docstring argued that creating a store where none existed
+        "cannot damage operator state". That is true of the file and false of the operator: the
+        damage is that a wrong path stops looking wrong. Both keyword flags are private plumbing
+        for the two classmethods -- a caller that sets them by hand has named its intent, which
+        is the property being protected.
         """
         if busy_timeout_ms <= 0:
             raise ValueError("busy_timeout_ms must be positive")
         self.path = Path(path).expanduser().resolve()
-        self.path.parent.mkdir(parents=True, exist_ok=True)
         self.busy_timeout_ms = busy_timeout_ms
         existed = self.path.exists() and self.path.stat().st_size > 0
+        if not existed and not may_create:
+            # Before `mkdir` and before `create_engine`, so a failed open leaves the filesystem
+            # exactly as it found it -- no file, and no parent directories either. A directory
+            # tree conjured at a typo path is the same wrong signal in a quieter form.
+            raise DatabaseNotFoundError(self.path)
+        self.path.parent.mkdir(parents=True, exist_ok=True)
         self._stamp_revision, self._pending_upgrade = self._preflight_schema()
         if existed and self._pending_upgrade and not may_migrate:
             # Raised *before* the engine is created, so nothing has touched the file beyond the
@@ -152,7 +194,9 @@ class Database:
                 f"{location} already holds a database; use Database.migrate to upgrade it, or "
                 "Database(...) to open it"
             )
-        return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+        return cls(
+            location, busy_timeout_ms=busy_timeout_ms, may_migrate=True, may_create=True
+        )
 
     @classmethod
     def migrate(cls, path: str | Path, *, busy_timeout_ms: int = 5000) -> Database:

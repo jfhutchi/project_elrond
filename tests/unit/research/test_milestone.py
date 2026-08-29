@@ -37,7 +37,7 @@ TODAY = NOW.date()
 
 @pytest.fixture
 def database(tmp_path: Path):
-    db = Database(tmp_path / "milestone.db")
+    db = Database.create(tmp_path / "milestone.db")
     yield db
     db.close()
 

@@ -339,7 +339,7 @@ def test_an_oversized_response_is_refused_before_it_is_parsed() -> None:
 
 @pytest.fixture
 def store(tmp_path):
-    database = Database(tmp_path / "scout.db")
+    database = Database.create(tmp_path / "scout.db")
     yield database
     database.close()
 

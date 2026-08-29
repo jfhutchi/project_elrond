@@ -67,7 +67,7 @@ SIP_SESSIONS = 2669
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[Database]:
-    db = Database(tmp_path / "research.db")
+    db = Database.create(tmp_path / "research.db")
     yield db
     db.close()
 
@@ -1618,7 +1618,7 @@ def test_a_verified_count_at_registration_catches_an_overstatement_early(
     # The identical draft against a counted sample of 40. A second database, because the first
     # registration already reserved the protected window and contamination would refuse this one
     # before the power gate ever saw it -- which would prove nothing about the sample.
-    second = Database(database.path.parent / "second.db")
+    second = Database.create(database.path.parent / "second.db")
     try:
         with second.transaction() as session, pytest.raises(RegistrationRefused) as refused:
             HypothesisRegistry(session).register(

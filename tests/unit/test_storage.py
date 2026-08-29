@@ -131,7 +131,7 @@ def make_fill(*, price: str = "100.25") -> Fill:
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[Database]:
-    db = Database(tmp_path / "quantbot.db")
+    db = Database.create(tmp_path / "quantbot.db")
     yield db
     db.close()
 
@@ -197,7 +197,7 @@ def test_database_initializes_versioned_schema_and_connection_pragmas(database: 
 
 def test_database_rejects_unsupported_schema_version(tmp_path: Path) -> None:
     path = tmp_path / "unsupported.db"
-    db = Database(path)
+    db = Database.create(path)
     with db.engine.begin() as connection:
         connection.exec_driver_sql("UPDATE schema_version SET version = 999 WHERE id = 1")
     db.close()
@@ -940,7 +940,7 @@ def test_a_v1_database_upgrades_to_head_and_carries_its_ledger_across(tmp_path: 
 def test_a_database_one_version_ahead_of_this_build_is_refused(tmp_path: Path) -> None:
     """Older is upgradable, newer is fatal. Asserted at the boundary, not at an absurd value."""
     path = tmp_path / "from-the-future.db"
-    db = Database(path)
+    db = Database.create(path)
     with db.engine.begin() as connection:
         connection.exec_driver_sql(
             f"UPDATE schema_version SET version = {SCHEMA_VERSION + 1} WHERE id = 1"
