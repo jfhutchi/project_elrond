@@ -25,7 +25,7 @@ import sys
 from dataclasses import dataclass
 from enum import StrEnum
 
-from quantbot.node.capabilities import GpuVendor, NodeCapabilities
+from quantbot.node.capabilities import GpuDevice, GpuVendor, NodeCapabilities
 from quantbot.placement import CONTROL_PLANE, KRONOS_INFERENCE, WATCHDOG, JobRequirements
 
 
@@ -188,12 +188,23 @@ def _accelerator_detail(capabilities: NodeCapabilities) -> str:
         return "GPU enumeration failed"
     if not devices:
         return "no display adapter"
-    described = ", ".join(
-        f"{device.vendor.value} {device.model}"
-        + ("" if device.vram_mb is None else f" {device.vram_mb}MB")
-        for device in devices
-    )
+    described = ", ".join(_describe_device(device) for device in devices)
     return f"detected {described}, no supported runtime answered"
+
+
+def _describe_device(device: GpuDevice) -> str:
+    """Name a card the way an operator would recognise it.
+
+    The vendor prefix is added only when the model does not already carry it. Naive
+    concatenation produces "AMD AMD Radeon RX 6650M", and somebody reading a refusal should not
+    have to look past a stutter to find out which card was rejected.
+    """
+    name = device.model
+    if device.vendor is not GpuVendor.UNKNOWN and device.vendor.value.lower() not in name.lower():
+        name = f"{device.vendor.value} {name}"
+    if device.vram_mb is not None:
+        name = f"{name} {device.vram_mb}MB"
+    return name
 
 
 def suggested_role(capabilities: NodeCapabilities) -> NodeRole:

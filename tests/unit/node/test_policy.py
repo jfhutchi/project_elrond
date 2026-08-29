@@ -212,6 +212,24 @@ def test_a_gpu_worker_role_is_refused_without_a_usable_runtime() -> None:
     assert "RX 6650M" in reason and "8192MB" in reason
     assert NodeRole.GPU_WORKER not in supportable_roles(omen)
     assert NodeRole.WORKER in supportable_roles(omen)
+    # The model string already carries the vendor. Concatenating both produced
+    # "AMD AMD Radeon RX 6650M" against the real machine, which makes a refusal harder to read
+    # than it needs to be.
+    assert "AMD AMD" not in reason
+
+
+def test_a_card_whose_vendor_is_unrecognised_is_still_named_in_a_refusal() -> None:
+    """An unknown vendor must not prepend the literal word UNKNOWN to the model.
+
+    The refusal exists to tell an operator which adapter was rejected. "UNKNOWN Microsoft Basic
+    Display Adapter" reads as a second failure rather than as the card's name.
+    """
+    node = measured(gpus=(GpuDevice(GpuVendor.UNKNOWN, "Microsoft Basic Display Adapter", None),))
+
+    reason = role_is_supportable(NodeRole.GPU_WORKER, node)
+    assert reason is not None
+    assert "Microsoft Basic Display Adapter" in reason
+    assert "UNKNOWN" not in reason
 
 
 def test_no_measured_machine_is_ever_suggested_as_coordinator() -> None:
