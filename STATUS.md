@@ -1586,19 +1586,45 @@ What did **not** move:
 train the next change to delete the explanation instead of the gate. Four protections,
 mutation-checked.
 
+## 6jj. The vetoes are on, and the cost of that is stated (#75)
+
+**2026-08-29.** All five implemented vetoes enabled by default, per-group exposure ceilings, and
+`PolicyAuthority` so a threshold says who chose it.
+
+**They were off for a reason that had stopped being true.** #58 enabled only the two a thin ledger
+can always answer, because `DAILY_LOSS` needs a session equity mark and `LIQUIDITY` needs twenty
+sessions of volume, and on a fresh ledger both refuse. Sound reasoning, wrong conclusion: it left
+tested controls doing nothing while waiting for a preference nobody had been asked for.
+
+**A single ceiling could not work, which is why enabling it needed more than a flag.** Measured on
+the deployed roster, `US_EQUITY` sits at ~5972bps of equity — a limit tight enough to bind there
+refuses nearly every order the strategy exists to place. So `US_EQUITY` gets the net-exposure
+ceiling and everything else gets 4000bps, which is four of ten equal-weight holdings in one
+exposure: a duration book of TLT + IEF + TIP + LQD passes, a fifth does not.
+
+**The veto was also unwired, and enabling it alone would have halted trading.** Neither production
+call site passed a classification, and an absent table rejects every order. Both now load it.
+
+**A defect this surfaced.** `effective_from` was the date the table was written (2026-08-27), a
+deliberate conservatism to avoid researching per-fund history. Once the veto was enabled that
+refused *every* decision dated earlier — every replay, every backtest, and the wired-cycle
+integration test, which submitted zero orders. It is now 2018-10-01, the month after Communication
+Services split out of the S&P sector scheme, which is the last event that materially changed what
+these funds hold. One documented reshuffle is a smaller claim than 23 inception dates and buys
+back the whole usable period.
+
+**The cost is real and is asserted rather than hoped away**: a thin ledger is now refused, and a
+test says so. A false refusal costs a paper entry; a false permit costs the thing the control
+exists to prevent. #57 records every refusal so the trade can be revisited on evidence.
+
+`CORRELATION_CONCENTRATION` still refuses to be enabled. Four protections, mutation-checked.
+
 ## 7. Open items
 
-- [ ] **Decide whether to enable `DAILY_LOSS` and `LIQUIDITY` portfolio vetoes — operator
-      action (#58).** Both are implemented and tested and default to off. Enabling them halts
-      entries until the ledger holds an equity mark for the current session and twenty sessions
-      of volume per symbol, which is correct fail-closed behaviour and a real trading pause.
-- [ ] **Choose exposure-concentration ceilings, or decline to enable the veto — operator
-      action (#59).** `EXPOSURE_CONCENTRATION` is implemented, mutation-checked and off by
-      default, and its shipped ceiling is a placeholder that does not bind. A single global
-      threshold cannot serve both `US_EQUITY` (structurally near 100% for this strategy) and the
-      narrow groups. Setting a limit that can refuse the operator's own orders is not an agent's
-      call. Also open on #59: whether HYG belongs in `US_EQUITY` as well as `CREDIT` — it is
-      classified as both, which is the conservative reading and a contested one.
+- [x] **Enable the implemented portfolio vetoes — done autonomously under #72/#75.** All five
+      now ship on, with per-group exposure ceilings, and the classification is wired into both
+      production call sites. Both former operator items are closed; the thresholds are labelled
+      `PROJECT_DEFAULT`, not approved.
 - [ ] **#48 reproducibility is blocked on there being a confirmatory experiment to reproduce.**
       The readiness half is built and exercised (§6ee); the reproducer needs a real manifest,
       which needs a confirmatory run, which needs M1. Not blocked on engineering.

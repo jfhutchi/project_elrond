@@ -38,7 +38,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
@@ -50,6 +50,7 @@ from quantbot.domain import Position
 from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.risk.exposure import (
     ExposureClassification,
+    ExposureGroup,
     ExposureState,
     Provenance,
     build_exposure_state,
@@ -82,6 +83,39 @@ class VetoName(StrEnum):
 
 #: Vetoes with no evaluator behind them. Enabling one is refused rather than ignored.
 UNIMPLEMENTED: frozenset[VetoName] = frozenset({VetoName.CORRELATION_CONCENTRATION})
+
+
+class PolicyAuthority(StrEnum):
+    """Who chose these numbers. Provenance, never permission (#72, #75).
+
+    A threshold an agent selected is not operator-approved, and a policy that cannot say which it
+    is invites exactly the misreading #72's non-goals forbid. The same rule as the economic
+    mandate's `authority`: state it plainly rather than gate on it.
+    """
+
+    #: Selected by the system from an existing deployed value or a project constraint, then
+    #: frozen and versioned. Sufficient to run paper trading; not an approval.
+    PROJECT_DEFAULT = "PROJECT_DEFAULT"
+    #: The operator set these deliberately.
+    OPERATOR_SET = "OPERATOR_SET"
+
+
+#: Ceiling for any exposure group with no specific entry, in basis points of equity.
+#:
+#: **Derived, not picked.** The strategy holds `roster_size: 10` positions at roughly equal
+#: weight, so 4000bps is four concurrent holdings carrying one exposure. That permits the
+#: rotation's normal behaviour -- including a duration book of TLT + IEF + TIP + LQD -- and
+#: refuses a fifth, which is a pile-in rather than a rotation.
+DEFAULT_GROUP_CEILING_BPS = 4000
+
+#: Groups whose ceiling is the net-exposure limit, because constraining them below it would
+#: refuse the strategy's whole purpose rather than a concentration.
+#:
+#: `US_EQUITY` is the one that matters: measured against the deployed roster it stands at
+#: ~5972bps of equity, and every broad and sector holding in the universe carries it. A limit
+#: tight enough to bind here would refuse nearly every order the strategy wants to place, which
+#: is a control that stops the research rather than one that bounds a risk.
+STRUCTURAL_GROUPS: frozenset[ExposureGroup] = frozenset({ExposureGroup.US_EQUITY})
 
 
 class VetoModel(BaseModel):
@@ -143,12 +177,41 @@ class PortfolioVetoPolicy(VetoModel):
     #: too loose to constrain the dominant group and would be too tight for the narrow ones
     #: (sectors, duration, credit) if set for the dominant one. Per-group ceilings are the likely
     #: next step; choosing them is an operator decision about risk appetite, not an agent's.
-    max_group_exposure_bps: int = Field(default=10000, gt=0)
+    max_group_exposure_bps: int = Field(default=DEFAULT_GROUP_CEILING_BPS, gt=0)
+
+    #: Ceilings for named groups, overriding `max_group_exposure_bps`. A single global threshold
+    #: cannot serve this universe: it is too loose to constrain the narrow groups if set for the
+    #: dominant one, and refuses every order if set for the narrow ones.
+    group_exposure_ceilings_bps: Mapping[ExposureGroup, int] = Field(
+        default_factory=lambda: {group: 10000 for group in STRUCTURAL_GROUPS}
+    )
+
+    #: Who chose these numbers. Excluded from `identity` for the reason the economic mandate
+    #: excludes its lifecycle fields: the identity answers "which thresholds were in force", and
+    #: an operator adopting the same numbers does not change which numbers they are.
+    authority: PolicyAuthority = PolicyAuthority.PROJECT_DEFAULT
 
     #: Vetoes to enforce. Anything absent is not evaluated, which is a policy choice and is
     #: recorded in `identity` so a study can tell one policy from another.
+    #:
+    #: **Every implemented veto is on by default (#75).** They previously shipped disabled
+    #: because threshold selection was described as operator policy, which left tested controls
+    #: doing nothing while waiting for a preference nobody had been asked for. A paper runtime
+    #: should start with a complete versioned policy.
+    #:
+    #: This is not free, and the cost belongs in the open: `LIQUIDITY` refuses entries until
+    #: twenty sessions of volume exist per symbol, and `DAILY_LOSS` refuses while the session's
+    #: opening equity is unmeasured. Both are fail-closed by design. The trade is deliberate --
+    #: a false refusal costs a paper entry, a false permit costs the thing the control exists to
+    #: prevent -- and #57 records every refusal so the choice can be revisited on evidence.
     enabled: frozenset[VetoName] = frozenset(
-        {VetoName.NET_EXPOSURE, VetoName.STALE_MARKET_DATA}
+        {
+            VetoName.NET_EXPOSURE,
+            VetoName.STALE_MARKET_DATA,
+            VetoName.DAILY_LOSS,
+            VetoName.LIQUIDITY,
+            VetoName.EXPOSURE_CONCENTRATION,
+        }
     )
 
     @model_validator(mode="after")
@@ -167,6 +230,10 @@ class PortfolioVetoPolicy(VetoModel):
         """Hash of the exact parameters in force, for #57's `rule_parameters_hash`."""
         payload = json.loads(self.model_dump_json())
         payload["enabled"] = sorted(payload["enabled"])
+        # Provenance, not a threshold. Two policies with identical numbers behave identically and
+        # must group as one dataset in a counterfactual study; who chose them is reported by
+        # `authority` instead.
+        payload.pop("authority", None)
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -439,26 +506,26 @@ def _exposure_concentration(
     # Absolute, not signed. Netting a long against a short across two instruments that share an
     # exposure would report the concentration away.
     added = abs(inputs.order_net_exposure)
-    ceiling = inputs.equity * Decimal(policy.max_group_exposure_bps) / BASIS_POINTS
-    breached = [
-        (group, projected)
-        for group in sorted(state.order_groups)
-        if (projected := state.committed_by_group.get(group, Decimal("0")) + added) > ceiling
-    ]
+    breached: list[tuple[ExposureGroup, Decimal, Decimal]] = []
+    for group in sorted(state.order_groups):
+        limit_bps = policy.group_exposure_ceilings_bps.get(group, policy.max_group_exposure_bps)
+        ceiling = inputs.equity * Decimal(limit_bps) / BASIS_POINTS
+        projected = state.committed_by_group.get(group, Decimal("0")) + added
+        if projected > ceiling:
+            breached.append((group, projected, ceiling))
     if breached:
         # Each breach names how that exposure was assigned. A refusal driven by a prospectus and
         # one driven by a declared stress proxy are different claims, and #57 cannot pool them
         # into one dataset if the rejection does not say which it was.
         detail = "; ".join(
             f"{group.value} ({state.order_provenance.get(group, Provenance.MANDATE).value}) "
-            f"would reach {value}"
-            for group, value in breached
+            f"would reach {value} against a {limit} ceiling"
+            for group, value, limit in breached
         )
         return _reject(
             VetoName.EXPOSURE_CONCENTRATION,
             policy,
-            f"{detail} against a {ceiling} ceiling "
-            f"({policy.max_group_exposure_bps}bps of {inputs.equity})",
+            f"{detail}, on equity of {inputs.equity}",
         )
     return None
 

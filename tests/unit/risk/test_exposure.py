@@ -27,6 +27,7 @@ from quantbot.risk.exposure import (
 )
 from quantbot.risk.vetoes import (
     UNIMPLEMENTED,
+    PolicyAuthority,
     PortfolioVetoInputs,
     PortfolioVetoPolicy,
     VetoName,
@@ -68,9 +69,16 @@ def position(symbol: str, value: str) -> Position:
 
 
 def policy(**overrides: object) -> PortfolioVetoPolicy:
+    """One veto, one flat ceiling.
+
+    The shipped policy gives `US_EQUITY` its own structural ceiling (#75), which is right in
+    production and would mask the arithmetic under test here -- so these tests clear the
+    per-group map and let every group share `max_group_exposure_bps`.
+    """
     fields: dict[str, object] = {
         "enabled": frozenset({VetoName.EXPOSURE_CONCENTRATION}),
         "max_group_exposure_bps": 5000,
+        "group_exposure_ceilings_bps": {},
     }
     fields.update(overrides)
     return PortfolioVetoPolicy(**fields)  # type: ignore[arg-type]
@@ -151,6 +159,14 @@ def test_a_classification_cannot_be_applied_before_it_was_verified() -> None:
     assert known.groups_for("SPY", as_of=VERIFIED) == frozenset({ExposureGroup.US_EQUITY})
     assert known.groups_for("SPY", as_of=date(2026, 8, 26)) is None, "one day early is unknown"
     assert known.groups_for("SPY", as_of=date(2017, 1, 3)) is None
+
+    # The shipped table speaks from the last sector reshuffle, not from the day it was written.
+    shipped = load_exposure_classification(REPOSITORY / DEFAULT_CLASSIFICATION_PATH)
+    assert shipped.effective_from == date(2018, 10, 1)
+    assert shipped.groups_for("XLK", as_of=date(2018, 9, 28)) is None, (
+        "before Communication Services split out, XLK held something else"
+    )
+    assert shipped.groups_for("XLK", as_of=date(2018, 10, 1)) is not None
 
 
 def test_an_unlisted_symbol_is_unknown_and_unknown_refuses() -> None:
@@ -269,24 +285,66 @@ def test_a_missing_reference_price_refuses_here_too() -> None:
     assert decision.rejections[0].unmeasured == "REFERENCE_PRICE_UNAVAILABLE"
 
 
-def test_the_veto_ships_disabled_and_the_threshold_is_a_placeholder() -> None:
-    """Turning on a limit that can refuse the operator's orders is theirs to do, not an agent's.
+def test_the_veto_ships_enabled_with_a_ceiling_that_actually_binds() -> None:
+    """#75 reversed the earlier default, and the reason it shipped disabled is worth keeping.
 
-    Same rule as `DAILY_LOSS` and `LIQUIDITY`. And the shipped ceiling deliberately does not
-    bind: this universe is mostly US equity, so a roster can be near 100% `US_EQUITY` while being
-    exactly what the strategy is designed to hold.
+    It was off because threshold selection was called operator policy, with a 100%-of-equity
+    placeholder that could never refuse anything. That left a tested control doing nothing while
+    waiting for a preference nobody had been asked for.
+
+    A single global ceiling genuinely cannot serve this universe -- too loose for the narrow
+    groups if set for `US_EQUITY`, and refusing every order if set for them. Per-group ceilings
+    are what made enabling it defensible rather than theatrical.
     """
     shipped = PortfolioVetoPolicy()
 
-    assert VetoName.EXPOSURE_CONCENTRATION not in shipped.enabled
-    assert shipped.max_group_exposure_bps == 10000
-
-    # But it is no longer refused at configuration, because it now has an evaluator.
+    assert VetoName.EXPOSURE_CONCENTRATION in shipped.enabled
     assert VetoName.EXPOSURE_CONCENTRATION not in UNIMPLEMENTED
-    enabled = PortfolioVetoPolicy(
-        enabled=frozenset({VetoName.NET_EXPOSURE, VetoName.EXPOSURE_CONCENTRATION})
+
+    # The general ceiling binds: four of ten equal-weight holdings in one exposure.
+    assert shipped.max_group_exposure_bps == 4000
+
+    # `US_EQUITY` is structural for this strategy -- measured at ~5972bps of equity on the
+    # deployed roster -- so a 4000bps limit would refuse nearly every order it wants to place.
+    assert shipped.group_exposure_ceilings_bps[ExposureGroup.US_EQUITY] == 10000
+    assert ExposureGroup.TECHNOLOGY not in shipped.group_exposure_ceilings_bps
+
+    # And the numbers are the system's, stated as such rather than implied to be approved.
+    assert shipped.authority is PolicyAuthority.PROJECT_DEFAULT
+
+
+def test_a_structural_group_and_a_narrow_one_are_not_held_to_one_number() -> None:
+    """The whole point of per-group ceilings, on the shipped policy rather than a fixture.
+
+    The same book is fine on US equity and refused on technology, which a single threshold could
+    not express in either direction.
+    """
+    shipped = PortfolioVetoPolicy()
+    loaded = load_exposure_classification(REPOSITORY / DEFAULT_CLASSIFICATION_PATH)
+
+    # 45% of equity already committed to a technology-carrying holding, buying more.
+    state = build_exposure_state(
+        classification=loaded,
+        symbol="XLK",
+        positions=[position("XLK", "4500")],
+        as_of=SESSION,
     )
-    assert VetoName.EXPOSURE_CONCENTRATION in enabled.enabled
+    decision = evaluate_portfolio_vetoes(
+        inputs(symbol="XLK", exposure=state, order_net_exposure=Decimal("1000")), shipped
+    )
+
+    assert not decision.allowed
+    # The shipped policy runs every veto and does not short-circuit, so the concentration
+    # rejection is selected by name rather than by position.
+    concentration = next(
+        item
+        for item in decision.rejections
+        if item.veto is VetoName.EXPOSURE_CONCENTRATION
+    )
+    assert "TECHNOLOGY" in concentration.reason, concentration.reason
+    assert "US_EQUITY" not in concentration.reason, (
+        "the structural group has room and must not be reported as breached"
+    )
 
 
 def test_two_classification_versions_are_two_studies() -> None:
