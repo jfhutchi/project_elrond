@@ -1074,6 +1074,10 @@ class AdaptiveMomentumRunner:
                 gate_version=rejection.policy_version,
                 rule_parameters_hash=rejection.rule_parameters_hash,
                 detail=rejection.reason,
+                # The veto assembles its own evidence (#85). Reading its fields here would be a
+                # second place to update, and the forgotten one fails silently: the rejection
+                # still stores, just without the basis it was made on.
+                evidence=rejection.decision_evidence(),
             )
             for rejection in vetoes.rejections
         ]

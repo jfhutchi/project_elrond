@@ -53,6 +53,7 @@ from quantbot.risk.dependence import (
     DependenceState,
     build_dependence_state,
 )
+from quantbot.risk.evidence import EVIDENCE_FIELDS, DecisionEvidence, EvidenceKind
 from quantbot.risk.exposure import (
     ExposureClassification,
     ExposureGroup,
@@ -363,6 +364,33 @@ class VetoRejection(VetoModel):
     #: The dependence snapshot a correlation refusal rested on (#58/#59), so a counterfactual
     #: study can tell a refusal under one matrix from one under another.
     dependence_snapshot_identity: str | None = None
+
+    def decision_evidence(self) -> DecisionEvidence:
+        """The contemporaneous context this refusal rested on, ready to persist (#85).
+
+        Assembled here rather than at the persistence boundary, so the module that produces the
+        evidence also decides its shape. A composer that read these fields itself would be a
+        second place to update, and the one that got forgotten would fail silently: the
+        rejection would still store, just without its basis.
+
+        The kind is derived from which fields are populated rather than from the veto name. A
+        veto that refused *because it could not measure* its input has no context to record even
+        though its name suggests otherwise, and `NONE` is the honest answer there.
+        """
+        for kind in (EvidenceKind.MARKET_FRESHNESS, EvidenceKind.DEPENDENCE):
+            values = {field: getattr(self, field) for field in EVIDENCE_FIELDS[kind]}
+            if any(value is not None for value in values.values()):
+                return DecisionEvidence(
+                    kind=kind,
+                    payload={
+                        # An empty string is "this kind was recorded and that field was not
+                        # measurable", which is different from the key being absent -- absent
+                        # would mean a writer that did not know the field existed.
+                        field: "" if value is None else str(value)
+                        for field, value in values.items()
+                    },
+                )
+        return DecisionEvidence(kind=EvidenceKind.NONE, payload={})
 
 
 class PortfolioVetoDecision(VetoModel):
