@@ -81,6 +81,7 @@ from quantbot.risk import (
     calculate_drawdown,
     evaluate_portfolio_vetoes,
 )
+from quantbot.risk.exposure import load_exposure_classification
 from quantbot.storage import Database, StateConflictError, StorageRepository
 from quantbot.strategy import (
     StrategyConfig,
@@ -649,6 +650,7 @@ async def _paper_smoke(runtime: Runtime) -> dict[str, object]:
             symbol_bars=symbol_bars,
             observed_at=now,
             volume_sessions=policy.minimum_volume_sessions,
+            classification=load_exposure_classification(),
         ),
         policy,
     )

@@ -16,16 +16,21 @@
 # SPY and a factor claim for HYG. The same group name means the same exposure either way; what
 # differs is how much evidence stands behind saying this instrument has it.
 #
-# WHAT `effective_from` MEANS. The date each mandate was read off the issuer's material -- a
-# verification date, not a claim about when the fund's mandate began. Classification is refused
-# for any decision earlier than it, and that refusal blocks.
+# WHAT `effective_from` MEANS. The earliest decision date these mandates can be applied to.
+# Classification is refused for anything earlier, and that refusal blocks.
 #
-# The conservatism is deliberate. Fund mandates change: when Communication Services was created in
-# September 2018, constituents left XLK, so a 2017 portfolio scored against today's XLK would be
-# judged on a composition that did not exist. Rather than research an inception date per fund and
-# carry the risk of getting one wrong, this table refuses to speak about anything before it was
-# checked. The cost is that the veto cannot be backtested; that cost is correct, because the veto
-# genuinely could not have run over that history.
+# It is set to the month after Communication Services was created in the S&P sector scheme, which
+# is the last event that materially changed what these funds hold -- constituents left XLK and XLY
+# then, so a 2017 portfolio scored against today's XLK would be judged on a composition that did
+# not exist. Rounded forward to a month boundary on purpose: if the exact changeover date is off
+# by days, being late refuses more, and refusing more is the safe direction here.
+#
+# THIS REPLACED A VERIFICATION DATE. The first version used the date the table was written
+# (2026-08-27), to avoid researching per-fund history at all. That was defensible while the veto
+# shipped disabled. Once #75 enabled it, the same choice refused every decision dated earlier --
+# every replay, every backtest, and the wired-cycle integration test -- because the table declined
+# to speak about any history whatsoever. One documented sector reshuffle is a smaller claim than
+# 23 inception dates and buys back the entire usable period.
 #
 # A SYMBOL MAY CARRY MORE THAN ONE EXPOSURE and counts in each. Concentration is measured per
 # group, which can only ever make the veto more likely to refuse. A single-group table would rate
@@ -38,7 +43,7 @@
 
 version: 2
 source: "Issuer fund descriptions (State Street Select Sector SPDRs, Invesco, iShares, Vanguard)"
-effective_from: 2026-08-27
+effective_from: 2018-10-01
 
 # What each fund holds, by its published mandate.
 mandate:

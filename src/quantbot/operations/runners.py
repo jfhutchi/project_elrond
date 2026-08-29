@@ -67,6 +67,7 @@ from quantbot.risk import (
     observation_id,
     size_entry,
 )
+from quantbot.risk.exposure import ExposureClassification, load_exposure_classification
 from quantbot.risk.shadow import session_of
 from quantbot.storage import Database, StorageRepository
 from quantbot.strategy import (
@@ -414,6 +415,7 @@ class AdaptiveMomentumRunner:
         sessions: SessionCalendar,
         market_data: MarketDataSettings | None = None,
         veto_policy: PortfolioVetoPolicy | None = None,
+        exposure_classification: ExposureClassification | None = None,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -426,6 +428,11 @@ class AdaptiveMomentumRunner:
         # limits. `PortfolioVetoPolicy` refuses to be constructed with an unimplemented veto
         # enabled, so the default cannot claim protection it does not have (#58).
         self._veto_policy = veto_policy or PortfolioVetoPolicy()
+        # Loaded once, here, so `EXPOSURE_CONCENTRATION` has the table it needs at decision time
+        # (#75). Without it the veto is correct and useless: an absent classification rejects
+        # every order, so enabling the control while leaving it unwired would have halted paper
+        # trading in the name of protecting it.
+        self._exposure = exposure_classification or load_exposure_classification()
         self._clock = clock
         self._run_id: str | None = None
 
@@ -925,6 +932,7 @@ class AdaptiveMomentumRunner:
                 )],
                 observed_at=created_at,
                 volume_sessions=self._veto_policy.minimum_volume_sessions,
+                classification=self._exposure,
             ),
             self._veto_policy,
         )

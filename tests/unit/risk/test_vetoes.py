@@ -8,12 +8,19 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import pytest
 
+from quantbot.risk.exposure import (
+    DEFAULT_CLASSIFICATION_PATH,
+    build_exposure_state,
+    load_exposure_classification,
+)
 from quantbot.risk.vetoes import (
     UNIMPLEMENTED,
+    PolicyAuthority,
     PortfolioVetoInputs,
     PortfolioVetoPolicy,
     VetoName,
@@ -29,14 +36,10 @@ NOW = datetime(2026, 8, 27, 15, 30, tzinfo=EASTERN).astimezone(UTC)
 #: Every implemented veto, so a test exercises the rule it is named after rather than the
 #: shipped default's subset. `PortfolioVetoPolicy()` with no arguments is the default, and the
 #: two tests about the default construct it directly.
-ALL_VETOES = frozenset(
-    {
-        VetoName.NET_EXPOSURE,
-        VetoName.DAILY_LOSS,
-        VetoName.STALE_MARKET_DATA,
-        VetoName.LIQUIDITY,
-    }
-)
+#: Every veto that may actually be enabled. Derived rather than listed: the literal list went
+#: stale when SECTOR_CONCENTRATION became EXPOSURE_CONCENTRATION, so "all vetoes" quietly stopped
+#: meaning all of them and a test named for completeness was checking a subset.
+ALL_VETOES = frozenset(VetoName) - UNIMPLEMENTED
 
 
 def policy(**overrides: object) -> PortfolioVetoPolicy:
@@ -46,8 +49,21 @@ def policy(**overrides: object) -> PortfolioVetoPolicy:
 
 
 def inputs(**overrides: object) -> PortfolioVetoInputs:
-    """A portfolio nothing objects to, so each test can break exactly one thing."""
+    """A portfolio nothing objects to, so each test can break exactly one thing.
+
+    The exposure state is part of "nothing objects" since #75: `EXPOSURE_CONCENTRATION` ships
+    enabled, and an absent classification rejects. Leaving it out would have made every test in
+    this module fail for a reason none of them are about.
+    """
     fields: dict[str, object] = {
+        "exposure": build_exposure_state(
+            classification=load_exposure_classification(
+                Path(__file__).resolve().parents[3] / DEFAULT_CLASSIFICATION_PATH
+            ),
+            symbol=str(overrides.get("symbol", "SPY")),
+            positions=[],
+            as_of=date(2026, 8, 27),
+        ),
         "symbol": "SPY",
         "equity": Decimal("100000"),
         "committed_net_exposure": Decimal("10000"),
@@ -79,6 +95,7 @@ def test_a_clean_portfolio_passes_every_enabled_veto() -> None:
         VetoName.DAILY_LOSS,
         VetoName.STALE_MARKET_DATA,
         VetoName.LIQUIDITY,
+        VetoName.EXPOSURE_CONCENTRATION,
     }
     assert "none refused" in decision.explain()
 
@@ -228,7 +245,7 @@ def test_every_veto_speaks_even_when_an_earlier_one_refused() -> None:
         VetoName.STALE_MARKET_DATA,
         VetoName.LIQUIDITY,
     }
-    assert len(decision.evaluated) == 4
+    assert len(decision.evaluated) == 5
 
 
 def test_a_rejection_carries_what_a_counterfactual_study_needs_to_attribute_it() -> None:
@@ -308,33 +325,59 @@ def test_a_veto_never_returns_a_quantity() -> None:
     assert not any(hasattr(item, "quantity") for item in decision.rejections)
 
 
-def test_the_shipped_default_enables_only_what_a_thin_ledger_can_answer() -> None:
-    """The default must protect without silently halting the paper daemon (#58).
+def test_every_implemented_veto_is_enabled_and_a_thin_ledger_is_refused() -> None:
+    """#75 reverses #58's default, and the cost of doing so is asserted rather than hoped away.
 
+    The old default enabled only the two vetoes a thin ledger could always answer, because
     `DAILY_LOSS` needs a mark from the current session and `LIQUIDITY` needs twenty sessions of
-    volume. On a fresh or thin ledger neither exists, so both refuse — correctly, since an
-    enabled veto that cannot measure must reject — and enabling them by default would stop the
-    entries this project needs in order to accumulate forward evidence at all.
+    volume, and on a fresh ledger both refuse. That reasoning was sound and its conclusion was
+    wrong: it left tested controls doing nothing while waiting for a threshold preference nobody
+    had been asked for, and "which vetoes are enforced" was never a question only a human could
+    answer for a paper account.
 
-    Which vetoes are enforced is therefore **operator policy**, exactly as the economic mandate
-    is. The default enables the two that are always answerable; the other two are implemented,
-    tested, and off until the operator turns them on.
+    So the shipped policy now enables everything implemented, and **a thin ledger is refused**.
+    That is the trade, stated here so it cannot be walked back accidentally: a false refusal
+    costs a paper entry, a false permit costs the thing the control exists to prevent, and #57
+    records every refusal so the choice can be revisited on evidence rather than on taste.
     """
     default = PortfolioVetoPolicy()
 
-    assert default.enabled == {VetoName.NET_EXPOSURE, VetoName.STALE_MARKET_DATA}
+    assert default.enabled == ALL_VETOES
+    assert VetoName.CORRELATION_CONCENTRATION not in default.enabled, (
+        "the one with no evaluator stays off, and refuses to be enabled at all"
+    )
 
     thin_ledger = inputs(
         session_opening_equity=None, average_daily_volume=None, volume_sessions=0
     )
-    assert evaluate_portfolio_vetoes(thin_ledger, default).allowed, (
-        "the shipped default must not halt entries on a ledger with no history"
-    )
+    decision = evaluate_portfolio_vetoes(thin_ledger, default)
 
-    # And the two that are off are off because they would refuse, not because they are broken.
-    everything = policy(enabled=ALL_VETOES)
-    refused_now = evaluate_portfolio_vetoes(thin_ledger, everything)
-    assert refused(refused_now) == {VetoName.DAILY_LOSS, VetoName.LIQUIDITY}
+    assert not decision.allowed, "an enabled veto that cannot measure must reject"
+    assert refused(decision) >= {VetoName.DAILY_LOSS, VetoName.LIQUIDITY}
+
+    # Each refusal names what was missing rather than a limit, so an operator reading it knows
+    # the fix is data rather than a looser threshold.
+    unmeasured = {item.veto: item.unmeasured for item in decision.rejections}
+    assert unmeasured[VetoName.DAILY_LOSS] == "session_opening_equity"
+    assert unmeasured[VetoName.LIQUIDITY] == "average_daily_volume"
+
+
+def test_the_shipped_thresholds_are_the_systems_and_say_so() -> None:
+    """A threshold an agent selected is not operator-approved (#72).
+
+    `authority` is deliberately outside `identity`: two policies with the same numbers behave
+    identically and must group as one dataset in a counterfactual study, so provenance is
+    reported beside the identity rather than folded into it.
+    """
+    default = PortfolioVetoPolicy()
+
+    assert default.authority is PolicyAuthority.PROJECT_DEFAULT
+
+    adopted = PortfolioVetoPolicy(authority=PolicyAuthority.OPERATOR_SET)
+    assert adopted.identity == default.identity, (
+        "an operator adopting the same numbers does not change which numbers they are"
+    )
+    assert adopted.authority is not default.authority
 
 
 def test_the_staleness_default_fits_the_daily_bars_this_system_trades() -> None:
@@ -345,7 +388,10 @@ def test_the_staleness_default_fits_the_daily_bars_this_system_trades() -> None:
     weekend. The first version of this veto encoded an intraday assumption and blocked the wired
     cycle entirely. Four days clears a long weekend and still catches a feed genuinely behind.
     """
-    default = PortfolioVetoPolicy()
+    # Only the veto under test: the shipped policy now also enforces concentration and
+    # liquidity, and a refusal from one of those would make this pass or fail for the wrong
+    # reason -- the failure mode this repository's engineering standard is written against.
+    default = policy(enabled=frozenset({VetoName.STALE_MARKET_DATA}))
     yesterday = inputs(latest_market_data_at=NOW - timedelta(days=1))
     long_weekend = inputs(latest_market_data_at=NOW - timedelta(days=3))
     behind = inputs(latest_market_data_at=NOW - timedelta(days=9))
@@ -443,7 +489,13 @@ def test_a_new_symbol_entry_cannot_clear_net_exposure_on_a_fabricated_zero() -> 
     decision = evaluate_portfolio_vetoes(unmeasured, policy(max_net_exposure_bps=10000))
 
     assert not decision.allowed
-    assert refused(decision) == {VetoName.NET_EXPOSURE}
+    # Both refuse, and for the same missing input: a concentration limit cannot attribute an
+    # order to a group without knowing what the order is worth either. A missing price is not a
+    # zero one in either rule.
+    assert refused(decision) == {VetoName.NET_EXPOSURE, VetoName.EXPOSURE_CONCENTRATION}
+    assert {
+        item.unmeasured for item in decision.rejections
+    } == {"REFERENCE_PRICE_UNAVAILABLE"}
     assert decision.rejections[0].unmeasured == "REFERENCE_PRICE_UNAVAILABLE"
     assert "not a zero one" in decision.rejections[0].reason
 
