@@ -765,6 +765,7 @@ class AdaptiveMomentumRunner:
                             # before any gate rules on it. Rerun-stable, and it changes when the
                             # evidence the decision saw changes (#57).
                             candidate_key=decision.bar_set_hash,
+                            calendar_sessions=calendar_sessions,
                         )
 
                 if request is not None and repository.get_order_intent(
@@ -874,6 +875,7 @@ class AdaptiveMomentumRunner:
         created_at: datetime,
         opened_at: Mapping[str, datetime],
         candidate_key: str,
+        calendar_sessions: Sequence[XNYSSession],
     ) -> tuple[SubmissionRequest | None, tuple[str, ...]]:
         if decision_price is None or stop_distance is None or stop_distance <= 0:
             return None, ("ENTRY_INPUTS_UNAVAILABLE",)
@@ -933,6 +935,10 @@ class AdaptiveMomentumRunner:
                 observed_at=created_at,
                 volume_sessions=self._veto_policy.minimum_volume_sessions,
                 classification=self._exposure,
+                # The calendar the cycle already read. `STALE_MARKET_DATA` judges the feed
+                # against the sessions the market actually completed rather than against a
+                # wall clock, so without this it refuses (#74).
+                sessions=calendar_sessions,
             ),
             self._veto_policy,
         )

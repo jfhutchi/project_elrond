@@ -1619,6 +1619,35 @@ exists to prevent. #57 records every refusal so the trade can be revisited on ev
 
 `CORRELATION_CONCENTRATION` still refuses to be enabled. Four protections, mutation-checked.
 
+## 6kk. Freshness is a question about sessions, not seconds (#74)
+
+**2026-08-29.** `quantbot.risk.freshness`: a versioned `MarketFreshnessPolicy`, an expectation read
+from the exchange calendar, and four distinct outcomes.
+
+**The wall clock was wrong twice, in both directions.** It first shipped at 900 seconds, which
+encoded an intraday assumption into a daily-bar system and refused every entry. That was corrected
+to four days, which cleared a long weekend — and the code recorded, honestly, that calendar seconds
+were a coarse proxy for "sessions behind".
+
+Elapsed time was never the measurement. A Friday close is perfectly current on Sunday; a Thursday
+close is stale on Friday evening at 25 hours old. The second is *newer* and the four-day allowance
+waved it through. No single number separates them, and the calendar separates them without one.
+
+- **Daily**: the newest observation must belong to the most recent *completed* session. Weekends,
+  holidays and half-days need no allowance — a half-day is simply a session whose `close_at` is
+  earlier, and the rule never learns that half-days exist.
+- **Intraday**: cadence-derived, and only while the market is open. The same 20-minute-old
+  observation is fresh under the daily rule and `FEED_STALE` under a minute cadence, which is what
+  stops #56's engine inheriting a four-day allowance.
+- **`MARKET_CLOSED` is not `FEED_STALE`.** An intraday feed is supposed to be silent overnight.
+- **Everything fails closed**: no calendar, no observation, a future stamp, or an intraday policy
+  that cannot name its cadence.
+
+The rejection carries `freshness_policy_identity`, expected session, observed session and market
+state as **structured fields**, because #57 compares refusals across rule versions and cannot group
+on prose. Eight protections, mutation-checked; two of them only became load-bearing after the
+assertions were sharpened to isolate the mechanism from a second guard.
+
 ## 7. Open items
 
 - [x] **Enable the implemented portfolio vetoes — done autonomously under #72/#75.** All five

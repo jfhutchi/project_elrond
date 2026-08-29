@@ -627,6 +627,10 @@ async def _paper_smoke(runtime: Runtime) -> dict[str, object]:
         # The last durable close, which is a price the decision could actually have seen.
         last_close = stored_bars[-1].close if stored_bars else None
     policy = PortfolioVetoPolicy()
+    # `STALE_MARKET_DATA` judges the feed against the sessions the market completed rather than
+    # against elapsed time (#74), so it needs the calendar. Without it the veto refuses, which is
+    # correct and would silently stop the smoke path -- so it is fetched rather than defaulted.
+    calendar_sessions = await runtime.sessions.sessions()
     # A held position's mark first, then the last stored close, then **nothing**. The first
     # version of this substituted `Decimal("0")` when the symbol was not held, which let a real
     # proposed entry contribute zero projected exposure while `NET_EXPOSURE` reported itself as
@@ -651,6 +655,7 @@ async def _paper_smoke(runtime: Runtime) -> dict[str, object]:
             observed_at=now,
             volume_sessions=policy.minimum_volume_sessions,
             classification=load_exposure_classification(),
+            sessions=calendar_sessions,
         ),
         policy,
     )
