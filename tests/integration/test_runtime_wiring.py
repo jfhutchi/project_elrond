@@ -383,7 +383,7 @@ async def test_the_fetched_window_and_the_measured_window_cannot_drift_apart(
     sides from the single change: the sync refuses to run, and the snapshot refuses to build.
     """
     config = load_strategy_config(_write_config(tmp_path))
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="test fixture readiness", measured=measured(), updated_at=NOW
     )
