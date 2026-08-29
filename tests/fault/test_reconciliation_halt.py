@@ -106,7 +106,7 @@ def _prepare_database(
     account: Account,
     positions: tuple[Position, ...] = (),
 ) -> Database:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     with database.transaction() as session:
         repository = StorageRepository(session)
         repository.set_kill_switch(False, reason="test ready", updated_at=NOW)

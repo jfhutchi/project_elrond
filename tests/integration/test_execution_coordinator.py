@@ -164,7 +164,7 @@ def _mark_ready(database: Database) -> None:
 
 @pytest.mark.asyncio
 async def test_intent_is_durable_before_single_broker_submission(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _mark_ready(database)
     broker = AcceptingBroker(database)
     coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
@@ -190,7 +190,7 @@ async def test_intent_is_durable_before_single_broker_submission(tmp_path: Path)
 
 @pytest.mark.asyncio
 async def test_exit_bypasses_entry_risk_but_not_operational_safety(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _mark_ready(database)
     broker = AcceptingBroker(database)
     coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
@@ -209,7 +209,7 @@ async def test_exit_bypasses_entry_risk_but_not_operational_safety(tmp_path: Pat
 
 @pytest.mark.asyncio
 async def test_exit_cannot_bypass_missing_durable_reconciliation(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     with database.transaction() as session:
         StorageRepository(session).set_kill_switch(False, reason="test ready", updated_at=NOW)
     broker = AcceptingBroker(database)
@@ -231,7 +231,7 @@ async def test_exit_cannot_bypass_missing_durable_reconciliation(tmp_path: Path)
 
 @pytest.mark.asyncio
 async def test_latest_material_reconciliation_blocks_exit_submission(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _mark_ready(database)
     with database.transaction() as session:
         StorageRepository(session).save_reconciliation(
@@ -268,7 +268,7 @@ async def test_latest_material_reconciliation_blocks_exit_submission(tmp_path: P
 
 @pytest.mark.asyncio
 async def test_broker_account_restrictions_block_exit_submission(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _mark_ready(database)
     restricted = _account_snapshot().model_copy(
         update={"order_entry_allowed": False, "restrictions": ("trading_blocked",)}

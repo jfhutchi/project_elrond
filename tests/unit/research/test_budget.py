@@ -29,7 +29,7 @@ SIP = dataset_key("sip-us-equities-daily")
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[Database]:
-    db = Database(tmp_path / "budget.db")
+    db = Database.create(tmp_path / "budget.db")
     yield db
     db.close()
 

@@ -33,7 +33,7 @@ STAGES = {TaskState.CRITIQUE: lambda _t: StageResult(TaskState.REGISTERED, "ok")
 
 @pytest.fixture
 def database(tmp_path) -> Iterator[Database]:
-    db = Database(tmp_path / "cycle.db")
+    db = Database.create(tmp_path / "cycle.db")
     yield db
     db.close()
 

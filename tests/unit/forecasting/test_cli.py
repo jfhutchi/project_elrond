@@ -83,7 +83,7 @@ class CountingProvider(FakeProvider):
 
 
 def seed_bars(path: Path) -> None:
-    database = Database(path)
+    database = Database.create(path)
     try:
         bars = [
             Bar(

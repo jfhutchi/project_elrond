@@ -98,7 +98,7 @@ SPENT_DATASET = "sip-us-equities-daily"
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[Database]:
-    db = Database(tmp_path / "pipeline.db")
+    db = Database.create(tmp_path / "pipeline.db")
     yield db
     db.close()
 

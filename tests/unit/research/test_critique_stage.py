@@ -33,7 +33,7 @@ DATASET = "fred-macro-daily"
 
 @pytest.fixture
 def database(tmp_path) -> Iterator[Database]:
-    db = Database(tmp_path / "critique.db")
+    db = Database.create(tmp_path / "critique.db")
     yield db
     db.close()
 

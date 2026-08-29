@@ -224,7 +224,7 @@ def test_non_state_event_is_still_recorded_for_audit() -> None:
 def test_order_update_is_durable_and_duplicate_safe_across_restart(tmp_path: Path) -> None:
     database_path = tmp_path / "events.sqlite"
     event = update(TradeUpdateEvent.PARTIAL_FILL, event_id="execution-1")
-    with Database(database_path) as database:
+    with Database.create(database_path) as database:
         with database.transaction() as session:
             repository = StorageRepository(session)
             repository.create_order_intent(order_intent())
@@ -248,7 +248,7 @@ def test_order_update_is_durable_and_duplicate_safe_across_restart(tmp_path: Pat
 def test_conflicting_durable_event_rolls_back_without_mutating_original(tmp_path: Path) -> None:
     database_path = tmp_path / "events.sqlite"
     original = update(TradeUpdateEvent.PARTIAL_FILL, event_id="execution-1")
-    with Database(database_path) as database:
+    with Database.create(database_path) as database:
         with database.transaction() as session:
             repository = StorageRepository(session)
             repository.create_order_intent(order_intent())
@@ -283,7 +283,7 @@ def test_unknown_stream_incident_has_a_durable_idempotent_mapping(tmp_path: Path
         detail={"broker_order_id": "broker-order-1", "event": "future_status"},
     )
     database_path = tmp_path / "incidents.sqlite"
-    with Database(database_path) as database:
+    with Database.create(database_path) as database:
         with database.transaction() as session:
             repository = StorageRepository(session)
             assert persist_trade_stream_incident(repository, incident) is True

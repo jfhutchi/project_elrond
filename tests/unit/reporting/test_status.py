@@ -12,7 +12,7 @@ from quantbot.storage import Database
 def test_empty_database_project_status_matches_golden_without_fabrication(
     tmp_path: Path,
 ) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     context = ProjectStatusContext(
         settings=Settings(),
         strategy_id="full-v1:test",
@@ -37,7 +37,7 @@ def test_empty_database_project_status_matches_golden_without_fabrication(
 
 
 def test_project_status_contains_every_required_persistent_field(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     status = build_project_status(
         database,
         ProjectStatusContext(

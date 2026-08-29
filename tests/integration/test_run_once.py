@@ -188,7 +188,7 @@ def _clear(database: Database) -> None:
 
 @pytest.mark.asyncio
 async def test_run_once_orders_recovery_data_strategy_and_submission(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _clear(database)
     calls: list[str] = []
     metrics = OperationalMetrics()

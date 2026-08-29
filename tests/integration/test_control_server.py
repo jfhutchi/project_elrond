@@ -77,7 +77,7 @@ def seed(database: Database, *, reconciled_at: datetime) -> None:
 @pytest.fixture
 def served(tmp_path) -> Iterator[tuple[int, Database]]:
     """A real server on a real port, torn down afterwards."""
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     seed(database, reconciled_at=NOW - timedelta(hours=2))
 
     async def measure():

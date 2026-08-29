@@ -136,7 +136,7 @@ def test_paper_smoke_requires_current_and_durable_readiness() -> None:
 
 
 def test_cli_paper_smoke_refuses_an_empty_reconciliation_ledger(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
         reason="all paper gates verified",
         measured=measured(),
@@ -189,7 +189,7 @@ def test_cli_paper_smoke_refuses_an_empty_reconciliation_ledger(tmp_path: Path) 
 def test_cli_dispatches_injected_operations_and_status_never_prints_secrets(
     tmp_path: Path,
 ) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     settings = _ready_settings()
     context = CLIContext(
         settings=settings,
@@ -272,7 +272,7 @@ def test_research_capacity_reports_the_equity_window_as_spent(tmp_path: Path) ->
     """
     import json
 
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     context = CLIContext(
         settings=_ready_settings(),
         database=database,
@@ -317,7 +317,7 @@ def test_the_integrity_sweep_acts_by_default_and_reports_what_it_could_not_reach
     from quantbot.domain import StrategyIdentity
     from quantbot.research.promotion import PromotionLedger, PromotionState, Stage
 
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     moment = datetime(2026, 8, 21, 14, 30, tzinfo=UTC)
     with database.transaction() as session:
         repository = StorageRepository(session)
@@ -429,7 +429,7 @@ def test_verify_manifest_reports_violations_skips_and_code_drift(tmp_path: Path)
     path = tmp_path / "manifest.json"
     path.write_text(manifest.canonical_json(), encoding="utf-8")
 
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     context = CLIContext(
         settings=_ready_settings(),
         database=database,
@@ -492,7 +492,7 @@ def test_verify_manifest_explains_why_two_runs_are_not_the_same_experiment(
     first.write_text(bundle("d" * 16).canonical_json(), encoding="utf-8")
     second.write_text(bundle("e" * 16).canonical_json(), encoding="utf-8")
 
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     context = CLIContext(
         settings=_ready_settings(),
         database=database,
@@ -529,7 +529,7 @@ def test_the_research_cycle_reports_before_it_advances_anything(tmp_path: Path) 
 
     from quantbot.research.director import ResearchDirector, ResearchTask, TaskState
 
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     moment = datetime(2026, 8, 21, 12, 0, tzinfo=UTC)
     with database.transaction() as session:
         ResearchDirector(session).open_task(

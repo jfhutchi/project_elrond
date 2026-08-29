@@ -376,7 +376,7 @@ def semantic_ledger(tmp_path):
     """A research database with the `search_runs` table this counting reuses."""
     from quantbot.storage.database import Database  # noqa: PLC0415
 
-    return Database(tmp_path / "research.db")
+    return Database.create(tmp_path / "research.db")
 
 
 def test_each_semantic_call_leaves_a_row_so_a_sweep_cannot_hide(tmp_path) -> None:

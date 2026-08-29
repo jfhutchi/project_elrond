@@ -26,7 +26,7 @@ REFUTED = Path(__file__).resolve().parents[3] / "REFUTED.md"
 
 
 def memory(tmp_path: Path):
-    return Database(tmp_path / "research.db")
+    return Database.create(tmp_path / "research.db")
 
 
 def task(question: str, family_id: str) -> ResearchTask:

@@ -29,7 +29,7 @@ def _ready(**changes: bool) -> ReadinessEvidence:
 def test_new_database_starts_engaged_and_clear_cannot_bypass_other_gates(
     tmp_path: Path,
 ) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     controller = KillSwitchController(database)
 
     assert controller.get().engaged is True
@@ -47,7 +47,7 @@ def test_new_database_starts_engaged_and_clear_cannot_bypass_other_gates(
 
 def test_clear_and_hard_failure_engagement_survive_restart(tmp_path: Path) -> None:
     path = tmp_path / "quantbot.db"
-    database = Database(path)
+    database = Database.create(path)
     controller = KillSwitchController(database)
     controller.clear(reason="all paper gates verified", measured=measured(), updated_at=NOW)
     assert controller.get().engaged is False

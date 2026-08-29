@@ -40,6 +40,8 @@ uv run quantbot doctor
 
 | Command | What it does |
 |---|---|
+| `quantbot create-database` | Bootstrap a new store. The only command that creates one |
+| `quantbot migrate-database` | Upgrade an existing store. The only command that rewrites one |
 | `quantbot status` | Durable state: kill switch, last run, reconciliation |
 | `quantbot doctor` | Preflight checks against config, ledger and broker |
 | `quantbot run-once` | One operational cycle |

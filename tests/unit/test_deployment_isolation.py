@@ -51,7 +51,7 @@ def test_opening_a_database_here_cannot_touch_the_deployment() -> None:
     path = Path(os.environ["QUANTBOT_DB_PATH"])
     assert not path.exists(), "each test starts with its own empty store"
 
-    database = Database(path)
+    database = Database.create(path)
     try:
         assert path.exists(), "the database was created somewhere other than the path given"
     finally:

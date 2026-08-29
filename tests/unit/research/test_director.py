@@ -37,7 +37,7 @@ NOW = datetime(2026, 8, 18, 14, 30, tzinfo=UTC)
 
 @pytest.fixture
 def database(tmp_path: Path) -> Iterator[Database]:
-    db = Database(tmp_path / "director.db")
+    db = Database.create(tmp_path / "director.db")
     yield db
     db.close()
 

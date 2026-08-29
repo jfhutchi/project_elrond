@@ -354,7 +354,7 @@ def test_a_refusal_round_trips_through_the_durable_store(tmp_path: Path) -> None
     """
     from quantbot.storage import Database, StorageRepository
 
-    database = Database(tmp_path / "shadow.db")
+    database = Database.create(tmp_path / "shadow.db")
     observation = rejected(reasons=(reason("LIQUIDITY"), reason("DAILY_LOSS")))
     parent, reasons = as_rows(observation)
 
@@ -383,7 +383,7 @@ def test_a_different_refusal_sharing_an_id_is_refused_rather_than_overwritten(
     from quantbot.storage import Database, StorageRepository
     from quantbot.storage.repositories import StateConflictError
 
-    database = Database(tmp_path / "shadow-conflict.db")
+    database = Database.create(tmp_path / "shadow-conflict.db")
     first, first_reasons = as_rows(rejected())
     second, second_reasons = as_rows(rejected(symbol="QQQ"))
 
@@ -413,7 +413,7 @@ def test_the_claim_lineage_comes_from_durable_state_not_from_a_caller(tmp_path: 
     from quantbot.storage import Database
 
     moment = _dt(2026, 8, 27, 14, 30, tzinfo=_UTC)
-    database = Database(tmp_path / "lineage.db")
+    database = Database.create(tmp_path / "lineage.db")
 
     with database.transaction() as session:
         ledger = PromotionLedger(session)

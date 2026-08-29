@@ -22,7 +22,7 @@ NOW = datetime(2026, 8, 14, 21, 5, tzinfo=UTC)
 
 @pytest.mark.asyncio
 async def test_unresolved_restart_recovery_halts_before_data_or_orders(tmp_path: Path) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _clear(database)
     calls: list[str] = []
     cycle = RunOnceCycle(
@@ -55,7 +55,7 @@ class ExplodingDataSync(FakeDataSync):
 async def test_unhandled_exception_is_captured_without_message_and_re_raised(
     tmp_path: Path,
 ) -> None:
-    database = Database(tmp_path / "quantbot.db")
+    database = Database.create(tmp_path / "quantbot.db")
     _clear(database)
     calls: list[str] = []
     cycle = RunOnceCycle(

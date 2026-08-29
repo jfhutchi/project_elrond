@@ -28,6 +28,7 @@ from quantbot.research.reproduce import (
     assess_reproducibility,
     find_manifest,
 )
+from quantbot.storage import Database
 from tests.unit.research.test_reproducibility import manifest as base_manifest
 
 NOW = datetime(2026, 8, 22, 14, 30, tzinfo=UTC)
@@ -257,6 +258,9 @@ def test_the_command_runs_end_to_end_and_refuses_to_claim_a_reproduction(
     # environment. Without this the test reaches into whatever store the operator's shell points
     # at -- a live one, on the machine this runs on.
     monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
+    # Opening a store no longer creates one (#86), so the fixture bootstraps it the way
+    # `quantbot create-database` would.
+    Database.create(tmp_path / "quantbot.db").close()
 
     path, written = bundle(tmp_path)
     assert written.reproduction_command[:2] == ("quantbot", "reproduce-experiment")
@@ -287,6 +291,9 @@ def test_the_command_reports_a_missing_bundle_rather_than_raising(
     from quantbot.cli import main
 
     monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
+    # Opening a store no longer creates one (#86), so the fixture bootstraps it the way
+    # `quantbot create-database` would.
+    Database.create(tmp_path / "quantbot.db").close()
 
     output = StringIO()
     code = main(

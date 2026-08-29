@@ -14,12 +14,18 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
+from io import StringIO
 from pathlib import Path
 
 import pytest
 from sqlalchemy import create_engine
 
-from quantbot.storage import Database, MigrationRequiredError, UnsupportedSchemaVersionError
+from quantbot.storage import (
+    Database,
+    DatabaseNotFoundError,
+    MigrationRequiredError,
+    UnsupportedSchemaVersionError,
+)
 from quantbot.storage.database import encode_utc
 from quantbot.storage.schema import SCHEMA_VERSION, kill_switch_state, metadata, schema_version
 from tests.unit.test_storage import NOW
@@ -247,3 +253,149 @@ def test_an_ordinary_cli_command_does_not_migrate_the_store_it_reads(
 
     assert fingerprint(path) == before, "a status command migrated the database"
     assert marker(path) == (1, "0001")
+
+
+# --- #86: opening must not create, either -------------------------------------------------------
+#
+# #66 closed one half of the storage lifecycle boundary: an ordinary open cannot *migrate*. It
+# left the other half open, and the acceptance criterion it claimed to satisfy was not actually
+# satisfied -- `Database(path)` against a missing file still created a store at head, complete
+# with its default kill-switch row.
+#
+# The hazard is quieter than the migration one and reaches further. A typo, a wrong working
+# directory, a stale service definition or an unmounted volume all present as "no file there".
+# A constructor that creates one converts every such mistake into a pristine, healthy-looking,
+# entirely wrong database -- and the operator sees a system with no positions rather than a
+# system pointed somewhere it should not be. These tests are written against the filesystem for
+# the same reason the ones above are: "it did not bootstrap" is a claim about the directory.
+
+
+def test_opening_a_missing_store_refuses_and_leaves_the_filesystem_alone(tmp_path: Path) -> None:
+    """Acceptance criteria 1 and 2. Nothing is created -- not the file, not its parents."""
+    missing = tmp_path / "nested" / "deeper" / "quantbot.db"
+
+    with pytest.raises(DatabaseNotFoundError) as refusal:
+        Database(missing)
+
+    assert not missing.exists()
+    assert not missing.parent.exists(), "an ordinary open created directories on the way to a file"
+    assert not (tmp_path / "nested").exists()
+    assert list(tmp_path.iterdir()) == []
+    # The refusal has to be actionable, because the next question is always "then where is my
+    # database?" and the answer is usually visible in the resolved path.
+    assert str(missing.resolve()) in str(refusal.value)
+    assert "QUANTBOT_DB_PATH" in str(refusal.value)
+
+
+def test_a_zero_length_placeholder_is_not_a_store_to_bootstrap(tmp_path: Path) -> None:
+    """Acceptance criterion 3. An empty file is the shape a half-failed deployment leaves."""
+    placeholder = tmp_path / "quantbot.db"
+    placeholder.touch()
+
+    with pytest.raises(DatabaseNotFoundError):
+        Database(placeholder)
+
+    assert placeholder.stat().st_size == 0, "the refused open wrote a schema into the placeholder"
+
+
+def test_create_bootstraps_the_whole_store_including_the_engaged_kill_switch(
+    tmp_path: Path,
+) -> None:
+    """Acceptance criterion 4. Bootstrap authority lives in exactly one named place."""
+    fresh = tmp_path / "first-run" / "quantbot.db"
+
+    database = Database.create(fresh)
+    try:
+        assert fresh.exists()
+        version, revision = marker(fresh)
+        assert version == SCHEMA_VERSION
+        assert revision is not None, "a created store must carry an Alembic revision marker"
+        with database.engine.connect() as connection:
+            state = connection.execute(kill_switch_state.select()).fetchone()
+        assert state is not None and bool(state.engaged) is True
+    finally:
+        database.close()
+
+    # And it is now an ordinary store: opening it is allowed, creating it again is not.
+    Database(fresh).close()
+    with pytest.raises(FileExistsError):
+        Database.create(fresh)
+
+
+def test_a_read_only_cli_pointed_at_a_typo_path_changes_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance criterion 7, and the failure this issue is actually about.
+
+    `status` is the command an operator runs to find out whether anything is wrong. Before this,
+    running it against a mistyped path answered that question by creating a database in which
+    nothing was wrong.
+    """
+    from quantbot.cli import main
+
+    real = tmp_path / "quantbot.db"
+    Database.create(real).close()
+    typo = tmp_path / "quantbo.db"
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(typo))
+
+    output = StringIO()
+    with pytest.raises(DatabaseNotFoundError):
+        main(["status"], output=output)
+
+    assert not typo.exists(), "a read-only command bootstrapped a store at the wrong path"
+    assert sorted(entry.name for entry in tmp_path.iterdir()) == ["quantbot.db"]
+
+
+def test_the_bootstrap_command_refuses_to_run_unconfirmed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A bootstrap that happens because a path was mistyped is the thing being prevented.
+
+    So the command holding the authority reports what it would do and stops, and the path it
+    echoes is the *resolved* one -- the mistake is usually a relative path landing somewhere
+    unexpected, which an unresolved argument would hide.
+    """
+    import json
+
+    from quantbot.cli import main
+
+    target = tmp_path / "quantbot.db"
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(target))
+
+    output = StringIO()
+    assert main(["create-database"], output=output) == 2
+    payload = json.loads(output.getvalue())
+    assert payload["ok"] is False and payload["created"] is False
+    assert str(target.resolve()) in payload["error"]
+    assert not target.exists()
+
+    confirmed = StringIO()
+    assert main(["create-database", "--confirm"], output=confirmed) == 0
+    assert json.loads(confirmed.getvalue())["created"] is True
+    assert marker(target)[0] == SCHEMA_VERSION
+
+    # A second run refuses rather than touching what it just made.
+    again = StringIO()
+    assert main(["create-database", "--confirm"], output=again) == 2
+    assert json.loads(again.getvalue())["created"] is False
+
+
+def test_the_runtime_cannot_start_against_a_store_it_invented(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Acceptance criterion 8. The runtime is the caller with the most to lose here.
+
+    A daemon that starts against a freshly created store has no positions, no fills and no
+    reconciliation history, and every one of those absences reads as a clean system rather than
+    as a system that cannot see its own state.
+    """
+    from quantbot.runtime import build_runtime
+
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
+    monkeypatch.setenv("ALPACA_PAPER_API_KEY", "key")
+    monkeypatch.setenv("ALPACA_PAPER_API_SECRET", "secret")
+
+    with pytest.raises(DatabaseNotFoundError):
+        build_runtime()
+
+    assert not (tmp_path / "quantbot.db").exists()
