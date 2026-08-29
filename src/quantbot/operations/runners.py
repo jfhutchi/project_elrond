@@ -335,7 +335,7 @@ class MarketDataSync:
         sessions: SessionCalendar,
         config: StrategyConfig,
         market_data: MarketDataSettings | None = None,
-        correlation_lookback_sessions: int = 120,
+        veto_policy: PortfolioVetoPolicy | None = None,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -343,9 +343,10 @@ class MarketDataSync:
         self._sessions = sessions
         self._config = config
         self._market_data = market_data or MarketDataSettings()
-        #: Kept in step with the runner's window on purpose. Fetching less than the correlation
-        #: veto measures over would leave that veto permanently unmeasurable.
-        self._correlation_lookback_sessions = correlation_lookback_sessions
+        #: The same frozen policy the runner evaluates vetoes against, so the fetched window and
+        #: the measured window cannot drift apart (#84). They were separate arguments held in
+        #: step by a comment, which is a convention rather than an invariant.
+        self._veto_policy = veto_policy or PortfolioVetoPolicy()
         self._clock = clock
 
     async def sync(self) -> DataSyncResult:
@@ -359,7 +360,9 @@ class MarketDataSync:
         # veto measures dependence over its own window, and a store holding only what the signal
         # needs would leave that veto permanently unmeasurable -- refusing every order, correctly
         # and uselessly. Whichever consumer needs more sessions decides how many are fetched.
-        needed = max(warmup_sessions(self._config), self._correlation_lookback_sessions)
+        needed = max(
+            warmup_sessions(self._config), self._veto_policy.correlation_lookback_sessions
+        )
         history = [
             session for session in calendar_sessions if session.close_at <= completed.close_at
         ]
@@ -425,7 +428,6 @@ class AdaptiveMomentumRunner:
         market_data: MarketDataSettings | None = None,
         veto_policy: PortfolioVetoPolicy | None = None,
         exposure_classification: ExposureClassification | None = None,
-        correlation_lookback_sessions: int = 120,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -443,9 +445,6 @@ class AdaptiveMomentumRunner:
         # every order, so enabling the control while leaving it unwired would have halted paper
         # trading in the name of protecting it.
         self._exposure = exposure_classification or load_exposure_classification()
-        # Sessions of history the correlation snapshot needs. 120 is what the measurement behind
-        # the 0.90 threshold used, so the rule and the window that justified it stay together.
-        self._correlation_lookback_sessions = correlation_lookback_sessions
         self._clock = clock
         self._run_id: str | None = None
 
@@ -470,9 +469,16 @@ class AdaptiveMomentumRunner:
             }
 
     def _dependence_snapshot(
-        self, histories: Mapping[str, list[Bar]], as_of: date
+        self, histories: Mapping[str, list[Bar]], session_window: Sequence[date]
     ) -> DependenceSnapshot | None:
-        """Pairwise dependence over the configured window, from point-in-time bars."""
+        """Pairwise dependence over an exact calendar window, from point-in-time bars.
+
+        The window comes from the exchange calendar rather than from the stored bars (#84). If
+        it were derived from the data, a feed that dropped a session would quietly redefine the
+        window it is supposed to be judged against, and every symbol would still look complete.
+        """
+        if len(session_window) < self._veto_policy.correlation_lookback_sessions:
+            return None
         closes: dict[str, dict[date, Decimal]] = {
             symbol: {bar.timestamp.date(): bar.close for bar in bars}
             for symbol, bars in histories.items()
@@ -482,8 +488,7 @@ class AdaptiveMomentumRunner:
             return None
         return build_dependence_snapshot(
             closes=closes,
-            as_of_session=as_of,
-            lookback_sessions=self._correlation_lookback_sessions,
+            session_window=session_window,
             source=MarketDataCache.provider_key(
                 self._market_data.provider,
                 self._market_data.feed,
@@ -691,7 +696,12 @@ class AdaptiveMomentumRunner:
         # One snapshot per cycle, from the bars this cycle already read. Built from `sliced` so
         # it sees only what was knowable at the decision, and `None` when the window cannot be
         # filled -- `CORRELATION_CONCENTRATION` then refuses rather than assuming (#58/#59).
-        dependence = self._dependence_snapshot(sliced, evaluation_at.date())
+        dependence = self._dependence_snapshot(
+            sliced,
+            [session.session_date for session in calendar_sessions[: evaluation_index + 1]][
+                -self._veto_policy.correlation_lookback_sessions :
+            ],
+        )
         roster = self._roster(histories, calendar_sessions, evaluation_index + 1)
         sequence = sequence_for(self._config, calendar_sessions)
 

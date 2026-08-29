@@ -66,6 +66,11 @@ def position(symbol: str, value: str) -> Position:
     )
 
 
+#: One exact 120-session window, shared by every snapshot built here. The dates themselves are
+#: arbitrary; that they are *the same dates for every symbol* is the invariant #84 added.
+SESSION_WINDOW = tuple(date(2026, 3, 2) + timedelta(days=offset) for offset in range(120))
+
+
 def _snapshot(*symbols: str) -> DependenceSnapshot:
     """A snapshot in which nothing is correlated with anything.
 
@@ -78,9 +83,7 @@ def _snapshot(*symbols: str) -> DependenceSnapshot:
     names = sorted({*symbols, "SPY", "TLT", "GLD"})
     return DependenceSnapshot(
         source="test",
-        as_of_session=date(2026, 8, 27),
-        lookback_sessions=120,
-        observations_used=119,
+        session_window=SESSION_WINDOW,
         coefficients={
             "|".join(sorted((a, b))): Decimal("0.10")
             for i, a in enumerate(names)
@@ -520,9 +523,7 @@ def test_a_correlated_cluster_over_its_ceiling_refuses_and_names_the_snapshot() 
     """The rule doing its actual job, plus the evidence #57 groups refusals on."""
     correlated = DependenceSnapshot(
         source="test",
-        as_of_session=date(2026, 8, 27),
-        lookback_sessions=120,
-        observations_used=119,
+        session_window=SESSION_WINDOW,
         coefficients={"QQQ|SPY": Decimal("0.95")},
     )
     state = build_dependence_state(

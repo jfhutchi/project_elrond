@@ -42,6 +42,8 @@ from quantbot.operations import (
     ReadinessEvidence,
     RunOnceCycle,
 )
+from quantbot.operations.runners import StrategyDataError
+from quantbot.risk import PortfolioVetoPolicy
 from quantbot.runtime import (
     RuntimeConfigurationError,
     build_runtime,
@@ -365,6 +367,66 @@ def _build_cycle(
         max_data_age_seconds=86_400,
     )
     return cycle, strategy, broker_transport
+
+
+async def test_the_fetched_window_and_the_measured_window_cannot_drift_apart(
+    tmp_path: Path,
+) -> None:
+    """#84: one policy field feeds both consumers, so neither can be changed alone.
+
+    They were separate constructor arguments held in step by a comment. Fetching fewer sessions
+    than the veto measures over leaves that veto permanently unmeasurable -- refusing every
+    order, correctly and uselessly -- and measuring over fewer than the threshold was calibrated
+    against silently changes the rule.
+
+    Raising the policy past what the calendar can supply must therefore be visible on *both*
+    sides from the single change: the sync refuses to run, and the snapshot refuses to build.
+    """
+    config = load_strategy_config(_write_config(tmp_path))
+    database = Database(tmp_path / "quantbot.db")
+    KillSwitchController(database).clear(
+        reason="test fixture readiness", measured=measured(), updated_at=NOW
+    )
+    beyond = PortfolioVetoPolicy(correlation_lookback_sessions=SESSION_COUNT + 10)
+
+    settings = _ready_settings()
+    data_transport = FakeMarketDataTransport()
+    sessions = CachedSessionCalendar(
+        AlpacaMarketCalendar(
+            api_key=settings.ALPACA_PAPER_API_KEY,  # type: ignore[arg-type]
+            api_secret=settings.ALPACA_PAPER_API_SECRET,  # type: ignore[arg-type]
+            transport=data_transport,
+        ),
+        clock=lambda: NOW,
+    )
+    sync = MarketDataSync(
+        database=database,
+        client=AlpacaMarketDataClient(
+            api_key=settings.ALPACA_PAPER_API_KEY,  # type: ignore[arg-type]
+            api_secret=settings.ALPACA_PAPER_API_SECRET,  # type: ignore[arg-type]
+            transport=data_transport,
+        ),
+        sessions=sessions,
+        config=config,
+        veto_policy=beyond,
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(StrategyDataError, match=str(SESSION_COUNT + 10)):
+        await sync.sync()
+
+    # The same single field, read by the other consumer. A window the calendar cannot fill is
+    # no snapshot, and `CORRELATION_CONCENTRATION` then refuses rather than measuring short.
+    cycle, strategy, _ = _build_cycle(tmp_path, config, database)
+    strategy._veto_policy = beyond  # noqa: SLF001 - the point is that one field moves both
+    calendar = await sessions.sessions()
+    assert (
+        strategy._dependence_snapshot(  # noqa: SLF001
+            {}, [session.session_date for session in calendar]
+        )
+        is None
+    )
+    database.close()
 
 
 async def test_wired_cycle_reconciles_syncs_data_and_submits_a_risk_sized_order(
