@@ -72,14 +72,31 @@ def _repository_local_package(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         yield package_name
 
 
+# The path tests below assert where a child's imports come from. Memory and wall clock are
+# *unrelated* limits here, so they are set generously on purpose -- CLAUDE.md's rule from #12 cuts
+# both ways: a limit that is not under test must never decide the outcome of one that is.
+#
+# It decided one. On 2026-08-29 `test_child_sys_path_entries_and_approved_package_are_outside_
+# repository` failed on windows-latest with `exit_code=0`, complete stdout, and
+# `terminated_reason='memory'`. The script had already done its job and printed the JSON the
+# assertion needed; the 512MB ceiling killed it anyway, and a path property that was never in
+# question was reported as broken.
+#
+# 2048MB is still a ceiling, so a genuine runaway is still caught. The real memory-limit test
+# lives in `tests/integration/test_sandbox_adversarial.py` with a deliberately tight ceiling and
+# is untouched by this.
+PATH_TEST_MEMORY_MB = 2048
+PATH_TEST_WALL_CLOCK_SECONDS = 120.0
+
+
 def _run_with_repository_local_package(
     monkeypatch: pytest.MonkeyPatch, source: str
 ) -> SandboxResult:
     with _repository_local_package(monkeypatch) as package_name:
         policy = SandboxPolicy(
             allowed_third_party=(package_name,),
-            wall_clock_seconds=30.0,
-            memory_mb=512,
+            wall_clock_seconds=PATH_TEST_WALL_CLOCK_SECONDS,
+            memory_mb=PATH_TEST_MEMORY_MB,
         )
         return SandboxRunner(policy).run(source.replace("PACKAGE_NAME", package_name))
 
@@ -310,8 +327,8 @@ print(json.dumps({
 """
         policy = SandboxPolicy(
             allowed_third_party=(approved_name,),
-            wall_clock_seconds=30.0,
-            memory_mb=512,
+            wall_clock_seconds=PATH_TEST_WALL_CLOCK_SECONDS,
+            memory_mb=PATH_TEST_MEMORY_MB,
         )
         result = SandboxRunner(policy).run(source)
 
@@ -333,8 +350,8 @@ print(json.dumps({"module_file": pydantic.__file__, "payload": Payload(value=7).
 """
     policy = SandboxPolicy(
         allowed_third_party=("pydantic",),
-        wall_clock_seconds=30.0,
-        memory_mb=512,
+        wall_clock_seconds=PATH_TEST_WALL_CLOCK_SECONDS,
+        memory_mb=PATH_TEST_MEMORY_MB,
     )
     result = SandboxRunner(policy).run(source)
 
