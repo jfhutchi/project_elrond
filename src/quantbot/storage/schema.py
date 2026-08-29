@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 metadata = MetaData(
     naming_convention={
@@ -646,6 +646,13 @@ rejection_reasons = Table(
     Column("gate_version", Integer, nullable=False),
     Column("rule_parameters_hash", String(128), nullable=False),
     Column("detail", Text, nullable=False),
+    # What the rule was *looking at*, as opposed to which rule it was (#85). Nullable because
+    # rows written before v13 genuinely had no structured evidence, and a NULL that reads back
+    # as LEGACY_UNRECORDED is honest where a backfilled value would not be.
+    Column("evidence_kind", String(32)),
+    Column("evidence_schema_version", Integer),
+    Column("evidence_payload", Text),
+    Column("evidence_identity", String(128)),
     ForeignKeyConstraint(
         ["observation_id"],
         ["rejected_candidates.observation_id"],
@@ -657,6 +664,8 @@ Index(
     rejection_reasons.c.gate_id,
     rejection_reasons.c.rule_parameters_hash,
 )
+# Grouping refusals by decision basis is the query #85 exists to serve.
+Index("ix_rejection_reasons_evidence_identity", rejection_reasons.c.evidence_identity)
 
 
 # --- Research: durable search records (#23, #11) ---------------------------------------------

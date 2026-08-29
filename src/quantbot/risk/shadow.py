@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -54,6 +54,7 @@ from typing import Annotated, Self
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
 from quantbot.market_data.calendar import XNYS_TIMEZONE
+from quantbot.risk.evidence import LEGACY_EVIDENCE, DecisionEvidence, EvidenceKind
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -98,6 +99,13 @@ class RejectionReason(ShadowModel):
     gate_version: int = Field(ge=1)
     rule_parameters_hash: Text
     detail: Text
+    #: The contemporaneous state this rule refused on (#85). The parameter hash says which rule
+    #: was in force; this says what it was looking at. Two refusals can share the first and not
+    #: the second -- the same freshness policy refuses a missing Tuesday and a missing Thursday,
+    #: the same correlation threshold refuses under a matrix measured in March and one measured
+    #: in August -- and pooling those because the hashes match is the error one level down from
+    #: pooling across a threshold change.
+    evidence: DecisionEvidence = DecisionEvidence(kind=EvidenceKind.NONE, payload={})
 
 
 class RejectedCandidate(ShadowModel):
@@ -315,17 +323,73 @@ def as_rows(
         "state": observation.state.value,
         "unavailable_reason": observation.unavailable_reason,
     }
-    reasons = [
+    for reason in observation.reasons:
+        if not reason.evidence.recorded:
+            # The legacy marker exists so rows written before #85 read back honestly. Live code
+            # writing one would be claiming an absence it did not have, which is the one thing a
+            # provenance field must never be able to say. Checked here rather than on the model
+            # because reading a genuine legacy row has to construct the same type.
+            raise ValueError(
+                f"{reason.gate_id} carries LEGACY_UNRECORDED, which describes a row persisted "
+                "before decision evidence was durable and cannot be written now"
+            )
+    reasons: list[dict[str, object]] = [
         {
             "observation_id": observation.observation_id,
             "gate_id": reason.gate_id,
             "gate_version": reason.gate_version,
             "rule_parameters_hash": reason.rule_parameters_hash,
             "detail": reason.detail,
+            "evidence_kind": reason.evidence.kind.value,
+            "evidence_schema_version": reason.evidence.schema_version,
+            # Canonical, sorted, and hashed by the same rule that produced `evidence_identity`,
+            # so two rows with the same basis are byte-identical here rather than merely
+            # equivalent under some later parser.
+            "evidence_payload": json.dumps(
+                dict(sorted(reason.evidence.payload.items())),
+                sort_keys=True,
+                separators=(",", ":"),
+            ),
+            "evidence_identity": reason.evidence.identity,
         }
         for reason in observation.reasons
     ]
     return parent, reasons
+
+
+def reasons_from_rows(rows: Sequence[Mapping[str, object]]) -> tuple[RejectionReason, ...]:
+    """Rebuild reasons from stored rows, with legacy rows honestly marked (#85).
+
+    A row whose `evidence_kind` is NULL predates v13. It reads back as `LEGACY_UNRECORDED`
+    rather than as `NONE`, because those are different facts: `NONE` says the veto was asked and
+    had no structured context, and this says nobody asked. An analysis that pooled them would be
+    treating "not recorded" as "recorded empty", which is how an absence becomes a measurement.
+
+    Nothing is reconstructed from current state. Recomputing an expected session from today's
+    calendar would answer what the rule *would* refuse now, not what it *did* refuse then.
+    """
+    rebuilt: list[RejectionReason] = []
+    for row in rows:
+        stored = row.get("evidence_kind")
+        if stored is None:
+            evidence = LEGACY_EVIDENCE
+        else:
+            payload = row.get("evidence_payload")
+            evidence = DecisionEvidence(
+                kind=EvidenceKind(str(stored)),
+                schema_version=int(str(row["evidence_schema_version"])),
+                payload=json.loads(str(payload)) if payload else {},
+            )
+        rebuilt.append(
+            RejectionReason(
+                gate_id=str(row["gate_id"]),
+                gate_version=int(str(row["gate_version"])),
+                rule_parameters_hash=str(row["rule_parameters_hash"]),
+                detail=str(row["detail"]),
+                evidence=evidence,
+            )
+        )
+    return tuple(rebuilt)
 
 
 def session_of(moment: datetime) -> date:
@@ -338,6 +402,7 @@ def session_of(moment: datetime) -> date:
 __all__ = [
     "MINIMUM_EVALUATED_OUTCOMES",
     "as_rows",
+    "reasons_from_rows",
     "candidate_id",
     "CandidateDirection",
     "CounterfactualState",
