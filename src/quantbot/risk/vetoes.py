@@ -39,7 +39,7 @@ from __future__ import annotations
 import hashlib
 import json
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Annotated, Self
@@ -55,6 +55,14 @@ from quantbot.risk.exposure import (
     Provenance,
     build_exposure_state,
 )
+from quantbot.risk.freshness import (
+    FreshnessExpectation,
+    FreshnessOutcome,
+    MarketFreshnessPolicy,
+    assess_freshness,
+    expected_freshness,
+)
+from quantbot.strategy import XNYSSession
 
 BASIS_POINTS = Decimal("10000")
 
@@ -143,21 +151,20 @@ class PortfolioVetoPolicy(VetoModel):
     #: same off-by-one already bit fill attribution and equity marks.
     max_daily_loss_bps: int = Field(default=500, gt=0)
 
-    #: How old the newest market observation may be before entries stop. Stale data is not a
-    #: connectivity problem at this layer; it is a risk one, because sizing against a price that
-    #: no longer exists is worse than not trading.
+    #: How many expected intervals an **intraday** feed may miss while the market is open
+    #: before it counts as stopped. Ignored for daily bars, whose freshness is a question about
+    #: sessions rather than seconds (#74).
     #:
-    #: **The default is four days, not fifteen minutes, and the first version of this got it
-    #: wrong.** This strategy trades daily bars once per session, so the newest observation is
-    #: always the previous session's close -- roughly a day old at decision time, and longer
-    #: across a weekend or a holiday. A 900-second ceiling encoded an intraday assumption into a
-    #: daily-bar system and refused every entry. Four days clears a long weekend and still
-    #: catches a feed that is genuinely behind.
+    #: Three, because one missed interval is a hiccup and a feed that has produced nothing for
+    #: three consecutive expected updates during an open session has stopped rather than slowed.
     #:
-    #: **Recorded limitation:** calendar seconds are a coarse proxy for "sessions behind". The
-    #: precise rule needs the exchange calendar, which the risk layer does not currently take;
-    #: an intraday strategy would need this retuned rather than inheriting a daily default.
-    max_market_data_age_seconds: int = Field(default=345_600, gt=0)
+    #: **This replaced a wall clock, and the history is why.** The veto first shipped a
+    #: 900-second ceiling, which encoded an intraday assumption into a daily-bar system and
+    #: refused every entry. That was corrected to four days, which cleared a long weekend and
+    #: was recorded in the code as a coarse proxy for "sessions behind". Elapsed time was the
+    #: wrong measurement both times: a Friday close is current all weekend, a Tuesday close is
+    #: stale on Wednesday, and no single number distinguishes them. The calendar does.
+    freshness: MarketFreshnessPolicy = MarketFreshnessPolicy()
 
     #: The order may not exceed this share of the symbol's average daily volume. A position that
     #: cannot be exited without moving the price is a position whose backtest never happened.
@@ -270,6 +277,11 @@ class PortfolioVetoInputs(VetoModel):
     latest_market_data_at: datetime | None = None
     observed_at: datetime
 
+    #: What the exchange calendar says the feed owes at `observed_at` (#74). `None` rejects:
+    #: without it there is no way to tell a quiet holiday from a dead feed, and guessing in
+    #: either direction is worse than refusing.
+    freshness: FreshnessExpectation | None = None
+
     #: Average daily volume over `minimum_volume_sessions`, and how many sessions backed it.
     average_daily_volume: NonNegativeDecimal | None = None
     volume_sessions: int = Field(default=0, ge=0)
@@ -301,6 +313,13 @@ class VetoRejection(VetoModel):
     #: limit was breached. Both reject; only one is fixable by changing a limit.
     unmeasured: str | None = None
 
+    #: Freshness evidence, when `STALE_MARKET_DATA` refused (#74). Structured rather than only in
+    #: the reason string, because #57 studies rules across versions and cannot group on prose.
+    freshness_policy_identity: str | None = None
+    expected_session: date | None = None
+    observed_session: date | None = None
+    market_state: str | None = None
+
 
 class PortfolioVetoDecision(VetoModel):
     """Allow or reject, and never a size. A veto has no opinion about quantity."""
@@ -326,7 +345,11 @@ class PortfolioVetoDecision(VetoModel):
 
 
 def _reject(
-    veto: VetoName, policy: PortfolioVetoPolicy, reason: str, unmeasured: str | None = None
+    veto: VetoName,
+    policy: PortfolioVetoPolicy,
+    reason: str,
+    unmeasured: str | None = None,
+    **evidence: object,
 ) -> VetoRejection:
     return VetoRejection(
         veto=veto,
@@ -334,6 +357,7 @@ def _reject(
         rule_parameters_hash=policy.identity,
         reason=reason,
         unmeasured=unmeasured,
+        **evidence,
     )
 
 
@@ -391,34 +415,38 @@ def _daily_loss(inputs: PortfolioVetoInputs, policy: PortfolioVetoPolicy) -> Vet
 def _stale_market_data(
     inputs: PortfolioVetoInputs, policy: PortfolioVetoPolicy
 ) -> VetoRejection | None:
-    if inputs.latest_market_data_at is None:
-        return _reject(
-            VetoName.STALE_MARKET_DATA,
-            policy,
-            f"no market observation is recorded for {inputs.symbol}, so its age is unknown",
-            unmeasured="latest_market_data_at",
-        )
-    age = inputs.observed_at - inputs.latest_market_data_at
-    ceiling = timedelta(seconds=policy.max_market_data_age_seconds)
-    if age > ceiling:
-        return _reject(
-            VetoName.STALE_MARKET_DATA,
-            policy,
-            f"the newest {inputs.symbol} observation is {int(age.total_seconds())}s old against "
-            f"a {policy.max_market_data_age_seconds}s ceiling; sizing against a price that no "
-            "longer exists is worse than not trading",
-        )
-    if age < timedelta(0):
-        # A future-stamped observation is not fresh data, it is a clock or ingestion defect, and
-        # treating it as the freshest possible reading is the fail-open direction.
-        return _reject(
-            VetoName.STALE_MARKET_DATA,
-            policy,
-            f"the newest {inputs.symbol} observation is stamped after the decision clock, which "
-            "is a data defect rather than fresh data",
-            unmeasured="latest_market_data_at",
-        )
-    return None
+    """Judge the feed against the exchange calendar rather than against a clock (#74).
+
+    The rejection carries the expected session, the observed session and the outcome, so a reader
+    can tell a missing session from a dead intraday feed from an unmeasurable one without
+    re-deriving any of it.
+    """
+    assessment = assess_freshness(
+        expectation=inputs.freshness,
+        latest_observation_at=inputs.latest_market_data_at,
+        observed_at=inputs.observed_at,
+        symbol=inputs.symbol,
+        tolerated_intervals=policy.freshness.tolerated_intervals,
+    )
+    if assessment.fresh:
+        return None
+    return _reject(
+        VetoName.STALE_MARKET_DATA,
+        policy,
+        f"{assessment.outcome.value}: {assessment.detail}",
+        # Only the unmeasurable outcome is a missing input. A missing session and a stopped feed
+        # are measurements, and reporting them as unmeasured would send a reader looking for
+        # absent plumbing instead of absent data.
+        unmeasured=(
+            "market_data_freshness"
+            if assessment.outcome is FreshnessOutcome.FRESHNESS_METADATA_UNAVAILABLE
+            else None
+        ),
+        freshness_policy_identity=assessment.policy_identity,
+        expected_session=assessment.expected_session,
+        observed_session=assessment.observed_session,
+        market_state=assessment.market_state.value,
+    )
 
 
 def _liquidity(inputs: PortfolioVetoInputs, policy: PortfolioVetoPolicy) -> VetoRejection | None:
@@ -582,6 +610,8 @@ def build_veto_inputs(
     observed_at: datetime,
     volume_sessions: int,
     classification: ExposureClassification | None = None,
+    sessions: Sequence[XNYSSession] = (),
+    freshness_policy: MarketFreshnessPolicy | None = None,
 ) -> PortfolioVetoInputs:
     """Assemble measured state from primitives the caller already holds.
 
@@ -635,6 +665,13 @@ def build_veto_inputs(
         observed_at=observed_at,
         average_daily_volume=average_volume,
         volume_sessions=len(volumes),
+        # `None` when no calendar was supplied, and the veto then refuses. An empty calendar
+        # must not read as an open market with nothing owed.
+        freshness=expected_freshness(
+            sessions=sessions,
+            observed_at=observed_at,
+            policy=freshness_policy or MarketFreshnessPolicy(),
+        ),
         # `None` when no classification was supplied, and the veto that needs it then rejects.
         # Defaulting to an empty table here would report every group at zero.
         exposure=(

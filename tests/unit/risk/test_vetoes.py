@@ -18,6 +18,8 @@ from quantbot.risk.exposure import (
     build_exposure_state,
     load_exposure_classification,
 )
+from quantbot.risk.freshness import MarketFreshnessPolicy, expected_freshness
+from quantbot.risk.shadow import session_of
 from quantbot.risk.vetoes import (
     UNIMPLEMENTED,
     PolicyAuthority,
@@ -28,6 +30,7 @@ from quantbot.risk.vetoes import (
     evaluate_portfolio_vetoes,
     session_date_of,
 )
+from quantbot.strategy import XNYSSession
 
 EASTERN = ZoneInfo("America/New_York")
 NOW = datetime(2026, 8, 27, 15, 30, tzinfo=EASTERN).astimezone(UTC)
@@ -48,6 +51,28 @@ def policy(**overrides: object) -> PortfolioVetoPolicy:
     return PortfolioVetoPolicy(**fields)  # type: ignore[arg-type]
 
 
+
+def _sessions_around(moment: datetime) -> tuple[XNYSSession, ...]:
+    """Ten contiguous weekday sessions ending on the Eastern session `moment` belongs to."""
+    from quantbot.risk.shadow import session_of
+
+    last = session_of(moment)
+    days: list[date] = []
+    cursor = last
+    while len(days) < 10:
+        if cursor.weekday() < 5:
+            days.append(cursor)
+        cursor -= timedelta(days=1)
+    return tuple(
+        XNYSSession(
+            session_date=day,
+            open_at=datetime.combine(day, time(13, 30), tzinfo=UTC),
+            close_at=datetime.combine(day, time(20, 0), tzinfo=UTC),
+        )
+        for day in reversed(days)
+    )
+
+
 def inputs(**overrides: object) -> PortfolioVetoInputs:
     """A portfolio nothing objects to, so each test can break exactly one thing.
 
@@ -56,6 +81,14 @@ def inputs(**overrides: object) -> PortfolioVetoInputs:
     this module fail for a reason none of them are about.
     """
     fields: dict[str, object] = {
+        # Like the exposure state, the calendar is part of "nothing objects" since #74:
+        # `STALE_MARKET_DATA` judges the feed against completed sessions, and no calendar
+        # rejects. Without this every test here would fail for a reason none of them is about.
+        "freshness": expected_freshness(
+            sessions=_sessions_around(NOW),
+            observed_at=NOW,
+            policy=MarketFreshnessPolicy(),
+        ),
         "exposure": build_exposure_state(
             classification=load_exposure_classification(
                 Path(__file__).resolve().parents[3] / DEFAULT_CLASSIFICATION_PATH
@@ -165,35 +198,66 @@ def test_the_daily_loss_session_is_eastern_not_utc() -> None:
         session_date_of(datetime(2026, 8, 27, 20, 5))
 
 
-def test_stale_market_data_stops_entries() -> None:
+def test_a_missing_session_stops_entries() -> None:
+    """Staleness is now a question about sessions, not seconds (#74).
+
+    An observation from two sessions back is stale the moment the last one closes, and this used
+    to need an hour-scale ceiling to catch. The calendar catches it without a threshold.
+    """
+    # `NOW` falls inside the final session, so the last *completed* one is the second to last.
+    completed = _sessions_around(NOW)[-2]
+    stale_session = _sessions_around(NOW)[-3].close_at
     decision = evaluate_portfolio_vetoes(
-        inputs(latest_market_data_at=NOW - timedelta(seconds=3600)),
-        policy(max_market_data_age_seconds=900),
+        inputs(latest_market_data_at=stale_session),
+        policy(enabled=frozenset({VetoName.STALE_MARKET_DATA})),
     )
 
     assert refused(decision) == {VetoName.STALE_MARKET_DATA}
-    assert "3600s old" in decision.rejections[0].reason
+    rejection = decision.rejections[0]
+    assert rejection.reason.startswith("EXPECTED_SESSION_MISSING")
+    # The evidence #57 groups on, structured rather than parsed out of prose.
+    assert rejection.expected_session == completed.session_date
+    assert rejection.observed_session == session_of(stale_session)
+    assert rejection.market_state in {"OPEN", "CLOSED"}
+    assert rejection.freshness_policy_identity is not None
 
 
 def test_absent_market_data_is_not_fresh_market_data() -> None:
-    decision = evaluate_portfolio_vetoes(inputs(latest_market_data_at=None), policy())
-
-    assert refused(decision) == {VetoName.STALE_MARKET_DATA}
-    assert decision.rejections[0].unmeasured == "latest_market_data_at"
-
-
-def test_an_observation_stamped_in_the_future_is_a_defect_not_freshness() -> None:
-    """Age below zero is the freshest possible reading and the clearest possible data fault.
-
-    Comparing only against the ceiling would let a clock skew or a bad ingestion timestamp read
-    as the newest data the system has ever seen — permanently, and in the allowing direction.
-    """
     decision = evaluate_portfolio_vetoes(
-        inputs(latest_market_data_at=NOW + timedelta(seconds=120)), policy()
+        inputs(latest_market_data_at=None),
+        policy(enabled=frozenset({VetoName.STALE_MARKET_DATA})),
     )
 
     assert refused(decision) == {VetoName.STALE_MARKET_DATA}
-    assert decision.rejections[0].unmeasured == "latest_market_data_at"
+    assert decision.rejections[0].unmeasured == "market_data_freshness"
+
+
+def test_an_absent_calendar_is_not_a_fresh_feed() -> None:
+    """Fail closed on missing metadata (#74). No calendar means nothing is owed, which is the
+    most permissive possible reading and therefore the one that must reject."""
+    decision = evaluate_portfolio_vetoes(
+        inputs(freshness=None),
+        policy(enabled=frozenset({VetoName.STALE_MARKET_DATA})),
+    )
+
+    assert refused(decision) == {VetoName.STALE_MARKET_DATA}
+    assert decision.rejections[0].unmeasured == "market_data_freshness"
+    assert "FRESHNESS_METADATA_UNAVAILABLE" in decision.rejections[0].reason
+
+
+def test_an_observation_stamped_in_the_future_is_a_defect_not_freshness() -> None:
+    """A future stamp is the freshest possible reading and the clearest possible data fault.
+
+    Comparing only against a ceiling would let a clock skew or a bad ingestion timestamp read as
+    the newest data the system has ever seen — permanently, and in the allowing direction.
+    """
+    decision = evaluate_portfolio_vetoes(
+        inputs(latest_market_data_at=NOW + timedelta(days=2)),
+        policy(enabled=frozenset({VetoName.STALE_MARKET_DATA})),
+    )
+
+    assert refused(decision) == {VetoName.STALE_MARKET_DATA}
+    assert decision.rejections[0].unmeasured == "market_data_freshness"
 
 
 def test_liquidity_bounds_participation_in_average_daily_volume() -> None:
@@ -276,7 +340,7 @@ def test_changing_any_limit_changes_the_policy_identity() -> None:
     for change in (
         {"max_net_exposure_bps": 5000},
         {"max_daily_loss_bps": 250},
-        {"max_market_data_age_seconds": 60},
+        {"freshness": MarketFreshnessPolicy(tolerated_intervals=9)},
         {"max_participation_bps": 50},
         {"minimum_volume_sessions": 40},
         {"enabled": frozenset({VetoName.NET_EXPOSURE})},
@@ -380,25 +444,22 @@ def test_the_shipped_thresholds_are_the_systems_and_say_so() -> None:
     assert adopted.authority is not default.authority
 
 
-def test_the_staleness_default_fits_the_daily_bars_this_system_trades() -> None:
-    """A 900-second ceiling refused every entry, and that was a bug in the rule (#58).
+def test_the_current_session_close_is_fresh() -> None:
+    """The veto must be able to pass, or every staleness test above proves only that it refuses.
 
-    This strategy decides once per session on daily bars, so the newest observation is always
-    the previous session's close — about a day old at decision time, and longer across a
-    weekend. The first version of this veto encoded an intraday assumption and blocked the wired
-    cycle entirely. Four days clears a long weekend and still catches a feed genuinely behind.
+    The calendar cases -- weekend, long weekend, holiday, half-day, missing session, intraday
+    stoppage -- live in `tests/unit/risk/test_freshness.py`, where they can be written against
+    the rule directly instead of through a portfolio fixture.
     """
-    # Only the veto under test: the shipped policy now also enforces concentration and
-    # liquidity, and a refusal from one of those would make this pass or fail for the wrong
-    # reason -- the failure mode this repository's engineering standard is written against.
-    default = policy(enabled=frozenset({VetoName.STALE_MARKET_DATA}))
-    yesterday = inputs(latest_market_data_at=NOW - timedelta(days=1))
-    long_weekend = inputs(latest_market_data_at=NOW - timedelta(days=3))
-    behind = inputs(latest_market_data_at=NOW - timedelta(days=9))
+    # The last *completed* session's close. The final session is still open at `NOW`, so its
+    # close is in the future -- which is a data defect, not freshness.
+    current = _sessions_around(NOW)[-2].close_at
+    decision = evaluate_portfolio_vetoes(
+        inputs(latest_market_data_at=current),
+        policy(enabled=frozenset({VetoName.STALE_MARKET_DATA})),
+    )
 
-    assert evaluate_portfolio_vetoes(yesterday, default).allowed
-    assert evaluate_portfolio_vetoes(long_weekend, default).allowed
-    assert refused(evaluate_portfolio_vetoes(behind, default)) == {VetoName.STALE_MARKET_DATA}
+    assert decision.allowed, decision.explain()
 
 
 def test_a_vetoed_order_reserves_nothing() -> None:
