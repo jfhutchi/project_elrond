@@ -53,7 +53,10 @@ from tests.support import measured
 
 ACCOUNT_ID = "paper-account-1"
 UNIVERSE = ("SPY", "QQQ", "TLT", "GLD")
-SESSION_COUNT = 90
+# Enough to fill the 120-session correlation window (#58). Raised from 90 rather than shrinking
+# the window: 0.90 was measured over 120 sessions, and tuning the rule so a fixture passes would
+# be choosing the threshold to fit the test rather than the data.
+SESSION_COUNT = 150
 NOW = datetime(2026, 8, 14, 21, 5, tzinfo=UTC)
 
 

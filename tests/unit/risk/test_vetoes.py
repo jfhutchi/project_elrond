@@ -13,6 +13,8 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from quantbot.domain import Position
+from quantbot.risk.dependence import DependenceSnapshot, build_dependence_state
 from quantbot.risk.exposure import (
     DEFAULT_CLASSIFICATION_PATH,
     build_exposure_state,
@@ -21,6 +23,7 @@ from quantbot.risk.exposure import (
 from quantbot.risk.freshness import MarketFreshnessPolicy, expected_freshness
 from quantbot.risk.shadow import session_of
 from quantbot.risk.vetoes import (
+    _EVALUATORS,
     UNIMPLEMENTED,
     PolicyAuthority,
     PortfolioVetoInputs,
@@ -52,6 +55,40 @@ def policy(**overrides: object) -> PortfolioVetoPolicy:
 
 
 
+def position(symbol: str, value: str) -> Position:
+    amount = Decimal(value)
+    return Position(
+        symbol=symbol,
+        quantity=amount / Decimal("100"),
+        market_price=Decimal("100"),
+        market_value=amount,
+        average_entry_price=Decimal("100"),
+    )
+
+
+def _snapshot(*symbols: str) -> DependenceSnapshot:
+    """A snapshot in which nothing is correlated with anything.
+
+    Part of "nothing objects": `CORRELATION_CONCENTRATION` ships enabled and an absent snapshot
+    rejects, so without this every test here would fail for a reason none of them is about. The
+    coefficients are deliberately low so no cluster forms and the veto passes.
+    """
+    # At least three, because `symbols` is derived from coefficient *keys*: a one-symbol
+    # snapshot has no pairs, so it would report an empty universe and refuse everything.
+    names = sorted({*symbols, "SPY", "TLT", "GLD"})
+    return DependenceSnapshot(
+        source="test",
+        as_of_session=date(2026, 8, 27),
+        lookback_sessions=120,
+        observations_used=119,
+        coefficients={
+            "|".join(sorted((a, b))): Decimal("0.10")
+            for i, a in enumerate(names)
+            for b in names[i + 1 :]
+        },
+    )
+
+
 def _sessions_around(moment: datetime) -> tuple[XNYSSession, ...]:
     """Ten contiguous weekday sessions ending on the Eastern session `moment` belongs to."""
     from quantbot.risk.shadow import session_of
@@ -81,6 +118,12 @@ def inputs(**overrides: object) -> PortfolioVetoInputs:
     this module fail for a reason none of them are about.
     """
     fields: dict[str, object] = {
+        "dependence": build_dependence_state(
+            snapshot=_snapshot(str(overrides.get("symbol", "SPY"))),
+            symbol=str(overrides.get("symbol", "SPY")),
+            positions=[],
+            threshold=Decimal("0.90"),
+        ),
         # Like the exposure state, the calendar is part of "nothing objects" since #74:
         # `STALE_MARKET_DATA` judges the feed against completed sessions, and no calendar
         # rejects. Without this every test here would fail for a reason none of them is about.
@@ -129,6 +172,7 @@ def test_a_clean_portfolio_passes_every_enabled_veto() -> None:
         VetoName.STALE_MARKET_DATA,
         VetoName.LIQUIDITY,
         VetoName.EXPOSURE_CONCENTRATION,
+        VetoName.CORRELATION_CONCENTRATION,
     }
     assert "none refused" in decision.explain()
 
@@ -149,7 +193,7 @@ def test_a_short_book_nets_down_rather_than_adding_up() -> None:
     """Net is signed. Treating it as gross would refuse a hedged book the limit was fine with."""
     decision = evaluate_portfolio_vetoes(
         inputs(committed_net_exposure=Decimal("-90000"), order_net_exposure=Decimal("50000")),
-        policy(max_net_exposure_bps=5000),
+        policy(enabled=frozenset({VetoName.NET_EXPOSURE}), max_net_exposure_bps=5000),
     )
 
     assert decision.allowed, "|-90000 + 50000| is 40000, inside a 50% ceiling"
@@ -309,7 +353,7 @@ def test_every_veto_speaks_even_when_an_earlier_one_refused() -> None:
         VetoName.STALE_MARKET_DATA,
         VetoName.LIQUIDITY,
     }
-    assert len(decision.evaluated) == 5
+    assert len(decision.evaluated) == 6
 
 
 def test_a_rejection_carries_what_a_counterfactual_study_needs_to_attribute_it() -> None:
@@ -349,20 +393,24 @@ def test_changing_any_limit_changes_the_policy_identity() -> None:
         assert policy(**change).identity != base.identity, change
 
 
-def test_an_unimplemented_veto_cannot_be_enabled() -> None:
-    """Correlation has no evaluator, and a veto that reads as enforced is worse than a missing one.
+def test_the_unimplemented_guard_survives_having_nothing_to_guard(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`UNIMPLEMENTED` is empty since #58's correlation rule landed, and the check stays.
 
-    It is declared in `VetoName` so the gap is a visible member of the enum rather than an
-    absence a reader has to notice, and refused at configuration so nothing can believe the
-    portfolio is protected against a concentration nothing measures.
-
-    `EXPOSURE_CONCENTRATION` left this set when #59's classification landed; a name that stayed
-    here after gaining an evaluator would refuse to be enabled forever.
+    Deleting the guard once the set emptied would remove the mechanism that stops a *future*
+    declared name from reading as an enforced control -- which is the whole reason the set
+    existed. So the set is provably empty rather than quietly absent, and the guard is driven
+    directly to show it still refuses.
     """
-    assert UNIMPLEMENTED == {VetoName.CORRELATION_CONCENTRATION}
-    for name in UNIMPLEMENTED:
-        with pytest.raises(ValueError, match="has no evaluator"):
-            policy(enabled=frozenset({VetoName.NET_EXPOSURE, name}))
+    assert UNIMPLEMENTED == frozenset(), "every declared veto now has an evaluator"
+    assert set(_EVALUATORS) == set(VetoName), "and the evaluator table covers the enum"
+
+    import quantbot.risk.vetoes as module
+
+    monkeypatch.setattr(module, "UNIMPLEMENTED", frozenset({VetoName.LIQUIDITY}))
+    with pytest.raises(ValueError, match="has no evaluator"):
+        PortfolioVetoPolicy(enabled=frozenset({VetoName.LIQUIDITY}))
 
 
 def test_a_disabled_veto_is_not_evaluated_and_the_policy_says_so() -> None:
@@ -407,8 +455,8 @@ def test_every_implemented_veto_is_enabled_and_a_thin_ledger_is_refused() -> Non
     default = PortfolioVetoPolicy()
 
     assert default.enabled == ALL_VETOES
-    assert VetoName.CORRELATION_CONCENTRATION not in default.enabled, (
-        "the one with no evaluator stays off, and refuses to be enabled at all"
+    assert VetoName.CORRELATION_CONCENTRATION in default.enabled, (
+        "#58's correlation rule landed, so nothing implemented is left disabled"
     )
 
     thin_ledger = inputs(
@@ -424,6 +472,76 @@ def test_every_implemented_veto_is_enabled_and_a_thin_ledger_is_refused() -> Non
     unmeasured = {item.veto: item.unmeasured for item in decision.rejections}
     assert unmeasured[VetoName.DAILY_LOSS] == "session_opening_equity"
     assert unmeasured[VetoName.LIQUIDITY] == "average_daily_volume"
+
+
+def test_an_absent_dependence_snapshot_refuses_on_its_own() -> None:
+    """Fail closed, asserted in isolation (#58).
+
+    The thin-ledger test above checks a *superset* of refusals, so it stays green whether or not
+    correlation refuses -- which makes it useless for this property. Only this veto is enabled
+    here, so the refusal can only have come from the missing snapshot.
+    """
+    decision = evaluate_portfolio_vetoes(
+        inputs(dependence=None),
+        policy(enabled=frozenset({VetoName.CORRELATION_CONCENTRATION})),
+    )
+
+    assert refused(decision) == {VetoName.CORRELATION_CONCENTRATION}
+    assert decision.rejections[0].unmeasured == "dependence_snapshot"
+
+
+def test_a_holding_the_snapshot_never_measured_refuses() -> None:
+    """The expensive case: the order is measurable and a *held* position is not.
+
+    Every cluster total that includes the unmeasured symbol is then an understatement, and an
+    understated numerator is the permissive direction. A naive implementation proceeds here
+    because the order itself looks fine.
+    """
+    measured = _snapshot("SPY")
+    state = build_dependence_state(
+        snapshot=measured,
+        symbol="SPY",
+        positions=[position("NVDA", "9000")],
+        threshold=Decimal("0.90"),
+    )
+    assert state.unmeasured == ("NVDA",)
+
+    decision = evaluate_portfolio_vetoes(
+        inputs(dependence=state),
+        policy(enabled=frozenset({VetoName.CORRELATION_CONCENTRATION})),
+    )
+
+    assert refused(decision) == {VetoName.CORRELATION_CONCENTRATION}
+    assert decision.rejections[0].unmeasured == "UNMEASURED_SYMBOL"
+    assert "NVDA" in decision.rejections[0].reason
+
+
+def test_a_correlated_cluster_over_its_ceiling_refuses_and_names_the_snapshot() -> None:
+    """The rule doing its actual job, plus the evidence #57 groups refusals on."""
+    correlated = DependenceSnapshot(
+        source="test",
+        as_of_session=date(2026, 8, 27),
+        lookback_sessions=120,
+        observations_used=119,
+        coefficients={"QQQ|SPY": Decimal("0.95")},
+    )
+    state = build_dependence_state(
+        snapshot=correlated,
+        symbol="SPY",
+        positions=[position("QQQ", "38000")],
+        threshold=Decimal("0.90"),
+    )
+
+    decision = evaluate_portfolio_vetoes(
+        inputs(dependence=state),
+        policy(enabled=frozenset({VetoName.CORRELATION_CONCENTRATION})),
+    )
+
+    assert refused(decision) == {VetoName.CORRELATION_CONCENTRATION}
+    rejection = decision.rejections[0]
+    assert "QQQ, SPY" in rejection.reason
+    assert rejection.unmeasured is None, "a breached ceiling is not a missing measurement"
+    assert rejection.dependence_snapshot_identity == correlated.identity
 
 
 def test_the_shipped_thresholds_are_the_systems_and_say_so() -> None:
@@ -553,7 +671,11 @@ def test_a_new_symbol_entry_cannot_clear_net_exposure_on_a_fabricated_zero() -> 
     # Both refuse, and for the same missing input: a concentration limit cannot attribute an
     # order to a group without knowing what the order is worth either. A missing price is not a
     # zero one in either rule.
-    assert refused(decision) == {VetoName.NET_EXPOSURE, VetoName.EXPOSURE_CONCENTRATION}
+    assert refused(decision) == {
+        VetoName.NET_EXPOSURE,
+        VetoName.EXPOSURE_CONCENTRATION,
+        VetoName.CORRELATION_CONCENTRATION,
+    }
     assert {
         item.unmeasured for item in decision.rejections
     } == {"REFERENCE_PRICE_UNAVAILABLE"}
