@@ -1648,6 +1648,44 @@ state as **structured fields**, because #57 compares refusals across rule versio
 on prose. Eight protections, mutation-checked; two of them only became load-bearing after the
 assertions were sharpened to isolate the mechanism from a second guard.
 
+## 6ll. What moves together, and the clustering that would have got it wrong (#58, #59 slice 2)
+
+**2026-08-29.** `quantbot.risk.dependence`: a frozen point-in-time `DependenceSnapshot`, and
+`CORRELATION_CONCENTRATION` implemented against it. `UNIMPLEMENTED` is now empty.
+
+**The obvious implementation was wrong, and measuring first is what caught it.** "Cluster symbols
+above a correlation threshold" reads as connected components of the qualifying graph. Measured
+over 120 sessions of daily log returns on the real stored bars, that puts **thirteen of
+twenty-three symbols in one cluster at 0.80**, containing `TLT`, `IEF` and `TIP` alongside `SPY`,
+`QQQ` and `XLK`.
+
+Nothing links Treasuries to equities directly — `corr(TLT, SPY) = +0.445`. They arrive together
+through credit: `HYG–SPY` at 0.82 on one side, `LQD–TLT` at 0.90 on the other. Single linkage
+needs one qualifying edge per join, so a chain suffices.
+
+A limit built on that would report a bond position as adding to equity concentration. It is not
+conservative — it is a wrong answer that happens to refuse, which is the hardest kind to notice.
+
+**Complete linkage**, requiring every pair inside a cluster to clear the threshold, gives
+`{IEF, LQD, TLT}` and `{QQQ, SPY}` and `{IWM, MDY}`: duration, large-cap growth, mid/small caps.
+
+**The threshold is measured, not picked.** At 0.90 the clusters are identical at 40, 90 and 120
+sessions. 60 sessions disagrees — it produces `{EEM, QQQ, XLK}` instead — which is a real caution
+that the rule is window-sensitive, and exactly why the window is part of the snapshot identity
+rather than a constant somewhere.
+
+**A control that needs data forces the data layer to fetch it.** The sync window was
+`warmup_sessions(config)` — what the *signal* needs. A correlation veto measuring over 120
+sessions against a store holding 52 is permanently unmeasurable, refusing every order correctly
+and uselessly. The sync now fetches whichever consumer needs more.
+
+**`REQUIRE_COMPLETE`, with no pairwise-complete option**, because pairwise-complete computes each
+coefficient on whatever sample that pair happens to share and then presents them as comparable.
+
+Eleven protections, mutation-checked. Three needed isolated tests written before they were
+load-bearing: the existing thin-ledger test asserts a *superset* of refusals, so it stayed green
+whether or not the correlation guards fired.
+
 ## 7. Open items
 
 - [x] **Enable the implemented portfolio vetoes — done autonomously under #72/#75.** All five

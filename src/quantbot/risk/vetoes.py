@@ -48,6 +48,11 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from quantbot.domain import Position
 from quantbot.market_data.calendar import XNYS_TIMEZONE
+from quantbot.risk.dependence import (
+    DependenceSnapshot,
+    DependenceState,
+    build_dependence_state,
+)
 from quantbot.risk.exposure import (
     ExposureClassification,
     ExposureGroup,
@@ -85,12 +90,15 @@ class VetoName(StrEnum):
     #: Concentration in a mandate-defined exposure group (#59). Named for exposure rather
     #: than sector because sector alone cannot express that SPY and XLK are the same bet.
     EXPOSURE_CONCENTRATION = "EXPOSURE_CONCENTRATION"
-    #: Declared, unimplemented, blocked on a frozen covariance source (#59).
+    #: Concentration in a cluster of instruments that have recently *moved* together, as
+    #: opposed to sharing a mandate. Backed by a frozen point-in-time dependence snapshot (#59).
     CORRELATION_CONCENTRATION = "CORRELATION_CONCENTRATION"
 
 
-#: Vetoes with no evaluator behind them. Enabling one is refused rather than ignored.
-UNIMPLEMENTED: frozenset[VetoName] = frozenset({VetoName.CORRELATION_CONCENTRATION})
+#: Vetoes with no evaluator behind them. Empty since #58's correlation rule landed, and kept
+#: rather than deleted: the mechanism that refuses to enable an unimplemented veto is what stops
+#: a name from reading as a control, and it should be here waiting the next time one is declared.
+UNIMPLEMENTED: frozenset[VetoName] = frozenset()
 
 
 class PolicyAuthority(StrEnum):
@@ -198,6 +206,19 @@ class PortfolioVetoPolicy(VetoModel):
     #: an operator adopting the same numbers does not change which numbers they are.
     authority: PolicyAuthority = PolicyAuthority.PROJECT_DEFAULT
 
+    #: Pairwise correlation at or above which two instruments count as one bet, and the
+    #: ceiling on what a single such cluster may reach in basis points of equity.
+    #:
+    #: **0.90 is measured, not picked.** Over 120 sessions of daily log returns on this universe,
+    #: complete-linkage clustering at 0.90 yields `{IEF, LQD, TLT}` -- duration, and nothing else
+    #: larger. Below 0.85 the clusters begin absorbing most of the book, and the veto stops
+    #: distinguishing a concentrated roster from an ordinary one.
+    #:
+    #: 4000bps matches the exposure ceiling for the same reason: with `roster_size: 10` at
+    #: roughly equal weight it binds at four concurrent holdings inside one cluster.
+    correlation_threshold: Decimal = Field(default=Decimal("0.90"), gt=0, le=1)
+    max_correlated_cluster_bps: int = Field(default=4000, gt=0)
+
     #: Vetoes to enforce. Anything absent is not evaluated, which is a policy choice and is
     #: recorded in `identity` so a study can tell one policy from another.
     #:
@@ -218,6 +239,7 @@ class PortfolioVetoPolicy(VetoModel):
             VetoName.DAILY_LOSS,
             VetoName.LIQUIDITY,
             VetoName.EXPOSURE_CONCENTRATION,
+            VetoName.CORRELATION_CONCENTRATION,
         }
     )
 
@@ -286,6 +308,11 @@ class PortfolioVetoInputs(VetoModel):
     average_daily_volume: NonNegativeDecimal | None = None
     volume_sessions: int = Field(default=0, ge=0)
 
+    #: The correlated cluster this order would join, or `None` when no dependence snapshot was
+    #: supplied. `None` rejects: without a snapshot every cluster reads as empty, which is the
+    #: most permissive possible answer.
+    dependence: DependenceState | None = None
+
     #: Committed exposure per mandate-defined group, or `None` when no classification was
     #: supplied. `None` rejects: concentration measured against a table that is not there would
     #: report every group at zero, which is the most permissive possible answer.
@@ -319,6 +346,10 @@ class VetoRejection(VetoModel):
     expected_session: date | None = None
     observed_session: date | None = None
     market_state: str | None = None
+
+    #: The dependence snapshot a correlation refusal rested on (#58/#59), so a counterfactual
+    #: study can tell a refusal under one matrix from one under another.
+    dependence_snapshot_identity: str | None = None
 
 
 class PortfolioVetoDecision(VetoModel):
@@ -558,6 +589,66 @@ def _exposure_concentration(
     return None
 
 
+def _correlation_concentration(
+    inputs: PortfolioVetoInputs, policy: PortfolioVetoPolicy
+) -> VetoRejection | None:
+    """Refuse an order that would concentrate the book in one cluster of co-moving instruments.
+
+    This is the empirical sibling of `EXPOSURE_CONCENTRATION`. That one asks what an instrument
+    *is* by mandate; this asks what it has recently *done*. They disagree usefully: `HYG` carries
+    a credit mandate and correlates with `SPY` at 0.82, and only one of the two rules can see it.
+    """
+    if inputs.dependence is None:
+        return _reject(
+            VetoName.CORRELATION_CONCENTRATION,
+            policy,
+            f"no dependence snapshot was supplied for {inputs.symbol}, so the cluster this order "
+            "would join is unknown; an absent snapshot would otherwise report every cluster as "
+            "empty",
+            unmeasured="dependence_snapshot",
+        )
+    state = inputs.dependence
+    if state.unmeasured:
+        # A held position outside the snapshot understates its cluster's total, and an
+        # understated numerator is the permissive direction.
+        return _reject(
+            VetoName.CORRELATION_CONCENTRATION,
+            policy,
+            f"{', '.join(state.unmeasured)} has no measured dependence as of the snapshot, so "
+            "any cluster total that includes it understates what is actually committed",
+            unmeasured="UNMEASURED_SYMBOL",
+        )
+    if state.order_cluster is None:
+        return _reject(
+            VetoName.CORRELATION_CONCENTRATION,
+            policy,
+            f"{inputs.symbol} has no measured dependence, so the cluster this order would join "
+            "cannot be identified",
+            unmeasured="UNMEASURED_SYMBOL",
+        )
+    if inputs.order_net_exposure is None:
+        return _reject(
+            VetoName.CORRELATION_CONCENTRATION,
+            policy,
+            f"no reference price could be measured for {inputs.symbol}, so the value this order "
+            "would add to its cluster is unknown",
+            unmeasured="REFERENCE_PRICE_UNAVAILABLE",
+        )
+
+    projected = state.committed_in_cluster + abs(inputs.order_net_exposure)
+    ceiling = inputs.equity * Decimal(policy.max_correlated_cluster_bps) / BASIS_POINTS
+    if projected > ceiling:
+        return _reject(
+            VetoName.CORRELATION_CONCENTRATION,
+            policy,
+            f"{', '.join(state.order_cluster)} move together at or above {state.threshold} and "
+            f"would reach {projected} against a {ceiling} ceiling "
+            f"({policy.max_correlated_cluster_bps}bps of {inputs.equity})",
+            dependence_snapshot_identity=state.snapshot_identity,
+        )
+    return None
+
+
 #: Name to evaluator. A veto with no entry here cannot be enabled, which is checked by
 #: `PortfolioVetoPolicy` rather than discovered when it silently allows everything.
 _EVALUATORS = {
@@ -566,6 +657,7 @@ _EVALUATORS = {
     VetoName.STALE_MARKET_DATA: _stale_market_data,
     VetoName.LIQUIDITY: _liquidity,
     VetoName.EXPOSURE_CONCENTRATION: _exposure_concentration,
+    VetoName.CORRELATION_CONCENTRATION: _correlation_concentration,
 }
 
 
@@ -612,6 +704,8 @@ def build_veto_inputs(
     classification: ExposureClassification | None = None,
     sessions: Sequence[XNYSSession] = (),
     freshness_policy: MarketFreshnessPolicy | None = None,
+    dependence: DependenceSnapshot | None = None,
+    correlation_threshold: Decimal = Decimal("0.90"),
 ) -> PortfolioVetoInputs:
     """Assemble measured state from primitives the caller already holds.
 
@@ -674,6 +768,18 @@ def build_veto_inputs(
         ),
         # `None` when no classification was supplied, and the veto that needs it then rejects.
         # Defaulting to an empty table here would report every group at zero.
+        # `None` when no snapshot was supplied, and the veto then rejects. An absent matrix
+        # would otherwise report every cluster as empty.
+        dependence=(
+            None
+            if dependence is None
+            else build_dependence_state(
+                snapshot=dependence,
+                symbol=symbol,
+                positions=positions,
+                threshold=correlation_threshold,
+            )
+        ),
         exposure=(
             None
             if classification is None

@@ -67,6 +67,7 @@ from quantbot.risk import (
     observation_id,
     size_entry,
 )
+from quantbot.risk.dependence import DependenceSnapshot, build_dependence_snapshot
 from quantbot.risk.exposure import ExposureClassification, load_exposure_classification
 from quantbot.risk.shadow import session_of
 from quantbot.storage import Database, StorageRepository
@@ -334,6 +335,7 @@ class MarketDataSync:
         sessions: SessionCalendar,
         config: StrategyConfig,
         market_data: MarketDataSettings | None = None,
+        correlation_lookback_sessions: int = 120,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -341,6 +343,9 @@ class MarketDataSync:
         self._sessions = sessions
         self._config = config
         self._market_data = market_data or MarketDataSettings()
+        #: Kept in step with the runner's window on purpose. Fetching less than the correlation
+        #: veto measures over would leave that veto permanently unmeasurable.
+        self._correlation_lookback_sessions = correlation_lookback_sessions
         self._clock = clock
 
     async def sync(self) -> DataSyncResult:
@@ -350,7 +355,11 @@ class MarketDataSync:
         if completed is None:
             raise StrategyDataError("broker calendar contains no completed session")
 
-        needed = warmup_sessions(self._config)
+        # The strategy's warmup is not the only consumer of history any more. The correlation
+        # veto measures dependence over its own window, and a store holding only what the signal
+        # needs would leave that veto permanently unmeasurable -- refusing every order, correctly
+        # and uselessly. Whichever consumer needs more sessions decides how many are fetched.
+        needed = max(warmup_sessions(self._config), self._correlation_lookback_sessions)
         history = [
             session for session in calendar_sessions if session.close_at <= completed.close_at
         ]
@@ -416,6 +425,7 @@ class AdaptiveMomentumRunner:
         market_data: MarketDataSettings | None = None,
         veto_policy: PortfolioVetoPolicy | None = None,
         exposure_classification: ExposureClassification | None = None,
+        correlation_lookback_sessions: int = 120,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -433,6 +443,9 @@ class AdaptiveMomentumRunner:
         # every order, so enabling the control while leaving it unwired would have halted paper
         # trading in the name of protecting it.
         self._exposure = exposure_classification or load_exposure_classification()
+        # Sessions of history the correlation snapshot needs. 120 is what the measurement behind
+        # the 0.90 threshold used, so the rule and the window that justified it stay together.
+        self._correlation_lookback_sessions = correlation_lookback_sessions
         self._clock = clock
         self._run_id: str | None = None
 
@@ -455,6 +468,29 @@ class AdaptiveMomentumRunner:
                 symbol: repository.list_bars(symbol=symbol, provider=provider_key)
                 for symbol in self._config.universe
             }
+
+    def _dependence_snapshot(
+        self, histories: Mapping[str, list[Bar]], as_of: date
+    ) -> DependenceSnapshot | None:
+        """Pairwise dependence over the configured window, from point-in-time bars."""
+        closes: dict[str, dict[date, Decimal]] = {
+            symbol: {bar.timestamp.date(): bar.close for bar in bars}
+            for symbol, bars in histories.items()
+            if bars
+        }
+        if not closes:
+            return None
+        return build_dependence_snapshot(
+            closes=closes,
+            as_of_session=as_of,
+            lookback_sessions=self._correlation_lookback_sessions,
+            source=MarketDataCache.provider_key(
+                self._market_data.provider,
+                self._market_data.feed,
+                self._market_data.adjustment,
+                self._market_data.timeframe,
+            ),
+        )
 
     def _slice(self, histories: Mapping[str, list[Bar]], cutoff: datetime) -> dict[str, list[Bar]]:
         sliced: dict[str, list[Bar]] = {}
@@ -652,6 +688,10 @@ class AdaptiveMomentumRunner:
 
         histories = self._load_histories()
         sliced = self._slice(histories, evaluation_at)
+        # One snapshot per cycle, from the bars this cycle already read. Built from `sliced` so
+        # it sees only what was knowable at the decision, and `None` when the window cannot be
+        # filled -- `CORRELATION_CONCENTRATION` then refuses rather than assuming (#58/#59).
+        dependence = self._dependence_snapshot(sliced, evaluation_at.date())
         roster = self._roster(histories, calendar_sessions, evaluation_index + 1)
         sequence = sequence_for(self._config, calendar_sessions)
 
@@ -766,6 +806,7 @@ class AdaptiveMomentumRunner:
                             # evidence the decision saw changes (#57).
                             candidate_key=decision.bar_set_hash,
                             calendar_sessions=calendar_sessions,
+                            dependence=dependence,
                         )
 
                 if request is not None and repository.get_order_intent(
@@ -876,6 +917,7 @@ class AdaptiveMomentumRunner:
         opened_at: Mapping[str, datetime],
         candidate_key: str,
         calendar_sessions: Sequence[XNYSSession],
+        dependence: DependenceSnapshot | None,
     ) -> tuple[SubmissionRequest | None, tuple[str, ...]]:
         if decision_price is None or stop_distance is None or stop_distance <= 0:
             return None, ("ENTRY_INPUTS_UNAVAILABLE",)
@@ -939,6 +981,8 @@ class AdaptiveMomentumRunner:
                 # against the sessions the market actually completed rather than against a
                 # wall clock, so without this it refuses (#74).
                 sessions=calendar_sessions,
+                dependence=dependence,
+                correlation_threshold=self._veto_policy.correlation_threshold,
             ),
             self._veto_policy,
         )
