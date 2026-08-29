@@ -37,6 +37,11 @@ No AI agent may:
 
 Only the human operator may authorize future use of real capital.
 
+This boundary is about **actions**, not classifications. An agent may not enable live trading,
+supply credentials, or move money. An agent *may* conclude that a package is ready for a human to
+review with real capital in mind, provided the package states plainly what authority its success
+criteria carried (#72).
+
 ## Baseline
 
 Treat branch `version_01` as the preserved known-good baseline.
@@ -307,16 +312,67 @@ When completing an issue:
 
 Do not stop merely because one issue is complete.
 
-Stop only when:
+### A missing operator preference is not a blocker (#72)
 
-- There is a genuine human-only decision.
-- Required credentials/data/access are unavailable.
+This section previously said to stop when there was "a genuine human-only decision". In practice
+that sentence manufactured the decisions it was meant to respect: paper qualification waited on a
+ratified mandate, implemented risk controls shipped disabled pending threshold selection, capacity
+research waited on operator intent, and a data-mined candidate could dead-end waiting for someone
+to attest a number the system had already measured. The agent obeyed the stop rule instead of
+building the autonomous system the rule exists to serve.
+
+**Human authorization is required only at the real-capital boundary, and for access software
+cannot obtain.** Everything else — research, backtesting, shadow mode, paper trading, risk policy,
+model selection, statistical policy, runtime topology, ordinary implementation — proceeds on a
+default the agent selects and labels honestly.
+
+When a preference is unspecified:
+
+1. Do **not** stop if a conservative, reversible, versioned default can be chosen from existing
+   evidence or project constraints.
+2. Choose the safest reasonable default, record its provenance as a *project default*, version it,
+   test it, and continue.
+3. Prefer measured state over attestation wherever the fact can be established mechanically. A
+   durable measurement is stronger provenance than a person recalling a number.
+4. If several safe choices remain, pick one by an explicit deterministic rule and preserve the
+   alternatives for later comparison. Do not ask the operator to choose merely to unblock work.
+5. If one action cannot safely execute, continue everything that does not depend on it.
+6. A blocker stops the unsafe or impossible action, never the whole session.
+
+**Tiebreak for thresholds**, in order: an existing deployed value; a value implied by a constraint
+already written down; then the value that refuses more — a false refusal costs a missed paper
+trade, a false permit costs the thing the control exists to prevent.
+
+### A default is not an approval
+
+A default chosen autonomously must never be rendered as operator approval. Do not fabricate a
+signature, populate a ratification field, or describe an agent's choice as ratified. Where a human
+gate is removed, the artifact says a project default replaced it.
+
+`RATIFIED` and `ratified_by` remain unreachable from code. `PROJECT_DEFAULT` is the honest status
+for an agent-chosen mandate, and any artifact measured against one states that plainly, with its
+provenance and version, so a reader can tell what authority stands behind the number.
+
+Changing a default later creates a new version; prior evidence keeps the authority it was measured
+under and is never relabelled.
+
+### Stop only when
+
+- Enabling real-money trading, installing or using live broker credentials, or moving real capital.
+  This always requires explicit human authorization and no agent may produce it.
+- Required credentials, data or external access genuinely cannot be obtained by software.
 - Further work would compromise statistical validity.
-- A safety boundary prevents proceeding.
-- The remaining work requires information that cannot be responsibly inferred.
+- A destructive, irreversible action on operator state has no safe backup, rollback or
+  verification mechanism.
+- A fact is physically unavailable and cannot be responsibly inferred.
 - Your execution/session capacity is exhausted.
 
-When blocked, leave a precise GitHub note describing what is blocked, why, and the minimum operator action required.
+Reaching a stage that says a human *should look* — `LIVE_REVIEW_ELIGIBLE` — is not one of these. It
+is a research classification that grants no broker authority and moves no money, and requiring a
+human to enable it would make review a prerequisite for its own eligibility.
+
+When blocked, leave a precise GitHub note describing what is blocked and why, then continue with
+everything that does not depend on it.
 
 ## Ultimate Test
 

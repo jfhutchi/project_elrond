@@ -32,15 +32,28 @@ version: 1
 #   [PROPOSED]    an agent picked this number. It is defensible and it is not yet a decision
 #                 the operator has made.
 #
-# Nothing reaches PAPER_QUALIFIED or LIVE_REVIEW_ELIGIBLE while this says PROVISIONAL. Both are
-# statements that evidence cleared a bar, and neither is worth anything while the party writing
-# the bar is also the party announcing it was cleared.
+# STATUS IS PROJECT_DEFAULT, AND THAT IS NOT AN APPROVAL (#72).
 #
-# To ratify: set status to RATIFIED and fill ratified_by and ratified_at. `ratified_by` must be
-# a person -- a value that reads as an automated identity is refused at load. Ratifying does not
-# change the objective's identity hash, so evidence measured against these values stays valid;
-# changing any value above does, and forces reassessment.
-status: PROVISIONAL
+# These values are frozen and versioned, and the system chose them. That is enough to measure
+# evidence against, because what stops metric shopping is freezing the bar *before* the results,
+# not signing it -- an agent that cannot edit the criterion after seeing the outcome is as
+# constrained by an agent-written bar as by an operator-written one.
+#
+# What a signature would have told a reader is preserved instead as a label: every artifact
+# measured against this objective reports its `authority`, so a qualification claim says in plain
+# words that its criteria were chosen by the system rather than accepted by the operator. That is
+# strictly more informative than a gate, which only ever said "somebody touched this once".
+#
+# The earlier design required RATIFIED here and blocked PAPER_QUALIFIED without it. That
+# manufactured a deadlock: it also gated LIVE_REVIEW_ELIGIBLE, which is the stage meaning "a human
+# should look at this" -- so human review became a prerequisite for its own eligibility.
+#
+# To ratify: set status to RATIFIED and fill ratified_by and ratified_at. `ratified_by` must be a
+# person -- a value that reads as an automated identity is refused at load, and no code path in
+# this repository can produce RATIFIED. Ratifying does not change the objective's identity hash,
+# so evidence measured against these values stays valid; changing any value above does, and forces
+# reassessment.
+status: PROJECT_DEFAULT
 ratified_by: null
 ratified_at: null
 authored_by: "claude-opus-5, transcribed from STATUS.md sections 1-2 and CLAUDE.md"

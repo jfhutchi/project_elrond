@@ -1549,6 +1549,43 @@ The tests assert against the **bytes on disk** rather than the returned object, 
 not migrate" is a claim about the file. Six protections, mutation-checked, including the incident
 itself: a `status` command pointed at a behind-head store now fails and leaves the file byte-identical.
 
+## 6ii. A default is not an approval, and a missing preference is not a blocker (#72)
+
+**2026-08-29.** `MandateStatus.PROJECT_DEFAULT`, `EconomicObjective.authority`, and a rewritten
+stop policy in `CLAUDE.md`.
+
+**The deadlock was mine.** #54 established that an agent must not choose a success criterion after
+seeing results. That concern is real. What I built to enforce it was a human signature, and those
+are not the same thing — what defeats metric shopping is freezing and versioning the bar
+*beforehand*, which an agent-authored objective does exactly as well as a signed one. The
+signature requirement then spread: paper qualification waited on it, capacity assessment inherited
+it, and implemented risk controls shipped disabled pending threshold selection.
+
+**The circular part, which Sol caught and I had no answer to.** The requirement also gated
+`LIVE_REVIEW_ELIGIBLE` — the stage whose entire meaning is "a human should look at this". Reading
+the package is the event most likely to *produce* a ratification, so requiring ratification to
+enter the queue meant nothing could ever arrive to prompt one. Human review had become a
+prerequisite for its own eligibility.
+
+**What replaced the gate is a label, and it tells the reader more.** `PROJECT_DEFAULT` is frozen,
+versioned and honest about its authorship, and every artifact measured against an objective
+reports `authority` — so a qualification claim states plainly whether its criteria were chosen by
+the system or accepted by the operator. A gate only ever said "somebody touched this once".
+
+What did **not** move:
+
+- `RATIFIED` is unreachable from code. Promotion requires naming a human and a date, and an
+  identity reading as automated is refused — so the workaround of signing as the tool is closed.
+- A `PROVISIONAL` draft still certifies nothing. A criterion still being edited is not a criterion.
+- `LIVE_REVIEW_ELIGIBLE` is terminal and grants no broker authority. That assertion is what makes
+  opening the stage safe: reaching it cannot lead anywhere on its own.
+- Switching `TRADING_MODE` to live does not clear the boundary; the acknowledgement is separate.
+
+`tests/unit/test_autonomy_boundary.py` pins all of it against **reachability rather than wording**
+— a check that grepped for "operator" would flag the comments explaining why a boundary exists and
+train the next change to delete the explanation instead of the gate. Four protections,
+mutation-checked.
+
 ## 7. Open items
 
 - [ ] **Decide whether to enable `DAILY_LOSS` and `LIQUIDITY` portfolio vetoes — operator

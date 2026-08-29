@@ -134,20 +134,31 @@ def test_the_headline_is_the_capital_where_the_edge_dies() -> None:
     assert not crossing.positive
 
 
-def test_a_provisional_mandate_cannot_certify_capacity() -> None:
-    """Same rule as PAPER_QUALIFIED under #54: the agent may not own the definition of success.
+def test_a_draft_mandate_cannot_certify_capacity_but_a_project_default_can() -> None:
+    """Capacity needs a capital range that was frozen, not one that was signed (#72).
 
-    The intended capital range is one of the five values #54 marks `[PROPOSED]`, so a capacity
-    verdict measured against it is a claim about a range nobody outside the system chose.
+    The earlier rule required ratification, which imported #54's deadlock into a second module:
+    a capacity verdict could never be produced because the range it measured against was waiting
+    on a signature. What actually matters is that the range cannot be edited after the answer is
+    known -- true of a `PROJECT_DEFAULT`, not true of a draft.
     """
-    provisional = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
-    assert not provisional.ratified()
+    default = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
+    assert not default.ratified(), "still not an approval"
 
-    unratified = assess(objective=provisional)
+    measured = assess(objective=default)
+    assert measured.verdict is not CapacityVerdict.UNASSESSED
+    assert not any("PROJECT_DEFAULT" in item for item in measured.blocking)
 
-    assert unratified.verdict is CapacityVerdict.UNASSESSED
-    assert not unratified.supports_intended_capital
-    assert any("PROVISIONAL" in item for item in unratified.blocking)
+    # And the assessment can say what authority its capital range carried, which is what a
+    # reader needs instead of the gate.
+    assert "not approved by the operator" in default.authority
+
+    draft = default.model_copy(update={"status": MandateStatus.PROVISIONAL})
+    unusable = assess(objective=draft)
+
+    assert unusable.verdict is CapacityVerdict.UNASSESSED
+    assert not unusable.supports_intended_capital
+    assert any("PROVISIONAL" in item for item in unusable.blocking)
 
 
 def test_every_missing_input_blocks_rather_than_being_substituted() -> None:
