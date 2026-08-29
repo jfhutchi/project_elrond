@@ -64,12 +64,32 @@ DEFAULT_MANDATE_PATH = Path("config/economic-objective-v1.yaml")
 
 
 class MandateStatus(StrEnum):
-    #: Written down, not yet ratified. Freezes the objective; authorises nothing.
+    """Who stands behind the numbers this objective freezes.
+
+    The distinction that matters is **provenance, not permission** (#72). All three of the usable
+    states freeze the objective identically; what differs is what a reader should conclude when
+    they see evidence measured against one.
+    """
+
+    #: A draft. Freezes nothing anyone should rely on and backs no qualification claim.
     PROVISIONAL = "PROVISIONAL"
-    #: The operator has accepted it. Only this may back a live-review claim.
+    #: Chosen by the system, frozen, versioned, and honest about its authorship. Sufficient for
+    #: research, shadow and paper qualification -- the numbers are as fixed as a ratified
+    #: objective's, and a hurdle set before the evidence is still a hurdle. It is **not** an
+    #: approval, and anything measured against it says so.
+    PROJECT_DEFAULT = "PROJECT_DEFAULT"
+    #: A human accepted it. Never reachable from code, and never synthesised from
+    #: `PROJECT_DEFAULT`: a status an agent can write is not a signature.
     RATIFIED = "RATIFIED"
     #: A later version supersedes it. Kept because candidates assessed under it name it.
     SUPERSEDED = "SUPERSEDED"
+
+
+#: Statuses that may back a qualification claim. `PROVISIONAL` cannot, because a draft nobody
+#: froze deliberately is not a bar; `SUPERSEDED` cannot, because the project has moved on.
+USABLE_STATUSES: frozenset[MandateStatus] = frozenset(
+    {MandateStatus.PROJECT_DEFAULT, MandateStatus.RATIFIED}
+)
 
 
 class Objective(StrEnum):
@@ -214,34 +234,71 @@ class EconomicObjective(BaseModel):
         return f"economic-objective-v{self.version}-{self.content_hash[:16]}"
 
     def ratified(self) -> bool:
+        """Whether a *human* accepted this. Narrow on purpose, and not the qualification gate."""
         return self.status is MandateStatus.RATIFIED
+
+    def usable(self) -> bool:
+        """Whether evidence may be measured against this and reported as clearing a bar.
+
+        A project default qualifies. The reason the earlier design required ratification was that
+        an agent must not choose a success criterion *after* seeing results -- and that is solved
+        by freezing and versioning the objective beforehand, not by a signature. A frozen
+        agent-authored bar and a frozen human-authored one are equally resistant to metric
+        shopping; they differ in who to ask about the number, which is what `authority` reports.
+        """
+        return self.status in USABLE_STATUSES
+
+    @property
+    def authority(self) -> str:
+        """Who stands behind these numbers, for any artifact measured against them.
+
+        This is the safeguard that replaced the gate (#72). A reader of a qualification claim has
+        to be able to tell "measured against criteria a human accepted" from "measured against
+        criteria the system chose for itself", and the honest way to give them that is a label on
+        the result rather than a stop before it.
+        """
+        if self.status is MandateStatus.RATIFIED:
+            return f"RATIFIED by {self.ratified_by} on {self.ratified_at} ({self.identity})"
+        if self.status is MandateStatus.PROJECT_DEFAULT:
+            return (
+                f"PROJECT_DEFAULT authored by {self.authored_by} ({self.identity}) -- chosen by "
+                "the system, not approved by the operator"
+            )
+        return f"{self.status.value} ({self.identity})"
 
     def ratification_objections(self) -> tuple[str, ...]:
         """Why this mandate cannot back a claim that a strategy met the project's objective.
 
-        Read at both `PAPER_QUALIFIED` and `LIVE_REVIEW_ELIGIBLE`, because both are statements
-        that evidence cleared a bar and neither is safe while an agent still owns the bar. The
-        earlier design let qualification proceed on a provisional mandate and required
-        ratification only at the last rung; #54's review challenged that and was right --
-        `PAPER_QUALIFIED` is the label a dashboard, a later agent and an operator all read as
-        "the paper evidence supports this".
+        Read wherever evidence is reported as clearing a bar. What it objects to changed with
+        #72: a **draft** cannot back such a claim, and neither can a superseded objective, but a
+        frozen `PROJECT_DEFAULT` can.
 
-        Separated from `ratified()` because the caller needs the reason, not the boolean: an
-        operator told "not eligible" without being told the objective is still unratified will
-        go looking for a defect in the evidence.
+        The earlier version required human ratification here. That was the right instinct aimed
+        at the wrong target -- what makes a bar honest is being frozen and versioned before the
+        evidence, not being signed. Requiring a signature to reach `LIVE_REVIEW_ELIGIBLE` also
+        made human review a prerequisite for its own eligibility, since reviewing the package is
+        the event most likely to produce the ratification.
+
+        The provenance distinction did not disappear; it moved to `authority`, which every
+        artifact measured against this objective reports. A reader can then tell an
+        agent-authored bar from an operator-authored one, which a gate never told them anyway.
+
+        Separated from `usable()` because the caller needs the reason, not the boolean: an
+        operator told "not eligible" without being told the objective is still a draft will go
+        looking for a defect in the evidence.
         """
         if self.status is MandateStatus.SUPERSEDED:
             return (
                 f"{self.identity} is superseded; a candidate judged under it was judged against "
                 "an objective the project has since replaced",
             )
-        if not self.ratified():
+        if not self.usable():
             return (
-                f"{self.identity} is {self.status.value}: several of the values it freezes -- the "
-                "intended capital range, the minimum meaningful improvement, the turnover cap, "
-                "the evaluation horizon and the choice of objective itself -- are proposals an "
-                "agent wrote rather than decisions the operator made, and a hurdle set and "
-                "cleared by the same party is not a hurdle",
+                f"{self.identity} is {self.status.value}: the values it freezes -- the intended "
+                "capital range, the minimum meaningful improvement, the turnover cap, the "
+                "evaluation horizon and the choice of objective itself -- are a draft rather "
+                "than a bar anything was measured against. Freeze it as PROJECT_DEFAULT or have "
+                "the operator ratify it; a criterion still being edited is not a criterion",
             )
         return ()
 
@@ -275,6 +332,7 @@ def load_economic_objective(path: str | Path = DEFAULT_MANDATE_PATH) -> Economic
 __all__ = [
     "DEFAULT_MANDATE_PATH",
     "LIFECYCLE_FIELDS",
+    "USABLE_STATUSES",
     "EconomicObjective",
     "MandateError",
     "MandateStatus",

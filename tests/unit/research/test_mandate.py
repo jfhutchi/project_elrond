@@ -28,6 +28,17 @@ from quantbot.research.mandate import (
 REPOSITORY = Path(__file__).resolve().parents[3]
 
 
+def objective(**overrides: object) -> EconomicObjective:
+    """The shipped mandate with fields replaced, re-validated.
+
+    `model_copy` skips validation, and every test below is about a validator, so the payload is
+    round-tripped through `model_validate` instead.
+    """
+    payload = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH).model_dump(mode="json")
+    payload.update(overrides)
+    return EconomicObjective.model_validate(payload)
+
+
 def test_the_projects_objective_loads_and_says_what_it_is_optimising() -> None:
     """The shipped mandate is real, not an example."""
     frozen = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
@@ -41,22 +52,79 @@ def test_the_projects_objective_loads_and_says_what_it_is_optimising() -> None:
     assert frozen.minimum_meaningful_improvement_bps > 0
 
 
-def test_the_shipped_objective_is_not_yet_the_operators() -> None:
-    """`PROVISIONAL` is the honest state and it has consequences.
+def test_the_shipped_objective_is_usable_and_says_who_chose_it() -> None:
+    """`PROJECT_DEFAULT` is the honest state: frozen, versioned, and not an approval (#72).
 
-    An earlier version of this test said every value in the file was transcribed from STATUS.md
-    and CLAUDE.md, so freezing them was bookkeeping. #54's review disagreed and was right: the
-    capital range, the improvement threshold, the turnover cap, the horizon and the choice of
-    objective are proposals an agent wrote. Only the operator decides what this project is
-    optimising, and until they do, nothing here may claim to have met it.
+    This test has been rewritten twice and the history is the point. It first said the values
+    were transcribed and therefore bookkeeping; #54 disagreed and required ratification; that
+    requirement then blocked `PAPER_QUALIFIED` *and* `LIVE_REVIEW_ELIGIBLE`, which made human
+    review a prerequisite for its own eligibility.
+
+    What survives from #54 is the real concern: an agent must not pick a success criterion after
+    seeing the results. That is defeated by freezing and versioning the bar beforehand, not by a
+    signature. What a signature would have told a reader is carried as a label instead.
     """
     frozen = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
 
-    assert frozen.status is MandateStatus.PROVISIONAL
-    assert not frozen.ratified()
-    objections = frozen.ratification_objections()
-    assert objections, "an unratified objective must not back a human live-review claim"
+    assert frozen.status is MandateStatus.PROJECT_DEFAULT
+    assert frozen.usable(), "a frozen, versioned default is a bar evidence can be measured against"
+    assert not frozen.ratified(), "and it is still not an approval"
+    assert frozen.ratification_objections() == ()
+
+    # The safeguard that replaced the gate: anything measured against this must be able to say
+    # plainly that the system chose its own criteria.
+    assert "PROJECT_DEFAULT" in frozen.authority
+    assert "not approved by the operator" in frozen.authority
+    assert frozen.identity in frozen.authority
+
+
+def test_a_draft_still_cannot_certify_anything() -> None:
+    """Loosening the gate for project defaults must not loosen it for drafts.
+
+    `PROVISIONAL` means nobody froze this deliberately. Evidence measured against a criterion
+    still being edited is evidence against a moving target, which is the original defect.
+    """
+    draft = objective(status=MandateStatus.PROVISIONAL.value)
+
+    assert not draft.usable()
+    objections = draft.ratification_objections()
+    assert objections, "a draft must not back a qualification claim"
     assert "PROVISIONAL" in objections[0]
+    assert "not a criterion" in objections[0]
+
+
+def test_no_code_path_can_produce_a_ratified_mandate() -> None:
+    """The one thing #72 must not have loosened.
+
+    A status an agent can write is not a signature. `PROJECT_DEFAULT` exists precisely so nothing
+    ever needs to reach for `RATIFIED` to get work done, and the automated-ratifier check stops
+    the obvious workaround of signing as the tool.
+    """
+    for identity in ("claude", "claude-opus-5", "gpt-5.6 sol", "an agent", "a bot"):
+        with pytest.raises(ValueError, match="automated ratifier"):
+            objective(
+                status=MandateStatus.RATIFIED.value,
+                ratified_by=identity,
+                ratified_at="2026-08-29",
+            )
+
+    # And a default cannot be relabelled by flipping the status: promotion still has to name a
+    # human and a date, which is the part an agent cannot honestly supply.
+    with pytest.raises(ValueError, match="records who ratified it"):
+        objective(status=MandateStatus.RATIFIED.value)
+
+
+def test_a_project_default_cannot_hide_who_chose_the_numbers() -> None:
+    """A default whose provenance is unknown is an unattributed assertion, not a default.
+
+    The whole basis for letting one back a claim is that the artifact can say who chose the
+    numbers, so `authority` has to carry the author through to anything measured against it.
+    """
+    with pytest.raises(ValueError, match="at least 1 character"):
+        objective(status=MandateStatus.PROJECT_DEFAULT.value, authored_by="")
+
+    named = objective(status=MandateStatus.PROJECT_DEFAULT.value, authored_by="some-agent")
+    assert "some-agent" in named.authority
 
 
 def test_a_ratified_objective_clears_live_review_and_a_superseded_one_does_not() -> None:

@@ -1541,26 +1541,43 @@ def test_the_refutation_trigger_follows_lineage_rather_than_prose(ledger_db: Dat
     assert evidence.supported, evidence.explain()
 
 
-def test_the_last_rung_refuses_an_objective_the_operator_has_not_ratified() -> None:
-    """`LIVE_REVIEW_ELIGIBLE` is where the mandate's ratification starts to matter.
+def test_the_last_rung_refuses_a_draft_objective_but_not_a_project_default() -> None:
+    """What `LIVE_REVIEW_ELIGIBLE` needs from a mandate is that it was *frozen*, not signed (#72).
 
-    Everything below it can be judged against an objective transcribed from the project's own
-    documents. Putting a candidate in front of the operator *as satisfying their objective*
-    cannot: only they decide what this project is optimising, and the shipped mandate says
-    PROVISIONAL precisely so that this refuses rather than assuming.
+    The earlier rule required ratification here. It made human review a prerequisite for its own
+    eligibility: reaching the review queue is what would prompt an operator to ratify anything,
+    so nothing could ever arrive to prompt it. Nothing about this stage moves money, enables a
+    broker or authorises live trading -- it says a package is worth reading.
+
+    A draft still refuses, because a criterion still being edited is not a criterion. And the
+    provenance a signature used to carry is now on the package: `authority` says whether the bar
+    was the operator's or the system's, which a gate never told a reader anyway.
     """
     qualified = state(Stage.PAPER_QUALIFIED)
-    provisional = load_economic_objective()
-    assert not provisional.ratified()
+    default = load_economic_objective()
+    assert not default.ratified(), "the shipped mandate is still not an approval"
 
+    promoted = promote(
+        qualified,
+        Stage.LIVE_REVIEW_ELIGIBLE,
+        actor="director",
+        reason="every gate is clear",
+        now=NOW,
+        objective=default,
+    )
+    assert promoted.stage is Stage.LIVE_REVIEW_ELIGIBLE
+
+    draft = EconomicObjective.model_validate(
+        {**default.model_dump(mode="json"), "status": MandateStatus.PROVISIONAL.value}
+    )
     with pytest.raises(PromotionRefused, match="PROVISIONAL"):
         promote(
             qualified,
             Stage.LIVE_REVIEW_ELIGIBLE,
             actor="director",
-            reason="every gate is clear",
+            reason="measured against a moving target",
             now=NOW,
-            objective=provisional,
+            objective=draft,
         )
 
     with pytest.raises(PromotionRefused, match="no economic objective was supplied"):
@@ -1572,7 +1589,9 @@ def test_the_last_rung_refuses_an_objective_the_operator_has_not_ratified() -> N
             now=NOW,
         )
 
-    ratified = provisional.model_copy(
+    # A ratified objective also works, and is *not* required. The difference between the two is
+    # what `authority` reports, not whether the stage is reachable.
+    ratified = default.model_copy(
         update={
             "status": MandateStatus.RATIFIED,
             "ratified_by": "hutch",
@@ -1588,7 +1607,11 @@ def test_the_last_rung_refuses_an_objective_the_operator_has_not_ratified() -> N
         objective=ratified,
     )
     assert moved.stage is Stage.LIVE_REVIEW_ELIGIBLE
-    # Still terminal. Ratifying an objective does not create a destination past human review.
+    assert "RATIFIED by hutch" in ratified.authority
+    assert "not approved by the operator" in default.authority
+
+    # Still terminal, and reaching it grants nothing. `LIVE_REVIEW_ELIGIBLE` says a package is
+    # worth reading; it is not an authorization and has no destination past human review.
     assert ALLOWED_PROMOTIONS[Stage.LIVE_REVIEW_ELIGIBLE] == frozenset()
 
 
@@ -1883,15 +1906,24 @@ def test_a_gap_between_qualified_sessions_is_not_one_days_return(ledger_db: Data
     assert gapped.forward_days == MINIMUM_FORWARD_DAYS - 1
 
 
-def test_a_provisional_mandate_cannot_certify_its_own_success(
-    ledger_db: Database, ratified_objective: Path
+def test_a_draft_mandate_cannot_certify_its_own_success(
+    ledger_db: Database, ratified_objective: Path, tmp_path: Path
 ) -> None:
-    """#54: an agent that writes the hurdle may not also announce its evidence cleared it.
+    """A criterion still being edited is not a criterion (#54, as narrowed by #72).
 
-    The forward numbers are still computed and still reported -- observing continues and the
-    evidence accrues -- so this is not a refusal to measure. It is a refusal to call the
-    measurement a success against a definition of success nobody outside the system chose.
+    #54's concern was an agent writing the hurdle and announcing its own evidence cleared it.
+    What defeats that is freezing the bar before the evidence, which a `PROJECT_DEFAULT` does --
+    so qualification no longer waits on a signature. A `PROVISIONAL` draft still refuses, because
+    nothing froze it deliberately and the values can still move.
+
+    The forward numbers are computed and reported either way. This is not a refusal to measure.
     """
+    import yaml
+
+    draft_path = tmp_path / "draft-objective.yaml"
+    payload = yaml.safe_load((REPOSITORY / DEFAULT_MANDATE_PATH).read_text(encoding="utf-8"))
+    payload["status"] = "PROVISIONAL"
+    draft_path.write_text(yaml.safe_dump(payload), encoding="utf-8")
     with ledger_db.transaction() as session:
         seed_ledger(session, days=MINIMUM_FORWARD_DAYS)
         seed_prices(
@@ -1913,7 +1945,7 @@ def test_a_provisional_mandate_cannot_certify_its_own_success(
                 reason="my own bar, cleared",
                 now=NOW,
                 account_id=ACCOUNT,
-                objective_path=REPOSITORY / DEFAULT_MANDATE_PATH,
+                objective_path=draft_path,
             )
 
         # The measurement itself is unaffected: the numbers are the same, and everything except
