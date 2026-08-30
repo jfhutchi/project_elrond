@@ -340,6 +340,23 @@ class ModelResponse(FrozenModel):
     #: that cannot say it was produced under degradation cannot be weighed against one that was
     #: not.
     superseded: tuple[Text, ...] = ()
+    #: How many completions this runtime had already requested from this model when this one was
+    #: issued. 0 means this was the first.
+    #:
+    #: Recorded because the answer is not a function of the prompt alone. Measured 2026-08-30
+    #: against local Ollama with `mistral:7b` at `temperature=0`, on one fixed prompt: a call
+    #: issued to a freshly loaded model and the same call issued after one unrelated completion
+    #: return *different* analyses -- 26-37% of the confounders and falsification tests differ.
+    #: Each condition is itself perfectly reproducible (5/5 and 2/2 identical), and repeating the
+    #: call inside one warm session is identical 8/8. So the model is deterministic given its
+    #: preceding call history, and that history was nowhere in the provenance.
+    #:
+    #: The consequence is worse than the divergence. The obvious reproducibility check -- run it
+    #: again and compare -- is a *warm repeat*, so it always passes. The check that would catch
+    #: this is a rerun from a fresh process, which is the one nobody runs. An artifact that
+    #: cannot say what session position produced it cannot support a reproducibility claim, so
+    #: this field is provenance in the same sense `superseded` is (#18, #48).
+    session_call_index: int = Field(default=0, ge=0)
 
     @property
     def is_fallback(self) -> bool:
@@ -386,6 +403,9 @@ class ModelRuntime:
         self._transport = transport
         self._breaker = breaker or CircuitBreaker()
         self._timeout = timeout_seconds
+        # Per model, not per role: two roles pointing at one backend share its session state, so
+        # counting per role would report 0 for a call that was in fact the second.
+        self._calls_by_model: dict[str, int] = {}
 
     def resolve(
         self,
@@ -438,6 +458,8 @@ class ModelRuntime:
                     ) from error
                 continue
             self._breaker.record_success(spec)
+            issued = self._calls_by_model.get(spec.model, 0)
+            self._calls_by_model[spec.model] = issued + 1
             return ModelResponse(
                 spec=spec,
                 template=template,
@@ -448,6 +470,7 @@ class ModelRuntime:
                 produced_at=now,
                 chain_position=position,
                 superseded=tuple(attempted),
+                session_call_index=issued,
             )
         raise ModelUnavailable(f"{role.value} exhausted its chain: {'; '.join(attempted)}")
 
