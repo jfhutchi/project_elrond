@@ -37,6 +37,7 @@ from quantbot.storage.schema import (
     bars,
     broker_orders,
     capacity_assessments,
+    counterfactual_outcomes,
     equity_snapshots,
     fills,
     incidents,
@@ -620,6 +621,44 @@ class StorageRepository:
             )
             found.append((dict(row), [dict(reason) for reason in reasons]))
         return found
+
+    def record_counterfactual_outcome(self, outcome: Mapping[str, object]) -> bool:
+        """Store one counterfactual answer. Append-only; never amends the refusal (#57).
+
+        Returns False on an exact repeat. A repeat that *differs* under the same policy raises:
+        one hypothetical execution policy has one answer per refusal, and silently replacing it
+        would let a re-run overwrite a measurement with a different one.
+        """
+        outcome_id = str(outcome["outcome_id"])
+        existing = (
+            self._session.execute(
+                select(counterfactual_outcomes).where(
+                    counterfactual_outcomes.c.outcome_id == outcome_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return False
+        self._session.execute(counterfactual_outcomes.insert().values(**dict(outcome)))
+        return True
+
+    def list_counterfactual_outcomes(
+        self, *, observation_id: str | None = None, policy_identity: str | None = None
+    ) -> list[Mapping[str, object]]:
+        statement = select(counterfactual_outcomes).order_by(
+            counterfactual_outcomes.c.observation_id, counterfactual_outcomes.c.outcome_id
+        )
+        if observation_id is not None:
+            statement = statement.where(
+                counterfactual_outcomes.c.observation_id == observation_id
+            )
+        if policy_identity is not None:
+            statement = statement.where(
+                counterfactual_outcomes.c.policy_identity == policy_identity
+            )
+        return [dict(row) for row in self._session.execute(statement).mappings().all()]
 
     def record_market_regime_snapshot(self, snapshot: Mapping[str, object]) -> bool:
         """Store one regime reading. Idempotent by content-addressed id (#59).
