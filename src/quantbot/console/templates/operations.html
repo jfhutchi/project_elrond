@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% set title = "Operations" %}
+{% block body %}
+<h1>Operations</h1>
+<p class="sub">Is Elrond healthy, and does anything need you right now.</p>
+
+<h2>Needs attention</h2>
+{% if attention %}
+  <ul class="attention">
+    {% for item in attention %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+{% else %}
+  <p class="quiet">Nothing is blocked and nothing is unmeasured that should be measured.</p>
+{% endif %}
+
+<h2>State</h2>
+<div class="grid">
+  <div class="card">
+    <div class="k">Account equity</div>
+    {% if state.health.account_equity %}
+      <div class="v">${{ state.health.account_equity }}</div>
+      <div class="n">paper account</div>
+    {% else %}
+      <div class="v absent">not snapshotted</div>
+      <div class="n">no account snapshot exists — this is not $0</div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="k">Open positions</div>
+    <div class="v">{{ state.health.open_positions }}</div>
+  </div>
+  <div class="card">
+    <div class="k">Reconciliation</div>
+    {% if state.health.reconciliation_clean is none %}
+      <div class="v absent">never run</div>
+      <div class="n">an unrun check is not a passed one</div>
+    {% elif state.health.reconciliation_clean %}
+      <div class="v"><span class="pill pill--ok">CLEAN</span></div>
+    {% else %}
+      <div class="v"><span class="pill pill--crit">{{ state.health.reconciliation_diffs }} DIFFS</span></div>
+    {% endif %}
+  </div>
+  <div class="card">
+    <div class="k">Last cycle</div>
+    {% if state.health.last_run_at %}
+      <div class="v" style="font-size:1.05rem">{{ state.health.last_run_at.strftime("%Y-%m-%d %H:%M") }}</div>
+    {% else %}
+      <div class="v absent">never</div>
+    {% endif %}
+  </div>
+</div>
+
+<h2>Strategies</h2>
+{% if state.strategies %}
+<div class="scroll"><table>
+  <tr><th>Strategy</th><th>Stage</th><th>Claim</th><th>Updated</th><th>Reason</th></tr>
+  {% for row in state.strategies %}
+  <tr>
+    <td class="mono">{{ row.strategy_id }}</td>
+    <td><span class="pill {% if row.live_review_eligible %}pill--warn{% else %}pill--absent{% endif %}">{{ row.stage }}</span></td>
+    <td class="mono">{{ row.hypothesis_id or "—" }}</td>
+    <td>{{ row.updated_at.strftime("%Y-%m-%d") if row.updated_at else "—" }}</td>
+    <td class="quiet">{{ row.reason or "" }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="quiet" style="margin-top:.75rem">
+  <code class="mono">LIVE_REVIEW_ELIGIBLE</code> is a research classification and the terminal
+  stage. It grants no broker authority, and no stage in this ladder leads to trading real capital.
+</p>
+{% else %}
+  <p class="quiet">No strategy has been promoted yet.</p>
+{% endif %}
+{% endblock %}

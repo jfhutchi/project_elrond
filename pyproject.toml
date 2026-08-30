@@ -9,6 +9,14 @@ description = "Safety-first quantitative trading foundation"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.16,<2",
+    # The operator console (#82). FastAPI because every policy object in this project is already
+    # a Pydantic model, so `model_json_schema()` *is* the schema-driven form requirement and
+    # OpenAPI makes "explicit, versioned application APIs" true by construction rather than by
+    # discipline. Jinja2 renders server-side: no npm, no second lockfile, no Node CI job, and a
+    # research store that will outgrow the browser wants pagination rather than virtualisation.
+    "fastapi>=0.115,<1",
+    "jinja2>=3.1,<4",
+    "uvicorn>=0.34,<1",
     "httpx>=0.28,<1",
     "pydantic>=2.12,<3",
     "pydantic-settings>=2.11,<3",

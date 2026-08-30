@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% set title = "Risk" %}
+{% block body %}
+<h1>Risk</h1>
+<p class="sub">
+  The policy in force, and what it refused. Hard vetoes stay hard regardless of what this page
+  shows.
+</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="k">Policy</div>
+    <div class="v mono" style="font-size:.9rem">{{ state.risk.policy_identity }}</div>
+    <div class="n">version {{ state.risk.policy_version }} · authority {{ state.risk.authority }}</div>
+  </div>
+  <div class="card">
+    <div class="k">Vetoes enabled</div>
+    <div class="v">{{ state.risk.enabled_vetoes|length }}</div>
+    <div class="n">
+      {% if state.risk.unimplemented_vetoes %}
+        <span class="pill pill--crit">
+          {{ state.risk.unimplemented_vetoes|join(", ") }} declared with no evaluator
+        </span>
+      {% else %}
+        every enabled veto has an evaluator behind it
+      {% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="k">Refusals recorded</div>
+    <div class="v">{{ state.risk.recent_refusals }}</div>
+    <div class="n">candidates, not reasons — one candidate refused by four rules is one event</div>
+  </div>
+</div>
+
+<h2>Enforced</h2>
+<div class="scroll"><table>
+  <tr><th>Veto</th><th>Refusals</th></tr>
+  {% for veto in state.risk.enabled_vetoes %}
+  <tr>
+    <td class="mono">{{ veto }}</td>
+    <td>{{ state.risk.refusals_by_gate.get(veto, 0) }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="quiet" style="margin-top:.75rem">
+  Counts here are reasons per gate and will exceed the candidate count above. The two are
+  different numbers, and treating the larger as a sample size is how a gate looks better tested
+  than it is.
+</p>
+{% endblock %}

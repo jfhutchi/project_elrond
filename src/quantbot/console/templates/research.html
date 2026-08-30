@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% set title = "Research" %}
+{% block body %}
+<h1>Research</h1>
+<p class="sub">Where each strategy sits, and what its evidence actually supports.</p>
+
+{% if state.strategies %}
+<div class="scroll"><table>
+  <tr><th>Strategy</th><th>Stage</th><th>Bound claim</th><th>Updated</th></tr>
+  {% for row in state.strategies %}
+  <tr>
+    <td class="mono">{{ row.strategy_id }}</td>
+    <td><span class="pill pill--absent">{{ row.stage }}</span></td>
+    <td class="mono">{{ row.hypothesis_id or "—" }}</td>
+    <td>{{ row.updated_at.strftime("%Y-%m-%d") if row.updated_at else "—" }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+{% else %}
+<p class="quiet">Nothing has been promoted.</p>
+{% endif %}
+
+<h2>Standing position</h2>
+<p class="quiet">
+  No benchmark-relative excess has been measured for a deployed strategy, so nothing on this page
+  should be read as evidence of an edge. Engineering completion, green tests and a promoted stage
+  are not profitability, and this console will not present them as such.
+</p>
+{% endblock %}

@@ -42,6 +42,7 @@ uv run quantbot doctor
 |---|---|
 | `quantbot create-database` | Bootstrap a new store. The only command that creates one |
 | `quantbot migrate-database` | Upgrade an existing store. The only command that rewrites one |
+| `quantbot console` | Read-only operator console on http://127.0.0.1:8787 |
 | `quantbot config` | Every setting in force, its source, and why it is immutable |
 | `quantbot status` | Durable state: kill switch, last run, reconciliation |
 | `quantbot doctor` | Preflight checks against config, ledger and broker |

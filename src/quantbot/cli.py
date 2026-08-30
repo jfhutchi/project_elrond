@@ -76,6 +76,12 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # #82 slice 1. Read-only by construction: this command reports what is in force and why
     # it cannot be changed here, which is the whole of what the registry can honestly offer
     # before a control plane exists.
+    # #82 slice 2. Read-only, and bound to loopback by default: a console is not implicitly
+    # trustworthy merely because it is local, and the default that refuses more is the one that
+    # is not reachable from the network at all.
+    console = commands.add_parser("console")
+    console.add_argument("--host", default=None, help="default 127.0.0.1; widen deliberately")
+    console.add_argument("--port", type=int, default=None)
     config_view = commands.add_parser("config")
     config_view.add_argument(
         "--subsystem", help="limit to one subsystem, e.g. risk, broker, safety, market-data"
@@ -189,6 +195,29 @@ def _durable_reconciliation_successful(database: Database) -> bool:
     return (
         latest is not None and latest.status is ReconciliationStatus.RECONCILED and not latest.diffs
     )
+
+
+def _console(args: argparse.Namespace, stream: TextIO) -> int:
+    """Serve the read-only operator console (#82).
+
+    Opens the configured store through the ordinary path, so a missing one fails with #86's
+    actionable error rather than being created by a web process.
+    """
+    import uvicorn
+
+    from quantbot.console.app import DEFAULT_HOST, DEFAULT_PORT, create_app
+    from quantbot.storage import Database
+
+    path = Path(os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    host = args.host or DEFAULT_HOST
+    port = args.port or DEFAULT_PORT
+    database = Database(path)
+    try:
+        print(f"read-only console on http://{host}:{port} reading {path}", file=stream)
+        uvicorn.run(create_app(database), host=host, port=port, log_level="warning")
+    finally:
+        database.close()
+    return 0
 
 
 def _config(args: argparse.Namespace, stream: TextIO) -> int:
@@ -337,6 +366,8 @@ def main(
         # this command is for is precisely the one that cannot be opened. A migration command
         # that needed a successful open would be unreachable exactly when it was needed.
         return _migrate_database(args, stream)
+    if args.command == "console":
+        return _console(args, stream)
     if args.command == "config":
         # Before the context, like the database commands: reporting configuration must not
         # require a working database, since a misconfigured store is one of the things an
