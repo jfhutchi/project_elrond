@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set title = "Market data" %}
+{% block body %}
+<h1>Market data</h1>
+<p class="sub">What the feed can actually see. Limited feed semantics are never hidden.</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="k">Feed</div>
+    <div class="v" style="font-size:1.1rem">{{ state.market_data.feed }}</div>
+    <div class="n">adjustment {{ state.market_data.adjustment }}</div>
+  </div>
+  <div class="card">
+    <div class="k">Volume coverage</div>
+    <div class="v">
+      <span class="pill {% if state.market_data.supports_volume_triggers %}pill--ok{% else %}pill--warn{% endif %}">
+        {{ state.market_data.volume_coverage }}
+      </span>
+    </div>
+    <div class="n">
+      {% if state.market_data.supports_volume_triggers %}
+        consolidated tape
+      {% else %}
+        these prints are a sample of consolidated volume, not a measure of it
+      {% endif %}
+    </div>
+  </div>
+  <div class="card">
+    <div class="k">Stored symbols</div>
+    <div class="v">{{ state.market_data.stored_symbols }}</div>
+  </div>
+  <div class="card">
+    <div class="k">Latest session</div>
+    {% if state.market_data.latest_session %}
+      <div class="v" style="font-size:1.1rem">{{ state.market_data.latest_session }}</div>
+    {% else %}
+      <div class="v absent">no bars stored</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if not state.market_data.supports_volume_triggers %}
+<h2>Measured limitation</h2>
+<p class="quiet">
+  Against the consolidated tape over 2021–2026, a volume-shock trigger on this feed scored
+  <strong>36.6% precision and 22.8% recall</strong>, and this venue's share of consolidated volume
+  drifted 3.6× across the same window. Volume-derived anomaly detection is therefore refused on
+  this feed rather than run and labelled. Price-derived detection is unaffected: the same
+  comparison scored 96.3% precision and 99.0% recall.
+</p>
+{% endif %}
+{% endblock %}

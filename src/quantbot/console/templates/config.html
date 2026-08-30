@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% set title = "Configuration" %}
+{% block body %}
+<h1>Configuration</h1>
+<p class="sub">
+  Every operator-relevant setting, its effective value, where it came from, and why it cannot be
+  changed here. Nothing on this surface is runtime-mutable.
+</p>
+
+<div class="scroll"><table>
+  <tr>
+    <th>Subsystem</th><th>Key</th><th>Effective</th><th>Source</th><th>Class</th>
+    <th>Why immutable</th>
+  </tr>
+  {% for row in state.settings %}
+  <tr>
+    <td class="quiet">{{ row.subsystem }}</td>
+    <td class="mono">{{ row.key }}</td>
+    <td class="mono">
+      {% if row.effective_value is none %}
+        <span class="absent">unset</span>
+      {% else %}
+        {{ row.effective_value }}
+      {% endif %}
+    </td>
+    <td class="quiet">{{ row.source.value }}</td>
+    <td>
+      {% if row.safety_class.value == "CAPITAL_BOUNDARY" %}
+        <span class="pill pill--crit">{{ row.safety_class.value }}</span>
+      {% elif row.safety_class.value == "CREDENTIAL" %}
+        <span class="pill pill--warn">{{ row.safety_class.value }}</span>
+      {% else %}
+        <span class="pill pill--absent">{{ row.safety_class.value }}</span>
+      {% endif %}
+    </td>
+    <td class="quiet">{{ row.immutable_reason }}</td>
+  </tr>
+  {% endfor %}
+</table></div>
+
+<h2>Secrets</h2>
+<p class="quiet">
+  Credential values are never sent to this page. They are recognised by type rather than by name,
+  so a field nobody added to a pattern list still cannot leak. Account identifiers are reported as
+  configured or unset and never reproduced.
+</p>
+{% endblock %}

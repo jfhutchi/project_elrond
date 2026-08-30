@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% set title = "Capacity" %}
+{% block body %}
+<h1>Capacity</h1>
+<p class="sub">Whether an edge would survive the capital it would actually be traded at.</p>
+
+{% if state.capacity.verdict %}
+<div class="grid">
+  <div class="card">
+    <div class="k">Verdict</div>
+    <div class="v">
+      <span class="pill {% if state.capacity.verdict == 'SURVIVES_MANDATE' %}pill--ok{% else %}pill--warn{% endif %}">
+        {{ state.capacity.verdict }}
+      </span>
+    </div>
+    <div class="n">{{ state.capacity.strategy_id }} · as of {{ state.capacity.as_of }}</div>
+  </div>
+  <div class="card">
+    <div class="k">Binding instrument</div>
+    <div class="v" style="font-size:1.1rem">{{ state.capacity.binding_symbol or "—" }}</div>
+    <div class="n">{{ state.capacity.binding_constraint or "nothing binds inside the mandate" }}</div>
+  </div>
+</div>
+{% if state.capacity.modelled_inputs %}
+<h2>Modelled inputs</h2>
+<p class="quiet">
+  This verdict rests partly on versioned project defaults rather than measurements:
+  <strong>{{ state.capacity.modelled_inputs|join(", ") }}</strong>. An empty list would be the
+  strong claim that every input was observed.
+</p>
+{% endif %}
+{% else %}
+<div class="card">
+  <div class="k">Verdict</div>
+  <div class="v absent">UNASSESSED</div>
+  <div class="n">
+    No capacity assessment has been persisted for a qualified strategy. This is a fact about the
+    store rather than about an open issue, and it is not a passing check.
+  </div>
+</div>
+{% endif %}
+{% endblock %}
