@@ -194,7 +194,57 @@ def load_or_create_identity(
     )
     with database.transaction() as session:
         StorageRepository(session).save_strategy_deployment(identity)
+    _enter_promotion_ladder(database, identity, now=now)
     return identity
+
+
+def _enter_promotion_ladder(
+    database: Database, identity: StrategyIdentity, *, now: datetime
+) -> None:
+    """Put a newly deployed strategy on the promotion ladder at `CANDIDATE`.
+
+    `PromotionLedger` was called by nothing outside its own tests, so no strategy was ever on the
+    ladder in a real store. A strategy that is not on the ladder cannot be reasoned about by any
+    of the gates that judge it, and the console reads `list_promotions()` directly -- so the
+    absence showed up as an empty panel rather than as an error.
+
+    `CANDIDATE` claims nothing. `enter()` refuses an economic stage outright, precisely so that
+    getting onto the ladder can never be mistaken for having earned a position on it: every
+    economic stage is reached through `promote()`, which reads the forward ledger.
+
+    Deliberately only entry. Automatic promotion is a separate decision, recorded on #46: a
+    promoter written before any forward evidence exists could only be tested against fixtures,
+    which is the condition that produced this defect class nine times over.
+
+    Idempotent by refusal. `enter()` rejects a strategy already on the ladder rather than
+    upserting, because re-entering would discard everything it had earned through the same call
+    that legitimately starts one. A restart re-uses the stored identity and never reaches here,
+    but a store that somehow has the position already must not be reset by a deployment.
+    """
+    from quantbot.research.promotion import (
+        PromotionLedger,
+        PromotionRefused,
+        PromotionState,
+        Stage,
+    )
+
+    try:
+        with database.transaction() as session:
+            PromotionLedger(session).enter(
+                PromotionState(
+                    strategy_id=identity.strategy_id,
+                    stage=Stage.CANDIDATE,
+                    strategy_version=identity.version,
+                    configuration_hash=identity.configuration_hash,
+                    reason="deployed; entering the ladder at the stage that claims nothing",
+                    actor="runtime",
+                    updated_at=now,
+                )
+            )
+    except PromotionRefused:
+        # Already on the ladder. Not an error: the strategy is where it should be, and this call
+        # exists to establish that rather than to move it.
+        return
 
 
 @dataclass(slots=True)
