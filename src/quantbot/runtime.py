@@ -56,6 +56,7 @@ from quantbot.operations import (
     DaemonRunner,
     DataFreshness,
     HealthInputs,
+    KillSwitchController,
     LedgerSyncingRecovery,
     MarketDataSettings,
     MarketDataSync,
@@ -65,7 +66,9 @@ from quantbot.operations import (
     ReadinessEvidence,
     RunOnceCycle,
     SessionCalendar,
+    SessionObserver,
     StrategyDataError,
+    WakeKind,
     evaluate_operational_health,
     measure_readiness,
 )
@@ -276,6 +279,22 @@ class Runtime:
     veto_version: PolicyVersion
     #: Whether that version was read from the store or written as version 1 on first sight.
     veto_source: PolicySource
+
+    def observer(self) -> SessionObserver:
+        """The market-hours pass. Deliberately built without a submitter or a strategy runner.
+
+        Compare `cycle()` directly above: it takes `submitter=self.coordinator` and
+        `strategy=self.strategy`, and this takes neither. That difference is the safety property,
+        not a comment about one -- there is no route from an observation to an order.
+        """
+        return SessionObserver(
+            database=self.database,
+            recovery=self.recovery,
+            data_sync=self.data_sync,
+            kill_switch=KillSwitchController(self.database),
+            metrics=self.metrics,
+            max_data_age_seconds=max_data_age_seconds(),
+        )
 
     def cycle(self) -> RunOnceCycle:
         return RunOnceCycle(
@@ -570,7 +589,18 @@ class _SignalStop:
 
 
 async def _daemon(runtime: Runtime) -> dict[str, object]:
-    async def cycle(moment: datetime) -> object:
+    observer = runtime.observer()
+
+    async def cycle(moment: datetime, kind: WakeKind) -> object:
+        """Dispatch on what the daemon woke up to do.
+
+        An `OBSERVE` wake runs the authoritative safety checks and records a heartbeat. It cannot
+        submit an order, because `observer` has nothing to submit through. A `CYCLE` wake is the
+        after-close run, unchanged.
+        """
+        if kind is WakeKind.OBSERVE:
+            clock = await runtime.broker.get_market_clock()
+            return await observer.observe(now=moment, market_open=clock.is_open)
         return await _run_once(runtime, moment=moment)
 
     async def sleeper(delay: Decimal) -> None:

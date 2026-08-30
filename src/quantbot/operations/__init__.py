@@ -10,7 +10,15 @@ from quantbot.operations.cycle import (
     SubmissionRequest,
     authorize_paper_smoke,
 )
-from quantbot.operations.daemon import DaemonResult, DaemonRunner, next_cycle_at
+from quantbot.operations.daemon import (
+    OBSERVATION_INTERVAL,
+    DaemonResult,
+    DaemonRunner,
+    Wake,
+    WakeKind,
+    next_cycle_at,
+    next_wake,
+)
 from quantbot.operations.health import (
     DataFreshness,
     HealthInputs,
@@ -24,6 +32,12 @@ from quantbot.operations.kill_switch import (
     ReadinessEvidence,
 )
 from quantbot.operations.metrics import OperationalMetrics
+from quantbot.operations.observation import (
+    ObservationOutcome,
+    SessionObservation,
+    SessionObserver,
+    observation_id,
+)
 from quantbot.operations.qualification import (
     QualificationAssessment,
     QualificationPolicy,
@@ -49,6 +63,14 @@ __all__ = [
     "CycleResult",
     "CycleStrategyResult",
     "DaemonResult",
+    "Wake",
+    "WakeKind",
+    "OBSERVATION_INTERVAL",
+    "SessionObserver",
+    "SessionObservation",
+    "ObservationOutcome",
+    "next_wake",
+    "observation_id",
     "DaemonRunner",
     "DataFreshness",
     "DataSyncResult",

@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
@@ -23,7 +25,36 @@ class ClockProvider(Protocol):
 
 
 DaemonSleeper = Callable[[Decimal], Awaitable[None]]
-DaemonCycle = Callable[[datetime], Awaitable[object]]
+
+
+class WakeKind(StrEnum):
+    """What the daemon woke up to do."""
+
+    #: A market-hours pass over the authoritative safety checks. Cannot trade -- see
+    #: `operations/observation.py`, where the inability is structural rather than a flag.
+    OBSERVE = "OBSERVE"
+    #: The after-close cycle that evaluates the strategy and may submit orders. Its cadence is
+    #: deliberately unchanged: the deployed strategy was qualified on daily bars evaluated after
+    #: the close, and evaluating it intraday would be a different strategy carrying forward
+    #: qualification evidence it never earned.
+    CYCLE = "CYCLE"
+
+
+DaemonCycle = Callable[[datetime, WakeKind], Awaitable[object]]
+
+#: How often the daemon looks at a live session.
+#:
+#: `PROJECT_DEFAULT` v1, chosen 2026-08-30 under CLAUDE.md's rule that an unspecified operator
+#: preference is not a blocker. Not an operator ratification.
+#:
+#: The tiebreak did not resolve it from an existing value, so the reasoning is recorded instead.
+#: `DEFAULT_MAX_DATA_AGE_SECONDS` is 86,400 -- a bound on daily bars, not an intraday one, so
+#: sampling against it would give a twelve-hour interval and detect nothing within a session. 15
+#: minutes gives 26 passes over a 6.5-hour session at a handful of read-only API calls each,
+#: which is far below any broker rate limit and fine enough that an outage is visible within the
+#: session rather than after it. Lower costs calls for resolution nothing needs; much higher and
+#: a session can end before anything notices it went wrong.
+OBSERVATION_INTERVAL = timedelta(minutes=15)
 
 
 class DaemonResult(OperationsModel):
@@ -46,6 +77,42 @@ def next_cycle_at(
     if target <= normalized:
         raise ValueError("broker market clock does not provide a future close")
     return target
+
+
+@dataclass(frozen=True, slots=True)
+class Wake:
+    """When the daemon should next act, and which act it is."""
+
+    at: datetime
+    kind: WakeKind
+
+
+def next_wake(
+    clock: MarketClock,
+    now: datetime,
+    *,
+    after_close_delay: timedelta = timedelta(minutes=5),
+    observation_interval: timedelta = OBSERVATION_INTERVAL,
+) -> Wake:
+    """The next thing to do: watch the open session, or run the after-close cycle.
+
+    While the market is closed this is exactly the old behaviour -- sleep until after the next
+    close. That is deliberate: the trading cycle's cadence does not change, and a daemon started
+    overnight behaves as it always did.
+
+    While the market is open the daemon wakes at `observation_interval` instead, unless the close
+    arrives first. The close always wins the comparison, so an observation can never displace the
+    cycle or push it past its slot.
+    """
+    if observation_interval <= timedelta(0):
+        raise ValueError("observation_interval must be positive")
+    close_target = next_cycle_at(clock, now, after_close_delay=after_close_delay)
+    if not clock.is_open:
+        return Wake(at=close_target, kind=WakeKind.CYCLE)
+    observe_at = now.astimezone(UTC) + observation_interval
+    if observe_at < close_target:
+        return Wake(at=observe_at, kind=WakeKind.OBSERVE)
+    return Wake(at=close_target, kind=WakeKind.CYCLE)
 
 
 class DaemonRunner:
@@ -81,12 +148,12 @@ class DaemonRunner:
             while not stop.is_set():
                 clock = await self._clock_provider.get_market_clock()
                 current = now()
-                target = next_cycle_at(clock, current)
-                delay = Decimal(str((target - current.astimezone(UTC)).total_seconds()))
+                wake = next_wake(clock, current)
+                delay = Decimal(str((wake.at - current.astimezone(UTC)).total_seconds()))
                 await self._sleeper(delay)
                 if stop.is_set():
                     break
-                await self._cycle(target)
+                await self._cycle(wake.at, wake.kind)
                 completed += 1
                 self._metrics.increment("quantbot_daemon_cycles_total")
         return DaemonResult(cycles_completed=completed, stopped_cleanly=True)
