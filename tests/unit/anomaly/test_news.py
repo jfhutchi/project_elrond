@@ -40,23 +40,35 @@ class Response:
 
 
 class Transport:
-    """Records what was asked, and answers with whatever the test supplies."""
+    """Records every call, and answers with a sequence.
 
-    def __init__(self, response: object) -> None:
-        self._response = response
-        self.params: dict[str, str] = {}
-        self.calls = 0
+    A sequence rather than one response because an empty lookback now provokes a second,
+    different question -- "does this source cover this symbol at all" -- and a stub answering both
+    identically could not tell a silence from a coverage gap, which is the distinction under test.
+    """
+
+    def __init__(self, *responses: object) -> None:
+        self._responses = list(responses)
+        self.requests: list[dict[str, str]] = []
+
+    @property
+    def calls(self) -> int:
+        return len(self.requests)
 
     async def request(self, method: str, url: str, *, headers, params, timeout_seconds) -> Any:
-        self.calls += 1
-        self.params = dict(params)
-        if isinstance(self._response, Exception):
-            raise self._response
-        return self._response
+        self.requests.append(dict(params))
+        response = (
+            self._responses[len(self.requests) - 1]
+            if len(self.requests) <= len(self._responses)
+            else self._responses[-1]
+        )
+        if isinstance(response, Exception):
+            raise response
+        return response
 
 
-def source(response: object) -> tuple[AlpacaNewsSource, Transport]:
-    transport = Transport(response)
+def source(*responses: object) -> tuple[AlpacaNewsSource, Transport]:
+    transport = Transport(*responses)
     return (
         AlpacaNewsSource(
             transport, api_key="k", api_secret="s", timeout_seconds=Decimal("5")
@@ -99,8 +111,11 @@ async def test_the_query_is_bounded_at_the_observation() -> None:
 
     await fetch(news)
 
-    assert transport.params["end"] == "2026-03-16T21:00:00Z"
-    assert transport.params["start"] == "2026-03-14T21:00:00Z"
+    assert transport.requests[0]["end"] == "2026-03-16T21:00:00Z"
+    assert transport.requests[0]["start"] == "2026-03-14T21:00:00Z"
+    # The coverage probe is bounded at the observation too. A baseline running past the event
+    # would establish coverage using items the decision could not have seen.
+    assert transport.requests[1]["end"] == "2026-03-16T21:00:00Z"
 
 
 # --- every way of not answering ---------------------------------------------------------------
@@ -176,14 +191,19 @@ async def test_asking_about_no_symbols_is_not_a_lookup() -> None:
 
 
 @pytest.mark.asyncio
-async def test_a_healthy_empty_answer_is_a_finding() -> None:
-    """The one case that may support `NO_PUBLIC_CATALYST_FOUND`: asked, answered, nothing there."""
-    news, _ = source(Response(200, {"news": []}))
+async def test_a_healthy_empty_answer_is_a_finding_when_the_symbol_is_covered() -> None:
+    """The one case that may support `NO_PUBLIC_CATALYST_FOUND`.
+
+    Asked, answered, nothing in the window -- and the source demonstrably covers the symbol, so
+    its silence is about the world rather than about its own tagging.
+    """
+    news, transport = source(Response(200, {"news": []}), Response(200, {"news": [item()]}))
 
     result = await fetch(news)
 
     assert result.health is SourceHealth.HEALTHY
     assert result.candidates == ()
+    assert transport.calls == 2, "the coverage probe ran"
 
     assessment = assess_catalysts(
         anomaly_event_id="anomaly-1", observed_at=OBSERVED, sources=[result]
@@ -253,3 +273,82 @@ def test_a_body_without_a_news_list_yields_nothing() -> None:
     """A shape change fails here rather than three layers away."""
     assert candidates_from_payload({}, retrieved_at=RETRIEVED) == ()
     assert candidates_from_payload({"news": "unexpected"}, retrieved_at=RETRIEVED) == ()
+
+
+# --- coverage: a source that never mentions a symbol cannot be silent about it ----------------
+#
+# Measured 2026-08-30 over the live v1-3 ETF universe. Items returned in a trailing year:
+# XLU 50 (page cap), EEM 33, VNQ 27, EFA 3, MDY 1. Single-name controls hit the cap in a month.
+# Without the gate below, NO_PUBLIC_CATALYST_FOUND would be emitted for every MDY anomaly
+# forever -- and since that outcome is defined as the *interesting* case, the least covered
+# instruments would generate the most apparent discoveries.
+
+
+@pytest.mark.asyncio
+async def test_an_uncovered_symbol_cannot_support_a_negative_finding() -> None:
+    """The measurement turned into a mechanism.
+
+    An empty lookback *and* an empty baseline means this provider does not cover the symbol.
+    Reporting that as silence would be a claim about a vendor's tagging dressed as a claim about
+    the world.
+    """
+    news, transport = source(Response(200, {"news": []}), Response(200, {"news": []}))
+
+    result = await fetch(news, symbols=("MDY",))
+
+    assert result.health is SourceHealth.STALE
+    assert "MDY" in (result.detail or "")
+    assert "90 days" in (result.detail or "")
+    assert transport.calls == 2
+
+    assessment = assess_catalysts(
+        anomaly_event_id="anomaly-1", observed_at=OBSERVED, sources=[result]
+    )
+    assert assessment.outcome is CatalystOutcome.CATALYST_UNKNOWN
+
+
+@pytest.mark.asyncio
+async def test_the_coverage_probe_looks_back_the_detectors_own_baseline() -> None:
+    """Reused rather than chosen, which is what stops it becoming a tuned parameter.
+
+    "Long enough to characterise this symbol" means the same thing here as in the detector's
+    baseline, and a number picked for this purpose alone would be one more knob nobody could
+    justify later.
+    """
+    news, transport = source(Response(200, {"news": []}), Response(200, {"news": []}))
+
+    await fetch(news)
+
+    assert transport.requests[1]["start"] == "2025-12-16T21:00:00Z"
+    assert transport.requests[1]["limit"] == "1", "existence, not enumeration"
+
+
+@pytest.mark.asyncio
+async def test_a_failed_coverage_probe_is_unavailable_rather_than_uncovered() -> None:
+    """An unverifiable claim about the provider must not become a finding about the world.
+
+    Both branches assert something. If the probe cannot complete, neither has been established,
+    and the honest answer is that this lookup did not conclude.
+    """
+    news, _ = source(Response(200, {"news": []}), Response(503, {"message": "down"}))
+
+    result = await fetch(news)
+
+    assert result.health is SourceHealth.UNAVAILABLE
+    assert "coverage could not be checked" in (result.detail or "")
+
+
+@pytest.mark.asyncio
+async def test_a_found_catalyst_costs_no_extra_request() -> None:
+    """The probe is paid only where the answer changes what may be concluded.
+
+    A non-empty lookback has already established both coverage and content, so asking again would
+    be provider load bought with nothing.
+    """
+    news, transport = source(Response(200, {"news": [item()]}))
+
+    result = await fetch(news)
+
+    assert result.health is SourceHealth.HEALTHY
+    assert len(result.candidates) == 1
+    assert transport.calls == 1

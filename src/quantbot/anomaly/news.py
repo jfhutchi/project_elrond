@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping, Sequence
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from typing import Any, Protocol
 
@@ -42,6 +42,23 @@ NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
 #: reason", not "enumerate the coverage". Paging would multiply provider load for a question
 #: whose answer does not change after the first qualifying item.
 PAGE_LIMIT = 50
+
+#: How far back to look for *any* item about a symbol before permitting a negative finding.
+#:
+#: Measured 2026-08-30 against the live feed over the v1-3 ETF universe. Coverage is not uniform
+#: and not binary -- items returned over a trailing year: XLU 50 (page cap), EEM 33, VNQ 27,
+#: EFA 3, **MDY 1**. Single-name controls (AAPL, NVDA) hit the cap in a single month.
+#:
+#: A source averaging one item a year about MDY is in no position to support "nothing was
+#: published about MDY before this move". Without this gate that claim would be emitted for
+#: every MDY anomaly, permanently, and `NO_PUBLIC_CATALYST_FOUND` is defined as the *interesting*
+#: case -- so the least covered symbols would generate the most apparent discoveries. That is a
+#: false-finding generator pointed precisely at the instruments Elrond knows least about.
+#:
+#: 90 days rather than a number chosen for this purpose: it is the anomaly detector's own
+#: baseline window, so "long enough to characterise this symbol" means the same thing in both
+#: places. Reusing it is also what stops this becoming a tuned parameter.
+COVERAGE_BASELINE_DAYS = 90
 
 
 class NewsTransport(Protocol):
@@ -215,16 +232,88 @@ class AlpacaNewsSource:
                 detail="the provider returned a body that was not an object",
             )
 
+        candidates = candidates_from_payload(payload, retrieved_at=retrieved_at)
+        if candidates:
+            return SourceResult(
+                source=self.name, health=SourceHealth.HEALTHY, candidates=candidates
+            )
+
+        # Nothing in the lookback. That is either a real silence -- the finding this subsystem
+        # exists to produce -- or a symbol this provider does not cover, and the two are
+        # indistinguishable from a single empty response. Only the second requires another call.
+        return await self._coverage_verdict(
+            symbols, observed_at=observed_at, retrieved_at=retrieved_at
+        )
+
+    async def _coverage_verdict(
+        self,
+        symbols: Sequence[str],
+        *,
+        observed_at: datetime,
+        retrieved_at: datetime,
+    ) -> SourceResult:
+        """Decide whether an empty answer is a silence or a coverage gap.
+
+        Asked only when the lookback came back empty, so the extra request is paid on the path
+        where the answer actually changes what may be concluded -- and never on the common case
+        where a catalyst was found.
+
+        A failure *here* is not a coverage gap. If the baseline probe cannot be completed, this
+        returns `UNAVAILABLE` rather than assuming coverage: an unverifiable claim about the
+        provider must not become a finding about the world.
+        """
+        params = {
+            "symbols": ",".join(sorted(symbols)),
+            "start": (observed_at - timedelta(days=COVERAGE_BASELINE_DAYS))
+            .astimezone(UTC)
+            .isoformat()
+            .replace("+00:00", "Z"),
+            "end": observed_at.astimezone(UTC).isoformat().replace("+00:00", "Z"),
+            "limit": "1",
+        }
+        try:
+            response = await self._transport.request(
+                "GET",
+                NEWS_URL,
+                headers={
+                    "APCA-API-KEY-ID": self._key.get_secret_value(),
+                    "APCA-API-SECRET-KEY": self._secret.get_secret_value(),
+                },
+                params=params,
+                timeout_seconds=self._timeout,
+            )
+            if getattr(response, "status_code", 0) != 200:
+                raise RuntimeError(f"HTTP {getattr(response, 'status_code', 0)}")
+            payload = json.loads(getattr(response, "content", b"") or b"{}")
+            covered = bool(isinstance(payload, dict) and payload.get("news"))
+        except Exception as error:  # noqa: BLE001 -- unverifiable is not covered
+            return SourceResult(
+                source=self.name,
+                health=SourceHealth.UNAVAILABLE,
+                detail=(
+                    "the lookback was empty and coverage could not be checked, so silence "
+                    f"cannot be told from an absent symbol: {error!r}"
+                )[:500],
+            )
+
+        if covered:
+            # Covered, and genuinely had nothing in the window. The finding this exists for.
+            return SourceResult(source=self.name, health=SourceHealth.HEALTHY)
         return SourceResult(
             source=self.name,
-            health=SourceHealth.HEALTHY,
-            candidates=candidates_from_payload(payload, retrieved_at=retrieved_at),
+            health=SourceHealth.STALE,
+            detail=(
+                f"no item about {','.join(sorted(symbols))} in the trailing "
+                f"{COVERAGE_BASELINE_DAYS} days, so this source cannot support a claim that "
+                "nothing was published before the event"
+            ),
         )
 
 
 __all__ = [
     "NEWS_URL",
     "PAGE_LIMIT",
+    "COVERAGE_BASELINE_DAYS",
     "SOURCE_NAME",
     "AlpacaNewsSource",
     "NewsTransport",
