@@ -351,6 +351,46 @@ def _migrate_database(args: argparse.Namespace, stream: TextIO) -> int:
     return 0
 
 
+def _configure_logging() -> None:
+    """Install structured logging and secret redaction before anything can log.
+
+    `configure_logging` existed, was tested, and was **called by nothing** -- and no module
+    anywhere used `structlog.get_logger` either, so the whole subsystem was built and never
+    adopted. Nothing was leaking, because nothing was logging.
+
+    The hazard is the next log line. Without this call structlog runs on its default
+    configuration, so a `log.info("submitting", api_key=...)` added in good faith would print the
+    key: the `SecretRedactor` is a processor, and a processor that is never installed redacts
+    nothing. Wiring it here means redaction is already true whenever the first call site appears,
+    rather than depending on whoever adds it noticing that it is not.
+
+    Registered secrets come from `Settings` so the concrete values are masked as well as the
+    conventional key names. Reading them cannot fail the command: configuration errors are
+    reported by `config` and by the runtime with far better messages than a logging setup could,
+    and a process that refused to start because it could not arrange to redact something it was
+    never going to log would be the wrong trade.
+    """
+    from quantbot.logging import configure_logging
+
+    secrets: list[str] = []
+    settings: Settings | None
+    try:
+        settings = Settings()
+    except Exception:  # noqa: BLE001 -- see above
+        settings = None
+    if settings is not None:
+        for name in (
+            "ALPACA_PAPER_API_KEY",
+            "ALPACA_PAPER_API_SECRET",
+            "ALPACA_LIVE_API_KEY",
+            "ALPACA_LIVE_API_SECRET",
+        ):
+            value = getattr(settings, name, None)
+            if value is not None and value.get_secret_value():
+                secrets.append(value.get_secret_value())
+    configure_logging(stream=sys.stderr, registered_secrets=tuple(secrets))
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -358,6 +398,7 @@ def main(
     output: TextIO | None = None,
 ) -> int:
     stream = output or sys.stdout
+    _configure_logging()
     parser = build_parser(output=stream)
     args = parser.parse_args(argv)
 
