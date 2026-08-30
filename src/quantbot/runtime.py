@@ -381,8 +381,8 @@ def build_runtime(
             # routing gate's 98.24% search saving buys. Constructed here rather than defaulted
             # inside the runner: a source that built itself would be a second place credentials
             # are read, and the runner would have no way to be given a different one.
-            catalyst_source=AlpacaNewsSource(
-                data_transport, api_key=key, api_secret=secret
+            catalyst_sources=(
+                AlpacaNewsSource(data_transport, api_key=key, api_secret=secret),
             ),
         ),
         recovery=LedgerSyncingRecovery(

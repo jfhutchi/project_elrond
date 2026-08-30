@@ -23,6 +23,7 @@ Verified against the live endpoint 2026-08-30: the paper account **is** entitled
 
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime, timedelta
@@ -35,6 +36,10 @@ from quantbot.anomaly.catalyst import CatalystCandidate, SourceHealth, SourceRes
 
 #: The provider name recorded on every result, so a stored assessment says who was asked.
 SOURCE_NAME = "alpaca-news"
+
+#: Bumped when the mapping below changes what a candidate contains. In each candidate, so a
+#: re-parse under a new version is a new reading rather than a silent revision of an old one.
+PARSER_VERSION = 1
 
 NEWS_URL = "https://data.alpaca.markets/v1beta1/news"
 
@@ -114,6 +119,19 @@ def candidates_from_payload(
             # No stable id or no headline: nothing that can be cited later, so it is not a
             # candidate. Counted by its absence rather than invented.
             continue
+        # Hashed over the fields that carry meaning, not the whole payload: a provider that
+        # adds a field or reorders its JSON has not revised the story, and a hash that moved on
+        # either would report a revision that did not happen.
+        digest = hashlib.sha256(
+            "\x1f".join(
+                (
+                    str(identifier),
+                    headline.strip(),
+                    str(item.get("created_at") or ""),
+                    str(item.get("summary") or ""),
+                )
+            ).encode("utf-8")
+        ).hexdigest()
         candidates.append(
             CatalystCandidate(
                 source=str(item.get("source") or SOURCE_NAME),
@@ -122,6 +140,9 @@ def candidates_from_payload(
                 retrieved_at=retrieved_at,
                 headline=headline.strip()[:2000],
                 url=str(item["url"]) if isinstance(item.get("url"), str) else None,
+                content_hash=digest,
+                parser=SOURCE_NAME,
+                parser_version=PARSER_VERSION,
             )
         )
     return tuple(candidates)
@@ -313,6 +334,7 @@ class AlpacaNewsSource:
 __all__ = [
     "NEWS_URL",
     "PAGE_LIMIT",
+    "PARSER_VERSION",
     "COVERAGE_BASELINE_DAYS",
     "SOURCE_NAME",
     "AlpacaNewsSource",

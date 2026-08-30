@@ -315,7 +315,10 @@ def healthy_source(*candidates):
 
 
 def catalyst_runner(database, source):
-    """Always with the production containment handler.
+    """Always with the production containment handler, and always a *sequence* of sources.
+
+    The runner takes several (#83) so `assess_catalysts` has something to apply its rule to: one
+    unhealthy source makes the whole assessment UNKNOWN however many others answered.
 
     Without it these tests would pass or fail on whether the stub happened to raise, rather than
     on the wiring under test -- and the first version did exactly that: an assessment for an
@@ -323,7 +326,10 @@ def catalyst_runner(database, source):
     failure into an `AttributeError`.
     """
     return with_real_containment(
-        SimpleNamespace(_database=database, _catalyst_source=source)
+        SimpleNamespace(
+            _database=database,
+            _catalyst_sources=() if source is None else (source,),
+        )
     )
 
 
@@ -506,7 +512,7 @@ def test_the_composition_root_supplies_a_catalyst_source() -> None:
     )
     supplied = {keyword.arg for keyword in runner.keywords}
 
-    assert "catalyst_source" in supplied, "enrichment would never run in production"
+    assert "catalyst_sources" in supplied, "enrichment would never run in production"
 
 
 def test_credentials_are_not_unwrapped_before_the_request() -> None:
@@ -521,3 +527,78 @@ def test_credentials_are_not_unwrapped_before_the_request() -> None:
 
     assert "pk-secret" not in repr(vars(news))
     assert "sk-secret" not in repr(vars(news))
+
+
+# --- several sources, and the rule that only has meaning with several (#83) -------------------
+
+
+@pytest.mark.asyncio
+async def test_every_configured_source_is_consulted(tmp_path: Path) -> None:
+    """The denominator of a negative finding is which sources were actually asked.
+
+    With one source the question does not arise. With two, a result that consulted only the first
+    would report "no public catalyst" on the strength of half the evidence it claimed.
+    """
+    database = Database.create(tmp_path / "two.db")
+    try:
+        with database.transaction() as session:
+            StorageRepository(session).record_anomaly_event(anomaly_event().as_row())
+        first, second = StubSource(healthy_source()), StubSource(healthy_source())
+        runner = SimpleNamespace(
+            _database=database, _catalyst_sources=(first, second)
+        )
+        await run_catalysts(
+            with_real_containment(runner),
+            {"SPY": anomaly_event().event_id},
+            observed_at=EVENT_OBSERVED,
+        )
+
+        with database.transaction() as session:
+            stored = StorageRepository(session).list_catalyst_assessments()
+    finally:
+        database.close()
+
+    assert first.asked == [("SPY",)] and second.asked == [("SPY",)]
+    assert stored[0]["sources_consulted"].count("alpaca-news") == 2
+
+
+@pytest.mark.asyncio
+async def test_one_unhealthy_source_makes_the_whole_answer_unknown(tmp_path: Path) -> None:
+    """The rule `assess_catalysts` has always had and the runner could never exercise.
+
+    A source that could not answer makes the question unanswerable regardless of what the others
+    found. Letting the healthy one stand in would turn a provider outage into a discovery -- and
+    outages cluster when markets are busy, which is when anomalies fire.
+    """
+    from quantbot.anomaly.catalyst import SourceHealth, SourceResult
+
+    database = Database.create(tmp_path / "mixed.db")
+    try:
+        with database.transaction() as session:
+            StorageRepository(session).record_anomaly_event(anomaly_event().as_row())
+        runner = SimpleNamespace(
+            _database=database,
+            _catalyst_sources=(
+                StubSource(healthy_source()),
+                StubSource(
+                    SourceResult(
+                        source="second-provider",
+                        health=SourceHealth.RATE_LIMITED,
+                        detail="rate limited",
+                    )
+                ),
+            ),
+        )
+        await run_catalysts(
+            with_real_containment(runner),
+            {"SPY": anomaly_event().event_id},
+            observed_at=EVENT_OBSERVED,
+        )
+
+        with database.transaction() as session:
+            stored = StorageRepository(session).list_catalyst_assessments()
+    finally:
+        database.close()
+
+    assert stored[0]["outcome"] == "CATALYST_UNKNOWN"
+    assert "second-provider=RATE_LIMITED" in stored[0]["unhealthy_sources"]

@@ -88,6 +88,15 @@ class CatalystCandidate(FrozenModel):
     retrieved_at: datetime
     headline: Text
     url: str | None = None
+    #: Hash of the text this candidate was built from, so a later revision is detectable rather
+    #: than silent. #83 asks for it because a second provider makes it necessary: two sources
+    #: reporting the same story produce two candidates, and without a content identity there is
+    #: no way to tell a genuine second report from the same wire copy counted twice.
+    content_hash: Text
+    #: Which parser produced this, and at what version. A re-parse under a new version is a new
+    #: reading of the same item, and pooling the two would hide that the reading changed.
+    parser: Text
+    parser_version: int = Field(default=1, ge=1)
 
     @model_validator(mode="after")
     def validate_candidate(self) -> Self:

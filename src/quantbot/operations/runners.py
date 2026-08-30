@@ -480,7 +480,7 @@ class AdaptiveMomentumRunner:
         veto_policy: PortfolioVetoPolicy | None = None,
         exposure_classification: ExposureClassification | None = None,
         anomaly_detector: AnomalyDetectorConfig | None = None,
-        catalyst_source: CatalystSource | None = None,
+        catalyst_sources: Sequence[CatalystSource] = (),
         counterfactual_policy: HypotheticalExecutionPolicy | None = None,
         clock: Clock = _utcnow,
     ) -> None:
@@ -503,11 +503,16 @@ class AdaptiveMomentumRunner:
         # decides which families may fire: on a venue feed the volume family is refused and the
         # price family is not, which is why the config takes the feed rather than assuming one.
         self._anomaly = anomaly_detector or AnomalyDetectorConfig(feed=self._market_data.feed)
-        # `None` means no catalyst source is configured, and enrichment is then simply not
-        # attempted. Deliberately not a stub that returns an empty result: an empty result from a
-        # source nobody configured would be indistinguishable from a source that answered and
-        # found nothing, which is the exact confusion `catalyst.py` is built around.
-        self._catalyst_source = catalyst_source
+        # A sequence, not one source (#83). `assess_catalysts` has always taken several and
+        # applied the rule that matters -- one unhealthy source makes the whole assessment
+        # UNKNOWN, however many others answered -- but the runner could only ever supply one, so
+        # that rule had nothing to act on.
+        #
+        # Empty means no source is configured, and enrichment is then simply not attempted.
+        # Deliberately not a stub returning an empty result: an empty result from a source nobody
+        # configured is indistinguishable from a source that answered and found nothing, which is
+        # the exact confusion `catalyst.py` exists to prevent.
+        self._catalyst_sources = tuple(catalyst_sources)
         # #57. Frozen before any outcome is computed, and an input to evaluation rather than a
         # parameter of it: choosing an execution assumption after seeing returns is how a
         # hypothetical fill becomes a convenient one. Two outcomes under different policies are
@@ -666,22 +671,29 @@ class AdaptiveMomentumRunner:
         describes a decision rather than making one, so a provider outage must cost a row of
         context and never a trading cycle. Contained is not silent: the gap becomes an incident.
         """
-        if self._catalyst_source is None or not events:
+        if not self._catalyst_sources or not events:
             return {}
 
         recorded: dict[str, str] = {}
         try:
             for symbol, event_id in sorted(events.items()):
-                result = await self._catalyst_source.fetch(
-                    [symbol],
-                    window_start=observed_at - DEFAULT_LOOKBACK,
-                    observed_at=observed_at,
-                    retrieved_at=observed_at,
-                )
+                # Every configured source is consulted, and all of their results go into one
+                # assessment. That is what makes the denominator of a negative finding real: an
+                # outage at any one of them makes the whole answer UNKNOWN, rather than the
+                # remaining sources quietly standing in for the one that could not answer.
+                results = [
+                    await source.fetch(
+                        [symbol],
+                        window_start=observed_at - DEFAULT_LOOKBACK,
+                        observed_at=observed_at,
+                        retrieved_at=observed_at,
+                    )
+                    for source in self._catalyst_sources
+                ]
                 assessment = assess_catalysts(
                     anomaly_event_id=event_id,
                     observed_at=observed_at,
-                    sources=[result],
+                    sources=results,
                 )
                 with self._database.transaction() as session:
                     StorageRepository(session).record_catalyst_assessment(assessment.as_row())
