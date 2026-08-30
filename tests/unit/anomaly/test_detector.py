@@ -14,6 +14,7 @@ from decimal import Decimal
 import pytest
 
 from quantbot.anomaly import (
+    FEED_COVERAGE,
     AnomalyDetectorConfig,
     DataQuality,
     MarketAnomalyEvent,
@@ -26,6 +27,7 @@ from quantbot.anomaly import (
     detect,
     group_events,
     refusal,
+    supports_price_trigger,
     supports_volume_trigger,
     volume_coverage,
 )
@@ -53,6 +55,16 @@ def sessions(
 def quiet(count: int = 60, *, volume: int = 1_000_000) -> list[int]:
     """A baseline that varies a little, so a robust z is defined."""
     return [volume + (index % 7) * 1_000 for index in range(count)]
+
+
+def drifting(count: int = 60, *, jump: float | None = None) -> list[float]:
+    """Prices with small dispersion, optionally ending in a large move.
+
+    A flat baseline has zero dispersion, so the price branch refuses it -- correctly, and that
+    is tested elsewhere. These fixtures need it to vary so a sigma exists to exceed.
+    """
+    prices = [100.0 + (index % 5) * 0.1 for index in range(count)]
+    return [*prices, jump] if jump is not None else prices
 
 
 def config(**overrides: object) -> AnomalyDetectorConfig:
@@ -247,7 +259,11 @@ def test_a_market_wide_shock_carries_its_group_so_it_is_not_many_samples() -> No
     )
     assert len(events) == 3
 
-    grouped = group_events(events, {"SPY": "cluster-a", "QQQ": "cluster-a"})
+    grouped = group_events(
+        events,
+        {"SPY": "cluster-a", "QQQ": "cluster-a"},
+        snapshot_identity="dependence-v1-abcd",
+    )
     by_symbol = {event.symbol: event for event in grouped}
 
     assert by_symbol["SPY"].group_key == "cluster-a"
@@ -256,6 +272,10 @@ def test_a_market_wide_shock_carries_its_group_so_it_is_not_many_samples() -> No
         "a symbol the dependence snapshot could not measure must record no group rather than "
         "being defaulted into one of its own"
     )
+    # Every event names the matrix that was consulted, including the one that got no cluster:
+    # "this snapshot had nothing for it" and "no snapshot ran" are different facts.
+    for event in grouped:
+        assert event.dependence_snapshot_identity == "dependence-v1-abcd"
 
 
 # --- the event ----------------------------------------------------------------------------------
@@ -331,3 +351,159 @@ def test_a_quiet_session_produces_nothing() -> None:
     history = sessions([*quiet(), 1_003_000])
 
     assert detect(symbol="SPY", history=history, config=config(), observed_at=NOW) is None
+
+
+# --- trigger families (#56 follow-up, Sol item 1) ------------------------------------------------
+
+
+def test_a_venue_feed_still_emits_price_events_and_only_price_events() -> None:
+    """The regression Sol asked for, and the reason it is not simply "IEX refuses everything".
+
+    The two families do not share a fate, and the measurement says so. On the same corpus a
+    `PRICE_VELOCITY` trigger computed independently on each feed scores **96.3% precision and
+    99.0% recall**, with a median absolute close difference of 0.015%, because arbitrage pins
+    every venue's last print to every other. Volume is the opposite: a venue reports a fraction
+    of it, so IEX scored 36.6% / 22.8%.
+
+    Ordinary volume, extreme price, IEX feed. Exactly one family may fire.
+    """
+    history = sessions([*quiet(), 1_002_000], closes=drifting(jump=130.0))
+
+    event = detect(
+        symbol="SPY", history=history, config=config(feed=MarketDataFeed.IEX), observed_at=NOW
+    )
+
+    assert event is not None, "a venue feed must still be able to report a price anomaly"
+    assert event.triggers == (TriggerReason.PRICE_VELOCITY,)
+    assert TriggerReason.VOLUME_SHOCK not in event.triggers
+    assert event.volume_coverage is VolumeCoverage.SINGLE_VENUE
+
+    assert refusal(config(feed=MarketDataFeed.IEX), history, TriggerReason.PRICE_VELOCITY) is None
+    assert refusal(config(feed=MarketDataFeed.IEX), history, TriggerReason.VOLUME_SHOCK) is not None
+
+
+def test_a_huge_volume_spike_on_a_venue_feed_stays_silent() -> None:
+    """The other half of the same guard: no amount of IEX volume may manufacture an event."""
+    history = sessions([*quiet(), 500_000_000])
+
+    assert detect(
+        symbol="SPY", history=history, config=config(feed=MarketDataFeed.IEX), observed_at=NOW
+    ) is None
+
+
+def test_disabling_a_family_silences_it_on_a_feed_that_could_carry_it() -> None:
+    """Enabling is intent and capability is permission; both are required, neither suffices."""
+    history = sessions([*quiet(), 40_000_000], closes=drifting(jump=130.0))
+
+    both = detect(symbol="SPY", history=history, config=config(), observed_at=NOW)
+    assert both is not None
+    assert set(both.triggers) == {TriggerReason.VOLUME_SHOCK, TriggerReason.PRICE_VELOCITY}
+
+    volume_only = detect(
+        symbol="SPY",
+        history=history,
+        config=config(enabled_triggers=frozenset({TriggerReason.VOLUME_SHOCK})),
+        observed_at=NOW,
+    )
+    assert volume_only is not None
+    assert volume_only.triggers == (TriggerReason.VOLUME_SHOCK,)
+
+
+def test_the_enabled_families_are_part_of_the_detector_identity() -> None:
+    """Which questions a detector may ask changes its stream as much as any threshold does."""
+    base = config()
+    narrowed = config(enabled_triggers=frozenset({TriggerReason.VOLUME_SHOCK}))
+
+    assert base.identity != narrowed.identity
+    # A set serialises in arbitrary order; two identical detectors must still agree.
+    reordered = config(
+        enabled_triggers=frozenset({TriggerReason.PRICE_VELOCITY, TriggerReason.VOLUME_SHOCK})
+    )
+    assert reordered.identity == base.identity
+
+
+def test_a_family_with_no_detector_behind_it_cannot_be_enabled() -> None:
+    """`RANGE_EXPANSION` is declared in #56 and not yet computed.
+
+    Same rule as the risk layer's unimplemented-veto set: a declared-but-absent control reads as
+    protection that is not there, which is what #75 existed to remove.
+    """
+    with pytest.raises(ValueError, match="no detector behind it"):
+        config(enabled_triggers=frozenset({TriggerReason.RANGE_EXPANSION}))
+    with pytest.raises(ValueError, match="never emit an event"):
+        config(enabled_triggers=frozenset())
+
+
+# --- group binding (#56 follow-up, Sol item 2) ---------------------------------------------------
+
+
+def test_a_group_cannot_be_claimed_without_naming_the_snapshot_that_produced_it() -> None:
+    """An unbound cluster is an ungrounded claim about what moves together.
+
+    Without this, a caller could stamp clusters computed from one dependence matrix onto events
+    naming a different one -- or naming none -- and nothing downstream could detect the mismatch.
+    The grouping helper takes the identity as a required argument for the same reason.
+    """
+    with pytest.raises(ValueError, match="must name the dependence snapshot"):
+        MarketAnomalyEvent(
+            symbol="SPY",
+            session_date=date(2026, 3, 2),
+            segment=SessionSegment.FULL_SESSION,
+            observed_at=NOW,
+            detector_identity="anomaly-detector-v1-x",
+            feed=MarketDataFeed.SIP,
+            volume_coverage=VolumeCoverage.CONSOLIDATED,
+            cadence=config().cadence,
+            baseline_sessions=(date(2026, 3, 1),),
+            volume=VolumeObservation(observed=Decimal("1"), expected=Decimal("1")),
+            price=PriceObservation(session_return=Decimal("0")),
+            triggers=(TriggerReason.VOLUME_SHOCK,),
+            group_key="cluster-a",
+        )
+
+    history = sessions([*quiet(), 40_000_000])
+    event = detect(symbol="SPY", history=history, config=config(), observed_at=NOW)
+    assert event is not None
+    with pytest.raises(ValueError, match="requires the identity"):
+        group_events([event], {"SPY": "cluster-a"}, snapshot_identity="   ")
+
+
+def test_every_feed_the_enum_offers_has_been_characterised() -> None:
+    """The guard that makes the fail-closed default meaningful rather than decorative.
+
+    `supports_price_trigger` refuses an `UNKNOWN` feed, but every member of `MarketDataFeed` is
+    currently characterised, so that branch cannot be reached today -- dropping the check leaves
+    the suite green, which by this project's own rule means it is not yet a protection.
+
+    This is what makes it one. Adding a feed to the enum without saying what its volume covers
+    fails here, and until then the refusal branch is a live default rather than dead code.
+    """
+    uncharacterised = [feed for feed in MarketDataFeed if feed not in FEED_COVERAGE]
+
+    assert not uncharacterised, (
+        f"{[f.value for f in uncharacterised]} has no declared volume coverage, so the detector "
+        "would have to guess whether its prints sample the market or report it"
+    )
+
+
+def test_an_uncharacterised_feed_refuses_both_families(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The refusal branch itself, exercised by simulating the feed nobody has measured yet.
+
+    Guessing is the permissive direction: a new venue feed assumed consolidated would reproduce
+    exactly the IEX defect this module was written to stop.
+    """
+    monkeypatch.delitem(FEED_COVERAGE, MarketDataFeed.IEX)
+
+    assert volume_coverage(MarketDataFeed.IEX) is VolumeCoverage.UNKNOWN
+    assert supports_volume_trigger(MarketDataFeed.IEX) is False
+    assert supports_price_trigger(MarketDataFeed.IEX) is False
+
+    history = sessions([*quiet(), 40_000_000], closes=drifting(jump=130.0))
+    assert detect(
+        symbol="SPY", history=history, config=config(feed=MarketDataFeed.IEX), observed_at=NOW
+    ) is None
+
+    reason = refusal(config(feed=MarketDataFeed.IEX), history, TriggerReason.PRICE_VELOCITY)
+    assert reason is not None and "uncharacterised" in reason

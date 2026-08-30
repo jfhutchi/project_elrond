@@ -26,7 +26,12 @@ from collections.abc import Mapping, Sequence
 from datetime import date, datetime
 from decimal import Decimal
 
-from quantbot.anomaly.capability import supports_volume_trigger, volume_trigger_refusal
+from quantbot.anomaly.capability import (
+    price_trigger_refusal,
+    supports_price_trigger,
+    supports_volume_trigger,
+    volume_trigger_refusal,
+)
 from quantbot.anomaly.models import (
     AnomalyDetectorConfig,
     DataQuality,
@@ -110,7 +115,9 @@ def detect(
     # --- volume ------------------------------------------------------------------------------
     expected: Decimal | None = None
     robust_z: Decimal | None = None
-    if not supports_volume_trigger(config.feed):
+    if TriggerReason.VOLUME_SHOCK not in config.enabled_triggers:
+        pass
+    elif not supports_volume_trigger(config.feed):
         quality = DataQuality.FEED_UNFIT
     elif len(baseline) < config.baseline_sessions:
         quality = DataQuality.INSUFFICIENT_BASELINE
@@ -144,7 +151,15 @@ def detect(
         session_return = Decimal(
             str(round(math.log(float(current.close) / float(baseline[-1].close)), 6))
         )
-    if len(returns) >= config.baseline_sessions - 1 and len(returns) >= 2:
+    price_enabled = (
+        TriggerReason.PRICE_VELOCITY in config.enabled_triggers
+        and supports_price_trigger(config.feed)
+    )
+    if (
+        price_enabled
+        and len(returns) >= config.baseline_sessions - 1
+        and len(returns) >= 2
+    ):
         sigma = statistics.pstdev(returns)
         if sigma > 0:
             trailing_sigma = Decimal(str(round(sigma, 6)))
@@ -175,14 +190,28 @@ def detect(
     )
 
 
-def refusal(config: AnomalyDetectorConfig, history: Sequence[SessionObservation]) -> str | None:
-    """Why this configuration cannot produce a volume event here, or `None` when it can.
+def refusal(
+    config: AnomalyDetectorConfig,
+    history: Sequence[SessionObservation],
+    trigger: TriggerReason = TriggerReason.VOLUME_SHOCK,
+) -> str | None:
+    """Why this configuration cannot produce `trigger` here, or `None` when it can.
 
     Kept separate from `detect` so a caller can report *"the detector is running but structurally
-    cannot fire"* -- which is a different operational state from *"nothing unusual happened"*,
-    and the two look identical from an empty event stream.
+    cannot fire"* -- a different operational state from *"nothing unusual happened"*, and the two
+    look identical from an empty event stream.
+
+    Per family, because the families do not share a fate: on a venue feed the volume trigger is
+    refused and the price trigger is not, and a single answer would have to be wrong about one
+    of them.
     """
-    unfit = volume_trigger_refusal(config.feed)
+    if trigger not in config.enabled_triggers:
+        return f"{trigger.value} is not an enabled trigger family for {config.identity}"
+    unfit = (
+        volume_trigger_refusal(config.feed)
+        if trigger is TriggerReason.VOLUME_SHOCK
+        else price_trigger_refusal(config.feed)
+    )
     if unfit is not None:
         return unfit
     if len(history) - 1 < config.baseline_sessions:
@@ -195,7 +224,10 @@ def refusal(config: AnomalyDetectorConfig, history: Sequence[SessionObservation]
 
 
 def group_events(
-    events: Sequence[MarketAnomalyEvent], clusters: Mapping[str, str]
+    events: Sequence[MarketAnomalyEvent],
+    clusters: Mapping[str, str],
+    *,
+    snapshot_identity: str,
 ) -> tuple[MarketAnomalyEvent, ...]:
     """Stamp each event with the dependence cluster its symbol belongs to (#56 item 4).
 
@@ -207,9 +239,27 @@ def group_events(
     The clustering comes from the #58 dependence snapshot rather than a second notion of "these
     move together" invented here. A symbol the snapshot could not measure gets no group, which
     is recorded rather than defaulted to its own.
+
+    `snapshot_identity` is required and stamped alongside the group, so the two cannot come
+    apart. Setting the group independently would let a caller attach clusters from one matrix to
+    events naming another -- or naming none -- and nothing downstream could detect it. The event
+    validator refuses a group without a snapshot for the same reason.
     """
+    if not snapshot_identity.strip():
+        raise ValueError(
+            "grouping requires the identity of the dependence snapshot that produced the "
+            "clusters; an unnamed matrix cannot be checked or reproduced"
+        )
     return tuple(
-        event.model_copy(update={"group_key": clusters.get(event.symbol)}) for event in events
+        event.model_copy(
+            update={
+                "group_key": clusters.get(event.symbol),
+                # Stamped whether or not this symbol landed in a cluster: "this snapshot was
+                # consulted and had nothing for it" is a different fact from "no snapshot ran".
+                "dependence_snapshot_identity": snapshot_identity,
+            }
+        )
+        for event in events
     )
 
 

@@ -30,9 +30,17 @@ event still leaves a bad event, and the routing layer still spends on it. A dete
 volume-derived trigger on a venue feed refuses instead, the same way the risk layer refuses an
 unmeasurable input rather than substituting one.
 
-Price and volatility triggers are a separate question -- a venue's prints track consolidated
-prices far better than its volume tracks consolidated volume -- so they are admissible on a
-venue feed and are measured separately before being enabled.
+**Price triggers are a different question, and the measurement answers it the other way.** On
+the same corpus, a `PRICE_VELOCITY` trigger computed independently on each feed agrees almost
+perfectly: 108 IEX triggers against 105 SIP triggers, 104 shared -- 96.3% precision and 99.0%
+recall. Median absolute difference between the two feeds' closing prices is 0.015%, and the worst
+observed is 1.10%.
+
+That is the expected asymmetry stated precisely. A venue reports a *fraction* of the volume, so
+its volume is a small biased sample of the total; but it reports a *price*, and arbitrage keeps
+every venue's last print within basis points of every other. So the capability gate is per trigger
+family rather than per feed: volume-derived triggers require consolidated coverage, price-derived
+ones do not, and neither is enabled on a feed nobody has characterised.
 """
 
 from __future__ import annotations
@@ -111,9 +119,32 @@ def volume_trigger_refusal(feed: MarketDataFeed) -> str | None:
     )
 
 
+def supports_price_trigger(feed: MarketDataFeed) -> bool:
+    """Whether a price-derived anomaly may be emitted from this feed.
+
+    Measured rather than assumed: on IEX against SIP a price-velocity trigger scores 96.3%
+    precision and 99.0% recall, because arbitrage pins every venue's last print to every other
+    venue's. An uncharacterised feed is still refused -- the measurement covers IEX, not "any
+    venue feed anyone might configure".
+    """
+    return volume_coverage(feed) is not VolumeCoverage.UNKNOWN
+
+
+def price_trigger_refusal(feed: MarketDataFeed) -> str | None:
+    """Why a price trigger is refused on this feed, or `None` when it is permitted."""
+    if supports_price_trigger(feed):
+        return None
+    return (
+        f"{feed.value} has no characterised coverage, so nothing is known about how its prints "
+        "relate to the consolidated tape; an uncharacterised feed is refused rather than assumed"
+    )
+
+
 __all__ = [
     "FEED_COVERAGE",
     "VolumeCoverage",
+    "price_trigger_refusal",
+    "supports_price_trigger",
     "supports_volume_trigger",
     "volume_coverage",
     "volume_trigger_refusal",

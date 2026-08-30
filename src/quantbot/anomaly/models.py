@@ -61,6 +61,13 @@ class TriggerReason(StrEnum):
     RANGE_EXPANSION = "RANGE_EXPANSION"
 
 
+#: Trigger families with a detector behind them. `RANGE_EXPANSION` is declared in #56 and not
+#: yet computed, so it cannot be enabled.
+IMPLEMENTED_TRIGGERS: frozenset[TriggerReason] = frozenset(
+    {TriggerReason.VOLUME_SHOCK, TriggerReason.PRICE_VELOCITY}
+)
+
+
 class DataQuality(StrEnum):
     """Whether the detector could measure what it needed."""
 
@@ -97,9 +104,41 @@ class AnomalyDetectorConfig(BaseModel):
     feed: MarketDataFeed = MarketDataFeed.SIP
     cadence: DataCadence = DataCadence.DAILY_BAR
 
+    #: Which trigger families this detector may emit. Explicit and versioned, because "which
+    #: questions the detector is allowed to ask" changes the event stream as much as any
+    #: threshold does, and two detectors emitting different families are two detectors.
+    #:
+    #: A family listed here is still subject to the feed's measured capability -- enabling one
+    #: is a statement of intent, not a grant. `RANGE_EXPANSION` is deliberately absent: it is
+    #: declared in #56 but nothing computes it yet, and a family that is enabled by default
+    #: while unimplemented is the shape of control #75 existed to remove.
+    enabled_triggers: frozenset[TriggerReason] = frozenset(
+        {TriggerReason.VOLUME_SHOCK, TriggerReason.PRICE_VELOCITY}
+    )
+
+    @model_validator(mode="after")
+    def validate_config(self) -> Self:
+        if not self.enabled_triggers:
+            raise ValueError(
+                "a detector with no enabled trigger families can never emit an event; disable "
+                "the detector rather than configuring one that silently does nothing"
+            )
+        unimplemented = self.enabled_triggers - IMPLEMENTED_TRIGGERS
+        if unimplemented:
+            # Same rule as the risk layer's `UNIMPLEMENTED` veto set: a declared-but-absent
+            # control reads as protection that is not there.
+            raise ValueError(
+                f"{sorted(item.value for item in unimplemented)} has no detector behind it, so "
+                "enabling it would name a trigger that can never fire"
+            )
+        return self
+
     @property
     def identity(self) -> str:
         payload = json.loads(self.model_dump_json())
+        # Sorted, because a set serialises in an arbitrary order and an identity that depended
+        # on it would differ between two identical detectors.
+        payload["enabled_triggers"] = sorted(payload["enabled_triggers"])
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -199,6 +238,14 @@ class MarketAnomalyEvent(BaseModel):
                 "a baseline session at or after the observed session is look-ahead; the "
                 "baseline must be built only from sessions that had already completed"
             )
+        if self.group_key is not None and self.dependence_snapshot_identity is None:
+            # A cluster with no named snapshot is an ungrounded claim about what moves together.
+            # A caller could otherwise stamp groups from one matrix onto events naming another,
+            # or none, and nothing downstream could tell.
+            raise ValueError(
+                "a group_key must name the dependence snapshot that produced it; an unbound "
+                "cluster cannot be checked against the matrix it came from"
+            )
         if TriggerReason.VOLUME_SHOCK in self.triggers and self.volume.expected is None:
             raise ValueError(
                 "a volume shock cannot fire without an expected volume to compare against"
@@ -264,6 +311,7 @@ class MarketAnomalyEvent(BaseModel):
 
 
 __all__ = [
+    "IMPLEMENTED_TRIGGERS",
     "AnomalyDetectorConfig",
     "DataQuality",
     "MarketAnomalyEvent",
