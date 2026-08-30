@@ -37,6 +37,8 @@ def candidate(
         published_at=published,
         retrieved_at=OBSERVED,
         headline="Something happened",
+        content_hash=f"hash-{external_id}",
+        parser="alpaca-news",
     )
 
 
@@ -198,6 +200,8 @@ def test_a_naive_timestamp_is_refused() -> None:
             published_at=datetime(2026, 8, 28, 20, 0),
             retrieved_at=OBSERVED,
             headline="Something happened",
+            content_hash="hash-news-1",
+            parser="alpaca-news",
         )
 
 

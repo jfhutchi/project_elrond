@@ -52,6 +52,8 @@ def candidate(**overrides: object) -> CatalystCandidate:
         "published_at": OBSERVED - timedelta(hours=6),
         "retrieved_at": OBSERVED,
         "headline": "Company announces something",
+        "content_hash": "abc123",
+        "parser": "alpaca-news",
     }
     fields.update(overrides)
     return CatalystCandidate(**fields)  # type: ignore[arg-type]

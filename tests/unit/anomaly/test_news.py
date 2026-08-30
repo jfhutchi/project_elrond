@@ -352,3 +352,92 @@ async def test_a_found_catalyst_costs_no_extra_request() -> None:
     assert result.health is SourceHealth.HEALTHY
     assert len(result.candidates) == 1
     assert transport.calls == 1
+
+
+# --- content identity (#83) -------------------------------------------------------------------
+
+
+def test_two_different_items_hash_differently() -> None:
+    """The point of the hash: telling a genuine second report from the same wire copy twice.
+
+    #83 asks for a content identity because a second provider makes it necessary. Two sources
+    carrying the same story produce two candidates, and without this there is no way to tell
+    corroboration from double-counting -- which would inflate exactly the evidence a negative
+    finding is measured against.
+    """
+    candidates = candidates_from_payload(
+        {"news": [item(id=1, headline="First thing"), item(id=2, headline="Second thing")]},
+        retrieved_at=RETRIEVED,
+    )
+
+    assert len({c.content_hash for c in candidates}) == 2
+
+
+def test_the_same_item_hashes_the_same_on_a_re_fetch() -> None:
+    """Otherwise every re-fetch would look like a revision, and nothing could be deduplicated."""
+    first = candidates_from_payload({"news": [item()]}, retrieved_at=RETRIEVED)
+    later = candidates_from_payload(
+        {"news": [item()]}, retrieved_at=RETRIEVED + timedelta(hours=6)
+    )
+
+    assert first[0].content_hash == later[0].content_hash, (
+        "the retrieval time is not part of the content"
+    )
+
+
+def test_a_revised_story_hashes_differently() -> None:
+    """A provider correcting a headline has changed the item, and that has to be detectable."""
+    original = candidates_from_payload({"news": [item()]}, retrieved_at=RETRIEVED)
+    revised = candidates_from_payload(
+        {"news": [item(headline="Company announces something, corrected")]},
+        retrieved_at=RETRIEVED,
+    )
+
+    assert original[0].content_hash != revised[0].content_hash
+    assert original[0].external_id == revised[0].external_id, "same item, different content"
+
+
+def test_a_reordered_payload_does_not_look_like_a_revision() -> None:
+    """Hashed over the fields that carry meaning, not the raw JSON.
+
+    A provider adding a field or reordering its response has not revised the story, and a hash
+    that moved on either would report a revision that did not happen -- noise that would then be
+    indistinguishable from a real correction.
+    """
+    plain = candidates_from_payload({"news": [item()]}, retrieved_at=RETRIEVED)
+    padded = candidates_from_payload(
+        {"news": [{**item(), "images": [{"url": "x"}], "author": "somebody"}]},
+        retrieved_at=RETRIEVED,
+    )
+
+    assert plain[0].content_hash == padded[0].content_hash
+
+
+def test_every_candidate_names_the_parser_that_built_it() -> None:
+    """A re-parse under a new version is a new reading of the same item, and pooling the two
+    would hide that the reading changed rather than the story.
+    """
+    from quantbot.anomaly.news import PARSER_VERSION
+
+    candidate = candidates_from_payload({"news": [item()]}, retrieved_at=RETRIEVED)[0]
+
+    assert candidate.parser == SOURCE_NAME
+    assert candidate.parser_version == PARSER_VERSION
+
+
+def test_a_re_dated_item_hashes_differently() -> None:
+    """A corrected publication time is a revision, and one that matters more than most.
+
+    The qualifying window is bounded at the observation, so an item re-dated by a provider can
+    move across that boundary -- from explaining the move to postdating it, or the reverse. If
+    the hash ignored the timestamp, that change would be invisible while altering whether the
+    item counts as a catalyst at all.
+    """
+    original = candidates_from_payload({"news": [item()]}, retrieved_at=RETRIEVED)
+    redated = candidates_from_payload(
+        {"news": [item(created_at="2026-03-16T18:45:00Z")]}, retrieved_at=RETRIEVED
+    )
+
+    assert original[0].external_id == redated[0].external_id
+    assert original[0].published_at != redated[0].published_at
+    assert original[0].content_hash != redated[0].content_hash

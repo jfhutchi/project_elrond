@@ -72,6 +72,8 @@ def catalyst() -> CatalystCandidate:
         published_at=EVENT_OBSERVED.replace(hour=14),
         retrieved_at=EVENT_OBSERVED,
         headline="Something was announced",
+        content_hash="abc123",
+        parser="alpaca-news",
     )
 
 
