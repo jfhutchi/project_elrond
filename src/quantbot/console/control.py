@@ -244,6 +244,7 @@ def rollback_to(
 
 __all__ = [
     "UNPROPOSABLE_POLICY_FIELDS",
+    "field_documentation",
     "ChangeAuthority",
     "ConfigProposal",
     "FieldChange",
@@ -255,3 +256,21 @@ __all__ = [
     "rollback_to",
     "validate_proposal",
 ]
+
+
+def field_documentation() -> dict[str, tuple[str, str]]:
+    """Each proposable field as (title, description), read from the policy model.
+
+    Not a console-side lookup table. A second copy of what a setting is called is a second place
+    to update, and the forgotten copy is the one a person reads -- so the names live on the
+    model, travel in `model_json_schema()`, and appear in the OpenAPI document as well as here.
+
+    Falls back to the field name when a field carries no title. That is deliberately visible
+    rather than prettified: an undocumented setting should look undocumented, not look like one
+    whose description happens to be short.
+    """
+    documented = {}
+    for key in proposable_fields():
+        info = PortfolioVetoPolicy.model_fields[key]
+        documented[key] = (info.title or key, info.description or "")
+    return documented

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% set title = "Kill switch" %}
+{% block body %}
+<h1>Kill switch</h1>
+<p class="sub">
+  Whether this system will place any order at all. Engaging is always available and needs only a
+  reason &mdash; stopping is never the dangerous direction. Clearing is gated on conditions this
+  process measures at the moment you ask, not on anything typed here.
+</p>
+
+<div class="card" {% if state.health.kill_switch_engaged %}style="border-color:var(--crit)"{% endif %}>
+  <div class="k">Current state</div>
+  {% if state.health.kill_switch_engaged %}
+    <div class="v" style="color:var(--crit)">ENGAGED &mdash; no orders will be placed</div>
+  {% else %}
+    <div class="v">Clear &mdash; trading is permitted, subject to every other control</div>
+  {% endif %}
+  <div class="n">{{ state.health.kill_switch_reason or "no reason recorded" }}</div>
+  {% if state.health.kill_switch_updated_at %}
+  <div class="n quiet">last changed {{ state.health.kill_switch_updated_at }}</div>
+  {% endif %}
+</div>
+
+{% if refusal %}
+<div class="card" style="border-color:var(--crit)">
+  <div class="k">Refused</div>
+  <div class="v" style="font-size:.95rem">{{ refusal }}</div>
+  {% if blocking %}
+  <p class="n">
+    Every condition below has to hold before trading may resume. A condition nobody could probe
+    blocks exactly as an unmet one does &mdash; not knowing is not the same as being fine, and
+    treating it as such is how a system resumes into the fault that stopped it.
+  </p>
+  <ul class="attention">
+    {% for item in blocking %}<li>{{ item }}</li>{% endfor %}
+  </ul>
+  {% endif %}
+  <div class="n">Nothing was changed. The kill switch is exactly as it was.</div>
+</div>
+{% endif %}
+
+{% if readiness %}
+<div class="card">
+  <div class="k">What was measured</div>
+  <div class="scroll"><table>
+    <tr><th>Condition</th><th>Established by</th></tr>
+    {% for item in readiness.probes %}
+    <tr><td class="mono">{{ item }}</td><td class="quiet">probed just now</td></tr>
+    {% endfor %}
+    {% for item in readiness.unprobed %}
+    <tr>
+      <td class="mono">{{ item }}</td>
+      <td><span class="absent">nobody could probe this</span></td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</div>
+{% endif %}
+
+{% if state.health.kill_switch_engaged %}
+<div class="card">
+  <div class="k">Resume trading</div>
+  {% if can_measure %}
+  <p class="n">
+    This will probe the broker, the reconciliation record and the market data before deciding.
+    If any condition fails or cannot be established, nothing changes and you will be told which.
+    The reason is recorded permanently beside the change.
+  </p>
+  <form method="post" action="/kill-switch/clear">
+    <p>
+      <label class="n" for="clear-reason">Why it is safe to resume</label><br>
+      <input type="text" id="clear-reason" name="reason" style="width:100%;max-width:48rem"
+             autocomplete="off" required>
+    </p>
+    <button type="submit">Measure readiness and clear</button>
+  </form>
+  {% else %}
+  <p class="absent">
+    This console cannot measure readiness, so it cannot clear the kill switch. It was started
+    without a broker, and a surface that cannot establish it is safe to resume must not offer to.
+    Clear from the CLI where the broker is configured.
+  </p>
+  {% endif %}
+</div>
+{% else %}
+<div class="card">
+  <div class="k">Stop trading</div>
+  <p class="n">
+    Takes effect immediately and needs no measurement. Nothing is gated on stopping.
+  </p>
+  <form method="post" action="/kill-switch/engage">
+    <p>
+      <label class="n" for="engage-reason">Why</label><br>
+      <input type="text" id="engage-reason" name="reason" style="width:100%;max-width:48rem"
+             autocomplete="off" required>
+    </p>
+    <button type="submit">Engage the kill switch</button>
+  </form>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="k">What this control is not</div>
+  <p class="n">
+    The kill switch decides whether <em>paper</em> orders are placed. Nothing on this page, or
+    anywhere in this console, can enable live trading or move real capital &mdash; that boundary
+    is not a setting, and there is no surface here that reaches it.
+  </p>
+</div>
+{% endblock %}

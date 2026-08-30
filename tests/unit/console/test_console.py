@@ -56,6 +56,13 @@ MUTATING_ROUTES = {
     ("/config/policy/preview", "POST"),
     ("/config/policy/apply", "POST"),
     ("/config/policy/rollback", "POST"),
+    # The kill switch. Engaging is ungated -- stopping is never the dangerous direction.
+    # Clearing cannot be faked from here: `KillSwitchController.clear` accepts only a
+    # `MeasuredReadiness`, and the token that makes one is private to the module that owns the
+    # gate. This surface can ask whether it is safe to resume and relay the answer; it cannot
+    # assert it.
+    ("/kill-switch/engage", "POST"),
+    ("/kill-switch/clear", "POST"),
 }
 
 
