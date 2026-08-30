@@ -45,6 +45,7 @@ from quantbot.research.capital import (
     CostModel,
     assess_capital_capacity,
 )
+from quantbot.research.forward_excess import measure_forward_excess
 from quantbot.research.mandate import EconomicObjective
 from quantbot.storage import StorageRepository
 from quantbot.strategy import StrategyConfig
@@ -60,14 +61,20 @@ def build_capacity_inputs(
     cost_model: CostModel,
     as_of: date,
     market_data_source: str,
+    account_id: str | None = None,
     gross_excess_bps: Decimal | None = None,
     provider: str | None = None,
 ) -> CapacityInputs:
     """Assemble the ladder's inputs from durable state, naming what could not be measured.
 
-    `gross_excess_bps` stays a parameter rather than being read from anywhere, because nothing in
-    this repository currently measures a benchmark-relative excess for a deployed strategy.
-    Passing `None` -- the honest default -- produces a blocked assessment, which is the correct
+    `gross_excess_bps` is now *measured* when not supplied, by `measure_forward_excess` against
+    the durable equity and benchmark history. It stayed a parameter for a long time because
+    nothing in this repository computed one -- which meant the ladder would have gone on
+    reporting UNASSESSED after the evidence arrived, since nothing would have noticed.
+
+    An explicit argument still wins, so a study evaluating a hypothetical edge can pass its own.
+    Passing `None` -- the honest default -- now produces either a measured excess or a blocked
+    assessment naming why the measurement refused, which is the correct
     answer and not a defect in this function.
     """
     repository = StorageRepository(session)
@@ -115,11 +122,34 @@ def build_capacity_inputs(
         ]
 
     turnover = turnover_from_holding_period(config.exit_period)
+
+    # Measured rather than left to a caller. `gross_excess_bps` used to be a parameter nothing
+    # supplied, so the ladder reported UNASSESSED forever and would have gone on doing so after
+    # the data arrived, because nothing computed the number. An explicit argument still wins --
+    # a study evaluating a hypothetical edge passes its own -- but the default is now a
+    # measurement rather than an absence.
+    measured_excess = None
     if gross_excess_bps is None:
-        unavailable.append(
-            "no benchmark-relative excess has been measured for this strategy, so there is no "
-            "edge for capacity to erode and the ladder has nothing to evaluate"
+        measured_excess = measure_forward_excess(
+            strategy_id=strategy_id,
+            benchmark_symbol=config.benchmark_symbol,
+            equity=[
+                (snapshot.captured_at.date(), snapshot.equity)
+                for snapshot in repository.list_equity_snapshots(account_id=account_id)
+            ]
+            if account_id
+            else [],
+            benchmark_closes={
+                bar.timestamp.date(): bar.close
+                for bar in repository.list_bars(symbol=config.benchmark_symbol)
+            },
         )
+        gross_excess_bps = measured_excess.bps
+        if gross_excess_bps is None:
+            unavailable.append(
+                f"no benchmark-relative excess is measurable for this strategy: "
+                f"{measured_excess.detail}"
+            )
 
     return CapacityInputs(
         strategy_id=strategy_id,
