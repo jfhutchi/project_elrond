@@ -22,7 +22,7 @@ dependencies = [
     "pydantic-settings>=2.11,<3",
     "pyyaml>=6.0,<7",
     "sqlalchemy>=2.0,<3",
-    "structlog>=25.4,<26",
+    "structlog>=26.1,<27",
     "tzdata>=2025.1",
     "websockets>=15,<16",
 ]
@@ -33,11 +33,11 @@ quantbot-kronos = "quantbot.forecasting.cli:main"
 
 [dependency-groups]
 dev = [
-    "hypothesis>=6.140,<7",
-    "mypy>=1.17,<2",
+    "hypothesis>=6.165,<7",
+    "mypy>=2.3,<3",
     "pytest>=8.4,<10",
     "pytest-asyncio>=1.2,<2",
-    "ruff>=0.13,<1",
+    "ruff>=0.16.4,<1",
     "types-pyyaml>=6.0,<7",
 ]
 
