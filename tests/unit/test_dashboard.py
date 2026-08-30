@@ -788,3 +788,39 @@ def test_the_page_declares_its_encoding_and_a_doctype(
     assert '<meta charset="utf-8">' in page.lower()
     # And the page really does contain the non-ASCII this protects.
     assert any(ord(ch) > 127 for ch in page), "nothing here needed the declaration"
+
+
+def test_no_non_live_transition_is_reported_as_an_operator_decision() -> None:
+    """#72's audit, as a guard rather than a one-off sweep.
+
+    Four transitions used to render as "operator decision" on the operator's own status surface:
+    `CANDIDATE -> REGISTERED`, `RESEARCH_SURVIVOR -> SHADOW`, `SHADOW -> PAPER_OBSERVATION` and
+    `PAPER_QUALIFIED -> LIVE_REVIEW_ELIGIBLE`. None of them moves real capital, so all four were
+    telling a reader to stop and wait for a decision nobody needed to make.
+
+    The genuine boundary is asserted here too, in the same test, because a guard that only
+    forbids is one edit away from removing the thing that should stay: `LIVE_REVIEW_ELIGIBLE` is
+    terminal and does say a human should look.
+    """
+    from quantbot.research.promotion import ALLOWED_PROMOTIONS, Stage
+
+    order = list(Stage)
+    for stage in Stage:
+        rendered = _dashboard()._unmet_gates(stage, days=0, trades=0)
+        upward = [
+            target
+            for target in ALLOWED_PROMOTIONS[stage]
+            if order.index(target) > order.index(stage)
+        ]
+        if stage is Stage.LIVE_REVIEW_ELIGIBLE:
+            assert "awaiting human review" in rendered, (
+                "the one real boundary must keep saying a human should look"
+            )
+            continue
+        assert "operator decision" not in rendered, (
+            f"{stage.value} -> {[t.value for t in upward]} still reports an operator decision; "
+            "no transition below LIVE_REVIEW_ELIGIBLE moves real capital (#72)"
+        )
+        assert "no mechanical gate is declared" not in rendered, (
+            f"{stage.value} has an upward transition with no stated requirement"
+        )
