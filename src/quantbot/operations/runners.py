@@ -13,6 +13,8 @@ from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from typing import Protocol
 
+from sqlalchemy.orm import Session
+
 from quantbot.anomaly import (
     AnomalyDetectorConfig,
     SessionObservation,
@@ -706,6 +708,68 @@ class AdaptiveMomentumRunner:
             )
         return recorded
 
+    def _record_capacity_assessment(
+        self,
+        session: Session,
+        *,
+        trading_date: date,
+        account_id: str | None,
+    ) -> str:
+        """Run the capital-capacity ladder and persist what it found (#51).
+
+        `capacity_production` has been correct and callerless since it was written. Every
+        construction site for `CapacityAssessment` and every call to
+        `record_capacity_assessment` in this repository was a test, so `assess_milestone` read an
+        empty table and reported the capacity question `UNASSESSED` -- permanently, and not
+        because the answer was unknown but because nothing ever asked.
+
+        That is the thirteenth instance of this shape on this branch and the one with the
+        longest fuse: `milestone.py` already says `UNASSESSED` means *no production artifact
+        exists*, which was true and would have stayed true after the evidence arrived.
+
+        **A refusal is recorded, not skipped.** With no measured benchmark-relative excess the
+        ladder returns `UNASSESSED` with `blocking` naming why, and that row is written. Storing
+        it is the point: a persisted refusal says the question was asked and could not be
+        answered, which is a different fact from silence, and it is the one that lets an operator
+        see the measurement start working the day enough sessions exist.
+
+        Contained like the other research recorders. A capacity number is context for judging
+        promotion, nothing in the decision path below reads one, and a failure here must cost
+        that context rather than a trading cycle.
+        """
+        from quantbot.research.capacity_production import (
+            assess_from_inputs,
+            assessment_row,
+            build_capacity_inputs,
+        )
+        from quantbot.research.capital import CostModel
+        from quantbot.research.mandate import load_economic_objective
+
+        objective = load_economic_objective()
+        cost_model = CostModel()
+        provider_key = MarketDataCache.provider_key(
+            self._market_data.provider,
+            self._market_data.feed,
+            self._market_data.adjustment,
+            self._market_data.timeframe,
+        )
+        inputs = build_capacity_inputs(
+            session,
+            strategy_id=self._identity.strategy_id,
+            configuration_hash=self._identity.configuration_hash,
+            config=self._config,
+            objective=objective,
+            cost_model=cost_model,
+            as_of=trading_date,
+            market_data_source=provider_key,
+            account_id=account_id,
+            provider=provider_key,
+        )
+        assessment = assess_from_inputs(inputs, objective=objective, cost_model=cost_model)
+        row = assessment_row(assessment, as_of=trading_date)
+        StorageRepository(session).record_capacity_assessment(row)
+        return str(row["assessment_id"])
+
     def _evaluate_matured_counterfactuals(
         self,
         repository: StorageRepository,
@@ -1132,6 +1196,21 @@ class AdaptiveMomentumRunner:
                 self._record_contained_failure(
                     kind="counterfactual-evaluation",
                     message=f"counterfactual evaluation failed for this cycle: {error!r}",
+                    occurred_at=now,
+                )
+            # #51. Assess capital capacity and persist the answer, including a refusal. The
+            # ladder had no production caller at all, so the milestone gate read an empty table
+            # and reported the question unassessed forever.
+            try:
+                self._record_capacity_assessment(
+                    session,
+                    trading_date=now.date(),
+                    account_id=account_snapshot.account.account_id,
+                )
+            except Exception as error:  # noqa: BLE001 -- contained; see above
+                self._record_contained_failure(
+                    kind="capacity-assessment",
+                    message=f"capacity assessment failed for this cycle: {error!r}",
                     occurred_at=now,
                 )
             for symbol in self._config.universe:
