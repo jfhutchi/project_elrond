@@ -39,7 +39,7 @@ from quantbot.console.control import (
     validate_proposal,
 )
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
-from quantbot.console.state import ConsoleState, read_console_state
+from quantbot.console.state import ConsoleState, RuntimePanel, read_console_state
 from quantbot.operations.kill_switch import (
     KillSwitchClearBlocked,
     KillSwitchController,
@@ -70,6 +70,7 @@ NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/discovery", "Discovery"),
     ("/config", "Configuration"),
     ("/config/policy", "Risk policy"),
+    ("/runtime", "Runtime"),
     ("/kill-switch", "Kill switch"),
     ("/glossary", "Glossary"),
 )
@@ -79,6 +80,7 @@ def create_app(
     database: Database,
     *,
     measure: Callable[[], Awaitable[MeasuredReadiness]] | None = None,
+    runtime: RuntimePanel | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -102,7 +104,7 @@ def create_app(
 
     def snapshot() -> ConsoleState:
         with database.transaction() as session:
-            return read_console_state(session, now=datetime.now(UTC))
+            return read_console_state(session, now=datetime.now(UTC), runtime=runtime)
 
     def page(request: Request, template: str, active: str) -> HTMLResponse:
         state = snapshot()
@@ -183,6 +185,11 @@ def create_app(
                 "blocking": blocking,
             },
         )
+
+    @app.get("/runtime", response_class=HTMLResponse)
+    def runtime_view(request: Request) -> HTMLResponse:
+        """What this machine measured about itself, and what that permits (#38, #136)."""
+        return page(request, "runtime.html", "/runtime")
 
     @app.get("/glossary", response_class=HTMLResponse)
     def glossary(request: Request) -> HTMLResponse:

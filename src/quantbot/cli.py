@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from quantbot.config import Settings
+from quantbot.console.state import RuntimePanel
 from quantbot.domain import ReconciliationStatus
 from quantbot.operations import (
     KillSwitchController,
@@ -224,14 +225,43 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     port = args.port or DEFAULT_PORT
     database = Database(path)
     measure = _console_readiness_probe(database, stream)
+    runtime = _console_runtime_panel()
     try:
         print(f"operator console on http://{host}:{port} reading {path}", file=stream)
         uvicorn.run(
-            create_app(database, measure=measure), host=host, port=port, log_level="warning"
+            create_app(database, measure=measure, runtime=runtime),
+            host=host,
+            port=port,
+            log_level="warning",
         )
     finally:
         database.close()
     return 0
+
+
+def _console_runtime_panel() -> RuntimePanel | None:
+    """Measure this machine once, at start-up.
+
+    Once rather than per request because reading the GPU spawns a process and a machine does not
+    grow memory between two page loads. The measurement time is rendered beside the numbers, so
+    a reader is told how old the reading is rather than left to assume it is live.
+
+    Returns `None` if the measurement fails. A console that would not start because it could not
+    read a GPU would be trading an operator's whole view of the system for one panel.
+    """
+    from datetime import UTC, datetime
+    from platform import node
+
+    from quantbot.console.state import build_runtime_panel
+    from quantbot.placement import HostProfile
+
+    try:
+        moment = datetime.now(UTC)
+        endpoint = os.environ.get("QUANTBOT_MODEL_ENDPOINT", "").strip() or None
+        profile = HostProfile.measure(node(), model_endpoint=endpoint, now=moment)
+        return build_runtime_panel(profile, measured_at=moment)
+    except Exception:  # noqa: BLE001 -- one panel is not worth the whole console
+        return None
 
 
 def _console_readiness_probe(

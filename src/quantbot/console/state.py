@@ -168,6 +168,40 @@ class IncidentRow(FrozenModel):
     occurred_at: Text
 
 
+class JobPlacement(FrozenModel):
+    """Whether this host can carry one declared kind of work, and why not when it cannot."""
+
+    job: Text
+    can_run: bool
+    #: The first requirement this host fails. `None` when it can run.
+    unmet: str | None = None
+
+
+class RuntimePanel(FrozenModel):
+    """What this machine measured about itself, and what that permits (#38, #136).
+
+    Reads a `HostProfile` rather than a config file, for the reason `placement.py` gives: a host
+    that could *declare* its capacity would be checking a claim, and the host most likely to
+    carry a wrong claim is the undersized one nobody wants running heavy work.
+
+    Measured once when the console starts, not per request. Reading the GPU spawns a process,
+    and a machine does not grow memory between two page loads -- so the measurement time is
+    displayed rather than implied.
+    """
+
+    host: Text
+    architecture: Text
+    cpu_cores: int | None
+    total_memory_mb: int | None
+    gpu_vram_mb: int | None
+    #: MEASURED or DECLARED. Only a measured profile may receive work.
+    provenance: Text
+    measured_at: datetime
+    model_endpoint: str | None = None
+    model_endpoint_reachable: bool | None = None
+    placements: tuple[JobPlacement, ...] = ()
+
+
 class ConsoleState(FrozenModel):
     """Everything the read-only console renders, assembled in one pass."""
 
@@ -178,6 +212,8 @@ class ConsoleState(FrozenModel):
     market_data: MarketDataPanel
     capacity: CapacityPanel
     discovery: DiscoveryPanel
+    #: `None` when the console was built without a measurement, which is the test default.
+    runtime: RuntimePanel | None = None
     #: Unresolved only. A resolved incident is history; this panel is about what is still true.
     incidents: tuple[IncidentRow, ...]
     settings: tuple[ConfigSetting, ...]
@@ -211,6 +247,15 @@ class ConsoleState(FrozenModel):
                 f"the last operational cycle was {self.health.days_since_last_run} days ago; "
                 "no forward evidence is accumulating while it is stopped"
             )
+        # Before reconciliation: a control plane this host cannot carry is not a degraded
+        # system, it is one that should not be running here at all (#38).
+        if self.runtime is not None:
+            for placement in self.runtime.placements:
+                if placement.job == "control-plane" and not placement.can_run:
+                    items.append(
+                        f"this host cannot meet the control-plane requirement: "
+                        f"{placement.unmet}"
+                    )
         if self.health.reconciliation_clean is False:
             items.append(
                 f"reconciliation found {self.health.reconciliation_diffs} difference(s) against "
@@ -432,7 +477,47 @@ def _incidents(session: Session) -> tuple[IncidentRow, ...]:
     )
 
 
-def read_console_state(session: Session, *, now: datetime) -> ConsoleState:
+def build_runtime_panel(host: object, *, measured_at: datetime) -> RuntimePanel:
+    """Turn a measured `HostProfile` into what the console renders.
+
+    Takes the profile rather than measuring one, so the caller decides when the machine is read
+    and the console never spawns a GPU probe while rendering a page.
+    """
+    from quantbot.placement import (
+        CONTROL_PLANE,
+        KRONOS_INFERENCE,
+        SEMANTIC_ANALYSIS,
+        WATCHDOG,
+        unmet_requirement,
+    )
+
+    declared = (CONTROL_PLANE, WATCHDOG, KRONOS_INFERENCE, SEMANTIC_ANALYSIS)
+    placements = []
+    for job in declared:
+        reason = unmet_requirement(job, host, now=measured_at)  # type: ignore[arg-type]
+        placements.append(
+            JobPlacement(job=job.name, can_run=reason is None, unmet=reason)
+        )
+    endpoint = getattr(host, "model_endpoint", None)
+    return RuntimePanel(
+        host=str(getattr(host, "name", "unknown")),
+        architecture=str(getattr(host, "architecture", "unknown")),
+        cpu_cores=getattr(host, "cpu_cores", None),
+        total_memory_mb=getattr(host, "total_memory_mb", None),
+        gpu_vram_mb=getattr(host, "gpu_vram_mb", None),
+        provenance=str(getattr(getattr(host, "provenance", None), "value", "DECLARED")),
+        measured_at=measured_at,
+        model_endpoint=None if endpoint is None else str(getattr(endpoint, "url", "")),
+        model_endpoint_reachable=(
+            None if endpoint is None else bool(getattr(endpoint, "reachable", False))
+        ),
+        placements=tuple(placements),
+    )
+
+
+def read_console_state(
+    session: Session, *, now: datetime, runtime: RuntimePanel | None = None
+) -> ConsoleState:
     """Assemble everything the console renders, from authoritative state alone.
 
     One pass, one transaction. A page whose panels each opened their own read could show two
@@ -448,6 +533,7 @@ def read_console_state(session: Session, *, now: datetime) -> ConsoleState:
         market_data=_market_data(session),
         capacity=_capacity(session, strategies),
         discovery=_discovery(session),
+        runtime=runtime,
         incidents=_incidents(session),
         settings=tuple(settings.values()),
     )
@@ -456,6 +542,8 @@ def read_console_state(session: Session, *, now: datetime) -> ConsoleState:
 __all__ = [
     "CapacityPanel",
     "ConsoleState",
+    "JobPlacement",
+    "RuntimePanel",
     "DiscoveryPanel",
     "IncidentRow",
     "HealthPanel",

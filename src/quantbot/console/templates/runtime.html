@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% set title = "Runtime" %}
+{% block body %}
+<h1>Runtime</h1>
+<p class="sub">
+  What this machine measured about itself, and which kinds of work that permits. Capacity is read
+  from the machine rather than declared in a config file &mdash; a host that could announce its
+  own size would be checked against a claim, and the host most likely to carry a wrong claim is
+  the undersized one nobody wants running heavy work.
+</p>
+
+{% if state.runtime %}
+<section class="card">
+  <div class="k">This host</div>
+  <div class="v mono" style="font-size:1.05rem">{{ state.runtime.host }}</div>
+  <div class="n">
+    {{ state.runtime.architecture }} &middot;
+    {% if state.runtime.cpu_cores %}{{ state.runtime.cpu_cores }} cores{% else %}<span class="absent">cores unknown</span>{% endif %} &middot;
+    {% if state.runtime.total_memory_mb %}{{ state.runtime.total_memory_mb }} MB{% else %}<span class="absent">memory unknown</span>{% endif %} &middot;
+    {% if state.runtime.gpu_vram_mb %}{{ state.runtime.gpu_vram_mb }} MB VRAM{% else %}<span class="absent">no GPU detected</span>{% endif %}
+  </div>
+  <div class="n quiet">
+    {{ state.runtime.provenance }} &middot; measured {{ state.runtime.measured_at.strftime("%Y-%m-%d %H:%M") }} UTC,
+    when this console started
+  </div>
+  {% if state.runtime.provenance != "MEASURED" %}
+  <div class="n absent">
+    A profile that was not measured may not receive work. Nothing will be dispatched to this host.
+  </div>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="k">What this host may run</div>
+  <p class="n">
+    A job nothing can carry is refused rather than sent to the least-bad option. Degrading a
+    GPU workload onto an undersized machine is how the always-on control plane &mdash; broker,
+    risk, reconciliation &mdash; goes down for a research task that was never urgent.
+  </p>
+  <div class="scroll"><table>
+    <tr><th>Job</th><th>On this host</th><th>Why not</th></tr>
+    {% for placement in state.runtime.placements %}
+    <tr>
+      <td class="mono">{{ placement.job }}</td>
+      <td>
+        {% if placement.can_run %}
+          <span class="pill pill--absent">yes</span>
+        {% else %}
+          <span class="pill pill--warn">no</span>
+        {% endif %}
+      </td>
+      <td class="quiet">{{ placement.unmet or "" }}</td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  <p class="n">
+    An unreadable capacity blocks rather than passes. Refusing a job because nobody could measure
+    the memory is recoverable; running it because the reading failed open is not.
+  </p>
+</section>
+
+<section class="card">
+  <div class="k">Local model endpoint</div>
+  {% if state.runtime.model_endpoint %}
+    <div class="v mono" style="font-size:.95rem">{{ state.runtime.model_endpoint }}</div>
+    {% if state.runtime.model_endpoint_reachable %}
+      <div class="n">Answered when this console started.</div>
+    {% else %}
+      <div class="n absent">
+        Configured but did not answer. A configured URL is not a capability, so anything
+        requiring a local model is refused on this host.
+      </div>
+    {% endif %}
+  {% else %}
+    <p class="absent">
+      None configured. Work requiring a local model endpoint will not be placed here &mdash;
+      which is a fact about this host, not a fault.
+    </p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="k">Where work runs today</div>
+  <p class="n">
+    Every worker runs as a local subprocess. There is no container or cluster backend, and
+    nothing chooses between backends because there is only one &mdash; so a job this host cannot
+    carry is refused rather than routed elsewhere. That is tracked in
+    <span class="mono">#136</span>, and it is the honest current state rather than a limitation
+    this page is hiding.
+  </p>
+</section>
+{% else %}
+<section class="card">
+  <p class="absent">
+    This machine was not measured, so nothing here describes what it can run. The console starts
+    without the panel rather than refusing to start &mdash; one panel is not worth an operator&rsquo;s
+    whole view of the system.
+  </p>
+</section>
+{% endif %}
+{% endblock %}
