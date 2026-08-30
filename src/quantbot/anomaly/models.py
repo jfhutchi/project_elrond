@@ -61,6 +61,13 @@ class TriggerReason(StrEnum):
     RANGE_EXPANSION = "RANGE_EXPANSION"
 
 
+#: Trigger families with a detector behind them. `RANGE_EXPANSION` is declared in #56 and not
+#: yet computed, so it cannot be enabled.
+IMPLEMENTED_TRIGGERS: frozenset[TriggerReason] = frozenset(
+    {TriggerReason.VOLUME_SHOCK, TriggerReason.PRICE_VELOCITY}
+)
+
+
 class DataQuality(StrEnum):
     """Whether the detector could measure what it needed."""
 
@@ -97,9 +104,41 @@ class AnomalyDetectorConfig(BaseModel):
     feed: MarketDataFeed = MarketDataFeed.SIP
     cadence: DataCadence = DataCadence.DAILY_BAR
 
+    #: Which trigger families this detector may emit. Explicit and versioned, because "which
+    #: questions the detector is allowed to ask" changes the event stream as much as any
+    #: threshold does, and two detectors emitting different families are two detectors.
+    #:
+    #: A family listed here is still subject to the feed's measured capability -- enabling one
+    #: is a statement of intent, not a grant. `RANGE_EXPANSION` is deliberately absent: it is
+    #: declared in #56 but nothing computes it yet, and a family that is enabled by default
+    #: while unimplemented is the shape of control #75 existed to remove.
+    enabled_triggers: frozenset[TriggerReason] = frozenset(
+        {TriggerReason.VOLUME_SHOCK, TriggerReason.PRICE_VELOCITY}
+    )
+
+    @model_validator(mode="after")
+    def validate_config(self) -> Self:
+        if not self.enabled_triggers:
+            raise ValueError(
+                "a detector with no enabled trigger families can never emit an event; disable "
+                "the detector rather than configuring one that silently does nothing"
+            )
+        unimplemented = self.enabled_triggers - IMPLEMENTED_TRIGGERS
+        if unimplemented:
+            # Same rule as the risk layer's `UNIMPLEMENTED` veto set: a declared-but-absent
+            # control reads as protection that is not there.
+            raise ValueError(
+                f"{sorted(item.value for item in unimplemented)} has no detector behind it, so "
+                "enabling it would name a trigger that can never fire"
+            )
+        return self
+
     @property
     def identity(self) -> str:
         payload = json.loads(self.model_dump_json())
+        # Sorted, because a set serialises in an arbitrary order and an identity that depended
+        # on it would differ between two identical detectors.
+        payload["enabled_triggers"] = sorted(payload["enabled_triggers"])
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
         ).hexdigest()
@@ -177,13 +216,12 @@ class MarketAnomalyEvent(BaseModel):
     price: PriceObservation
     #: Every reason that fired, sorted. Empty is not a valid event.
     triggers: tuple[TriggerReason, ...] = Field(min_length=1)
-    data_quality: DataQuality = DataQuality.OK
-    #: Symbols whose events share one underlying move. Set from the #58 dependence clustering
-    #: so a market-wide shock is one piece of information rather than dozens of pseudo-
-    #: independent samples -- a multiple-testing problem that looks like a queueing problem.
-    #: `None` when no dependence snapshot was available, which is recorded rather than assumed.
-    group_key: str | None = None
-    dependence_snapshot_identity: str | None = None
+    #: Whether each **enabled** family could be measured, per family rather than for the event
+    #: as a whole. A single verdict was wrong in a specific way: on IEX the volume family cannot
+    #: run, and a scalar `FEED_UNFIT` then described a perfectly valid price observation as
+    #: unusable, so downstream routing would discard a real event for a reason that applies to
+    #: a different question.
+    family_quality: Mapping[TriggerReason, DataQuality]
 
     @model_validator(mode="after")
     def validate_event(self) -> Self:
@@ -199,6 +237,18 @@ class MarketAnomalyEvent(BaseModel):
                 "a baseline session at or after the observed session is look-ahead; the "
                 "baseline must be built only from sessions that had already completed"
             )
+        unmeasured = [
+            item.value
+            for item in self.triggers
+            if self.family_quality.get(item, DataQuality.OK) is not DataQuality.OK
+        ]
+        if unmeasured:
+            raise ValueError(
+                f"{sorted(unmeasured)} fired while recorded as unmeasurable; a family that "
+                "could not be measured cannot also have triggered"
+            )
+        if not set(self.triggers) <= set(self.family_quality):
+            raise ValueError("every fired family must report its measurement quality")
         if TriggerReason.VOLUME_SHOCK in self.triggers and self.volume.expected is None:
             raise ValueError(
                 "a volume shock cannot fire without an expected volume to compare against"
@@ -225,7 +275,12 @@ class MarketAnomalyEvent(BaseModel):
             "volume": json.loads(self.volume.model_dump_json()),
             "price": json.loads(self.price.model_dump_json()),
             "triggers": [item.value for item in self.triggers],
-            "data_quality": self.data_quality.value,
+            "family_quality": {
+                family.value: quality.value
+                for family, quality in sorted(
+                    self.family_quality.items(), key=lambda pair: pair[0].value
+                )
+            },
         }
         digest = hashlib.sha256(
             json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -257,13 +312,79 @@ class MarketAnomalyEvent(BaseModel):
                 None if self.price.trailing_sigma is None else str(self.price.trailing_sigma)
             ),
             "triggers": ",".join(item.value for item in self.triggers),
-            "data_quality": self.data_quality.value,
-            "group_key": self.group_key,
+            "family_quality": ",".join(
+                f"{family.value}={quality.value}"
+                for family, quality in sorted(
+                    self.family_quality.items(), key=lambda pair: pair[0].value
+                )
+            ),
+        }
+
+
+class AnomalyDependenceContext(BaseModel):
+    """How one frozen dependence model grouped one raw anomaly observation (#56).
+
+    Kept as its own artifact rather than as fields on the event, because the two answer
+    different questions and change on different clocks:
+
+    * the **raw observation** is what happened -- a symbol, a session, an expected against an
+      observed. It is fixed the moment it is measured;
+    * the **dependence context** is what one particular correlation matrix, computed at one
+      as-of date under one method, said about which other symbols were moving with it. Re-run
+      the matrix over a different window and the grouping legitimately changes while nothing
+      about the observation does.
+
+    Folding the second into the first broke content-addressing in a way that would have become a
+    storage defect: `group_events` produced an event with a different `group_key` and the *same*
+    `event_id`, so two materially different payloads shared one supposedly content-addressed
+    identity. Keying `market_anomaly_events` on that would have silently deduplicated them.
+
+    Splitting it also removes the need to redefine a historical observation whenever a dependence
+    model is revised. A new matrix produces a new context; the observation it describes is
+    untouched, which is the same rule #72 fixed for policy versions.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    method_version: int = Field(default=1, ge=1)
+    #: The raw observation this describes. A relation, not a copy.
+    anomaly_event_id: Text
+    #: The exact frozen matrix that produced the grouping. Required: an unnamed matrix cannot be
+    #: checked or reproduced, and a cluster without one is an ungrounded claim about what moves
+    #: together.
+    dependence_snapshot_identity: Text
+    #: The cluster this symbol landed in, or `None` when the snapshot could measure the symbol
+    #: but placed it alone -- or could not measure it at all. Recorded rather than defaulted,
+    #: because "this matrix had nothing for it" is a different fact from "no matrix ran", and
+    #: the presence of the context row is what distinguishes them.
+    group_key: str | None = None
+
+    @property
+    def identity(self) -> str:
+        payload = {
+            "method_version": self.method_version,
+            "anomaly_event_id": self.anomaly_event_id,
             "dependence_snapshot_identity": self.dependence_snapshot_identity,
+            "group_key": self.group_key,
+        }
+        digest = hashlib.sha256(
+            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        return f"anomaly-dependence-v{self.method_version}-{digest[:16]}"
+
+    def as_row(self) -> Mapping[str, object]:
+        return {
+            "context_id": self.identity,
+            "anomaly_event_id": self.anomaly_event_id,
+            "dependence_snapshot_identity": self.dependence_snapshot_identity,
+            "group_key": self.group_key,
+            "method_version": self.method_version,
         }
 
 
 __all__ = [
+    "IMPLEMENTED_TRIGGERS",
+    "AnomalyDependenceContext",
     "AnomalyDetectorConfig",
     "DataQuality",
     "MarketAnomalyEvent",

@@ -8,17 +8,21 @@ authority -- an anomaly is a routing signal for research, never a direction or a
 from quantbot.anomaly.capability import (
     FEED_COVERAGE,
     VolumeCoverage,
+    price_trigger_refusal,
+    supports_price_trigger,
     supports_volume_trigger,
     volume_coverage,
     volume_trigger_refusal,
 )
 from quantbot.anomaly.detector import (
     SessionObservation,
+    dependence_contexts,
     detect,
-    group_events,
     refusal,
 )
 from quantbot.anomaly.models import (
+    IMPLEMENTED_TRIGGERS,
+    AnomalyDependenceContext,
     AnomalyDetectorConfig,
     DataQuality,
     MarketAnomalyEvent,
@@ -30,6 +34,8 @@ from quantbot.anomaly.models import (
 
 __all__ = [
     "FEED_COVERAGE",
+    "IMPLEMENTED_TRIGGERS",
+    "AnomalyDependenceContext",
     "AnomalyDetectorConfig",
     "DataQuality",
     "MarketAnomalyEvent",
@@ -40,8 +46,10 @@ __all__ = [
     "VolumeCoverage",
     "VolumeObservation",
     "detect",
-    "group_events",
+    "dependence_contexts",
+    "price_trigger_refusal",
     "refusal",
+    "supports_price_trigger",
     "supports_volume_trigger",
     "volume_coverage",
     "volume_trigger_refusal",
