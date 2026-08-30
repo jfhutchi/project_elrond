@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 18
+SCHEMA_VERSION = 19
 
 metadata = MetaData(
     naming_convention={
@@ -1014,3 +1014,35 @@ search_runs = Table(
 )
 Index("ix_search_runs_dataset", search_runs.c.dataset, search_runs.c.start_date)
 Index("ix_search_runs_actor", search_runs.c.actor)
+
+
+veto_policy_versions = Table(
+    "veto_policy_versions",
+    metadata,
+    Column("identity", String(128), primary_key=True),
+    Column("version", Integer, nullable=False),
+    # NULL only for version 1, the shipped default.
+    Column("supersedes", String(128)),
+    # OPERATOR or PROJECT_DEFAULT. Never written from a proposal (#72).
+    Column("authority", String(32), nullable=False),
+    Column("applied_by", String(128), nullable=False),
+    Column("applied_at", String(40), nullable=False),
+    Column("reason", Text, nullable=False),
+    # The whole policy body, so a version is read rather than replayed from its diffs.
+    Column("body", Text, nullable=False),
+    # The derived diff, for a reader. Authority lives in `body`.
+    Column("changes", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["supersedes"], ["veto_policy_versions.identity"], ondelete="RESTRICT"
+    ),
+    UniqueConstraint("version", name="one_row_per_version_ordinal"),
+    # The chain cannot fork. `apply_proposal` refuses a stale proposal, but that check lives in
+    # one process; two processes can both read version 3 and both write a successor to it. Only
+    # the database sees that race.
+    UniqueConstraint("supersedes", name="one_successor_per_version"),
+    CheckConstraint("version >= 1", name="versions_start_at_one"),
+    CheckConstraint(
+        "(version = 1) = (supersedes IS NULL)", name="only_the_first_has_no_predecessor"
+    ),
+)
+Index("ix_veto_policy_versions_applied_at", veto_policy_versions.c.applied_at)

@@ -59,6 +59,7 @@ from quantbot.storage.schema import (
     runs,
     signals,
     strategy_deployments,
+    veto_policy_versions,
 )
 
 JsonValue: TypeAlias = None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
@@ -2126,6 +2127,68 @@ class StorageRepository:
             )
         ).all()
         return len(rows)
+
+    # --- veto policy versions (#82) ------------------------------------------------------------
+
+    def record_policy_version(self, version: Mapping[str, object]) -> bool:
+        """Append one version of the veto policy. Never updates an existing row.
+
+        Returns False on an exact repeat of an identity already stored, which makes a retried
+        apply idempotent. It does **not** reconcile a differing body under the same identity:
+        the identity is content-addressed over the policy, so a differing body under the same
+        identity means the addressing is broken, and that must surface rather than be absorbed.
+
+        Two writers racing on the same head are caught by the unique index on `supersedes`, not
+        here -- a check in this method would have the same blind spot as the one in
+        `apply_proposal`, since both read before they write.
+        """
+        identity = str(version["identity"])
+        existing = (
+            self._session.execute(
+                select(veto_policy_versions).where(veto_policy_versions.c.identity == identity)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            if existing["body"] != version["body"]:
+                raise ValueError(
+                    f"policy version {identity} is already stored with a different body; "
+                    "the identity is content-addressed, so this means it is not addressing "
+                    "the content"
+                )
+            return False
+        self._session.execute(veto_policy_versions.insert().values(**dict(version)))
+        return True
+
+    def policy_version_head(self) -> Mapping[str, object] | None:
+        """The version currently in force, or None if none has been recorded.
+
+        The head is the highest ordinal rather than the most recent `applied_at`: two rows can
+        share a timestamp at this resolution, and the ordinal is what the unique index actually
+        guarantees.
+        """
+        row = (
+            self._session.execute(
+                select(veto_policy_versions)
+                .order_by(veto_policy_versions.c.version.desc())
+                .limit(1)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return dict(row) if row is not None else None
+
+    def list_policy_versions(self) -> list[Mapping[str, object]]:
+        """Every version, oldest first. The history a refusal's identity resolves against."""
+        return [
+            dict(row)
+            for row in self._session.execute(
+                select(veto_policy_versions).order_by(veto_policy_versions.c.version)
+            )
+            .mappings()
+            .all()
+        ]
 
 
 @dataclass(frozen=True, slots=True)
