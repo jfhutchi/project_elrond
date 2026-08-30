@@ -14,6 +14,14 @@ from quantbot.anomaly.capability import (
     volume_coverage,
     volume_trigger_refusal,
 )
+from quantbot.anomaly.catalyst import (
+    CatalystAssessment,
+    CatalystCandidate,
+    CatalystOutcome,
+    SourceHealth,
+    SourceResult,
+    assess_catalysts,
+)
 from quantbot.anomaly.detector import (
     SessionObservation,
     dependence_contexts,
@@ -48,6 +56,9 @@ __all__ = [
     "IMPLEMENTED_TRIGGERS",
     "AnomalyDependenceContext",
     "AnomalyDetectorConfig",
+    "CatalystAssessment",
+    "CatalystCandidate",
+    "CatalystOutcome",
     "DataQuality",
     "InformationProxy",
     "MarketAnomalyEvent",
@@ -58,9 +69,12 @@ __all__ = [
     "RoutingValueReport",
     "SessionObservation",
     "SessionSegment",
+    "SourceHealth",
+    "SourceResult",
     "TriggerReason",
     "VolumeCoverage",
     "VolumeObservation",
+    "assess_catalysts",
     "detect",
     "effective_observations",
     "evaluate_routing_value",
