@@ -28,11 +28,14 @@ from pathlib import Path
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from quantbot.operations.registry import ConfigSetting, config_registry
 from quantbot.research.promotion import Stage
 from quantbot.storage import StorageRepository
+from quantbot.storage.database import decode_utc
+from quantbot.storage.schema import session_observations
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -47,6 +50,13 @@ class FrozenModel(BaseModel):
 #: produce a notice while a genuinely stopped system does. Chosen to notice sooner rather than
 #: later: a false notice costs a glance, and a missed one costs every downstream measurement.
 STALE_RUN_DAYS = 4
+
+#: Minutes without a market-hours observation before the console calls the loop stopped. A
+#: `PROJECT_DEFAULT` (#72), derived rather than picked: `OBSERVATION_INTERVAL` is 15 minutes, so
+#: three missed passes is the smallest gap that cannot be one slow broker call or a single
+#: restart. Anything tighter reports a healthy daemon as stopped, which teaches an operator to
+#: ignore the line.
+STALE_OBSERVATION_MINUTES = 45
 
 
 class HealthPanel(FrozenModel):
@@ -70,6 +80,17 @@ class HealthPanel(FrozenModel):
     #: and nothing else, so a system that had stopped ten days earlier rendered as a date a
     #: person had to subtract from today to notice -- which is exactly what did not happen.
     days_since_last_run: int | None
+    #: When the market-hours loop last looked at anything (#143). `None` when it never has.
+    #:
+    #: Distinct from `last_run_at`, and the distinction is the point. A stale cycle with a fresh
+    #: observation is a daemon that is up and simply between sessions. A stale cycle with no
+    #: observation at all is a daemon that is not running -- which is what happened for eleven
+    #: days, and what `last_run_at` alone could not tell apart.
+    last_observation_at: datetime | None
+    #: Whole minutes since that pass. `None` when none has ever run.
+    minutes_since_last_observation: int | None
+    #: What that pass found: HEALTHY, DEGRADED, HALTED, or `None` when none has run.
+    last_observation_outcome: str | None
     #: Absent rather than zero when the account has never been snapshotted.
     account_equity: str | None
     open_positions: int
@@ -300,6 +321,16 @@ class ConsoleState(FrozenModel):
                 f"the last operational cycle was {self.health.days_since_last_run} days ago; "
                 "no forward evidence is accumulating while it is stopped"
             )
+        # Separate from the line above, and answering a different question: is the process alive
+        # at all. A stale cycle with a fresh observation is a daemon between sessions; a stale
+        # cycle with no observation is a daemon that is not running. Eleven days of the second
+        # looked exactly like the first, because nothing recorded the difference (#143).
+        gap = self.health.minutes_since_last_observation
+        if gap is not None and gap >= STALE_OBSERVATION_MINUTES:
+            items.append(
+                f"the market-hours loop last looked {gap} minutes ago; the daemon is probably "
+                "not running"
+            )
         # Before reconciliation: a control plane this host cannot carry is not a degraded
         # system, it is one that should not be running here at all (#38).
         if self.runtime is not None:
@@ -379,6 +410,15 @@ def _health(
     expected = Settings().EXPECTED_ACCOUNT_ID
     account = repository.get_latest_account_snapshot(expected) if expected else None
     runs = repository.list_runs()
+    observation = session.execute(
+        select(
+            session_observations.c.observed_at,
+            session_observations.c.outcome,
+        )
+        .order_by(session_observations.c.observed_at.desc())
+        .limit(1)
+    ).one_or_none()
+    observed_at = None if observation is None else decode_utc(observation.observed_at)
     return HealthPanel(
         kill_switch_engaged=True if kill is None else bool(kill.engaged),
         kill_switch_reason=(
@@ -393,6 +433,13 @@ def _health(
         days_since_last_run=(
             None if not runs else max((now - runs[-1].started_at).days, 0)
         ),
+        last_observation_at=observed_at,
+        minutes_since_last_observation=(
+            None
+            if observed_at is None
+            else max(int((now - observed_at).total_seconds() // 60), 0)
+        ),
+        last_observation_outcome=(None if observation is None else str(observation.outcome)),
         account_equity=None if account is None else str(account.account.equity),
         open_positions=0 if account is None else len(account.positions),
         trading_mode=str(settings_source["TRADING_MODE"].effective_value or "UNKNOWN"),
