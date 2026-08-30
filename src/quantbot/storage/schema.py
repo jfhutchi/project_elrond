@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 metadata = MetaData(
     naming_convention={
@@ -787,6 +787,59 @@ Index(
     "ix_anomaly_dependence_contexts_group",
     anomaly_dependence_contexts.c.dependence_snapshot_identity,
     anomaly_dependence_contexts.c.group_key,
+)
+
+
+# --- Regime: what kind of market a decision happened in (#59) ---------------------------------
+#
+# Context, never authority. A regime may group an outcome; it may never permit one, and
+# `quantbot.risk.regime` is structurally unable to import an execution path.
+#
+# Bound to observations through a relation rather than by copying the id onto them, for the
+# reason #94 established for dependence: the snapshot is one versioned definition's reading of a
+# session, and revising that definition must mint a new snapshot rather than redefine the
+# observation it described.
+market_regime_snapshots = Table(
+    "market_regime_snapshots",
+    metadata,
+    # Content-addressed over the reading and the method that produced it, so a redefinition
+    # cannot relabel observations already grouped under the old one.
+    Column("snapshot_id", String(128), primary_key=True),
+    Column("as_of_session", String(10), nullable=False),
+    Column("benchmark_symbol", String(32), nullable=False),
+    Column("source", String(64), nullable=False),
+    Column("method_version", Integer, nullable=False),
+    Column("trend", String(16), nullable=False),
+    Column("volatility", String(16), nullable=False),
+    Column("breadth", String(16), nullable=False),
+    Column("realised_volatility", Text),
+    Column("participation", Text),
+    # Which axes could not be computed, and why. An unexplained gap is indistinguishable from an
+    # ordinary reading once it is in a dataset.
+    Column("unavailable", Text, nullable=False),
+    Column("source_snapshot_ids", Text, nullable=False),
+)
+Index(
+    "ix_market_regime_snapshots_session",
+    market_regime_snapshots.c.as_of_session,
+    market_regime_snapshots.c.method_version,
+)
+
+anomaly_regime_contexts = Table(
+    "anomaly_regime_contexts",
+    metadata,
+    Column("anomaly_event_id", String(128), primary_key=True),
+    Column("market_regime_snapshot_id", String(128), primary_key=True),
+    ForeignKeyConstraint(
+        ["anomaly_event_id"],
+        ["market_anomaly_events.event_id"],
+        ondelete="CASCADE",
+    ),
+    ForeignKeyConstraint(
+        ["market_regime_snapshot_id"],
+        ["market_regime_snapshots.snapshot_id"],
+        ondelete="CASCADE",
+    ),
 )
 
 

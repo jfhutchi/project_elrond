@@ -33,6 +33,7 @@ from quantbot.storage.database import decode_decimal, decode_utc, encode_decimal
 from quantbot.storage.schema import (
     account_snapshots,
     anomaly_dependence_contexts,
+    anomaly_regime_contexts,
     bars,
     broker_orders,
     capacity_assessments,
@@ -41,6 +42,7 @@ from quantbot.storage.schema import (
     incidents,
     kill_switch_state,
     market_anomaly_events,
+    market_regime_snapshots,
     order_events,
     order_intents,
     positions,
@@ -618,6 +620,74 @@ class StorageRepository:
             )
             found.append((dict(row), [dict(reason) for reason in reasons]))
         return found
+
+    def record_market_regime_snapshot(self, snapshot: Mapping[str, object]) -> bool:
+        """Store one regime reading. Idempotent by content-addressed id (#59).
+
+        Re-deriving the same session under the same method re-produces the same id and stores
+        once. A different method version is a different snapshot and gets its own row, which is
+        what stops a redefinition relabelling observations already grouped under the old one.
+        """
+        snapshot_id = str(snapshot["snapshot_id"])
+        existing = (
+            self._session.execute(
+                select(market_regime_snapshots).where(
+                    market_regime_snapshots.c.snapshot_id == snapshot_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return False
+        self._session.execute(market_regime_snapshots.insert().values(**dict(snapshot)))
+        return True
+
+    def bind_anomaly_regime(self, *, anomaly_event_id: str, snapshot_id: str) -> bool:
+        """Relate one observation to one regime reading of its session.
+
+        A relation rather than a column on the event, for the reason #94 established: the
+        snapshot is one definition's reading, and a second definition must add a row rather than
+        redefine what was observed.
+        """
+        existing = (
+            self._session.execute(
+                select(anomaly_regime_contexts).where(
+                    anomaly_regime_contexts.c.anomaly_event_id == anomaly_event_id,
+                    anomaly_regime_contexts.c.market_regime_snapshot_id == snapshot_id,
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return False
+        self._session.execute(
+            anomaly_regime_contexts.insert().values(
+                anomaly_event_id=anomaly_event_id, market_regime_snapshot_id=snapshot_id
+            )
+        )
+        return True
+
+    def list_market_regime_snapshots(
+        self, *, as_of_session: str | None = None
+    ) -> list[Mapping[str, object]]:
+        statement = select(market_regime_snapshots).order_by(
+            market_regime_snapshots.c.as_of_session, market_regime_snapshots.c.snapshot_id
+        )
+        if as_of_session is not None:
+            statement = statement.where(
+                market_regime_snapshots.c.as_of_session == as_of_session
+            )
+        return [dict(row) for row in self._session.execute(statement).mappings().all()]
+
+    def list_anomaly_regime_contexts(
+        self, *, anomaly_event_id: str
+    ) -> list[Mapping[str, object]]:
+        statement = select(anomaly_regime_contexts).where(
+            anomaly_regime_contexts.c.anomaly_event_id == anomaly_event_id
+        )
+        return [dict(row) for row in self._session.execute(statement).mappings().all()]
 
     def record_capacity_assessment(self, assessment: Mapping[str, object]) -> bool:
         """Store one capacity verdict. Idempotent by content-addressed id (#51).
