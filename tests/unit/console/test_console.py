@@ -372,6 +372,80 @@ def test_a_system_that_never_ran_is_distinguished_from_a_stale_one(database) -> 
     assert any("has ever run" in item for item in state.attention)
 
 
+def _observe(database, at, outcome="HEALTHY", reasons="") -> None:
+    """Write one heartbeat row directly, as the observer would."""
+    from quantbot.storage.database import encode_utc
+    from quantbot.storage.schema import session_observations
+
+    with database.transaction() as session:
+        session.execute(
+            session_observations.insert().values(
+                observation_id=f"observation-{encode_utc(at)}",
+                observed_at=encode_utc(at),
+                market_open=1,
+                outcome=outcome,
+                reasons=reasons,
+                market_data_age_seconds=None,
+                detail="{}",
+            )
+        )
+
+
+def test_a_fresh_observation_says_the_daemon_is_alive(database) -> None:
+    """A stale cycle with a fresh heartbeat is a daemon between sessions, not a stopped one.
+
+    Without the heartbeat those two states are indistinguishable, which is why eleven days of a
+    stopped system read as normal: `last_run_at` alone cannot tell "the cycle has not come round"
+    from "nothing is running" (#143).
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from quantbot.console.state import read_console_state
+
+    now = datetime(2026, 8, 30, 15, 0, tzinfo=UTC)
+    _observe(database, now - timedelta(minutes=10))
+
+    with database.transaction() as session:
+        state = read_console_state(session, now=now)
+
+    assert state.health.minutes_since_last_observation == 10
+    assert state.health.last_observation_outcome == "HEALTHY"
+    assert not [item for item in state.attention if "not running" in item]
+
+
+def test_a_silent_loop_is_called_out(database) -> None:
+    """Three missed passes is the smallest gap that cannot be one slow call or a restart."""
+    from datetime import UTC, datetime, timedelta
+
+    from quantbot.console.state import read_console_state
+
+    now = datetime(2026, 8, 30, 15, 0, tzinfo=UTC)
+    _observe(database, now - timedelta(hours=4))
+
+    with database.transaction() as session:
+        state = read_console_state(session, now=now)
+
+    assert state.health.minutes_since_last_observation == 240
+    assert any("probably" in item and "not running" in item for item in state.attention)
+
+
+def test_a_store_that_has_never_observed_raises_no_daemon_notice(database) -> None:
+    """A store upgraded a minute ago has no heartbeats, and that is not evidence of a fault.
+
+    "Nothing has ever run" is already reported by the cycle line. Repeating it as a stopped
+    daemon would fire on every fresh install, which is how a notice becomes noise.
+    """
+    from datetime import UTC, datetime
+
+    from quantbot.console.state import read_console_state
+
+    with database.transaction() as session:
+        state = read_console_state(session, now=datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert state.health.minutes_since_last_observation is None
+    assert not [item for item in state.attention if "not running" in item]
+
+
 def strategy_identity():
     """The deployment a run has to hang off. `create_run` saves it as a side effect."""
     from datetime import UTC, datetime

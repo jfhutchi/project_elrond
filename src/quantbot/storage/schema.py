@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 metadata = MetaData(
     naming_convention={
@@ -1091,3 +1091,29 @@ catalyst_assessments = Table(
 )
 Index("ix_catalyst_assessments_event", catalyst_assessments.c.anomaly_event_id)
 Index("ix_catalyst_assessments_outcome", catalyst_assessments.c.outcome)
+
+session_observations = Table(
+    "session_observations",
+    metadata,
+    # Content-addressed from the observed instant: a restart cannot mint a second id for a pass
+    # that already happened.
+    Column("observation_id", String(128), primary_key=True),
+    Column("observed_at", String(40), nullable=False),
+    Column("market_open", Integer, nullable=False),
+    # HEALTHY, DEGRADED (a fault), HALTED (a deliberate stop -- not the same thing). Reading a
+    # kill switch as a fault is how somebody clears one to make an alert go away.
+    Column("outcome", String(32), nullable=False),
+    Column("reasons", Text, nullable=False),
+    Column("market_data_age_seconds", String(40), nullable=True),
+    Column("detail", Text, nullable=False),
+    CheckConstraint(
+        "outcome IN ('HEALTHY', 'DEGRADED', 'HALTED')", name="an_outcome_is_one_of_three"
+    ),
+    CheckConstraint("market_open IN (0, 1)", name="market_open_is_a_flag"),
+    # A row claiming health while carrying reasons, or claiming a fault while naming none, makes
+    # every later reading of this table ambiguous. Enforced by the database, not only by the
+    # model that writes to it.
+    CheckConstraint("(outcome = 'HEALTHY') = (reasons = '')", name="health_and_reasons_agree"),
+)
+Index("ix_session_observations_observed_at", session_observations.c.observed_at)
+Index("ix_session_observations_outcome", session_observations.c.outcome)
