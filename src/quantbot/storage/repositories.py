@@ -32,12 +32,14 @@ from quantbot.domain import (
 from quantbot.storage.database import decode_decimal, decode_utc, encode_decimal, encode_utc
 from quantbot.storage.schema import (
     account_snapshots,
+    anomaly_dependence_contexts,
     bars,
     broker_orders,
     equity_snapshots,
     fills,
     incidents,
     kill_switch_state,
+    market_anomaly_events,
     order_events,
     order_intents,
     positions,
@@ -615,6 +617,85 @@ class StorageRepository:
             )
             found.append((dict(row), [dict(reason) for reason in reasons]))
         return found
+
+    def record_anomaly_event(self, event: Mapping[str, object]) -> bool:
+        """Store one raw anomaly observation. Idempotent by content-addressed id (#56).
+
+        Returns False on an exact repeat rather than raising: `event_id` excludes the wall
+        clock, so replaying a session re-derives the same id, and a second write would count one
+        piece of information twice. A repeat that *differs* raises, because two different
+        observations cannot share an id -- that is the defect the raw/context split removed, and
+        this is where it would surface if it ever returned.
+
+        `observed_at` is excluded from the comparison for the same reason it is excluded from
+        the identity: when the detector ran is not part of what it observed.
+        """
+        event_id = str(event["event_id"])
+        existing = (
+            self._session.execute(
+                select(market_anomaly_events).where(
+                    market_anomaly_events.c.event_id == event_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            compared = {key: existing[key] for key in event if key != "observed_at"}
+            if compared != {key: value for key, value in event.items() if key != "observed_at"}:
+                raise StateConflictError(
+                    f"anomaly event {event_id} already recorded with different observations"
+                )
+            return False
+        self._session.execute(market_anomaly_events.insert().values(**dict(event)))
+        return True
+
+    def record_anomaly_dependence_context(self, context: Mapping[str, object]) -> bool:
+        """Relate one observation to one frozen matrix's opinion of it. Idempotent by identity.
+
+        A second matrix produces a second row; the same matrix twice produces one. The unique
+        constraint on `(anomaly_event_id, dependence_snapshot_identity)` makes "one matrix has
+        one opinion per observation" a property of the store rather than of the caller.
+        """
+        context_id = str(context["context_id"])
+        existing = (
+            self._session.execute(
+                select(anomaly_dependence_contexts).where(
+                    anomaly_dependence_contexts.c.context_id == context_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return False
+        self._session.execute(anomaly_dependence_contexts.insert().values(**dict(context)))
+        return True
+
+    def list_anomaly_events(
+        self, *, session_date: str | None = None, symbol: str | None = None
+    ) -> list[Mapping[str, object]]:
+        """Stored observations, oldest first. Rows rather than models, like every reader here."""
+        statement = select(market_anomaly_events).order_by(
+            market_anomaly_events.c.session_date, market_anomaly_events.c.event_id
+        )
+        if session_date is not None:
+            statement = statement.where(market_anomaly_events.c.session_date == session_date)
+        if symbol is not None:
+            statement = statement.where(market_anomaly_events.c.symbol == symbol)
+        return [dict(row) for row in self._session.execute(statement).mappings().all()]
+
+    def list_anomaly_dependence_contexts(
+        self, *, anomaly_event_id: str | None = None
+    ) -> list[Mapping[str, object]]:
+        statement = select(anomaly_dependence_contexts).order_by(
+            anomaly_dependence_contexts.c.context_id
+        )
+        if anomaly_event_id is not None:
+            statement = statement.where(
+                anomaly_dependence_contexts.c.anomaly_event_id == anomaly_event_id
+            )
+        return [dict(row) for row in self._session.execute(statement).mappings().all()]
 
     def save_bars(
         self,

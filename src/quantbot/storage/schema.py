@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 metadata = MetaData(
     naming_convention={
@@ -666,6 +666,88 @@ Index(
 )
 # Grouping refusals by decision basis is the query #85 exists to serve.
 Index("ix_rejection_reasons_evidence_identity", rejection_reasons.c.evidence_identity)
+
+
+# --- Discovery: what woke the research system up (#56) ----------------------------------------
+#
+# Two tables, and the split is the point. `market_anomaly_events` is the raw observation: a
+# symbol, a session, an expected against an observed, under a named detector and feed. It is
+# fixed the moment it is measured.
+#
+# `anomaly_dependence_contexts` is what one frozen correlation matrix said about that
+# observation -- which other symbols were moving with it. Re-run the matrix over a different
+# window and the grouping legitimately changes while nothing about the observation does.
+#
+# Folding the second into the first broke content-addressing before it reached storage: the
+# grouped copy carried a different `group_key` under the same `event_id`, so keying this table
+# on it would have deduplicated two different payloads into whichever arrived first.
+#
+# No enrichment, no catalyst, no score. An anomaly is a routing signal for research and has no
+# broker authority, so nothing here references an order, an intent or a side.
+market_anomaly_events = Table(
+    "market_anomaly_events",
+    metadata,
+    # Content-addressed over the observation and the detector that produced it, excluding the
+    # wall clock: a replayed session must not mint a second event for one piece of information.
+    Column("event_id", String(128), primary_key=True),
+    Column("symbol", String(32), nullable=False),
+    Column("session_date", String(10), nullable=False),
+    Column("segment", String(24), nullable=False),
+    Column("observed_at", String(40), nullable=False),
+    Column("detector_identity", String(128), nullable=False),
+    # Feed semantics on the row itself, so a venue feed can never be read downstream as
+    # full-market volume (#56).
+    Column("feed", String(24), nullable=False),
+    Column("volume_coverage", String(32), nullable=False),
+    Column("cadence", String(24), nullable=False),
+    # The exact baseline window, so "the same sample" is a property of the row rather than a
+    # claim about it -- the same rule #84 established for the dependence snapshot.
+    Column("baseline_first_session", String(10), nullable=False),
+    Column("baseline_last_session", String(10), nullable=False),
+    Column("baseline_session_count", Integer, nullable=False),
+    Column("observed_volume", Text, nullable=False),
+    Column("expected_volume", Text),
+    Column("volume_robust_z", Text),
+    Column("session_return", Text, nullable=False),
+    Column("trailing_sigma", Text),
+    Column("triggers", String(128), nullable=False),
+    # Per family, because one verdict described a valid price observation as unusable whenever
+    # the volume family could not run on the same feed.
+    Column("family_quality", String(255), nullable=False),
+)
+Index(
+    "ix_market_anomaly_events_session",
+    market_anomaly_events.c.session_date,
+    market_anomaly_events.c.symbol,
+)
+Index("ix_market_anomaly_events_detector", market_anomaly_events.c.detector_identity)
+
+anomaly_dependence_contexts = Table(
+    "anomaly_dependence_contexts",
+    metadata,
+    Column("context_id", String(128), primary_key=True),
+    Column("anomaly_event_id", String(128), nullable=False),
+    Column("dependence_snapshot_identity", String(128), nullable=False),
+    # Null means this matrix measured the symbol and placed it alone, or could not measure it.
+    # The row's existence is what separates that from "no matrix ran".
+    Column("group_key", String(128)),
+    Column("method_version", Integer, nullable=False),
+    ForeignKeyConstraint(
+        ["anomaly_event_id"],
+        ["market_anomaly_events.event_id"],
+        ondelete="CASCADE",
+    ),
+    UniqueConstraint(
+        "anomaly_event_id",
+        "dependence_snapshot_identity",
+        name="one_context_per_event_and_snapshot",
+    ),
+)
+Index(
+    "ix_anomaly_dependence_contexts_group",
+    anomaly_dependence_contexts.c.dependence_snapshot_identity,
+    anomaly_dependence_contexts.c.group_key,
+)
 
 
 # --- Research: durable search records (#23, #11) ---------------------------------------------
