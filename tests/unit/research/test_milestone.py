@@ -563,3 +563,113 @@ def test_forward_days_must_be_authentic_and_not_backfilled(database: Database) -
             strategy_version="1.3.0",
             configuration_hash="cfg-abc",
         )
+
+
+def test_m4_reads_the_persisted_capacity_artifact_not_an_issue_number(
+    database: Database, ratified_path: Path
+) -> None:
+    """#51's production seam: the gate consults storage, and storage is what makes it move.
+
+    The distinction this module was written for is that closing an issue must not open a gate.
+    Before #51 the check received `None` unconditionally, so `UNASSESSED` was structural -- it
+    could not have changed no matter what anyone measured, which made it a statement about the
+    tracker wearing the costume of a statement about evidence.
+
+    Now `UNASSESSED` means exactly one thing: no assessment has been persisted for a qualified
+    strategy. Persisting one that says the edge dies turns it into a *blocking result*, because
+    "nobody looked" and "somebody looked and the answer was no" are different facts.
+    """
+    from quantbot.research.capital import CapacityVerdict
+
+    with database.transaction() as session:
+        qualify(session, objective_path=ratified_path)
+        survived(session, CLAIM_ID)
+        refute(session, record_id="refuted-elsewhere")
+        before = assess_milestone(session, as_of=TODAY)
+
+    absent = next(
+        check for check in before.checks if check.level is Milestone.M4_FORWARD_EDGE_SUPPORTED
+    )
+    assert absent.unassessed and "#51" in absent.unassessed[0]
+    assert "no capacity assessment has been persisted" in absent.unassessed[0]
+    assert not absent.blocking
+
+    with database.transaction() as session:
+        StorageRepository(session).record_capacity_assessment(
+            {
+                "assessment_id": "capacity-assessment-v1-exhausts",
+                "strategy_id": "adaptive-momentum",
+                "as_of": TODAY.isoformat(),
+                "inputs_identity": "capacity-inputs-v1-abcd",
+                "objective_identity": "economic-objective-v1-abcd",
+                "cost_model_identity": "cost-model-abcd",
+                "verdict": CapacityVerdict.EXHAUSTS_INSIDE_MANDATE.value,
+                "breakeven_usd": "4000",
+                "first_failing_rung_usd": "4000",
+                "binding_symbol": "XLU",
+                "binding_constraint": "XLU participation reaches 0.08 of a session at $4000",
+                "modelled_inputs": "turnover (CONFIGURED_HOLDING_PERIOD)",
+                "blocking": "",
+                "rung_count": 5,
+            }
+        )
+
+    with database.transaction() as session:
+        after = assess_milestone(session, as_of=TODAY)
+
+    measured = next(
+        check for check in after.checks if check.level is Milestone.M4_FORWARD_EDGE_SUPPORTED
+    )
+    assert not measured.unassessed, "a persisted assessment is no longer an absent check"
+    assert measured.blocking, "an assessment saying the edge dies must block, not stay silent"
+    assert "EXHAUSTS_INSIDE_MANDATE" in measured.blocking[0]
+    assert "XLU" in measured.blocking[0], "the operator needs to know which book binds"
+    assert "modelled inputs" in measured.blocking[0], (
+        "a verdict resting on an assumed turnover must say so where it is read"
+    )
+    assert not measured.reached
+
+
+def test_a_capacity_assessment_for_an_unqualified_strategy_does_not_open_m4(
+    database: Database, ratified_path: Path
+) -> None:
+    """Reading any assessment would be the same category error as reading an issue number.
+
+    An assessment for a strategy that never reached `PAPER_QUALIFIED` says nothing about whether
+    *this* gate should open.
+    """
+    from quantbot.research.capital import CapacityVerdict
+
+    with database.transaction() as session:
+        qualify(session, objective_path=ratified_path)
+        survived(session, CLAIM_ID)
+        refute(session, record_id="refuted-elsewhere")
+        StorageRepository(session).record_capacity_assessment(
+            {
+                "assessment_id": "capacity-assessment-v1-other",
+                "strategy_id": "some-other-strategy",
+                "as_of": TODAY.isoformat(),
+                "inputs_identity": "capacity-inputs-v1-other",
+                "objective_identity": "economic-objective-v1-abcd",
+                "cost_model_identity": "cost-model-abcd",
+                "verdict": CapacityVerdict.SURVIVES_MANDATE.value,
+                "breakeven_usd": None,
+                "first_failing_rung_usd": None,
+                "binding_symbol": "SPY",
+                "binding_constraint": None,
+                "modelled_inputs": "",
+                "blocking": "",
+                "rung_count": 5,
+            }
+        )
+
+    with database.transaction() as session:
+        report = assess_milestone(session, as_of=TODAY)
+
+    m4 = next(
+        check for check in report.checks if check.level is Milestone.M4_FORWARD_EDGE_SUPPORTED
+    )
+    assert m4.unassessed and "#51" in m4.unassessed[0], (
+        "another strategy's capacity verdict must not clear this strategy's gate"
+    )
+    assert not m4.reached

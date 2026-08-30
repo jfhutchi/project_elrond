@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 metadata = MetaData(
     naming_convention={
@@ -666,6 +666,46 @@ Index(
 )
 # Grouping refusals by decision basis is the query #85 exists to serve.
 Index("ix_rejection_reasons_evidence_identity", rejection_reasons.c.evidence_identity)
+
+
+# --- Capacity: how much capital the edge survives, if there is one (#51) ----------------------
+#
+# The ladder existed and nothing fed it, so the milestone gate received `None` and reported the
+# question as permanently unassessed. This is the artifact it reads instead.
+#
+# `UNASSESSED` here means the production artifact is absent or its inputs were incomplete. It
+# does not mean issue #51 is open, and the distinction is the whole point: a gate that reads an
+# issue number can be opened by closing an issue.
+capacity_assessments = Table(
+    "capacity_assessments",
+    metadata,
+    # Content-addressed over the verdict, the ladder and the inputs that produced it.
+    Column("assessment_id", String(128), primary_key=True),
+    Column("strategy_id", String(128), nullable=False),
+    Column("as_of", String(10), nullable=False),
+    # The frozen input artifact. Without it a verdict cannot be traced to the allocation,
+    # turnover and liquidity it rested on.
+    Column("inputs_identity", String(128)),
+    Column("objective_identity", String(128), nullable=False),
+    Column("cost_model_identity", String(128), nullable=False),
+    Column("verdict", String(32), nullable=False),
+    Column("breakeven_usd", Text),
+    Column("first_failing_rung_usd", Text),
+    # Which instrument binds, because "the strategy exhausts at $2m" tells an operator nothing
+    # they can act on and "XLU binds at $2m" tells them to change the roster.
+    Column("binding_symbol", String(32)),
+    Column("binding_constraint", Text),
+    # Inputs that rested on a versioned project default rather than a measurement. Empty is a
+    # strong claim and is only true when every input was observed.
+    Column("modelled_inputs", Text, nullable=False),
+    Column("blocking", Text, nullable=False),
+    Column("rung_count", Integer, nullable=False),
+)
+Index(
+    "ix_capacity_assessments_strategy",
+    capacity_assessments.c.strategy_id,
+    capacity_assessments.c.as_of,
+)
 
 
 # --- Discovery: what woke the research system up (#56) ----------------------------------------

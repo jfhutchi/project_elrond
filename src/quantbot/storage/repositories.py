@@ -35,6 +35,7 @@ from quantbot.storage.schema import (
     anomaly_dependence_contexts,
     bars,
     broker_orders,
+    capacity_assessments,
     equity_snapshots,
     fills,
     incidents,
@@ -617,6 +618,50 @@ class StorageRepository:
             )
             found.append((dict(row), [dict(reason) for reason in reasons]))
         return found
+
+    def record_capacity_assessment(self, assessment: Mapping[str, object]) -> bool:
+        """Store one capacity verdict. Idempotent by content-addressed id (#51).
+
+        Re-running the assessment over unchanged state re-derives the same id and stores once. A
+        repeat that differs is a different verdict and gets its own row: assessments are an
+        append-only record of what the ladder said on a given date, and rewriting one would
+        destroy the comparison a later reader needs.
+        """
+        assessment_id = str(assessment["assessment_id"])
+        existing = (
+            self._session.execute(
+                select(capacity_assessments).where(
+                    capacity_assessments.c.assessment_id == assessment_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return False
+        self._session.execute(capacity_assessments.insert().values(**dict(assessment)))
+        return True
+
+    def latest_capacity_assessment(self, strategy_id: str) -> Mapping[str, object] | None:
+        """The most recent assessment for a strategy, or `None` when none has been computed.
+
+        `None` is what makes the milestone gate report `UNASSESSED`, and it means exactly that
+        no production artifact exists -- never that an issue is open.
+        """
+        row = (
+            self._session.execute(
+                select(capacity_assessments)
+                .where(capacity_assessments.c.strategy_id == strategy_id)
+                .order_by(
+                    capacity_assessments.c.as_of.desc(),
+                    capacity_assessments.c.assessment_id.desc(),
+                )
+                .limit(1)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else dict(row)
 
     def record_anomaly_event(self, event: Mapping[str, object]) -> bool:
         """Store one raw anomaly observation. Idempotent by content-addressed id (#56).
