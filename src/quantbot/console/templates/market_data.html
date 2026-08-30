@@ -49,4 +49,21 @@
   comparison scored 96.3% precision and 99.0% recall.
 </p>
 {% endif %}
+<div class="card">
+  <div class="k">Fetch the latest bars</div>
+  <p class="n">
+    Reads the market-data provider and durably caches completed bars. Submits no order, cancels
+    nothing and moves no position, and a bar already stored is never rewritten &mdash; a repeated
+    sync cannot revise history.
+  </p>
+  <p class="n quiet">
+    Worth having here because <span class="mono">MARKET_DATA_STALE</span> halts a trading cycle,
+    and the fix is almost always &ldquo;fetch the bars&rdquo;. An operator who can see the
+    staleness should be able to address it from the same page rather than from a terminal.
+  </p>
+  <form method="post" action="/operations/sync-data">
+    <button type="submit">Sync market data now</button>
+  </form>
+</div>
+
 {% endblock %}

@@ -68,6 +68,15 @@ MUTATING_ROUTES = {
     # what agrees -- and it reaches the broker through a narrow injected callable rather than a
     # `Runtime`, so this process still cannot reach the order path at all.
     ("/operations/reconcile", "POST"),
+    # Sync market data. Safe in the same sense, and with one guarantee reconcile does not have:
+    # `save_bars` refuses to revise a bar it already holds, so a repeated sync cannot rewrite
+    # history. It reaches the provider through a narrow injected callable whose object graph --
+    # database, bar source, calendar, config, frozen veto policy -- contains no broker and no
+    # execution coordinator.
+    #
+    # Added deliberately, which is what this list is for: the whole-suite run caught it and this
+    # edit is the review moment.
+    ("/operations/sync-data", "POST"),
 }
 
 
