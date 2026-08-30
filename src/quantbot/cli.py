@@ -126,6 +126,12 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
         help="store to create; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
     )
     create.add_argument("--confirm", action="store_true")
+    backup = commands.add_parser("backup-database")
+    backup.add_argument(
+        "--database",
+        help="store to back up; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
+    )
+    backup.add_argument("--to", required=True, help="destination path; must not already exist")
     verify = commands.add_parser("verify-manifest")
     verify.add_argument("--manifest", required=True)
     verify.add_argument("--against")
@@ -276,6 +282,44 @@ def _console_runtime_panel() -> RuntimePanel | None:
         return build_runtime_panel(profile, measured_at=moment)
     except Exception:  # noqa: BLE001 -- one panel is not worth the whole console
         return None
+
+
+def _backup_database(args: argparse.Namespace, stream: TextIO) -> int:
+    """Copy the durable ledger with SQLite's own backup, safe under a live writer.
+
+    A `cp` of the main file is not equivalent: the store runs in WAL mode, so committed data
+    lives across three files, and a copy of one of them taken while anything is writing can be
+    missing recent commits or torn -- and will usually still open, which is what makes it
+    dangerous. This holds a read transaction and writes one self-contained file.
+
+    Reports the evidence the backup carries, because "the file copied" is not the property that
+    matters: a restore has to preserve the strategy identity and the accumulated forward record,
+    and an operator should be able to see what they are protecting.
+    """
+    from quantbot.storage.backup import BackupError, backup_database, fingerprint
+
+    source = Path(args.database or os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    payload: dict[str, object] = {
+        "ok": False,
+        "command": "backup-database",
+        "database": str(source.resolve()),
+        "destination": str(Path(args.to).resolve()),
+    }
+    try:
+        written = backup_database(source, args.to)
+        carried = fingerprint(written)
+    except BackupError as error:
+        payload["error"] = str(error)
+        print(json.dumps(payload), file=stream)
+        return 1
+
+    payload["ok"] = True
+    payload["schema_version"] = carried.schema_version
+    payload["strategy_ids"] = list(carried.strategy_ids)
+    payload["evidence_rows"] = carried.row_counts
+    payload["bytes"] = written.stat().st_size
+    print(json.dumps(payload), file=stream)
+    return 0
 
 
 def _console_sync_data(
@@ -631,6 +675,8 @@ def main(
         # require a working database, since a misconfigured store is one of the things an
         # operator would run this to diagnose.
         return _config(args, stream)
+    if args.command == "backup-database":
+        return _backup_database(args, stream)
     if args.command == "create-database":
         # Same reason, more so: there is nothing to open yet.
         return _create_database(args, stream)
