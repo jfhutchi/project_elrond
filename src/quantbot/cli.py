@@ -7,7 +7,7 @@ import asyncio
 import json
 import os
 import sys
-from collections.abc import Callable, Coroutine, Mapping, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -198,10 +198,21 @@ def _durable_reconciliation_successful(database: Database) -> bool:
 
 
 def _console(args: argparse.Namespace, stream: TextIO) -> int:
-    """Serve the read-only operator console (#82).
+    """Serve the operator console (#82).
 
     Opens the configured store through the ordinary path, so a missing one fails with #86's
     actionable error rather than being created by a web process.
+
+    The readiness probe is passed in when a broker can be built, because clearing the kill switch
+    has to measure the world rather than trust a form. When it cannot -- no credentials, or a
+    context that cannot reach the broker -- the console says so and does not offer to clear.
+    That degradation is deliberate: a button that refuses for reasons nobody can read is worse
+    than a page that explains why there is no button.
+
+    Building the broker here does widen what this process holds. It is worth stating plainly:
+    the console previously needed only the store, and now optionally holds paper credentials to
+    make one read-only health call. It places no orders -- the route table is an allowlist and
+    submission is not on it.
     """
     import uvicorn
 
@@ -212,12 +223,56 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     host = args.host or DEFAULT_HOST
     port = args.port or DEFAULT_PORT
     database = Database(path)
+    measure = _console_readiness_probe(database, stream)
     try:
-        print(f"read-only console on http://{host}:{port} reading {path}", file=stream)
-        uvicorn.run(create_app(database), host=host, port=port, log_level="warning")
+        print(f"operator console on http://{host}:{port} reading {path}", file=stream)
+        uvicorn.run(
+            create_app(database, measure=measure), host=host, port=port, log_level="warning"
+        )
     finally:
         database.close()
     return 0
+
+
+def _console_readiness_probe(
+    database: Database, stream: TextIO
+) -> Callable[[], Awaitable[MeasuredReadiness]] | None:
+    """A callable that probes readiness, or `None` when this context cannot.
+
+    Deferred rather than measured now: readiness is a fact about the moment somebody asks to
+    resume, and a value captured at start-up would be hours stale by the time it was used.
+    """
+    from datetime import UTC, datetime
+
+    from quantbot.brokers import AlpacaPaperBrokerAdapter
+    from quantbot.brokers.transports import HttpxBrokerTransport
+    from quantbot.operations.readiness import measure_readiness
+    from quantbot.runtime import paper_credentials
+
+    try:
+        settings = Settings()
+        key, secret = paper_credentials(settings)
+    except Exception as error:  # noqa: BLE001 -- an unbuildable probe is a reported absence
+        print(f"readiness probe unavailable: {error}", file=stream)
+        return None
+
+    broker = AlpacaPaperBrokerAdapter(
+        api_key=key, api_secret=secret, transport=HttpxBrokerTransport()
+    )
+
+    async def probe() -> MeasuredReadiness:
+        return await measure_readiness(
+            database,
+            broker,
+            paper_mode=settings.TRADING_MODE.value == "PAPER",
+            expected_account_id=settings.EXPECTED_ACCOUNT_ID,
+            # The console does not load a strategy config, so it cannot establish that the sizing
+            # caps parsed. Declared False rather than True: an unestablished condition must block.
+            risk_caps_valid=False,
+            now=datetime.now(UTC),
+        )
+
+    return probe
 
 
 def _config(args: argparse.Namespace, stream: TextIO) -> int:

@@ -255,8 +255,8 @@ def test_the_page_reports_the_rule_in_force_after_a_change(
 
     page = client.get("/config/policy").text
 
-    assert versions(database)[1]["identity"] in page
-    assert "version 2" in page
+    assert versions(database)[1]["identity"] in page, "the fingerprint is still traceable"
+    assert "Version 2" in page, "and the human-readable version leads"
 
 
 def test_rendering_the_page_writes_nothing(client: TestClient, database: Database) -> None:
@@ -273,7 +273,7 @@ def test_rendering_the_page_writes_nothing(client: TestClient, database: Databas
     page = client.get("/config/policy").text
 
     assert versions(database) == [], "rendering the page appended a version"
-    assert "not yet recorded" in page, "and it says so rather than implying a recorded rule"
+    assert "Not yet written down" in page, "and it says so rather than implying a recorded rule"
 
 
 def test_an_apply_records_the_shipped_defaults_before_superseding_them(
@@ -319,3 +319,103 @@ def test_every_threshold_input_is_labelled(client: TestClient) -> None:
         assert f'aria-describedby="in-force-{name}"' in body, (
             f"{name} does not point at the value it is replacing"
         )
+
+
+def test_each_setting_shows_a_readable_name_and_keeps_its_machine_key(
+    client: TestClient,
+) -> None:
+    """An operator should not have to know that `max_daily_loss_bps` is the daily loss limit.
+
+    The machine key stays visible beside it, deliberately: it is what the API, the audit trail
+    and every durable refusal record use, so hiding it would leave a reader unable to connect
+    what they changed here with what they read anywhere else.
+    """
+    body = client.get("/config/policy").text
+
+    assert "Daily loss limit" in body
+    assert "max_daily_loss_bps" in body
+    assert "Correlation cluster threshold" in body
+
+
+def test_each_setting_explains_what_it_does(client: TestClient) -> None:
+    """A number an operator cannot interpret is one they will either not touch or touch wrongly.
+
+    The text comes from the policy model itself, so it travels in `model_json_schema()` and the
+    OpenAPI document too -- one place to update rather than a template copy that drifts.
+    """
+    body = client.get("/config/policy").text
+
+    assert "no new positions are opened for the rest of the day" in body
+    assert "<details" in body, "disclosed on demand rather than filling the table"
+    assert "&#9432;" in body
+
+
+def test_the_description_is_read_from_the_model_not_the_template() -> None:
+    """The property that keeps the two from drifting."""
+    from quantbot.console.control import field_documentation
+    from quantbot.risk.vetoes import PortfolioVetoPolicy
+
+    documented = field_documentation()
+
+    for key, (title, description) in documented.items():
+        info = PortfolioVetoPolicy.model_fields[key]
+        assert title == info.title
+        assert description == info.description
+    assert all(title != key for key, (title, _) in documented.items()), (
+        "every proposable setting has a human-readable name"
+    )
+
+
+def test_documenting_a_setting_does_not_mint_a_new_policy_version() -> None:
+    """Titles and descriptions are metadata, not policy.
+
+    If they entered the identity, writing documentation would re-version the policy and every
+    refusal recorded beforehand would cite a rule that no longer resolves -- documentation would
+    become a breaking change, which is a good way to guarantee none gets written.
+    """
+    from quantbot.risk.vetoes import PortfolioVetoPolicy
+
+    assert PortfolioVetoPolicy().identity == "veto-policy-v1-42458cc40925c9ae"
+
+
+def test_no_description_loses_a_word_boundary() -> None:
+    """The first version of these strings was chunked every 88 characters, which split words and
+    dropped the space at each boundary: "At 0.90 themeasured clusters", "most ofthe book".
+
+    Caught by reading the rendered page, not by a test -- the second console defect that day
+    which only appeared when something actually looked at it.
+
+    Checked at the *source*, against implicit string concatenation, because that is the
+    mechanism that fails. My first attempt at this test pattern-matched the prose for fused
+    words and flagged "position", which contains "it" between two letters: a check that fires on
+    correct text is one somebody deletes.
+    """
+    from quantbot.risk.vetoes import PortfolioVetoPolicy
+
+    for name, info in PortfolioVetoPolicy.model_fields.items():
+        if not info.description:
+            continue
+        assert "  " not in info.description, f"{name} has a doubled space"
+        assert info.description == info.description.strip()
+        # A lost boundary fuses two words into one token. Real English tops out well below this;
+        # a fused pair like "themeasured" or "distinguishinga" clears it only when both halves
+        # are long, so the bound is set where a genuine word cannot reach but a fusion can.
+        longest = max(info.description.split(), key=len)
+        assert len(longest) <= 16, (
+            f"{name} contains {longest!r}, which is what a lost space looks like"
+        )
+
+
+def test_a_description_explains_the_idea_not_just_the_setting() -> None:
+    """"How closely two symbols must move together" only helps somebody who already knows why
+    that matters. The operator reading this is deciding whether to change the number, and that
+    needs the mechanism rather than the definition.
+    """
+    from quantbot.risk.vetoes import PortfolioVetoPolicy
+
+    correlation = PortfolioVetoPolicy.model_fields["correlation_threshold"].description or ""
+
+    assert "move at the same time" in correlation, "the concept is explained"
+    assert "not really two holdings" in correlation, "why it matters is explained"
+    assert "0.85" in correlation, "what moving it costs is explained"
+    assert len(correlation) > 300, "a one-line gloss is not an explanation"

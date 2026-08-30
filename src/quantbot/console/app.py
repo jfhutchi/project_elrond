@@ -20,7 +20,7 @@ never rendered and never serialised.
 from __future__ import annotations
 
 import json
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qsl
@@ -33,11 +33,18 @@ from quantbot.console.control import (
     ConfigProposal,
     ProposalRefused,
     apply_proposal,
+    field_documentation,
     proposable_fields,
     rollback_to,
     validate_proposal,
 )
+from quantbot.console.glossary import GLOSSARY, anchor, terms_in
 from quantbot.console.state import ConsoleState, read_console_state
+from quantbot.operations.kill_switch import (
+    KillSwitchClearBlocked,
+    KillSwitchController,
+    MeasuredReadiness,
+)
 from quantbot.risk.policy_versions import (
     PolicyVersion,
     active_policy_version,
@@ -63,15 +70,26 @@ NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/discovery", "Discovery"),
     ("/config", "Configuration"),
     ("/config/policy", "Risk policy"),
+    ("/kill-switch", "Kill switch"),
+    ("/glossary", "Glossary"),
 )
 
 
-def create_app(database: Database) -> FastAPI:
+def create_app(
+    database: Database,
+    *,
+    measure: Callable[[], Awaitable[MeasuredReadiness]] | None = None,
+) -> FastAPI:
     """Build the console over one already-open store.
 
     The database is injected rather than opened here, for the reason #86 established: acquiring
     a connection must not be how a store gets created, and a web process that opened its own
     would be a second place that could do it at a mistyped path.
+
+    `measure` probes the world and returns readiness. `None` when the console was started
+    somewhere the broker is not configured, which makes clearing the kill switch impossible
+    rather than merely unlikely -- and says so, instead of offering a control that would refuse
+    for a reason nobody could read.
     """
     app = FastAPI(
         title="Elrond operator console",
@@ -127,6 +145,117 @@ def create_app(database: Database) -> FastAPI:
     @app.get("/discovery", response_class=HTMLResponse)
     def discovery(request: Request) -> HTMLResponse:
         return page(request, "discovery.html", "/discovery")
+
+    # --- the kill switch (#82) ------------------------------------------------------------------
+    #
+    # Engaging is always available and needs no argument beyond a reason: stopping is never the
+    # dangerous direction, and a control that made it hard would be worse than useless in the
+    # moment somebody reaches for it.
+    #
+    # **Clearing cannot be faked from here.** `KillSwitchController.clear` accepts only a
+    # `MeasuredReadiness`, and only `measure_readiness()` can mint one -- the token is private to
+    # its module. So this surface cannot assert that it is safe to resume; it can only ask, and
+    # relay the answer. That property predates this console and is why adding the button is safe:
+    # the gate is the measurement, not the caller.
+    #
+    # The refusal is the useful part. A blocked clear names every condition that was unmet *and*
+    # every condition nobody could probe, because an unprobed condition is not a satisfied one.
+
+    def kill_switch_page(
+        request: Request,
+        *,
+        readiness: MeasuredReadiness | None = None,
+        refusal: str | None = None,
+        blocking: tuple[str, ...] = (),
+    ) -> HTMLResponse:
+        state = snapshot()
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="kill_switch.html",
+            context={
+                "state": state,
+                "navigation": NAVIGATION,
+                "active": "/kill-switch",
+                "attention": state.attention,
+                "can_measure": measure is not None,
+                "readiness": readiness,
+                "refusal": refusal,
+                "blocking": blocking,
+            },
+        )
+
+    @app.get("/glossary", response_class=HTMLResponse)
+    def glossary(request: Request) -> HTMLResponse:
+        """Plain-language definitions for the jargon this console uses.
+
+        A setting an operator cannot interpret is one they will either not touch or touch
+        wrongly, and most of the vocabulary here is meaningless without an explanation nobody
+        was offering.
+        """
+        state = snapshot()
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="glossary.html",
+            context={
+                "state": state,
+                "navigation": NAVIGATION,
+                "active": "/glossary",
+                "attention": state.attention,
+                "glossary": GLOSSARY,
+                "anchor": anchor,
+            },
+        )
+
+    @app.get("/kill-switch", response_class=HTMLResponse)
+    def kill_switch(request: Request) -> HTMLResponse:
+        return kill_switch_page(request)
+
+    @app.post("/kill-switch/engage", response_model=None)
+    async def kill_switch_engage(request: Request) -> RedirectResponse | HTMLResponse:
+        """Stop trading. Never gated, because stopping is never the dangerous direction."""
+        form = await read_form(request)
+        reason = str(form.get("reason", "")).strip()
+        if not reason:
+            return kill_switch_page(
+                request,
+                refusal=(
+                    "a kill switch needs a reason; an engagement nobody can explain is one "
+                    "nobody can safely clear later"
+                ),
+            )
+        KillSwitchController(database).engage(reason=reason, updated_at=datetime.now(UTC))
+        return RedirectResponse("/kill-switch", status_code=303)
+
+    @app.post("/kill-switch/clear", response_model=None)
+    async def kill_switch_clear(request: Request) -> RedirectResponse | HTMLResponse:
+        """Resume trading, but only against readiness this process actually measured."""
+        form = await read_form(request)
+        reason = str(form.get("reason", "")).strip()
+        if not reason:
+            return kill_switch_page(
+                request, refusal="clearing the kill switch needs a reason"
+            )
+        if measure is None:
+            return kill_switch_page(
+                request,
+                refusal=(
+                    "this console cannot measure readiness, so it cannot clear the kill switch; "
+                    "run it where the broker is configured, or clear from the CLI there"
+                ),
+            )
+        measured = await measure()
+        try:
+            KillSwitchController(database).clear(
+                reason=reason, measured=measured, updated_at=datetime.now(UTC)
+            )
+        except KillSwitchClearBlocked:
+            return kill_switch_page(
+                request,
+                readiness=measured,
+                refusal="the conditions for resuming are not met",
+                blocking=tuple(measured.blocking),
+            )
+        return RedirectResponse("/kill-switch", status_code=303)
 
     @app.get("/config", response_class=HTMLResponse)
     def config(request: Request) -> HTMLResponse:
@@ -200,6 +329,14 @@ def create_app(database: Database) -> FastAPI:
                 "head_recorded": is_recorded,
                 "policy": head.policy(),
                 "fields": sorted(proposable_fields()),
+                "documentation": field_documentation(),
+                # Which glossary entries each description leans on, so a reader who does not
+                # know a word can find out without leaving the page they are working on.
+                "glossary_links": {
+                    key: terms_in(f"{title} {description}")
+                    for key, (title, description) in field_documentation().items()
+                },
+                "anchor": anchor,
                 "history": history,
                 "changes": changes,
                 "refusal": refusal,

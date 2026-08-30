@@ -152,13 +152,30 @@ class PortfolioVetoPolicy(VetoModel):
     #: Net exposure ceiling, |long - short| as a fraction of equity in basis points. Gross is
     #: already capped in sizing; net is not, and a long-short book can sit inside a gross limit
     #: while carrying the directional risk the gross limit was meant to bound.
-    max_net_exposure_bps: int = Field(default=10000, gt=0)
+    max_net_exposure_bps: int = Field(
+        title="Total exposure ceiling",
+        description=(
+            "How much of the account may be invested at once, rather than sitting in cash. "
+            "Basis points, where 10000 is 100% -- so 10000 means the whole account may be "
+            "in positions. Lowering it keeps more in cash: fewer opportunities taken, and a "
+            "smaller loss on any day the whole market falls."
+        ),
+        default=10000, gt=0)
 
     #: Loss from the session's opening equity that halts new entries for the rest of the day.
     #: Keyed on the **Eastern** session, not UTC -- a 20:05 New York mark is the next UTC day,
     #: and a UTC-keyed limit would reset mid-session and halt on the previous day's losses. The
     #: same off-by-one already bit fill attribution and equity marks.
-    max_daily_loss_bps: int = Field(default=500, gt=0)
+    max_daily_loss_bps: int = Field(
+        title="Daily loss limit",
+        description=(
+            "A stop for the whole account, not one position. If the account is down this "
+            "much from where it opened this morning, no new positions are opened for the "
+            "rest of the day; existing ones are left alone. 500 is 5%. It exists to stop a "
+            "bad day compounding into a worse one through trades made while things are "
+            "already going wrong."
+        ),
+        default=500, gt=0)
 
     #: How many expected intervals an **intraday** feed may miss while the market is open
     #: before it counts as stopped. Ignored for daily bars, whose freshness is a question about
@@ -177,10 +194,27 @@ class PortfolioVetoPolicy(VetoModel):
 
     #: The order may not exceed this share of the symbol's average daily volume. A position that
     #: cannot be exited without moving the price is a position whose backtest never happened.
-    max_participation_bps: int = Field(default=100, gt=0)
+    max_participation_bps: int = Field(
+        title="Share of traded volume",
+        description=(
+            "How large an order may be compared with how much of that symbol normally "
+            "trades in a day. 100 is 1%. This matters because buying a large share of a "
+            "day's volume pushes the price up as you buy -- so you pay more than the price "
+            "you saw, and the profit the backtest measured never existed. Lower is more "
+            "cautious and means smaller positions."
+        ),
+        default=100, gt=0)
     #: Sessions of volume history required before the liquidity veto will pass anything. Below
     #: this the average is not an average, and an unmeasurable limit must not allow.
-    minimum_volume_sessions: int = Field(default=20, gt=0)
+    minimum_volume_sessions: int = Field(
+        title="Sessions of volume history",
+        description=(
+            "How many days of trading history a symbol needs before an order in it is "
+            "allowed at all. Without enough history there is no way to tell whether today's "
+            "volume is normal or unusual, so the order is refused rather than sized against "
+            "a guess."
+        ),
+        default=20, gt=0)
 
     #: Ceiling on any one exposure group's committed value, in basis points of equity.
     #:
@@ -196,7 +230,16 @@ class PortfolioVetoPolicy(VetoModel):
     #: below, and #72 settled that a threshold like this is a versioned project default an agent
     #: chooses and labels rather than a preference it waits for. The prose is corrected here
     #: because a future reader would otherwise take it as a live instruction to stop (#72).
-    max_group_exposure_bps: int = Field(default=DEFAULT_GROUP_CEILING_BPS, gt=0)
+    max_group_exposure_bps: int = Field(
+        title="Per-group exposure ceiling",
+        description=(
+            "A ceiling on how much may sit in one *kind* of thing -- US shares, government "
+            "bonds, corporate credit -- rather than in one symbol. Holding ten different "
+            "funds that all rise and fall with the US stock market is one bet wearing ten "
+            "names, and this is what stops the account taking it. 4000 is 40% of the "
+            "account in any single kind."
+        ),
+        default=DEFAULT_GROUP_CEILING_BPS, gt=0)
 
     #: Ceilings for named groups, overriding `max_group_exposure_bps`. A single global threshold
     #: cannot serve this universe: it is too loose to constrain the narrow groups if set for the
@@ -220,8 +263,29 @@ class PortfolioVetoPolicy(VetoModel):
     #:
     #: 4000bps matches the exposure ceiling for the same reason: with `roster_size: 10` at
     #: roughly equal weight it binds at four concurrent holdings inside one cluster.
-    correlation_threshold: Decimal = Field(default=Decimal("0.90"), gt=0, le=1)
-    max_correlated_cluster_bps: int = Field(default=4000, gt=0)
+    correlation_threshold: Decimal = Field(
+        title="Correlation cluster threshold",
+        description=(
+            "Correlation measures whether two investments tend to move at the same time: "
+            "near 1.0 they rise and fall almost together, near 0 they move independently. "
+            "Two holdings that move together are not really two holdings -- if one falls "
+            "the other very likely falls too, so the account is far less spread out than "
+            "the number of positions suggests. This setting is the line above which two "
+            "symbols are treated as the same position for the exposure limits. At 0.90 the "
+            "groups it finds are tight and genuinely related; below about 0.85 they start "
+            "swallowing most of the portfolio, and the control stops telling a concentrated "
+            "account apart from a normal one."
+        ),
+        default=Decimal("0.90"), gt=0, le=1)
+    max_correlated_cluster_bps: int = Field(
+        title="Per-cluster exposure ceiling",
+        description=(
+            "The ceiling on how much may sit in one group of holdings that move together, "
+            "found using the correlation setting above. 4000 is 40% of the account. It is "
+            "the same idea as the per-kind ceiling, but the groups are discovered from how "
+            "prices actually behaved rather than from what the funds are labelled as."
+        ),
+        default=4000, gt=0)
 
     #: Sessions of history the dependence snapshot is measured over.
     #:
@@ -234,7 +298,16 @@ class PortfolioVetoPolicy(VetoModel):
     #:
     #: Being a policy field also means changing it changes `identity`, so a refusal measured
     #: over 120 sessions can never be pooled with one measured over 60.
-    correlation_lookback_sessions: int = Field(default=120, ge=2)
+    correlation_lookback_sessions: int = Field(
+        title="Correlation lookback",
+        description=(
+            "How many days of price history are used to work out which holdings move "
+            "together. Shorter means the measure reacts faster to a change in behaviour, "
+            "but is noisier and more easily fooled by a few unusual days. It also sets how "
+            "much history must be downloaded before any decision can be made at all, so "
+            "raising it makes the system need more data before it will trade."
+        ),
+        default=120, ge=2)
 
     #: Vetoes to enforce. Anything absent is not evaluated, which is a policy choice and is
     #: recorded in `identity` so a study can tell one policy from another.

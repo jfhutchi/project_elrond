@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% set title = "Glossary" %}
+{% block body %}
+<h1>Glossary</h1>
+<p class="sub">
+  What the words on the other pages mean, in the sense this system uses them. Ordered so that
+  earlier entries do not depend on later ones &mdash; reading top to bottom should work.
+</p>
+
+<div class="card">
+  <div class="k">Contents</div>
+  <p class="n">
+    {% for entry in glossary %}<a href="#{{ anchor(entry.term) }}">{{ entry.term }}</a>{% if not loop.last %} &middot;
+    {% endif %}{% endfor %}
+  </p>
+</div>
+
+{% for entry in glossary %}
+<div class="card" id="{{ anchor(entry.term) }}">
+  <div class="k">{{ entry.term }}</div>
+  <div class="v" style="font-size:1rem">{{ entry.short }}</div>
+  <p class="n">{{ entry.long }}</p>
+</div>
+{% endfor %}
+
+<div class="card">
+  <div class="k">What is deliberately not here</div>
+  <p class="n">
+    Advice. This page says what the words mean, not what you should do about them. Whether a
+    threshold is set correctly is a question about evidence, and this system does not yet have
+    enough forward evidence to answer it &mdash; a glossary that implied otherwise would be the
+    most useful-looking wrong thing on the site.
+  </p>
+</div>
+{% endblock %}

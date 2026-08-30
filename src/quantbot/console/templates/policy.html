@@ -11,16 +11,40 @@
 
 <section class="card">
   <div class="k">In force</div>
-  <div class="v mono" style="font-size:.9rem">{{ head.identity }}</div>
+  <div class="v">
+    Version {{ head.version }}
+    {% if head.version == 1 %}&mdash; the settings this system shipped with{% endif %}
+  </div>
   <div class="n">
-    version {{ head.version }} &middot; authority {{ head.authority.value }} &middot;
-    applied by {{ head.applied_by }} &middot; {{ head.applied_at }}
+    Set by {{ head.applied_by }} on {{ head.applied_at }}.
+    {% if head.authority.value == "PROJECT_DEFAULT" %}
+      Chosen by the system rather than approved by you.
+    {% else %}
+      Recorded as your decision.
+    {% endif %}
     {% if not head_recorded %}
-      &middot; <span class="absent">the shipped defaults, not yet recorded &mdash; the runtime
-      writes them as version 1 when it starts, and an apply from here writes them first</span>
+      <span class="absent">Not yet written down &mdash; the runtime records it as version 1 when
+      it next starts, and an apply from here records it first.</span>
     {% endif %}
   </div>
   <div class="n">{{ head.reason }}</div>
+
+  {# The fingerprint is load-bearing and unreadable, so it is present and demoted rather than
+     hidden. A reader who never needs it should not have to look at it; a reader tracing a
+     refusal needs exactly this string. #}
+  <details class="hint" style="margin-top:.75rem">
+    <summary aria-label="What the fingerprint is">
+      <span class="quiet" style="font-size:.75rem">fingerprint
+        <span class="mono">{{ head.identity[:24] }}&hellip;</span></span>
+    </summary>
+    <p>
+      <span class="mono" style="word-break:break-all">{{ head.identity }}</span><br><br>
+      Every refusal this system records names the fingerprint of the rule that produced it, so
+      any past decision can be traced back to the exact settings in force at the time. It is
+      computed from the settings themselves: change any threshold and the fingerprint changes
+      too, which is what stops an old refusal being silently re-attributed to a newer rule.
+    </p>
+  </details>
 </section>
 
 {% if refusal %}
@@ -73,7 +97,28 @@
       <tr><th>Setting</th><th>In force</th><th>New value</th></tr>
       {% for name in fields %}
       <tr>
-        <td class="mono"><label for="field-{{ name }}">{{ name }}</label></td>
+        <td>
+          <label for="field-{{ name }}">{{ documentation[name][0] }}</label>
+          {# The machine key stays visible. It is what the API, the audit trail and every
+             refusal record use, so hiding it would leave a reader unable to connect what they
+             changed here with what they read anywhere else. #}
+          <div class="mono quiet" style="font-size:.75rem">{{ name }}</div>
+          {% if documentation[name][1] %}
+          <details class="hint">
+            <summary aria-label="What {{ documentation[name][0] }} does">&#9432;</summary>
+            <p>
+              {{ documentation[name][1] }}
+              {% if glossary_links[name] %}
+              <br><br><span class="quiet">Terms:
+                {% for term in glossary_links[name] %}<a
+                  href="/glossary#{{ anchor(term) }}">{{ term }}</a>{% if not loop.last %},
+                {% endif %}{% endfor %}
+              </span>
+              {% endif %}
+            </p>
+          </details>
+          {% endif %}
+        </td>
         <td class="mono quiet" id="in-force-{{ name }}">{{ policy[name] }}</td>
         <td>
           {# Labelled and described. Without the association every box announces as "unchanged",

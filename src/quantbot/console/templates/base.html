@@ -66,6 +66,19 @@
 
   /* Absence is styled as absence. A dash in the value slot must never read as a zero. */
   .absent { color: var(--absent); font-style: italic; }
+  /* Native disclosure rather than a scripted tooltip: keyboard reachable, screen-reader
+     announced, and it works with JavaScript disabled -- which a control surface should. */
+  details.hint { display: inline-block; margin-top: .25rem; }
+  details.hint > summary {
+    cursor: pointer; color: var(--ink-faint); font-size: .95rem;
+    list-style: none; display: inline-block; padding: 0 .15rem;
+  }
+  details.hint > summary::-webkit-details-marker { display: none; }
+  details.hint > summary:hover, details.hint > summary:focus { color: var(--accent); }
+  details.hint > p {
+    margin: .4rem 0 0; max-width: 34rem; color: var(--ink-faint);
+    font-size: .78rem; line-height: 1.45;
+  }
 
   table { width: 100%; border-collapse: collapse; font-size: .87rem; }
   .scroll { overflow-x: auto; }
