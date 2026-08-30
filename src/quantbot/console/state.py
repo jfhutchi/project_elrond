@@ -28,7 +28,7 @@ from pathlib import Path
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from quantbot.operations.registry import ConfigSetting, config_registry
@@ -57,6 +57,12 @@ STALE_RUN_DAYS = 4
 #: restart. Anything tighter reports a healthy daemon as stopped, which teaches an operator to
 #: ignore the line.
 STALE_OBSERVATION_MINUTES = 45
+
+#: How many heartbeats the session page lists. A `PROJECT_DEFAULT` (#72): at the 15-minute
+#: interval this is about eight hours, so one full session plus its edges fits on the page. More
+#: would be a scroll nobody reads; fewer would hide the shape of a session that degraded and
+#: recovered, which is the pattern worth seeing.
+SESSION_OBSERVATION_ROWS = 32
 
 
 class HealthPanel(FrozenModel):
@@ -272,6 +278,46 @@ class ReportsPanel(FrozenModel):
     missing: bool = False
 
 
+class ObservationRow(FrozenModel):
+    """One market-hours heartbeat, as the console shows it."""
+
+    observed_at: datetime
+    market_open: bool
+    #: HEALTHY, DEGRADED or HALTED. Halted is a deliberate stop, not a fault.
+    outcome: Text
+    reasons: tuple[str, ...] = ()
+
+
+class SessionPanel(FrozenModel):
+    """What the market-hours loop has actually been doing (#143).
+
+    Counts and a recent list, and nothing that could be mistaken for research progress. A loop
+    that observed 26 times today has not discovered anything -- it has confirmed that the parts
+    of the system that can go wrong between one close and the next have not.
+
+    Deliberately reports the session state **as of the last heartbeat** rather than calling the
+    broker. The console reads authoritative stored state in one transaction; a live clock call
+    here would add a network dependency that can fail, and would show a market state no recorded
+    observation was taken under.
+    """
+
+    observations: tuple[ObservationRow, ...] = ()
+    #: Every heartbeat ever recorded, not merely the ones listed above.
+    total: int = 0
+    healthy: int = 0
+    degraded: int = 0
+    halted: int = 0
+
+    @property
+    def market_open_at_last_heartbeat(self) -> bool | None:
+        """`None` when nothing has ever been observed, which is not the same as a closed market."""
+        return self.observations[0].market_open if self.observations else None
+
+    @property
+    def ever_observed(self) -> bool:
+        return self.total > 0
+
+
 class ConsoleState(FrozenModel):
     """Everything the read-only console renders, assembled in one pass."""
 
@@ -282,6 +328,8 @@ class ConsoleState(FrozenModel):
     market_data: MarketDataPanel
     capacity: CapacityPanel
     discovery: DiscoveryPanel
+    #: The market-hours loop's own record of itself (#143).
+    session: SessionPanel = SessionPanel()
     #: Every budget with recorded spend, non-renewable first.
     budgets: tuple[BudgetRow, ...] = ()
     #: `None` when the console was built without a reports directory.
@@ -714,6 +762,49 @@ def build_runtime_panel(host: object, *, measured_at: datetime) -> RuntimePanel:
     )
 
 
+def _session(session: Session) -> SessionPanel:
+    """Read the heartbeat log the market-hours loop writes (#143).
+
+    Counts come from the whole table and the listed rows from its tail, so a page showing 32
+    observations still reports honestly how many there have been. Deriving the count from the
+    listed rows would silently cap it at the page size.
+    """
+    counts = {
+        str(row.outcome): int(row.n)
+        for row in session.execute(
+            select(
+                session_observations.c.outcome,
+                func.count().label("n"),
+            ).group_by(session_observations.c.outcome)
+        )
+    }
+    rows = session.execute(
+        select(
+            session_observations.c.observed_at,
+            session_observations.c.market_open,
+            session_observations.c.outcome,
+            session_observations.c.reasons,
+        )
+        .order_by(session_observations.c.observed_at.desc())
+        .limit(SESSION_OBSERVATION_ROWS)
+    ).all()
+    return SessionPanel(
+        observations=tuple(
+            ObservationRow(
+                observed_at=decode_utc(row.observed_at),
+                market_open=bool(row.market_open),
+                outcome=str(row.outcome),
+                reasons=tuple(part for part in str(row.reasons).split(",") if part),
+            )
+            for row in rows
+        ),
+        total=sum(counts.values()),
+        healthy=int(counts.get("HEALTHY", 0)),
+        degraded=int(counts.get("DEGRADED", 0)),
+        halted=int(counts.get("HALTED", 0)),
+    )
+
+
 def read_console_state(
     session: Session,
     *,
@@ -736,6 +827,7 @@ def read_console_state(
         market_data=_market_data(session),
         capacity=_capacity(session, strategies),
         discovery=_discovery(session),
+        session=_session(session),
         budgets=_budgets(session),
         reports=reports,
         runtime=runtime,
