@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 16
+SCHEMA_VERSION = 17
 
 metadata = MetaData(
     naming_convention={
@@ -787,6 +787,53 @@ Index(
     "ix_anomaly_dependence_contexts_group",
     anomaly_dependence_contexts.c.dependence_snapshot_identity,
     anomaly_dependence_contexts.c.group_key,
+)
+
+
+# --- Counterfactual: what a refusal cost, once its horizon elapsed (#57 phase 2) --------------
+#
+# Append-only, and keyed so it cannot become an amendment. The refusal in `rejected_candidates`
+# is what was known at decision time and stays that way forever; hindsight arrives here as a new
+# row that references it.
+#
+# `(observation_id, policy_identity)` is unique: one hypothetical execution policy has one answer
+# per refusal. A second policy is a second dataset and gets its own row, because pooling outcomes
+# computed under different execution assumptions defeats the question #57 exists to ask.
+#
+# Nothing here carries a quantity, a client order id or a side. A hypothetical outcome must not
+# be mistakable for an order, and the schema is where that stops being a convention.
+counterfactual_outcomes = Table(
+    "counterfactual_outcomes",
+    metadata,
+    Column("outcome_id", String(128), primary_key=True),
+    Column("observation_id", String(128), nullable=False),
+    Column("policy_identity", String(128), nullable=False),
+    # COUNTERFACTUAL_UNAVAILABLE (not yet), _UNEVALUABLE (never), _EVALUATED (measured).
+    Column("state", String(40), nullable=False),
+    Column("horizon_session", String(10)),
+    Column("evaluated_at", String(40)),
+    # Only ever populated on EVALUATED. A number beside a non-evaluated state gets quoted.
+    Column("net_excess_bps", Text),
+    Column("gross_return_bps", Text),
+    Column("benchmark_return_bps", Text),
+    # Why a terminal outcome is terminal. Without it, never is indistinguishable from not yet.
+    Column("unevaluable_reason", String(40)),
+    Column("detail", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["observation_id"],
+        ["rejected_candidates.observation_id"],
+        ondelete="CASCADE",
+    ),
+    UniqueConstraint(
+        "observation_id",
+        "policy_identity",
+        name="one_outcome_per_refusal_and_policy",
+    ),
+)
+Index(
+    "ix_counterfactual_outcomes_policy",
+    counterfactual_outcomes.c.policy_identity,
+    counterfactual_outcomes.c.state,
 )
 
 

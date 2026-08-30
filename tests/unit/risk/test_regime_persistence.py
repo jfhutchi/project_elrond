@@ -172,7 +172,12 @@ def test_an_unavailable_axis_survives_the_round_trip_with_its_reason(tmp_path: P
 
 
 def test_the_migration_is_additive_and_leaves_prior_rows_alone(tmp_path: Path) -> None:
-    """A real 0015 store through the real migration."""
+    """A real 0015 store through the real migration.
+
+    Asserted against `SCHEMA_VERSION` rather than a literal. An earlier version hardcoded 16 and
+    broke the moment 0017 landed -- a test that has to be edited by every later migration is a
+    test that will eventually be edited without being read.
+    """
     from alembic import command
     from alembic.config import Config
 
@@ -193,4 +198,6 @@ def test_the_migration_is_additive_and_leaves_prior_rows_alone(tmp_path: Path) -
     finally:
         database.close()
 
-    assert marker is not None and marker[0] == 16
+    from quantbot.storage.schema import SCHEMA_VERSION
+
+    assert marker is not None and marker[0] == SCHEMA_VERSION
