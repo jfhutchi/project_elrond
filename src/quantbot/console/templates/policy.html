@@ -73,11 +73,15 @@
       <tr><th>Setting</th><th>In force</th><th>New value</th></tr>
       {% for name in fields %}
       <tr>
-        <td class="mono">{{ name }}</td>
-        <td class="mono quiet">{{ policy[name] }}</td>
+        <td class="mono"><label for="field-{{ name }}">{{ name }}</label></td>
+        <td class="mono quiet" id="in-force-{{ name }}">{{ policy[name] }}</td>
         <td>
-          <input type="text" name="{{ name }}" value="{{ pending.get(name, '') }}"
-                 placeholder="unchanged" autocomplete="off">
+          {# Labelled and described. Without the association every box announces as "unchanged",
+             so an operator using a screen reader gets eight identical fields and no way to tell
+             which threshold they are editing. #}
+          <input type="text" id="field-{{ name }}" name="{{ name }}"
+                 value="{{ pending.get(name, '') }}" placeholder="unchanged"
+                 autocomplete="off" aria-describedby="in-force-{{ name }}">
         </td>
       </tr>
       {% endfor %}

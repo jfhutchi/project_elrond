@@ -33,6 +33,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from datetime import datetime
+from decimal import Decimal
 from typing import Annotated, Any, Self
 
 from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
@@ -85,6 +86,20 @@ class ConfigProposal(BaseModel):
 #: ordering of the history it is appending to.
 UNPROPOSABLE_POLICY_FIELDS: frozenset[str] = frozenset({"authority", "version"})
 
+#: Field types a text form can honestly round-trip.
+#:
+#: Found by rendering the page rather than by a test: `enabled` is a `frozenset[VetoName]` and
+#: `freshness` is a nested policy, and both appeared as editable text boxes containing a Python
+#: repr -- `frozenset({<VetoName.EXPOSURE_CONCENTRATION: ...`. Nobody can type that, and every
+#: attempt would fail validation, so the box was an invitation to an error.
+#:
+#: Excluded here rather than filtered in the template, because a form that shows a field it
+#: cannot accept is the same class of lie as a console that shows a rule the runtime is not
+#: running. These fields are still versioned, still evidence-bearing and still changeable -- by
+#: a caller that can express them. They need an editor, and until one exists the honest surface
+#: is one that says so.
+EDITABLE_TYPES: tuple[type, ...] = (int, str, Decimal)
+
 
 def proposable_fields() -> frozenset[str]:
     """Which settings a console may propose at all.
@@ -109,15 +124,18 @@ def proposable_fields() -> frozenset[str]:
     defence in depth, because a guard that is named for a job it does not do is worse than no
     guard: it is what a future reader will trust when they widen this function.
 
-    `authority` and `version` are excluded separately -- they are provenance, not settings.
+    `authority` and `version` are excluded separately -- they are provenance, not settings, and
+    fields a text form cannot express are excluded by type; see `EDITABLE_TYPES`.
     """
     registry = {row.key: row for row in config_registry()}
+    shipped = PortfolioVetoPolicy()
     return frozenset(
         key
         for key in PortfolioVetoPolicy.model_fields
         if key in registry
         and registry[key].safety_class is SafetyClass.EVIDENCE_BEARING
         and key not in UNPROPOSABLE_POLICY_FIELDS
+        and isinstance(getattr(shipped, key, None), EDITABLE_TYPES)
     )
 
 
