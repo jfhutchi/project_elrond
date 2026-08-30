@@ -76,10 +76,14 @@ from quantbot.risk import (
     observation_id,
     size_entry,
 )
+from quantbot.risk.counterfactual import (
+    HypotheticalExecutionPolicy,
+    evaluate_counterfactual,
+)
 from quantbot.risk.dependence import DependenceSnapshot, build_dependence_snapshot
 from quantbot.risk.exposure import ExposureClassification, load_exposure_classification
 from quantbot.risk.regime import build_market_regime_snapshot
-from quantbot.risk.shadow import session_of
+from quantbot.risk.shadow import CounterfactualState, session_of
 from quantbot.storage import Database, StorageRepository
 from quantbot.strategy import (
     MonthlyRoster,
@@ -477,6 +481,7 @@ class AdaptiveMomentumRunner:
         exposure_classification: ExposureClassification | None = None,
         anomaly_detector: AnomalyDetectorConfig | None = None,
         catalyst_source: CatalystSource | None = None,
+        counterfactual_policy: HypotheticalExecutionPolicy | None = None,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -503,6 +508,11 @@ class AdaptiveMomentumRunner:
         # source nobody configured would be indistinguishable from a source that answered and
         # found nothing, which is the exact confusion `catalyst.py` is built around.
         self._catalyst_source = catalyst_source
+        # #57. Frozen before any outcome is computed, and an input to evaluation rather than a
+        # parameter of it: choosing an execution assumption after seeing returns is how a
+        # hypothetical fill becomes a convenient one. Two outcomes under different policies are
+        # two datasets, so the identity travels with every result.
+        self._counterfactual = counterfactual_policy or HypotheticalExecutionPolicy()
         self._clock = clock
         self._run_id: str | None = None
 
@@ -683,6 +693,85 @@ class AdaptiveMomentumRunner:
                 occurred_at=observed_at,
             )
         return recorded
+
+    def _evaluate_matured_counterfactuals(
+        self,
+        repository: StorageRepository,
+        calendar_sessions: Sequence[XNYSSession],
+        *,
+        now: datetime,
+    ) -> int:
+        """Answer what each elapsed refusal would have cost. Returns how many were answered.
+
+        #57 built `evaluate_counterfactual` and the outcomes table, and nothing ever called
+        either -- so even once horizons elapsed, no refusal would have been evaluated. The
+        blocker was recorded as "no horizons have elapsed", which was true and hid that the pass
+        did not exist. Time was only half of it.
+
+        Deliberately re-derived from stored bars rather than from the cycle's `sliced` window:
+        a horizon reaches back further than a decision window, and an evaluator restricted to
+        what today's cycle happened to read would silently skip the older refusals.
+
+        Nothing here can affect a decision. It reads refusals, writes outcomes, and returns a
+        count; the trading path never reads an outcome.
+        """
+        sessions = [item.session_date for item in calendar_sessions]
+        if not sessions:
+            return 0
+
+        benchmark_closes = {
+            bar.timestamp.date(): bar.close
+            for bar in repository.list_bars(symbol=self._counterfactual.benchmark_symbol)
+        }
+        closes_by_symbol: dict[str, dict[date, Decimal]] = {}
+        answered = 0
+
+        # Skip refusals already answered *under this policy*. Deliberately not keyed on
+        # `rejected_candidates.state`: that column never advances, because #57 is explicit that an
+        # outcome references the observation rather than amending it -- the refusal keeps saying
+        # what was known when it was made. A filter on it would therefore never filter, and every
+        # historical refusal would be re-evaluated on every cycle, at a cost growing with exactly
+        # the history this is meant to accumulate. (My first version did that, and the test that
+        # was supposed to catch it passed on the repository's idempotency instead.)
+        #
+        # Policy-scoped rather than global, and that is a feature: a different execution policy
+        # is a different dataset, so its outcomes have to be computed rather than inherited.
+        already = {
+            str(row["observation_id"])
+            for row in repository.list_counterfactual_outcomes(
+                policy_identity=self._counterfactual.identity
+            )
+        }
+
+        for parent, _reasons in repository.list_rejected_candidates(
+            strategy_id=self._identity.strategy_id
+        ):
+            if str(parent["observation_id"]) in already:
+                continue
+            symbol = str(parent["symbol"])
+            if symbol not in closes_by_symbol:
+                closes_by_symbol[symbol] = {
+                    bar.timestamp.date(): bar.close
+                    for bar in repository.list_bars(symbol=symbol)
+                }
+            outcome = evaluate_counterfactual(
+                observation_id=str(parent["observation_id"]),
+                direction=CandidateDirection(str(parent["direction"])),
+                reference_price=Decimal(str(parent["reference_price"])),
+                decision_session=date.fromisoformat(str(parent["session_date"])),
+                policy=self._counterfactual,
+                sessions=sessions,
+                symbol_closes=closes_by_symbol[symbol],
+                benchmark_closes=benchmark_closes,
+                evaluated_at=now,
+            )
+            # `UNAVAILABLE` means the horizon has not elapsed. Storing that would record a
+            # non-answer as an answer and make "not yet" indistinguishable from "measured".
+            if outcome.state is CounterfactualState.UNAVAILABLE:
+                continue
+            if repository.record_counterfactual_outcome(outcome.as_row()):
+                answered += 1
+        return answered
 
     def _record_regime(
         self,
@@ -1021,6 +1110,18 @@ class AdaptiveMomentumRunner:
         evaluated = 0
         with self._database.transaction() as session:
             repository = StorageRepository(session)
+            # #57. Answer any refusal whose horizon has now elapsed, before this cycle records
+            # new ones. Contained like the other research recorders: what a refusal would have
+            # cost is context for judging the gates, and nothing in the decision path below reads
+            # an outcome. A failure here must cost that context and never a trading cycle.
+            try:
+                self._evaluate_matured_counterfactuals(repository, calendar_sessions, now=now)
+            except Exception as error:  # noqa: BLE001 -- contained; see above
+                self._record_contained_failure(
+                    kind="counterfactual-evaluation",
+                    message=f"counterfactual evaluation failed for this cycle: {error!r}",
+                    occurred_at=now,
+                )
             for symbol in self._config.universe:
                 position = positions.get(symbol)
                 context: PositionContext | None = None
