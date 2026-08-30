@@ -76,12 +76,12 @@ from quantbot.reporting import (
 )
 from quantbot.risk import (
     OrderPurpose,
-    PortfolioVetoPolicy,
     build_veto_inputs,
     calculate_drawdown,
     evaluate_portfolio_vetoes,
 )
 from quantbot.risk.exposure import load_exposure_classification
+from quantbot.risk.policy_versions import PolicySource, PolicyVersion, active_policy_version
 from quantbot.storage import Database, StateConflictError, StorageRepository
 from quantbot.strategy import (
     StrategyConfig,
@@ -219,6 +219,12 @@ class Runtime:
     metrics: OperationalMetrics
     broker_transport: HttpxBrokerTransport
     data_transport: HttpxMarketDataTransport
+    #: The recorded rule this process is running under (#82), resolved once at wiring time so
+    #: every collaborator evaluates against the same version and the identity written into a
+    #: refusal is the identity of the policy that actually produced it.
+    veto_version: PolicyVersion
+    #: Whether that version was read from the store or written as version 1 on first sight.
+    veto_source: PolicySource
 
     def cycle(self) -> RunOnceCycle:
         return RunOnceCycle(
@@ -284,6 +290,16 @@ def build_runtime(
             AlpacaMarketCalendar(api_key=key, api_secret=secret, transport=data_transport)
         )
         settings_for_data = market_data_settings()
+    # #82. The rule the runtime enforces is the *recorded* one. Constructing
+    # `PortfolioVetoPolicy()` here instead -- which is what this did -- meant every applied change
+    # produced a correct, fully audited version history that changed nothing about what the
+    # system does. On first run the shipped defaults are written as version 1 rather than assumed,
+    # so refusals recorded before anyone opens a console still cite a version the history explains.
+    with active_database.transaction() as session:
+        veto_version, veto_source = active_policy_version(
+            StorageRepository(session), now=datetime.now(UTC)
+        )
+    veto_policy = veto_version.policy()
     return Runtime(
         settings=active_settings,
         config=config,
@@ -300,6 +316,7 @@ def build_runtime(
             sessions=sessions,
             config=config,
             market_data=settings_for_data,
+            veto_policy=veto_policy,
         ),
         strategy=AdaptiveMomentumRunner(
             database=active_database,
@@ -308,6 +325,7 @@ def build_runtime(
             identity=identity,
             sessions=sessions,
             market_data=settings_for_data,
+            veto_policy=veto_policy,
         ),
         recovery=LedgerSyncingRecovery(
             active_database,
@@ -318,6 +336,8 @@ def build_runtime(
         metrics=OperationalMetrics(),
         broker_transport=broker_transport,
         data_transport=data_transport,
+        veto_version=veto_version,
+        veto_source=veto_source,
     )
 
 
@@ -626,7 +646,10 @@ async def _paper_smoke(runtime: Runtime) -> dict[str, object]:
         symbol_bars = [(bar.timestamp, bar.volume) for bar in stored_bars]
         # The last durable close, which is a price the decision could actually have seen.
         last_close = stored_bars[-1].close if stored_bars else None
-    policy = PortfolioVetoPolicy()
+    # The recorded policy this runtime resolved at wiring time, not a fresh construction of the
+    # defaults -- otherwise the smoke path would judge an order against a rule the cycle is not
+    # using, and report a veto decision citing an identity nothing enforced.
+    policy = runtime.veto_version.policy()
     # `STALE_MARKET_DATA` judges the feed against the sessions the market completed rather than
     # against elapsed time (#74), so it needs the calendar. Without it the veto refuses, which is
     # correct and would silently stop the smoke path -- so it is fetched rather than defaulted.
