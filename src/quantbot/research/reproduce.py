@@ -53,6 +53,13 @@ from pathlib import Path
 from quantbot.research.manifest import ExperimentManifest
 from quantbot.research.reproducibility import check_invariants
 
+#: What #48 asks for that exists: `reproduction_compare.compare_manifests` decides whether a
+#: rerun's manifest matches the original. Built before the execution capability on purpose -- the
+#: comparison rule decides what counts as reproduction, and writing it after seeing a rerun's
+#: output would be choosing the tolerance that makes the result agree.
+#:
+#: It compares; it does not rerun. Every entry below is still outstanding.
+
 #: The minimum behaviours #48 asks for that this command does not implement. Named individually
 #: rather than summarised, so a reader can tell which parts of "reproducible" are still missing
 #: instead of inferring it from an absence.
@@ -60,7 +67,7 @@ OUTSTANDING: tuple[str, ...] = (
     "resolve the dataset snapshots named by the manifest back to their exact bytes",
     "reconstruct the compiled experiment plan from the registration",
     "execute it through the authoritative path the manifest names",
-    "produce a new manifest and compare it to the original",
+    "produce a new manifest from the rerun",
     "replay a frozen external-worker artifact rather than re-running its inference",
 )
 
