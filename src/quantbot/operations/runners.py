@@ -12,6 +12,12 @@ from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
+from quantbot.anomaly import (
+    AnomalyDetectorConfig,
+    SessionObservation,
+    dependence_contexts,
+    detect,
+)
 from quantbot.brokers import BrokerAdapter
 from quantbot.domain import (
     Account,
@@ -428,6 +434,7 @@ class AdaptiveMomentumRunner:
         market_data: MarketDataSettings | None = None,
         veto_policy: PortfolioVetoPolicy | None = None,
         exposure_classification: ExposureClassification | None = None,
+        anomaly_detector: AnomalyDetectorConfig | None = None,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -445,6 +452,10 @@ class AdaptiveMomentumRunner:
         # every order, so enabling the control while leaving it unwired would have halted paper
         # trading in the name of protecting it.
         self._exposure = exposure_classification or load_exposure_classification()
+        # #56's detector, running on the feed this runtime actually reads. Its capability gate
+        # decides which families may fire: on a venue feed the volume family is refused and the
+        # price family is not, which is why the config takes the feed rather than assuming one.
+        self._anomaly = anomaly_detector or AnomalyDetectorConfig(feed=self._market_data.feed)
         self._clock = clock
         self._run_id: str | None = None
 
@@ -467,6 +478,75 @@ class AdaptiveMomentumRunner:
                 symbol: repository.list_bars(symbol=symbol, provider=provider_key)
                 for symbol in self._config.universe
             }
+
+    def _record_anomalies(
+        self,
+        sliced: Mapping[str, list[Bar]],
+        dependence: DependenceSnapshot | None,
+        *,
+        observed_at: datetime,
+    ) -> int:
+        """Detect and persist anomalies for this cycle. Returns how many were new.
+
+        Deliberately separate from the decision path and deliberately unable to affect it. The
+        events are written, the dependence grouping is written beside them as its own relation
+        (#94), and nothing in this runner reads either when choosing orders.
+
+        Failures here are contained. An anomaly is research context, and losing a cycle of it is
+        a gap in a dataset; letting it interrupt the cycle would let an observability feature
+        stop trading, which is the wrong trade in both directions.
+        """
+        events = []
+        for symbol, bars in sorted(sliced.items()):
+            history = [
+                SessionObservation(
+                    session_date=bar.timestamp.date(),
+                    volume=bar.volume,
+                    close=bar.close,
+                    high=bar.high,
+                    low=bar.low,
+                )
+                for bar in bars
+            ]
+            event = detect(
+                symbol=symbol,
+                history=history,
+                config=self._anomaly,
+                observed_at=observed_at,
+            )
+            if event is not None:
+                events.append(event)
+        if not events:
+            return 0
+
+        contexts = (
+            dependence_contexts(
+                events,
+                {
+                    symbol: f"cluster-{index:02d}"
+                    for index, cluster in enumerate(
+                        dependence.clusters(
+                            sorted(dependence.symbols),
+                            threshold=self._veto_policy.correlation_threshold,
+                        )
+                    )
+                    for symbol in cluster
+                },
+                snapshot_identity=dependence.identity,
+            )
+            if dependence is not None
+            else ()
+        )
+
+        recorded = 0
+        with self._database.transaction() as session:
+            repository = StorageRepository(session)
+            for event in events:
+                if repository.record_anomaly_event(event.as_row()):
+                    recorded += 1
+            for context in contexts:
+                repository.record_anomaly_dependence_context(context.as_row())
+        return recorded
 
     def _dependence_snapshot(
         self, histories: Mapping[str, list[Bar]], session_window: Sequence[date]
@@ -702,6 +782,11 @@ class AdaptiveMomentumRunner:
                 -self._veto_policy.correlation_lookback_sessions :
             ],
         )
+        # #56. Observation only: an anomaly is a routing signal for research and holds no
+        # broker authority, so nothing below reads these events when deciding what to submit.
+        # Built from `sliced` for the same reason the dependence snapshot is -- it must see only
+        # what was knowable at the decision.
+        self._record_anomalies(sliced, dependence, observed_at=now)
         roster = self._roster(histories, calendar_sessions, evaluation_index + 1)
         sequence = sequence_for(self._config, calendar_sessions)
 

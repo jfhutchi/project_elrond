@@ -529,3 +529,88 @@ def test_build_runtime_assembles_every_operational_collaborator(
     assert runtime.identity.configuration_hash
     assert runtime.cycle() is not None
     runtime.database.close()
+
+
+async def test_a_cycle_records_anomalies_without_letting_them_touch_the_decision(
+    tmp_path: Path,
+) -> None:
+    """#56 reaching production, and staying out of the way once it gets there.
+
+    The detector was correct and unreachable: nothing outside its own package called `detect`.
+    That is the failure this branch has met repeatedly -- a control that is right in isolation
+    and never wired -- so the assertion is that a real cycle *writes events*, not that the code
+    exists.
+
+    The second half matters as much. An anomaly is a routing signal for research and holds no
+    broker authority, so the cycle must still submit the order it would have submitted anyway.
+    An observability feature that could change what gets traded is not observability.
+    """
+    config = load_strategy_config(_write_config(tmp_path))
+    database = Database.create(tmp_path / "quantbot.db")
+    KillSwitchController(database).clear(
+        reason="test fixture readiness", measured=measured(), updated_at=NOW
+    )
+    cycle, strategy, broker_transport = _build_cycle(tmp_path, config, database)
+    strategy.bind_run("run-1")
+
+    result = await cycle.run("run-1", started_at=NOW, trading_date=NOW.date())
+
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        events = repository.list_anomaly_events()
+        contexts = [
+            context
+            for event in events
+            for context in repository.list_anomaly_dependence_contexts(
+                anomaly_event_id=str(event["event_id"])
+            )
+        ]
+    database.close()
+
+    assert events, "a cycle over this fixture must record anomalies; the detector is unwired"
+    assert result.status == "SUCCEEDED"
+    assert broker_transport.submitted, "detection must not suppress the order the cycle would place"
+
+    # The fixture reads IEX, so the per-family capability gate must be visible in what was
+    # stored: price fires, volume is refused, and the event is still valid.
+    for event in events:
+        assert event["feed"] == "iex"
+        assert event["volume_coverage"] == "SINGLE_VENUE"
+        assert "PRICE_VELOCITY" in str(event["triggers"])
+        assert "VOLUME_SHOCK" not in str(event["triggers"])
+        assert "VOLUME_SHOCK=FEED_UNFIT" in str(event["family_quality"])
+
+    # Each event carries the matrix that grouped it, as a relation rather than a field (#94).
+    assert len(contexts) == len(events)
+    assert all(row["dependence_snapshot_identity"] for row in contexts)
+
+
+async def test_replaying_a_cycle_does_not_record_the_same_anomaly_twice(
+    tmp_path: Path,
+) -> None:
+    """Replay safety where it actually matters: the production path, not a unit fixture.
+
+    `event_id` excludes the wall clock precisely so a re-run is idempotent. If that only held in
+    isolation, a restarted daemon would double every event and inflate the rate the routing
+    experiment reports.
+    """
+    config = load_strategy_config(_write_config(tmp_path))
+    database = Database.create(tmp_path / "quantbot.db")
+    KillSwitchController(database).clear(
+        reason="test fixture readiness", measured=measured(), updated_at=NOW
+    )
+    cycle, strategy, _ = _build_cycle(tmp_path, config, database)
+
+    strategy.bind_run("run-1")
+    await cycle.run("run-1", started_at=NOW, trading_date=NOW.date())
+    with database.transaction() as session:
+        first = len(StorageRepository(session).list_anomaly_events())
+
+    strategy.bind_run("run-2")
+    await cycle.run("run-2", started_at=NOW, trading_date=NOW.date())
+    with database.transaction() as session:
+        second = len(StorageRepository(session).list_anomaly_events())
+    database.close()
+
+    assert first > 0
+    assert second == first, "re-running the same session must not mint a second set of events"
