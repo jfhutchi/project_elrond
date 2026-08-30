@@ -45,7 +45,7 @@ jobs:
       QUANTBOT_LIVE_TRADING: "false"
       UV_LINK_MODE: copy
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Install uv
         uses: astral-sh/setup-uv@v5
