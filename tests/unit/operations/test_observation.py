@@ -284,3 +284,90 @@ def test_a_nonpositive_interval_is_refused() -> None:
             NOW,
             observation_interval=timedelta(0),
         )
+
+
+# --- the constraints, at the layer that creates them ------------------------------------------
+
+
+def _staged_at_v20(path) -> None:  # type: ignore[no-untyped-def]
+    """Wind a fresh store back to v20, as an operator's existing store actually sits."""
+    import sqlite3
+
+    connection = sqlite3.connect(path)
+    connection.execute("DROP TABLE session_observations")
+    connection.execute("UPDATE schema_version SET version = 20")
+    connection.execute("UPDATE alembic_version SET version_num = '0020'")
+    connection.commit()
+    connection.close()
+
+
+@pytest.mark.parametrize(
+    ("label", "outcome", "reasons", "market_open"),
+    [
+        ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+        ("a fault naming no reason", "DEGRADED", "", 1),
+        ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+        ("market_open as something other than a flag", "HEALTHY", "", 7),
+    ],
+)
+def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+    tmp_path, label: str, outcome: str, reasons: str, market_open: int
+) -> None:  # type: ignore[no-untyped-def]
+    """The constraints, asserted on a store that arrived at v21 through the migration.
+
+    A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+    reading of this table ambiguous, which is what the table exists to prevent.
+
+    One correction worth recording, because the first version of this docstring was wrong. It
+    claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+    a constraint from the migration alone does not reach these assertions at all, because
+    `Database._compare_against_metadata` already refuses to open a store whose live schema
+    differs from the metadata this build was compiled against. Migration/schema drift is
+    prevented by that pre-existing guard, not by this test.
+
+    So what this actually asserts is that the constraint exists in the effective schema, checked
+    through the path an operator's existing store takes. Verified by mutation: removing a
+    constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+    an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+    assertions specifically.
+    """
+    import sqlite3
+
+    path = tmp_path / "migrated.db"
+    with Database.create(path):
+        pass
+    _staged_at_v20(path)
+    with Database.migrate(path):
+        pass
+
+    connection = sqlite3.connect(path)
+    try:
+        with pytest.raises(sqlite3.IntegrityError):
+            connection.execute(
+                "INSERT INTO session_observations (observation_id, observed_at, market_open, "
+                "outcome, reasons, detail) VALUES (?, ?, ?, ?, ?, ?)",
+                ("row", "2026-08-30T15:00:00Z", market_open, outcome, reasons, "{}"),
+            )
+    finally:
+        connection.close()
+
+
+def test_the_migration_reaches_the_current_version(tmp_path) -> None:  # type: ignore[no-untyped-def]
+    """The upgrade path exists and lands at v21, so a v20 store is not stranded."""
+    import sqlite3
+
+    path = tmp_path / "upgrade.db"
+    with Database.create(path):
+        pass
+    _staged_at_v20(path)
+    with Database.migrate(path):
+        pass
+
+    connection = sqlite3.connect(path)
+    try:
+        assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == 21
+        assert connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_observations'"
+        ).fetchone()
+    finally:
+        connection.close()
