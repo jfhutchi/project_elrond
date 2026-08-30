@@ -90,6 +90,7 @@ def create_app(
     runtime: RuntimePanel | None = None,
     reports: ReportsPanel | None = None,
     reconcile: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
+    sync_data: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -337,6 +338,32 @@ def create_app(
         except Exception as error:  # noqa: BLE001 -- reported, never silently swallowed
             return page_with_notice(request, f"reconciliation failed: {error!r}"[:400])
         return RedirectResponse("/", status_code=303)
+
+    @app.post("/operations/sync-data", response_model=None)
+    async def operations_sync_data(request: Request) -> RedirectResponse | HTMLResponse:
+        """Fetch and durably cache completed bars, and record what that found.
+
+        Safe in the same specific sense reconciliation is: it submits no order, cancels nothing
+        and moves no position. It reads a market-data provider and writes bars -- and `save_bars`
+        refuses to revise one it already holds, so a repeated sync cannot rewrite history.
+
+        The reason it is worth having on this surface is the freshness check that halts a cycle.
+        `MARKET_DATA_STALE` stops trading, and the fix is almost always "fetch the bars", which
+        currently needs a terminal. An operator who can see the staleness should be able to
+        address it from the same page.
+        """
+        if sync_data is None:
+            return page_with_notice(
+                request,
+                "this console cannot sync market data: it was started without market-data "
+                "credentials, and a surface that cannot reach the provider must not offer to "
+                "fetch from it",
+            )
+        try:
+            await sync_data()
+        except Exception as error:  # noqa: BLE001 -- reported, never silently swallowed
+            return page_with_notice(request, f"market data sync failed: {error!r}"[:400])
+        return RedirectResponse("/market-data", status_code=303)
 
     @app.get("/config", response_class=HTMLResponse)
     def config(request: Request) -> HTMLResponse:

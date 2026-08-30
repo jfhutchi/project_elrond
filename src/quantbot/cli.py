@@ -232,6 +232,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
 
     reports = build_reports_panel(runtime_paths().reports, now=datetime.now(UTC))
     reconcile = _console_reconcile(database, stream)
+    sync_data = _console_sync_data(database, stream)
     try:
         print(f"operator console on http://{host}:{port} reading {path}", file=stream)
         uvicorn.run(
@@ -241,6 +242,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
                 runtime=runtime,
                 reports=reports,
                 reconcile=reconcile,
+                sync_data=sync_data,
             ),
             host=host,
             port=port,
@@ -274,6 +276,68 @@ def _console_runtime_panel() -> RuntimePanel | None:
         return build_runtime_panel(profile, measured_at=moment)
     except Exception:  # noqa: BLE001 -- one panel is not worth the whole console
         return None
+
+
+def _console_sync_data(
+    database: Database, stream: TextIO
+) -> Callable[[], Awaitable[Mapping[str, object]]] | None:
+    """A callable that refreshes market data, or `None` when this context cannot.
+
+    Narrow for the same reason `_console_reconcile` is, and it happens to be easier here:
+    `MarketDataSync` takes a database, a bar source, a calendar, the strategy config and the
+    frozen veto policy. No broker, no execution coordinator, no strategy runner -- so the object
+    graph a console needs to fetch bars genuinely does not contain the order path.
+
+    It also does not call `build_runtime`, which writes: `load_or_create_identity` records a
+    strategy deployment and enters it on the promotion ladder, and opening a browser tab must
+    not mint deployment state.
+
+    The veto policy is read from the store rather than constructed, so the window this fetches
+    and the window the runner measures against cannot drift apart (#84).
+    """
+    from quantbot.market_data import AlpacaMarketCalendar, AlpacaMarketDataClient
+    from quantbot.market_data.transports import HttpxMarketDataTransport
+    from quantbot.operations import CachedSessionCalendar, MarketDataSync
+    from quantbot.risk.policy_versions import active_policy_version
+    from quantbot.runtime import market_data_settings, paper_credentials, runtime_paths
+    from quantbot.storage import StorageRepository
+    from quantbot.strategy.config import load_strategy_config
+
+    try:
+        settings = Settings()
+        key, secret = paper_credentials(settings)
+        config = load_strategy_config(runtime_paths().config)
+        transport = HttpxMarketDataTransport()
+        with database.transaction() as session:
+            version, _ = active_policy_version(
+                StorageRepository(session), now=datetime.now(UTC)
+            )
+    except Exception as error:  # noqa: BLE001 -- an unbuildable action is a reported absence
+        print(f"data sync unavailable: {error}", file=stream)
+        return None
+
+    sync = MarketDataSync(
+        database=database,
+        client=AlpacaMarketDataClient(api_key=key, api_secret=secret, transport=transport),
+        sessions=CachedSessionCalendar(
+            AlpacaMarketCalendar(api_key=key, api_secret=secret, transport=transport)
+        ),
+        config=config,
+        market_data=market_data_settings(),
+        veto_policy=version.policy(),
+    )
+
+    async def run() -> Mapping[str, object]:
+        result = await sync.sync()
+        return {
+            "ok": result.healthy,
+            "bars_stored": result.bars_stored,
+            "completed_through": result.completed_through.isoformat(),
+            "stale_symbols": list(result.stale_symbols),
+            "reasons": list(result.reasons),
+        }
+
+    return run
 
 
 def _console_reconcile(
