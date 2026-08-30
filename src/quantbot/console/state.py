@@ -23,7 +23,8 @@ redacts by type rather than by name, and the console reads it rather than the en
 from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
-from datetime import date, datetime
+from datetime import UTC, date, datetime
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
@@ -224,6 +225,32 @@ class BudgetRow(FrozenModel):
         return self.fraction is not None and self.fraction >= 1.0
 
 
+class ReportRow(FrozenModel):
+    """One report on disk. Listed rather than rendered."""
+
+    name: Text
+    written_at: datetime
+    size_bytes: int
+
+
+class ReportsPanel(FrozenModel):
+    """What has been written to the reports directory (#82).
+
+    A listing, not a viewer. Rendering the markdown would need a renderer this project does not
+    have, for a file the operator can open -- and the question this panel answers is not "what
+    did last week's report say" but "is anything still being produced", which is the question
+    that went unanswered while the system was stopped for ten days.
+    """
+
+    directory: Text
+    #: Newest first.
+    reports: tuple[ReportRow, ...] = ()
+    #: Whole days since the newest report. `None` when there are none.
+    days_since_latest: int | None = None
+    #: The directory does not exist. Distinct from existing and being empty.
+    missing: bool = False
+
+
 class ConsoleState(FrozenModel):
     """Everything the read-only console renders, assembled in one pass."""
 
@@ -236,6 +263,8 @@ class ConsoleState(FrozenModel):
     discovery: DiscoveryPanel
     #: Every budget with recorded spend, non-renewable first.
     budgets: tuple[BudgetRow, ...] = ()
+    #: `None` when the console was built without a reports directory.
+    reports: ReportsPanel | None = None
     #: `None` when the console was built without a measurement, which is the test default.
     runtime: RuntimePanel | None = None
     #: Unresolved only. A resolved incident is history; this panel is about what is still true.
@@ -295,6 +324,11 @@ class ConsoleState(FrozenModel):
             items.append(
                 "no capacity assessment has been persisted, so whether an edge survives the "
                 "capital it would be traded at is unmeasured (#51)"
+            )
+        if self.reports is not None and self.reports.missing:
+            items.append(
+                f"the reports directory {self.reports.directory} does not exist, so nothing "
+                "written there could be found"
             )
         exhausted = [row for row in self.budgets if row.exhausted and not row.renewable]
         if exhausted:
@@ -559,6 +593,42 @@ def _budgets(session: Session) -> tuple[BudgetRow, ...]:
     )
 
 
+def build_reports_panel(directory: Path, *, now: datetime) -> ReportsPanel:
+    """List what has been written, newest first.
+
+    Reads the filesystem rather than a table because that is where reports live. A missing
+    directory is reported as missing rather than as empty: "nobody has written a report" and
+    "the place reports go does not exist" are different faults, and only the second is a
+    configuration error.
+    """
+    if not directory.is_dir():
+        return ReportsPanel(directory=str(directory), missing=True)
+
+    rows = []
+    for path in sorted(directory.glob("*.md")):
+        try:
+            stat = path.stat()
+        except OSError:
+            # A file that vanished between the glob and the stat. Skipped rather than reported
+            # as size zero, which would read as an empty report somebody wrote.
+            continue
+        rows.append(
+            ReportRow(
+                name=path.name,
+                written_at=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
+                size_bytes=stat.st_size,
+            )
+        )
+    rows.sort(key=lambda row: row.written_at, reverse=True)
+    return ReportsPanel(
+        directory=str(directory),
+        reports=tuple(rows),
+        days_since_latest=(
+            None if not rows else max((now - rows[0].written_at).days, 0)
+        ),
+    )
+
+
 def build_runtime_panel(host: object, *, measured_at: datetime) -> RuntimePanel:
     """Turn a measured `HostProfile` into what the console renders.
 
@@ -598,7 +668,11 @@ def build_runtime_panel(host: object, *, measured_at: datetime) -> RuntimePanel:
 
 
 def read_console_state(
-    session: Session, *, now: datetime, runtime: RuntimePanel | None = None
+    session: Session,
+    *,
+    now: datetime,
+    runtime: RuntimePanel | None = None,
+    reports: ReportsPanel | None = None,
 ) -> ConsoleState:
     """Assemble everything the console renders, from authoritative state alone.
 
@@ -616,6 +690,7 @@ def read_console_state(
         capacity=_capacity(session, strategies),
         discovery=_discovery(session),
         budgets=_budgets(session),
+        reports=reports,
         runtime=runtime,
         incidents=_incidents(session),
         settings=tuple(settings.values()),
@@ -624,6 +699,8 @@ def read_console_state(
 
 __all__ = [
     "BudgetRow",
+    "ReportRow",
+    "ReportsPanel",
     "CapacityPanel",
     "ConsoleState",
     "JobPlacement",

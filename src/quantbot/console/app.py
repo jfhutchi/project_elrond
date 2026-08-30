@@ -39,7 +39,12 @@ from quantbot.console.control import (
     validate_proposal,
 )
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
-from quantbot.console.state import ConsoleState, RuntimePanel, read_console_state
+from quantbot.console.state import (
+    ConsoleState,
+    ReportsPanel,
+    RuntimePanel,
+    read_console_state,
+)
 from quantbot.operations.kill_switch import (
     KillSwitchClearBlocked,
     KillSwitchController,
@@ -70,6 +75,7 @@ NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/discovery", "Discovery"),
     ("/config", "Configuration"),
     ("/config/policy", "Risk policy"),
+    ("/reports", "Reports"),
     ("/runtime", "Runtime"),
     ("/kill-switch", "Kill switch"),
     ("/glossary", "Glossary"),
@@ -81,6 +87,7 @@ def create_app(
     *,
     measure: Callable[[], Awaitable[MeasuredReadiness]] | None = None,
     runtime: RuntimePanel | None = None,
+    reports: ReportsPanel | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -104,7 +111,9 @@ def create_app(
 
     def snapshot() -> ConsoleState:
         with database.transaction() as session:
-            return read_console_state(session, now=datetime.now(UTC), runtime=runtime)
+            return read_console_state(
+                session, now=datetime.now(UTC), runtime=runtime, reports=reports
+            )
 
     def page(request: Request, template: str, active: str) -> HTMLResponse:
         state = snapshot()
@@ -185,6 +194,11 @@ def create_app(
                 "blocking": blocking,
             },
         )
+
+    @app.get("/reports", response_class=HTMLResponse)
+    def reports_view(request: Request) -> HTMLResponse:
+        """What has been written to the reports directory. A listing, not a viewer."""
+        return page(request, "reports.html", "/reports")
 
     @app.get("/runtime", response_class=HTMLResponse)
     def runtime_view(request: Request) -> HTMLResponse:

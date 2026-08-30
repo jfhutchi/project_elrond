@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from quantbot.config import Settings
-from quantbot.console.state import RuntimePanel
+from quantbot.console.state import RuntimePanel, build_reports_panel
 from quantbot.domain import ReconciliationStatus
 from quantbot.operations import (
     KillSwitchController,
@@ -226,10 +226,15 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     database = Database(path)
     measure = _console_readiness_probe(database, stream)
     runtime = _console_runtime_panel()
+    # Listed from the configured directory, read once at start-up like the host profile. The
+    # listing is cheap, but rendering a page should not stat a directory either.
+    from quantbot.runtime import runtime_paths
+
+    reports = build_reports_panel(runtime_paths().reports, now=datetime.now(UTC))
     try:
         print(f"operator console on http://{host}:{port} reading {path}", file=stream)
         uvicorn.run(
-            create_app(database, measure=measure, runtime=runtime),
+            create_app(database, measure=measure, runtime=runtime, reports=reports),
             host=host,
             port=port,
             log_level="warning",
