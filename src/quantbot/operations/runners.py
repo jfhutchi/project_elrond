@@ -8,7 +8,7 @@ decision comes from :mod:`quantbot.strategy` and :mod:`quantbot.risk`.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 
@@ -75,6 +75,7 @@ from quantbot.risk import (
 )
 from quantbot.risk.dependence import DependenceSnapshot, build_dependence_snapshot
 from quantbot.risk.exposure import ExposureClassification, load_exposure_classification
+from quantbot.risk.regime import build_market_regime_snapshot
 from quantbot.risk.shadow import session_of
 from quantbot.storage import Database, StorageRepository
 from quantbot.strategy import (
@@ -92,6 +93,24 @@ from quantbot.strategy import (
 )
 
 Clock = Callable[[], datetime]
+
+
+@dataclass(frozen=True, slots=True)
+class ResearchContext:
+    """What the market looked like when a decision was made. Context, never authority.
+
+    Bound onto refusals so a later study can condition on the conditions rather than pooling
+    every rejection into one undifferentiated set (#56, #59). Nothing in the decision path reads
+    it, which is the property that keeps a regime label from ever relaxing a limit.
+
+    Absent stays absent. A missing regime is `None` rather than a neutral label, because a
+    substituted context is indistinguishable from a measured one once it is inside an analysis.
+    """
+
+    #: Symbol to the anomaly event fired for it this cycle, if any.
+    anomaly_event_ids: Mapping[str, str] = field(default_factory=dict)
+    #: One regime reading for the whole cycle: it describes the market, not a symbol.
+    regime_snapshot_id: str | None = None
 
 
 class StrategyDataError(RuntimeError):
@@ -485,17 +504,62 @@ class AdaptiveMomentumRunner:
         dependence: DependenceSnapshot | None,
         *,
         observed_at: datetime,
-    ) -> int:
-        """Detect and persist anomalies for this cycle. Returns how many were new.
+    ) -> Mapping[str, str]:
+        """Detect and persist anomalies for this cycle, returning each symbol's event id.
 
         Deliberately separate from the decision path and deliberately unable to affect it. The
         events are written, the dependence grouping is written beside them as its own relation
-        (#94), and nothing in this runner reads either when choosing orders.
+        (#94), and nothing in this runner reads either when deciding what to submit. The returned
+        ids are bound onto refusals as context (#56, #59) and are read by nothing else.
 
-        Failures here are contained. An anomaly is research context, and losing a cycle of it is
-        a gap in a dataset; letting it interrupt the cycle would let an observability feature
-        stop trading, which is the wrong trade in both directions.
+        Failures here are contained -- an anomaly is research context, and losing a cycle of it
+        is a gap in a dataset, while letting it stop the cycle would let an observability feature
+        halt trading. The containment is real this time: the first version of this method said
+        exactly that in its docstring and had no `except` anywhere in it, so a detector raising
+        would have taken the cycle down while the comment above it promised otherwise.
+
+        Contained is not silent. A swallowed failure that leaves no trace produces a dataset with
+        invisible holes, which is worse for research than a loud one, so the gap is recorded as
+        an incident.
         """
+        try:
+            return self._detect_and_record_anomalies(sliced, dependence, observed_at=observed_at)
+        except Exception as error:  # noqa: BLE001 -- deliberately broad; see above
+            self._record_contained_failure(
+                kind="anomaly-detection",
+                message=f"anomaly detection failed for this cycle: {error!r}",
+                occurred_at=observed_at,
+            )
+            return {}
+
+    def _record_contained_failure(
+        self, *, kind: str, message: str, occurred_at: datetime
+    ) -> None:
+        """Record a contained observability failure, and never raise from doing so.
+
+        A failure inside the handler for a failure must not be the thing that stops the cycle --
+        that would reintroduce exactly the coupling containment exists to remove.
+        """
+        try:
+            with self._database.transaction() as session:
+                StorageRepository(session).create_incident(
+                    incident_id=f"{kind}:{occurred_at.isoformat()}",
+                    severity="WARNING",
+                    kind=kind,
+                    message=message[:2000],
+                    occurred_at=occurred_at,
+                )
+        except Exception:  # noqa: BLE001 -- see above
+            return
+
+    def _detect_and_record_anomalies(
+        self,
+        sliced: Mapping[str, list[Bar]],
+        dependence: DependenceSnapshot | None,
+        *,
+        observed_at: datetime,
+    ) -> dict[str, str]:
+        """The body of `_record_anomalies`, separated so containment wraps all of it."""
         events = []
         for symbol, bars in sorted(sliced.items()):
             history = [
@@ -517,7 +581,7 @@ class AdaptiveMomentumRunner:
             if event is not None:
                 events.append(event)
         if not events:
-            return 0
+            return {}
 
         contexts = (
             dependence_contexts(
@@ -538,15 +602,59 @@ class AdaptiveMomentumRunner:
             else ()
         )
 
-        recorded = 0
         with self._database.transaction() as session:
             repository = StorageRepository(session)
             for event in events:
-                if repository.record_anomaly_event(event.as_row()):
-                    recorded += 1
+                repository.record_anomaly_event(event.as_row())
             for context in contexts:
                 repository.record_anomaly_dependence_context(context.as_row())
-        return recorded
+        # One event per symbol per cycle by construction: `detect` returns at most one.
+        return {event.symbol: event.event_id for event in events}
+
+    def _record_regime(
+        self,
+        sliced: Mapping[str, list[Bar]],
+        *,
+        as_of_session: date,
+        observed_at: datetime,
+    ) -> str | None:
+        """Record what kind of market this cycle happened in. Returns the snapshot id.
+
+        Contained for the same reason anomaly detection is: this describes the decision, it does
+        not make it, so a failure here must cost a row of context rather than a trading cycle.
+
+        `None` on failure or on a benchmark with too little history -- never a default label. A
+        regime study that read missing context as ordinary context would find effects in its own
+        gaps, which is the specific way this artifact could manufacture a result.
+        """
+        benchmark = sliced.get(self._config.regime_symbol)
+        if not benchmark:
+            return None
+        try:
+            snapshot = build_market_regime_snapshot(
+                as_of_session=as_of_session,
+                benchmark_symbol=self._config.regime_symbol,
+                source=(
+                    f"{self._market_data.provider}:{self._market_data.feed.value}"
+                    f":{self._market_data.adjustment.value}:1day"
+                ),
+                benchmark_closes=[bar.close for bar in benchmark],
+                universe_closes={
+                    symbol: [bar.close for bar in bars]
+                    for symbol, bars in sliced.items()
+                    if symbol != self._config.regime_symbol and bars
+                },
+            )
+            with self._database.transaction() as session:
+                StorageRepository(session).record_market_regime_snapshot(snapshot.as_row())
+        except Exception as error:  # noqa: BLE001 -- contained; see above
+            self._record_contained_failure(
+                kind="market-regime",
+                message=f"regime snapshot failed for this cycle: {error!r}",
+                occurred_at=observed_at,
+            )
+            return None
+        return snapshot.identity
 
     def _dependence_snapshot(
         self, histories: Mapping[str, list[Bar]], session_window: Sequence[date]
@@ -786,7 +894,14 @@ class AdaptiveMomentumRunner:
         # broker authority, so nothing below reads these events when deciding what to submit.
         # Built from `sliced` for the same reason the dependence snapshot is -- it must see only
         # what was knowable at the decision.
-        self._record_anomalies(sliced, dependence, observed_at=now)
+        research = ResearchContext(
+            anomaly_event_ids=self._record_anomalies(sliced, dependence, observed_at=now),
+            regime_snapshot_id=self._record_regime(
+                sliced,
+                as_of_session=calendar_sessions[evaluation_index].session_date,
+                observed_at=now,
+            ),
+        )
         roster = self._roster(histories, calendar_sessions, evaluation_index + 1)
         sequence = sequence_for(self._config, calendar_sessions)
 
@@ -902,6 +1017,7 @@ class AdaptiveMomentumRunner:
                             candidate_key=decision.bar_set_hash,
                             calendar_sessions=calendar_sessions,
                             dependence=dependence,
+                            research=research,
                         )
 
                 if request is not None and repository.get_order_intent(
@@ -1013,6 +1129,7 @@ class AdaptiveMomentumRunner:
         candidate_key: str,
         calendar_sessions: Sequence[XNYSSession],
         dependence: DependenceSnapshot | None,
+        research: ResearchContext,
     ) -> tuple[SubmissionRequest | None, tuple[str, ...]]:
         if decision_price is None or stop_distance is None or stop_distance <= 0:
             return None, ("ENTRY_INPUTS_UNAVAILABLE",)
@@ -1099,6 +1216,7 @@ class AdaptiveMomentumRunner:
                 observed_at=created_at,
                 candidate_key=candidate_key,
                 vetoes=vetoes,
+                research=research,
             )
             return None, vetoes.reasons
         reservations.append(
@@ -1138,6 +1256,7 @@ class AdaptiveMomentumRunner:
         observed_at: datetime,
         candidate_key: str,
         vetoes: PortfolioVetoDecision,
+        research: ResearchContext,
     ) -> None:
         """Keep one refusal and every rule that refused it, so #57 can eventually judge them.
 
@@ -1190,6 +1309,12 @@ class AdaptiveMomentumRunner:
             reference_price=reference_price,
             reasons=tuple(reasons),
             hypothesis_id=None if promotion is None else promotion.hypothesis_id,
+            # What the market looked like, bound at the moment of refusal (#56, #59). The
+            # columns and the model fields for these existed and nothing ever filled them, so
+            # every refusal on record was uncontextualised while the schema implied otherwise.
+            # Absent stays `None`: a substituted context cannot be told from a measured one.
+            market_regime_snapshot_id=research.regime_snapshot_id,
+            anomaly_event_id=research.anomaly_event_ids.get(symbol),
         )
         parent, reason_rows = as_rows(observation)
         repository.record_rejected_candidate(parent, reason_rows)

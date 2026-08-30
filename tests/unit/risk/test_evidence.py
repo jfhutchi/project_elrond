@@ -298,7 +298,7 @@ def test_the_production_path_attaches_evidence_to_every_reason(tmp_path: Path) -
     """
     from types import SimpleNamespace
 
-    from quantbot.operations.runners import AdaptiveMomentumRunner
+    from quantbot.operations.runners import AdaptiveMomentumRunner, ResearchContext
     from quantbot.risk.vetoes import PortfolioVetoDecision, PortfolioVetoPolicy
     from quantbot.storage import Database, StorageRepository
 
@@ -332,6 +332,7 @@ def test_the_production_path_attaches_evidence_to_every_reason(tmp_path: Path) -
             observed_at=NOW,
             candidate_key="entry",
             vetoes=decision,
+            research=ResearchContext(),
         )
         stored = repository.list_rejected_candidates()
     database.close()
