@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 19
+SCHEMA_VERSION = 20
 
 metadata = MetaData(
     naming_convention={
@@ -1046,3 +1046,48 @@ veto_policy_versions = Table(
     ),
 )
 Index("ix_veto_policy_versions_applied_at", veto_policy_versions.c.applied_at)
+
+
+catalyst_assessments = Table(
+    "catalyst_assessments",
+    metadata,
+    Column("assessment_id", String(128), primary_key=True),
+    Column("anomaly_event_id", String(128), nullable=False),
+    Column("observed_at", String(40), nullable=False),
+    Column("lookback_seconds", Integer, nullable=False),
+    # CATALYST_FOUND, NO_PUBLIC_CATALYST_FOUND (a finding), CATALYST_UNKNOWN (nobody looked).
+    Column("outcome", String(32), nullable=False),
+    # The denominator of a negative finding: who was asked, and who actually answered.
+    Column("sources_consulted", Text, nullable=False),
+    Column("unhealthy_sources", Text, nullable=False),
+    Column("catalyst_ids", Text, nullable=False),
+    # Counted, never dropped: the world explained the move, just not before it.
+    Column("published_after_event", Integer, nullable=False),
+    Column("unplaceable", Integer, nullable=False),
+    Column("detail", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["anomaly_event_id"], ["market_anomaly_events.event_id"], ondelete="CASCADE"
+    ),
+    UniqueConstraint(
+        "anomaly_event_id", "lookback_seconds", name="one_assessment_per_event_and_window"
+    ),
+    CheckConstraint("lookback_seconds > 0", name="a_window_has_width"),
+    CheckConstraint("published_after_event >= 0", name="counts_are_not_negative"),
+    CheckConstraint("unplaceable >= 0", name="unplaceable_is_not_negative"),
+    # An outage is not silence. Enforced by the database and not only by the model that writes
+    # to it, because this is the confusion that would turn provider incidents into discoveries.
+    CheckConstraint(
+        "NOT (outcome = 'NO_PUBLIC_CATALYST_FOUND' AND unhealthy_sources <> '')",
+        name="an_outage_is_not_a_negative_finding",
+    ),
+    CheckConstraint(
+        "NOT (outcome = 'NO_PUBLIC_CATALYST_FOUND' AND unplaceable > 0)",
+        name="an_unplaceable_item_is_not_silence",
+    ),
+    CheckConstraint(
+        "(outcome = 'CATALYST_FOUND') = (catalyst_ids <> '')",
+        name="a_positive_finding_names_what_it_found",
+    ),
+)
+Index("ix_catalyst_assessments_event", catalyst_assessments.c.anomaly_event_id)
+Index("ix_catalyst_assessments_outcome", catalyst_assessments.c.outcome)

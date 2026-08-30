@@ -37,6 +37,7 @@ from quantbot.storage.schema import (
     bars,
     broker_orders,
     capacity_assessments,
+    catalyst_assessments,
     counterfactual_outcomes,
     equity_snapshots,
     fills,
@@ -2127,6 +2128,47 @@ class StorageRepository:
             )
         ).all()
         return len(rows)
+
+    def record_catalyst_assessment(self, assessment: Mapping[str, object]) -> bool:
+        """Store one catalyst lookup. Idempotent by content-addressed id (#56).
+
+        Returns False on a repeat. Re-running the same lookup over the same window re-derives the
+        same id and stores once, so a retried enrichment does not inflate the number of times an
+        anomaly appears to have been investigated.
+
+        A *different* answer for the same event and window is a different id and therefore a new
+        row rather than a conflict. That is deliberate: the provider genuinely may have had
+        nothing at 10:00 and something at 10:05, and collapsing those two would destroy the
+        record that the second lookup found what the first could not.
+        """
+        assessment_id = str(assessment["assessment_id"])
+        existing = (
+            self._session.execute(
+                select(catalyst_assessments).where(
+                    catalyst_assessments.c.assessment_id == assessment_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return False
+        self._session.execute(catalyst_assessments.insert().values(**dict(assessment)))
+        return True
+
+    def list_catalyst_assessments(
+        self, *, anomaly_event_id: str | None = None, outcome: str | None = None
+    ) -> list[Mapping[str, object]]:
+        statement = select(catalyst_assessments).order_by(
+            catalyst_assessments.c.anomaly_event_id, catalyst_assessments.c.assessment_id
+        )
+        if anomaly_event_id is not None:
+            statement = statement.where(
+                catalyst_assessments.c.anomaly_event_id == anomaly_event_id
+            )
+        if outcome is not None:
+            statement = statement.where(catalyst_assessments.c.outcome == outcome)
+        return [dict(row) for row in self._session.execute(statement).mappings().all()]
 
     # --- veto policy versions (#82) ------------------------------------------------------------
 
