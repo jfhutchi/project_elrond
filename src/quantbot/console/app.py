@@ -88,6 +88,7 @@ def create_app(
     measure: Callable[[], Awaitable[MeasuredReadiness]] | None = None,
     runtime: RuntimePanel | None = None,
     reports: ReportsPanel | None = None,
+    reconcile: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -99,6 +100,15 @@ def create_app(
     somewhere the broker is not configured, which makes clearing the kill switch impossible
     rather than merely unlikely -- and says so, instead of offering a control that would refuse
     for a reason nobody could read.
+
+    `reconcile` is a **narrow callable**, not a `Runtime`. That distinction is the whole design:
+    `_reconcile` in `runtime.py` takes the entire object graph -- broker, execution coordinator,
+    recovery, market data -- and handing that to a web process would put the execution path
+    inside it. The console's safety story is that its route table is an allowlist and order
+    submission is not on it; holding a `Runtime` would make the capability *present* while no
+    route used it, and "nothing calls it" is a far weaker guarantee than "this process cannot".
+
+    So the console receives one function that does one thing, exactly as `measure` does.
     """
     app = FastAPI(
         title="Elrond operator console",
@@ -114,6 +124,25 @@ def create_app(
             return read_console_state(
                 session, now=datetime.now(UTC), runtime=runtime, reports=reports
             )
+
+    def page_with_notice(request: Request, notice: str) -> HTMLResponse:
+        """Operations, with something the operator has to read.
+
+        Rendered in place rather than redirected: a redirect to a page showing unchanged state
+        is indistinguishable from success, which is the same trap the policy apply path avoids.
+        """
+        state = snapshot()
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="operations.html",
+            context={
+                "state": state,
+                "navigation": NAVIGATION,
+                "active": "/",
+                "attention": state.attention,
+                "notice": notice,
+            },
+        )
 
     def page(request: Request, template: str, active: str) -> HTMLResponse:
         state = snapshot()
@@ -277,6 +306,31 @@ def create_app(
                 blocking=tuple(measured.blocking),
             )
         return RedirectResponse("/kill-switch", status_code=303)
+
+    @app.post("/operations/reconcile", response_model=None)
+    async def operations_reconcile(request: Request) -> RedirectResponse | HTMLResponse:
+        """Compare the broker's ledger against ours, and record what it found.
+
+        A safe operational action in the specific sense that matters: it submits no order,
+        cancels nothing and moves no position. It reads the broker, adopts its authoritative
+        fills, and records a reconciliation -- the same work the CLI does, through the same code.
+
+        Deliberately the *first* such action. The operator's system has been stopped since a
+        reconciliation failure whose underlying condition later cleared, and being able to ask
+        "is it reconciled now" without a terminal is the difference between that being obvious
+        and being archaeology.
+        """
+        if reconcile is None:
+            return page_with_notice(
+                request,
+                "this console cannot reconcile: it was started without a broker, and a surface "
+                "that cannot reach the broker must not offer to compare against it",
+            )
+        try:
+            await reconcile()
+        except Exception as error:  # noqa: BLE001 -- reported, never silently swallowed
+            return page_with_notice(request, f"reconciliation failed: {error!r}"[:400])
+        return RedirectResponse("/", status_code=303)
 
     @app.get("/config", response_class=HTMLResponse)
     def config(request: Request) -> HTMLResponse:

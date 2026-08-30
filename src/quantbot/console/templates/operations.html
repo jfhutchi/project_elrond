@@ -4,6 +4,14 @@
 <h1>Operations</h1>
 <p class="sub">Is Elrond healthy, and does anything need you right now.</p>
 
+{% if notice is defined and notice %}
+<div class="card" style="border-color:var(--crit)">
+  <div class="k">Refused</div>
+  <div class="v" style="font-size:.95rem">{{ notice }}</div>
+  <div class="n">Nothing changed.</div>
+</div>
+{% endif %}
+
 <h2>Needs attention</h2>
 {% if attention %}
   <ul class="attention">
@@ -86,4 +94,17 @@
 {% else %}
   <p class="quiet">No strategy has been promoted yet.</p>
 {% endif %}
+<h2>Operations</h2>
+<div class="card">
+  <div class="k">Reconcile against the broker</div>
+  <p class="n">
+    Reads the broker, adopts its authoritative fills, and records what agrees and what does not.
+    Submits no order, cancels nothing and moves no position &mdash; the same work
+    <span class="mono">quantbot reconcile</span> does, through the same code.
+  </p>
+  <form method="post" action="/operations/reconcile">
+    <button type="submit">Reconcile now</button>
+  </form>
+</div>
+
 {% endblock %}
