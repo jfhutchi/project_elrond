@@ -121,6 +121,39 @@ class CapacityPanel(FrozenModel):
     modelled_inputs: tuple[str, ...]
 
 
+class DiscoveryPanel(FrozenModel):
+    """What the anomaly and catalyst subsystems have actually produced (#56).
+
+    The panel exists because both subsystems have failure modes that look like success from any
+    aggregate. A run of `NO_PUBLIC_CATALYST_FOUND` reads as a stream of discoveries; a run of
+    `CATALYST_UNKNOWN` reads as nothing happening. Neither is legible from a count of events, so
+    the outcome mix is shown rather than a total.
+    """
+
+    anomalies: int
+    #: Assessed, and how the assessments came out. Keys are the three outcomes.
+    catalyst_outcomes: Mapping[str, int]
+    #: Anomalies with no catalyst assessment at all -- enrichment was not configured, or failed.
+    unassessed: int
+    #: Symbols this source could not support a negative finding about, most recent first. Named
+    #: rather than counted: which instruments are unenrichable is the actionable part.
+    uncovered_symbols: tuple[str, ...] = ()
+
+    @property
+    def findings(self) -> int:
+        """Negative findings, which are the *interesting* outcome and the easiest to manufacture."""
+        return self.catalyst_outcomes.get("NO_PUBLIC_CATALYST_FOUND", 0)
+
+
+class IncidentRow(FrozenModel):
+    """One contained failure, so a research gap is visible rather than silent."""
+
+    kind: Text
+    severity: Text
+    message: Text
+    occurred_at: Text
+
+
 class ConsoleState(FrozenModel):
     """Everything the read-only console renders, assembled in one pass."""
 
@@ -130,6 +163,9 @@ class ConsoleState(FrozenModel):
     risk: RiskPanel
     market_data: MarketDataPanel
     capacity: CapacityPanel
+    discovery: DiscoveryPanel
+    #: Unresolved only. A resolved incident is history; this panel is about what is still true.
+    incidents: tuple[IncidentRow, ...]
     settings: tuple[ConfigSetting, ...]
 
     @property
@@ -160,6 +196,21 @@ class ConsoleState(FrozenModel):
             items.append(
                 "no capacity assessment has been persisted, so whether an edge survives the "
                 "capital it would be traded at is unmeasured (#51)"
+            )
+        if self.discovery.unassessed:
+            items.append(
+                f"{self.discovery.unassessed} anomaly event(s) have no catalyst assessment, so "
+                "nothing established whether they had a public explanation"
+            )
+        if self.discovery.uncovered_symbols:
+            items.append(
+                f"the news source does not cover {', '.join(self.discovery.uncovered_symbols)}, "
+                "so no negative catalyst finding is possible for them (#83)"
+            )
+        if self.incidents:
+            items.append(
+                f"{len(self.incidents)} unresolved incident(s), including "
+                f"{self.incidents[0].kind}"
             )
         if not self.market_data.supports_volume_triggers:
             items.append(
@@ -295,6 +346,57 @@ def _capacity(session: Session, strategies: Sequence[StrategyRow]) -> CapacityPa
     )
 
 
+def _discovery(session: Session) -> DiscoveryPanel:
+    """Read what discovery produced, without interpreting it.
+
+    `unassessed` is derived by difference rather than stored. An anomaly with no assessment and
+    an anomaly assessed as `CATALYST_UNKNOWN` are different facts -- the first means nobody
+    looked, the second means somebody could not -- and a panel that showed only the assessments
+    would make the first invisible.
+    """
+    repository = StorageRepository(session)
+    events = repository.list_anomaly_events()
+    assessments = repository.list_catalyst_assessments()
+
+    outcomes: dict[str, int] = {}
+    for row in assessments:
+        outcome = str(row["outcome"])
+        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+
+    assessed = {str(row["anomaly_event_id"]) for row in assessments}
+    by_event = {str(row["event_id"]): str(row["symbol"]) for row in events}
+    # A symbol is reported uncovered on the evidence of its own assessments: the source said so.
+    uncovered = {
+        by_event.get(str(row["anomaly_event_id"]), "")
+        for row in assessments
+        if "STALE" in str(row["unhealthy_sources"])
+    }
+    return DiscoveryPanel(
+        anomalies=len(events),
+        catalyst_outcomes=dict(sorted(outcomes.items())),
+        unassessed=sum(1 for row in events if str(row["event_id"]) not in assessed),
+        uncovered_symbols=tuple(sorted(item for item in uncovered if item)),
+    )
+
+
+def _incidents(session: Session) -> tuple[IncidentRow, ...]:
+    """Unresolved incidents, newest first.
+
+    Contained failures are recorded precisely so a research dataset does not acquire invisible
+    holes. That only works if somebody can see them, which is this.
+    """
+    records = StorageRepository(session).list_incidents(unresolved_only=True)
+    return tuple(
+        IncidentRow(
+            kind=record.kind,
+            severity=record.severity,
+            message=record.message,
+            occurred_at=str(record.occurred_at),
+        )
+        for record in sorted(records, key=lambda item: str(item.occurred_at), reverse=True)
+    )
+
+
 def read_console_state(session: Session, *, now: datetime) -> ConsoleState:
     """Assemble everything the console renders, from authoritative state alone.
 
@@ -310,6 +412,8 @@ def read_console_state(session: Session, *, now: datetime) -> ConsoleState:
         risk=_risk(session),
         market_data=_market_data(session),
         capacity=_capacity(session, strategies),
+        discovery=_discovery(session),
+        incidents=_incidents(session),
         settings=tuple(settings.values()),
     )
 
@@ -317,6 +421,8 @@ def read_console_state(session: Session, *, now: datetime) -> ConsoleState:
 __all__ = [
     "CapacityPanel",
     "ConsoleState",
+    "DiscoveryPanel",
+    "IncidentRow",
     "HealthPanel",
     "MarketDataPanel",
     "RiskPanel",
