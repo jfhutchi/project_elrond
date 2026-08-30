@@ -99,6 +99,44 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
 
 ## Structural limits that bound all future work
 
+* **A local model's answer depends on what it was asked before, and provenance did not record
+  it.** Measured 2026-08-30 against local Ollama with `mistral:7b` at `temperature=0`, on one
+  fixed prompt and one fixed source set, through the real `SemanticWorker`.
+
+  | condition | claim-set hash | stability |
+  |---|---|---|
+  | cold: first call after the model loads | `aee6d50c…` | **5/5 identical** across cold starts |
+  | primed: one unrelated completion first | `c08bc3c3…` | **2/2 identical** |
+  | warm: the same call repeated in-session | — | **8/8 identical** |
+
+  Each condition is individually reproducible. **Cold and primed disagree**: 26-37% of the
+  confounders and falsification tests differ (pairwise Jaccard 0.736 and 0.628 against the warm
+  answer). So the model is deterministic *given its preceding call history*, and that history
+  appeared nowhere in the recorded provenance -- which carried model, version, endpoint, prompt
+  hash and `temperature=0`, all of which were identical across the disagreeing runs.
+
+  The divergence is not the dangerous part. **The obvious reproducibility check is a warm
+  repeat, so it always passes.** Rerun an analysis immediately and it returns byte-identical
+  text; the artifact looks reproducible and the check looks sound. The rerun that would catch
+  this -- a fresh process against a model in a different state -- is the one nobody runs. This
+  is the failure class the project exists to resist, appearing in the instrument used to judge
+  hypotheses.
+
+  Consequences, all of which bound existing work rather than only future work:
+
+  - Any recorded LLM artifact's reproducibility claim is unverifiable from its provenance alone.
+  - #37's planned comparison of the native research arm against TradingAgents cannot attribute a
+    difference to the arms unless both are issued from a controlled session position. Two arms
+    differing by 26% for reasons internal to one model's cache would look exactly like a finding.
+  - The 8/8 warm-identical result should not be read as "the native arm is reproducible and
+    TradingAgents is not". It is reproducible *within a session*; that is a weaker claim than
+    TradingAgents' `Hold`/`Buy` flip is a strong one, but it is not the same property.
+
+  `ModelResponse.session_call_index` now records how many completions the runtime had already
+  requested from that model. It makes the condition visible in every artifact. It does **not**
+  make an artifact reproducible -- reproducing one requires reproducing the session position,
+  which is a decision about how recorded calls are issued rather than a field.
+
 * **TradingAgents output is not reproducible, and its data layer fails open.** Verified
   2026-08-22 by running it (pinned `a33fd4c0`) against local Ollama with `mistral:7b`. Two
   identical invocations -- same ticker, same date, same config -- returned **`Hold`** and then
