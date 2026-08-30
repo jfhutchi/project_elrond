@@ -33,6 +33,7 @@ from quantbot.anomaly.capability import (
     volume_trigger_refusal,
 )
 from quantbot.anomaly.models import (
+    AnomalyDependenceContext,
     AnomalyDetectorConfig,
     DataQuality,
     MarketAnomalyEvent,
@@ -90,8 +91,6 @@ def detect(
     config: AnomalyDetectorConfig,
     observed_at: datetime,
     segment: SessionSegment = SessionSegment.FULL_SESSION,
-    group_key: str | None = None,
-    dependence_snapshot_identity: str | None = None,
 ) -> MarketAnomalyEvent | None:
     """Judge the most recent observation in `history` against the ones before it.
 
@@ -109,7 +108,7 @@ def detect(
     current = history[-1]
     baseline = list(history[:-1])[-config.baseline_sessions :]
 
-    quality = DataQuality.OK
+    family_quality: dict[TriggerReason, DataQuality] = {}
     triggers: list[TriggerReason] = []
 
     # --- volume ------------------------------------------------------------------------------
@@ -118,9 +117,9 @@ def detect(
     if TriggerReason.VOLUME_SHOCK not in config.enabled_triggers:
         pass
     elif not supports_volume_trigger(config.feed):
-        quality = DataQuality.FEED_UNFIT
+        family_quality[TriggerReason.VOLUME_SHOCK] = DataQuality.FEED_UNFIT
     elif len(baseline) < config.baseline_sessions:
-        quality = DataQuality.INSUFFICIENT_BASELINE
+        family_quality[TriggerReason.VOLUME_SHOCK] = DataQuality.INSUFFICIENT_BASELINE
     else:
         logs = [math.log(float(item.volume)) for item in baseline if item.volume > 0]
         if len(logs) == len(baseline) and current.volume > 0:
@@ -128,8 +127,9 @@ def detect(
             if median is not None:
                 expected = Decimal(str(round(math.exp(median), 4)))
             if score is None:
-                quality = DataQuality.NON_VARYING_BASELINE
+                family_quality[TriggerReason.VOLUME_SHOCK] = DataQuality.NON_VARYING_BASELINE
             else:
+                family_quality[TriggerReason.VOLUME_SHOCK] = DataQuality.OK
                 robust_z = Decimal(str(round(score, 4)))
                 rvol = None if expected is None or expected <= 0 else current.volume / expected
                 if robust_z >= config.volume_robust_z or (
@@ -137,7 +137,7 @@ def detect(
                 ):
                     triggers.append(TriggerReason.VOLUME_SHOCK)
         else:
-            quality = DataQuality.INSUFFICIENT_BASELINE
+            family_quality[TriggerReason.VOLUME_SHOCK] = DataQuality.INSUFFICIENT_BASELINE
 
     # --- price -------------------------------------------------------------------------------
     returns = [
@@ -155,13 +155,18 @@ def detect(
         TriggerReason.PRICE_VELOCITY in config.enabled_triggers
         and supports_price_trigger(config.feed)
     )
-    if (
-        price_enabled
-        and len(returns) >= config.baseline_sessions - 1
-        and len(returns) >= 2
+    if TriggerReason.PRICE_VELOCITY in config.enabled_triggers and not supports_price_trigger(
+        config.feed
     ):
+        family_quality[TriggerReason.PRICE_VELOCITY] = DataQuality.FEED_UNFIT
+    elif price_enabled and (len(returns) < config.baseline_sessions - 1 or len(returns) < 2):
+        family_quality[TriggerReason.PRICE_VELOCITY] = DataQuality.INSUFFICIENT_BASELINE
+    elif price_enabled:
         sigma = statistics.pstdev(returns)
-        if sigma > 0:
+        if sigma == 0:
+            family_quality[TriggerReason.PRICE_VELOCITY] = DataQuality.NON_VARYING_BASELINE
+        else:
+            family_quality[TriggerReason.PRICE_VELOCITY] = DataQuality.OK
             trailing_sigma = Decimal(str(round(sigma, 6)))
             if abs(session_return / trailing_sigma) >= config.price_velocity_sigma:
                 triggers.append(TriggerReason.PRICE_VELOCITY)
@@ -184,9 +189,7 @@ def detect(
         ),
         price=PriceObservation(session_return=session_return, trailing_sigma=trailing_sigma),
         triggers=tuple(sorted(set(triggers))),
-        data_quality=quality,
-        group_key=group_key,
-        dependence_snapshot_identity=dependence_snapshot_identity,
+        family_quality=dict(family_quality),
     )
 
 
@@ -223,13 +226,13 @@ def refusal(
     return None
 
 
-def group_events(
+def dependence_contexts(
     events: Sequence[MarketAnomalyEvent],
     clusters: Mapping[str, str],
     *,
     snapshot_identity: str,
-) -> tuple[MarketAnomalyEvent, ...]:
-    """Stamp each event with the dependence cluster its symbol belongs to (#56 item 4).
+) -> tuple[AnomalyDependenceContext, ...]:
+    """Relate each raw observation to the cluster one frozen matrix put it in (#56 item 4).
 
     On a macro day every symbol's volume rises together, so a per-symbol detector turns one
     piece of information into dozens of events. Counting those as independent samples is a
@@ -240,10 +243,16 @@ def group_events(
     move together" invented here. A symbol the snapshot could not measure gets no group, which
     is recorded rather than defaulted to its own.
 
-    `snapshot_identity` is required and stamped alongside the group, so the two cannot come
-    apart. Setting the group independently would let a caller attach clusters from one matrix to
-    events naming another -- or naming none -- and nothing downstream could detect it. The event
-    validator refuses a group without a snapshot for the same reason.
+    Returns **new relations** rather than modified events. Grouping used to be stamped onto the
+    event, which broke content-addressing: the grouped copy carried a different `group_key` and
+    the same `event_id`, so two materially different payloads shared one identity and a store
+    keyed on it would have deduplicated them silently.
+
+    The split also matches what the two things are. The observation is fixed when it is measured;
+    the grouping is one matrix's opinion about it, computed over a chosen window, and re-running
+    that matrix legitimately changes the opinion without changing what happened. A context row is
+    emitted for every event, including symbols the matrix placed alone -- its presence is what
+    separates "this matrix had nothing for it" from "no matrix ran".
     """
     if not snapshot_identity.strip():
         raise ValueError(
@@ -251,16 +260,19 @@ def group_events(
             "clusters; an unnamed matrix cannot be checked or reproduced"
         )
     return tuple(
-        event.model_copy(
-            update={
-                "group_key": clusters.get(event.symbol),
-                # Stamped whether or not this symbol landed in a cluster: "this snapshot was
-                # consulted and had nothing for it" is a different fact from "no snapshot ran".
-                "dependence_snapshot_identity": snapshot_identity,
-            }
+        AnomalyDependenceContext(
+            anomaly_event_id=event.event_id,
+            dependence_snapshot_identity=snapshot_identity,
+            group_key=clusters.get(event.symbol),
         )
         for event in events
     )
 
 
-__all__ = ["MAD_TO_SIGMA", "SessionObservation", "detect", "group_events", "refusal"]
+__all__ = [
+    "MAD_TO_SIGMA",
+    "SessionObservation",
+    "dependence_contexts",
+    "detect",
+    "refusal",
+]

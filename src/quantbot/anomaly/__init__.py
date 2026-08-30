@@ -16,12 +16,13 @@ from quantbot.anomaly.capability import (
 )
 from quantbot.anomaly.detector import (
     SessionObservation,
+    dependence_contexts,
     detect,
-    group_events,
     refusal,
 )
 from quantbot.anomaly.models import (
     IMPLEMENTED_TRIGGERS,
+    AnomalyDependenceContext,
     AnomalyDetectorConfig,
     DataQuality,
     MarketAnomalyEvent,
@@ -34,6 +35,7 @@ from quantbot.anomaly.models import (
 __all__ = [
     "FEED_COVERAGE",
     "IMPLEMENTED_TRIGGERS",
+    "AnomalyDependenceContext",
     "AnomalyDetectorConfig",
     "DataQuality",
     "MarketAnomalyEvent",
@@ -44,7 +46,7 @@ __all__ = [
     "VolumeCoverage",
     "VolumeObservation",
     "detect",
-    "group_events",
+    "dependence_contexts",
     "price_trigger_refusal",
     "refusal",
     "supports_price_trigger",

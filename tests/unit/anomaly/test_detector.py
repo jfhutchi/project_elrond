@@ -15,6 +15,7 @@ import pytest
 
 from quantbot.anomaly import (
     FEED_COVERAGE,
+    AnomalyDependenceContext,
     AnomalyDetectorConfig,
     DataQuality,
     MarketAnomalyEvent,
@@ -24,8 +25,8 @@ from quantbot.anomaly import (
     TriggerReason,
     VolumeCoverage,
     VolumeObservation,
+    dependence_contexts,
     detect,
-    group_events,
     refusal,
     supports_price_trigger,
     supports_volume_trigger,
@@ -175,6 +176,7 @@ def test_the_baseline_can_only_contain_sessions_that_already_completed() -> None
             volume=VolumeObservation(observed=Decimal("1"), expected=Decimal("1")),
             price=PriceObservation(session_return=Decimal("0")),
             triggers=(TriggerReason.VOLUME_SHOCK,),
+            family_quality={TriggerReason.VOLUME_SHOCK: DataQuality.OK},
         )
 
 
@@ -259,12 +261,13 @@ def test_a_market_wide_shock_carries_its_group_so_it_is_not_many_samples() -> No
     )
     assert len(events) == 3
 
-    grouped = group_events(
+    contexts = dependence_contexts(
         events,
         {"SPY": "cluster-a", "QQQ": "cluster-a"},
         snapshot_identity="dependence-v1-abcd",
     )
-    by_symbol = {event.symbol: event for event in grouped}
+    by_event = {context.anomaly_event_id: context for context in contexts}
+    by_symbol = {event.symbol: by_event[event.event_id] for event in events}
 
     assert by_symbol["SPY"].group_key == "cluster-a"
     assert by_symbol["QQQ"].group_key == "cluster-a"
@@ -272,10 +275,11 @@ def test_a_market_wide_shock_carries_its_group_so_it_is_not_many_samples() -> No
         "a symbol the dependence snapshot could not measure must record no group rather than "
         "being defaulted into one of its own"
     )
-    # Every event names the matrix that was consulted, including the one that got no cluster:
-    # "this snapshot had nothing for it" and "no snapshot ran" are different facts.
-    for event in grouped:
-        assert event.dependence_snapshot_identity == "dependence-v1-abcd"
+    # A row exists for every event, including the ungrouped one: its presence is what separates
+    # "this matrix had nothing for it" from "no matrix ran".
+    assert len(contexts) == len(events)
+    for context in contexts:
+        assert context.dependence_snapshot_identity == "dependence-v1-abcd"
 
 
 # --- the event ----------------------------------------------------------------------------------
@@ -291,7 +295,7 @@ def test_an_event_keeps_observed_and_expected_rather_than_only_their_ratio() -> 
     assert event.volume.expected is not None and event.volume.expected > 0
     assert event.volume.rvol is not None and event.volume.rvol > 3
     assert event.volume.robust_z is not None
-    assert event.data_quality is DataQuality.OK
+    assert event.family_quality[TriggerReason.VOLUME_SHOCK] is DataQuality.OK
     assert TriggerReason.VOLUME_SHOCK in event.triggers
 
 
@@ -324,6 +328,7 @@ def test_an_event_cannot_be_built_without_a_trigger() -> None:
             volume=VolumeObservation(observed=Decimal("1"), expected=Decimal("1")),
             price=PriceObservation(session_return=Decimal("0")),
             triggers=(),
+            family_quality={},
         )
 
 
@@ -343,6 +348,7 @@ def test_a_volume_shock_cannot_fire_without_an_expected_volume() -> None:
             volume=VolumeObservation(observed=Decimal("1"), expected=None),
             price=PriceObservation(session_return=Decimal("0")),
             triggers=(TriggerReason.VOLUME_SHOCK,),
+            family_quality={TriggerReason.VOLUME_SHOCK: DataQuality.OK},
         )
 
 
@@ -444,20 +450,10 @@ def test_a_group_cannot_be_claimed_without_naming_the_snapshot_that_produced_it(
     naming a different one -- or naming none -- and nothing downstream could detect the mismatch.
     The grouping helper takes the identity as a required argument for the same reason.
     """
-    with pytest.raises(ValueError, match="must name the dependence snapshot"):
-        MarketAnomalyEvent(
-            symbol="SPY",
-            session_date=date(2026, 3, 2),
-            segment=SessionSegment.FULL_SESSION,
-            observed_at=NOW,
-            detector_identity="anomaly-detector-v1-x",
-            feed=MarketDataFeed.SIP,
-            volume_coverage=VolumeCoverage.CONSOLIDATED,
-            cadence=config().cadence,
-            baseline_sessions=(date(2026, 3, 1),),
-            volume=VolumeObservation(observed=Decimal("1"), expected=Decimal("1")),
-            price=PriceObservation(session_return=Decimal("0")),
-            triggers=(TriggerReason.VOLUME_SHOCK,),
+    with pytest.raises(ValueError):
+        AnomalyDependenceContext(
+            anomaly_event_id="anomaly-2026-03-02-abcd",
+            dependence_snapshot_identity="",
             group_key="cluster-a",
         )
 
@@ -465,7 +461,7 @@ def test_a_group_cannot_be_claimed_without_naming_the_snapshot_that_produced_it(
     event = detect(symbol="SPY", history=history, config=config(), observed_at=NOW)
     assert event is not None
     with pytest.raises(ValueError, match="requires the identity"):
-        group_events([event], {"SPY": "cluster-a"}, snapshot_identity="   ")
+        dependence_contexts([event], {"SPY": "cluster-a"}, snapshot_identity="   ")
 
 
 def test_every_feed_the_enum_offers_has_been_characterised() -> None:
@@ -507,3 +503,99 @@ def test_an_uncharacterised_feed_refuses_both_families(
 
     reason = refusal(config(feed=MarketDataFeed.IEX), history, TriggerReason.PRICE_VELOCITY)
     assert reason is not None and "uncharacterised" in reason
+
+
+# --- identity boundary (#56 follow-up: raw observation vs dependence context) --------------------
+
+
+def test_grouping_cannot_change_what_a_raw_event_id_describes() -> None:
+    """The defect this split exists to remove, pinned as a property.
+
+    Grouping used to be stamped onto the event while `event_id` excluded it, so the grouped copy
+    carried a different `group_key` under the *same* identity. Two materially different immutable
+    payloads shared one supposedly content-addressed id, and a `market_anomaly_events` table
+    keyed on it would have deduplicated them into whichever arrived first.
+
+    The observation and the grouping answer different questions on different clocks: what
+    happened is fixed when measured, while one matrix's opinion about what moved with it changes
+    whenever that matrix is recomputed. So the event has no grouping fields at all -- the
+    strongest available form of "grouping cannot redefine it".
+    """
+    history = sessions([*quiet(), 40_000_000])
+    event = detect(symbol="SPY", history=history, config=config(), observed_at=NOW)
+    assert event is not None
+
+    assert not hasattr(event, "group_key")
+    assert not hasattr(event, "dependence_snapshot_identity")
+
+    first = dependence_contexts([event], {"SPY": "a"}, snapshot_identity="dependence-v1-one")
+    second = dependence_contexts([event], {"SPY": "z"}, snapshot_identity="dependence-v1-two")
+
+    # The observation is untouched by either matrix.
+    assert first[0].anomaly_event_id == event.event_id
+    assert second[0].anomaly_event_id == event.event_id
+    # And the two opinions are distinguishable from each other.
+    assert first[0].identity != second[0].identity
+
+
+def test_a_dependence_context_is_addressed_by_everything_that_defines_it() -> None:
+    """Keyed on the raw event and the exact matrix, so re-running one is a new relation."""
+    base = AnomalyDependenceContext(
+        anomaly_event_id="anomaly-2026-03-20-abcd",
+        dependence_snapshot_identity="dependence-v1-one",
+        group_key="cluster-a",
+    )
+
+    assert base.identity.startswith("anomaly-dependence-v1-")
+    for change in (
+        {"anomaly_event_id": "anomaly-2026-03-20-ffff"},
+        {"dependence_snapshot_identity": "dependence-v1-two"},
+        {"group_key": "cluster-b"},
+        {"group_key": None},
+        {"method_version": 2},
+    ):
+        assert base.model_copy(update=change).identity != base.identity, change
+
+
+# --- family-specific data quality ---------------------------------------------------------------
+
+
+def test_a_valid_price_event_is_not_condemned_by_the_volume_family_it_shares_a_feed_with() -> None:
+    """One verdict for the whole event was wrong in a specific, costly way.
+
+    On IEX the volume family cannot run, and a scalar `FEED_UNFIT` then described a perfectly
+    valid price observation as unusable -- so downstream routing would discard a real event for
+    a reason that applies only to a question it was not asking.
+    """
+    history = sessions([*quiet(), 1_002_000], closes=drifting(jump=130.0))
+    event = detect(
+        symbol="SPY", history=history, config=config(feed=MarketDataFeed.IEX), observed_at=NOW
+    )
+
+    assert event is not None
+    assert event.triggers == (TriggerReason.PRICE_VELOCITY,)
+    assert event.family_quality[TriggerReason.PRICE_VELOCITY] is DataQuality.OK
+    assert event.family_quality[TriggerReason.VOLUME_SHOCK] is DataQuality.FEED_UNFIT
+
+    # The row a store would keep must carry both verdicts, not a collapsed one.
+    assert event.as_row()["family_quality"] == "PRICE_VELOCITY=OK,VOLUME_SHOCK=FEED_UNFIT"
+
+
+def test_a_family_cannot_fire_while_recorded_as_unmeasurable() -> None:
+    """Otherwise the event asserts a trigger and its own inability to have computed it."""
+    with pytest.raises(ValueError, match="fired while recorded as unmeasurable"):
+        MarketAnomalyEvent(
+            symbol="SPY",
+            session_date=date(2026, 3, 2),
+            segment=SessionSegment.FULL_SESSION,
+            observed_at=NOW,
+            detector_identity="anomaly-detector-v1-x",
+            feed=MarketDataFeed.SIP,
+            volume_coverage=VolumeCoverage.CONSOLIDATED,
+            cadence=config().cadence,
+            baseline_sessions=(date(2026, 3, 1),),
+            volume=VolumeObservation(observed=Decimal("1"), expected=Decimal("1")),
+            price=PriceObservation(session_return=Decimal("0")),
+            triggers=(TriggerReason.VOLUME_SHOCK,),
+            family_quality={TriggerReason.VOLUME_SHOCK: DataQuality.FEED_UNFIT},
+        )
