@@ -380,6 +380,18 @@ class ExperimentManifest(FrozenModel):
     #: a result cited as evidence has to say what produced it.
     code: CodeProvenance | None = None
     environment: EnvironmentFingerprint | None = None
+    #: Every model completion this experiment consumed, as `model@session_call_index` (#18, #48).
+    #:
+    #: Recorded because a model's answer is not a function of its recorded inputs. Measured
+    #: 2026-08-30: the same prompt at `temperature=0` returns materially different analyses
+    #: depending on how many completions that model had already served, and 26-37% of the
+    #: returned claims differ between a cold call and a primed one. Model, version, endpoint,
+    #: prompt hash and temperature were identical across the runs that disagreed.
+    #:
+    #: An empty tuple is the honest default and means what it says: this experiment declares no
+    #: model calls. It is not a claim that none happened, which is why `assess_reproducibility`
+    #: treats the *presence* of calls as the signal and never the absence.
+    model_calls: tuple[str, ...] = ()
     datasets: tuple[DatasetSnapshot, ...] = ()
     statistics: StatisticalPlan | None = None
     features: dict[str, str] = Field(default_factory=dict)

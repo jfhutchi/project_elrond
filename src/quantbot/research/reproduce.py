@@ -227,6 +227,33 @@ def assess_reproducibility(
                 f"{current_lock_hash[:16]}"
             )
 
+    if manifest.model_calls:
+        # A model's answer depends on its preceding call history, which no manifest records and
+        # no rerun can restore. So the claim "this can be re-executed to the same result" is
+        # false for any component a model produced.
+        #
+        # Blocking on a confirmatory run and drift on an exploratory one, because the two make
+        # different claims. A confirmatory result is cited as evidence and must not rest on a
+        # component that cannot be reproduced. An exploratory run may legitimately have used a
+        # model to *generate* something whose evaluation is deterministic -- the result can be
+        # perfectly reproducible even though the idea came from a model -- and blocking that
+        # would refuse a bundle whose numbers are entirely re-derivable.
+        #
+        # Which side a given bundle falls on is not inferable from here: nothing in a manifest
+        # says whether a model sat in the path that produced the result or merely suggested the
+        # question. The mode is the only declaration available, so it is what this reads.
+        detail = (
+            f"{len(manifest.model_calls)} model completion(s) "
+            f"({', '.join(manifest.model_calls[:3])}"
+            f"{', …' if len(manifest.model_calls) > 3 else ''}) "
+            "cannot be reproduced from this manifest: a model's answer depends on how many "
+            "completions it had already served, which is not recoverable"
+        )
+        if manifest.mode == "CONFIRMATORY":
+            blocking.append(detail)
+        else:
+            drift.append(detail)
+
     report = check_invariants(manifest)
     blocking.extend(
         f"manifest invariant violated: {violation.invariant} ({violation.detail})"
