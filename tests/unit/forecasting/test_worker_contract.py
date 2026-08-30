@@ -275,3 +275,123 @@ def test_dependabot_cannot_propose_bumps_the_worker_contract_would_reject() -> N
             f"{entry['dependency-name']} suppresses more than version updates; a security "
             "advisory here is the one case worth interrupting for"
         )
+
+
+# --- the pinned artifact is what stops a downloaded model executing code ------------------------
+#
+# CVE-2025-32434 is a remote-code-execution in `torch.load`, and this worker is a thing that loads
+# a model someone else published. Nine open advisories against the pinned `torch==2.5.1` are
+# unreachable here, but "unreachable" was an untested claim until these tests existed, which is
+# the weakest possible basis for dismissing a critical alert. Each test below is one leg of that
+# argument, and deleting the corresponding check turns it red.
+
+
+def _weight(directory: Path, name: str, payload: bytes = b"weights") -> Path:
+    path = directory / name
+    path.write_bytes(payload)
+    return path
+
+
+def _sha(path: Path) -> str:
+    import hashlib
+
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_an_artifact_without_safetensors_is_refused_rather_than_loaded(tmp_path: Path) -> None:
+    """The CVE's precondition, refused at the door.
+
+    `torch.load` reaching a pickle is what CVE-2025-32434 needs. A snapshot offering only
+    `pytorch_model.bin` is exactly that, and it never gets as far as `from_pretrained`.
+    """
+    _weight(tmp_path, "pytorch_model.bin")
+
+    with pytest.raises(worker.WorkerContractError, match="exactly one safetensors"):
+        worker._verify_single_weight(tmp_path, "irrelevant")
+
+
+def test_an_ambiguous_artifact_is_refused_rather_than_resolved(tmp_path: Path) -> None:
+    """Two weights mean the hash below verifies one file and the loader may read the other.
+
+    Picking the first would make the verification decorative -- it would prove something true
+    about a file nobody loaded.
+    """
+    _weight(tmp_path, "model-00001.safetensors")
+    _weight(tmp_path, "model-00002.safetensors", b"different")
+
+    with pytest.raises(worker.WorkerContractError, match="exactly one safetensors"):
+        worker._verify_single_weight(tmp_path, "irrelevant")
+
+
+def test_a_weight_that_is_not_the_pinned_one_is_refused(tmp_path: Path) -> None:
+    """Otherwise the pin records an intention rather than enforcing one."""
+    path = _weight(tmp_path, "model.safetensors")
+
+    worker._verify_single_weight(tmp_path, _sha(path))  # the pinned artifact loads
+
+    path.write_bytes(b"substituted")
+    with pytest.raises(worker.WorkerContractError, match="weight hash does not match"):
+        worker._verify_single_weight(tmp_path, _sha(_weight(tmp_path, "other.tmp", b"weights")))
+
+
+def test_a_substituted_config_is_refused(tmp_path: Path) -> None:
+    """`config.json` chooses the architecture that interprets the weights, so it is as
+    load-bearing as the weights themselves and is pinned the same way.
+    """
+    config = tmp_path / "config.json"
+    config.write_text('{"model_type": "kronos"}', encoding="utf-8")
+
+    worker._verify_config(tmp_path, _sha(config))
+
+    config.write_text('{"model_type": "something-else"}', encoding="utf-8")
+    with pytest.raises(worker.WorkerContractError, match="config hash does not match"):
+        worker._verify_config(tmp_path, _sha(tmp_path / "config.json") + "x")
+
+
+def test_a_missing_config_is_refused_rather_than_defaulted(tmp_path: Path) -> None:
+    """A default architecture would be an unpinned one."""
+    with pytest.raises(worker.WorkerContractError, match="config hash does not match"):
+        worker._verify_config(tmp_path, "0" * 64)
+
+
+def test_every_artifact_is_verified_before_anything_is_loaded() -> None:
+    """The ordering *is* the protection, and it is the one a refactor would quietly lose.
+
+    Verification after `from_pretrained` would be a report on code that had already run. All four
+    checks must therefore precede both loads in the source, asserted structurally because no
+    unit test can observe an RCE that already happened.
+    """
+    import ast
+
+    source = Path(worker.__file__).read_text(encoding="utf-8")
+    tree = ast.parse(source)
+    function = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef)
+        and any(
+            isinstance(inner, ast.Attribute) and inner.attr == "from_pretrained"
+            for inner in ast.walk(node)
+        )
+    )
+
+    verifications = [
+        node.lineno
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id in {"_verify_single_weight", "_verify_config"}
+    ]
+    loads = [
+        node.lineno
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "from_pretrained"
+    ]
+
+    assert len(verifications) == 4, "model and tokenizer, weight and config"
+    assert len(loads) == 2, "model and tokenizer"
+    assert max(verifications) < min(loads), (
+        "an artifact is verified before it is loaded, never after"
+    )
