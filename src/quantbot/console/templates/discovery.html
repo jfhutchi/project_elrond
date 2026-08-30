@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% set title = "Discovery" %}
+{% block body %}
+<h1>Discovery</h1>
+<p class="sub">
+  What the anomaly detector and catalyst enrichment have produced. Both subsystems have failure
+  modes that look like success from a total, so the outcome mix is shown rather than a count:
+  a run of negative findings reads as a stream of discoveries, and a run of unknowns reads as
+  nothing happening at all.
+</p>
+
+<div class="grid">
+  <div class="card">
+    <div class="k">Anomaly events</div>
+    <div class="v">{{ state.discovery.anomalies }}</div>
+    <div class="n">
+      Routing signals for research. An anomaly holds no broker authority and is not an edge.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="k">Negative findings</div>
+    <div class="v">{{ state.discovery.findings }}</div>
+    <div class="n">
+      Unusual activity every source was asked about and none could explain. The interesting case
+      &mdash; and the one that is easiest to manufacture, which is why an uncovered symbol can no
+      longer produce it.
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="k">Unassessed</div>
+    {% if state.discovery.unassessed %}
+      <div class="v">{{ state.discovery.unassessed }}</div>
+      <div class="n">
+        Anomalies with no catalyst assessment at all. Nobody looked, which is a different fact
+        from having looked and failed.
+      </div>
+    {% else %}
+      <div class="v absent">none</div>
+      <div class="n">Every recorded anomaly has an assessment beside it.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="card">
+  <div class="k">Catalyst outcomes</div>
+  {% if state.discovery.catalyst_outcomes %}
+  <div class="scroll"><table>
+    <tr><th>Outcome</th><th>Count</th><th>What it means</th></tr>
+    {% for outcome, count in state.discovery.catalyst_outcomes.items() %}
+    <tr>
+      <td class="mono">{{ outcome }}</td>
+      <td class="mono">{{ count }}</td>
+      <td class="quiet">
+        {% if outcome == "CATALYST_FOUND" %}
+          A qualifying item was published before the event and retrieved. On sector ETFs this
+          may be a daily automated roundup rather than an explanation &mdash; see REFUTED.md;
+          positive findings on those are not evidence a catalyst existed.
+        {% elif outcome == "NO_PUBLIC_CATALYST_FOUND" %}
+          Every source answered and none had anything. A finding about the world, permitted only
+          where the source demonstrably covers the symbol.
+        {% else %}
+          Somebody could not look: an outage, a rate limit, an item with no publication time, or
+          a symbol this source does not cover. Never a finding.
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}
+  <p class="absent">
+    No catalyst assessment has been recorded. Enrichment runs only for symbols that produced an
+    anomaly, so an empty table here is the expected state until one fires.
+  </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="k">Symbols with no news coverage</div>
+  {% if state.discovery.uncovered_symbols %}
+    <div class="v mono">{{ state.discovery.uncovered_symbols | join(", ") }}</div>
+    <div class="n">
+      The source returned nothing about these over the detector&rsquo;s own baseline window, so it
+      is in no position to say nothing was published. Their anomalies record
+      <span class="mono">CATALYST_UNKNOWN</span> rather than a negative finding &mdash; without
+      that gate, the least covered instruments would have produced the most apparent discoveries.
+    </div>
+  {% else %}
+    <p class="absent">
+      None recorded. This fills in as anomalies fire on symbols the source does not cover; it is
+      not a claim that every symbol is covered.
+    </p>
+  {% endif %}
+</div>
+
+<div class="card">
+  <div class="k">Unresolved incidents</div>
+  <p class="n">
+    Contained failures. Anomaly detection, regime snapshots and catalyst enrichment all describe
+    decisions rather than making them, so a failure in any of them costs a row of research
+    context and never a trading cycle. They are recorded here so the resulting gap in the dataset
+    is visible rather than silent &mdash; a later study can tell &ldquo;no anomaly fired&rdquo;
+    from &ldquo;detection was broken that day&rdquo;.
+  </p>
+  {% if state.incidents %}
+  <div class="scroll"><table>
+    <tr><th>When</th><th>Kind</th><th>Severity</th><th>Message</th></tr>
+    {% for incident in state.incidents %}
+    <tr>
+      <td class="quiet mono">{{ incident.occurred_at }}</td>
+      <td class="mono">{{ incident.kind }}</td>
+      <td>
+        {% if incident.severity in ("CRITICAL", "ERROR") %}
+          <span class="pill pill--crit">{{ incident.severity }}</span>
+        {% else %}
+          <span class="pill pill--warn">{{ incident.severity }}</span>
+        {% endif %}
+      </td>
+      <td class="quiet">{{ incident.message }}</td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  {% else %}
+    <p class="absent">None unresolved.</p>
+  {% endif %}
+</div>
+{% endblock %}

@@ -60,6 +60,7 @@ NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/research", "Research"),
     ("/market-data", "Market data"),
     ("/capacity", "Capacity"),
+    ("/discovery", "Discovery"),
     ("/config", "Configuration"),
     ("/config/policy", "Risk policy"),
 )
@@ -122,6 +123,10 @@ def create_app(database: Database) -> FastAPI:
     @app.get("/capacity", response_class=HTMLResponse)
     def capacity(request: Request) -> HTMLResponse:
         return page(request, "capacity.html", "/capacity")
+
+    @app.get("/discovery", response_class=HTMLResponse)
+    def discovery(request: Request) -> HTMLResponse:
+        return page(request, "discovery.html", "/discovery")
 
     @app.get("/config", response_class=HTMLResponse)
     def config(request: Request) -> HTMLResponse:
