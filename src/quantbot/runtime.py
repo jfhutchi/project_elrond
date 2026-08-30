@@ -22,6 +22,7 @@ from types import FrameType
 
 from pydantic import SecretStr
 
+from quantbot.anomaly.news import AlpacaNewsSource
 from quantbot.backtest import BacktestEngine, BenchmarkVariant
 from quantbot.brokers import AlpacaPaperBrokerAdapter, BrokerError, HttpxBrokerTransport
 from quantbot.cli import CLIContext, CommandHandler
@@ -326,6 +327,13 @@ def build_runtime(
             sessions=sessions,
             market_data=settings_for_data,
             veto_policy=veto_policy,
+            # #56. Enrichment runs only for symbols that produced an anomaly, which is what the
+            # routing gate's 98.24% search saving buys. Constructed here rather than defaulted
+            # inside the runner: a source that built itself would be a second place credentials
+            # are read, and the runner would have no way to be given a different one.
+            catalyst_source=AlpacaNewsSource(
+                data_transport, api_key=key, api_secret=secret
+            ),
         ),
         recovery=LedgerSyncingRecovery(
             active_database,

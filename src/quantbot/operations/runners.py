@@ -11,6 +11,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from typing import Protocol
 
 from quantbot.anomaly import (
     AnomalyDetectorConfig,
@@ -18,6 +19,8 @@ from quantbot.anomaly import (
     dependence_contexts,
     detect,
 )
+from quantbot.anomaly.catalyst import DEFAULT_LOOKBACK, assess_catalysts
+from quantbot.anomaly.catalyst import SourceResult as CatalystSourceResult
 from quantbot.brokers import BrokerAdapter
 from quantbot.domain import (
     Account,
@@ -95,6 +98,23 @@ from quantbot.strategy import (
 Clock = Callable[[], datetime]
 
 
+class CatalystSource(Protocol):
+    """A news source the runner may consult about an anomaly.
+
+    Narrow on purpose: the runner needs one question answered and must not be able to reach a
+    provider for anything else.
+    """
+
+    async def fetch(
+        self,
+        symbols: Sequence[str],
+        *,
+        window_start: datetime,
+        observed_at: datetime,
+        retrieved_at: datetime,
+    ) -> CatalystSourceResult: ...
+
+
 @dataclass(frozen=True, slots=True)
 class ResearchContext:
     """What the market looked like when a decision was made. Context, never authority.
@@ -111,6 +131,8 @@ class ResearchContext:
     anomaly_event_ids: Mapping[str, str] = field(default_factory=dict)
     #: One regime reading for the whole cycle: it describes the market, not a symbol.
     regime_snapshot_id: str | None = None
+    #: Symbol to the catalyst assessment recorded for its anomaly, if one fired and was assessed.
+    catalyst_ids: Mapping[str, str] = field(default_factory=dict)
 
 
 class StrategyDataError(RuntimeError):
@@ -454,6 +476,7 @@ class AdaptiveMomentumRunner:
         veto_policy: PortfolioVetoPolicy | None = None,
         exposure_classification: ExposureClassification | None = None,
         anomaly_detector: AnomalyDetectorConfig | None = None,
+        catalyst_source: CatalystSource | None = None,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -475,6 +498,11 @@ class AdaptiveMomentumRunner:
         # decides which families may fire: on a venue feed the volume family is refused and the
         # price family is not, which is why the config takes the feed rather than assuming one.
         self._anomaly = anomaly_detector or AnomalyDetectorConfig(feed=self._market_data.feed)
+        # `None` means no catalyst source is configured, and enrichment is then simply not
+        # attempted. Deliberately not a stub that returns an empty result: an empty result from a
+        # source nobody configured would be indistinguishable from a source that answered and
+        # found nothing, which is the exact confusion `catalyst.py` is built around.
+        self._catalyst_source = catalyst_source
         self._clock = clock
         self._run_id: str | None = None
 
@@ -610,6 +638,51 @@ class AdaptiveMomentumRunner:
                 repository.record_anomaly_dependence_context(context.as_row())
         # One event per symbol per cycle by construction: `detect` returns at most one.
         return {event.symbol: event.event_id for event in events}
+
+    async def _record_catalysts(
+        self,
+        events: Mapping[str, str],
+        *,
+        observed_at: datetime,
+    ) -> dict[str, str]:
+        """Ask whether each anomaly had a public explanation, and record the answer.
+
+        Returns symbol to assessment id. Empty when no source is configured, which is the honest
+        state: `assess_catalysts` refuses an empty source list because a lookup that never
+        happened is not a negative finding, and inventing a `CATALYST_UNKNOWN` row for every
+        event would fill the table with records of nothing having been attempted.
+
+        Contained like the other two research recorders, and for the same reason -- this
+        describes a decision rather than making one, so a provider outage must cost a row of
+        context and never a trading cycle. Contained is not silent: the gap becomes an incident.
+        """
+        if self._catalyst_source is None or not events:
+            return {}
+
+        recorded: dict[str, str] = {}
+        try:
+            for symbol, event_id in sorted(events.items()):
+                result = await self._catalyst_source.fetch(
+                    [symbol],
+                    window_start=observed_at - DEFAULT_LOOKBACK,
+                    observed_at=observed_at,
+                    retrieved_at=observed_at,
+                )
+                assessment = assess_catalysts(
+                    anomaly_event_id=event_id,
+                    observed_at=observed_at,
+                    sources=[result],
+                )
+                with self._database.transaction() as session:
+                    StorageRepository(session).record_catalyst_assessment(assessment.as_row())
+                recorded[symbol] = assessment.identity
+        except Exception as error:  # noqa: BLE001 -- contained; see above
+            self._record_contained_failure(
+                kind="catalyst-enrichment",
+                message=f"catalyst enrichment failed for this cycle: {error!r}",
+                occurred_at=observed_at,
+            )
+        return recorded
 
     def _record_regime(
         self,
@@ -894,13 +967,19 @@ class AdaptiveMomentumRunner:
         # broker authority, so nothing below reads these events when deciding what to submit.
         # Built from `sliced` for the same reason the dependence snapshot is -- it must see only
         # what was knowable at the decision.
+        anomaly_event_ids = self._record_anomalies(sliced, dependence, observed_at=now)
         research = ResearchContext(
-            anomaly_event_ids=self._record_anomalies(sliced, dependence, observed_at=now),
+            anomaly_event_ids=anomaly_event_ids,
             regime_snapshot_id=self._record_regime(
                 sliced,
                 as_of_session=calendar_sessions[evaluation_index].session_date,
                 observed_at=now,
             ),
+            # Enrichment runs only for symbols that actually produced an anomaly. The routing
+            # gate measured a 2.18x information-density lift at a 1.76% selection rate, and that
+            # 98% saving is the entire reason enrichment is affordable -- asking a news provider
+            # about every symbol every cycle would spend it.
+            catalyst_ids=await self._record_catalysts(anomaly_event_ids, observed_at=now),
         )
         roster = self._roster(histories, calendar_sessions, evaluation_index + 1)
         sequence = sequence_for(self._config, calendar_sessions)
@@ -1315,6 +1394,7 @@ class AdaptiveMomentumRunner:
             # Absent stays `None`: a substituted context cannot be told from a measured one.
             market_regime_snapshot_id=research.regime_snapshot_id,
             anomaly_event_id=research.anomaly_event_ids.get(symbol),
+            catalyst_snapshot_id=research.catalyst_ids.get(symbol),
         )
         parent, reason_rows = as_rows(observation)
         repository.record_rejected_candidate(parent, reason_rows)
