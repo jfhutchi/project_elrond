@@ -231,10 +231,17 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     from quantbot.runtime import runtime_paths
 
     reports = build_reports_panel(runtime_paths().reports, now=datetime.now(UTC))
+    reconcile = _console_reconcile(database, stream)
     try:
         print(f"operator console on http://{host}:{port} reading {path}", file=stream)
         uvicorn.run(
-            create_app(database, measure=measure, runtime=runtime, reports=reports),
+            create_app(
+                database,
+                measure=measure,
+                runtime=runtime,
+                reports=reports,
+                reconcile=reconcile,
+            ),
             host=host,
             port=port,
             log_level="warning",
@@ -267,6 +274,62 @@ def _console_runtime_panel() -> RuntimePanel | None:
         return build_runtime_panel(profile, measured_at=moment)
     except Exception:  # noqa: BLE001 -- one panel is not worth the whole console
         return None
+
+
+def _console_reconcile(
+    database: Database, stream: TextIO
+) -> Callable[[], Awaitable[Mapping[str, object]]] | None:
+    """A callable that reconciles against the broker, or `None` when this context cannot.
+
+    Builds **only** the recovery objects, never a `Runtime`. Two reasons, and both matter.
+
+    A `Runtime` carries the execution coordinator and the strategy runner, so handing one to a
+    web process would put the order path inside it. The console's safety story is that its route
+    table is an allowlist and submission is not on it; holding the capability unused is a much
+    weaker guarantee than not holding it.
+
+    And `build_runtime` writes: `load_or_create_identity` records a strategy deployment and
+    enters it on the promotion ladder. Starting a read-mostly console must not mint deployment
+    state as a side effect of somebody opening a browser tab.
+
+    `StartupRecovery` and `LedgerSyncingRecovery` each take only `(database, broker, settings)`,
+    so the narrow thing is also the natural one.
+    """
+    from datetime import UTC, datetime
+
+    from quantbot.brokers import AlpacaPaperBrokerAdapter
+    from quantbot.brokers.transports import HttpxBrokerTransport
+    from quantbot.execution.recovery import StartupRecovery
+    from quantbot.operations.runners import LedgerSyncingRecovery
+    from quantbot.runtime import paper_credentials
+
+    try:
+        settings = Settings()
+        key, secret = paper_credentials(settings)
+    except Exception as error:  # noqa: BLE001 -- an unbuildable action is a reported absence
+        print(f"reconcile unavailable: {error}", file=stream)
+        return None
+
+    broker = AlpacaPaperBrokerAdapter(
+        api_key=key, api_secret=secret, transport=HttpxBrokerTransport()
+    )
+    recovery = LedgerSyncingRecovery(
+        database, broker, StartupRecovery(database, broker, settings)
+    )
+
+    async def run() -> Mapping[str, object]:
+        started_at = datetime.now(UTC)
+        result = await recovery.recover(
+            f"console-reconcile-{started_at.isoformat()}", started_at=started_at
+        )
+        return {
+            "ok": result.ready,
+            "status": result.reconciliation.status.value,
+            "diff_count": len(result.reconciliation.diffs),
+            "reasons": list(result.reasons),
+        }
+
+    return run
 
 
 def _console_readiness_probe(

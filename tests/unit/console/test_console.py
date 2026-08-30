@@ -63,6 +63,11 @@ MUTATING_ROUTES = {
     # assert it.
     ("/kill-switch/engage", "POST"),
     ("/kill-switch/clear", "POST"),
+    # Reconcile. Safe in the specific sense that matters: it submits no order, cancels nothing
+    # and moves no position. It reads the broker, adopts its authoritative fills and records
+    # what agrees -- and it reaches the broker through a narrow injected callable rather than a
+    # `Runtime`, so this process still cannot reach the order path at all.
+    ("/operations/reconcile", "POST"),
 }
 
 
@@ -380,3 +385,88 @@ def strategy_identity():
         configuration_hash="cfg-abc",
         deployment_timestamp=datetime(2026, 8, 1, tzinfo=UTC),
     )
+
+
+def test_the_console_is_given_a_callable_rather_than_a_runtime() -> None:
+    """The design decision behind the reconcile action, asserted rather than described.
+
+    `_reconcile` in `runtime.py` takes the whole object graph -- broker, execution coordinator,
+    strategy runner. Handing that to a web process would put the order path inside it, and
+    "no route calls it" is a far weaker guarantee than "this process cannot".
+
+    Also: `build_runtime` writes. `load_or_create_identity` records a deployment and enters it on
+    the promotion ladder, so building one at console start-up would mint deployment state because
+    somebody opened a browser tab.
+    """
+    import ast
+    from pathlib import Path as _Path
+
+    tree = ast.parse(_Path("src/quantbot/cli.py").read_text(encoding="utf-8"))
+    seam = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "_console_reconcile"
+    )
+    built = {
+        node.func.id
+        for node in ast.walk(seam)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    }
+
+    assert "LedgerSyncingRecovery" in built, "the seam builds recovery directly"
+    assert "build_runtime" not in built, "a Runtime would carry the execution path"
+    assert "load_or_create_identity" not in built, "start-up must not mint deployment state"
+
+
+def test_a_console_without_a_broker_refuses_to_reconcile(database) -> None:
+    """The form is hidden when it cannot work, and the route refuses anyway.
+
+    Anything can POST to a local port, so a hidden button is a convenience and the refusal is
+    the control -- the same reasoning as the kill switch.
+    """
+    from quantbot.console.app import create_app
+
+    response = TestClient(create_app(database, reconcile=None)).post(
+        "/operations/reconcile", follow_redirects=False
+    )
+
+    assert response.status_code == 200
+    assert "cannot reconcile" in response.text
+    assert "Nothing changed" in response.text
+
+
+def test_a_failed_reconciliation_is_reported_rather_than_swallowed(database) -> None:
+    """A redirect to a page showing unchanged state is indistinguishable from success.
+
+    The same trap the policy apply path avoids, and the reason this renders in place.
+    """
+    from quantbot.console.app import create_app
+
+    async def explode():
+        raise RuntimeError("the broker refused the connection")
+
+    response = TestClient(create_app(database, reconcile=explode)).post(
+        "/operations/reconcile", follow_redirects=False
+    )
+
+    assert response.status_code == 200
+    assert "reconciliation failed" in response.text
+    assert "refused the connection" in response.text
+
+
+def test_a_successful_reconciliation_redirects(database) -> None:
+    """So a refresh does not repeat a broker round trip."""
+    from quantbot.console.app import create_app
+
+    called: list[bool] = []
+
+    async def succeed():
+        called.append(True)
+        return {"ok": True, "status": "RECONCILED", "diff_count": 0, "reasons": []}
+
+    response = TestClient(create_app(database, reconcile=succeed)).post(
+        "/operations/reconcile", follow_redirects=False
+    )
+
+    assert response.status_code == 303
+    assert called == [True]
