@@ -48,22 +48,54 @@ def everything(client: TestClient) -> str:
 # --- the boundary --------------------------------------------------------------------------
 
 
-def test_the_console_exposes_no_mutation_at_all(client: TestClient) -> None:
-    """Read-only asserted against the route table, not left to review.
+#: The complete set of routes on this console that may change anything (#82 slice 6). An
+#: allowlist rather than a blanket "no mutation" assertion, because the console now has a control
+#: plane -- but the property the old assertion protected is kept exactly: a POST added anywhere
+#: else fails the suite rather than being noticed in review.
+MUTATING_ROUTES = {
+    ("/config/policy/preview", "POST"),
+    ("/config/policy/apply", "POST"),
+    ("/config/policy/rollback", "POST"),
+}
 
-    Slice 2's job is to render the system truthfully before slice 3 lets anyone change it. A
-    surface that *cannot* mutate is a stronger claim than one that currently does not, and it is
-    checkable.
+
+def test_the_console_mutates_only_through_the_policy_control_plane(client: TestClient) -> None:
+    """Every mutating route is named here, and nothing else may mutate.
+
+    Slice 2 asserted the console could not change anything at all. Slice 6 gives it exactly one
+    thing it may change -- the veto policy, through validate/diff/apply -- so the assertion moves
+    from "none" to "these three", which is still checkable and still fails closed. Widening it
+    requires editing this list, which is the review moment the old test was buying.
     """
-    routes = [
+    routes = {
         (route.path, method)
         for route in client.app.routes
         for method in getattr(route, "methods", set())
-    ]
-    mutating = [item for item in routes if item[1] in {"POST", "PUT", "PATCH", "DELETE"}]
+    }
+    mutating = {item for item in routes if item[1] in {"POST", "PUT", "PATCH", "DELETE"}}
 
-    assert not mutating, f"the read-only console exposes mutating routes: {mutating}"
-    assert routes, "an empty route table would satisfy the assertion above"
+    assert mutating == MUTATING_ROUTES, (
+        f"unexpected mutating routes: {sorted(mutating - MUTATING_ROUTES)}; "
+        f"missing: {sorted(MUTATING_ROUTES - mutating)}"
+    )
+
+
+def test_nothing_on_the_console_can_reach_the_capital_boundary(client: TestClient) -> None:
+    """The property that actually matters, asserted end to end rather than trusted to the model.
+
+    `proposable_fields` excludes credentials and the capital boundary by safety class, and unit
+    tests cover that. This checks the *route* honours it: a request naming `KILL_SWITCH` is
+    refused rather than silently dropped from the update set, because a silently dropped field
+    would apply a change set that is not the one submitted and report success.
+    """
+    for field in ("KILL_SWITCH", "TRADING_MODE", "ALPACA_PAPER_API_KEY", "authority"):
+        response = client.post(
+            "/config/policy/preview", data={field: "x", "reason": "attempting the boundary"}
+        )
+
+        assert response.status_code == 200
+        assert "cannot be changed from a console" in response.text, field
+        assert "Proposed change" not in response.text, f"{field} produced a diff"
 
 
 def test_every_navigation_target_renders(client: TestClient) -> None:

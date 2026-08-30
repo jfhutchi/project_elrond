@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% set title = "Risk policy" %}
+{% block body %}
+<h1>Risk policy</h1>
+<p class="sub">
+  The veto thresholds this runtime is enforcing right now, and the only surface in this console
+  that can change anything. A change here does not edit these numbers &mdash; it mints a new
+  version and leaves the old one intact, because every refusal on record cites the identity of
+  the policy that produced it.
+</p>
+
+<section class="card">
+  <div class="k">In force</div>
+  <div class="v mono" style="font-size:.9rem">{{ head.identity }}</div>
+  <div class="n">
+    version {{ head.version }} &middot; authority {{ head.authority.value }} &middot;
+    applied by {{ head.applied_by }} &middot; {{ head.applied_at }}
+    {% if not head_recorded %}
+      &middot; <span class="absent">the shipped defaults, not yet recorded &mdash; the runtime
+      writes them as version 1 when it starts, and an apply from here writes them first</span>
+    {% endif %}
+  </div>
+  <div class="n">{{ head.reason }}</div>
+</section>
+
+{% if refusal %}
+<section class="card" style="border-color:var(--crit)">
+  <div class="k">Refused</div>
+  <div class="v" style="font-size:.95rem">{{ refusal }}</div>
+  <div class="n">
+    Nothing was written. A refused proposal leaves the version in force exactly as it was.
+  </div>
+</section>
+{% endif %}
+
+{% if changes %}
+<section class="card" style="border-color:var(--accent)">
+  <div class="k">Proposed change &mdash; not yet applied</div>
+  <div class="scroll"><table>
+    <tr><th>Setting</th><th>In force</th><th>Proposed</th></tr>
+    {% for change in changes %}
+    <tr>
+      <td class="mono">{{ change.key }}</td>
+      <td class="mono quiet">{{ change.previous }}</td>
+      <td class="mono">{{ change.proposed }}</td>
+    </tr>
+    {% endfor %}
+  </table></div>
+  <form method="post" action="/config/policy/apply" style="margin-top:1rem">
+    <input type="hidden" name="base_identity" value="{{ head.identity }}">
+    {% for change in changes %}
+    <input type="hidden" name="{{ change.key }}" value="{{ change.proposed }}">
+    {% endfor %}
+    <input type="hidden" name="reason" value="{{ pending.get('reason', '') }}">
+    <button type="submit">Apply &mdash; mint version {{ head.version + 1 }}</button>
+    <span class="n">
+      This will be recorded with <span class="mono">PROJECT_DEFAULT</span> authority. The console
+      cannot tell a person from a script posting to the same local port, so it does not claim an
+      operator chose these numbers.
+    </span>
+  </form>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="k">Propose a change</div>
+  <p class="n">
+    Leave a field blank to leave it alone. Values are validated by the policy model itself, so an
+    out-of-range threshold is refused here rather than stored and enforced.
+  </p>
+  <form method="post" action="/config/policy/preview">
+    <div class="scroll"><table>
+      <tr><th>Setting</th><th>In force</th><th>New value</th></tr>
+      {% for name in fields %}
+      <tr>
+        <td class="mono">{{ name }}</td>
+        <td class="mono quiet">{{ policy[name] }}</td>
+        <td>
+          <input type="text" name="{{ name }}" value="{{ pending.get(name, '') }}"
+                 placeholder="unchanged" autocomplete="off">
+        </td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    <p style="margin-top:.75rem">
+      <label class="n" for="reason">Why. Recorded on the version and never editable afterwards.</label><br>
+      <input type="text" id="reason" name="reason" style="width:100%;max-width:48rem"
+             value="{{ pending.get('reason', '') }}" autocomplete="off">
+    </p>
+    <button type="submit">Preview the diff</button>
+  </form>
+  <p class="n">
+    Not listed here: credentials and anything deciding whether real capital can move. Those are
+    excluded by safety class rather than hidden from the form, so a request naming one is refused
+    rather than ignored.
+  </p>
+</section>
+
+<section class="card">
+  <div class="k">History</div>
+  <p class="n">
+    Newest first. Every version that was ever in force, kept so a refusal recorded years ago
+    still resolves to the rule that produced it. Rolling back mints a new version holding an old
+    body; it never rewinds, because that would delete the record that the versions in between
+    were ever in force.
+  </p>
+  <div class="scroll"><table>
+    <tr>
+      <th>#</th><th>Identity</th><th>Authority</th><th>By</th><th>When</th><th>Why</th><th></th>
+    </tr>
+    {% for row in history %}
+    <tr>
+      <td class="mono">{{ row.version }}</td>
+      <td class="mono quiet" style="font-size:.8rem">{{ row.identity }}</td>
+      <td>
+        {% if row.authority == "OPERATOR" %}
+          <span class="pill pill--warn">OPERATOR</span>
+        {% else %}
+          <span class="pill pill--absent">{{ row.authority }}</span>
+        {% endif %}
+      </td>
+      <td class="quiet">{{ row.applied_by }}</td>
+      <td class="quiet">{{ row.applied_at }}</td>
+      <td class="quiet">{{ row.reason }}</td>
+      <td>
+        {% if row.identity != head.identity %}
+        <form method="post" action="/config/policy/rollback">
+          <input type="hidden" name="target_identity" value="{{ row.identity }}">
+          <input type="hidden" name="reason"
+                 value="restoring the thresholds from version {{ row.version }}">
+          <button type="submit">Restore these values</button>
+        </form>
+        {% else %}
+          <span class="absent">in force</span>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </table></div>
+</section>
+{% endblock %}
