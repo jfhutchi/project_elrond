@@ -305,3 +305,78 @@ def test_the_danger_strip_does_not_claim_the_console_is_read_only(client: TestCl
 
     assert "nothing here can change state" not in body
     assert "no surface here can enable live trading or move capital" in body
+
+
+def test_a_stopped_system_says_so_rather_than_showing_a_date(database, monkeypatch) -> None:
+    """The gap the real outage exposed.
+
+    The operator's system stopped on 2026-08-19 and was still stopped ten days later. The console
+    rendered `last_run_at` as a timestamp and nothing else, so noticing required subtracting one
+    date from another -- and nobody did. Meanwhile capacity, counterfactuals and reproduction
+    were all recorded as "evidence blocked", which was true and pointed away from the cause.
+
+    Elapsed time now leads, and it reaches the attention list ahead of every other item, because
+    a system that is not running makes every other measurement on the page a statement about the
+    past.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from quantbot.console.state import read_console_state
+
+    stopped = datetime(2026, 8, 19, 20, 5, tzinfo=UTC)
+    with database.transaction() as session:
+        StorageRepository(session).create_run(
+            "run-1", strategy_identity(), started_at=stopped
+        )
+
+    with database.transaction() as session:
+        state = read_console_state(session, now=stopped + timedelta(days=10))
+
+    assert state.health.days_since_last_run == 10
+    assert any("10 days ago" in item for item in state.attention)
+    assert "no forward evidence" in " ".join(state.attention)
+
+
+def test_a_recent_cycle_raises_nothing(database) -> None:
+    """A notice that fires on a healthy system is one an operator learns to scroll past."""
+    from datetime import UTC, datetime, timedelta
+
+    from quantbot.console.state import read_console_state
+
+    ran = datetime(2026, 8, 29, 20, 5, tzinfo=UTC)
+    with database.transaction() as session:
+        StorageRepository(session).create_run("run-1", strategy_identity(), started_at=ran)
+
+    with database.transaction() as session:
+        state = read_console_state(session, now=ran + timedelta(days=1))
+
+    assert state.health.days_since_last_run == 1
+    assert not [item for item in state.attention if "days ago" in item]
+
+
+def test_a_system_that_never_ran_is_distinguished_from_a_stale_one(database) -> None:
+    """Never-run and stopped are different facts, and only one of them is a fault."""
+    from datetime import UTC, datetime
+
+    from quantbot.console.state import read_console_state
+
+    with database.transaction() as session:
+        state = read_console_state(session, now=datetime(2026, 8, 30, tzinfo=UTC))
+
+    assert state.health.days_since_last_run is None
+    assert any("has ever run" in item for item in state.attention)
+
+
+def strategy_identity():
+    """The deployment a run has to hang off. `create_run` saves it as a side effect."""
+    from datetime import UTC, datetime
+
+    from quantbot.domain import StrategyIdentity
+
+    return StrategyIdentity(
+        strategy_id="adaptive-momentum",
+        version="v1",
+        git_commit="abc123",
+        configuration_hash="cfg-abc",
+        deployment_timestamp=datetime(2026, 8, 1, tzinfo=UTC),
+    )

@@ -43,9 +43,24 @@
   <div class="card">
     <div class="k">Last cycle</div>
     {% if state.health.last_run_at %}
-      <div class="v" style="font-size:1.05rem">{{ state.health.last_run_at.strftime("%Y-%m-%d %H:%M") }}</div>
+      {# The elapsed time leads. A timestamp alone is a number a reader has to subtract from
+         today to interpret, and when this system stopped for ten days nobody did. #}
+      {% if state.health.days_since_last_run == 0 %}
+        <div class="v" style="font-size:1.05rem">today</div>
+      {% elif state.health.days_since_last_run == 1 %}
+        <div class="v" style="font-size:1.05rem">yesterday</div>
+      {% else %}
+        <div class="v" style="font-size:1.05rem{% if state.health.days_since_last_run >= 4 %};color:var(--crit){% endif %}">
+          {{ state.health.days_since_last_run }} days ago
+        </div>
+      {% endif %}
+      <div class="n quiet">{{ state.health.last_run_at.strftime("%Y-%m-%d %H:%M") }} UTC</div>
+      {% if state.health.days_since_last_run >= 4 %}
+      <div class="n">no forward evidence accumulates while it is stopped</div>
+      {% endif %}
     {% else %}
       <div class="v absent">never</div>
+      <div class="n">nothing on this page describes a system that has done anything</div>
     {% endif %}
   </div>
 </div>

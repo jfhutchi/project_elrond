@@ -40,6 +40,14 @@ class FrozenModel(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
 
+#: Days without a cycle before the console says so. A `PROJECT_DEFAULT` (#72).
+#:
+#: Four covers a long weekend plus a public holiday, so an ordinary market closure does not
+#: produce a notice while a genuinely stopped system does. Chosen to notice sooner rather than
+#: later: a false notice costs a glance, and a missed one costs every downstream measurement.
+STALE_RUN_DAYS = 4
+
+
 class HealthPanel(FrozenModel):
     """Is Elrond healthy, and is anything dangerous true right now.
 
@@ -55,6 +63,12 @@ class HealthPanel(FrozenModel):
     reconciliation_clean: bool | None
     reconciliation_diffs: int
     last_run_at: datetime | None
+    #: Whole days since the last operational cycle. `None` when none has ever run.
+    #:
+    #: Derived rather than left to the reader. The console showed `last_run_at` as a timestamp
+    #: and nothing else, so a system that had stopped ten days earlier rendered as a date a
+    #: person had to subtract from today to notice -- which is exactly what did not happen.
+    days_since_last_run: int | None
     #: Absent rather than zero when the account has never been snapshotted.
     account_equity: str | None
     open_positions: int
@@ -181,6 +195,22 @@ class ConsoleState(FrozenModel):
             items.append(
                 f"kill switch ENGAGED: {self.health.kill_switch_reason or 'no reason recorded'}"
             )
+        # Before reconciliation and capacity, because a system that is not running makes every
+        # other measurement on this page a statement about the past. The threshold is a
+        # `PROJECT_DEFAULT`: a paper strategy on a daily cadence should run every trading day, so
+        # anything past a long weekend is worth an operator seeing. It is deliberately not tied
+        # to the market calendar -- a holiday producing one spurious notice costs a glance, and
+        # calendar logic here would be a second place for #74's off-by-one to live.
+        if self.health.days_since_last_run is None:
+            items.append(
+                "no operational cycle has ever run, so nothing on this page describes a "
+                "system that has done anything"
+            )
+        elif self.health.days_since_last_run >= STALE_RUN_DAYS:
+            items.append(
+                f"the last operational cycle was {self.health.days_since_last_run} days ago; "
+                "no forward evidence is accumulating while it is stopped"
+            )
         if self.health.reconciliation_clean is False:
             items.append(
                 f"reconciliation found {self.health.reconciliation_diffs} difference(s) against "
@@ -220,7 +250,9 @@ class ConsoleState(FrozenModel):
         return tuple(items)
 
 
-def _health(session: Session, settings_source: Mapping[str, ConfigSetting]) -> HealthPanel:
+def _health(
+    session: Session, settings_source: Mapping[str, ConfigSetting], *, now: datetime
+) -> HealthPanel:
     from quantbot.config import Settings
     from quantbot.storage.repositories import RecordNotFoundError
 
@@ -249,6 +281,9 @@ def _health(session: Session, settings_source: Mapping[str, ConfigSetting]) -> H
         ),
         reconciliation_diffs=0 if reconciliation is None else len(reconciliation.diffs),
         last_run_at=runs[-1].started_at if runs else None,
+        days_since_last_run=(
+            None if not runs else max((now - runs[-1].started_at).days, 0)
+        ),
         account_equity=None if account is None else str(account.account.equity),
         open_positions=0 if account is None else len(account.positions),
         trading_mode=str(settings_source["TRADING_MODE"].effective_value or "UNKNOWN"),
@@ -407,7 +442,7 @@ def read_console_state(session: Session, *, now: datetime) -> ConsoleState:
     strategies = _strategies(session)
     return ConsoleState(
         generated_at=now,
-        health=_health(session, settings),
+        health=_health(session, settings, now=now),
         strategies=strategies,
         risk=_risk(session),
         market_data=_market_data(session),
