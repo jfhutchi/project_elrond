@@ -80,6 +80,10 @@ class RiskPanel(FrozenModel):
     policy_identity: Text
     policy_version: int
     authority: Text
+    #: Whether this is the recorded rule or the shipped defaults with nothing recorded yet. Once
+    #: a change has been applied the two differ, and a console reporting the defaults would be
+    #: describing a rule the runtime is not running -- worse than reporting nothing.
+    policy_source: Text
     enabled_vetoes: tuple[str, ...]
     #: Vetoes declared with no evaluator behind them. Empty is the correct current state and is
     #: asserted rather than assumed, because a declared-but-absent control reads as protection.
@@ -216,9 +220,15 @@ def _strategies(session: Session) -> tuple[StrategyRow, ...]:
 
 
 def _risk(session: Session) -> RiskPanel:
+    from quantbot.risk.policy_versions import recorded_policy_version
     from quantbot.risk.vetoes import UNIMPLEMENTED, PortfolioVetoPolicy
 
-    policy = PortfolioVetoPolicy()
+    # The recorded head, never a fresh construction of the defaults (#82). Read-only: this must
+    # not bootstrap a version to answer a GET, so an empty store reports the defaults -- which is
+    # what the runtime would be enforcing until it starts and records them.
+    version = recorded_policy_version(StorageRepository(session))
+    policy = version.policy() if version is not None else PortfolioVetoPolicy()
+    source = "recorded" if version is not None else "shipped defaults, none recorded yet"
     refusals = StorageRepository(session).list_rejected_candidates()
     by_gate: dict[str, int] = {}
     for _, reasons in refusals:
@@ -229,6 +239,7 @@ def _risk(session: Session) -> RiskPanel:
         policy_identity=policy.identity,
         policy_version=policy.version,
         authority=policy.authority.value,
+        policy_source=source,
         enabled_vetoes=tuple(sorted(item.value for item in policy.enabled)),
         unimplemented_vetoes=tuple(sorted(item.value for item in UNIMPLEMENTED)),
         recent_refusals=len(refusals),

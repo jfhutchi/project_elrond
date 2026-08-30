@@ -28,114 +28,30 @@ the caller declares, and `PolicyAuthority.OPERATOR` is unreachable from any auto
 default chosen autonomously must never be rendered as approval.
 """
 
+
 from __future__ import annotations
 
-import hashlib
-import json
 from collections.abc import Mapping
 from datetime import datetime
-from enum import StrEnum
 from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import BaseModel, ConfigDict, StringConstraints, model_validator
 
 from quantbot.operations.registry import (
     SafetyClass,
     config_registry,
 )
+from quantbot.risk.policy_versions import (
+    ChangeAuthority,
+    FieldChange,
+    PolicyVersion,
+    ProposalRefused,
+    initial_version,
+    policy_body,
+)
 from quantbot.risk.vetoes import PortfolioVetoPolicy
 
-Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
-
-class ProposalRefused(RuntimeError):
-    """A proposal that must not be applied, with the reason an operator needs."""
-
-
-class ChangeAuthority(StrEnum):
-    """Who chose the values in a version. Recorded, never inferred.
-
-    Mirrors `PolicyAuthority` deliberately: a console apply and an agent-selected default are
-    different provenance even when the numbers are identical, and #72 requires that a reader be
-    able to tell them apart.
-    """
-
-    #: A human operator applied it through the console.
-    OPERATOR = "OPERATOR"
-    #: An agent selected it as a versioned project default. Never rendered as approval.
-    PROJECT_DEFAULT = "PROJECT_DEFAULT"
-
-
-class FieldChange(BaseModel):
-    """One field moving, with both values kept so a diff needs no second lookup."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    key: Text
-    previous: str
-    proposed: str
-
-    @model_validator(mode="after")
-    def validate_change(self) -> Self:
-        if self.previous == self.proposed:
-            raise ValueError(
-                f"{self.key} is unchanged; a no-op in a change set makes a diff misleading "
-                "about what an apply actually did"
-            )
-        return self
-
-
-class PolicyVersion(BaseModel):
-    """One frozen version of the veto policy, with the provenance of the change that made it."""
-
-    model_config = ConfigDict(frozen=True, extra="forbid")
-
-    identity: Text
-    version: int = Field(ge=1)
-    #: The version this succeeded. `None` only for the first, which is the shipped default.
-    supersedes: str | None
-    authority: ChangeAuthority
-    applied_by: Text
-    applied_at: datetime
-    reason: Text
-    #: The full policy body, so a version can be reconstructed without replaying every change.
-    body: Mapping[str, Any]
-    changes: tuple[FieldChange, ...] = ()
-
-    def policy(self) -> PortfolioVetoPolicy:
-        """Rebuild the frozen policy this version describes."""
-        return PortfolioVetoPolicy.model_validate(dict(self.body))
-
-    def rollback_identity(self, version: int) -> str:
-        """The identity a rollback restoring this body would carry.
-
-        Distinct from this version's own identity. The *policy* is identical, but the version is
-        not the same object: applied at a different time, by a different actor, for a different
-        reason. Reusing the restored identity would make two rows indistinguishable and break the
-        `supersedes` chain that explains how the system got here.
-        """
-        payload = {"restores": self.identity, "version": version, "body": dict(self.body)}
-        digest = hashlib.sha256(
-            json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        return f"veto-policy-rollback-v{version}-{digest[:16]}"
-
-    def as_row(self) -> dict[str, object]:
-        return {
-            "identity": self.identity,
-            "version": self.version,
-            "supersedes": self.supersedes,
-            "authority": self.authority.value,
-            "applied_by": self.applied_by,
-            "applied_at": self.applied_at.isoformat(),
-            "reason": self.reason,
-            "body": json.dumps(dict(self.body), sort_keys=True, separators=(",", ":")),
-            "changes": json.dumps(
-                [json.loads(item.model_dump_json()) for item in self.changes],
-                sort_keys=True,
-                separators=(",", ":"),
-            ),
-        }
+Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=2000)]
 
 
 class ConfigProposal(BaseModel):
@@ -205,30 +121,6 @@ def proposable_fields() -> frozenset[str]:
     )
 
 
-def _body(policy: PortfolioVetoPolicy) -> dict[str, Any]:
-    decoded: dict[str, Any] = json.loads(policy.model_dump_json())
-    return decoded
-
-
-def initial_version(*, now: datetime, actor: str = "project-default") -> PolicyVersion:
-    """The shipped policy as version 1, so history starts where the system started.
-
-    Recorded rather than implied. Without it the first apply would have nothing to supersede, and
-    every refusal already measured under the shipped defaults would sit outside the version
-    history that is supposed to explain them.
-    """
-    policy = PortfolioVetoPolicy()
-    return PolicyVersion(
-        identity=policy.identity,
-        version=1,
-        supersedes=None,
-        authority=ChangeAuthority.PROJECT_DEFAULT,
-        applied_by=actor,
-        applied_at=now,
-        reason="the shipped policy, recorded so version history starts where the system did",
-        body=_body(policy),
-    )
-
 
 def validate_proposal(proposal: ConfigProposal, *, head: PolicyVersion) -> tuple[FieldChange, ...]:
     """Check a proposal without applying it, returning the diff it would produce.
@@ -253,13 +145,13 @@ def validate_proposal(proposal: ConfigProposal, *, head: PolicyVersion) -> tuple
         )
 
     current = head.policy()
-    merged = {**_body(current), **dict(proposal.updates)}
+    merged = {**policy_body(current), **dict(proposal.updates)}
     try:
         candidate = PortfolioVetoPolicy.model_validate(merged)
     except Exception as error:  # noqa: BLE001 - surfaced verbatim to the operator
         raise ProposalRefused(f"the proposed policy is not valid: {error}") from error
 
-    before, after = _body(current), _body(candidate)
+    before, after = policy_body(current), policy_body(candidate)
     changes = tuple(
         FieldChange(key=key, previous=str(before[key]), proposed=str(after[key]))
         for key in sorted(proposal.updates)
@@ -282,7 +174,7 @@ def apply_proposal(
     old one keeps pointing at the rule that actually produced it.
     """
     changes = validate_proposal(proposal, head=head)
-    merged = {**_body(head.policy()), **dict(proposal.updates)}
+    merged = {**policy_body(head.policy()), **dict(proposal.updates)}
     candidate = PortfolioVetoPolicy.model_validate(merged)
     return PolicyVersion(
         identity=candidate.identity,
@@ -292,7 +184,7 @@ def apply_proposal(
         applied_by=proposal.actor,
         applied_at=now,
         reason=proposal.reason,
-        body=_body(candidate),
+        body=policy_body(candidate),
         changes=changes,
     )
 
@@ -311,7 +203,7 @@ def rollback_to(
             f"{target.identity} is already in force; rolling back to it would mint an identical "
             "version and record a change that did not happen"
         )
-    before, after = _body(head.policy()), dict(target.body)
+    before, after = policy_body(head.policy()), dict(target.body)
     changes = tuple(
         FieldChange(key=key, previous=str(before[key]), proposed=str(after[key]))
         for key in sorted(after)
@@ -328,6 +220,8 @@ def rollback_to(
         body=after,
         changes=changes,
     )
+
+
 
 
 __all__ = [
