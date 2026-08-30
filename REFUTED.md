@@ -99,6 +99,44 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
 
 ## Structural limits that bound all future work
 
+* **The news source does not cover the universe Elrond trades, and the gap is worst where it
+  matters most.** Measured 2026-08-30 against the live Alpaca/Benzinga feed, items returned per
+  symbol over a trailing year:
+
+  | XLU | EEM | VNQ | EFA | MDY | AAPL, NVDA (control) |
+  |---|---|---|---|---|---|
+  | 50 (page cap) | 33 | 27 | 3 | **1** | 50 in a *month* |
+
+  `NO_PUBLIC_CATALYST_FOUND` is defined as a **finding** -- unusual activity with no public
+  explanation, the interesting case worth escalating. That definition assumes the source would
+  have reported a catalyst if one existed. For MDY, at roughly one item a year, it would not.
+
+  Left ungated, every MDY anomaly would produce a permanent, confident negative finding. Because
+  that outcome is the interesting one, **the least covered instruments would have generated the
+  most apparent discoveries** -- a false-discovery generator pointed precisely at the instruments
+  the system knows least about, and one that would have looked like a result.
+
+  Now gated: an empty lookback provokes a coverage probe over the detector's own 90-session
+  baseline, and a symbol the source has not mentioned in that window yields `STALE`, which forces
+  `CATALYST_UNKNOWN`. A probe that cannot complete yields `UNAVAILABLE` rather than assuming
+  coverage, because an unverifiable claim about a provider must not become a finding about the
+  world.
+
+  **A second, unfixed limitation is recorded here rather than mechanised.** Where sector ETFs
+  *are* covered, much of the coverage is a daily automated roundup -- *"Leading And Lagging
+  Sectors For August 28, 2026"* -- which names every sector ETF whether or not anything happened
+  to it. These are wire reports published after the session, not explanations of it. They satisfy
+  the qualifying-window test and would produce `CATALYST_FOUND` on days when nothing occurred.
+  Distinguishing a roundup from an explanation needs a relevance judgement, and a keyword filter
+  on the headline would be a tuned parameter dressed as a rule. So the current state is: negative
+  findings are gated and trustworthy; **positive findings on sector ETFs are not, and must not be
+  read as evidence that a catalyst existed.**
+
+  This is why #83 Part B does not begin with adopting a second provider. The question a second
+  source would answer is a coverage question, and the coverage number says the primary is usable
+  for 12 of 15 universe symbols and unusable for three -- which is an argument for a gate first
+  and a vendor evaluation second, if at all.
+
 * **A local model's answer depends on what it was asked before, and provenance did not record
   it.** Measured 2026-08-30 against local Ollama with `mistral:7b` at `temperature=0`, on one
   fixed prompt and one fixed source set, through the real `SemanticWorker`.
