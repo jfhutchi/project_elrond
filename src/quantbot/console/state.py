@@ -202,6 +202,28 @@ class RuntimePanel(FrozenModel):
     placements: tuple[JobPlacement, ...] = ()
 
 
+class BudgetRow(FrozenModel):
+    """What one budget has spent of one resource (#14).
+
+    `renewable` is the field that matters. Wall seconds and tokens come back tomorrow; trials
+    against a dataset window do not, and a console that displayed them in the same table without
+    saying so would let a reader treat a permanent cost as a recurring one.
+    """
+
+    budget_key: Text
+    resource: Text
+    spent: Text
+    renewable: bool
+    #: `None` when no cap is configured for this pair, which means nothing is limiting it.
+    cap: str | None = None
+    #: Spent as a share of the cap, 0-1. `None` when uncapped.
+    fraction: float | None = None
+
+    @property
+    def exhausted(self) -> bool:
+        return self.fraction is not None and self.fraction >= 1.0
+
+
 class ConsoleState(FrozenModel):
     """Everything the read-only console renders, assembled in one pass."""
 
@@ -212,6 +234,8 @@ class ConsoleState(FrozenModel):
     market_data: MarketDataPanel
     capacity: CapacityPanel
     discovery: DiscoveryPanel
+    #: Every budget with recorded spend, non-renewable first.
+    budgets: tuple[BudgetRow, ...] = ()
     #: `None` when the console was built without a measurement, which is the test default.
     runtime: RuntimePanel | None = None
     #: Unresolved only. A resolved incident is history; this panel is about what is still true.
@@ -271,6 +295,12 @@ class ConsoleState(FrozenModel):
             items.append(
                 "no capacity assessment has been persisted, so whether an edge survives the "
                 "capital it would be traded at is unmeasured (#51)"
+            )
+        exhausted = [row for row in self.budgets if row.exhausted and not row.renewable]
+        if exhausted:
+            items.append(
+                f"{', '.join(sorted(row.budget_key for row in exhausted))} has spent its "
+                "non-renewable budget; no further confirmatory work can be admitted against it"
             )
         if self.discovery.unassessed:
             items.append(
@@ -477,6 +507,58 @@ def _incidents(session: Session) -> tuple[IncidentRow, ...]:
     )
 
 
+def _budgets(session: Session) -> tuple[BudgetRow, ...]:
+    """Every budget that has actually spent something, with its cap when one exists.
+
+    Read from recorded spend rather than from the configured caps, so a budget nobody capped
+    still appears once it has cost something. The reverse -- listing caps and showing zero
+    against them -- would fill the page with rows describing nothing while hiding the one
+    resource that was quietly being consumed without a limit.
+    """
+    from sqlalchemy import func, select
+
+    from quantbot.research.budget import RENEWABLE, Resource
+    from quantbot.storage.schema import budget_spend
+
+    rows = session.execute(
+        select(
+            budget_spend.c.budget_key,
+            budget_spend.c.category,
+            func.coalesce(func.sum(budget_spend.c.amount), "0"),
+        ).group_by(budget_spend.c.budget_key, budget_spend.c.category)
+    ).all()
+
+    reported = []
+    for key, category, total in rows:
+        try:
+            resource = Resource(str(category))
+        except ValueError:
+            # A category this build does not know. Reported rather than dropped: a spend nobody
+            # can classify is still a spend, and hiding it would understate the total.
+            reported.append(
+                BudgetRow(
+                    budget_key=str(key),
+                    resource=str(category),
+                    spent=str(total),
+                    renewable=False,
+                )
+            )
+            continue
+        reported.append(
+            BudgetRow(
+                budget_key=str(key),
+                resource=resource.value,
+                spent=str(total),
+                renewable=resource in RENEWABLE,
+            )
+        )
+    # Non-renewable first: a permanent cost deserves the reader's attention before a recurring
+    # one, whatever the alphabet says.
+    return tuple(
+        sorted(reported, key=lambda row: (row.renewable, row.budget_key, row.resource))
+    )
+
+
 def build_runtime_panel(host: object, *, measured_at: datetime) -> RuntimePanel:
     """Turn a measured `HostProfile` into what the console renders.
 
@@ -533,6 +615,7 @@ def read_console_state(
         market_data=_market_data(session),
         capacity=_capacity(session, strategies),
         discovery=_discovery(session),
+        budgets=_budgets(session),
         runtime=runtime,
         incidents=_incidents(session),
         settings=tuple(settings.values()),
@@ -540,6 +623,7 @@ def read_console_state(
 
 
 __all__ = [
+    "BudgetRow",
     "CapacityPanel",
     "ConsoleState",
     "JobPlacement",

@@ -26,4 +26,39 @@
   should be read as evidence of an edge. Engineering completion, green tests and a promoted stage
   are not profitability, and this console will not present them as such.
 </p>
+<h2>Budgets</h2>
+<p class="sub">
+  What research has already spent. The distinction that matters is whether a resource comes back:
+  wall seconds and tokens renew tomorrow, and <strong>trials against a dataset window do not</strong>
+  &mdash; every candidate evaluated uses up a little of what that data can still be asked.
+</p>
+{% if state.budgets %}
+<div class="scroll"><table>
+  <tr><th>Budget</th><th>Resource</th><th>Spent</th><th>Kind</th></tr>
+  {% for row in state.budgets %}
+  <tr>
+    <td class="mono">{{ row.budget_key }}</td>
+    <td class="mono">{{ row.resource }}</td>
+    <td class="mono">{{ row.spent }}</td>
+    <td>
+      {% if row.renewable %}
+        <span class="pill pill--absent">renews</span>
+      {% else %}
+        <span class="pill pill--warn">permanent</span>
+      {% endif %}
+    </td>
+  </tr>
+  {% endfor %}
+</table></div>
+<p class="n">
+  Read from recorded spend rather than from configured caps, so a budget nobody capped still
+  appears once it has cost something. Listing caps instead would fill this table with rows
+  describing nothing while hiding the resource being consumed without a limit.
+</p>
+{% else %}
+<p class="absent">
+  Nothing has been spent. This is an empty ledger, not a system with unlimited budget.
+</p>
+{% endif %}
+
 {% endblock %}
