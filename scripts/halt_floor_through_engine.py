@@ -3,10 +3,15 @@
 `STATUS.md` carries this as the standing severity-1: once equity is 15% below its high-water
 mark `entry_halted` blocks new positions, but a strategy that cannot open positions cannot earn
 back the drawdown. The halt is triggered by a loss and then forbids the only mechanism that
-could undo it. `drawdown_halt_floor_bps` is built, defaults to 0 (off), and deploying it is an
-operator decision because it changes live behaviour and restarts the qualification window.
+could undo it. `drawdown_halt_floor_bps` is built and defaults to 0 (off).
 
-That decision has been blocked on evidence, and the evidence was missing for a specific reason:
+An earlier version of this docstring called deploying it "an operator decision because it changes
+live behaviour and restarts the qualification window". Under #72 that is wrong in the direction
+that stops work: the floor governs a paper strategy and moves no real capital, so it is an agent
+decision made against a versioned project default and labelled as one. Restarting the
+qualification window is a research cost to weigh, not a human gate to wait at.
+
+The decision was blocked on evidence, and the evidence was missing for a specific reason:
 `scripts/halt_policy_study.py` is a standalone simulation that never calls `BacktestEngine`.
 Commit `f77ea08` records what that costs — a standalone halt study concluded a floor turned $100
 into $252.43 against $126.80, deterministic and reproducible and **wrong about this system**,
@@ -18,7 +23,7 @@ component selection applied, on the SIP window. Under #8's rules the standalone 
 `RESEARCH_SCRIPT` result and this is a `PRODUCTION_ENGINE` one; only the second is about Elrond.
 
 Classification `EXPLORATORY`: the window is consumed, this carries no registration and runs no
-adversarial probes. It is a measurement of a *mechanism the operator must decide about*, not a
+adversarial probes. It is a measurement of a *mechanism*, not a
 test of a hypothesis, and it spends no statistical budget because it searches nothing.
 
 Usage:

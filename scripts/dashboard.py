@@ -256,7 +256,21 @@ def _promotion_rows(session: Session) -> list[tuple[str, str, str, str, str, str
 
 
 def _unmet_gates(stage: Stage, *, days: int, trades: int) -> str:
-    """What stands between this strategy and its next stage, named rather than summarised."""
+    """What stands between this strategy and its next stage, named rather than summarised.
+
+    Four of these transitions used to render as "operator decision", which was wrong in the
+    direction that stops work: none of them moves real capital. Registering a claim is what the
+    research loop produces, shadow and paper observation touch no live money, and #72 settled
+    that requiring a human to grant *eligibility for human review* would make review a
+    prerequisite for its own eligibility.
+
+    The genuine boundary is elsewhere and unchanged: `LIVE_REVIEW_ELIGIBLE` is terminal, nothing
+    in this enum leads to trading real capital, and the branch above still says so.
+
+    Spelled as branches rather than a module-level mapping on purpose --
+    `test_the_dashboard_holds_no_hand_maintained_records` forbids collection literals here,
+    because that is the shape in which hand-maintained research tables crept back in twice.
+    """
     if stage is Stage.LIVE_REVIEW_ELIGIBLE:
         return "awaiting human review; there is no stage after this one"
     targets = ALLOWED_PROMOTIONS[stage]
@@ -276,8 +290,19 @@ def _unmet_gates(stage: Stage, *, days: int, trades: int) -> str:
             )
         elif target is Stage.RESEARCH_SURVIVOR:
             unmet.append(f"{target.value}: needs a surviving experiment outcome")
+        elif target is Stage.REGISTERED:
+            unmet.append(f"{target.value}: needs a frozen pre-registration to bind to")
+        elif target is Stage.SHADOW:
+            unmet.append(f"{target.value}: needs integrity clear; no capital is at risk here")
+        elif target is Stage.PAPER_OBSERVATION:
+            unmet.append(f"{target.value}: needs integrity clear; paper only, no real capital")
+        elif target is Stage.LIVE_REVIEW_ELIGIBLE:
+            unmet.append(
+                f"{target.value}: a research classification once paper evidence clears; it "
+                "grants no broker authority"
+            )
         else:
-            unmet.append(f"{target.value}: operator decision")
+            unmet.append(f"{target.value}: no mechanical gate is declared for this transition")
     return "; ".join(unmet)
 
 

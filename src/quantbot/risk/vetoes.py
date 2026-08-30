@@ -184,15 +184,18 @@ class PortfolioVetoPolicy(VetoModel):
 
     #: Ceiling on any one exposure group's committed value, in basis points of equity.
     #:
-    #: **The default does not bind, and that is deliberate rather than an oversight.** This
-    #: universe is mostly US equity: a roster of 10 from 23 can be near 100% `US_EQUITY` while
-    #: being exactly what the strategy is designed to hold. A tight global threshold would refuse
-    #: almost every roster, so the shipped value is a placeholder and the veto ships disabled.
+    #: The fallback for any group without its own ceiling below. This universe is mostly US
+    #: equity -- a roster of 10 from 23 can be near 100% `US_EQUITY` while being exactly what the
+    #: strategy is designed to hold -- so one global threshold cannot serve every group: it is
+    #: too loose for the dominant one and refuses every order if set for the narrow ones.
     #:
-    #: **Recorded limitation:** one threshold across all groups is a blunt instrument here. It is
-    #: too loose to constrain the dominant group and would be too tight for the narrow ones
-    #: (sectors, duration, credit) if set for the dominant one. Per-group ceilings are the likely
-    #: next step; choosing them is an operator decision about risk appetite, not an agent's.
+    #: **That is why `group_exposure_ceilings_bps` exists, and this is the fallback rather than
+    #: the rule.** An earlier version of this comment said the value was a placeholder, that the
+    #: veto shipped disabled, and that per-group ceilings were an operator decision. All three
+    #: stopped being true: #75 ships every implemented veto enabled, the per-group ceilings are
+    #: below, and #72 settled that a threshold like this is a versioned project default an agent
+    #: chooses and labels rather than a preference it waits for. The prose is corrected here
+    #: because a future reader would otherwise take it as a live instruction to stop (#72).
     max_group_exposure_bps: int = Field(default=DEFAULT_GROUP_CEILING_BPS, gt=0)
 
     #: Ceilings for named groups, overriding `max_group_exposure_bps`. A single global threshold

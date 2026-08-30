@@ -264,8 +264,13 @@ Two traps found while building it, both recorded in REFUTED.md: a 15% target is 
 no-op** against a 10% weight cap, and cycle 12's portfolio-level result does **not** transfer to
 per-position sizing.
 
-**Deploying v1.3.0 restarts the 30-day qualification window (currently day 1) and is an
-operator decision, not an agent one.**
+**Deploying v1.3.0 restarts the 30-day qualification window (currently day 1).**
+
+> **⚠ SUPERSEDED 2026-08-30 by #72.** This block used to end "and is an operator decision, not an
+> agent one". Paper deployment moves no real capital, so under #72 it is an agent decision made
+> against a versioned project default and labelled as one. Restarting the qualification window is
+> a research consequence to weigh, not a human gate to wait at. The real-capital boundary is
+> unchanged and lives elsewhere.
 
 ## 6d. Cycle 14 — what the money should actually be in
 
@@ -1191,9 +1196,16 @@ same shape the project keeps producing: **a gate reading its input from the thin
 | The claim behind a deployment | `hypothesis_id` supplied at qualification | Bound at `REGISTERED`, read from `promotion_state`, refused as an argument anywhere else |
 | Evidence identity | version + config checked, `strategy_id` not | Exact strategy identity required; a fork sharing a config no longer transfers |
 | Qualification provenance | The stage, and a free-text reason | `objective_identity` + `evidence_identity` on the state **and** the append-only event |
-| Who defines success | Ratification required only at `LIVE_REVIEW_ELIGIBLE` | Required at `PAPER_QUALIFIED` too; an agent may not clear a bar it wrote |
+| Who defines success | Ratification required only at `LIVE_REVIEW_ELIGIBLE` | Required at `PAPER_QUALIFIED` too; an agent may not clear a bar it wrote — **superseded by #72, see below** |
 | A later mandate | Inherited the earlier qualification | Identity must match; a policy edit forces reassessment |
 | Session pairing | Consecutive *qualified* dates | Adjacent *exchange* sessions; a gap is dropped and counted, not annualised |
+
+> **⚠ SUPERSEDED 2026-08-30 by #72.** The "Who defines success" row above is history. A
+> `PROJECT_DEFAULT` mandate is now *usable* at `PAPER_QUALIFIED`: `ratification_objections()`
+> returns nothing for one, and every artifact measured against it reports `authority` so a reader
+> can tell an agent-authored bar from an operator-authored one. The concern the row records --
+> an agent clearing a bar it wrote -- is answered by visible provenance rather than by waiting.
+> `RATIFIED` and `ratified_by` remain unreachable from code.
 
 **The claim is now part of the strategy, not part of the question.** Before, a strategy whose
 mechanism was refuted could be offered a different, unrefuted registration, and the gate would
@@ -1487,11 +1499,15 @@ so it would add to no group's concentration and pass every limit by not being re
 unclassifiable *held* position blocks too, because it makes every group total an understatement,
 and an understated numerator is the permissive direction. Thirteen protections, mutation-checked.
 
-**It ships disabled, and the threshold deliberately does not bind.** This universe is mostly US
-equity, so a roster can sit near 100% `US_EQUITY` while being exactly what the strategy is designed
-to hold. One global ceiling is too loose for the dominant group and would be far too tight for the
-narrow ones if set for it. Per-group ceilings are the likely next step and are an operator decision
-about risk appetite.
+**One global ceiling cannot serve this universe.** It is mostly US equity, so a roster can sit
+near 100% `US_EQUITY` while being exactly what the strategy is designed to hold -- too loose for
+the dominant group, and far too tight for the narrow ones if set for it.
+
+> **⚠ SUPERSEDED 2026-08-30 by #75 and #72.** This block used to say the veto "ships disabled" and
+> that per-group ceilings "are an operator decision about risk appetite". Both stopped being true:
+> every implemented veto ships enabled under #75, and `group_exposure_ceilings_bps` now carries
+> per-group values chosen as versioned project defaults under #72. Nothing here is waiting on a
+> preference.
 
 **Mandate and stress behaviour are now separate claims (Sol's #59 follow-up).** The first version
 of the table mixed them: `HYG: [CREDIT, US_EQUITY]` and `LQD: [CREDIT, TREASURY_DURATION]` recorded
