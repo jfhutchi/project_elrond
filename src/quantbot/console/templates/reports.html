@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% set title = "Reports" %}
+{% block body %}
+<h1>Reports</h1>
+<p class="sub">
+  What has been written to the reports directory. A listing rather than a viewer &mdash; the
+  question this answers is not what last week&rsquo;s report said, which the file itself answers,
+  but whether anything is still being produced. That is the question that went unanswered while
+  the system was stopped.
+</p>
+
+{% if state.reports %}
+  {% if state.reports.missing %}
+  <section class="card" style="border-color:var(--crit)">
+    <div class="k">Directory missing</div>
+    <div class="v mono" style="font-size:.95rem">{{ state.reports.directory }}</div>
+    <div class="n">
+      The place reports go does not exist. That is a configuration fault, and a different one
+      from nobody having written a report &mdash; which is why it is not shown as an empty list.
+    </div>
+  </section>
+  {% elif state.reports.reports %}
+  <section class="card">
+    <div class="k">Most recent</div>
+    {% if state.reports.days_since_latest == 0 %}
+      <div class="v">today</div>
+    {% elif state.reports.days_since_latest == 1 %}
+      <div class="v">yesterday</div>
+    {% else %}
+      <div class="v"{% if state.reports.days_since_latest >= 8 %} style="color:var(--crit)"{% endif %}>
+        {{ state.reports.days_since_latest }} days ago
+      </div>
+    {% endif %}
+    <div class="n quiet mono">{{ state.reports.directory }}</div>
+  </section>
+
+  <section class="card">
+    <div class="k">Written</div>
+    <div class="scroll"><table>
+      <tr><th>File</th><th>When</th><th>Size</th></tr>
+      {% for report in state.reports.reports %}
+      <tr>
+        <td class="mono">{{ report.name }}</td>
+        <td class="quiet">{{ report.written_at.strftime("%Y-%m-%d %H:%M") }} UTC</td>
+        <td class="mono quiet">{{ report.size_bytes }} bytes</td>
+      </tr>
+      {% endfor %}
+    </table></div>
+    <p class="n">
+      Newest first. The console does not render the contents: that would need a markdown renderer
+      this project has no other use for, and the files open perfectly well on their own.
+    </p>
+  </section>
+  {% else %}
+  <section class="card">
+    <div class="k">Nothing written</div>
+    <div class="v absent">no reports</div>
+    <div class="n">
+      The directory exists and is empty. Nobody has produced a report &mdash; which is a fact
+      about what has run, not a fault in the configuration.
+    </div>
+  </section>
+  {% endif %}
+{% else %}
+<section class="card">
+  <p class="absent">
+    This console was started without a reports directory, so it has nothing to look in. That is a
+    statement about how it was launched rather than about whether reports exist.
+  </p>
+</section>
+{% endif %}
+{% endblock %}
