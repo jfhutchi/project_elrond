@@ -232,3 +232,46 @@ finally:
         check=False,
     )
     assert completed.returncode == 0, completed.stderr
+
+
+def test_dependabot_cannot_propose_bumps_the_worker_contract_would_reject() -> None:
+    """The recurring failure this config exists to stop, guarded rather than remembered.
+
+    `requirements-kronos-worker.txt` is an attestation manifest, not a dependency list. It is
+    mirrored by `EXPECTED_PACKAGE_VERSIONS`, checked at runtime, and versioned alongside
+    `WORKER_ENVIRONMENT_ID` and the pinned model hashes -- because a shadow forecast is
+    attributable to the environment that produced it.
+
+    Dependabot cannot update both files, so its proposals here arrive red and stay red. A package
+    added to the manifest without a matching ignore would restart that cycle silently, so the
+    coverage is asserted rather than trusted.
+
+    Security advisories are deliberately still allowed through: the ignores cover
+    `version-update:*` only.
+    """
+    import yaml
+
+    root = Path(__file__).parents[3]
+    pinned = (root / "requirements-kronos-worker.txt").read_text(encoding="utf-8")
+    manifest = {
+        line.split("==", maxsplit=1)[0]
+        for raw in pinned.splitlines()
+        if (line := raw.strip()) and not line.startswith("#")
+    }
+    config = yaml.safe_load((root / ".github" / "dependabot.yml").read_text(encoding="utf-8"))
+    uv_updates = next(
+        entry for entry in config["updates"] if entry["package-ecosystem"] == "uv"
+    )
+    ignored = {entry["dependency-name"] for entry in uv_updates["ignore"]}
+
+    uncovered = manifest - ignored
+    assert not uncovered, (
+        f"{sorted(uncovered)} are pinned in the worker attestation manifest but Dependabot may "
+        "still propose version bumps for them, which the contract test will reject every time"
+    )
+
+    for entry in uv_updates["ignore"]:
+        assert all(kind.startswith("version-update:") for kind in entry["update-types"]), (
+            f"{entry['dependency-name']} suppresses more than version updates; a security "
+            "advisory here is the one case worth interrupting for"
+        )

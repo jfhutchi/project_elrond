@@ -1,0 +1,53 @@
+# Routine version bumps stay welcome. The Kronos worker's pins are not routine version bumps.
+#
+# `requirements-kronos-worker.txt` is not a dependency list. It is an **attestation manifest** for
+# an isolated environment, mirrored by `EXPECTED_PACKAGE_VERSIONS` in `kronos_worker.py`, which
+# the worker checks at runtime and refuses to start if the installed versions disagree. It sits
+# beside `WORKER_ENVIRONMENT_ID`, pinned model revisions and SHA256 hashes of the model weights,
+# because a shadow forecast is attributable to the exact environment that produced it.
+#
+# So a bump here is a research decision, not a chore. It mints a new `WORKER_ENVIRONMENT_ID`,
+# requires the pinned Kronos model to be re-verified under the new numerics, and leaves every
+# prior forecast attributed to the environment it actually ran under -- the same rule the rest of
+# this project applies to policy versions and dependence snapshots.
+#
+# Dependabot cannot do that, and it cannot know to update both files, so its proposals here
+# arrive red and stay red. `version-update:*` is therefore ignored for those packages.
+#
+# **Security advisories are deliberately still raised.** The ignore covers version updates only;
+# a vulnerability in any of these still opens a PR, which is the one case worth interrupting for.
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    ignore:
+      # Every package in the Kronos worker attestation manifest. None is a dependency of this
+      # project -- they exist only to pin the isolated worker environment.
+      - dependency-name: "torch"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "einops"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "huggingface-hub"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "numpy"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "pandas"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "safetensors"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+      - dependency-name: "tqdm"
+        update-types:
+          ["version-update:semver-major", "version-update:semver-minor", "version-update:semver-patch"]
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
