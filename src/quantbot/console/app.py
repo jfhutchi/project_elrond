@@ -68,6 +68,7 @@ DEFAULT_PORT = 8787
 #: cannot disagree about what exists.
 NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/", "Operations"),
+    ("/session", "Market session"),
     ("/risk", "Risk"),
     ("/research", "Research"),
     ("/market-data", "Market data"),
@@ -228,6 +229,11 @@ def create_app(
     def reports_view(request: Request) -> HTMLResponse:
         """What has been written to the reports directory. A listing, not a viewer."""
         return page(request, "reports.html", "/reports")
+
+    @app.get("/session", response_class=HTMLResponse)
+    def session_view(request: Request) -> HTMLResponse:
+        """What the market-hours loop has been doing, and what it deliberately cannot do (#143)."""
+        return page(request, "session.html", "/session")
 
     @app.get("/runtime", response_class=HTMLResponse)
     def runtime_view(request: Request) -> HTMLResponse:

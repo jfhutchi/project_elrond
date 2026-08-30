@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+{% set title = "Market session" %}
+{% block body %}
+<h1>Market session</h1>
+<p class="sub">
+  What the market-hours loop has been doing. Every fifteen minutes while a session is open, Elrond
+  checks reconciliation, the kill switch and market-data freshness, and writes down what it found
+  &mdash; including when it found nothing wrong.
+</p>
+<p class="sub quiet">
+  This page is about <em>liveness</em>, not about edge. A loop that observed twenty-six times today
+  has not discovered anything; it has confirmed that the parts of the system which can go wrong
+  between one close and the next have not.
+</p>
+
+{% if not state.session.ever_observed %}
+<section class="card">
+  <div class="k">No heartbeats recorded</div>
+  <div class="n">
+    The market-hours loop has never run here. That is expected on a store that was created or
+    upgraded recently &mdash; it is <strong>not</strong> evidence that the daemon is stopped, which
+    is why this page does not claim it is.
+  </div>
+  <div class="n quiet">
+    Heartbeats begin at the first open session after the daemon starts.
+  </div>
+</section>
+{% else %}
+
+<section class="card">
+  <div class="k">Heartbeats recorded</div>
+  <div class="v mono" style="font-size:1.4rem">{{ state.session.total }}</div>
+  <div class="n">
+    {{ state.session.healthy }} healthy &middot;
+    {{ state.session.degraded }} degraded &middot;
+    {{ state.session.halted }} halted
+  </div>
+  <div class="n quiet">
+    A <strong>halted</strong> heartbeat means the kill switch was engaged &mdash; a deliberate stop,
+    not a fault. It is counted separately from <strong>degraded</strong> for that reason: reporting
+    a kill switch as a failure invites clearing it to make the warning go away.
+  </div>
+</section>
+
+<section class="card">
+  <div class="k">Market state at the last heartbeat</div>
+  <div class="v">
+    {% if state.session.market_open_at_last_heartbeat %}open{% else %}closed{% endif %}
+  </div>
+  <div class="n quiet">
+    Read from the last recorded observation rather than from a live broker call, so it describes a
+    moment something was actually measured at. It is not a live clock.
+  </div>
+</section>
+
+<section class="card">
+  <div class="k">Recent heartbeats</div>
+  <div class="n quiet">Most recent first. Showing up to {{ state.session.observations | length }} of {{ state.session.total }}.</div>
+  <div style="overflow-x:auto">
+    <table>
+      <thead>
+        <tr><th>Observed (UTC)</th><th>Session</th><th>Outcome</th><th>What it found</th></tr>
+      </thead>
+      <tbody>
+        {% for row in state.session.observations %}
+        <tr>
+          <td class="mono">{{ row.observed_at.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td>{% if row.market_open %}open{% else %}closed{% endif %}</td>
+          <td>
+            {% if row.outcome == "HEALTHY" %}<span class="ok">healthy</span>
+            {% elif row.outcome == "HALTED" %}<span class="absent">halted</span>
+            {% else %}<span class="warn">degraded</span>{% endif %}
+          </td>
+          <td>
+            {% if row.reasons %}
+              <span class="mono">{{ row.reasons | join(", ") }}</span>
+            {% else %}
+              <span class="quiet">nothing wrong</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endif %}
+
+<section class="card">
+  <div class="k">What this loop deliberately does not do</div>
+  <div class="n">
+    It <strong>cannot place an order</strong>. The observation pass is built without a submitter and
+    without a strategy runner &mdash; not a setting that disables them, but no connection to them at
+    all, so there is no route from watching a session to trading in one.
+  </div>
+  <div class="n">
+    It does not evaluate the strategy. The deployed strategy was qualified on daily bars evaluated
+    after the close; running it every fifteen minutes would be a different strategy carrying forward
+    evidence it never earned. The trading cycle still runs once, after the close.
+  </div>
+</section>
+
+<section class="card">
+  <div class="k">Not built yet, and not shown as empty</div>
+  <div class="n">
+    The target operating model asks for an event stream, a worker queue with priorities and
+    backpressure, per-worker budgets, and escalation state. <strong>None of that exists</strong>, so
+    none of it appears above as a panel reading zero.
+  </div>
+  <div class="n quiet">
+    An empty widget looks like a system that has nothing to report. The honest version says the
+    measurement does not exist. Concretely: no experiment has ever run, no research worker has ever
+    been dispatched, and no statistical budget has ever been spent &mdash; so a queue depth or a
+    budget gauge would be reporting zero for a mechanism that was never wired, which reads as health.
+  </div>
+  <div class="n quiet">
+    Intraday event detection additionally needs intraday data. The configured feed supplies one bar
+    per day, so there is nothing for an event stream to watch between one close and the next.
+  </div>
+</section>
+{% endblock %}
