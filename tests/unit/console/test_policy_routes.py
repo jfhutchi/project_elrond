@@ -299,3 +299,23 @@ def test_an_apply_records_the_shipped_defaults_before_superseding_them(
     assert [row["version"] for row in history] == [1, 2]
     assert history[0]["supersedes"] is None
     assert history[0]["applied_by"] == "project-default", "not attributed to the console"
+
+
+def test_every_threshold_input_is_labelled(client: TestClient) -> None:
+    """Eight boxes that all announce as "unchanged" are eight boxes nobody can tell apart.
+
+    Found by reading the rendered page's accessibility tree, where every input showed the same
+    name. A sighted operator reads the adjacent cell; anyone using a screen reader gets a form
+    with no way to know which threshold they are about to change -- on the one surface in this
+    console that changes a risk control.
+    """
+    from quantbot.console.control import proposable_fields
+
+    body = client.get("/config/policy").text
+
+    for name in proposable_fields():
+        assert f'<label for="field-{name}">' in body, f"{name} has no label"
+        assert f'id="field-{name}"' in body
+        assert f'aria-describedby="in-force-{name}"' in body, (
+            f"{name} does not point at the value it is replacing"
+        )

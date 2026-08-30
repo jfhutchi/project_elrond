@@ -283,3 +283,18 @@ def test_a_store_with_no_kill_switch_row_reads_as_engaged(
     assert state["kill_switch_engaged"] is True
     assert "no kill-switch state is recorded" in state["kill_switch_reason"]
     assert 'class="strip strip--danger"' in page
+
+
+def test_the_danger_strip_does_not_claim_the_console_is_read_only(client: TestClient) -> None:
+    """It said "read-only console -- nothing here can change state" on every page.
+
+    That was true until #121 added the policy control plane, and then it was a standing false
+    claim on the one surface an operator reads to know what this thing can do. Caught by looking
+    at the rendered page; every test here passed while it was wrong.
+
+    What replaces it is the claim that is still true and is the one that matters.
+    """
+    body = client.get("/").text
+
+    assert "nothing here can change state" not in body
+    assert "no surface here can enable live trading or move capital" in body

@@ -262,3 +262,37 @@ def test_a_version_can_be_rebuilt_from_its_stored_body_alone() -> None:
 
     assert rebuilt.identity == second.identity
     assert rebuilt.correlation_threshold == Decimal("0.85")
+
+
+def test_only_fields_a_text_form_can_express_are_offered() -> None:
+    """Found by rendering the page, not by a test, which is the point of recording it here.
+
+    `enabled` is a `frozenset[VetoName]` and `freshness` is a nested policy. Both were offered as
+    editable text boxes containing a Python repr -- `frozenset({<VetoName.EXPOSURE_CONCENTRATION:
+    ...` -- which nobody can type and which would fail validation on every attempt. A form that
+    shows a field it cannot accept is the same class of lie as a console showing a rule the
+    runtime is not running.
+
+    They remain versioned, evidence-bearing and changeable by a caller that can express them.
+    What is refused is pretending a text box is that caller.
+    """
+    shipped = PortfolioVetoPolicy()
+    fields = proposable_fields()
+
+    assert "enabled" not in fields
+    assert "freshness" not in fields
+    assert fields, "an empty set would satisfy the assertions above"
+    for key in fields:
+        value = getattr(shipped, key)
+        assert isinstance(value, int | str | Decimal), f"{key} is {type(value).__name__}"
+
+
+def test_the_scalar_thresholds_are_still_offered() -> None:
+    """The exclusion must be by expressibility, not a convenient way to narrow the surface.
+
+    A rule that quietly dropped the numbers an operator actually needs to tune would make the
+    control plane useless while looking safer.
+    """
+    fields = proposable_fields()
+
+    assert {"correlation_threshold", "max_daily_loss_bps", "max_net_exposure_bps"} <= fields
