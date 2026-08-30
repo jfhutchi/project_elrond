@@ -41,6 +41,8 @@ from quantbot.storage.schema import (
     equity_snapshots,
     fills,
     incidents,
+    instrument_symbols,
+    instruments,
     kill_switch_state,
     market_anomaly_events,
     market_regime_snapshots,
@@ -621,6 +623,85 @@ class StorageRepository:
             )
             found.append((dict(row), [dict(reason) for reason in reasons]))
         return found
+
+    def save_instrument(
+        self, instrument: Mapping[str, object], mappings: Sequence[Mapping[str, object]]
+    ) -> bool:
+        """Store one instrument identity and its symbol history (#83).
+
+        Returns False when the identity already exists. Attributes legitimately change -- a
+        resolver answers later, a ticker moves -- so this does not treat a repeat as a conflict
+        the way content-addressed records do. Updating an identity is a separate, deliberate
+        call; this one creates.
+        """
+        instrument_id = str(instrument["instrument_id"])
+        existing = (
+            self._session.execute(
+                select(instruments).where(instruments.c.instrument_id == instrument_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            return False
+        self._session.execute(instruments.insert().values(**dict(instrument)))
+        for mapping in mappings:
+            self._session.execute(instrument_symbols.insert().values(**dict(mapping)))
+        return True
+
+    def replace_instrument_symbols(
+        self, instrument_id: str, mappings: Sequence[Mapping[str, object]]
+    ) -> int:
+        """Rewrite one instrument's symbol windows after a rename.
+
+        Rewrites the *windows*, never the history they describe: a rename closes the old window
+        and opens a new one, so the rows that come back still cover every date they covered
+        before. Deleting and re-inserting is how a closed window gets its `valid_to`.
+        """
+        self._session.execute(
+            instrument_symbols.delete().where(
+                instrument_symbols.c.instrument_id == instrument_id
+            )
+        )
+        for mapping in mappings:
+            self._session.execute(instrument_symbols.insert().values(**dict(mapping)))
+        return len(mappings)
+
+    def get_instrument(self, instrument_id: str) -> Mapping[str, object] | None:
+        row = (
+            self._session.execute(
+                select(instruments).where(instruments.c.instrument_id == instrument_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else dict(row)
+
+    def list_instrument_symbols(self, instrument_id: str) -> list[Mapping[str, object]]:
+        statement = (
+            select(instrument_symbols)
+            .where(instrument_symbols.c.instrument_id == instrument_id)
+            .order_by(instrument_symbols.c.provider, instrument_symbols.c.valid_from)
+        )
+        return [dict(row) for row in self._session.execute(statement).mappings().all()]
+
+    def instrument_for_symbol(
+        self, *, provider: str, symbol: str, moment: str
+    ) -> str | None:
+        """Which instrument this provider meant by this symbol on that date.
+
+        The date is required rather than optional. A lookup without one would answer for
+        "whenever", and a recycled ticker is exactly the case that gets wrong -- silently.
+        """
+        statement = select(instrument_symbols.c.instrument_id).where(
+            instrument_symbols.c.provider == provider,
+            instrument_symbols.c.symbol == symbol.upper(),
+            instrument_symbols.c.valid_from <= moment,
+            (instrument_symbols.c.valid_to.is_(None))
+            | (instrument_symbols.c.valid_to >= moment),
+        )
+        row = self._session.execute(statement).one_or_none()
+        return None if row is None else str(row[0])
 
     def record_counterfactual_outcome(self, outcome: Mapping[str, object]) -> bool:
         """Store one counterfactual answer. Append-only; never amends the refusal (#57).
