@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 17
+SCHEMA_VERSION = 18
 
 metadata = MetaData(
     naming_convention={
@@ -787,6 +787,66 @@ Index(
     "ix_anomaly_dependence_contexts_group",
     anomaly_dependence_contexts.c.dependence_snapshot_identity,
     anomaly_dependence_contexts.c.group_key,
+)
+
+
+# --- Instruments: one economic thing, across the names providers give it (#83 part A) ---------
+#
+# A ticker is a label a venue currently uses, not an identity. Keying records on that string
+# splits one instrument's history in two when it renames, and merges two histories into one when
+# a symbol is recycled.
+#
+# `instrument_id` is minted once and never recomputed -- deliberately not content-addressed,
+# because an identity hashed over its attributes changes when an attribute changes, which is
+# exactly what a durable identity must not do.
+#
+# A resolver is a source, never the key. An instrument nobody could resolve is still recordable,
+# which is the case that matters: a resolver outage must not stop a decision being attributed.
+instruments = Table(
+    "instruments",
+    metadata,
+    Column("instrument_id", String(64), primary_key=True),
+    Column("asset_class", String(16), nullable=False),
+    # For display only. Never a key -- that is the whole point of this table.
+    Column("current_symbol", String(32), nullable=False),
+    # RESOLVED / AMBIGUOUS / UNRESOLVED. Ambiguity is conflicting evidence and unresolved is an
+    # absence of it; collapsing them into a null would lose the difference.
+    Column("status", String(16), nullable=False),
+    Column("figi", String(32)),
+    Column("composite_figi", String(32)),
+    Column("share_class_figi", String(32)),
+    # Kept separately attributable: a CIK asserted by a market-data vendor and one read from
+    # EDGAR are different claims and must not share a field silently.
+    Column("sec_cik", String(16)),
+    Column("sec_cik_source", String(64)),
+    Column("exchange_mic", String(8)),
+    Column("ambiguous_candidates", Text, nullable=False),
+    Column("resolver", String(64)),
+    Column("resolver_version", String(32)),
+    Column("resolved_at", String(40)),
+    Column("source_refs", Text, nullable=False),
+)
+Index("ix_instruments_current_symbol", instruments.c.current_symbol)
+
+# Historical, not current. An event recorded under an old symbol stays interpretable because the
+# question is always asked with a date.
+instrument_symbols = Table(
+    "instrument_symbols",
+    metadata,
+    Column("instrument_id", String(64), primary_key=True),
+    Column("provider", String(64), primary_key=True),
+    Column("symbol", String(32), primary_key=True),
+    Column("valid_from", String(10), primary_key=True),
+    Column("valid_to", String(10)),
+    ForeignKeyConstraint(
+        ["instrument_id"], ["instruments.instrument_id"], ondelete="CASCADE"
+    ),
+)
+Index(
+    "ix_instrument_symbols_lookup",
+    instrument_symbols.c.provider,
+    instrument_symbols.c.symbol,
+    instrument_symbols.c.valid_from,
 )
 
 
