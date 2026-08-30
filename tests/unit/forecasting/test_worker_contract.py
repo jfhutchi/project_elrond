@@ -395,3 +395,32 @@ def test_every_artifact_is_verified_before_anything_is_loaded() -> None:
     assert max(verifications) < min(loads), (
         "an artifact is verified before it is loaded, never after"
     )
+
+
+def test_the_two_copies_of_the_pinned_contract_agree() -> None:
+    """The worker's pins and `models.py`'s pins are the same nine values, or attribution lies.
+
+    `kronos_worker.py` cannot import from `quantbot` -- it runs in an isolated venv, and that
+    isolation is what makes its attestation mean anything. So every pinned constant exists twice,
+    and nothing asserted the copies agreed.
+
+    They did agree when this was written (2026-08-30), so this closes a latent risk rather than a
+    live defect. Had they drifted, `KronosConfig` would claim one set of pins while the worker
+    verified another, and a forecast would be attributed to an environment identity that did not
+    describe what verified it. Provenance is the one thing here with no independent check: a
+    result whose recorded environment is wrong cannot be caught by looking at the result.
+
+    The duplication itself is correct and stays. See `docs/worker-environment-identity.md` for the
+    #137 decision on how this identity behaves across execution backends.
+    """
+    from quantbot.forecasting import models
+
+    config = KronosConfig()
+    assert (worker.MODEL_ID, worker.TOKENIZER_ID) == (config.model_id, config.tokenizer_id)
+    assert worker.MODEL_REVISION == models.KRONOS_MODEL_REVISION
+    assert worker.MODEL_WEIGHT_SHA256 == models.KRONOS_MODEL_WEIGHT_SHA256
+    assert worker.MODEL_CONFIG_SHA256 == models.KRONOS_MODEL_CONFIG_SHA256
+    assert worker.TOKENIZER_REVISION == models.KRONOS_TOKENIZER_REVISION
+    assert worker.TOKENIZER_WEIGHT_SHA256 == models.KRONOS_TOKENIZER_WEIGHT_SHA256
+    assert worker.TOKENIZER_CONFIG_SHA256 == models.KRONOS_TOKENIZER_CONFIG_SHA256
+    assert worker.WORKER_ENVIRONMENT_ID == models.KRONOS_WORKER_ENVIRONMENT_ID
