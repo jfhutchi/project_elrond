@@ -39,7 +39,7 @@ alternative -- adding another framework because the ladder has no way to say "st
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
 from enum import StrEnum
@@ -47,7 +47,7 @@ from enum import StrEnum
 from sqlalchemy.orm import Session
 
 from quantbot.research.capacity import CapacityStatus, capacity_inventory
-from quantbot.research.capital import CapacityAssessment
+from quantbot.research.capital import CapacityAssessment, CapacityVerdict
 from quantbot.research.memory import RecordKind, ResearchMemory, Verdict
 from quantbot.research.promotion import (
     MINIMUM_FORWARD_DAYS,
@@ -381,39 +381,69 @@ def _forward_supported_check(
     distinguishes the two.
 
     **The gate reads an assessment, not an issue number.** Closing #51 must not open M4; a
-    capacity assessment that *says the edge survives across the mandate* opens it. So `capacity`
-    is `None` until one is computed -- which is still the state today -- and a computed one that
-    does not support intended capital blocks with its own reasons rather than a generic string.
+    capacity assessment that *says the edge survives across the mandate* opens it.
+
+    Since #51 that assessment is read from durable storage rather than passed in. An explicit
+    `capacity` argument still wins so a caller can evaluate a hypothetical, but the default path
+    now consults `capacity_assessments` -- so `UNASSESSED` means *no production artifact exists*,
+    which is a fact about the store rather than about a tracker.
     """
+    repository = StorageRepository(session)
     qualified = [
         record.strategy_id
-        for record in StorageRepository(session).list_promotions()
+        for record in repository.list_promotions()
         if stage_rank(Stage(record.stage)) >= stage_rank(Stage.PAPER_QUALIFIED)
     ]
     blocking: list[str] = []
     unassessed: list[str] = []
+    stored = _stored_capacity(repository, qualified)
     if not qualified:
         blocking.append(
             "no strategy has reached PAPER_QUALIFIED, which under #47 needs a measured, "
             "benchmark-relative, adequately powered positive result against a ratified mandate"
         )
-    if capacity is None:
+    if capacity is not None:
+        if not capacity.supports_intended_capital:
+            # A computed assessment that says the edge dies is a *result*, not an absent check,
+            # so it blocks rather than sitting in `unassessed`. The distinction matters: one is
+            # "nobody looked", the other is "somebody looked and the answer was no".
+            blocking.append(f"intended-capital capacity (#51): {capacity.explain()}")
+    elif stored is None:
         unassessed.append(
-            "intended-capital execution capacity (#51): the paper account holds $100 and the "
-            "mandate's range reaches $10,000; nothing has measured whether an effect survives "
-            "at the size it would be traded at"
+            "intended-capital execution capacity (#51): no capacity assessment has been "
+            "persisted for a qualified strategy, so nothing has measured whether an effect "
+            "survives at the size it would be traded at"
         )
-    elif not capacity.supports_intended_capital:
-        # A computed assessment that says the edge dies is a *result*, not an absent check, so
-        # it blocks rather than sitting in `unassessed`. The distinction matters: one is "nobody
-        # looked", the other is "somebody looked and the answer was no".
-        blocking.append(f"intended-capital capacity (#51): {capacity.explain()}")
+    elif str(stored["verdict"]) != CapacityVerdict.SURVIVES_MANDATE.value:
+        detail = str(stored.get("binding_constraint") or stored.get("blocking") or "")
+        modelled = str(stored.get("modelled_inputs") or "")
+        blocking.append(
+            f"intended-capital capacity (#51): {stored['verdict']}"
+            + (f" -- {detail}" if detail else "")
+            + (f" [modelled inputs: {modelled}]" if modelled else "")
+        )
     return MilestoneCheck(
         level=Milestone.M4_FORWARD_EDGE_SUPPORTED,
         evidence=tuple(qualified),
         blocking=tuple(blocking),
         unassessed=tuple(unassessed),
     )
+
+
+def _stored_capacity(
+    repository: StorageRepository, qualified: Sequence[str]
+) -> Mapping[str, object] | None:
+    """The persisted assessment for a qualified strategy, or `None` when none exists.
+
+    Read per qualified strategy rather than globally: an assessment for a strategy that never
+    reached `PAPER_QUALIFIED` says nothing about whether *this* gate should open, and letting one
+    count would be the same category error as reading an issue number.
+    """
+    for strategy_id in qualified:
+        stored = repository.latest_capacity_assessment(strategy_id)
+        if stored is not None:
+            return stored
+    return None
 
 
 def _live_review_check(session: Session) -> MilestoneCheck:

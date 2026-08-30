@@ -215,6 +215,10 @@ class LadderRung:
     inside_mandate: bool
     #: Share of a session's volume this capital would represent, worst instrument.
     participation: Decimal
+    #: Which instrument that worst participation belongs to. Reported because "the strategy
+    #: cannot be filled at $2m" and "XLU cannot be filled at $2m" call for different responses,
+    #: and only the second one tells an operator what to change.
+    binding_symbol: str | None
     execution_drag_bps: Decimal
     #: Benchmark-relative return in bps a year, after the drag above.
     net_excess_bps: Decimal
@@ -260,6 +264,44 @@ class CapacityAssessment:
     #: The same verdict recomputed across `STRESS_MULTIPLIERS`. Empty when the assessment is
     #: blocked, because there is no answer whose sensitivity could be reported.
     stress_sensitivity: tuple[StressPoint, ...]
+    #: The identity of the input artifact this rests on, so a verdict can be traced to the exact
+    #: allocation, turnover and liquidity it was computed from (#51).
+    inputs_identity: str | None = None
+    #: Which inputs were project defaults rather than measurements. Empty is a strong claim and
+    #: is only true when every input was observed.
+    modelled_inputs: tuple[str, ...] = ()
+
+    @property
+    def first_failing_rung(self) -> LadderRung | None:
+        """The lowest capital inside the mandate where the edge is no longer positive."""
+        return next(
+            (rung for rung in self.rungs if rung.inside_mandate and not rung.positive), None
+        )
+
+    @property
+    def binding_symbol(self) -> str | None:
+        """The instrument that binds at the first failing rung, or at the largest if none does.
+
+        Named rather than left implicit: an operator told the strategy exhausts at $2m can do
+        nothing with that, and an operator told XLU binds at $2m can change the roster.
+        """
+        rung = self.first_failing_rung
+        if rung is not None:
+            return rung.binding_symbol
+        inside = [item for item in self.rungs if item.inside_mandate]
+        return inside[-1].binding_symbol if inside else None
+
+    @property
+    def binding_constraint(self) -> str | None:
+        """What actually ran out, in words. `None` when nothing did."""
+        rung = self.first_failing_rung
+        if rung is None:
+            return None
+        return (
+            f"{rung.binding_symbol} participation reaches {rung.participation} of a session at "
+            f"${rung.capital_usd}, costing {rung.execution_drag_bps}bps against the strategy's "
+            "gross excess"
+        )
 
     @property
     def supports_intended_capital(self) -> bool:
@@ -409,9 +451,12 @@ def _rungs_for(
     for capital in rungs_usd:
         weighted_drag = Decimal("0")
         worst_participation = Decimal("0")
-        for holding in instruments.values():
+        binding: str | None = None
+        for symbol, holding in instruments.items():
             participation = capital * holding.weight / holding.session_volume_usd
-            worst_participation = max(worst_participation, participation)
+            if participation > worst_participation or binding is None:
+                worst_participation = participation
+                binding = symbol
             weighted_drag += holding.weight * cost_model.drag_bps(
                 participation=participation, turnover=turnover
             )
@@ -423,6 +468,7 @@ def _rungs_for(
                 capital_usd=capital,
                 inside_mandate=low <= capital <= high,
                 participation=worst_participation,
+                binding_symbol=binding,
                 execution_drag_bps=drag,
                 net_excess_bps=gross_excess_bps - drag,
             )
