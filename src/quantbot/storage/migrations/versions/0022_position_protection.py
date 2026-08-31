@@ -58,6 +58,14 @@ def _schema_version() -> Table:
 
 def v22_tables() -> MetaData:
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    # Reference-only stub: the table already exists from 0001 and is deliberately excluded from
+    # V22_TABLES, but SQLAlchemy must know its composite key to resolve the new foreign keys.
+    Table(
+        "strategy_deployments",
+        metadata,
+        Column("strategy_id", String(128), primary_key=True),
+        Column("version", String(64), primary_key=True),
+    )
     cycles = Table(
         "position_protection_cycles",
         metadata,
