@@ -116,9 +116,7 @@ def _risk_reducing_exit_reasons(
     position = matching[0]
     if position.quantity == 0:
         return ("EXIT_POSITION_NOT_FOUND",)
-    reducing_side = (
-        OrderSide.SELL if position.quantity > 0 else OrderSide.BUY
-    )
+    reducing_side = OrderSide.SELL if position.quantity > 0 else OrderSide.BUY
     reasons: list[str] = []
     if intent.side is not reducing_side:
         reasons.append("EXIT_SIDE_INCREASES_RISK")
