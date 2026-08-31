@@ -65,6 +65,10 @@ def _seed_protection_cycle(
     reason: str = "POSITION_STATE_UNRECONCILED",
     unprotected: int = 1,
     exits_required: int = 0,
+    account_id: str = ACCOUNT_ID,
+    cycle_id: str = "console-protection-cycle",
+    position_count: int | None = 1,
+    evaluated_count: int = 1,
 ) -> None:
     identity = StrategyIdentity(
         strategy_id="adaptive-momentum",
@@ -78,19 +82,19 @@ def _seed_protection_cycle(
         repository.save_strategy_deployment(identity)
         session.execute(
             position_protection_cycles.insert().values(
-                cycle_id="console-protection-cycle",
+                cycle_id=cycle_id,
                 observed_at=encode_utc(observed_at),
                 completed_at=encode_utc(observed_at),
                 strategy_id=identity.strategy_id,
                 strategy_version=identity.version,
                 configuration_hash=identity.configuration_hash,
-                account_id=ACCOUNT_ID,
+                account_id=account_id,
                 policy_version="position-protection-v1",
                 policy_hash="a" * 64,
                 outcome=outcome,
                 reason=reason,
-                position_count=1,
-                evaluated_count=1,
+                position_count=position_count,
+                evaluated_count=evaluated_count,
                 unprotected_count=unprotected,
                 exit_required_count=exits_required,
                 detail="{}",
@@ -151,3 +155,50 @@ def test_stale_protection_loop_is_reported_while_a_position_is_open(
 
     assert "the position-protection loop last ran" in page
     assert "while 1 position(s) remain open" in page
+
+def test_a_newer_cycle_for_another_account_cannot_mask_this_account(
+    database: Database,
+    client: TestClient,
+) -> None:
+    moment = datetime.now(UTC)
+    _seed_open_position(database, now=moment - timedelta(minutes=10))
+    _seed_protection_cycle(
+        database,
+        observed_at=moment - timedelta(minutes=5),
+        outcome="HEALTHY",
+        reason="",
+        unprotected=0,
+        cycle_id="expected-account-cycle",
+    )
+    _seed_protection_cycle(
+        database,
+        observed_at=moment,
+        account_id="different-paper-account",
+        cycle_id="different-account-cycle",
+    )
+
+    health = client.get("/api/state").json()["health"]
+
+    assert health["last_protection_outcome"] == "HEALTHY"
+    assert health["unprotected_positions"] == 0
+
+
+def test_a_cycle_that_could_not_evaluate_the_open_position_reports_the_gap(
+    database: Database,
+    client: TestClient,
+) -> None:
+    moment = datetime.now(UTC)
+    _seed_open_position(database, now=moment)
+    _seed_protection_cycle(
+        database,
+        observed_at=moment,
+        outcome="INCIDENT",
+        reason="BROKER_STATE_UNAVAILABLE",
+        unprotected=0,
+        position_count=None,
+        evaluated_count=0,
+    )
+
+    page = client.get("/").text
+
+    assert "1 open position(s) are absent from the latest protection cycle" in page
