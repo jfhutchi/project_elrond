@@ -894,6 +894,37 @@ class AdaptiveMomentumRunner:
             return None
         return snapshot.identity
 
+    def _bind_anomalies_to_regime(
+        self,
+        anomaly_event_ids: Mapping[str, str],
+        snapshot_id: str | None,
+        *,
+        observed_at: datetime,
+    ) -> None:
+        """Attach every anomaly from this cycle to its contemporaneous regime snapshot.
+
+        Both records are immutable and may exist independently. The relation is written only
+        when both sides exist; a missing regime remains missing rather than becoming a neutral
+        label. Binding is research context, so a storage failure is contained and recorded as an
+        incident instead of stopping the trading cycle.
+        """
+        if snapshot_id is None or not anomaly_event_ids:
+            return
+        try:
+            with self._database.transaction() as session:
+                repository = StorageRepository(session)
+                for anomaly_event_id in sorted(set(anomaly_event_ids.values())):
+                    repository.bind_anomaly_regime(
+                        anomaly_event_id=anomaly_event_id,
+                        snapshot_id=snapshot_id,
+                    )
+        except Exception as error:  # noqa: BLE001 -- contained research context; see above
+            self._record_contained_failure(
+                kind="anomaly-regime-binding",
+                message=f"anomaly/regime binding failed for this cycle: {error!r}",
+                occurred_at=observed_at,
+            )
+
     def _dependence_snapshot(
         self, histories: Mapping[str, list[Bar]], session_window: Sequence[date]
     ) -> DependenceSnapshot | None:
@@ -1133,13 +1164,19 @@ class AdaptiveMomentumRunner:
         # Built from `sliced` for the same reason the dependence snapshot is -- it must see only
         # what was knowable at the decision.
         anomaly_event_ids = self._record_anomalies(sliced, dependence, observed_at=now)
+        regime_snapshot_id = self._record_regime(
+            sliced,
+            as_of_session=calendar_sessions[evaluation_index].session_date,
+            observed_at=now,
+        )
+        self._bind_anomalies_to_regime(
+            anomaly_event_ids,
+            regime_snapshot_id,
+            observed_at=now,
+        )
         research = ResearchContext(
             anomaly_event_ids=anomaly_event_ids,
-            regime_snapshot_id=self._record_regime(
-                sliced,
-                as_of_session=calendar_sessions[evaluation_index].session_date,
-                observed_at=now,
-            ),
+            regime_snapshot_id=regime_snapshot_id,
             # Enrichment runs only for symbols that actually produced an anomaly. The routing
             # gate measured a 2.18x information-density lift at a 1.76% selection rate, and that
             # 98% saving is the entire reason enrichment is affordable -- asking a news provider
