@@ -18,7 +18,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
-from sqlalchemy import func, select
+from sqlalchemy import select
 
 from quantbot.brokers import BrokerAccountSnapshot, BrokerError
 from quantbot.domain import MarketClock, Position, StrategyIdentity
@@ -31,9 +31,8 @@ from quantbot.risk.protection import (
     evaluate_position,
 )
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
-from quantbot.storage.database import decode_decimal, decode_utc, encode_decimal, encode_utc
+from quantbot.storage.database import decode_utc, encode_decimal, encode_utc
 from quantbot.storage.schema import (
-    equity_snapshots,
     position_protection_cycles,
     position_protection_evaluations,
 )
@@ -180,11 +179,11 @@ class PositionProtectionSupervisor:
         with self.database.transaction() as session:
             repository = StorageRepository(session)
             local_snapshot = repository.get_latest_account_snapshot(account_id)
-            high_water = session.execute(
-                select(func.max(equity_snapshots.c.equity)).where(
-                    equity_snapshots.c.account_id == account_id
-                )
-            ).scalar_one_or_none()
+            snapshots = repository.list_account_snapshots(account_id=account_id)
+            high_water = max(
+                (snapshot.account.equity for snapshot in snapshots),
+                default=None,
+            )
 
         local_by_symbol = (
             {}
@@ -193,7 +192,7 @@ class PositionProtectionSupervisor:
         )
         drawdown_bps = self._drawdown_bps(
             current=account_snapshot.account.equity,
-            encoded_high_water=None if high_water is None else str(high_water),
+            encoded_high_water=high_water,
         )
         decisions: list[tuple[Position, ProtectionDecision, bool]] = []
         for position in broker_positions:
@@ -265,11 +264,11 @@ class PositionProtectionSupervisor:
     def _drawdown_bps(
         *,
         current: Decimal,
-        encoded_high_water: str | None,
+        encoded_high_water: Decimal | None,
     ) -> Decimal | None:
         if encoded_high_water is None:
             return None
-        high_water = decode_decimal(encoded_high_water)
+        high_water = encoded_high_water
         if high_water <= 0:
             return None
         return max((high_water - current) / high_water * Decimal(10_000), Decimal("0"))
