@@ -72,6 +72,10 @@ from quantbot.operations import (
     evaluate_operational_health,
     measure_readiness,
 )
+from quantbot.operations.protection import (
+    PositionProtectionDaemonRunner,
+    PositionProtectionSupervisor,
+)
 from quantbot.reporting import (
     ProjectStatusContext,
     WeeklyReportRequest,
@@ -114,6 +118,8 @@ class RuntimePaths:
     #: Separate from the writer lock: this excludes a second scheduler, while the
     #: writer lock excludes a second writer and is held only during a cycle.
     daemon_lock: Path
+    #: Held by the independently deployed after-entry protection loop only.
+    protection_lock: Path
     reports: Path
 
 
@@ -128,6 +134,9 @@ def runtime_paths() -> RuntimePaths:
         lock=_env_path("QUANTBOT_LOCK_PATH", DEFAULT_LOCK_PATH),
         daemon_lock=_env_path("QUANTBOT_LOCK_PATH", DEFAULT_LOCK_PATH).with_suffix(
             ".daemon.lock"
+        ),
+        protection_lock=_env_path("QUANTBOT_LOCK_PATH", DEFAULT_LOCK_PATH).with_suffix(
+            ".protection.lock"
         ),
         reports=_env_path("QUANTBOT_REPORTS_DIR", DEFAULT_REPORTS_DIR),
     )
@@ -279,6 +288,21 @@ class Runtime:
     veto_version: PolicyVersion
     #: Whether that version was read from the store or written as version 1 on first sight.
     veto_source: PolicySource
+
+    def protector(self) -> PositionProtectionSupervisor:
+        """Build the after-entry authority without a strategy, model, or research collaborator."""
+        expected_account_id = self.settings.EXPECTED_ACCOUNT_ID
+        if expected_account_id is None:
+            raise RuntimeConfigurationError(
+                "position protection requires EXPECTED_ACCOUNT_ID"
+            )
+        return PositionProtectionSupervisor(
+            database=self.database,
+            broker=self.broker,
+            expected_account_id=expected_account_id,
+            strategy_identity=self.identity,
+            metrics=self.metrics,
+        )
 
     def observer(self) -> SessionObserver:
         """The market-hours pass. Deliberately built without a submitter or a strategy runner.
@@ -620,6 +644,30 @@ async def _daemon(runtime: Runtime) -> dict[str, object]:
     }
 
 
+async def _protection_daemon(runtime: Runtime) -> dict[str, object]:
+    """Run the after-entry supervisor as an independent process and liveness boundary."""
+    protector = runtime.protector()
+
+    async def evaluate(moment: datetime) -> object:
+        return await protector.evaluate(now=moment)
+
+    async def sleeper(delay: Decimal) -> None:
+        await asyncio.sleep(max(float(delay), 0.0))
+
+    result = await PositionProtectionDaemonRunner(
+        clock_provider=runtime.broker,
+        evaluate=evaluate,
+        sleeper=sleeper,
+        metrics=runtime.metrics,
+        lock_path=runtime.paths.protection_lock,
+    ).run(_SignalStop(), now=lambda: datetime.now(UTC))
+    return {
+        "ok": result.stopped_cleanly,
+        "command": "protection-daemon",
+        "cycles_completed": result.cycles_completed,
+    }
+
+
 def _backtest(runtime: Runtime, args: argparse.Namespace) -> dict[str, object]:
     provider_key = _provider_key(runtime)
     with runtime.database.transaction() as session:
@@ -822,6 +870,7 @@ def build_cli_context(
         "reconcile": lambda _args: asyncio.run(_reconcile(active)),
         "run-once": lambda _args: asyncio.run(_run_once(active)),
         "daemon": lambda _args: asyncio.run(_daemon(active)),
+        "protection-daemon": lambda _args: asyncio.run(_protection_daemon(active)),
         "backtest": lambda args: _backtest(active, args),
         "report-weekly": lambda args: _report_weekly(active, args),
         "paper-smoke": lambda _args: asyncio.run(_paper_smoke(active)),
