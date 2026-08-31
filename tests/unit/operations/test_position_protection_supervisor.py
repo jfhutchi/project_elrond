@@ -211,6 +211,7 @@ async def test_broker_outage_becomes_a_typed_durable_incident(database: Database
     assert result.evaluated_count == 0
     cycle = stored_cycles(database)[0]
     assert cycle["reason"] == "BROKER_STATE_UNAVAILABLE"
+    assert cycle["account_id"] == ACCOUNT_ID
     assert "secret-bearing" not in cycle["detail"]
     with database.transaction() as session:
         incidents = StorageRepository(session).list_incidents()
@@ -232,6 +233,10 @@ async def test_expected_account_mismatch_never_reads_positions_as_ours(
 
     assert result.outcome is ProtectionCycleOutcome.INCIDENT
     assert result.reason == "BROKER_ACCOUNT_MISMATCH"
+    cycle = stored_cycles(database)[0]
+    assert cycle["account_id"] == ACCOUNT_ID
+    assert "somebody-elses-paper-account" not in cycle["detail"]
+    assert "reported_account_id_hash" in cycle["detail"]
     assert stored_evaluations(database) == []
 
 

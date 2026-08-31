@@ -22,6 +22,7 @@ from tests.support import measured
         ["reconcile"],
         ["run-once"],
         ["daemon"],
+        ["protection-daemon"],
         ["kill-switch", "engage", "--reason", "operator"],
         ["kill-switch", "clear", "--reason", "operator"],
         ["backtest"],

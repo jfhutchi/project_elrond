@@ -35,7 +35,10 @@ from quantbot.operations.registry import ConfigSetting, config_registry
 from quantbot.research.promotion import Stage
 from quantbot.storage import StorageRepository
 from quantbot.storage.database import decode_utc
-from quantbot.storage.schema import session_observations
+from quantbot.storage.schema import (
+    position_protection_cycles,
+    session_observations,
+)
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -57,6 +60,10 @@ STALE_RUN_DAYS = 4
 #: restart. Anything tighter reports a healthy daemon as stopped, which teaches an operator to
 #: ignore the line.
 STALE_OBSERVATION_MINUTES = 45
+
+#: Three missed 15-minute protection passes. Kept separate from observation liveness:
+#: one loop can be healthy while the safety-critical loop is stopped.
+STALE_PROTECTION_MINUTES = 45
 
 #: How many heartbeats the session page lists. A `PROJECT_DEFAULT` (#72): at the 15-minute
 #: interval this is about eight hours, so one full session plus its edges fits on the page. More
@@ -97,6 +104,14 @@ class HealthPanel(FrozenModel):
     minutes_since_last_observation: int | None
     #: What that pass found: HEALTHY, DEGRADED, HALTED, or `None` when none has run.
     last_observation_outcome: str | None
+    #: The most recent independent after-entry evaluation, or None when it never ran.
+    last_protection_at: datetime | None
+    minutes_since_last_protection: int | None
+    last_protection_outcome: str | None
+    #: None when no protection cycle exists; zero is a measured count.
+    protected_positions: int | None
+    unprotected_positions: int | None
+    exit_required_positions: int | None
     #: Absent rather than zero when the account has never been snapshotted.
     account_equity: str | None
     open_positions: int
@@ -422,6 +437,43 @@ class ConsoleState(FrozenModel):
                 f"the market-hours loop last looked {gap} minutes ago; the daemon is probably "
                 "not running"
             )
+        protection_gap = self.health.minutes_since_last_protection
+        if self.health.open_positions and self.health.last_protection_at is None:
+            items.append(
+                f"{self.health.open_positions} open position(s) have never received a durable "
+                "protection evaluation"
+            )
+        elif (
+            self.health.open_positions
+            and protection_gap is not None
+            and protection_gap >= STALE_PROTECTION_MINUTES
+        ):
+            items.append(
+                f"the position-protection loop last ran {protection_gap} minutes ago while "
+                f"{self.health.open_positions} position(s) remain open"
+            )
+        covered_positions = (
+            (self.health.protected_positions or 0)
+            + (self.health.unprotected_positions or 0)
+        )
+        if (
+            self.health.last_protection_at is not None
+            and self.health.open_positions > covered_positions
+        ):
+            items.append(
+                f"{self.health.open_positions - covered_positions} open position(s) are absent "
+                "from the latest protection cycle"
+            )
+        if self.health.unprotected_positions:
+            items.append(
+                f"{self.health.unprotected_positions} position(s) are explicitly unprotected"
+            )
+        if self.health.exit_required_positions:
+            items.append(
+                f"{self.health.exit_required_positions} protective exit(s) require action"
+            )
+        if self.health.last_protection_outcome == "INCIDENT":
+            items.append("the latest position-protection cycle ended in an incident")
         # Before reconciliation: a control plane this host cannot carry is not a degraded
         # system, it is one that should not be running here at all (#38).
         if self.runtime is not None:
@@ -510,6 +562,23 @@ def _health(
         .limit(1)
     ).one_or_none()
     observed_at = None if observation is None else decode_utc(observation.observed_at)
+    protection = (
+        None
+        if expected is None
+        else session.execute(
+            select(
+                position_protection_cycles.c.observed_at,
+                position_protection_cycles.c.outcome,
+                position_protection_cycles.c.evaluated_count,
+                position_protection_cycles.c.unprotected_count,
+                position_protection_cycles.c.exit_required_count,
+            )
+            .where(position_protection_cycles.c.account_id == expected)
+            .order_by(position_protection_cycles.c.observed_at.desc())
+            .limit(1)
+        ).one_or_none()
+    )
+    protected_at = None if protection is None else decode_utc(protection.observed_at)
     return HealthPanel(
         kill_switch_engaged=True if kill is None else bool(kill.engaged),
         kill_switch_reason=(
@@ -531,6 +600,26 @@ def _health(
             else max(int((now - observed_at).total_seconds() // 60), 0)
         ),
         last_observation_outcome=(None if observation is None else str(observation.outcome)),
+        last_protection_at=protected_at,
+        minutes_since_last_protection=(
+            None
+            if protected_at is None
+            else max(int((now - protected_at).total_seconds() // 60), 0)
+        ),
+        last_protection_outcome=(
+            None if protection is None else str(protection.outcome)
+        ),
+        protected_positions=(
+            None
+            if protection is None
+            else int(protection.evaluated_count) - int(protection.unprotected_count)
+        ),
+        unprotected_positions=(
+            None if protection is None else int(protection.unprotected_count)
+        ),
+        exit_required_positions=(
+            None if protection is None else int(protection.exit_required_count)
+        ),
         account_equity=None if account is None else str(account.account.equity),
         open_positions=0 if account is None else len(account.positions),
         trading_mode=str(settings_source["TRADING_MODE"].effective_value or "UNKNOWN"),

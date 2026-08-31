@@ -59,7 +59,15 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     _ = output
     parser = argparse.ArgumentParser(prog="quantbot")
     commands = parser.add_subparsers(dest="command", required=True)
-    for name in ("status", "doctor", "sync-data", "reconcile", "run-once", "daemon"):
+    for name in (
+        "status",
+        "doctor",
+        "sync-data",
+        "reconcile",
+        "run-once",
+        "daemon",
+        "protection-daemon",
+    ):
         commands.add_parser(name)
     backtest = commands.add_parser("backtest")
     backtest.add_argument("--variant")
