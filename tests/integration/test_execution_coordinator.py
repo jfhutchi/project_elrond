@@ -14,6 +14,7 @@ from quantbot.domain import (
     OrderIntent,
     OrderSide,
     OrderType,
+    Position,
     ReconciliationStatus,
     TimeInForce,
 )
@@ -75,6 +76,16 @@ def _account_snapshot() -> BrokerAccountSnapshot:
     )
 
 
+def _long_position(quantity: Decimal = Decimal("2")) -> Position:
+    return Position(
+        symbol="SPY",
+        quantity=quantity,
+        market_price=Decimal("500"),
+        market_value=quantity * Decimal("500"),
+        average_entry_price=Decimal("450"),
+    )
+
+
 def _intent(*, side: OrderSide = OrderSide.BUY) -> OrderIntent:
     return OrderIntent(
         intent_id=f"intent-{side.value.lower()}",
@@ -110,16 +121,23 @@ class AcceptingBroker:
         self,
         database: Database,
         account_snapshot: BrokerAccountSnapshot | None = None,
+        *,
+        positions: tuple[Position, ...] | None = None,
+        position_snapshots: list[tuple[Position, ...]] | None = None,
     ) -> None:
         self.database = database
         self.account_snapshot = account_snapshot or _account_snapshot()
+        self.positions = (_long_position(),) if positions is None else positions
+        self.position_snapshots = position_snapshots or []
         self.submitted: list[OrderIntent] = []
 
     async def get_account(self) -> BrokerAccountSnapshot:
         return self.account_snapshot
 
-    async def get_positions(self) -> tuple[()]:
-        return ()
+    async def get_positions(self) -> tuple[Position, ...]:
+        if self.position_snapshots:
+            return self.position_snapshots.pop(0)
+        return self.positions
 
     async def submit_order(self, intent: OrderIntent) -> BrokerOrder:
         with self.database.transaction() as session:
@@ -208,29 +226,31 @@ async def test_exit_bypasses_entry_risk_but_not_operational_safety(tmp_path: Pat
 
 
 @pytest.mark.asyncio
-async def test_exit_cannot_bypass_missing_durable_reconciliation(tmp_path: Path) -> None:
+async def test_fresh_position_proof_allows_exit_without_cached_reconciliation(
+    tmp_path: Path,
+) -> None:
     database = Database.create(tmp_path / "quantbot.db")
     with database.transaction() as session:
         StorageRepository(session).set_kill_switch(False, reason="test ready", updated_at=NOW)
     broker = AcceptingBroker(database)
     coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
 
-    with pytest.raises(OrderSubmissionBlocked) as error:
-        await coordinator.submit(
-            _intent(side=OrderSide.SELL),
-            purpose=OrderPurpose.STRATEGY_EXIT,
-            market_eligible=True,
-            drawdown=None,
-            risk_approved=None,
-        )
+    result = await coordinator.submit(
+        _intent(side=OrderSide.SELL),
+        purpose=OrderPurpose.STRATEGY_EXIT,
+        market_eligible=True,
+        drawdown=None,
+        risk_approved=None,
+    )
 
-    assert "RECONCILIATION_REQUIRED" in error.value.decision.reasons
-    assert broker.submitted == []
+    assert result.intent.state is IntentState.BROKER_ACCEPTED
+    assert len(broker.submitted) == 1
     database.close()
 
-
 @pytest.mark.asyncio
-async def test_latest_material_reconciliation_blocks_exit_submission(tmp_path: Path) -> None:
+async def test_fresh_position_proof_allows_exit_after_unrelated_material_diff(
+    tmp_path: Path,
+) -> None:
     database = Database.create(tmp_path / "quantbot.db")
     _mark_ready(database)
     with database.transaction() as session:
@@ -252,6 +272,25 @@ async def test_latest_material_reconciliation_blocks_exit_submission(tmp_path: P
     broker = AcceptingBroker(database)
     coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
 
+    result = await coordinator.submit(
+        _intent(side=OrderSide.SELL),
+        purpose=OrderPurpose.STRATEGY_EXIT,
+        market_eligible=True,
+        drawdown=None,
+        risk_approved=None,
+    )
+
+    assert result.intent.state is IntentState.BROKER_ACCEPTED
+    assert len(broker.submitted) == 1
+    database.close()
+
+@pytest.mark.asyncio
+async def test_exit_requires_a_fresh_matching_broker_position(tmp_path: Path) -> None:
+    database = Database.create(tmp_path / "quantbot.db")
+    _mark_ready(database)
+    broker = AcceptingBroker(database, positions=())
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
     with pytest.raises(OrderSubmissionBlocked) as error:
         await coordinator.submit(
             _intent(side=OrderSide.SELL),
@@ -261,8 +300,80 @@ async def test_latest_material_reconciliation_blocks_exit_submission(tmp_path: P
             risk_approved=None,
         )
 
-    assert "RECONCILIATION_REQUIRED" in error.value.decision.reasons
+    assert error.value.decision.reasons == ("EXIT_POSITION_NOT_FOUND",)
     assert broker.submitted == []
+    database.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("intent", "positions", "reason"),
+    [
+        (
+            _intent(side=OrderSide.BUY),
+            (_long_position(),),
+            "EXIT_SIDE_INCREASES_RISK",
+        ),
+        (
+            _intent(side=OrderSide.SELL),
+            (_long_position(Decimal("1")),),
+            "EXIT_QUANTITY_EXCEEDS_POSITION",
+        ),
+    ],
+)
+async def test_exit_purpose_cannot_disguise_an_order_that_increases_risk(
+    tmp_path: Path,
+    intent: OrderIntent,
+    positions: tuple[Position, ...],
+    reason: str,
+) -> None:
+    database = Database.create(tmp_path / f"{reason}.db")
+    _mark_ready(database)
+    broker = AcceptingBroker(database, positions=positions)
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
+    with pytest.raises(OrderSubmissionBlocked) as error:
+        await coordinator.submit(
+            intent,
+            purpose=OrderPurpose.STRATEGY_EXIT,
+            market_eligible=True,
+            drawdown=None,
+            risk_approved=None,
+        )
+
+    assert reason in error.value.decision.reasons
+    assert broker.submitted == []
+    database.close()
+
+
+@pytest.mark.asyncio
+async def test_exit_rechecks_live_position_immediately_before_submission(
+    tmp_path: Path,
+) -> None:
+    database = Database.create(tmp_path / "quantbot.db")
+    _mark_ready(database)
+    broker = AcceptingBroker(
+        database,
+        position_snapshots=[(_long_position(),), ()],
+    )
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+    intent = _intent(side=OrderSide.SELL)
+
+    with pytest.raises(OrderSubmissionBlocked) as error:
+        await coordinator.submit(
+            intent,
+            purpose=OrderPurpose.STRATEGY_EXIT,
+            market_eligible=True,
+            drawdown=None,
+            risk_approved=None,
+        )
+
+    assert error.value.decision.reasons == ("EXIT_POSITION_NOT_FOUND",)
+    assert broker.submitted == []
+    with database.transaction() as session:
+        stored = StorageRepository(session).get_order_intent(intent.intent_id)
+    assert stored is not None
+    assert stored.state is IntentState.ERROR
     database.close()
 
 
