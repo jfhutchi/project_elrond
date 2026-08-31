@@ -365,7 +365,8 @@ def test_the_migration_reaches_the_current_version(tmp_path) -> None:  # type: i
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == SCHEMA_VERSION
+        version = connection.execute("SELECT version FROM schema_version").fetchone()[0]
+        assert version == SCHEMA_VERSION
         assert connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_observations'"
         ).fetchone()
