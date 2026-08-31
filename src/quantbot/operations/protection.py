@@ -26,7 +26,6 @@ from quantbot.operations.health import OperationsModel
 from quantbot.operations.metrics import OperationalMetrics
 from quantbot.risk.protection import (
     ProtectionDecision,
-    ProtectionOutcome,
     ProtectionPolicy,
     evaluate_position,
 )
@@ -88,12 +87,12 @@ def _cycle_id(moment: datetime) -> str:
 
 
 def _evaluation_id(cycle_id: str, symbol: str) -> str:
-    digest = hashlib.sha256(f"{cycle_id}:{symbol}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{cycle_id}:{symbol}".encode()).hexdigest()
     return f"protection-evaluation-{digest[:24]}"
 
 
 def _incident_id(cycle_id: str, kind: str) -> str:
-    digest = hashlib.sha256(f"{cycle_id}:{kind}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{cycle_id}:{kind}".encode()).hexdigest()
     return f"protection-incident-{digest[:24]}"
 
 
