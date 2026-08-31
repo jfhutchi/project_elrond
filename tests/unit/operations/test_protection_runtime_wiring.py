@@ -31,5 +31,10 @@ def test_protection_command_is_wired_to_the_independent_runner() -> None:
 def test_runtime_protector_has_no_strategy_model_or_research_collaborator() -> None:
     source = inspect.getsource(runtime.Runtime.protector)
 
-    for forbidden in ("self.strategy", "model", "research", "self.coordinator"):
+    for forbidden in (
+        "self.strategy",
+        "self.coordinator",
+        "self.research",
+        "self.model",
+    ):
         assert forbidden not in source
