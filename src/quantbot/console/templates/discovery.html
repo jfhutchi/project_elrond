@@ -125,4 +125,30 @@
     <p class="absent">None unresolved.</p>
   {% endif %}
 </div>
+{% if state.research_runtime and not state.research_runtime.configured %}
+<div class="card">
+  <div class="k">Research cannot run</div>
+  {% if state.research_runtime.missing %}
+  <p class="n">
+    No model is configured, so no hypothesis can be implemented and no experiment can run.
+    Everything on this page reads empty for that reason rather than because nothing was found
+    &mdash; which is a very different fact, and the one worth not misreading.
+  </p>
+  <p class="n">
+    Unset: {% for name in state.research_runtime.missing %}<span class="mono">{{ name }}</span>{% if not loop.last %}, {% endif %}{% endfor %}
+  </p>
+  <p class="n quiet">
+    Generating an implementation needs a model and criticising it needs a <em>different</em> one
+    &mdash; a model asked to review its own proposal tends to find it sound. Only the names of the
+    missing variables are shown here; a configured endpoint or model name is never rendered.
+  </p>
+  {% else %}
+  <p class="n">
+    Every model variable is set and the configuration was refused:
+  </p>
+  <p class="n mono">{{ state.research_runtime.refusal }}</p>
+  {% endif %}
+</div>
+{% endif %}
+
 {% endblock %}

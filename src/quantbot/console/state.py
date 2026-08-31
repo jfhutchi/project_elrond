@@ -318,6 +318,32 @@ class SessionPanel(FrozenModel):
         return self.total > 0
 
 
+class ResearchRuntimePanel(FrozenModel):
+    """Whether the research pipeline could run at all, and what is missing if not.
+
+    Every research issue on this project reports the same symptom -- no experiment has run, no
+    hypothesis registered, no candidate rejected -- and the console showed none of the reasons.
+    An operator reading empty research panels could reasonably conclude the system was working
+    and had found nothing, which is the most expensive possible misreading.
+
+    The narrowest cause is mechanical: generating an implementation from a registration needs a
+    model, criticising it needs a *different* model, and neither is configured. That is three
+    environment variables, not a research programme, and it is worth one line on a page rather
+    than an afternoon of archaeology.
+
+    **Names only, never values.** `missing` lists which variables are unset. A configured
+    endpoint or model name is not rendered, for the same reason the registry reports the account
+    id as `[configured]`: a console is a surface, and what it does not hold it cannot leak.
+    """
+
+    configured: bool
+    #: Which required variables are unset. Empty when configured.
+    missing: tuple[str, ...] = ()
+    #: Why a configuration was refused when all the variables are present -- generator and critic
+    #: naming the same model is the case that actually happens.
+    refusal: str | None = None
+
+
 class ConsoleState(FrozenModel):
     """Everything the read-only console renders, assembled in one pass."""
 
@@ -330,6 +356,8 @@ class ConsoleState(FrozenModel):
     discovery: DiscoveryPanel
     #: The market-hours loop's own record of itself (#143).
     session: SessionPanel = SessionPanel()
+    #: Whether research could run at all. `None` when the console was built without asking.
+    research_runtime: ResearchRuntimePanel | None = None
     #: Every budget with recorded spend, non-renewable first.
     budgets: tuple[BudgetRow, ...] = ()
     #: `None` when the console was built without a reports directory.
@@ -353,6 +381,21 @@ class ConsoleState(FrozenModel):
             items.append(
                 f"kill switch ENGAGED: {self.health.kill_switch_reason or 'no reason recorded'}"
             )
+        # Before everything except the kill switch: with no model configured, no experiment
+        # can run at all, so every empty research panel below is explained by this one line
+        # rather than by the absence of findings. Reading "nothing discovered" as a result when
+        # the pipeline was never able to start is the most expensive misreading available here.
+        if self.research_runtime is not None and not self.research_runtime.configured:
+            if self.research_runtime.missing:
+                items.append(
+                    "no model is configured ("
+                    + ", ".join(self.research_runtime.missing)
+                    + " unset), so no experiment can run and no research panel below can fill"
+                )
+            else:
+                items.append(
+                    f"research is configured but refused: {self.research_runtime.refusal}"
+                )
         # Before reconciliation and capacity, because a system that is not running makes every
         # other measurement on this page a statement about the past. The threshold is a
         # `PROJECT_DEFAULT`: a paper strategy on a daily cadence should run every trading day, so
@@ -805,6 +848,43 @@ def _session(session: Session) -> SessionPanel:
     )
 
 
+def _research_runtime() -> ResearchRuntimePanel:
+    """Ask whether a model runtime could be built, without building one or contacting anything.
+
+    Reads the environment rather than probing the endpoint. A page load must not open a socket to
+    a model server: the answer would be about that instant rather than about configuration, and a
+    slow or hanging endpoint would take the whole console down with it.
+
+    So this reports *configured or not*, which is the question an operator actually has when
+    every research panel reads zero. Whether the configured endpoint is reachable is a different
+    question and belongs to whatever tries to use it.
+    """
+    import os
+
+    from quantbot.research.composition import (
+        CRITIC,
+        ENDPOINT,
+        GENERATOR,
+        ResearchNotConfigured,
+        model_configuration,
+    )
+
+    try:
+        model_configuration()
+    except ResearchNotConfigured as refusal:
+        missing = tuple(
+            name for name in (ENDPOINT, GENERATOR, CRITIC) if not os.environ.get(name, "").strip()
+        )
+        return ResearchRuntimePanel(
+            configured=False,
+            missing=missing,
+            # Present only when nothing is missing -- that is the generator-equals-critic case,
+            # and it is the one an operator would otherwise stare at with every variable set.
+            refusal=None if missing else str(refusal),
+        )
+    return ResearchRuntimePanel(configured=True)
+
+
 def read_console_state(
     session: Session,
     *,
@@ -828,6 +908,7 @@ def read_console_state(
         capacity=_capacity(session, strategies),
         discovery=_discovery(session),
         session=_session(session),
+        research_runtime=_research_runtime(),
         budgets=_budgets(session),
         reports=reports,
         runtime=runtime,
