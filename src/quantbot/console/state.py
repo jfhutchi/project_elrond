@@ -452,6 +452,18 @@ class ConsoleState(FrozenModel):
                 f"the position-protection loop last ran {protection_gap} minutes ago while "
                 f"{self.health.open_positions} position(s) remain open"
             )
+        covered_positions = (
+            (self.health.protected_positions or 0)
+            + (self.health.unprotected_positions or 0)
+        )
+        if (
+            self.health.last_protection_at is not None
+            and self.health.open_positions > covered_positions
+        ):
+            items.append(
+                f"{self.health.open_positions - covered_positions} open position(s) are absent "
+                "from the latest protection cycle"
+            )
         if self.health.unprotected_positions:
             items.append(
                 f"{self.health.unprotected_positions} position(s) are explicitly unprotected"
@@ -550,17 +562,22 @@ def _health(
         .limit(1)
     ).one_or_none()
     observed_at = None if observation is None else decode_utc(observation.observed_at)
-    protection = session.execute(
-        select(
-            position_protection_cycles.c.observed_at,
-            position_protection_cycles.c.outcome,
-            position_protection_cycles.c.evaluated_count,
-            position_protection_cycles.c.unprotected_count,
-            position_protection_cycles.c.exit_required_count,
-        )
-        .order_by(position_protection_cycles.c.observed_at.desc())
-        .limit(1)
-    ).one_or_none()
+    protection = (
+        None
+        if expected is None
+        else session.execute(
+            select(
+                position_protection_cycles.c.observed_at,
+                position_protection_cycles.c.outcome,
+                position_protection_cycles.c.evaluated_count,
+                position_protection_cycles.c.unprotected_count,
+                position_protection_cycles.c.exit_required_count,
+            )
+            .where(position_protection_cycles.c.account_id == expected)
+            .order_by(position_protection_cycles.c.observed_at.desc())
+            .limit(1)
+        ).one_or_none()
+    )
     protected_at = None if protection is None else decode_utc(protection.observed_at)
     return HealthPanel(
         kill_switch_engaged=True if kill is None else bool(kill.engaged),
