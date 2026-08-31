@@ -75,7 +75,7 @@ def _seed_protection_cycle(
         version="1.0.0",
         git_commit="abc123",
         configuration_hash="cfg-123",
-        deployment_timestamp=observed_at - timedelta(days=30),
+        deployment_timestamp=datetime(2026, 1, 1, tzinfo=UTC),
     )
     with database.transaction() as session:
         repository = StorageRepository(session)
