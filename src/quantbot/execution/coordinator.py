@@ -16,7 +16,7 @@ from quantbot.brokers import (
 )
 from quantbot.brokers.base import BrokerModel
 from quantbot.config import Settings
-from quantbot.domain import BrokerOrder, IntentState, OrderIntent, ReconciliationStatus
+from quantbot.domain import (\n    BrokerOrder,\n    IntentState,\n    OrderIntent,\n    OrderSide,\n    Position,\n    ReconciliationStatus,\n)
 from quantbot.risk import (
     DrawdownState,
     OrderGateDecision,
@@ -102,6 +102,31 @@ def persist_broker_acknowledgement(
     )
 
 
+def _risk_reducing_exit_reasons(
+    intent: OrderIntent,
+    positions: tuple[Position, ...],
+) -> tuple[str, ...]:
+    """Prove an exit reduces the fresh broker position rather than trusting its purpose label."""
+    matching = tuple(position for position in positions if position.symbol == intent.symbol)
+    if not matching:
+        return ("EXIT_POSITION_NOT_FOUND",)
+    if len(matching) != 1:
+        return ("EXIT_POSITION_AMBIGUOUS",)
+
+    position = matching[0]
+    if position.quantity == 0:
+        return ("EXIT_POSITION_NOT_FOUND",)
+    reducing_side = (
+        OrderSide.SELL if position.quantity > 0 else OrderSide.BUY
+    )
+    reasons: list[str] = []
+    if intent.side is not reducing_side:
+        reasons.append("EXIT_SIDE_INCREASES_RISK")
+    if intent.quantity > abs(position.quantity):
+        reasons.append("EXIT_QUANTITY_EXCEEDS_POSITION")
+    return tuple(reasons)
+
+
 class ExecutionCoordinator:
     """Persist before network I/O and never replace a client order identity."""
 
@@ -121,6 +146,8 @@ class ExecutionCoordinator:
     def _gate(
         self,
         account_snapshot: BrokerAccountSnapshot,
+        positions: tuple[Position, ...],
+        intent: OrderIntent,
         purpose: OrderPurpose,
         market_eligible: bool,
         drawdown: DrawdownState | None,
@@ -154,6 +181,11 @@ class ExecutionCoordinator:
             vetoes=vetoes,
         )
         reasons = list(decision.reasons)
+        if purpose in {
+            OrderPurpose.STRATEGY_EXIT,
+            OrderPurpose.DRAWDOWN_LIQUIDATION,
+        }:
+            reasons.extend(_risk_reducing_exit_reasons(intent, positions))
         if not account_snapshot.order_entry_allowed:
             reasons.append("BROKER_ORDER_ENTRY_DISABLED")
         if account_snapshot.restrictions:
@@ -209,8 +241,11 @@ class ExecutionCoordinator:
             raise ValueError("new order intent must begin in RISK_APPROVED")
 
         initial_account = await self._broker.get_account()
+        initial_positions = await self._broker.get_positions()
         initial_gate = self._gate(
             initial_account,
+            initial_positions,
+            intent,
             purpose,
             market_eligible,
             drawdown,
@@ -230,9 +265,11 @@ class ExecutionCoordinator:
             )
 
         fresh_account = await self._broker.get_account()
-        await self._broker.get_positions()
+        fresh_positions = await self._broker.get_positions()
         fresh_gate = self._gate(
             fresh_account,
+            fresh_positions,
+            intent,
             purpose,
             market_eligible,
             drawdown,
