@@ -16,7 +16,14 @@ from quantbot.brokers import (
 )
 from quantbot.brokers.base import BrokerModel
 from quantbot.config import Settings
-from quantbot.domain import (\n    BrokerOrder,\n    IntentState,\n    OrderIntent,\n    OrderSide,\n    Position,\n    ReconciliationStatus,\n)
+from quantbot.domain import (
+    BrokerOrder,
+    IntentState,
+    OrderIntent,
+    OrderSide,
+    Position,
+    ReconciliationStatus,
+)
 from quantbot.risk import (
     DrawdownState,
     OrderGateDecision,
