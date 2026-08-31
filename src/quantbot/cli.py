@@ -126,6 +126,7 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
         help="store to create; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
     )
     create.add_argument("--confirm", action="store_true")
+    commands.add_parser("preflight")
     backup = commands.add_parser("backup-database")
     backup.add_argument(
         "--database",
@@ -282,6 +283,42 @@ def _console_runtime_panel() -> RuntimePanel | None:
         return build_runtime_panel(profile, measured_at=moment)
     except Exception:  # noqa: BLE001 -- one panel is not worth the whole console
         return None
+
+
+def _preflight(stream: TextIO) -> int:
+    """Report which capabilities this host is configured for, and what each is missing (#150).
+
+    Exit code is 1 when anything is unready, so this is usable as a provisioning gate rather
+    than only as a report. `CONSOLE` is always ready, so a zero exit means the host can actually
+    do the work rather than merely serve a page about not doing it.
+
+    Names only, never values -- this output is meant to be pasteable into an issue, and the
+    repository is public.
+    """
+    from quantbot.operations.preflight import preflight, unready
+
+    checks = preflight()
+    blocked = unready(checks)
+    json.dump(
+        {
+            "ok": not blocked,
+            "command": "preflight",
+            "capabilities": [
+                {
+                    "capability": check.capability.value,
+                    "ready": check.ready,
+                    "missing": list(check.missing),
+                    "refusal": check.refusal,
+                    "consequence": check.consequence or None,
+                }
+                for check in checks
+            ],
+            "unready": [check.capability.value for check in blocked],
+        },
+        stream,
+        sort_keys=True,
+    )
+    return 1 if blocked else 0
 
 
 def _backup_database(args: argparse.Namespace, stream: TextIO) -> int:
@@ -675,6 +712,11 @@ def main(
         # require a working database, since a misconfigured store is one of the things an
         # operator would run this to diagnose.
         return _config(args, stream)
+    if args.command == "preflight":
+        # Before the context, like `config`: whether a host is configured must be answerable
+        # without a working database, since an unconfigured host is exactly the case where
+        # opening one fails.
+        return _preflight(stream)
     if args.command == "backup-database":
         return _backup_database(args, stream)
     if args.command == "create-database":
