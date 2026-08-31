@@ -10,10 +10,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 from quantbot.console.app import create_app
-from quantbot.domain import Account, Position, StrategyIdentity
+from quantbot.domain import (
+    Account,
+    IntentState,
+    OrderIntent,
+    OrderSide,
+    OrderType,
+    Position,
+    StrategyIdentity,
+    TimeInForce,
+)
 from quantbot.storage import Database, StorageRepository
 from quantbot.storage.database import encode_utc
-from quantbot.storage.schema import position_protection_cycles
+from quantbot.storage.schema import (
+    position_protection_actions,
+    position_protection_cycles,
+    position_protection_evaluations,
+)
 
 ACCOUNT_ID = "paper-protection-account"
 
@@ -102,6 +115,96 @@ def _seed_protection_cycle(
         )
 
 
+def _seed_protection_action(
+    database: Database,
+    *,
+    observed_at: datetime,
+    status: str,
+    cycle_id: str = "console-protection-cycle",
+) -> None:
+    intent = OrderIntent(
+        intent_id="intent-console-protection",
+        client_order_id="qb-protect-console",
+        strategy_id="adaptive-momentum",
+        signal_date=observed_at.date(),
+        symbol="SPY",
+        side=OrderSide.SELL,
+        order_type=OrderType.MARKET,
+        time_in_force=TimeInForce.DAY,
+        quantity=Decimal("1"),
+        created_at=observed_at,
+    )
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(intent)
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.ORDER_CREATED,
+            expected_current=IntentState.RISK_APPROVED,
+        )
+        submitting = repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.SUBMITTING,
+            expected_current=IntentState.ORDER_CREATED,
+        )
+        if status == "WORKING":
+            repository.transition_order_intent(
+                intent.intent_id,
+                IntentState.BROKER_ACCEPTED,
+                expected_current=submitting.state,
+            )
+        elif status == "UNCERTAIN":
+            repository.transition_order_intent(
+                intent.intent_id,
+                IntentState.SUBMISSION_UNKNOWN,
+                expected_current=submitting.state,
+            )
+        session.execute(
+            position_protection_evaluations.insert().values(
+                evaluation_id="console-protection-evaluation",
+                cycle_id=cycle_id,
+                account_id=ACCOUNT_ID,
+                symbol="SPY",
+                quantity="1",
+                average_entry_price="450",
+                price="350",
+                price_as_of=encode_utc(observed_at),
+                price_source="BROKER_MARK",
+                strategy_id="adaptive-momentum",
+                strategy_version="1.0.0",
+                configuration_hash="cfg-123",
+                policy_version="position-protection-v1",
+                policy_hash="a" * 64,
+                reconciled=1,
+                outcome="EXIT_REQUIRED",
+                rule="HARD_STOP",
+                reason="hard stop crossed",
+                move_bps="-2222",
+                protected=1,
+                evaluated_at=encode_utc(observed_at),
+                detail='{"requires_exit":true}',
+            )
+        )
+        session.execute(
+            position_protection_actions.insert().values(
+                action_id="console-protection-action",
+                trigger_evaluation_id="console-protection-evaluation",
+                account_id=ACCOUNT_ID,
+                symbol="SPY",
+                side="SELL",
+                quantity="1",
+                intent_id=intent.intent_id,
+                client_order_id=intent.client_order_id,
+                status=status,
+                created_at=encode_utc(observed_at),
+                updated_at=encode_utc(observed_at),
+                completed_at=None,
+                last_error="",
+                detail="{}",
+            )
+        )
+
+
 def test_open_positions_without_a_cycle_are_explicitly_unprotected(
     database: Database,
     client: TestClient,
@@ -156,6 +259,7 @@ def test_stale_protection_loop_is_reported_while_a_position_is_open(
     assert "the position-protection loop last ran" in page
     assert "while 1 position(s) remain open" in page
 
+
 def test_a_newer_cycle_for_another_account_cannot_mask_this_account(
     database: Database,
     client: TestClient,
@@ -202,3 +306,50 @@ def test_a_cycle_that_could_not_evaluate_the_open_position_reports_the_gap(
     page = client.get("/").text
 
     assert "1 open position(s) are absent from the latest protection cycle" in page
+
+
+def test_a_working_protective_exit_is_visible_and_not_reported_as_unhandled(
+    database: Database,
+    client: TestClient,
+) -> None:
+    moment = datetime.now(UTC)
+    _seed_open_position(database, now=moment)
+    _seed_protection_cycle(
+        database,
+        observed_at=moment,
+        outcome="ACTION_REQUIRED",
+        reason="PROTECTIVE_EXIT_REQUIRED",
+        unprotected=0,
+        exits_required=1,
+    )
+    _seed_protection_action(database, observed_at=moment, status="WORKING")
+
+    page = client.get("/").text
+    health = client.get("/api/state").json()["health"]
+
+    assert "exit actions:" in page
+    assert "WORKING 1" in page
+    assert "no durable exit action exists" not in page
+    assert health["protection_action_counts"] == {"WORKING": 1}
+
+
+def test_an_uncertain_protective_exit_warns_against_blind_resubmission(
+    database: Database,
+    client: TestClient,
+) -> None:
+    moment = datetime.now(UTC)
+    _seed_open_position(database, now=moment)
+    _seed_protection_cycle(
+        database,
+        observed_at=moment,
+        outcome="ACTION_REQUIRED",
+        reason="PROTECTIVE_EXIT_REQUIRED",
+        unprotected=0,
+        exits_required=1,
+    )
+    _seed_protection_action(database, observed_at=moment, status="UNCERTAIN")
+
+    page = client.get("/").text
+
+    assert "uncertain broker outcome" in page
+    assert "will not be resubmitted blindly" in page

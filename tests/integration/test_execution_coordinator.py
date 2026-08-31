@@ -5,7 +5,7 @@ from typing import cast
 
 import pytest
 
-from quantbot.brokers import BrokerAccountSnapshot, BrokerAdapter
+from quantbot.brokers import BrokerAccountSnapshot, BrokerAdapter, SubmissionUncertainError
 from quantbot.config import Settings
 from quantbot.domain import (
     Account,
@@ -156,6 +156,30 @@ class AcceptingBroker:
         raise AssertionError("unambiguous submission must not perform lookup")
 
 
+class RecoveryBroker(AcceptingBroker):
+    def __init__(
+        self,
+        database: Database,
+        *,
+        found: BrokerOrder | None,
+        positions: tuple[Position, ...] | None = None,
+    ) -> None:
+        super().__init__(database, positions=positions)
+        self.found = found
+        self.lookups: list[str] = []
+
+    async def get_order_by_client_id(
+        self,
+        client_order_id: str,
+        *,
+        expected: OrderIntent | None = None,
+    ) -> BrokerOrder | None:
+        self.lookups.append(client_order_id)
+        if self.found is not None and expected is not None:
+            assert self.found.client_order_id == expected.client_order_id
+        return self.found
+
+
 def _drawdown() -> DrawdownState:
     return DrawdownState(
         current_equity=Decimal("10000"),
@@ -247,6 +271,7 @@ async def test_fresh_position_proof_allows_exit_without_cached_reconciliation(
     assert len(broker.submitted) == 1
     database.close()
 
+
 @pytest.mark.asyncio
 async def test_fresh_position_proof_allows_exit_after_unrelated_material_diff(
     tmp_path: Path,
@@ -283,6 +308,7 @@ async def test_fresh_position_proof_allows_exit_after_unrelated_material_diff(
     assert result.intent.state is IntentState.BROKER_ACCEPTED
     assert len(broker.submitted) == 1
     database.close()
+
 
 @pytest.mark.asyncio
 async def test_exit_requires_a_fresh_matching_broker_position(tmp_path: Path) -> None:
@@ -401,4 +427,114 @@ async def test_broker_account_restrictions_block_exit_submission(tmp_path: Path)
         "BROKER_ACCOUNT_RESTRICTED",
     } <= set(error.value.decision.reasons)
     assert broker.submitted == []
+    database.close()
+
+
+@pytest.mark.asyncio
+async def test_a_precreated_exit_resumes_from_order_created_with_the_same_identity(
+    tmp_path: Path,
+) -> None:
+    database = Database.create(tmp_path / "resume-created.db")
+    _mark_ready(database)
+    intent = _intent(side=OrderSide.SELL)
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(intent)
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.ORDER_CREATED,
+            expected_current=IntentState.RISK_APPROVED,
+        )
+    broker = AcceptingBroker(database)
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
+    result = await coordinator.submit_durable(
+        intent,
+        purpose=OrderPurpose.STRATEGY_EXIT,
+        market_eligible=True,
+        drawdown=None,
+        risk_approved=None,
+    )
+
+    assert broker.submitted == [intent]
+    assert result.intent.state is IntentState.BROKER_ACCEPTED
+    assert result.intent.client_order_id == intent.client_order_id
+    database.close()
+
+
+@pytest.mark.asyncio
+async def test_a_crash_in_submitting_is_looked_up_and_never_blindly_resubmitted(
+    tmp_path: Path,
+) -> None:
+    database = Database.create(tmp_path / "resume-unknown.db")
+    _mark_ready(database)
+    intent = _intent(side=OrderSide.SELL)
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(intent)
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.ORDER_CREATED,
+            expected_current=IntentState.RISK_APPROVED,
+        )
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.SUBMITTING,
+            expected_current=IntentState.ORDER_CREATED,
+        )
+    broker = RecoveryBroker(database, found=None)
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
+    with pytest.raises(SubmissionUncertainError, match="uncertain"):
+        await coordinator.submit_durable(
+            intent,
+            purpose=OrderPurpose.STRATEGY_EXIT,
+            market_eligible=True,
+            drawdown=None,
+            risk_approved=None,
+        )
+
+    assert broker.lookups == [intent.client_order_id]
+    assert broker.submitted == []
+    with database.transaction() as session:
+        stored = StorageRepository(session).get_order_intent(intent.intent_id)
+    assert stored is not None
+    assert stored.state is IntentState.SUBMISSION_UNKNOWN
+    database.close()
+
+
+@pytest.mark.asyncio
+async def test_a_crash_in_submitting_adopts_the_broker_order_without_resubmitting(
+    tmp_path: Path,
+) -> None:
+    database = Database.create(tmp_path / "resume-found.db")
+    _mark_ready(database)
+    intent = _intent(side=OrderSide.SELL)
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(intent)
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.ORDER_CREATED,
+            expected_current=IntentState.RISK_APPROVED,
+        )
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.SUBMITTING,
+            expected_current=IntentState.ORDER_CREATED,
+        )
+    broker = RecoveryBroker(database, found=_accepted(intent))
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
+    result = await coordinator.submit_durable(
+        intent,
+        purpose=OrderPurpose.STRATEGY_EXIT,
+        market_eligible=True,
+        drawdown=None,
+        risk_approved=None,
+    )
+
+    assert broker.lookups == [intent.client_order_id]
+    assert broker.submitted == []
+    assert result.intent.state is IntentState.BROKER_ACCEPTED
     database.close()

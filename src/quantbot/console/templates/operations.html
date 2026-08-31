@@ -54,6 +54,14 @@
         {{ state.health.minutes_since_last_protection }} minutes ago &middot;
         {{ state.health.last_protection_at.strftime("%Y-%m-%d %H:%M") }} UTC
       </div>
+      {% if state.health.protection_action_counts %}
+      <div class="n quiet">
+        exit actions:
+        {% for status, count in state.health.protection_action_counts.items() %}
+          {{ status }} {{ count }}{% if not loop.last %} &middot;{% endif %}
+        {% endfor %}
+      </div>
+      {% endif %}
     {% else %}
       <div class="v absent">never evaluated</div>
       {% if state.health.open_positions %}

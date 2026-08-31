@@ -36,6 +36,7 @@ from quantbot.research.promotion import Stage
 from quantbot.storage import StorageRepository
 from quantbot.storage.database import decode_utc
 from quantbot.storage.schema import (
+    position_protection_actions,
     position_protection_cycles,
     session_observations,
 )
@@ -112,6 +113,9 @@ class HealthPanel(FrozenModel):
     protected_positions: int | None
     unprotected_positions: int | None
     exit_required_positions: int | None
+    #: Durable exit actions by state for the configured account. Empty means no action exists;
+    #: it never means that an EXIT_REQUIRED evaluation was handled elsewhere.
+    protection_action_counts: Mapping[str, int]
     #: Absent rather than zero when the account has never been snapshotted.
     account_equity: str | None
     open_positions: int
@@ -468,9 +472,31 @@ class ConsoleState(FrozenModel):
             items.append(
                 f"{self.health.unprotected_positions} position(s) are explicitly unprotected"
             )
-        if self.health.exit_required_positions:
+        action_counts = self.health.protection_action_counts
+        if action_counts.get("UNCERTAIN", 0):
             items.append(
-                f"{self.health.exit_required_positions} protective exit(s) require action"
+                f"{action_counts['UNCERTAIN']} protective exit action(s) have an uncertain "
+                "broker outcome and will not be resubmitted blindly"
+            )
+        if action_counts.get("FAILED", 0):
+            items.append(
+                f"{action_counts['FAILED']} protective exit action(s) failed and require "
+                "operator review"
+            )
+        if action_counts.get("FILLED_UNVERIFIED", 0):
+            items.append(
+                f"{action_counts['FILLED_UNVERIFIED']} filled protective exit(s) are waiting "
+                "for a broker snapshot confirming the position is flat"
+            )
+        if action_counts.get("PENDING", 0):
+            items.append(
+                f"{action_counts['PENDING']} protective exit action(s) are durably pending"
+            )
+        handled_actions = sum(action_counts.values())
+        if self.health.exit_required_positions and handled_actions == 0:
+            items.append(
+                f"{self.health.exit_required_positions} protective exit(s) require action but "
+                "no durable exit action exists"
             )
         if self.health.last_protection_outcome == "INCIDENT":
             items.append("the latest position-protection cycle ended in an incident")
@@ -579,6 +605,21 @@ def _health(
         ).one_or_none()
     )
     protected_at = None if protection is None else decode_utc(protection.observed_at)
+    action_counts = (
+        {}
+        if expected is None
+        else {
+            str(row.status): int(row.n)
+            for row in session.execute(
+                select(
+                    position_protection_actions.c.status,
+                    func.count().label("n"),
+                )
+                .where(position_protection_actions.c.account_id == expected)
+                .group_by(position_protection_actions.c.status)
+            )
+        }
+    )
     return HealthPanel(
         kill_switch_engaged=True if kill is None else bool(kill.engaged),
         kill_switch_reason=(
@@ -620,6 +661,7 @@ def _health(
         exit_required_positions=(
             None if protection is None else int(protection.exit_required_count)
         ),
+        protection_action_counts=action_counts,
         account_equity=None if account is None else str(account.account.equity),
         open_positions=0 if account is None else len(account.positions),
         trading_mode=str(settings_source["TRADING_MODE"].effective_value or "UNKNOWN"),

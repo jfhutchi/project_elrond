@@ -53,6 +53,14 @@ class OrderSubmissionBlocked(RuntimeError):
         super().__init__("order submission blocked: " + ", ".join(decision.reasons))
 
 
+class OrderIntentNotResumable(RuntimeError):
+    """Raised when a durable intent has already reached an incompatible terminal state."""
+
+    def __init__(self, intent: OrderIntent) -> None:
+        self.intent = intent
+        super().__init__(f"order intent {intent.intent_id} cannot resume from {intent.state.value}")
+
+
 def _assert_ack_matches_intent(intent: OrderIntent, order: BrokerOrder) -> None:
     if (
         order.client_order_id != intent.client_order_id
@@ -231,6 +239,110 @@ class ExecutionCoordinator:
                 },
             )
 
+    def _stored_intent(self, expected: OrderIntent) -> OrderIntent:
+        with self._database.transaction() as session:
+            stored = StorageRepository(session).get_order_intent(expected.intent_id)
+        if stored is None:
+            raise ValueError(f"durable order intent not found: {expected.intent_id}")
+        if stored.model_copy(update={"state": expected.state}) != expected:
+            raise BrokerProtocolError(
+                f"durable order intent {expected.intent_id} does not match the requested order"
+            )
+        return stored
+
+    def _stored_order(self, intent: OrderIntent) -> BrokerOrder:
+        with self._database.transaction() as session:
+            order = StorageRepository(session).get_broker_order_by_client_order_id(
+                intent.client_order_id
+            )
+        if order is None:
+            raise BrokerProtocolError(
+                f"accepted order intent {intent.intent_id} has no durable broker order"
+            )
+        _assert_ack_matches_intent(intent, order)
+        return order
+
+    async def _recover_persisted_submission(self, intent: OrderIntent) -> SubmissionResult:
+        try:
+            found = await self._broker.get_order_by_client_id(
+                intent.client_order_id,
+                expected=intent,
+            )
+        except (BrokerRequestError, BrokerTransportError) as error:
+            self._record_unknown_incident(intent, 0)
+            raise SubmissionUncertainError(
+                "submission remains uncertain because lookup failed"
+            ) from error
+        if found is None:
+            unknown = intent
+            if intent.state is IntentState.SUBMITTING:
+                unknown = self._transition(
+                    intent.intent_id,
+                    IntentState.SUBMISSION_UNKNOWN,
+                    IntentState.SUBMITTING,
+                )
+            self._record_unknown_incident(unknown, 0)
+            raise SubmissionUncertainError("submission remains uncertain after restart lookup")
+        adopted = self._adopt(intent, found)
+        return SubmissionResult(
+            intent=adopted,
+            broker_order=found,
+            recovered_after_ambiguity=True,
+            not_found_retries=0,
+        )
+
+    async def submit_durable(
+        self,
+        intent: OrderIntent,
+        *,
+        purpose: OrderPurpose,
+        market_eligible: bool,
+        drawdown: DrawdownState | None,
+        risk_approved: bool | None,
+        vetoes: PortfolioVetoDecision | None = None,
+    ) -> SubmissionResult:
+        """Submit or recover one pre-persisted intent without ever replacing its identity."""
+        stored = self._stored_intent(intent)
+        if stored.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
+            return await self._recover_persisted_submission(stored)
+        if stored.state in {
+            IntentState.BROKER_ACCEPTED,
+            IntentState.PARTIALLY_FILLED,
+            IntentState.FILLED,
+        }:
+            return SubmissionResult(intent=stored, broker_order=self._stored_order(stored))
+        if stored.state not in {IntentState.RISK_APPROVED, IntentState.ORDER_CREATED}:
+            raise OrderIntentNotResumable(stored)
+
+        if stored.state is IntentState.RISK_APPROVED:
+            initial_account = await self._broker.get_account()
+            initial_positions = tuple(await self._broker.get_positions())
+            initial_gate = self._gate(
+                initial_account,
+                initial_positions,
+                stored,
+                purpose,
+                market_eligible,
+                drawdown,
+                risk_approved,
+                vetoes,
+            )
+            if not initial_gate.allowed:
+                raise OrderSubmissionBlocked(initial_gate)
+            stored = self._transition(
+                stored.intent_id,
+                IntentState.ORDER_CREATED,
+                IntentState.RISK_APPROVED,
+            )
+        return await self._submit_order_created(
+            stored,
+            purpose=purpose,
+            market_eligible=market_eligible,
+            drawdown=drawdown,
+            risk_approved=risk_approved,
+            vetoes=vetoes,
+        )
+
     async def submit(
         self,
         intent: OrderIntent,
@@ -269,6 +381,29 @@ class ExecutionCoordinator:
                 expected_current=IntentState.RISK_APPROVED,
             )
 
+        return await self._submit_order_created(
+            intent.model_copy(update={"state": IntentState.ORDER_CREATED}),
+            purpose=purpose,
+            market_eligible=market_eligible,
+            drawdown=drawdown,
+            risk_approved=risk_approved,
+            vetoes=vetoes,
+        )
+
+    async def _submit_order_created(
+        self,
+        intent: OrderIntent,
+        *,
+        purpose: OrderPurpose,
+        market_eligible: bool,
+        drawdown: DrawdownState | None,
+        risk_approved: bool | None,
+        vetoes: PortfolioVetoDecision | None,
+    ) -> SubmissionResult:
+        """Recheck volatile gates and submit an intent already durable as ORDER_CREATED."""
+        if intent.state is not IntentState.ORDER_CREATED:
+            raise ValueError("submission requires an ORDER_CREATED intent")
+
         fresh_account = await self._broker.get_account()
         fresh_positions = tuple(await self._broker.get_positions())
         fresh_gate = self._gate(
@@ -290,11 +425,12 @@ class ExecutionCoordinator:
             IntentState.SUBMITTING,
             IntentState.ORDER_CREATED,
         )
+        broker_intent = intent.model_copy(update={"state": IntentState.RISK_APPROVED})
         retries = 0
         recovered = False
         while True:
             try:
-                order = await self._broker.submit_order(intent)
+                order = await self._broker.submit_order(broker_intent)
             except BrokerRequestError as error:
                 if retries == 0 and error.status_code is not None and error.status_code < 500:
                     self._transition(intent.intent_id, IntentState.REJECTED, IntentState.SUBMITTING)
@@ -329,7 +465,7 @@ class ExecutionCoordinator:
             try:
                 found = await self._broker.get_order_by_client_id(
                     intent.client_order_id,
-                    expected=intent,
+                    expected=broker_intent,
                 )
             except (BrokerRequestError, BrokerTransportError) as lookup_error:
                 self._record_unknown_incident(intent, retries)

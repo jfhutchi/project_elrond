@@ -9,6 +9,7 @@ from quantbot.execution.accounting import (
 )
 from quantbot.execution.coordinator import (
     ExecutionCoordinator,
+    OrderIntentNotResumable,
     OrderSubmissionBlocked,
     SubmissionPolicy,
     SubmissionResult,
@@ -39,6 +40,7 @@ __all__ = [
     "AppliedExecution",
     "AppliedOrderEvent",
     "ExecutionCoordinator",
+    "OrderIntentNotResumable",
     "OrderEventReconciliationRequired",
     "OrderEventState",
     "OrderSubmissionBlocked",

@@ -28,13 +28,14 @@ def test_protection_command_is_wired_to_the_independent_runner() -> None:
     assert "lock_path=runtime.paths.protection_lock" in source
 
 
-def test_runtime_protector_has_no_strategy_model_or_research_collaborator() -> None:
+def test_runtime_protector_uses_only_the_authoritative_execution_boundary() -> None:
     source = inspect.getsource(runtime.Runtime.protector)
 
     for forbidden in (
         "self.strategy",
-        "self.coordinator",
         "self.research",
         "self.model",
+        "self.broker.submit_order",
     ):
         assert forbidden not in source
+    assert "submitter=self.coordinator" in source

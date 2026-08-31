@@ -2,8 +2,8 @@
 
 This module has no strategy, model, forecasting, anomaly, or research dependency. It reconciles
 fresh broker state against the latest durable account snapshot, evaluates deterministic protection
-rules, and records a measurable result for every broker-open position. This slice decides and
-records; exit submission is wired separately through the authoritative execution coordinator.
+rules, persists a protective action before broker mutation, and routes only that durable intent
+through the authoritative execution coordinator.
 """
 
 from __future__ import annotations
@@ -18,12 +18,26 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Protocol
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from quantbot.brokers import BrokerAccountSnapshot, BrokerError
-from quantbot.domain import MarketClock, Position, StrategyIdentity
+from quantbot.domain import (
+    IntentState,
+    MarketClock,
+    OrderIntent,
+    OrderSide,
+    OrderType,
+    Position,
+    StrategyIdentity,
+    TimeInForce,
+)
+from quantbot.execution import (
+    OrderIntentNotResumable,
+    OrderSubmissionBlocked,
+)
 from quantbot.operations.health import OperationsModel
 from quantbot.operations.metrics import OperationalMetrics
+from quantbot.risk import OrderPurpose
 from quantbot.risk.protection import (
     ProtectionDecision,
     ProtectionPolicy,
@@ -32,6 +46,8 @@ from quantbot.risk.protection import (
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
 from quantbot.storage.database import decode_utc, encode_decimal, encode_utc
 from quantbot.storage.schema import (
+    position_protection_action_evaluations,
+    position_protection_actions,
     position_protection_cycles,
     position_protection_evaluations,
 )
@@ -44,6 +60,19 @@ class PositionProtectionBroker(Protocol):
     async def get_account(self) -> BrokerAccountSnapshot: ...
 
     async def get_positions(self) -> Sequence[Position]: ...
+
+
+class ProtectionSubmitter(Protocol):
+    async def submit_durable(
+        self,
+        intent: OrderIntent,
+        *,
+        purpose: OrderPurpose,
+        market_eligible: bool,
+        drawdown: None,
+        risk_approved: None,
+        vetoes: None = None,
+    ) -> object: ...
 
 
 class ProtectionClockProvider(Protocol):
@@ -112,6 +141,21 @@ def _incident_id(cycle_id: str, kind: str) -> str:
     return f"protection-incident-{digest[:24]}"
 
 
+def _action_id(evaluation_id: str) -> str:
+    digest = hashlib.sha256(evaluation_id.encode("utf-8")).hexdigest()
+    return f"protection-action-{digest[:24]}"
+
+
+def _action_client_order_id(action_id: str) -> str:
+    digest = hashlib.sha256(action_id.encode("utf-8")).hexdigest()
+    return f"qb-protect-{digest[:32]}"
+
+
+def _action_incident_id(cycle_id: str, action_id: str, kind: str) -> str:
+    digest = hashlib.sha256(f"{cycle_id}:{action_id}:{kind}".encode()).hexdigest()
+    return f"protection-action-incident-{digest[:24]}"
+
+
 def _policy_hash(policy: ProtectionPolicy) -> str:
     payload = {
         key: str(value) if isinstance(value, Decimal) else value
@@ -136,6 +180,7 @@ class PositionProtectionSupervisor:
     expected_account_id: str
     strategy_identity: StrategyIdentity
     metrics: OperationalMetrics
+    submitter: ProtectionSubmitter | None = None
     policy: ProtectionPolicy = field(default_factory=ProtectionPolicy)
 
     def __post_init__(self) -> None:
@@ -154,6 +199,7 @@ class PositionProtectionSupervisor:
         )
         existing = self._existing(cycle_id)
         if existing is not None:
+            await self._dispatch_cycle_actions(cycle_id=cycle_id, moment=moment)
             return existing
 
         try:
@@ -200,6 +246,12 @@ class PositionProtectionSupervisor:
                     "status_code": getattr(exc, "status_code", None),
                 },
             )
+
+        self._confirm_filled_actions(
+            account_id=account_id,
+            open_symbols={position.symbol for position in broker_positions},
+            moment=moment,
+        )
 
         with self.database.transaction() as session:
             repository = StorageRepository(session)
@@ -283,6 +335,7 @@ class PositionProtectionSupervisor:
                 },
             )
         self._record_metrics(result)
+        await self._dispatch_cycle_actions(cycle_id=cycle_id, moment=moment)
         return result
 
     @staticmethod
@@ -360,8 +413,9 @@ class PositionProtectionSupervisor:
         account_id: str | None,
         decisions: tuple[tuple[Position, ProtectionDecision, bool], ...],
         detail: dict[str, object],
-    ) -> None:
+    ) -> tuple[str, ...]:
         policy_hash = _policy_hash(self.policy)
+        action_ids: list[str] = []
         with self.database.transaction() as session:
             repository = StorageRepository(session)
             repository.save_strategy_deployment(self.strategy_identity)
@@ -371,7 +425,7 @@ class PositionProtectionSupervisor:
                 )
             ).scalar_one_or_none()
             if existing is not None:
-                return
+                return ()
             session.execute(
                 position_protection_cycles.insert().values(
                     cycle_id=result.cycle_id,
@@ -393,57 +447,342 @@ class PositionProtectionSupervisor:
                 )
             )
             if decisions:
+                evaluation_rows = [
+                    {
+                        "evaluation_id": _evaluation_id(result.cycle_id, position.symbol),
+                        "cycle_id": result.cycle_id,
+                        "account_id": account_id,
+                        "symbol": position.symbol,
+                        "quantity": encode_decimal(position.quantity),
+                        "average_entry_price": encode_decimal(position.average_entry_price),
+                        "price": (
+                            None if decision.price is None else encode_decimal(decision.price)
+                        ),
+                        "price_as_of": (
+                            None if decision.price is None else encode_utc(result.observed_at)
+                        ),
+                        "price_source": "BROKER_MARK",
+                        "strategy_id": self.strategy_identity.strategy_id,
+                        "strategy_version": self.strategy_identity.version,
+                        "configuration_hash": (self.strategy_identity.configuration_hash),
+                        "policy_version": PROTECTION_POLICY_VERSION,
+                        "policy_hash": policy_hash,
+                        "reconciled": 1 if reconciled else 0,
+                        "outcome": decision.outcome.value,
+                        "rule": decision.rule.value,
+                        "reason": decision.reason,
+                        "move_bps": (
+                            None if decision.move_bps is None else encode_decimal(decision.move_bps)
+                        ),
+                        "protected": 1 if decision.protected else 0,
+                        "evaluated_at": encode_utc(decision.observed_at),
+                        "detail": json.dumps(
+                            {"requires_exit": decision.requires_exit},
+                            sort_keys=True,
+                            separators=(",", ":"),
+                        ),
+                    }
+                    for position, decision, reconciled in decisions
+                ]
+                session.execute(position_protection_evaluations.insert(), evaluation_rows)
+                for position, decision, _reconciled in decisions:
+                    if not decision.requires_exit:
+                        continue
+                    evaluation_id = _evaluation_id(result.cycle_id, position.symbol)
+                    active = (
+                        session.execute(
+                            select(position_protection_actions).where(
+                                position_protection_actions.c.account_id == account_id,
+                                position_protection_actions.c.symbol == position.symbol,
+                                position_protection_actions.c.status != "COMPLETED",
+                            )
+                        )
+                        .mappings()
+                        .one_or_none()
+                    )
+                    if active is None:
+                        action_id = _action_id(evaluation_id)
+                        client_order_id = _action_client_order_id(action_id)
+                        intent = OrderIntent(
+                            intent_id=f"intent-{client_order_id}",
+                            client_order_id=client_order_id,
+                            strategy_id=self.strategy_identity.strategy_id,
+                            signal_date=result.observed_at.date(),
+                            symbol=position.symbol,
+                            side=(OrderSide.SELL if position.quantity > 0 else OrderSide.BUY),
+                            order_type=OrderType.MARKET,
+                            time_in_force=TimeInForce.DAY,
+                            quantity=abs(position.quantity),
+                            created_at=result.observed_at,
+                        )
+                        repository.create_order_intent(intent)
+                        session.execute(
+                            position_protection_actions.insert().values(
+                                action_id=action_id,
+                                trigger_evaluation_id=evaluation_id,
+                                account_id=account_id,
+                                symbol=position.symbol,
+                                side=intent.side.value,
+                                quantity=encode_decimal(intent.quantity),
+                                intent_id=intent.intent_id,
+                                client_order_id=intent.client_order_id,
+                                status="PENDING",
+                                created_at=encode_utc(result.observed_at),
+                                updated_at=encode_utc(result.observed_at),
+                                completed_at=None,
+                                last_error="",
+                                detail=json.dumps(
+                                    {
+                                        "policy_hash": policy_hash,
+                                        "policy_version": PROTECTION_POLICY_VERSION,
+                                        "rule": decision.rule.value,
+                                    },
+                                    sort_keys=True,
+                                    separators=(",", ":"),
+                                ),
+                            )
+                        )
+                    else:
+                        action_id = str(active["action_id"])
+                    session.execute(
+                        position_protection_action_evaluations.insert().values(
+                            action_id=action_id,
+                            evaluation_id=evaluation_id,
+                            linked_at=encode_utc(result.observed_at),
+                        )
+                    )
+                    action_ids.append(action_id)
+        return tuple(action_ids)
+
+    @staticmethod
+    def _status_for_intent(state: IntentState) -> str:
+        if state is IntentState.FILLED:
+            return "FILLED_UNVERIFIED"
+        if state in {
+            IntentState.REJECTED,
+            IntentState.CANCELLED,
+            IntentState.EXPIRED,
+            IntentState.ERROR,
+        }:
+            return "FAILED"
+        if state is IntentState.SUBMISSION_UNKNOWN:
+            return "UNCERTAIN"
+        if state in {IntentState.BROKER_ACCEPTED, IntentState.PARTIALLY_FILLED}:
+            return "WORKING"
+        return "PENDING"
+
+    def _confirm_filled_actions(
+        self,
+        *,
+        account_id: str,
+        open_symbols: set[str],
+        moment: datetime,
+    ) -> None:
+        with self.database.transaction() as session:
+            filled = (
                 session.execute(
-                    position_protection_evaluations.insert(),
-                    [
-                        {
-                            "evaluation_id": _evaluation_id(
-                                result.cycle_id, position.symbol
-                            ),
-                            "cycle_id": result.cycle_id,
-                            "account_id": account_id,
-                            "symbol": position.symbol,
-                            "quantity": encode_decimal(position.quantity),
-                            "average_entry_price": encode_decimal(
-                                position.average_entry_price
-                            ),
-                            "price": (
-                                None
-                                if decision.price is None
-                                else encode_decimal(decision.price)
-                            ),
-                            "price_as_of": (
-                                None
-                                if decision.price is None
-                                else encode_utc(result.observed_at)
-                            ),
-                            "price_source": "BROKER_MARK",
-                            "strategy_id": self.strategy_identity.strategy_id,
-                            "strategy_version": self.strategy_identity.version,
-                            "configuration_hash": (
-                                self.strategy_identity.configuration_hash
-                            ),
-                            "policy_version": PROTECTION_POLICY_VERSION,
-                            "policy_hash": policy_hash,
-                            "reconciled": 1 if reconciled else 0,
-                            "outcome": decision.outcome.value,
-                            "rule": decision.rule.value,
-                            "reason": decision.reason,
-                            "move_bps": (
-                                None
-                                if decision.move_bps is None
-                                else encode_decimal(decision.move_bps)
-                            ),
-                            "protected": 1 if decision.protected else 0,
-                            "evaluated_at": encode_utc(decision.observed_at),
-                            "detail": json.dumps(
-                                {"requires_exit": decision.requires_exit},
-                                sort_keys=True,
-                                separators=(",", ":"),
-                            ),
-                        }
-                        for position, decision, reconciled in decisions
-                    ],
+                    select(position_protection_actions).where(
+                        position_protection_actions.c.account_id == account_id,
+                        position_protection_actions.c.status == "FILLED_UNVERIFIED",
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            for row in filled:
+                if str(row["symbol"]) in open_symbols:
+                    continue
+                session.execute(
+                    update(position_protection_actions)
+                    .where(
+                        position_protection_actions.c.action_id == str(row["action_id"]),
+                        position_protection_actions.c.status == "FILLED_UNVERIFIED",
+                    )
+                    .values(
+                        status="COMPLETED",
+                        updated_at=encode_utc(moment),
+                        completed_at=encode_utc(moment),
+                        last_error="",
+                    )
+                )
+
+    def _set_action_status(
+        self,
+        action_id: str,
+        *,
+        status: str,
+        moment: datetime,
+        last_error: str = "",
+    ) -> None:
+        values: dict[str, object] = {
+            "status": status,
+            "updated_at": encode_utc(moment),
+            "last_error": last_error,
+            "completed_at": encode_utc(moment) if status == "COMPLETED" else None,
+        }
+        with self.database.transaction() as session:
+            session.execute(
+                update(position_protection_actions)
+                .where(position_protection_actions.c.action_id == action_id)
+                .values(**values)
+            )
+
+    def _record_action_incident(
+        self,
+        *,
+        cycle_id: str,
+        action_id: str,
+        kind: str,
+        moment: datetime,
+        detail: dict[str, object],
+    ) -> None:
+        with self.database.transaction() as session:
+            StorageRepository(session).create_incident(
+                _action_incident_id(cycle_id, action_id, kind),
+                severity="ERROR",
+                kind=kind,
+                message=f"Protective exit action reported {kind}",
+                occurred_at=moment,
+                detail={"action_id": action_id, **detail},
+            )
+
+    async def _dispatch_cycle_actions(self, *, cycle_id: str, moment: datetime) -> None:
+        if self.submitter is None:
+            return
+        with self.database.transaction() as session:
+            rows = (
+                session.execute(
+                    select(position_protection_actions)
+                    .join(
+                        position_protection_action_evaluations,
+                        position_protection_action_evaluations.c.action_id
+                        == position_protection_actions.c.action_id,
+                    )
+                    .join(
+                        position_protection_evaluations,
+                        position_protection_evaluations.c.evaluation_id
+                        == position_protection_action_evaluations.c.evaluation_id,
+                    )
+                    .where(position_protection_evaluations.c.cycle_id == cycle_id)
+                    .order_by(position_protection_actions.c.action_id)
+                )
+                .mappings()
+                .all()
+            )
+        for row in rows:
+            action_id = str(row["action_id"])
+            if str(row["status"]) in {
+                "WORKING",
+                "FILLED_UNVERIFIED",
+                "COMPLETED",
+                "FAILED",
+            }:
+                continue
+            with self.database.transaction() as session:
+                intent = StorageRepository(session).get_order_intent(str(row["intent_id"]))
+            if intent is None:
+                self._set_action_status(
+                    action_id,
+                    status="FAILED",
+                    moment=moment,
+                    last_error="DURABLE_INTENT_MISSING",
+                )
+                self._record_action_incident(
+                    cycle_id=cycle_id,
+                    action_id=action_id,
+                    kind="PROTECTIVE_INTENT_MISSING",
+                    moment=moment,
+                    detail={"intent_id": str(row["intent_id"])},
+                )
+                continue
+            current_status = self._status_for_intent(intent.state)
+            if current_status in {"WORKING", "FILLED_UNVERIFIED", "COMPLETED", "FAILED"}:
+                self._set_action_status(action_id, status=current_status, moment=moment)
+                continue
+            try:
+                await self.submitter.submit_durable(
+                    intent.model_copy(update={"state": IntentState.RISK_APPROVED}),
+                    purpose=OrderPurpose.STRATEGY_EXIT,
+                    market_eligible=True,
+                    drawdown=None,
+                    risk_approved=None,
+                    vetoes=None,
+                )
+            except OrderSubmissionBlocked as error:
+                with self.database.transaction() as session:
+                    current = StorageRepository(session).get_order_intent(intent.intent_id)
+                status = (
+                    "FAILED"
+                    if current is not None and current.state is IntentState.ERROR
+                    else "PENDING"
+                )
+                reason = ",".join(error.decision.reasons)
+                self._set_action_status(
+                    action_id,
+                    status=status,
+                    moment=moment,
+                    last_error=reason,
+                )
+                self._record_action_incident(
+                    cycle_id=cycle_id,
+                    action_id=action_id,
+                    kind="PROTECTIVE_EXIT_BLOCKED",
+                    moment=moment,
+                    detail={"reasons": list(error.decision.reasons)},
+                )
+                continue
+            except OrderIntentNotResumable as error:
+                self._set_action_status(
+                    action_id,
+                    status="FAILED",
+                    moment=moment,
+                    last_error=error.intent.state.value,
+                )
+                self._record_action_incident(
+                    cycle_id=cycle_id,
+                    action_id=action_id,
+                    kind="PROTECTIVE_EXIT_TERMINAL",
+                    moment=moment,
+                    detail={"intent_state": error.intent.state.value},
+                )
+                continue
+            except BrokerError as error:
+                with self.database.transaction() as session:
+                    current = StorageRepository(session).get_order_intent(intent.intent_id)
+                status = "UNCERTAIN" if current is None else self._status_for_intent(current.state)
+                self._set_action_status(
+                    action_id,
+                    status=status,
+                    moment=moment,
+                    last_error=type(error).__name__,
+                )
+                self._record_action_incident(
+                    cycle_id=cycle_id,
+                    action_id=action_id,
+                    kind="PROTECTIVE_EXIT_BROKER_ERROR",
+                    moment=moment,
+                    detail={"error_type": type(error).__name__},
+                )
+                continue
+            with self.database.transaction() as session:
+                current = StorageRepository(session).get_order_intent(intent.intent_id)
+            if current is None:
+                raise RuntimeError(
+                    f"protective intent disappeared after submission: {intent.intent_id}"
+                )
+            final_status = self._status_for_intent(current.state)
+            self._set_action_status(
+                action_id,
+                status=final_status,
+                moment=moment,
+            )
+            if final_status == "FAILED":
+                self._record_action_incident(
+                    cycle_id=cycle_id,
+                    action_id=action_id,
+                    kind="PROTECTIVE_EXIT_TERMINAL",
+                    moment=moment,
+                    detail={"intent_state": current.state.value},
                 )
 
     def _record_incident(

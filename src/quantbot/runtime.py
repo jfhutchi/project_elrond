@@ -302,6 +302,7 @@ class Runtime:
             expected_account_id=expected_account_id,
             strategy_identity=self.identity,
             metrics=self.metrics,
+            submitter=self.coordinator,
         )
 
     def observer(self) -> SessionObserver:
