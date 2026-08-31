@@ -254,6 +254,35 @@ async def test_replaying_the_same_cycle_is_idempotent(database: Database) -> Non
         assert len(StorageRepository(session).list_incidents()) == 1
 
 
+@pytest.mark.asyncio
+async def test_same_instant_under_a_new_strategy_identity_is_a_distinct_cycle(
+    database: Database,
+) -> None:
+    broker_positions = (position("XLE", price="75"),)
+    seed_local(database, broker_positions)
+    broker = FakeBroker(snapshot=account(), positions=broker_positions)
+
+    first = await supervisor(database, broker).evaluate(now=NOW)
+    alternate_identity = StrategyIdentity(
+        strategy_id=IDENTITY.strategy_id,
+        version="1.0.1",
+        git_commit="def456",
+        configuration_hash="cfg-456",
+        deployment_timestamp=NOW - timedelta(days=1),
+    )
+    second = await PositionProtectionSupervisor(
+        database=database,
+        broker=broker,
+        expected_account_id=ACCOUNT_ID,
+        strategy_identity=alternate_identity,
+        metrics=OperationalMetrics(),
+    ).evaluate(now=NOW)
+
+    assert first.cycle_id != second.cycle_id
+    assert len(stored_cycles(database)) == 2
+    assert len(stored_evaluations(database)) == 2
+
+
 def test_the_supervisor_import_graph_has_no_strategy_model_or_research_path() -> None:
     source = Path("src/quantbot/operations/protection.py").read_text(encoding="utf-8")
     imported: set[str] = set()
