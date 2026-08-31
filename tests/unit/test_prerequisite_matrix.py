@@ -125,32 +125,52 @@ def _source(relative: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def _referenced_names(source: str) -> set[str]:
-    """Names the module actually *uses* -- not ones it merely defines or imports.
+def _call_name(expression: ast.expr) -> str | None:
+    """Return the named check for a direct function or method call."""
+    if isinstance(expression, ast.Name):
+        return expression.id
+    if isinstance(expression, ast.Attribute):
+        return expression.attr
+    return None
 
-    The exclusions are the whole correctness of this file, and I got them wrong first.
 
-    My first version also counted `FunctionDef` names and `ImportFrom` aliases. That made every
-    same-module row vacuous: `_record_capacity_assessment` is defined *and* called in
-    `runners.py`, so deleting the call left the `def` behind and the assertion still passed.
-    Verified by mutation -- removing the call site while keeping the definition came back
-    **green** across all twelve tests.
+def _called_names(source: str) -> set[str]:
+    """Names the module actually calls, not names it merely loads or passes around.
 
-    A matrix that looks like it enforces wiring and does not is worse than no matrix, and it
-    would have been this project's fourteenth instance of the defect it was written to stop --
-    in the tool built to stop it.
+    The first version counted definitions and imports, so a same-module definition or an unused
+    import kept the matrix green. Counting every expression-level name and attribute fixed those
+    mutations but left the same failure one step later: assigning a safety check to a callback or
+    testing its truthiness still references the name without executing the prerequisite.
 
-    `Name` and `Attribute` in expression position are what remain, which covers both
-    `unmet_requirement(...)` called bare after an import and `self._record_catalysts(...)`
-    reached through an attribute. An import with no call now fails, correctly.
+    Only the function expression of an AST call establishes invocation. Bare calls and method
+    calls are both supported; definitions, imports, annotations, assignments, comparisons, and
+    callback references do not satisfy the matrix.
     """
     names: set[str] = set()
     for node in ast.walk(ast.parse(source)):
-        if isinstance(node, ast.Name):
-            names.add(node.id)
-        elif isinstance(node, ast.Attribute):
-            names.add(node.attr)
+        if isinstance(node, ast.Call):
+            name = _call_name(node.func)
+            if name is not None:
+                names.add(name)
     return names
+
+
+def test_a_reference_without_a_call_does_not_satisfy_the_matrix() -> None:
+    """A callback or condition can mention a safety check while never executing it."""
+    source = (
+        "callback = safety_check\n"
+        "bound = service.safety_check\n"
+        "if safety_check:\n"
+        "    pass\n"
+    )
+
+    assert "safety_check" not in _called_names(source)
+
+
+def test_bare_and_attribute_calls_are_recognized() -> None:
+    source = "bare_check()\nservice.attribute_check()\n"
+
+    assert _called_names(source) == {"attribute_check", "bare_check"}
 
 
 @pytest.mark.parametrize(
@@ -167,7 +187,7 @@ def test_the_authoritative_call_site_still_invokes_the_check(
     to see this red will be someone who just removed the call and needs to know what they took
     out.
     """
-    assert check in _referenced_names(_source(call_site)), (
+    assert check in _called_names(_source(call_site)), (
         f"{call_site} no longer references {check}.\n\n{why}\n\n"
         "If this removal is deliberate, delete the matrix row in the same change and say why "
         "in the PR -- a safety check that quietly loses its caller is the thirteen-times defect "
