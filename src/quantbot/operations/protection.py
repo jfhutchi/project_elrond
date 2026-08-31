@@ -81,8 +81,24 @@ class PositionProtectionDaemonResult(OperationsModel):
     stopped_cleanly: bool
 
 
-def _cycle_id(moment: datetime) -> str:
-    digest = hashlib.sha256(encode_utc(moment).encode("utf-8")).hexdigest()
+def _cycle_id(
+    moment: datetime,
+    *,
+    expected_account_id: str,
+    strategy_identity: StrategyIdentity,
+    policy: ProtectionPolicy,
+) -> str:
+    payload = {
+        "observed_at": encode_utc(moment),
+        "expected_account_id": expected_account_id,
+        "strategy_id": strategy_identity.strategy_id,
+        "strategy_version": strategy_identity.version,
+        "configuration_hash": strategy_identity.configuration_hash,
+        "policy_version": PROTECTION_POLICY_VERSION,
+        "policy_hash": _policy_hash(policy),
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    digest = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return f"protection-{digest[:32]}"
 
 
@@ -130,7 +146,12 @@ class PositionProtectionSupervisor:
         if now.tzinfo is None or now.utcoffset() is None:
             raise ValueError("now must be timezone-aware")
         moment = now.astimezone(UTC)
-        cycle_id = _cycle_id(moment)
+        cycle_id = _cycle_id(
+            moment,
+            expected_account_id=self.expected_account_id,
+            strategy_identity=self.strategy_identity,
+            policy=self.policy,
+        )
         existing = self._existing(cycle_id)
         if existing is not None:
             return existing
