@@ -163,7 +163,7 @@ class PositionProtectionSupervisor:
                 cycle_id=cycle_id,
                 moment=moment,
                 reason="BROKER_STATE_UNAVAILABLE",
-                account_id=None,
+                account_id=self.expected_account_id,
                 detail={
                     "operation": "get_account",
                     "error_type": type(exc).__name__,
@@ -177,8 +177,13 @@ class PositionProtectionSupervisor:
                 cycle_id=cycle_id,
                 moment=moment,
                 reason="BROKER_ACCOUNT_MISMATCH",
-                account_id=account_id,
-                detail={"account_verified": False},
+                account_id=self.expected_account_id,
+                detail={
+                    "account_verified": False,
+                    "reported_account_id_hash": hashlib.sha256(
+                        account_id.encode("utf-8")
+                    ).hexdigest(),
+                },
             )
 
         try:
