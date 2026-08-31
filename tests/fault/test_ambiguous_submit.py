@@ -19,6 +19,7 @@ from quantbot.domain import (
     OrderIntent,
     OrderSide,
     OrderType,
+    Position,
     ReconciliationStatus,
     TimeInForce,
 )
@@ -98,8 +99,16 @@ class ScriptedAmbiguousBroker:
             restrictions=(),
         )
 
-    async def get_positions(self) -> tuple[()]:
-        return ()
+    async def get_positions(self) -> tuple[Position, ...]:
+        return (
+            Position(
+                symbol="SPY",
+                quantity=Decimal("2"),
+                market_price=Decimal("500"),
+                market_value=Decimal("1000"),
+                average_entry_price=Decimal("450"),
+            ),
+        )
 
     async def submit_order(self, intent: OrderIntent) -> BrokerOrder:
         self.submitted_client_ids.append(intent.client_order_id)
