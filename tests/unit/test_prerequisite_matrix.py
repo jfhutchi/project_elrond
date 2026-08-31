@@ -149,8 +149,8 @@ MATRIX: tuple[Prerequisite, ...] = (
         call_target="active_policy_version",
         call_site="runtime.py",
         why=(
-            "#82: runtime composition must load the recorded policy or an applied successor changes "
-            "history while leaving the rule the process enforces unchanged"
+            "#82: runtime composition must load the recorded policy or an applied successor "
+            "changes history while leaving the rule the process enforces unchanged"
         ),
     ),
     Prerequisite(
@@ -169,8 +169,8 @@ MATRIX: tuple[Prerequisite, ...] = (
         call_target="validate_trading_safety",
         call_site="risk/gates.py",
         why=(
-            "the authoritative order gate must enforce account and environment safety; a doctor-only "
-            "call in runtime.py does not protect broker submission"
+            "the authoritative order gate must enforce account and environment safety; a "
+            "doctor-only call in runtime.py does not protect broker submission"
         ),
     ),
     Prerequisite(
@@ -306,7 +306,8 @@ def test_the_authoritative_call_site_still_invokes_the_check(
         f"{prerequisite.call_site} no longer calls {prerequisite.call_target}.\n\n"
         f"{prerequisite.why}\n\n"
         "If this removal is deliberate, delete the matrix row in the same change and explain "
-        "why. A safety check that quietly loses its caller is the defect this matrix exists to "\n        "stop."
+        "why. A safety check that quietly loses its caller is the defect this matrix exists to "
+        "stop."
     )
 
 
