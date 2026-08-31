@@ -248,6 +248,72 @@ def _policy_entries(subsystem: str, policy: VersionedPolicy) -> Iterator[ConfigS
         )
 
 
+def _research_entries(environ: Mapping[str, str]) -> Iterator[ConfigSetting]:
+    """The model configuration, which is read from the environment rather than from `Settings`.
+
+    The registry's premise is that a setting cannot exist without appearing here, and these
+    three did exist without appearing. `composition.model_configuration` reads them straight
+    from `os.environ`, so walking `Settings.model_fields` never saw them -- and an operator
+    looking at the configuration page had no way to learn that the entire research pipeline was
+    unconfigured.
+
+    **The endpoint is classified as a credential, and that is deliberate.** It is not a secret in
+    the sense an API key is, but it is a URL that can embed one, and its value tells a reader
+    nothing its presence does not already tell them. Rendering it would be the one place this
+    console leaks a token, so it reports as configured-or-not like the account id does.
+
+    **The model names are evidence-bearing.** `ExperimentManifest.models` records which model
+    produced a generated artifact, and #45 exists because a model's training cutoff can
+    contaminate a result. An experiment run under a different generator is a different
+    experiment, so changing one of these is minting a new provenance rather than editing a
+    setting -- exactly what that class means everywhere else here.
+    """
+    from quantbot.research.composition import API_KEY, CODER, CRITIC, ENDPOINT, GENERATOR
+
+    credentials = (
+        (
+            ENDPOINT,
+            "a model endpoint URL can carry a host, a port and sometimes a token; its presence "
+            "is reportable and its value is not",
+        ),
+        (
+            API_KEY,
+            "a secret. Optional: a local endpoint legitimately has none, and an empty string is "
+            "not a key",
+        ),
+    )
+    for key, reason in credentials:
+        present = bool(environ.get(key, "").strip())
+        yield ConfigSetting(
+            key=key,
+            subsystem="research",
+            effective_value="[configured]" if present else None,
+            source=SettingSource.ENVIRONMENT,
+            safety_class=SafetyClass.CREDENTIAL,
+            immutable_reason=reason,
+        )
+
+    named = (
+        (GENERATOR, "proposes hypotheses and writes implementations"),
+        (CRITIC, "reviews them, and must differ from the generator"),
+        (CODER, "writes implementations when set; defaults to the generator"),
+    )
+    for key, role in named:
+        value = environ.get(key, "").strip()
+        yield ConfigSetting(
+            key=key,
+            subsystem="research",
+            effective_value=value or None,
+            source=SettingSource.ENVIRONMENT,
+            safety_class=SafetyClass.EVIDENCE_BEARING,
+            immutable_reason=(
+                f"{role}. Recorded into `ExperimentManifest.models`, so a result produced under "
+                "a different model is a different experiment; changing this mints new provenance "
+                "rather than editing a setting"
+            ),
+        )
+
+
 def config_registry(
     *,
     settings: Settings | None = None,
@@ -269,6 +335,7 @@ def config_registry(
     )
     entries.extend(_policy_entries("risk", veto_policy or PortfolioVetoPolicy()))
     entries.extend(_policy_entries("market-data", freshness_policy or MarketFreshnessPolicy()))
+    entries.extend(_research_entries(active_environ))
     return tuple(sorted(entries, key=lambda item: (item.subsystem, item.key)))
 
 
