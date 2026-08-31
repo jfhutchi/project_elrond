@@ -11,7 +11,7 @@ liquidation would trap capital in exactly the state the rule exists to avoid -- 
 halt `STATUS.md` records as a severity-1 defect, rebuilt one layer up.
 """
 
-from quantbot.config import Settings, validate_trading_safety
+from quantbot.config import Settings, validate_trading_authority, validate_trading_safety
 from quantbot.risk.models import DrawdownState, OrderGateDecision, OrderPurpose
 from quantbot.risk.vetoes import PortfolioVetoDecision
 
@@ -34,10 +34,13 @@ def evaluate_order_gate(
     passes when nobody ran it is the shape this project keeps finding, and the default exists so
     the parameter can be added without rewriting every call site -- not so it can be skipped.
     """
-    effective_settings = settings.model_copy(
-        update={"KILL_SWITCH": settings.KILL_SWITCH or durable_kill_switch_engaged}
-    )
-    safety = validate_trading_safety(effective_settings, reported_account_id)
+    if purpose is OrderPurpose.ENTRY:
+        effective_settings = settings.model_copy(
+            update={"KILL_SWITCH": settings.KILL_SWITCH or durable_kill_switch_engaged}
+        )
+        safety = validate_trading_safety(effective_settings, reported_account_id)
+    else:
+        safety = validate_trading_authority(settings, reported_account_id)
     reasons = list(safety.reasons)
     if not market_eligible:
         reasons.append("MARKET_NOT_ELIGIBLE")
