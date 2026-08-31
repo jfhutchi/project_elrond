@@ -29,7 +29,7 @@ from quantbot.operations.observation import (
     observation_id,
 )
 from quantbot.storage import Database
-from quantbot.storage.schema import session_observations
+from quantbot.storage.schema import SCHEMA_VERSION, session_observations
 
 NOW = datetime(2026, 8, 30, 15, 0, tzinfo=UTC)
 
@@ -353,7 +353,7 @@ def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
 
 
 def test_the_migration_reaches_the_current_version(tmp_path) -> None:  # type: ignore[no-untyped-def]
-    """The upgrade path exists and lands at v21, so a v20 store is not stranded."""
+    """The upgrade path preserves v21 and reaches current head, so a v20 store is not stranded."""
     import sqlite3
 
     path = tmp_path / "upgrade.db"
@@ -365,7 +365,7 @@ def test_the_migration_reaches_the_current_version(tmp_path) -> None:  # type: i
 
     connection = sqlite3.connect(path)
     try:
-        assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == 21
+        assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == SCHEMA_VERSION
         assert connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_observations'"
         ).fetchone()
