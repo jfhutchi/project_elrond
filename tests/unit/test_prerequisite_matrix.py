@@ -188,7 +188,7 @@ def test_the_authoritative_call_site_still_invokes_the_check(
     out.
     """
     assert check in _called_names(_source(call_site)), (
-        f"{call_site} no longer references {check}.\n\n{why}\n\n"
+        f"{call_site} no longer calls {check}.\n\n{why}\n\n"
         "If this removal is deliberate, delete the matrix row in the same change and say why "
         "in the PR -- a safety check that quietly loses its caller is the thirteen-times defect "
         "this matrix exists to stop."
