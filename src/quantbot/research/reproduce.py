@@ -62,8 +62,11 @@ from quantbot.research.reproducibility import check_invariants
 #: * `dataset_snapshots` produces a `DatasetSnapshot` from stored bars and resolves one back
 #:   against a store. Nothing in `src/` had ever constructed a snapshot, so the manifest could
 #:   record which data an experiment used only if something first described it.
+#: * `reconstruct.reconstruct_plan` rebuilds the compiled plan from the registration a manifest
+#:   names, refusing when the stored registration's content hash is not the one the manifest was
+#:   frozen against. `compile_experiment` is mechanical and had no caller in `src/`.
 #:
-#: Neither reruns anything. Every entry below is still outstanding.
+#: None of them reruns anything. Every entry below is still outstanding.
 
 #: The minimum behaviours #48 asks for that this command does not implement. Named individually
 #: rather than summarised, so a reader can tell which parts of "reproducible" are still missing
@@ -72,7 +75,9 @@ OUTSTANDING: tuple[str, ...] = (
     # `dataset_snapshots.resolve_snapshot` answers this for bars. It stays listed because a
     # manifest can name datasets that are not bars, and nothing resolves those.
     "resolve every dataset snapshot a manifest can name, not only stored bars",
-    "reconstruct the compiled experiment plan from the registration",
+    # `reconstruct.reconstruct_plan` does this for the plan itself. It stays listed because
+    # a plan is not an execution: nothing turns one back into the code that ran.
+    "turn a reconstructed plan back into the runnable experiment it describes",
     "execute it through the authoritative path the manifest names",
     "produce a new manifest from the rerun",
     "replay a frozen external-worker artifact rather than re-running its inference",
