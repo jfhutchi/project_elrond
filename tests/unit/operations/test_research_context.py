@@ -23,6 +23,7 @@ from types import SimpleNamespace
 import pytest
 
 from quantbot.operations.runners import AdaptiveMomentumRunner, ResearchContext
+from quantbot.risk.regime import build_market_regime_snapshot
 from quantbot.risk.vetoes import (
     PortfolioVetoDecision,
     PortfolioVetoPolicy,
@@ -283,6 +284,133 @@ def test_a_benchmark_with_no_bars_is_absent_rather_than_an_incident(tmp_path: Pa
 
     assert result is None
     assert incidents == []
+
+
+# --- anomaly events are linked to their contemporaneous regime ------------------------------
+
+
+def regime_snapshot():
+    return build_market_regime_snapshot(
+        as_of_session=EVENT_OBSERVED.date(),
+        benchmark_symbol="SPY",
+        source="test:sip:all:1day",
+        benchmark_closes=[Decimal("100")],
+        universe_closes={},
+    )
+
+
+def binding_runner(database):
+    return with_real_containment(SimpleNamespace(_database=database))
+
+
+def test_every_anomaly_is_bound_to_the_cycles_regime(tmp_path: Path) -> None:
+    """The event and snapshot tables are not enough; the relation is the research fact."""
+    database = Database.create(tmp_path / "anomaly-regime.db")
+    try:
+        first = anomaly_event()
+        second = anomaly_event(symbol="QQQ")
+        snapshot = regime_snapshot()
+        with database.transaction() as session:
+            repository = StorageRepository(session)
+            repository.record_anomaly_event(first.as_row())
+            repository.record_anomaly_event(second.as_row())
+            repository.record_market_regime_snapshot(snapshot.as_row())
+
+        AdaptiveMomentumRunner._bind_anomalies_to_regime(  # noqa: SLF001
+            binding_runner(database),
+            {"SPY": first.event_id, "QQQ": second.event_id},
+            snapshot.identity,
+            observed_at=EVENT_OBSERVED,
+        )
+
+        with database.transaction() as session:
+            repository = StorageRepository(session)
+            first_contexts = repository.list_anomaly_regime_contexts(
+                anomaly_event_id=first.event_id
+            )
+            second_contexts = repository.list_anomaly_regime_contexts(
+                anomaly_event_id=second.event_id
+            )
+    finally:
+        database.close()
+
+    assert [row["market_regime_snapshot_id"] for row in first_contexts] == [
+        snapshot.identity
+    ]
+    assert [row["market_regime_snapshot_id"] for row in second_contexts] == [
+        snapshot.identity
+    ]
+
+
+def test_a_missing_regime_stays_absent_without_filing_an_incident(tmp_path: Path) -> None:
+    """No snapshot is an expected data gap, not permission to invent a neutral context."""
+    database = Database.create(tmp_path / "missing-regime.db")
+    try:
+        observed = anomaly_event()
+        with database.transaction() as session:
+            StorageRepository(session).record_anomaly_event(observed.as_row())
+
+        AdaptiveMomentumRunner._bind_anomalies_to_regime(  # noqa: SLF001
+            binding_runner(database),
+            {"SPY": observed.event_id},
+            None,
+            observed_at=EVENT_OBSERVED,
+        )
+
+        with database.transaction() as session:
+            repository = StorageRepository(session)
+            contexts = repository.list_anomaly_regime_contexts(
+                anomaly_event_id=observed.event_id
+            )
+            incidents = repository.list_incidents(unresolved_only=True)
+    finally:
+        database.close()
+
+    assert contexts == []
+    assert incidents == []
+
+
+def test_a_binding_failure_is_contained_and_recorded(tmp_path: Path) -> None:
+    """Research context may lose a row, but it may neither halt trading nor disappear silently."""
+    database = Database.create(tmp_path / "failed-binding.db")
+    try:
+        snapshot = regime_snapshot()
+        with database.transaction() as session:
+            StorageRepository(session).record_market_regime_snapshot(snapshot.as_row())
+
+        AdaptiveMomentumRunner._bind_anomalies_to_regime(  # noqa: SLF001
+            binding_runner(database),
+            {"SPY": "anomaly-event-that-was-never-stored"},
+            snapshot.identity,
+            observed_at=EVENT_OBSERVED,
+        )
+
+        with database.transaction() as session:
+            incidents = StorageRepository(session).list_incidents(unresolved_only=True)
+    finally:
+        database.close()
+
+    assert [incident.kind for incident in incidents] == ["anomaly-regime-binding"]
+
+
+def test_the_cycle_supplies_both_records_to_the_binding() -> None:
+    """A correct helper with no production caller is the defect this repository keeps repeating."""
+    import ast
+
+    tree = ast.parse(Path("src/quantbot/operations/runners.py").read_text(encoding="utf-8"))
+    call = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "_bind_anomalies_to_regime"
+    )
+
+    assert len(call.args) == 2
+    assert isinstance(call.args[0], ast.Name)
+    assert call.args[0].id == "anomaly_event_ids"
+    assert isinstance(call.args[1], ast.Name)
+    assert call.args[1].id == "regime_snapshot_id"
 
 
 # --- catalyst enrichment reaches production ------------------------------------------------
