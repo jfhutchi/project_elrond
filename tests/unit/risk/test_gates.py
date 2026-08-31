@@ -150,7 +150,7 @@ def test_entry_requires_explicit_risk_approval() -> None:
     assert decision.reasons == ("RISK_NOT_APPROVED",)
 
 
-def test_durable_kill_switch_and_market_gate_compose_in_stable_order() -> None:
+def test_entry_kill_switch_does_not_trap_a_strategy_exit() -> None:
     decision = evaluate_order_gate(
         safe_paper_settings(),
         "PA-123",
@@ -162,7 +162,7 @@ def test_durable_kill_switch_and_market_gate_compose_in_stable_order() -> None:
     )
 
     assert decision.allowed is False
-    assert decision.reasons == ("KILL_SWITCH_ENGAGED", "MARKET_NOT_ELIGIBLE")
+    assert decision.reasons == ("MARKET_NOT_ELIGIBLE",)
 
 
 @pytest.mark.parametrize(
@@ -195,11 +195,65 @@ def test_operational_safety_failure_blocks_automatic_orders(
     decision = evaluate_order_gate(
         safe_paper_settings(**updates),
         reported_account,
-        OrderPurpose.STRATEGY_EXIT,
+        OrderPurpose.ENTRY,
         False,
         True,
         drawdown=drawdown("0"),
         risk_approved=True,
+        vetoes=clean_vetoes(),
+    )
+
+    assert decision.allowed is False
+    assert reason in decision.reasons
+
+
+def test_entry_readiness_failures_do_not_trap_a_risk_reducing_exit() -> None:
+    decision = evaluate_order_gate(
+        safe_paper_settings(
+            KILL_SWITCH=True,
+            BROKER_HEALTHY=False,
+            MARKET_DATA_HEALTHY=False,
+            RISK_ENGINE_HEALTHY=False,
+            RECONCILIATION_SUCCESSFUL=False,
+        ),
+        "PA-123",
+        OrderPurpose.STRATEGY_EXIT,
+        durable_kill_switch_engaged=True,
+        market_eligible=True,
+        drawdown=None,
+        risk_approved=None,
+    )
+
+    assert decision.allowed is True
+    assert decision.reasons == ()
+
+
+@pytest.mark.parametrize(
+    ("updates", "reported_account", "reason"),
+    [
+        (
+            {"BROKER_ENVIRONMENT": BrokerEnvironment.LIVE},
+            "PA-123",
+            "BROKER_ENVIRONMENT_MISMATCH",
+        ),
+        ({"EXPECTED_ACCOUNT_ID": None}, None, "EXPECTED_ACCOUNT_ID_MISSING"),
+        ({}, "WRONG", "ACCOUNT_MISMATCH"),
+        ({"ALPACA_PAPER_API_SECRET": None}, "PA-123", "CREDENTIALS_INCOMPLETE"),
+    ],
+)
+def test_immutable_authority_failures_still_block_exits(
+    updates: dict[str, object],
+    reported_account: str | None,
+    reason: str,
+) -> None:
+    decision = evaluate_order_gate(
+        safe_paper_settings(**updates),
+        reported_account,
+        OrderPurpose.STRATEGY_EXIT,
+        False,
+        True,
+        drawdown=None,
+        risk_approved=None,
     )
 
     assert decision.allowed is False
@@ -242,7 +296,7 @@ def test_live_mode_requires_live_credentials_and_acknowledgement() -> None:
     assert blocked.reasons == ("LIVE_TRADING_NOT_ACKNOWLEDGED",)
 
 
-def test_blocked_forced_liquidation_remains_required_and_is_not_falsely_executed() -> None:
+def test_forced_liquidation_is_not_trapped_by_the_entry_kill_switch() -> None:
     breached = drawdown("0.20")
     plan = build_liquidation_plan(
         breached,
@@ -269,8 +323,8 @@ def test_blocked_forced_liquidation_remains_required_and_is_not_falsely_executed
 
     assert plan.liquidation_required is True
     assert len(plan.instructions) == 1
-    assert gate.allowed is False
-    assert gate.reasons == ("KILL_SWITCH_ENGAGED",)
+    assert gate.allowed is True
+    assert gate.reasons == ()
 
 
 def test_an_entry_with_no_veto_decision_is_refused_rather_than_allowed() -> None:
