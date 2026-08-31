@@ -306,7 +306,7 @@ def test_the_authoritative_call_site_still_invokes_the_check(
         f"{prerequisite.call_site} no longer calls {prerequisite.call_target}.\n\n"
         f"{prerequisite.why}\n\n"
         "If this removal is deliberate, delete the matrix row in the same change and explain "
-        "why. A safety check that quietly loses its caller is the defect this matrix exists to stop."
+        "why. A safety check that quietly loses its caller is the defect this matrix exists to "\n        "stop."
     )
 
 
