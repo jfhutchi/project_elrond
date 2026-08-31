@@ -182,9 +182,8 @@ def upgrade() -> None:
     connection = op.get_bind()
     metadata = v22_tables()
     metadata.create_all(bind=connection, tables=[metadata.tables[name] for name in V22_TABLES])
-    connection.execute(
-        update(_schema_version()).where(_schema_version().c.id == 1).values(version=22)
-    )
+    schema = _schema_version()
+    connection.execute(update(schema).where(schema.c.id == 1).values(version=22))
 
 
 def downgrade() -> None:
@@ -194,6 +193,5 @@ def downgrade() -> None:
         bind=connection,
         tables=[metadata.tables[name] for name in reversed(V22_TABLES)],
     )
-    connection.execute(
-        update(_schema_version()).where(_schema_version().c.id == 1).values(version=21)
-    )
+    schema = _schema_version()
+    connection.execute(update(schema).where(schema.c.id == 1).values(version=21))
