@@ -246,7 +246,7 @@ class ExecutionCoordinator:
             raise ValueError("new order intent must begin in RISK_APPROVED")
 
         initial_account = await self._broker.get_account()
-        initial_positions = await self._broker.get_positions()
+        initial_positions = tuple(await self._broker.get_positions())
         initial_gate = self._gate(
             initial_account,
             initial_positions,
@@ -270,7 +270,7 @@ class ExecutionCoordinator:
             )
 
         fresh_account = await self._broker.get_account()
-        fresh_positions = await self._broker.get_positions()
+        fresh_positions = tuple(await self._broker.get_positions())
         fresh_gate = self._gate(
             fresh_account,
             fresh_positions,
