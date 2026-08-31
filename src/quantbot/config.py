@@ -81,11 +81,31 @@ class SafetyValidation(BaseModel):
     environment_label: str
 
 
+def validate_trading_authority(
+    settings: Settings,
+    reported_account_id: str | None = None,
+) -> SafetyValidation:
+    """Validate immutable authority for every broker mutation.
+
+    Readiness controls such as the kill switch, data health, risk-engine health, and a cached
+    reconciliation state block new risk. They cannot revoke the authority needed to reduce an
+    already-open position. Environment, account identity, live acknowledgement, and credentials
+    remain mandatory for every order purpose.
+    """
+    reasons = _trading_authority_reasons(settings, reported_account_id)
+    return SafetyValidation(
+        allowed=not reasons,
+        reasons=tuple(reasons),
+        broker_label=settings.BROKER_PROVIDER.value,
+        environment_label=settings.BROKER_ENVIRONMENT.value,
+    )
+
+
 def validate_trading_safety(
     settings: Settings,
     reported_account_id: str | None = None,
 ) -> SafetyValidation:
-    """Evaluate all readiness gates; any failed gate prohibits new orders."""
+    """Evaluate entry readiness plus immutable broker-mutation authority."""
     reasons: list[str] = []
 
     if settings.KILL_SWITCH:
@@ -98,7 +118,21 @@ def validate_trading_safety(
         reasons.append("RISK_ENGINE_UNHEALTHY")
     if not settings.RECONCILIATION_SUCCESSFUL:
         reasons.append("RECONCILIATION_REQUIRED")
+    reasons.extend(_trading_authority_reasons(settings, reported_account_id))
 
+    return SafetyValidation(
+        allowed=not reasons,
+        reasons=tuple(reasons),
+        broker_label=settings.BROKER_PROVIDER.value,
+        environment_label=settings.BROKER_ENVIRONMENT.value,
+    )
+
+
+def _trading_authority_reasons(
+    settings: Settings,
+    reported_account_id: str | None,
+) -> list[str]:
+    reasons: list[str] = []
     required_environment = BrokerEnvironment(settings.TRADING_MODE.value)
     if settings.BROKER_ENVIRONMENT is not required_environment:
         reasons.append("BROKER_ENVIRONMENT_MISMATCH")
@@ -115,14 +149,7 @@ def validate_trading_safety(
 
     if not _selected_credentials_complete(settings):
         reasons.append("CREDENTIALS_INCOMPLETE")
-
-    return SafetyValidation(
-        allowed=not reasons,
-        reasons=tuple(reasons),
-        broker_label=settings.BROKER_PROVIDER.value,
-        environment_label=settings.BROKER_ENVIRONMENT.value,
-    )
-
+    return reasons
 
 def _selected_credentials_complete(settings: Settings) -> bool:
     if settings.BROKER_PROVIDER is not BrokerProvider.ALPACA:
