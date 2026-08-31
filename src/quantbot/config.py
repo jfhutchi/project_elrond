@@ -151,6 +151,7 @@ def _trading_authority_reasons(
         reasons.append("CREDENTIALS_INCOMPLETE")
     return reasons
 
+
 def _selected_credentials_complete(settings: Settings) -> bool:
     if settings.BROKER_PROVIDER is not BrokerProvider.ALPACA:
         return False
