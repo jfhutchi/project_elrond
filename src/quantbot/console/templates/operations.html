@@ -38,6 +38,32 @@
     <div class="v">{{ state.health.open_positions }}</div>
   </div>
   <div class="card">
+    <div class="k">Position protection</div>
+    {% if state.health.last_protection_at %}
+      <div class="v">
+        <span class="pill {% if state.health.last_protection_outcome == 'HEALTHY' %}pill--ok{% elif state.health.last_protection_outcome == 'ACTION_REQUIRED' %}pill--warn{% else %}pill--crit{% endif %}">
+          {{ state.health.last_protection_outcome }}
+        </span>
+      </div>
+      <div class="n">
+        {{ state.health.protected_positions }} protected &middot;
+        {{ state.health.unprotected_positions }} unprotected &middot;
+        {{ state.health.exit_required_positions }} exits required
+      </div>
+      <div class="n quiet">
+        {{ state.health.minutes_since_last_protection }} minutes ago &middot;
+        {{ state.health.last_protection_at.strftime("%Y-%m-%d %H:%M") }} UTC
+      </div>
+    {% else %}
+      <div class="v absent">never evaluated</div>
+      {% if state.health.open_positions %}
+        <div class="n">open positions have no measurable protection state</div>
+      {% else %}
+        <div class="n">no protection cycle has been recorded yet</div>
+      {% endif %}
+    {% endif %}
+  </div>
+  <div class="card">
     <div class="k">Reconciliation</div>
     {% if state.health.reconciliation_clean is none %}
       <div class="v absent">never run</div>
