@@ -1250,6 +1250,13 @@ position_protection_actions = Table(
     Column("created_at", String(40), nullable=False),
     Column("updated_at", String(40), nullable=False),
     Column("completed_at", String(40), nullable=True),
+    Column(
+        "flat_confirmation_snapshot_id",
+        String(128),
+        ForeignKey("account_snapshots.snapshot_id"),
+        nullable=True,
+    ),
+    Column("flat_confirmed_at", String(40), nullable=True),
     Column("last_error", Text, nullable=False),
     Column("detail", Text, nullable=False),
     CheckConstraint("side IN ('BUY', 'SELL')", name="side_is_known"),
@@ -1260,6 +1267,14 @@ position_protection_actions = Table(
     CheckConstraint(
         "(status = 'COMPLETED') = (completed_at IS NOT NULL)",
         name="completion_time_matches_status",
+    ),
+    CheckConstraint(
+        "(flat_confirmation_snapshot_id IS NULL) = (flat_confirmed_at IS NULL)",
+        name="flat_confirmation_fields_match",
+    ),
+    CheckConstraint(
+        "(status = 'COMPLETED') = (flat_confirmation_snapshot_id IS NOT NULL)",
+        name="completion_has_flat_confirmation",
     ),
 )
 Index(

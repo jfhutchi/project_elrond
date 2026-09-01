@@ -23,6 +23,7 @@ from quantbot.domain import (
 from quantbot.storage import Database, StorageRepository
 from quantbot.storage.database import encode_utc
 from quantbot.storage.schema import (
+    position_protection_action_evaluations,
     position_protection_actions,
     position_protection_cycles,
     position_protection_evaluations,
@@ -198,9 +199,20 @@ def _seed_protection_action(
                 status=status,
                 created_at=encode_utc(observed_at),
                 updated_at=encode_utc(observed_at),
-                completed_at=None,
+                completed_at=(encode_utc(observed_at) if status == "COMPLETED" else None),
+                flat_confirmation_snapshot_id=(
+                    "protection-console-account" if status == "COMPLETED" else None
+                ),
+                flat_confirmed_at=(encode_utc(observed_at) if status == "COMPLETED" else None),
                 last_error="",
                 detail="{}",
+            )
+        )
+        session.execute(
+            position_protection_action_evaluations.insert().values(
+                action_id="console-protection-action",
+                evaluation_id="console-protection-evaluation",
+                linked_at=encode_utc(observed_at),
             )
         )
 
@@ -331,6 +343,47 @@ def test_a_working_protective_exit_is_visible_and_not_reported_as_unhandled(
     assert "WORKING 1" in page
     assert "no durable exit action exists" not in page
     assert health["protection_action_counts"] == {"WORKING": 1}
+    assert health["latest_protection_action_count"] == 1
+
+
+def test_an_old_completed_action_does_not_mask_an_unhandled_latest_exit(
+    database: Database,
+    client: TestClient,
+) -> None:
+    old = datetime.now(UTC) - timedelta(minutes=10)
+    latest = old + timedelta(minutes=5)
+    _seed_open_position(database, now=latest)
+    _seed_protection_cycle(
+        database,
+        observed_at=old,
+        outcome="ACTION_REQUIRED",
+        reason="PROTECTIVE_EXIT_REQUIRED",
+        unprotected=0,
+        exits_required=1,
+        cycle_id="old-protection-cycle",
+    )
+    _seed_protection_action(
+        database,
+        observed_at=old,
+        status="COMPLETED",
+        cycle_id="old-protection-cycle",
+    )
+    _seed_protection_cycle(
+        database,
+        observed_at=latest,
+        outcome="ACTION_REQUIRED",
+        reason="PROTECTIVE_EXIT_REQUIRED",
+        unprotected=0,
+        exits_required=1,
+        cycle_id="latest-protection-cycle",
+    )
+
+    page = client.get("/").text
+    health = client.get("/api/state").json()["health"]
+
+    assert "no durable exit action exists" in page
+    assert health["protection_action_counts"] == {"COMPLETED": 1}
+    assert health["latest_protection_action_count"] == 0
 
 
 def test_an_uncertain_protective_exit_warns_against_blind_resubmission(

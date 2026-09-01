@@ -46,6 +46,7 @@ from quantbot.risk.protection import (
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
 from quantbot.storage.database import decode_utc, encode_decimal, encode_utc
 from quantbot.storage.schema import (
+    incidents,
     position_protection_action_evaluations,
     position_protection_actions,
     position_protection_cycles,
@@ -54,6 +55,7 @@ from quantbot.storage.schema import (
 
 PROTECTION_POLICY_VERSION = "position-protection-v1"
 POSITION_PROTECTION_INTERVAL = timedelta(minutes=15)
+FILLED_POSITION_CONFIRMATION_TIMEOUT = timedelta(minutes=30)
 
 
 class PositionProtectionBroker(Protocol):
@@ -73,6 +75,8 @@ class ProtectionSubmitter(Protocol):
         risk_approved: None,
         vetoes: None = None,
     ) -> object: ...
+
+    async def reconcile_durable(self, intent: OrderIntent) -> object: ...
 
 
 class ProtectionClockProvider(Protocol):
@@ -154,6 +158,16 @@ def _action_client_order_id(action_id: str) -> str:
 def _action_incident_id(cycle_id: str, action_id: str, kind: str) -> str:
     digest = hashlib.sha256(f"{cycle_id}:{action_id}:{kind}".encode()).hexdigest()
     return f"protection-action-incident-{digest[:24]}"
+
+
+def _broker_snapshot_id(cycle_id: str) -> str:
+    digest = hashlib.sha256(f"{cycle_id}:broker-snapshot".encode()).hexdigest()
+    return f"protection-broker-snapshot-{digest[:24]}"
+
+
+def _flat_confirmation_incident_id(action_id: str) -> str:
+    digest = hashlib.sha256(f"{action_id}:flat-confirmation-stale".encode()).hexdigest()
+    return f"protection-flat-confirmation-{digest[:24]}"
 
 
 def _policy_hash(policy: ProtectionPolicy) -> str:
@@ -247,12 +261,6 @@ class PositionProtectionSupervisor:
                 },
             )
 
-        self._confirm_filled_actions(
-            account_id=account_id,
-            open_symbols={position.symbol for position in broker_positions},
-            moment=moment,
-        )
-
         with self.database.transaction() as session:
             repository = StorageRepository(session)
             local_snapshot = repository.get_latest_account_snapshot(account_id)
@@ -311,6 +319,7 @@ class PositionProtectionSupervisor:
             unprotected_count=unprotected_count,
             exit_required_count=exit_required_count,
         )
+        broker_snapshot_id = _broker_snapshot_id(cycle_id)
         self._persist(
             result=result,
             account_id=account_id,
@@ -320,7 +329,17 @@ class PositionProtectionSupervisor:
                 "local_snapshot_id": (
                     None if local_snapshot is None else local_snapshot.snapshot_id
                 ),
+                "broker_snapshot_id": broker_snapshot_id,
             },
+            broker_snapshot=account_snapshot,
+            broker_positions=broker_positions,
+            broker_snapshot_id=broker_snapshot_id,
+        )
+        self._confirm_filled_actions(
+            account_id=account_id,
+            open_symbols={position.symbol for position in broker_positions},
+            moment=moment,
+            broker_snapshot_id=broker_snapshot_id,
         )
         if reason:
             self._record_incident(
@@ -413,12 +432,24 @@ class PositionProtectionSupervisor:
         account_id: str | None,
         decisions: tuple[tuple[Position, ProtectionDecision, bool], ...],
         detail: dict[str, object],
+        broker_snapshot: BrokerAccountSnapshot | None = None,
+        broker_positions: tuple[Position, ...] = (),
+        broker_snapshot_id: str | None = None,
     ) -> tuple[str, ...]:
         policy_hash = _policy_hash(self.policy)
         action_ids: list[str] = []
         with self.database.transaction() as session:
             repository = StorageRepository(session)
             repository.save_strategy_deployment(self.strategy_identity)
+            if broker_snapshot is not None:
+                if broker_snapshot_id is None:
+                    raise ValueError("broker snapshot identity is required")
+                repository.save_account_snapshot(
+                    broker_snapshot_id,
+                    broker_snapshot.account,
+                    broker_positions,
+                    captured_at=result.observed_at,
+                )
             existing = session.execute(
                 select(position_protection_cycles.c.cycle_id).where(
                     position_protection_cycles.c.cycle_id == result.cycle_id
@@ -530,6 +561,8 @@ class PositionProtectionSupervisor:
                                 created_at=encode_utc(result.observed_at),
                                 updated_at=encode_utc(result.observed_at),
                                 completed_at=None,
+                                flat_confirmation_snapshot_id=None,
+                                flat_confirmed_at=None,
                                 last_error="",
                                 detail=json.dumps(
                                     {
@@ -577,8 +610,10 @@ class PositionProtectionSupervisor:
         account_id: str,
         open_symbols: set[str],
         moment: datetime,
+        broker_snapshot_id: str,
     ) -> None:
         with self.database.transaction() as session:
+            repository = StorageRepository(session)
             filled = (
                 session.execute(
                     select(position_protection_actions).where(
@@ -590,21 +625,52 @@ class PositionProtectionSupervisor:
                 .all()
             )
             for row in filled:
+                action_id = str(row["action_id"])
+                filled_at = decode_utc(str(row["updated_at"]))
+                stale_at = filled_at + FILLED_POSITION_CONFIRMATION_TIMEOUT
+                incident_id = _flat_confirmation_incident_id(action_id)
+                incident = session.execute(
+                    select(incidents.c.incident_id, incidents.c.resolved_at).where(
+                        incidents.c.incident_id == incident_id
+                    )
+                ).one_or_none()
                 if str(row["symbol"]) in open_symbols:
+                    if moment >= stale_at and incident is None:
+                        repository.create_incident(
+                            incident_id,
+                            severity="ERROR",
+                            kind="PROTECTIVE_FILL_POSITION_NOT_FLAT",
+                            message=(
+                                "Filled protective exit is not confirmed flat by broker state"
+                            ),
+                            occurred_at=stale_at,
+                            detail={
+                                "action_id": action_id,
+                                "symbol": str(row["symbol"]),
+                                "filled_observed_at": encode_utc(filled_at),
+                                "confirmation_deadline": encode_utc(stale_at),
+                            },
+                        )
+                    continue
+                if moment <= filled_at:
                     continue
                 session.execute(
                     update(position_protection_actions)
                     .where(
-                        position_protection_actions.c.action_id == str(row["action_id"]),
+                        position_protection_actions.c.action_id == action_id,
                         position_protection_actions.c.status == "FILLED_UNVERIFIED",
                     )
                     .values(
                         status="COMPLETED",
                         updated_at=encode_utc(moment),
                         completed_at=encode_utc(moment),
+                        flat_confirmation_snapshot_id=broker_snapshot_id,
+                        flat_confirmed_at=encode_utc(moment),
                         last_error="",
                     )
                 )
+                if incident is not None and incident.resolved_at is None:
+                    repository.resolve_incident(incident_id, resolved_at=moment)
 
     def _set_action_status(
         self,
@@ -672,7 +738,6 @@ class PositionProtectionSupervisor:
         for row in rows:
             action_id = str(row["action_id"])
             if str(row["status"]) in {
-                "WORKING",
                 "FILLED_UNVERIFIED",
                 "COMPLETED",
                 "FAILED",
@@ -696,18 +761,22 @@ class PositionProtectionSupervisor:
                 )
                 continue
             current_status = self._status_for_intent(intent.state)
-            if current_status in {"WORKING", "FILLED_UNVERIFIED", "COMPLETED", "FAILED"}:
+            if current_status in {"FILLED_UNVERIFIED", "COMPLETED", "FAILED"}:
                 self._set_action_status(action_id, status=current_status, moment=moment)
                 continue
+            reconciling_working_order = current_status == "WORKING"
             try:
-                await self.submitter.submit_durable(
-                    intent.model_copy(update={"state": IntentState.RISK_APPROVED}),
-                    purpose=OrderPurpose.STRATEGY_EXIT,
-                    market_eligible=True,
-                    drawdown=None,
-                    risk_approved=None,
-                    vetoes=None,
-                )
+                if reconciling_working_order:
+                    await self.submitter.reconcile_durable(intent)
+                else:
+                    await self.submitter.submit_durable(
+                        intent.model_copy(update={"state": IntentState.RISK_APPROVED}),
+                        purpose=OrderPurpose.STRATEGY_EXIT,
+                        market_eligible=True,
+                        drawdown=None,
+                        risk_approved=None,
+                        vetoes=None,
+                    )
             except OrderSubmissionBlocked as error:
                 with self.database.transaction() as session:
                     current = StorageRepository(session).get_order_intent(intent.intent_id)
@@ -749,7 +818,11 @@ class PositionProtectionSupervisor:
             except BrokerError as error:
                 with self.database.transaction() as session:
                     current = StorageRepository(session).get_order_intent(intent.intent_id)
-                status = "UNCERTAIN" if current is None else self._status_for_intent(current.state)
+                status = (
+                    "UNCERTAIN"
+                    if reconciling_working_order or current is None
+                    else self._status_for_intent(current.state)
+                )
                 self._set_action_status(
                     action_id,
                     status=status,
@@ -870,6 +943,7 @@ class PositionProtectionDaemonRunner:
 
 
 __all__ = [
+    "FILLED_POSITION_CONFIRMATION_TIMEOUT",
     "POSITION_PROTECTION_INTERVAL",
     "PositionProtectionDaemonResult",
     "PositionProtectionDaemonRunner",

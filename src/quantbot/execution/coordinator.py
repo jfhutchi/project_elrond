@@ -19,6 +19,7 @@ from quantbot.config import Settings
 from quantbot.domain import (
     BrokerOrder,
     IntentState,
+    InvalidOrderTransition,
     OrderIntent,
     OrderSide,
     Position,
@@ -31,7 +32,7 @@ from quantbot.risk import (
     PortfolioVetoDecision,
     evaluate_order_gate,
 )
-from quantbot.storage import Database, StorageRepository
+from quantbot.storage import Database, StateConflictError, StorageRepository
 
 
 class SubmissionPolicy(BrokerModel):
@@ -221,8 +222,13 @@ class ExecutionCoordinator:
             )
 
     def _adopt(self, intent: OrderIntent, order: BrokerOrder) -> OrderIntent:
-        with self._database.transaction() as session:
-            return persist_broker_acknowledgement(StorageRepository(session), intent, order)
+        try:
+            with self._database.transaction() as session:
+                return persist_broker_acknowledgement(StorageRepository(session), intent, order)
+        except (InvalidOrderTransition, StateConflictError) as error:
+            raise BrokerProtocolError(
+                "broker acknowledgement conflicts with durable order state"
+            ) from error
 
     def _record_unknown_incident(self, intent: OrderIntent, retries: int) -> None:
         digest = hashlib.sha256(intent.intent_id.encode("utf-8")).hexdigest()
@@ -283,7 +289,11 @@ class ExecutionCoordinator:
                 )
             self._record_unknown_incident(unknown, 0)
             raise SubmissionUncertainError("submission remains uncertain after restart lookup")
-        adopted = self._adopt(intent, found)
+        try:
+            adopted = self._adopt(intent, found)
+        except BrokerProtocolError:
+            self._transition(intent.intent_id, IntentState.ERROR, intent.state)
+            raise
         return SubmissionResult(
             intent=adopted,
             broker_order=found,
@@ -342,6 +352,61 @@ class ExecutionCoordinator:
             risk_approved=risk_approved,
             vetoes=vetoes,
         )
+
+    async def reconcile_durable(self, intent: OrderIntent) -> SubmissionResult:
+        """Refresh an accepted durable order without creating a new broker mutation."""
+        stored = self._stored_intent(intent)
+        if stored.state not in {
+            IntentState.BROKER_ACCEPTED,
+            IntentState.PARTIALLY_FILLED,
+        }:
+            raise OrderIntentNotResumable(stored)
+        try:
+            found = await self._broker.get_order_by_client_id(
+                stored.client_order_id,
+                expected=stored,
+            )
+        except (BrokerRequestError, BrokerTransportError) as error:
+            raise SubmissionUncertainError(
+                "accepted order state cannot be reconciled because broker lookup failed"
+            ) from error
+        if found is None:
+            raise SubmissionUncertainError(
+                "accepted order state cannot be reconciled because the broker did not find it"
+            )
+        try:
+            _assert_ack_matches_intent(stored, found)
+            target = _ack_terminal_target(found)
+            with self._database.transaction() as session:
+                repository = StorageRepository(session)
+                durable_order = repository.get_broker_order_by_client_order_id(
+                    stored.client_order_id
+                )
+                if durable_order is None:
+                    raise BrokerProtocolError(
+                        f"accepted order intent {stored.intent_id} has no durable broker order"
+                    )
+                if durable_order.broker_order_id != found.broker_order_id:
+                    raise BrokerProtocolError(
+                        "broker lookup changed the durable broker order identity"
+                    )
+                repository.update_broker_order_lifecycle(found)
+                reconciled = stored
+                if target is not None and target is not stored.state:
+                    reconciled = repository.transition_order_intent(
+                        stored.intent_id,
+                        target,
+                        expected_current=stored.state,
+                    )
+        except BrokerProtocolError:
+            self._transition(stored.intent_id, IntentState.ERROR, stored.state)
+            raise
+        except (InvalidOrderTransition, StateConflictError) as error:
+            self._transition(stored.intent_id, IntentState.ERROR, stored.state)
+            raise BrokerProtocolError(
+                "broker lifecycle conflicts with durable order state"
+            ) from error
+        return SubmissionResult(intent=reconciled, broker_order=found)
 
     async def submit(
         self,

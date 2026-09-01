@@ -538,3 +538,85 @@ async def test_a_crash_in_submitting_adopts_the_broker_order_without_resubmittin
     assert broker.submitted == []
     assert result.intent.state is IntentState.BROKER_ACCEPTED
     database.close()
+
+
+@pytest.mark.asyncio
+async def test_a_restart_in_submission_unknown_is_lookup_only_and_adopts_the_order(
+    tmp_path: Path,
+) -> None:
+    database = Database.create(tmp_path / "resume-explicit-unknown.db")
+    _mark_ready(database)
+    intent = _intent(side=OrderSide.SELL)
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(intent)
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.ORDER_CREATED,
+            expected_current=IntentState.RISK_APPROVED,
+        )
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.SUBMITTING,
+            expected_current=IntentState.ORDER_CREATED,
+        )
+        repository.transition_order_intent(
+            intent.intent_id,
+            IntentState.SUBMISSION_UNKNOWN,
+            expected_current=IntentState.SUBMITTING,
+        )
+    broker = RecoveryBroker(database, found=_accepted(intent))
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
+    result = await coordinator.submit_durable(
+        intent,
+        purpose=OrderPurpose.STRATEGY_EXIT,
+        market_eligible=True,
+        drawdown=None,
+        risk_approved=None,
+    )
+
+    assert broker.lookups == [intent.client_order_id]
+    assert broker.submitted == []
+    assert result.intent.state is IntentState.BROKER_ACCEPTED
+    database.close()
+
+
+@pytest.mark.asyncio
+async def test_an_accepted_durable_order_reconciles_a_later_fill_without_resubmission(
+    tmp_path: Path,
+) -> None:
+    database = Database.create(tmp_path / "reconcile-accepted.db")
+    _mark_ready(database)
+    intent = _intent(side=OrderSide.SELL)
+    broker = RecoveryBroker(database, found=None)
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
+    accepted = await coordinator.submit(
+        intent,
+        purpose=OrderPurpose.STRATEGY_EXIT,
+        market_eligible=True,
+        drawdown=None,
+        risk_approved=None,
+    )
+    broker.found = accepted.broker_order.model_copy(
+        update={
+            "filled_quantity": intent.quantity,
+            "filled_average_price": Decimal("499"),
+            "status": "filled",
+        }
+    )
+
+    reconciled = await coordinator.reconcile_durable(accepted.intent)
+
+    assert broker.lookups == [intent.client_order_id]
+    assert broker.submitted == [intent]
+    assert reconciled.intent.state is IntentState.FILLED
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        stored_intent = repository.get_order_intent(intent.intent_id)
+        stored_order = repository.get_broker_order(accepted.broker_order.broker_order_id)
+    assert stored_intent is not None
+    assert stored_intent.state is IntentState.FILLED
+    assert stored_order == broker.found
+    database.close()
