@@ -80,12 +80,12 @@ def _ack_terminal_target(order: BrokerOrder) -> IntentState | None:
         return IntentState.REJECTED
     if order.filled_quantity == order.quantity or status == "filled":
         return IntentState.FILLED
-    if order.filled_quantity > 0 or status in {"partially_filled", "partial_fill"}:
-        return IntentState.PARTIALLY_FILLED
     if status in {"canceled", "cancelled"}:
         return IntentState.CANCELLED
     if status == "expired":
         return IntentState.EXPIRED
+    if order.filled_quantity > 0 or status in {"partially_filled", "partial_fill"}:
+        return IntentState.PARTIALLY_FILLED
     return None
 
 

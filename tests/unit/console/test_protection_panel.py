@@ -386,6 +386,31 @@ def test_an_old_completed_action_does_not_mask_an_unhandled_latest_exit(
     assert health["latest_protection_action_count"] == 0
 
 
+def test_one_linked_action_does_not_mask_a_second_unhandled_latest_exit(
+    database: Database,
+    client: TestClient,
+) -> None:
+    moment = datetime.now(UTC)
+    _seed_open_position(database, now=moment)
+    _seed_protection_cycle(
+        database,
+        observed_at=moment,
+        outcome="ACTION_REQUIRED",
+        reason="PROTECTIVE_EXIT_REQUIRED",
+        unprotected=0,
+        exits_required=2,
+        evaluated_count=2,
+        position_count=2,
+    )
+    _seed_protection_action(database, observed_at=moment, status="WORKING")
+
+    page = client.get("/").text
+    health = client.get("/api/state").json()["health"]
+
+    assert "1 of 2 required protective exit(s) have no durable exit action" in page
+    assert health["latest_protection_action_count"] == 1
+
+
 def test_an_uncertain_protective_exit_warns_against_blind_resubmission(
     database: Database,
     client: TestClient,

@@ -493,10 +493,20 @@ class ConsoleState(FrozenModel):
             items.append(
                 f"{action_counts['PENDING']} protective exit action(s) are durably pending"
             )
-        if self.health.exit_required_positions and self.health.latest_protection_action_count == 0:
+        required_actions = self.health.exit_required_positions or 0
+        missing_actions = max(
+            required_actions - self.health.latest_protection_action_count,
+            0,
+        )
+        if missing_actions == required_actions and missing_actions:
             items.append(
-                f"{self.health.exit_required_positions} protective exit(s) require action but "
+                f"{required_actions} protective exit(s) require action but "
                 "no durable exit action exists"
+            )
+        elif missing_actions:
+            items.append(
+                f"{missing_actions} of {required_actions} required protective exit(s) have no "
+                "durable exit action"
             )
         if self.health.last_protection_outcome == "INCIDENT":
             items.append("the latest position-protection cycle ended in an incident")

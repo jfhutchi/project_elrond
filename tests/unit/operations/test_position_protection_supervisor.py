@@ -689,6 +689,43 @@ async def test_a_working_exit_reconciles_a_later_partial_fill_without_resubmitti
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("terminal_status", "expected_state"),
+    [
+        ("canceled", IntentState.CANCELLED),
+        ("expired", IntentState.EXPIRED),
+    ],
+)
+async def test_a_partially_filled_exit_reconciles_later_terminal_status(
+    database: Database,
+    terminal_status: str,
+    expected_state: IntentState,
+) -> None:
+    broker_positions = (position("XLE", quantity="2", price="75"),)
+    seed_local(database, broker_positions)
+    broker = ActionBroker(database, broker_positions)
+    subject = action_supervisor(database, broker)
+
+    await subject.evaluate(now=NOW)
+    broker.order_status = "partially_filled"
+    broker.filled_quantity = Decimal("1")
+    await subject.evaluate(now=NOW + timedelta(minutes=1))
+    broker.order_status = terminal_status
+    await subject.evaluate(now=NOW + timedelta(minutes=2))
+
+    assert len(broker.submitted) == 1
+    assert len(broker.lookups) == 2
+    with database.transaction() as session:
+        action = session.execute(select(position_protection_actions)).mappings().one()
+        intent = StorageRepository(session).get_order_intent(str(action["intent_id"]))
+        kinds = {item.kind for item in StorageRepository(session).list_incidents()}
+    assert action["status"] == "FAILED"
+    assert intent is not None
+    assert intent.state is expected_state
+    assert "PROTECTIVE_EXIT_TERMINAL" in kinds
+
+
+@pytest.mark.asyncio
 async def test_a_stale_filled_exit_raises_one_incident_until_flatness_is_proven(
     database: Database,
 ) -> None:
