@@ -1331,6 +1331,20 @@ class StorageRepository:
             return None
         return self._broker_order_from_row(row)
 
+    def get_broker_order_by_client_order_id(
+        self, client_order_id: str
+    ) -> BrokerOrder | None:
+        row = (
+            self._session.execute(
+                select(broker_orders).where(
+                    broker_orders.c.client_order_id == client_order_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return None if row is None else self._broker_order_from_row(row)
+
     def list_broker_orders(self) -> list[BrokerOrder]:
         """Return every immutable broker observation in deterministic order."""
         rows = (

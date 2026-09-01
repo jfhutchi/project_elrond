@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 22
+SCHEMA_VERSION = 23
 
 metadata = MetaData(
     naming_convention={
@@ -838,9 +838,7 @@ instrument_symbols = Table(
     Column("symbol", String(32), primary_key=True),
     Column("valid_from", String(10), primary_key=True),
     Column("valid_to", String(10)),
-    ForeignKeyConstraint(
-        ["instrument_id"], ["instruments.instrument_id"], ondelete="CASCADE"
-    ),
+    ForeignKeyConstraint(["instrument_id"], ["instruments.instrument_id"], ondelete="CASCADE"),
 )
 Index(
     "ix_instrument_symbols_lookup",
@@ -977,15 +975,11 @@ literature_searches = Table(
     #: traced back to the bytes that were actually acquired.
     Column("results_json", Text, nullable=False, server_default=text("'[]'")),
     Column("detail", Text, nullable=False, server_default=text("''")),
-    CheckConstraint(
-        "outcome IN ('RESULTS', 'NO_RESULTS', 'OUTAGE')", name="known_search_outcome"
-    ),
+    CheckConstraint("outcome IN ('RESULTS', 'NO_RESULTS', 'OUTAGE')", name="known_search_outcome"),
     CheckConstraint("total_matched >= 0", name="matched_not_negative"),
     # An outage found nothing because it never looked; recording a match count against one
     # would be inventing a number nobody received.
-    CheckConstraint(
-        "outcome != 'OUTAGE' OR total_matched = 0", name="an_outage_matched_nothing"
-    ),
+    CheckConstraint("outcome != 'OUTAGE' OR total_matched = 0", name="an_outage_matched_nothing"),
 )
 Index("ix_literature_searches_connector", literature_searches.c.connector)
 Index("ix_literature_searches_attempted", literature_searches.c.attempted_at)
@@ -1032,9 +1026,7 @@ veto_policy_versions = Table(
     Column("body", Text, nullable=False),
     # The derived diff, for a reader. Authority lives in `body`.
     Column("changes", Text, nullable=False),
-    ForeignKeyConstraint(
-        ["supersedes"], ["veto_policy_versions.identity"], ondelete="RESTRICT"
-    ),
+    ForeignKeyConstraint(["supersedes"], ["veto_policy_versions.identity"], ondelete="RESTRICT"),
     UniqueConstraint("version", name="one_row_per_version_ordinal"),
     # The chain cannot fork. `apply_proposal` refuses a stale proposal, but that check lives in
     # one process; two processes can both read version 3 and both write a successor to it. Only
@@ -1231,3 +1223,93 @@ Index(
     position_protection_evaluations.c.evaluated_at,
 )
 
+position_protection_actions = Table(
+    "position_protection_actions",
+    metadata,
+    Column("action_id", String(128), primary_key=True),
+    Column(
+        "trigger_evaluation_id",
+        String(128),
+        ForeignKey("position_protection_evaluations.evaluation_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("account_id", String(128), nullable=False),
+    Column("symbol", String(32), nullable=False),
+    Column("side", String(8), nullable=False),
+    Column("quantity", Text, nullable=False),
+    Column(
+        "intent_id",
+        String(128),
+        ForeignKey("order_intents.intent_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("client_order_id", String(128), nullable=False, unique=True),
+    Column("status", String(32), nullable=False),
+    Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=False),
+    Column("completed_at", String(40), nullable=True),
+    Column(
+        "flat_confirmation_snapshot_id",
+        String(128),
+        ForeignKey("account_snapshots.snapshot_id"),
+        nullable=True,
+    ),
+    Column("flat_confirmed_at", String(40), nullable=True),
+    Column("last_error", Text, nullable=False),
+    Column("detail", Text, nullable=False),
+    CheckConstraint("side IN ('BUY', 'SELL')", name="side_is_known"),
+    CheckConstraint(
+        "status IN ('PENDING', 'WORKING', 'UNCERTAIN', 'FILLED_UNVERIFIED', 'COMPLETED', 'FAILED')",
+        name="status_is_known",
+    ),
+    CheckConstraint(
+        "(status = 'COMPLETED') = (completed_at IS NOT NULL)",
+        name="completion_time_matches_status",
+    ),
+    CheckConstraint(
+        "(flat_confirmation_snapshot_id IS NULL) = (flat_confirmed_at IS NULL)",
+        name="flat_confirmation_fields_match",
+    ),
+    CheckConstraint(
+        "(status = 'COMPLETED') = (flat_confirmation_snapshot_id IS NOT NULL)",
+        name="completion_has_flat_confirmation",
+    ),
+)
+Index(
+    "uq_position_protection_actions_active_symbol",
+    position_protection_actions.c.account_id,
+    position_protection_actions.c.symbol,
+    unique=True,
+    sqlite_where=text(
+        "status IN ('PENDING', 'WORKING', 'UNCERTAIN', 'FILLED_UNVERIFIED', 'FAILED')"
+    ),
+)
+Index(
+    "ix_position_protection_actions_status_time",
+    position_protection_actions.c.status,
+    position_protection_actions.c.updated_at,
+)
+
+position_protection_action_evaluations = Table(
+    "position_protection_action_evaluations",
+    metadata,
+    Column(
+        "action_id",
+        String(128),
+        ForeignKey("position_protection_actions.action_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "evaluation_id",
+        String(128),
+        ForeignKey("position_protection_evaluations.evaluation_id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column("linked_at", String(40), nullable=False),
+)
+Index(
+    "ix_position_protection_action_evaluations_evaluation",
+    position_protection_action_evaluations.c.evaluation_id,
+)

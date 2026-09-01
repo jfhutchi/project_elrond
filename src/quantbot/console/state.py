@@ -36,7 +36,10 @@ from quantbot.research.promotion import Stage
 from quantbot.storage import StorageRepository
 from quantbot.storage.database import decode_utc
 from quantbot.storage.schema import (
+    position_protection_action_evaluations,
+    position_protection_actions,
     position_protection_cycles,
+    position_protection_evaluations,
     session_observations,
 )
 
@@ -112,6 +115,11 @@ class HealthPanel(FrozenModel):
     protected_positions: int | None
     unprotected_positions: int | None
     exit_required_positions: int | None
+    #: Durable exit actions by state for the configured account. Empty means no action exists;
+    #: it never means that an EXIT_REQUIRED evaluation was handled elsewhere.
+    protection_action_counts: Mapping[str, int]
+    #: Number of durable actions linked to evaluations in the latest protection cycle.
+    latest_protection_action_count: int
     #: Absent rather than zero when the account has never been snapshotted.
     account_equity: str | None
     open_positions: int
@@ -408,9 +416,7 @@ class ConsoleState(FrozenModel):
                     + " unset), so no experiment can run and no research panel below can fill"
                 )
             else:
-                items.append(
-                    f"research is configured but refused: {self.research_runtime.refusal}"
-                )
+                items.append(f"research is configured but refused: {self.research_runtime.refusal}")
         # Before reconciliation and capacity, because a system that is not running makes every
         # other measurement on this page a statement about the past. The threshold is a
         # `PROJECT_DEFAULT`: a paper strategy on a daily cadence should run every trading day, so
@@ -452,9 +458,8 @@ class ConsoleState(FrozenModel):
                 f"the position-protection loop last ran {protection_gap} minutes ago while "
                 f"{self.health.open_positions} position(s) remain open"
             )
-        covered_positions = (
-            (self.health.protected_positions or 0)
-            + (self.health.unprotected_positions or 0)
+        covered_positions = (self.health.protected_positions or 0) + (
+            self.health.unprotected_positions or 0
         )
         if (
             self.health.last_protection_at is not None
@@ -468,9 +473,40 @@ class ConsoleState(FrozenModel):
             items.append(
                 f"{self.health.unprotected_positions} position(s) are explicitly unprotected"
             )
-        if self.health.exit_required_positions:
+        action_counts = self.health.protection_action_counts
+        if action_counts.get("UNCERTAIN", 0):
             items.append(
-                f"{self.health.exit_required_positions} protective exit(s) require action"
+                f"{action_counts['UNCERTAIN']} protective exit action(s) have an uncertain "
+                "broker outcome and will not be resubmitted blindly"
+            )
+        if action_counts.get("FAILED", 0):
+            items.append(
+                f"{action_counts['FAILED']} protective exit action(s) failed and require "
+                "operator review"
+            )
+        if action_counts.get("FILLED_UNVERIFIED", 0):
+            items.append(
+                f"{action_counts['FILLED_UNVERIFIED']} filled protective exit(s) are waiting "
+                "for a broker snapshot confirming the position is flat"
+            )
+        if action_counts.get("PENDING", 0):
+            items.append(
+                f"{action_counts['PENDING']} protective exit action(s) are durably pending"
+            )
+        required_actions = self.health.exit_required_positions or 0
+        missing_actions = max(
+            required_actions - self.health.latest_protection_action_count,
+            0,
+        )
+        if missing_actions == required_actions and missing_actions:
+            items.append(
+                f"{required_actions} protective exit(s) require action but "
+                "no durable exit action exists"
+            )
+        elif missing_actions:
+            items.append(
+                f"{missing_actions} of {required_actions} required protective exit(s) have no "
+                "durable exit action"
             )
         if self.health.last_protection_outcome == "INCIDENT":
             items.append("the latest position-protection cycle ended in an incident")
@@ -480,8 +516,7 @@ class ConsoleState(FrozenModel):
             for placement in self.runtime.placements:
                 if placement.job == "control-plane" and not placement.can_run:
                     items.append(
-                        f"this host cannot meet the control-plane requirement: "
-                        f"{placement.unmet}"
+                        f"this host cannot meet the control-plane requirement: {placement.unmet}"
                     )
         if self.health.reconciliation_clean is False:
             items.append(
@@ -522,8 +557,7 @@ class ConsoleState(FrozenModel):
             )
         if self.incidents:
             items.append(
-                f"{len(self.incidents)} unresolved incident(s), including "
-                f"{self.incidents[0].kind}"
+                f"{len(self.incidents)} unresolved incident(s), including {self.incidents[0].kind}"
             )
         if not self.market_data.supports_volume_triggers:
             items.append(
@@ -568,6 +602,7 @@ def _health(
         else session.execute(
             select(
                 position_protection_cycles.c.observed_at,
+                position_protection_cycles.c.cycle_id,
                 position_protection_cycles.c.outcome,
                 position_protection_cycles.c.evaluated_count,
                 position_protection_cycles.c.unprotected_count,
@@ -579,25 +614,56 @@ def _health(
         ).one_or_none()
     )
     protected_at = None if protection is None else decode_utc(protection.observed_at)
+    action_counts = (
+        {}
+        if expected is None
+        else {
+            str(row.status): int(row.n)
+            for row in session.execute(
+                select(
+                    position_protection_actions.c.status,
+                    func.count().label("n"),
+                )
+                .where(position_protection_actions.c.account_id == expected)
+                .group_by(position_protection_actions.c.status)
+            )
+        }
+    )
+    latest_action_count = (
+        0
+        if protection is None
+        else int(
+            session.scalar(
+                select(func.count(func.distinct(position_protection_actions.c.action_id)))
+                .select_from(position_protection_actions)
+                .join(
+                    position_protection_action_evaluations,
+                    position_protection_action_evaluations.c.action_id
+                    == position_protection_actions.c.action_id,
+                )
+                .join(
+                    position_protection_evaluations,
+                    position_protection_evaluations.c.evaluation_id
+                    == position_protection_action_evaluations.c.evaluation_id,
+                )
+                .where(position_protection_evaluations.c.cycle_id == str(protection.cycle_id))
+            )
+            or 0
+        )
+    )
     return HealthPanel(
         kill_switch_engaged=True if kill is None else bool(kill.engaged),
         kill_switch_reason=(
             "no kill-switch state is recorded in this store" if kill is None else kill.reason
         ),
         kill_switch_updated_at=None if kill is None else kill.updated_at,
-        reconciliation_clean=(
-            None if reconciliation is None else not reconciliation.diffs
-        ),
+        reconciliation_clean=(None if reconciliation is None else not reconciliation.diffs),
         reconciliation_diffs=0 if reconciliation is None else len(reconciliation.diffs),
         last_run_at=runs[-1].started_at if runs else None,
-        days_since_last_run=(
-            None if not runs else max((now - runs[-1].started_at).days, 0)
-        ),
+        days_since_last_run=(None if not runs else max((now - runs[-1].started_at).days, 0)),
         last_observation_at=observed_at,
         minutes_since_last_observation=(
-            None
-            if observed_at is None
-            else max(int((now - observed_at).total_seconds() // 60), 0)
+            None if observed_at is None else max(int((now - observed_at).total_seconds() // 60), 0)
         ),
         last_observation_outcome=(None if observation is None else str(observation.outcome)),
         last_protection_at=protected_at,
@@ -606,20 +672,18 @@ def _health(
             if protected_at is None
             else max(int((now - protected_at).total_seconds() // 60), 0)
         ),
-        last_protection_outcome=(
-            None if protection is None else str(protection.outcome)
-        ),
+        last_protection_outcome=(None if protection is None else str(protection.outcome)),
         protected_positions=(
             None
             if protection is None
             else int(protection.evaluated_count) - int(protection.unprotected_count)
         ),
-        unprotected_positions=(
-            None if protection is None else int(protection.unprotected_count)
-        ),
+        unprotected_positions=(None if protection is None else int(protection.unprotected_count)),
         exit_required_positions=(
             None if protection is None else int(protection.exit_required_count)
         ),
+        protection_action_counts=action_counts,
+        latest_protection_action_count=latest_action_count,
         account_equity=None if account is None else str(account.account.equity),
         open_positions=0 if account is None else len(account.positions),
         trading_mode=str(settings_source["TRADING_MODE"].effective_value or "UNKNOWN"),
@@ -815,9 +879,7 @@ def _budgets(session: Session) -> tuple[BudgetRow, ...]:
         )
     # Non-renewable first: a permanent cost deserves the reader's attention before a recurring
     # one, whatever the alphabet says.
-    return tuple(
-        sorted(reported, key=lambda row: (row.renewable, row.budget_key, row.resource))
-    )
+    return tuple(sorted(reported, key=lambda row: (row.renewable, row.budget_key, row.resource)))
 
 
 def build_reports_panel(directory: Path, *, now: datetime) -> ReportsPanel:
@@ -850,9 +912,7 @@ def build_reports_panel(directory: Path, *, now: datetime) -> ReportsPanel:
     return ReportsPanel(
         directory=str(directory),
         reports=tuple(rows),
-        days_since_latest=(
-            None if not rows else max((now - rows[0].written_at).days, 0)
-        ),
+        days_since_latest=(None if not rows else max((now - rows[0].written_at).days, 0)),
     )
 
 
@@ -874,9 +934,7 @@ def build_runtime_panel(host: object, *, measured_at: datetime) -> RuntimePanel:
     placements = []
     for job in declared:
         reason = unmet_requirement(job, host, now=measured_at)  # type: ignore[arg-type]
-        placements.append(
-            JobPlacement(job=job.name, can_run=reason is None, unmet=reason)
-        )
+        placements.append(JobPlacement(job=job.name, can_run=reason is None, unmet=reason))
     endpoint = getattr(host, "model_endpoint", None)
     return RuntimePanel(
         host=str(getattr(host, "name", "unknown")),
