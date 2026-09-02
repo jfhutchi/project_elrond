@@ -614,3 +614,154 @@ async def test_replaying_a_cycle_does_not_record_the_same_anomaly_twice(
 
     assert first > 0
     assert second == first, "re-running the same session must not mint a second set of events"
+
+
+async def test_the_live_collector_records_where_it_got_to_and_when_it_last_worked(
+    tmp_path: Path,
+) -> None:
+    """#198 wired to its first real caller, on the path that actually collects.
+
+    Infrastructure nothing calls is the failure mode this repository has written down twice:
+    a control plane that only ever ran in its own unit tests would look finished and answer no
+    operational question. So the assertions here are against `MarketDataSync` itself, and they
+    are the three facts an operator could not previously get: which run happened, how much of
+    what it saw was stored, and when live collection last succeeded.
+    """
+    from quantbot.ingestion import (
+        IngestionControlPlane,
+        RunMode,
+        RunStatus,
+        SourceHealth,
+        ingestion_status,
+    )
+    from quantbot.operations.runners import UNIVERSE_STREAM
+
+    config = load_strategy_config(_write_config(tmp_path))
+    database = Database.create(tmp_path / "quantbot.db")
+    settings = _ready_settings()
+    data_transport = FakeMarketDataTransport()
+    sync = MarketDataSync(
+        database=database,
+        client=AlpacaMarketDataClient(
+            api_key=settings.ALPACA_PAPER_API_KEY,  # type: ignore[arg-type]
+            api_secret=settings.ALPACA_PAPER_API_SECRET,  # type: ignore[arg-type]
+            transport=data_transport,
+        ),
+        sessions=CachedSessionCalendar(
+            AlpacaMarketCalendar(
+                api_key=settings.ALPACA_PAPER_API_KEY,  # type: ignore[arg-type]
+                api_secret=settings.ALPACA_PAPER_API_SECRET,  # type: ignore[arg-type]
+                transport=data_transport,
+            ),
+            clock=lambda: NOW,
+        ),
+        config=config,
+        clock=lambda: NOW,
+    )
+
+    result = await sync.sync()
+    assert result.healthy
+
+    with database.transaction() as session:
+        plane = IngestionControlPlane(session)
+        run = plane.latest_run(sync.source_id)
+        assert run is not None
+        assert run.status is RunStatus.SUCCEEDED
+        assert run.mode is RunMode.LIVE
+        assert run.counts.seen > 0
+        assert run.counts.inserted == result.bars_stored
+        assert run.counts.unaccounted == 0, (
+            "every bar the fetch saw is accounted for as inserted, duplicate or rejected"
+        )
+
+        cursor = plane.cursor(sync.source_id, UNIVERSE_STREAM)
+        assert cursor is not None
+        assert cursor.last_success_at == NOW
+        assert cursor.version == 1
+
+        status = plane.status(
+            sync.source_id, stream_key=UNIVERSE_STREAM, expected_success_after=NOW
+        )
+        assert status.health is SourceHealth.HEALTHY
+
+    # A second sync at the same frozen instant is a second attempt, not a duplicate id, and it
+    # stores nothing new. That collision is what the first caller found.
+    await sync.sync()
+    with database.transaction() as session:
+        plane = IngestionControlPlane(session)
+        runs = plane.runs_for(sync.source_id)
+        assert len(runs) == 2
+        assert len({run.ingestion_run_id for run in runs}) == 2
+        assert runs[0].counts.inserted == 0
+        assert runs[0].counts.duplicate == runs[0].counts.seen
+
+        cursor = plane.cursor(sync.source_id, UNIVERSE_STREAM)
+        assert cursor is not None
+        assert cursor.version == 2, "the checkpoint moved once per attempt, without conflict"
+
+        report = ingestion_status(plane, now=NOW)
+        assert report["unhealthy_streams"] == 0
+        assert report["sources"][0]["streams"][0]["last_success_at"] == NOW.isoformat()  # type: ignore[index]
+
+    database.close()
+
+
+async def test_a_collection_that_fails_leaves_a_durable_failure_rather_than_silence(
+    tmp_path: Path,
+) -> None:
+    """The gap between "collection never ran" and "collection ran and broke" (#198).
+
+    Before this, a failing sync raised into the cycle and left nothing behind: the next person
+    to ask why data stopped had a stack trace in a log at best. The exception still propagates
+    -- the cycle fails exactly as it did -- and the attempt now survives the process.
+    """
+    from quantbot.ingestion import IngestionControlPlane, RunStatus, SourceHealth
+
+    config = load_strategy_config(_write_config(tmp_path))
+    database = Database.create(tmp_path / "quantbot.db")
+    settings = _ready_settings()
+    data_transport = FakeMarketDataTransport()
+    sessions = CachedSessionCalendar(
+        AlpacaMarketCalendar(
+            api_key=settings.ALPACA_PAPER_API_KEY,  # type: ignore[arg-type]
+            api_secret=settings.ALPACA_PAPER_API_SECRET,  # type: ignore[arg-type]
+            transport=data_transport,
+        ),
+        clock=lambda: NOW,
+    )
+    sync = MarketDataSync(
+        database=database,
+        client=AlpacaMarketDataClient(
+            api_key=settings.ALPACA_PAPER_API_KEY,  # type: ignore[arg-type]
+            api_secret=settings.ALPACA_PAPER_API_SECRET,  # type: ignore[arg-type]
+            transport=data_transport,
+        ),
+        sessions=sessions,
+        config=config,
+        # More history demanded than the calendar can supply, so the fetch never happens.
+        veto_policy=PortfolioVetoPolicy(correlation_lookback_sessions=SESSION_COUNT + 10),
+        clock=lambda: NOW,
+    )
+
+    with pytest.raises(StrategyDataError):
+        await sync.sync()
+
+    with database.transaction() as session:
+        plane = IngestionControlPlane(session)
+        run = plane.latest_run(sync.source_id)
+        assert run is not None
+        assert run.status is RunStatus.FAILED
+        assert run.error_code == "StrategyDataError"
+
+        assert plane.cursor(sync.source_id, "universe") is None, (
+            "a failure must not check point past data it never fetched"
+        )
+        status = plane.status(
+            sync.source_id, stream_key="universe", expected_success_after=None
+        )
+        assert status.health is SourceHealth.FAILED
+        assert [event.event_kind.value for event in plane.open_incidents(sync.source_id)] == [
+            "PROVIDER_FAILURE"
+        ]
+
+    database.close()
