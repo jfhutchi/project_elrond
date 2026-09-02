@@ -45,6 +45,7 @@ from pathlib import Path
 from types import ModuleType
 from typing import Protocol
 
+from quantbot.research.artifact_testing import ArtifactOutcome, ArtifactOutcomeVerdict
 from quantbot.research.builder import ExperimentOutcome, ExperimentPlan, OutcomeVerdict
 from quantbot.research.manifest import (
     CodeProvenance,
@@ -156,6 +157,21 @@ class Measured:
     probes_failed: tuple[str, ...] = ()
     diagnostics: Mapping[str, str] = field(default_factory=dict)
     detail: str = ""
+    #: Numeric results for preregistered artifact tests. Verdicts are derived by the runner.
+    artifact_measurements: tuple[ArtifactMeasured, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
+class ArtifactMeasured:
+    """Numbers produced for one preregistered component or interaction contrast."""
+
+    test_id: str
+    effect: Decimal | None
+    test_statistic: Decimal | None = None
+    confidence_low: Decimal | None = None
+    confidence_high: Decimal | None = None
+    probes_run: tuple[str, ...] = ()
+    probes_failed: tuple[str, ...] = ()
 
 
 class Measurement(Protocol):
@@ -268,6 +284,12 @@ class ExperimentRunner:
                 f"{registration.content_hash} froze {registered_graph_hash}; graph provenance "
                 "cannot be supplied or changed independently of the registered claim"
             )
+        for artifact_test in plan.artifact_tests:
+            persisted = self._registry.get_artifact_test(artifact_test.test_id)
+            if persisted is None or persisted.content_hash != artifact_test.content_hash:
+                raise ExperimentRunError(
+                    f"artifact test {artifact_test.test_id} is not the exact preregistered design"
+                )
 
         access = self._spend(plan, now=now)
 
@@ -286,6 +308,7 @@ class ExperimentRunner:
             outcome = ExperimentOutcome(
                 plan=plan,
                 verdict=OutcomeVerdict.FAILED,
+                artifact_outcomes=self._grade_artifacts(plan, Measured(effect=None)),
                 detail=f"{type(error).__name__}: {error}",
                 completed_at=now,
             )
@@ -358,6 +381,7 @@ class ExperimentRunner:
                 probes_run=tuple(measured.probes_run),
                 probes_failed=tuple(measured.probes_failed),
                 diagnostics=dict(measured.diagnostics),
+                artifact_outcomes=self._grade_artifacts(plan, measured),
                 detail=(
                     "probes required by the plan did not run, so the number cannot be read as "
                     f"evidence either way: {', '.join(missing)}"
@@ -401,9 +425,91 @@ class ExperimentRunner:
             probes_run=tuple(measured.probes_run),
             probes_failed=tuple(measured.probes_failed),
             diagnostics=diagnostics,
+            artifact_outcomes=self._grade_artifacts(plan, measured),
             detail=detail,
             completed_at=now,
         )
+
+    @staticmethod
+    def _grade_artifacts(
+        plan: ExperimentPlan, measured: Measured
+    ) -> tuple[ArtifactOutcome, ...]:
+        """Grade only preregistered numeric contrasts; missing results stay unassessed."""
+        supplied: dict[str, ArtifactMeasured] = {}
+        duplicates: set[str] = set()
+        for reported in measured.artifact_measurements:
+            if reported.test_id in supplied:
+                duplicates.add(reported.test_id)
+                continue
+            supplied[reported.test_id] = reported
+
+        outcomes: list[ArtifactOutcome] = []
+        for test in plan.artifact_tests:
+            result = supplied.get(test.test_id)
+            if test.test_id in duplicates:
+                verdict = ArtifactOutcomeVerdict.UNASSESSED
+                detail = "the artifact contrast reported duplicate, ambiguous results"
+            elif result is None:
+                verdict = ArtifactOutcomeVerdict.UNASSESSED
+                detail = "the preregistered artifact contrast reported no result"
+            elif result.test_statistic is None:
+                verdict = ArtifactOutcomeVerdict.UNASSESSED
+                detail = "the artifact contrast reported no test statistic"
+            else:
+                missing = [probe for probe in plan.probes if probe not in result.probes_run]
+                if missing:
+                    verdict = ArtifactOutcomeVerdict.UNASSESSED
+                    detail = "artifact probes did not run: " + ", ".join(missing)
+                elif test.power.override is not None:
+                    verdict = ArtifactOutcomeVerdict.UNDERPOWERED
+                    detail = (
+                        "the operator accepted an underpowered artifact test; its measured "
+                        "number cannot become confirmatory evidence"
+                    )
+                elif result.probes_failed:
+                    verdict = ArtifactOutcomeVerdict.REFUTED
+                    detail = "artifact probes objected: " + ", ".join(result.probes_failed)
+                elif abs(result.test_statistic) >= test.power.luck_threshold_z:
+                    verdict = ArtifactOutcomeVerdict.SURVIVED
+                    detail = (
+                        f"t={result.test_statistic} cleared the artifact test's frozen "
+                        f"{test.power.luck_threshold_z} luck bar"
+                    )
+                else:
+                    verdict = ArtifactOutcomeVerdict.REFUTED
+                    detail = (
+                        f"t={result.test_statistic} did not clear the artifact test's frozen "
+                        f"{test.power.luck_threshold_z} luck bar"
+                    )
+            outcomes.append(
+                ArtifactOutcome(
+                    test_id=test.test_id,
+                    test_registration_hash=test.content_hash,
+                    artifact_kind=test.draft.artifact_kind,
+                    artifact_content_id=test.draft.artifact_content_id,
+                    verdict=verdict,
+                    effect="" if result is None or result.effect is None else str(result.effect),
+                    confidence_low=(
+                        ""
+                        if result is None or result.confidence_low is None
+                        else str(result.confidence_low)
+                    ),
+                    confidence_high=(
+                        ""
+                        if result is None or result.confidence_high is None
+                        else str(result.confidence_high)
+                    ),
+                    test_statistic=(
+                        ""
+                        if result is None or result.test_statistic is None
+                        else str(result.test_statistic)
+                    ),
+                    probes_run=() if result is None else result.probes_run,
+                    probes_failed=() if result is None else result.probes_failed,
+                    detail=detail,
+                )
+            )
+        return tuple(outcomes)
 
     def _record(
         self,
@@ -494,6 +600,7 @@ class ExperimentRunner:
                 "version": plan.hypothesis_version,
                 "registration": plan.registration_hash,
                 "completed_at": outcome.completed_at.isoformat(),
+                "artifact_tests": [test.content_hash for test in plan.artifact_tests],
             }
         )
         return ExperimentManifest(
@@ -516,6 +623,22 @@ class ExperimentRunner:
                 # collide with a result key and quietly overwrite a verdict.
                 **{f"diagnostic:{key}": {"value": value}
                    for key, value in sorted(outcome.diagnostics.items())},
+                **{
+                    f"artifact:{artifact.test_id}": {
+                        "test_registration_hash": artifact.test_registration_hash,
+                        "artifact_kind": artifact.artifact_kind.value,
+                        "artifact_content_id": artifact.artifact_content_id,
+                        "verdict": artifact.verdict.value,
+                        "effect": artifact.effect,
+                        "confidence_low": artifact.confidence_low,
+                        "confidence_high": artifact.confidence_high,
+                        "test_statistic": artifact.test_statistic,
+                        "probes_run": ", ".join(artifact.probes_run),
+                        "probes_failed": ", ".join(artifact.probes_failed),
+                        "detail": artifact.detail,
+                    }
+                    for artifact in outcome.artifact_outcomes
+                },
                 "primary": {
                     "verdict": outcome.verdict.value,
                     "effect": "" if outcome.effect is None else str(outcome.effect),
@@ -664,6 +787,7 @@ def _plan_window(datasets: Sequence[DatasetSnapshot]) -> ExperimentPeriod:
 
 
 __all__ = [
+    "ArtifactMeasured",
     "ExperimentDesign",
     "ExperimentRunError",
     "ExperimentRunner",

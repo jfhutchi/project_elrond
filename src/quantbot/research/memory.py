@@ -42,7 +42,14 @@ from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_vali
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from quantbot.research.manifest import content_id
+from quantbot.research.artifact_testing import ArtifactOutcome, ArtifactOutcomeVerdict
+from quantbot.research.hypothesis_graph import GraphArtifactKind
+from quantbot.research.manifest import (
+    CodeProvenance,
+    DatasetSnapshot,
+    ExperimentManifest,
+    content_id,
+)
 from quantbot.research.registry import (
     DUPLICATE_OVERLAP,
     EXHAUSTED_TRIALS,
@@ -51,9 +58,15 @@ from quantbot.research.registry import (
     WindowConsumption,
 )
 from quantbot.storage.database import decode_utc, encode_utc
-from quantbot.storage.schema import research_records, research_relationships
+from quantbot.storage.schema import (
+    artifact_evidence,
+    hypothesis_data_windows,
+    research_records,
+    research_relationships,
+)
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+Digest = Annotated[str, StringConstraints(pattern=r"^[0-9a-f]{64}$")]
 
 
 class RecordKind(StrEnum):
@@ -147,6 +160,83 @@ class ResearchRecord(FrozenModel):
         return self
 
 
+class ArtifactEvidenceStatus(StrEnum):
+    """What an experiment actually established about one graph artifact."""
+
+    DIRECTLY_MEASURED = "DIRECTLY_MEASURED"
+    CONTEXTUAL_ASSOCIATION = "CONTEXTUAL_ASSOCIATION"
+    UNASSESSED = "UNASSESSED"
+
+
+class ArtifactEvidence(FrozenModel):
+    """Immutable manifest-backed evidence about one exact component or relationship."""
+
+    schema_version: int = Field(default=1, ge=1, le=1)
+    source_record_id: Text
+    test_id: Digest | None = None
+    artifact_kind: GraphArtifactKind
+    artifact_content_id: Digest
+    epistemic_status: ArtifactEvidenceStatus
+    verdict: Verdict | None = None
+    hypothesis_id: Text
+    hypothesis_version: int = Field(ge=1)
+    registration_hash: Digest
+    graph_hash: Digest
+    experiment_id: Text
+    manifest_hash: Digest
+    datasets: tuple[DatasetSnapshot, ...] = Field(min_length=1)
+    estimand: Text
+    benchmark: Text
+    universe: tuple[Text, ...] = Field(min_length=1)
+    regime: Text
+    code: CodeProvenance
+    configuration_hash: Text
+    cumulative_trials: int = Field(ge=1)
+    effect: str = ""
+    confidence_low: str = ""
+    confidence_high: str = ""
+    test_statistic: str = ""
+    recorded_at: datetime
+
+    @model_validator(mode="after")
+    def validate_epistemic_shape(self) -> Self:
+        direct = self.epistemic_status is ArtifactEvidenceStatus.DIRECTLY_MEASURED
+        if direct != (self.verdict is not None):
+            raise ValueError("only directly measured artifact evidence may carry a verdict")
+        contextual = self.epistemic_status is ArtifactEvidenceStatus.CONTEXTUAL_ASSOCIATION
+        if contextual == (self.test_id is not None):
+            raise ValueError(
+                "measured or unassessed tests name their preregistration; contextual "
+                "appearances do not"
+            )
+        if self.verdict not in {
+            None,
+            Verdict.SURVIVED,
+            Verdict.REFUTED,
+            Verdict.UNDERPOWERED,
+        }:
+            raise ValueError("artifact evidence supports only measured research verdicts")
+        return self
+
+    @property
+    def evidence_id(self) -> str:
+        return content_id(self)
+
+
+class ArtifactEvidenceSummary(FrozenModel):
+    """Lossless retrieval buckets; conflicting records are never averaged away."""
+
+    supporting: tuple[ArtifactEvidence, ...] = ()
+    refuting: tuple[ArtifactEvidence, ...] = ()
+    underpowered: tuple[ArtifactEvidence, ...] = ()
+    contextual: tuple[ArtifactEvidence, ...] = ()
+    unassessed: tuple[ArtifactEvidence, ...] = ()
+
+    @property
+    def contradictory(self) -> bool:
+        return bool(self.supporting and self.refuting)
+
+
 class ResearchMemory:
     """Read and write durable research knowledge inside one caller-owned transaction."""
 
@@ -213,6 +303,284 @@ class ResearchMemory:
         if row is None:
             return None
         return ResearchRecord.model_validate_json(str(row["document_json"]))
+
+    def record_run_artifacts(
+        self,
+        result: object,
+        source_record: ResearchRecord,
+    ) -> list[ArtifactEvidence]:
+        """Project one runner result into artifact memory without inferring component verdicts.
+
+        The ordinary claim-level record is stored first.  Every directly measured row is then
+        reconstructed from the runner outcome and checked against the manifest and its frozen
+        artifact-test registration.  All other graph members become contextual appearances,
+        explicitly carrying no verdict from the parent hypothesis.
+        """
+        from quantbot.research.runner import RunResult
+
+        if not isinstance(result, RunResult):
+            raise MemoryError_("artifact evidence must come from an ExperimentRunner result")
+        manifest = result.manifest
+        if manifest.mode != "CONFIRMATORY":
+            raise MemoryError_("exploratory output cannot become confirmatory artifact evidence")
+        encoded = manifest.canonical_json() + "\n"
+        if not result.manifest_path.is_file() or result.manifest_path.read_text(
+            encoding="utf-8"
+        ) != encoded:
+            raise MemoryError_("artifact evidence requires the exact persisted manifest")
+        if source_record.evidence_hash != manifest.manifest_hash:
+            raise MemoryError_("source research record does not cite this manifest")
+        if (source_record.hypothesis_id, source_record.hypothesis_version) != (
+            manifest.hypothesis_id,
+            manifest.hypothesis_version,
+        ):
+            raise MemoryError_("source research record does not name this hypothesis version")
+        if manifest.hypothesis_id is None or manifest.hypothesis_version is None:
+            raise MemoryError_("artifact evidence requires a registered hypothesis")
+        registration = self._registry.get(manifest.hypothesis_id, manifest.hypothesis_version)
+        if registration is None or registration.content_hash != manifest.registration_hash:
+            raise MemoryError_("manifest does not match the persisted hypothesis registration")
+        graph = registration.draft.graph
+        if graph is None or graph.graph_id != manifest.hypothesis_graph_hash:
+            raise MemoryError_("manifest does not match the registered component graph")
+        if manifest.code is None:
+            raise MemoryError_("artifact evidence requires exact code provenance")
+        self._verify_consumed_datasets(
+            manifest.hypothesis_id, manifest.hypothesis_version, manifest.datasets
+        )
+        self.record(source_record)
+
+        direct_by_artifact: dict[tuple[GraphArtifactKind, str], list[ArtifactOutcome]] = {}
+        planned_test_ids = {test.test_id for test in result.outcome.plan.artifact_tests}
+        for outcome in result.outcome.artifact_outcomes:
+            if outcome.test_id not in planned_test_ids:
+                raise MemoryError_("artifact outcome was not part of the compiled experiment plan")
+            key = (outcome.artifact_kind, outcome.artifact_content_id)
+            direct_by_artifact.setdefault(key, []).append(outcome)
+
+        created: list[ArtifactEvidence] = []
+        for kind in GraphArtifactKind:
+            for artifact_id in sorted(graph.artifact_ids(kind)):
+                outcomes = direct_by_artifact.get((kind, artifact_id), [])
+                if not outcomes:
+                    created.append(
+                        self._store_artifact_evidence(
+                            ArtifactEvidence(
+                                source_record_id=source_record.record_id,
+                                artifact_kind=kind,
+                                artifact_content_id=artifact_id,
+                                epistemic_status=ArtifactEvidenceStatus.CONTEXTUAL_ASSOCIATION,
+                                hypothesis_id=manifest.hypothesis_id,
+                                hypothesis_version=manifest.hypothesis_version,
+                                registration_hash=registration.content_hash,
+                                graph_hash=graph.graph_id,
+                                experiment_id=manifest.experiment_id,
+                                manifest_hash=manifest.manifest_hash,
+                                datasets=manifest.datasets,
+                                estimand=registration.draft.primary_estimand,
+                                benchmark=registration.draft.primary_estimand,
+                                universe=registration.draft.universe,
+                                regime=(
+                                    "all registered observations; confounders: "
+                                    + "; ".join(registration.draft.confounders)
+                                ),
+                                code=manifest.code,
+                                configuration_hash=manifest.configuration_hash,
+                                cumulative_trials=registration.cumulative_trials,
+                                recorded_at=source_record.recorded_at,
+                            )
+                        )
+                    )
+                    continue
+                for outcome in outcomes:
+                    created.append(
+                        self._evidence_from_artifact_outcome(
+                            outcome,
+                            source_record=source_record,
+                            registration_hash=registration.content_hash,
+                            graph_hash=graph.graph_id,
+                            universe=registration.draft.universe,
+                            manifest=manifest,
+                        )
+                    )
+        return created
+
+    def _evidence_from_artifact_outcome(
+        self,
+        outcome: ArtifactOutcome,
+        *,
+        source_record: ResearchRecord,
+        registration_hash: str,
+        graph_hash: str,
+        universe: tuple[str, ...],
+        manifest: ExperimentManifest,
+    ) -> ArtifactEvidence:
+        test = self._registry.get_artifact_test(outcome.test_id)
+        if test is None or test.content_hash != outcome.test_registration_hash:
+            raise MemoryError_("artifact outcome does not match its preregistered test")
+        if (
+            test.hypothesis_id != manifest.hypothesis_id
+            or test.hypothesis_version != manifest.hypothesis_version
+            or test.registration_hash != registration_hash
+            or test.graph_hash != graph_hash
+        ):
+            raise MemoryError_("artifact test belongs to a different hypothesis graph")
+        if (
+            outcome.artifact_kind is not test.draft.artifact_kind
+            or outcome.artifact_content_id != test.draft.artifact_content_id
+        ):
+            raise MemoryError_("artifact outcome target differs from its preregistered test")
+        result_key = f"artifact:{outcome.test_id}"
+        stored = manifest.results.get(result_key)
+        expected = {
+            "test_registration_hash": outcome.test_registration_hash,
+            "artifact_kind": outcome.artifact_kind.value,
+            "artifact_content_id": outcome.artifact_content_id,
+            "verdict": outcome.verdict.value,
+            "effect": outcome.effect,
+            "confidence_low": outcome.confidence_low,
+            "confidence_high": outcome.confidence_high,
+            "test_statistic": outcome.test_statistic,
+            "probes_run": ", ".join(outcome.probes_run),
+            "probes_failed": ", ".join(outcome.probes_failed),
+            "detail": outcome.detail,
+        }
+        if stored != expected:
+            raise MemoryError_("artifact outcome differs from the persisted manifest")
+        verdicts = {
+            ArtifactOutcomeVerdict.SURVIVED: Verdict.SURVIVED,
+            ArtifactOutcomeVerdict.REFUTED: Verdict.REFUTED,
+            ArtifactOutcomeVerdict.UNDERPOWERED: Verdict.UNDERPOWERED,
+        }
+        verdict = verdicts.get(outcome.verdict)
+        status = (
+            ArtifactEvidenceStatus.DIRECTLY_MEASURED
+            if verdict is not None
+            else ArtifactEvidenceStatus.UNASSESSED
+        )
+        draft = test.draft
+        return self._store_artifact_evidence(
+            ArtifactEvidence(
+                source_record_id=source_record.record_id,
+                test_id=test.test_id,
+                artifact_kind=draft.artifact_kind,
+                artifact_content_id=draft.artifact_content_id,
+                epistemic_status=status,
+                verdict=verdict,
+                hypothesis_id=test.hypothesis_id,
+                hypothesis_version=test.hypothesis_version,
+                registration_hash=registration_hash,
+                graph_hash=graph_hash,
+                experiment_id=manifest.experiment_id,
+                manifest_hash=manifest.manifest_hash,
+                datasets=manifest.datasets,
+                estimand=draft.estimand,
+                benchmark=draft.benchmark,
+                universe=universe,
+                regime=draft.regime,
+                code=manifest.code,
+                configuration_hash=manifest.configuration_hash,
+                cumulative_trials=test.cumulative_trials,
+                effect=outcome.effect,
+                confidence_low=outcome.confidence_low,
+                confidence_high=outcome.confidence_high,
+                test_statistic=outcome.test_statistic,
+                recorded_at=source_record.recorded_at,
+            )
+        )
+
+    def _verify_consumed_datasets(
+        self, hypothesis_id: str, version: int, datasets: tuple[DatasetSnapshot, ...]
+    ) -> None:
+        protected = [item for item in datasets if item.role == "PROTECTED_EVALUATION"]
+        if not protected:
+            raise MemoryError_("artifact evidence names no protected evaluation data")
+        for snapshot in protected:
+            state = self._session.execute(
+                select(hypothesis_data_windows.c.state).where(
+                    hypothesis_data_windows.c.hypothesis_id == hypothesis_id,
+                    hypothesis_data_windows.c.version == version,
+                    hypothesis_data_windows.c.dataset == snapshot.dataset,
+                    hypothesis_data_windows.c.role == snapshot.role,
+                )
+            ).scalar_one_or_none()
+            if state != "CONSUMED":
+                raise MemoryError_(
+                    f"{snapshot.dataset} was not durably consumed by the experiment"
+                )
+
+    def _store_artifact_evidence(self, entry: ArtifactEvidence) -> ArtifactEvidence:
+        existing = self.get_artifact_evidence(entry.evidence_id)
+        if existing is not None:
+            if existing == entry:
+                return existing
+            raise MemoryError_(f"artifact evidence {entry.evidence_id} changed content")
+        self._session.execute(
+            artifact_evidence.insert().values(
+                evidence_id=entry.evidence_id,
+                source_record_id=entry.source_record_id,
+                test_id=entry.test_id,
+                artifact_kind=entry.artifact_kind.value,
+                artifact_content_id=entry.artifact_content_id,
+                epistemic_status=entry.epistemic_status.value,
+                verdict=None if entry.verdict is None else entry.verdict.value,
+                hypothesis_id=entry.hypothesis_id,
+                hypothesis_version=entry.hypothesis_version,
+                manifest_hash=entry.manifest_hash,
+                recorded_at=encode_utc(entry.recorded_at),
+                document_json=entry.model_dump_json(),
+            )
+        )
+        return entry
+
+    def get_artifact_evidence(self, evidence_id: str) -> ArtifactEvidence | None:
+        row = (
+            self._session.execute(
+                select(artifact_evidence).where(artifact_evidence.c.evidence_id == evidence_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        return (
+            None
+            if row is None
+            else ArtifactEvidence.model_validate_json(str(row["document_json"]))
+        )
+
+    def evidence_for_artifact(
+        self, artifact_content_id: str, *, kind: GraphArtifactKind | None = None
+    ) -> list[ArtifactEvidence]:
+        statement = select(artifact_evidence).where(
+            artifact_evidence.c.artifact_content_id == artifact_content_id
+        )
+        if kind is not None:
+            statement = statement.where(artifact_evidence.c.artifact_kind == kind.value)
+        rows = self._session.execute(
+            statement.order_by(artifact_evidence.c.recorded_at, artifact_evidence.c.evidence_id)
+        ).mappings()
+        return [
+            ArtifactEvidence.model_validate_json(str(row["document_json"])) for row in rows
+        ]
+
+    def summarize_artifact(
+        self, artifact_content_id: str, *, kind: GraphArtifactKind | None = None
+    ) -> ArtifactEvidenceSummary:
+        entries = self.evidence_for_artifact(artifact_content_id, kind=kind)
+        return ArtifactEvidenceSummary(
+            supporting=tuple(item for item in entries if item.verdict is Verdict.SURVIVED),
+            refuting=tuple(item for item in entries if item.verdict is Verdict.REFUTED),
+            underpowered=tuple(item for item in entries if item.verdict is Verdict.UNDERPOWERED),
+            contextual=tuple(
+                item
+                for item in entries
+                if item.epistemic_status is ArtifactEvidenceStatus.CONTEXTUAL_ASSOCIATION
+            ),
+            unassessed=tuple(
+                item
+                for item in entries
+                if item.epistemic_status is ArtifactEvidenceStatus.UNASSESSED
+            ),
+        )
 
     def relate(
         self, source_id: str, relation: Relation, target_id: str, *, now: datetime, note: str = ""
