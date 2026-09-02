@@ -134,7 +134,7 @@ class Candidate(FrozenModel):
                 "anomaly mining inspects data by definition; declare the roles it read"
             )
         if self.mode is not DiscoveryMode.DATA_ANOMALY and self.search_cardinality > 1:
-            if not self.inspected_roles:
+            if not self.inspected_roles and self.mode is not DiscoveryMode.MUTATION:
                 raise ValueError(
                     f"{self.mode.value} reports a search of {self.search_cardinality} without "
                     "naming the data it searched"
