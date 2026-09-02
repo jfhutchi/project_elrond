@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 23
+SCHEMA_VERSION = 24
 
 metadata = MetaData(
     naming_convention={
@@ -481,6 +481,80 @@ research_relationships = Table(
     Column("note", Text, nullable=False, server_default=text("''")),
 )
 Index("ix_research_relationships_target_id", research_relationships.c.target_id)
+
+# Artifact-level claims are preregistered separately from the immutable hypothesis document.
+# This keeps historical registration hashes stable while still requiring the identifying design
+# to exist before protected data is consumed.  Every row is one additional charged comparison;
+# renaming a component cannot mint another test because the target is its behavioural content id.
+artifact_test_registrations = Table(
+    "artifact_test_registrations",
+    metadata,
+    Column("test_id", String(64), primary_key=True),
+    Column("content_hash", String(64), nullable=False, unique=True),
+    Column("hypothesis_id", String(128), nullable=False),
+    Column("hypothesis_version", Integer, nullable=False),
+    Column("registration_hash", String(64), nullable=False),
+    Column("graph_hash", String(64), nullable=False),
+    Column("artifact_kind", String(16), nullable=False),
+    Column("artifact_content_id", String(64), nullable=False),
+    Column("trial_charge", Integer, nullable=False),
+    Column("power_verdict", String(32), nullable=False),
+    Column("registered_at", String(40), nullable=False),
+    Column("document_json", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["hypothesis_id", "hypothesis_version"],
+        ["hypotheses.hypothesis_id", "hypotheses.version"],
+    ),
+    CheckConstraint("trial_charge = 1", name="artifact_test_charges_one_trial"),
+)
+Index(
+    "ix_artifact_test_registrations_hypothesis",
+    artifact_test_registrations.c.hypothesis_id,
+    artifact_test_registrations.c.hypothesis_version,
+)
+Index(
+    "ix_artifact_test_registrations_artifact",
+    artifact_test_registrations.c.artifact_kind,
+    artifact_test_registrations.c.artifact_content_id,
+)
+
+# A projection of manifest-backed evidence for fast component and interaction retrieval.  The
+# full immutable provenance/applicability document remains authoritative.  `source_record_id`
+# ties this projection to ordinary research memory so artifact evidence cannot become a second,
+# disconnected account of an experiment.
+artifact_evidence = Table(
+    "artifact_evidence",
+    metadata,
+    Column("evidence_id", String(64), primary_key=True),
+    Column("source_record_id", String(128), nullable=False),
+    Column("test_id", String(64)),
+    Column("artifact_kind", String(16), nullable=False),
+    Column("artifact_content_id", String(64), nullable=False),
+    Column("epistemic_status", String(32), nullable=False),
+    Column("verdict", String(32)),
+    Column("hypothesis_id", String(128), nullable=False),
+    Column("hypothesis_version", Integer, nullable=False),
+    Column("manifest_hash", String(64), nullable=False),
+    Column("recorded_at", String(40), nullable=False),
+    Column("document_json", Text, nullable=False),
+    ForeignKeyConstraint(
+        ["hypothesis_id", "hypothesis_version"],
+        ["hypotheses.hypothesis_id", "hypotheses.version"],
+    ),
+    ForeignKeyConstraint(["source_record_id"], ["research_records.record_id"]),
+    ForeignKeyConstraint(["test_id"], ["artifact_test_registrations.test_id"]),
+    CheckConstraint(
+        "(epistemic_status = 'DIRECTLY_MEASURED') = (verdict IS NOT NULL)",
+        name="direct_evidence_alone_has_verdict",
+    ),
+)
+Index(
+    "ix_artifact_evidence_artifact",
+    artifact_evidence.c.artifact_kind,
+    artifact_evidence.c.artifact_content_id,
+    artifact_evidence.c.recorded_at,
+)
+Index("ix_artifact_evidence_manifest", artifact_evidence.c.manifest_hash)
 
 
 # --- Budget governor (#14) -----------------------------------------------------------------

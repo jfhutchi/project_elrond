@@ -39,6 +39,7 @@ from typing import Annotated, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from quantbot.research.artifact_testing import ArtifactOutcome, ArtifactTestRegistration
 from quantbot.research.manifest import (
     VALID_FOR,
     DatasetSnapshot,
@@ -153,12 +154,17 @@ class ExperimentPlan(FrozenModel):
     probes: tuple[Text, ...] = Field(min_length=1)
     #: A confirmatory result has to come from the engine that will actually trade.
     execution_path: ExecutionPath
+    #: Separately preregistered, powered comparisons that may support artifact-level evidence.
+    artifact_tests: tuple[ArtifactTestRegistration, ...] = ()
 
     @model_validator(mode="after")
     def validate_plan(self) -> Self:
         missing = [probe for probe in REQUIRED_PROBES if probe not in self.probes]
         if missing:
             raise ValueError(f"a compiled experiment must run {', '.join(missing)}")
+        test_ids = [test.test_id for test in self.artifact_tests]
+        if len(test_ids) != len(set(test_ids)):
+            raise ValueError("an experiment plan cannot contain the same artifact test twice")
         return self
 
 
@@ -168,6 +174,7 @@ def compile_experiment(
     datasets: Sequence[DatasetSnapshot],
     execution_path: ExecutionPath = ExecutionPath.PRODUCTION_ENGINE,
     path_dependent: bool = False,
+    artifact_tests: Sequence[ArtifactTestRegistration] = (),
 ) -> ExperimentPlan:
     """Turn a frozen registration into a plan, refusing what cannot be run honestly."""
     draft = registration.draft
@@ -196,6 +203,20 @@ def compile_experiment(
             "cannot show it avoided look-ahead",
         )
 
+    graph_hash = None if draft.graph is None else draft.graph.graph_id
+    for artifact_test in artifact_tests:
+        if (
+            artifact_test.hypothesis_id != draft.hypothesis_id
+            or artifact_test.hypothesis_version != draft.version
+            or artifact_test.registration_hash != registration.content_hash
+            or artifact_test.graph_hash != graph_hash
+        ):
+            raise CompilationRefused(
+                "ARTIFACT_TEST_MISMATCHED",
+                f"artifact test {artifact_test.test_id} was not frozen against "
+                f"{draft.hypothesis_id} v{draft.version}@{registration.content_hash}",
+            )
+
     test = select_test(
         draft.effect.estimand, draft.effect.comparison, path_dependent=path_dependent
     )
@@ -208,7 +229,7 @@ def compile_experiment(
         hypothesis_id=draft.hypothesis_id,
         hypothesis_version=draft.version,
         registration_hash=registration.content_hash,
-        hypothesis_graph_hash=None if draft.graph is None else draft.graph.graph_id,
+        hypothesis_graph_hash=graph_hash,
         statistics=StatisticalPlan(
             test=test,
             comparison=draft.effect.comparison.value,
@@ -237,6 +258,7 @@ def compile_experiment(
         ),
         probes=tuple(probes),
         execution_path=execution_path,
+        artifact_tests=tuple(artifact_tests),
     )
 
 
@@ -254,6 +276,7 @@ class ExperimentOutcome(FrozenModel):
     #: Probes that ran and objected. A survivor cannot have any.
     probes_failed: tuple[Text, ...] = ()
     diagnostics: dict[str, str] = Field(default_factory=dict)
+    artifact_outcomes: tuple[ArtifactOutcome, ...] = ()
     detail: Text
     completed_at: datetime
 

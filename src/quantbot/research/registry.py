@@ -55,9 +55,15 @@ from sqlalchemy import func, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
+from quantbot.research.artifact_testing import (
+    ArtifactTestDraft,
+    ArtifactTestRefused,
+    ArtifactTestRegistration,
+)
 from quantbot.research.critic import Critique
 from quantbot.research.datasets import equivalent_datasets
 from quantbot.research.hypothesis_graph import (
+    GraphArtifactKind,
     HypothesisGraph,
     HypothesisLineage,
     validate_lineage,
@@ -75,6 +81,7 @@ from quantbot.research.power import (
 from quantbot.research.sources import EvidenceBasis
 from quantbot.storage.database import encode_utc
 from quantbot.storage.schema import (
+    artifact_test_registrations,
     hypotheses,
     hypothesis_data_windows,
     power_assessments,
@@ -669,6 +676,181 @@ class HypothesisRegistry:
             and registration.draft.graph.graph_id == graph_id
         ]
 
+    def register_artifact_test(
+        self,
+        registration: Registration,
+        draft: ArtifactTestDraft,
+        *,
+        now: datetime,
+        override: PowerOverride | None = None,
+        observed: ObservedSample | None = None,
+    ) -> ArtifactTestRegistration:
+        """Freeze one identifying artifact claim before protected data is consumed.
+
+        Each test is an additional comparison and is charged as one cumulative trial.  The
+        target is checked against the exact registered graph and the arm structure is checked
+        mechanically, so a free-form ablation label cannot later be presented as identification.
+        """
+        current = self.get(registration.draft.hypothesis_id, registration.draft.version)
+        if current is None or current.content_hash != registration.content_hash:
+            raise ArtifactTestRefused("artifact tests require the exact persisted registration")
+        graph = registration.draft.graph
+        if graph is None:
+            raise ArtifactTestRefused("artifact tests require a componentized hypothesis graph")
+        if draft.artifact_content_id not in graph.artifact_ids(draft.artifact_kind):
+            raise ArtifactTestRefused(
+                f"graph {graph.graph_id} has no {draft.artifact_kind.value.lower()} "
+                f"{draft.artifact_content_id}"
+            )
+        graph_components = set(graph.component_ids)
+        unknown = sorted(
+            {
+                component_id
+                for arm in draft.arms
+                for component_id in arm.included_component_ids
+                if component_id not in graph_components
+            }
+        )
+        if unknown:
+            raise ArtifactTestRefused(
+                "identification arms name components outside the registered graph: "
+                + ", ".join(unknown)
+            )
+        self._verify_identifying_arms(graph, draft)
+
+        for window in registration.draft.windows_for(DataRole.PROTECTED_EVALUATION):
+            row = self._window_row(
+                registration.draft.hypothesis_id,
+                registration.draft.version,
+                window.dataset,
+                window.role,
+            )
+            if row is None or WindowState(str(row["state"])) is not WindowState.RESERVED:
+                raise ArtifactTestRefused(
+                    "artifact tests must be frozen before protected data is consumed"
+                )
+
+        if observed is not None:
+            self._verify_sample_against(
+                registration.draft.windows,
+                observed,
+                "artifact test for "
+                f"{registration.draft.hypothesis_id} v{registration.draft.version}",
+            )
+        observations = (
+            registration.draft.available_observations
+            if observed is None
+            else observed.observations
+        )
+        trials = self._cumulative_trials(1)
+        assessment = assess(
+            hypothesis_id=registration.draft.hypothesis_id,
+            version=registration.draft.version,
+            stage="ARTIFACT_REGISTRATION",
+            specification=draft.effect,
+            observations_available=observations,
+            cumulative_trials=trials,
+            assessed_at=now,
+            override=override,
+        )
+        if not assessment.cleared:
+            raise ArtifactTestRefused(explain(assessment), assessment=assessment)
+        frozen = ArtifactTestRegistration(
+            hypothesis_id=registration.draft.hypothesis_id,
+            hypothesis_version=registration.draft.version,
+            registration_hash=registration.content_hash,
+            graph_hash=graph.graph_id,
+            draft=draft,
+            registered_at=now,
+            cumulative_trials=trials,
+            power=assessment,
+        )
+        if self.get_artifact_test(frozen.test_id) is not None:
+            raise ArtifactTestRefused(f"artifact test {frozen.test_id} is already registered")
+        self._session.execute(
+            artifact_test_registrations.insert().values(
+                test_id=frozen.test_id,
+                content_hash=frozen.content_hash,
+                hypothesis_id=frozen.hypothesis_id,
+                hypothesis_version=frozen.hypothesis_version,
+                registration_hash=frozen.registration_hash,
+                graph_hash=frozen.graph_hash,
+                artifact_kind=frozen.draft.artifact_kind.value,
+                artifact_content_id=frozen.draft.artifact_content_id,
+                trial_charge=1,
+                power_verdict=frozen.power.verdict.value,
+                registered_at=encode_utc(now),
+                document_json=frozen.model_dump_json(),
+            )
+        )
+        return frozen
+
+    @staticmethod
+    def _verify_identifying_arms(graph: HypothesisGraph, draft: ArtifactTestDraft) -> None:
+        arm_sets = [set(arm.included_component_ids) for arm in draft.arms]
+        if draft.artifact_kind is GraphArtifactKind.COMPONENT:
+            target = draft.artifact_content_id
+            with_target = {frozenset(arm - {target}) for arm in arm_sets if target in arm}
+            without_target = {frozenset(arm) for arm in arm_sets if target not in arm}
+            if not with_target & without_target:
+                raise ArtifactTestRefused(
+                    "a component contrast needs a matched component background both with and "
+                    "without the target"
+                )
+            return
+        relationship = next(
+            relation
+            for relation in graph.relationships
+            if relation.relationship_id == draft.artifact_content_id
+        )
+        source = relationship.source_component_id
+        target = relationship.target_component_id
+        required = {(False, False), (True, False), (False, True), (True, True)}
+        cells_by_background: dict[frozenset[str], set[tuple[bool, bool]]] = {}
+        for arm in arm_sets:
+            background = frozenset(arm - {source, target})
+            cells_by_background.setdefault(background, set()).add(
+                (source in arm, target in arm)
+            )
+        if not any(required <= cells for cells in cells_by_background.values()):
+            raise ArtifactTestRefused(
+                "an interaction contrast needs all four source/target factorial cells under "
+                "one matched component background"
+            )
+
+    def get_artifact_test(self, test_id: str) -> ArtifactTestRegistration | None:
+        row = (
+            self._session.execute(
+                select(artifact_test_registrations).where(
+                    artifact_test_registrations.c.test_id == test_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            return None
+        frozen = ArtifactTestRegistration.model_validate_json(str(row["document_json"]))
+        if frozen.content_hash != str(row["content_hash"]):
+            raise ArtifactTestRefused(f"artifact test {test_id} failed its content hash")
+        return frozen
+
+    def artifact_tests_for(
+        self, hypothesis_id: str, version: int
+    ) -> list[ArtifactTestRegistration]:
+        rows = self._session.execute(
+            select(artifact_test_registrations)
+            .where(
+                artifact_test_registrations.c.hypothesis_id == hypothesis_id,
+                artifact_test_registrations.c.hypothesis_version == version,
+            )
+            .order_by(artifact_test_registrations.c.registered_at)
+        ).mappings()
+        return [
+            ArtifactTestRegistration.model_validate_json(str(row["document_json"]))
+            for row in rows
+        ]
+
     def record_assessment(self, assessment: PowerAssessment) -> None:
         """Persist one power decision, whether it passed or refused.
 
@@ -975,6 +1157,19 @@ class HypothesisRegistry:
         consumers: list[str] = []
         by_family: dict[str, int] = {}
         trials = 0
+        artifact_charges = {
+            (str(row["hypothesis_id"]), int(row["hypothesis_version"])): int(row["charge"])
+            for row in self._session.execute(
+                select(
+                    artifact_test_registrations.c.hypothesis_id,
+                    artifact_test_registrations.c.hypothesis_version,
+                    func.sum(artifact_test_registrations.c.trial_charge).label("charge"),
+                ).group_by(
+                    artifact_test_registrations.c.hypothesis_id,
+                    artifact_test_registrations.c.hypothesis_version,
+                )
+            ).mappings()
+        }
         # Consumption that predates this registry, for any prior range overlapping the query.
         # Without this the equity window cycles 2-10 spent reported UNTOUCHED (#2).
         for name, prior_start, prior_end, prior_trials in self._prior_windows:
@@ -987,7 +1182,9 @@ class HypothesisRegistry:
                 consumers.append(PRIOR_CONSUMER)
         for row in rows:
             consumers.append(f"{row['hypothesis_id']} v{row['version']}")
-            spent = int(row["search_cardinality"])
+            spent = int(row["search_cardinality"]) + artifact_charges.get(
+                (str(row["hypothesis_id"]), int(row["version"])), 0
+            )
             trials += spent
             family = str(row["family_id"])
             by_family[family] = by_family.get(family, 0) + spent
@@ -1175,10 +1372,13 @@ class HypothesisRegistry:
 
     def _cumulative_trials(self, search_cardinality: int) -> int:
         """Everything this project has ever spent, plus what the incoming draft spends."""
-        spent = self._session.execute(
+        hypothesis_spend = self._session.execute(
             select(func.coalesce(func.sum(hypotheses.c.search_cardinality), 0))
         ).scalar_one()
-        return self._prior_trials + int(spent) + search_cardinality
+        artifact_spend = self._session.execute(
+            select(func.coalesce(func.sum(artifact_test_registrations.c.trial_charge), 0))
+        ).scalar_one()
+        return self._prior_trials + int(hypothesis_spend) + int(artifact_spend) + search_cardinality
 
     def _blocking(self, dataset: str, start: date, end: date, *, now: date) -> list[RowMapping]:
         """Every window row that still holds a claim over this range, as of `now` (#22).

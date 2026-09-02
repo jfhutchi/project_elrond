@@ -53,6 +53,7 @@ REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {
     21: "0021",
     22: "0022",
     23: "0023",
+    24: "0024",
 }
 
 

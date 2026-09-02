@@ -4,6 +4,15 @@ Kept separate from `quantbot.domain` on purpose. This package holds evidence, no
 state, and nothing in it has authority over the broker, the risk engine, or the kill switch.
 """
 
+from quantbot.research.artifact_testing import (
+    ArtifactOutcome,
+    ArtifactOutcomeVerdict,
+    ArtifactTestDraft,
+    ArtifactTestRefused,
+    ArtifactTestRegistration,
+    IdentificationArm,
+    IdentificationMethod,
+)
 from quantbot.research.budget import (
     RENEWABLE,
     Admission,
@@ -113,6 +122,9 @@ from quantbot.research.manifest import (
 )
 from quantbot.research.memory import (
     NOT_TESTED,
+    ArtifactEvidence,
+    ArtifactEvidenceStatus,
+    ArtifactEvidenceSummary,
     MemoryError_,
     RecordKind,
     Relation,
@@ -206,6 +218,7 @@ from quantbot.research.reproducibility import (
     check_invariants,
     compare,
 )
+from quantbot.research.runner import ArtifactMeasured
 from quantbot.research.scout import (
     ARXIV_MIN_INTERVAL_SECONDS,
     ARXIV_QUERY_URL,
@@ -251,6 +264,17 @@ from quantbot.research.workers import (
 )
 
 __all__ = [
+    "ArtifactEvidence",
+    "ArtifactEvidenceStatus",
+    "ArtifactEvidenceSummary",
+    "ArtifactMeasured",
+    "ArtifactOutcome",
+    "ArtifactOutcomeVerdict",
+    "ArtifactTestDraft",
+    "ArtifactTestRefused",
+    "ArtifactTestRegistration",
+    "IdentificationArm",
+    "IdentificationMethod",
     "Alert",
     "BudgetPanel",
     "EvidencePanel",
