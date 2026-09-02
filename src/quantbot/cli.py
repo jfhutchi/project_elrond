@@ -96,6 +96,20 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
         "--subsystem", help="limit to one subsystem, e.g. risk, broker, safety, market-data"
     )
     commands.add_parser("research-status")
+    # #198. Read-only by construction: it opens no run, moves no cursor and records no
+    # incident. A status command that wrote history would be the worst thing to run while
+    # trying to work out what happened to collection.
+    ingestion = commands.add_parser("ingestion-status")
+    ingestion.add_argument(
+        "--stale-after-hours",
+        dest="stale_after_hours",
+        type=int,
+        default=None,
+        help=(
+            "how long a source may go without a successful live run before it is called "
+            "stale; defaults to 100, matching the daemon watchdog's long-weekend bound"
+        ),
+    )
     # Reports only. Naming a source cannot spend it, and there is deliberately no flag here
     # that reserves or consumes anything: this command exists to be run before deciding to
     # spend, and a command that spent while answering would defeat its own purpose.
@@ -783,6 +797,25 @@ def main(
                     "any other analysis is EXPLORATORY and is not evidence"
                 ),
             }
+        elif args.command == "ingestion-status":
+            # Function-scope import for the same reason as the research commands: the kill
+            # switch lives in this file and must keep working when anything else does not.
+            from quantbot.ingestion import (
+                DEFAULT_STALE_AFTER_HOURS,
+                IngestionControlPlane,
+                ingestion_status,
+            )
+
+            with active.database.transaction() as session:
+                result = ingestion_status(
+                    IngestionControlPlane(session),
+                    now=datetime.now(UTC),
+                    stale_after_hours=(
+                        DEFAULT_STALE_AFTER_HOURS
+                        if args.stale_after_hours is None
+                        else args.stale_after_hours
+                    ),
+                )
         elif args.command == "research-status":
             # Function-scope import, like the other research commands: the kill switch lives in
             # this file and must not stop working because research code failed to import.
