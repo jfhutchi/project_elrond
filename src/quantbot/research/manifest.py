@@ -369,6 +369,9 @@ class ExperimentManifest(FrozenModel):
     hypothesis_id: str | None = None
     hypothesis_version: int | None = None
     registration_hash: str | None = None
+    #: Content address of the exact component/interaction graph inside the registration (#187).
+    #: Graphless legacy registrations remain reproducible; every componentized run carries it.
+    hypothesis_graph_hash: str | None = None
     #: Carried into the bundle rather than left behind a hash lookup, so a null result reads
     #: "no effect larger than X" instead of the far weaker "no effect found" (#19).
     minimum_detectable_effect: str | None = None
@@ -411,6 +414,13 @@ class ExperimentManifest(FrozenModel):
     def validate_identity(cls, value: str) -> str:
         if not value or value != value.strip():
             raise ValueError("manifest identity fields must be nonempty without whitespace")
+        return value
+
+    @field_validator("hypothesis_graph_hash")
+    @classmethod
+    def validate_graph_hash(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[0-9a-f]{64}", value):
+            raise ValueError("hypothesis_graph_hash must be a SHA-256 hex digest")
         return value
 
     @model_validator(mode="after")
@@ -487,7 +497,7 @@ class ExperimentManifest(FrozenModel):
                     "a confirmatory dataset snapshot must name its provider, retrieval time, "
                     f"availability time and transformation version: {', '.join(unlineaged)}"
                 )
-        elif any(field is not None for field in registration):
+        elif any(field is not None for field in (*registration, self.hypothesis_graph_hash)):
             raise ValueError("an exploratory experiment cannot claim a registration")
 
         leaked = [

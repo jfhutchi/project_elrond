@@ -145,6 +145,8 @@ class ExperimentPlan(FrozenModel):
     hypothesis_id: Text
     hypothesis_version: int = Field(ge=1)
     registration_hash: Text = Field(min_length=64, max_length=64)
+    #: Exact component/interaction graph frozen inside the registration, when componentized.
+    hypothesis_graph_hash: Text | None = Field(default=None, min_length=64, max_length=64)
     statistics: StatisticalPlan
     datasets: tuple[DatasetSnapshot, ...] = Field(min_length=1)
     costs: dict[str, str]
@@ -206,6 +208,7 @@ def compile_experiment(
         hypothesis_id=draft.hypothesis_id,
         hypothesis_version=draft.version,
         registration_hash=registration.content_hash,
+        hypothesis_graph_hash=None if draft.graph is None else draft.graph.graph_id,
         statistics=StatisticalPlan(
             test=test,
             comparison=draft.effect.comparison.value,

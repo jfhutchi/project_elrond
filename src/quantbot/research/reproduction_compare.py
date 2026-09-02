@@ -70,6 +70,7 @@ DECIDING_FIELDS: frozenset[str] = frozenset(
         "hypothesis_id",
         "hypothesis_version",
         "registration_hash",
+        "hypothesis_graph_hash",
         "minimum_detectable_effect",
         "power_verdict",
         "statistics",

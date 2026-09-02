@@ -95,6 +95,8 @@ def draft_from_candidate(
     return HypothesisDraft(
         hypothesis_id=hypothesis_id,
         family_id=candidate.family_id,
+        graph=candidate.graph,
+        lineage=candidate.lineage,
         question=candidate.question,
         # The candidate's expected direction is the prediction. The effect *size* comes from the
         # caller, and the two are deliberately separate: a direction is a claim discovery can

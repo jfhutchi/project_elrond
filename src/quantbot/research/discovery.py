@@ -39,6 +39,11 @@ from typing import Annotated, Protocol, Self
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
 
+from quantbot.research.hypothesis_graph import (
+    HypothesisGraph,
+    HypothesisLineage,
+    validate_lineage,
+)
 from quantbot.research.registry import DataRole, WindowConsumption
 from quantbot.research.sources import EvidenceBasis
 
@@ -81,6 +86,10 @@ class Candidate(FrozenModel):
     mode: DiscoveryMode
     question: Text
     family_id: Text
+    #: A generator may propose structured behaviour and lineage, but this mints no evidence and
+    #: establishes no equivalence. The registry verifies every parent artifact before freezing.
+    graph: HypothesisGraph | None = None
+    lineage: HypothesisLineage | None = None
     #: What is allegedly overlooked, and why it might not already be priced. A hypothesis
     #: about the market's inattention, never evidence of it.
     overlooked: Text
@@ -109,6 +118,10 @@ class Candidate(FrozenModel):
 
     @model_validator(mode="after")
     def validate_candidate(self) -> Self:
+        if (self.graph is None) != (self.lineage is None):
+            raise ValueError("a candidate component graph and lineage must travel together")
+        if self.graph is not None and self.lineage is not None:
+            validate_lineage(self.graph, self.lineage)
         forbidden = self.inspected_roles - DISCOVERY_ROLES
         if forbidden:
             raise ContaminatedGenerator(

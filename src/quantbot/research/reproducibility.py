@@ -136,6 +136,7 @@ def compare(left: ExperimentManifest, right: ExperimentManifest) -> list[Differe
         "git_commit",
         "mode",
         "registration_hash",
+        "hypothesis_graph_hash",
         "hypothesis_id",
         "hypothesis_version",
         "minimum_detectable_effect",

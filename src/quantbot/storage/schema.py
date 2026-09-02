@@ -295,8 +295,13 @@ kill_switch_state = Table(
 #
 # A registration is frozen at insert. `document_json` holds the whole canonical registration
 # and `content_hash` is its SHA-256, so immutability covers every field rather than only the
-# ones promoted to columns. Columns exist for what the gates query: lineage, family, and the
-# multiple-testing/power numbers that must be recomputed before a confirmatory run.
+# ones promoted to columns. Columns exist for what the gates query: legacy single-parent
+# lineage, family, and the multiple-testing/power numbers that must be recomputed before a
+# confirmatory run. Componentized multi-parent lineage (#187) lives in the same frozen
+# `document_json` as the exact graph and is validated by the registry. At registry scale it is
+# queried through that authoritative document; duplicating it into relational rows now would
+# create two histories that could drift. A later evidence index may be added additively when
+# #188 needs indexed component retrieval, without changing these historical registrations.
 
 hypotheses = Table(
     "hypotheses",
@@ -304,6 +309,8 @@ hypotheses = Table(
     Column("hypothesis_id", String(128), primary_key=True),
     Column("version", Integer, primary_key=True),
     Column("family_id", String(128), nullable=False),
+    # Pre-#187 single-parent lineage. New componentized registrations leave these null and carry
+    # every exact parent graph in their frozen document, avoiding a lossy "primary parent".
     Column("parent_hypothesis_id", String(128)),
     Column("parent_version", Integer),
     Column("registered_at", String(40), nullable=False),

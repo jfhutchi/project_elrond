@@ -239,6 +239,12 @@ def test_two_runs_of_the_same_experiment_compare_equal() -> None:
     assert compare(manifest(), manifest()) == []
 
 
+def test_a_different_component_graph_is_a_different_experiment() -> None:
+    changed = manifest(hypothesis_graph_hash="b" * 64)
+    differences = compare(manifest(), changed)
+    assert "hypothesis_graph_hash" in [difference.field for difference in differences]
+
+
 def test_a_manifest_refuses_to_carry_a_credential() -> None:
     """Redaction that is merely intended is redaction that eventually fails silently."""
     with pytest.raises(ValueError, match="must not carry credentials"):
