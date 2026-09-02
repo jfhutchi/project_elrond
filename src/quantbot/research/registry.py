@@ -457,6 +457,14 @@ class NoveltyReport:
 
 
 @dataclass(frozen=True, slots=True)
+class GraphOverlap:
+    """Exact behavioral overlap with prior registered component graphs."""
+
+    highest_overlap: float
+    nearest: tuple[str, ...]
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionClearance:
     """The re-check performed at execution, against state as it is *now*."""
 
@@ -1094,8 +1102,8 @@ class HypothesisRegistry:
                     component_overlap = 1.0
                 else:
                     component_overlap = _jaccard(
-                        frozenset(draft.graph.component_ids),
-                        frozenset(prior.graph.component_ids),
+                        _graph_artifacts(draft.graph),
+                        _graph_artifacts(prior.graph),
                     )
             overlaps.append(
                 (
@@ -1114,6 +1122,30 @@ class HypothesisRegistry:
             consumption=tuple(
                 self.window_consumption(window.dataset, window.start, window.end)
                 for window in draft.windows
+            ),
+        )
+
+    def graph_overlap(
+        self, graph: HypothesisGraph, *, exclude_hypothesis_id: str | None = None
+    ) -> GraphOverlap:
+        """Compare exact component and relationship behavior against frozen registrations."""
+        overlaps: list[tuple[float, str]] = []
+        artifacts = _graph_artifacts(graph)
+        for registration in self.list_registrations():
+            prior = registration.draft
+            if prior.graph is None or prior.hypothesis_id == exclude_hypothesis_id:
+                continue
+            score = (
+                1.0
+                if graph.graph_id == prior.graph.graph_id
+                else _jaccard(artifacts, _graph_artifacts(prior.graph))
+            )
+            overlaps.append((score, f"{prior.hypothesis_id} v{prior.version}"))
+        highest = max(overlaps, default=(0.0, ""))[0]
+        return GraphOverlap(
+            highest_overlap=highest,
+            nearest=tuple(
+                name for score, name in sorted(overlaps, reverse=True) if score == highest and name
             ),
         )
 
@@ -1564,6 +1596,14 @@ def _signature(universe: Sequence[str], features: Sequence[str]) -> frozenset[st
     )
 
 
+def _graph_artifacts(graph: HypothesisGraph) -> frozenset[str]:
+    """Namespaced ids so an unlikely cross-kind digest collision cannot create overlap."""
+    return frozenset(
+        [f"component:{item}" for item in graph.component_ids]
+        + [f"relationship:{item}" for item in graph.relationship_ids]
+    )
+
+
 def _jaccard(left: frozenset[str], right: frozenset[str]) -> float:
     union = left | right
     return len(left & right) / len(union) if union else 0.0
@@ -1588,6 +1628,7 @@ __all__ = [
     "DataRole",
     "DataWindow",
     "ExecutionClearance",
+    "GraphOverlap",
     "HypothesisDraft",
     "HypothesisRegistry",
     "NoveltyReport",
