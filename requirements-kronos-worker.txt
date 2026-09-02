@@ -1,9 +1,12 @@
 # Install into a dedicated Python 3.11 environment outside this repository.
 # Do not install QuantBot/Elrond into the worker environment.
+#
+# Security re-attestation candidate for Kronos worker environment v2.
+# Historical v1 evidence remains attributed to torch 2.5.1; do not relabel it.
 einops==0.8.1
 huggingface-hub==0.33.1
 numpy==1.26.4
 pandas==2.2.2
 safetensors==0.6.2
-torch==2.5.1
+torch==2.13.0
 tqdm==4.67.1
