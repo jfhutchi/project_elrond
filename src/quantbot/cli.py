@@ -627,7 +627,32 @@ def _create_database(args: argparse.Namespace, stream: TextIO) -> int:
         json.dump(payload, stream, sort_keys=True)
         return 2
 
-    Database.create(path).close()
+    database = Database.create(path)
+    try:
+        # A new store starts from what this project already knows, not from nothing.
+        #
+        # `REFUTED.md` holds settled findings from cycles 2-12, and `load_prior_findings` exists
+        # because the live store was once empty while that file held twenty-four of them -- so
+        # the novelty gate passed questions the project had already answered. Until now the only
+        # caller was `research-cycle`, which fails closed without `QUANTBOT_MODEL_GENERATOR`.
+        # That made a freshly created store report `BELOW_M0` -- "nothing shows this platform can
+        # reject a hypothesis" -- while its refutation history sat checked into the repository,
+        # and made the milestone depend on an LLM endpoint that has nothing to do with whether
+        # anything was ever refuted. Measured on 2026-09-02: seeding moves a new store from
+        # `BELOW_M0` to `M0_RESEARCH_PLATFORM_OPERATIONAL` with no credential configured, and
+        # leaves the real M1 blocker legible instead of hidden behind a model error.
+        #
+        # Idempotent through `ResearchMemory.record`, which accepts an exact repeat and refuses a
+        # conflicting one -- so this cannot overwrite a record a decision was based on. Done here
+        # rather than in `Database.create`, which is schema: seeding institutional knowledge is
+        # an application decision, and every test that creates a store should not pay for it.
+        from quantbot.research.memory import ResearchMemory
+        from quantbot.research.prior import load_prior_findings
+
+        with database.transaction() as session:
+            payload["prior_findings_seeded"] = load_prior_findings(ResearchMemory(session))
+    finally:
+        database.close()
     payload["ok"] = True
     payload["created"] = True
     json.dump(payload, stream, sort_keys=True)
