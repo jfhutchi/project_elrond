@@ -18,6 +18,15 @@ from quantbot.research.discovery import (
     plausibility_credit,
     total_search_cost,
 )
+from quantbot.research.hypothesis_graph import (
+    BehaviorTerm,
+    GraphArtifactKind,
+    HypothesisComponent,
+    HypothesisGraph,
+    HypothesisLineage,
+    LineageAction,
+    LineageChange,
+)
 from quantbot.research.registry import DataRole, WindowConsumption
 from quantbot.research.sources import EpistemicStatus, EvidenceBasis
 
@@ -189,3 +198,43 @@ def test_a_candidate_without_a_refutation_is_not_a_candidate() -> None:
         candidate(simplest_refutation="   ")
     with pytest.raises(ValueError):
         candidate(confounders=())
+
+
+def test_a_mutation_that_read_data_still_has_to_name_it() -> None:
+    """The structural exemption is for graph search, not for the `MUTATION` label (#189).
+
+    A componentized recombiner searches research memory rather than market data, so it has no
+    role to declare and the disclosure rule cannot apply to it. Reading that exemption off the
+    self-chosen mode instead of off the graph would hand every prose-level mutation a free pass
+    on the one question the rule exists to ask -- and `search_cardinality` is exactly the number
+    a data-mining generator has an incentive to leave unexplained.
+    """
+    with pytest.raises(ValueError, match="without naming the data it searched"):
+        candidate(
+            mode=DiscoveryMode.MUTATION,
+            search_cardinality=500,
+            inspected_roles=frozenset(),
+        )
+
+    signal = HypothesisComponent(
+        component_type="signal",
+        behavior=(BehaviorTerm(key="implementation", value="iv-skew-30d"),),
+    )
+    graph = HypothesisGraph(components=(signal,))
+    structural = candidate(
+        mode=DiscoveryMode.MUTATION,
+        search_cardinality=500,
+        inspected_roles=frozenset(),
+        graph=graph,
+        lineage=HypothesisLineage(
+            changes=(
+                LineageChange(
+                    artifact_kind=GraphArtifactKind.COMPONENT,
+                    action=LineageAction.INTRODUCED,
+                    child_content_id=signal.component_id,
+                ),
+            )
+        ),
+    )
+    assert structural.search_cardinality == 500
+    assert structural.inspected_roles == frozenset()

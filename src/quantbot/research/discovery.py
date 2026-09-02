@@ -134,7 +134,14 @@ class Candidate(FrozenModel):
                 "anomaly mining inspects data by definition; declare the roles it read"
             )
         if self.mode is not DiscoveryMode.DATA_ANOMALY and self.search_cardinality > 1:
-            if not self.inspected_roles and self.mode is not DiscoveryMode.MUTATION:
+            # #189's recombiner searches graph structure held in research memory, so it has no
+            # data role to name and the disclosure rule would be unsatisfiable for it. The
+            # exemption is keyed on that search actually being structural -- a graph is present
+            # -- rather than on the `MUTATION` label, which a generator chooses for itself. A
+            # prose-level mutation that mined data for five hundred variants still has to say
+            # what it read, which is the whole point of the rule.
+            structural_search = self.mode is DiscoveryMode.MUTATION and self.graph is not None
+            if not self.inspected_roles and not structural_search:
                 raise ValueError(
                     f"{self.mode.value} reports a search of {self.search_cardinality} without "
                     "naming the data it searched"
