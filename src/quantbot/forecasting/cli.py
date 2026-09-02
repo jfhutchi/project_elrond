@@ -129,11 +129,27 @@ def _parse_timestamp(value: str) -> datetime:
 
 
 def _database_paths_are_isolated(source: Path, forecast: Path) -> bool:
+    from quantbot.storage.target import (
+        DatabaseBackend,
+        DatabaseTargetError,
+        resolve_database_target,
+    )
+
     forecast_path = forecast.expanduser().resolve()
     protected = [source.expanduser().resolve(), Path("quantbot.db").resolve()]
-    active_raw = os.environ.get("QUANTBOT_DB_PATH")
-    if active_raw is not None:
-        protected.append(Path(active_raw).expanduser().resolve())
+
+    # Resolved rather than read straight from `QUANTBOT_DB_PATH` (#196). Once
+    # `QUANTBOT_DATABASE_URL` exists, a `sqlite:///quantbot.db` URL leaves the path variable
+    # unset -- and the active trading store would silently drop out of the protected list,
+    # turning this isolation check green for exactly the collision it exists to refuse.
+    try:
+        target = resolve_database_target()
+    except DatabaseTargetError:
+        # The active store cannot be identified, so isolation from it cannot be asserted.
+        # Refusing is the only honest answer; a shadow forecast is never worth guessing here.
+        return False
+    if target.backend is DatabaseBackend.SQLITE:
+        protected.append(target.path.resolve())
     for protected_path in protected:
         if protected_path == forecast_path:
             return False

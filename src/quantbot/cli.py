@@ -195,7 +195,7 @@ def _default_context() -> CLIContext:
         def unavailable(command: str) -> CommandHandler:
             return lambda _args: {"ok": False, "command": command, "reason": reason}
 
-        database_path = Path(os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+        database_path = _configured_database()
         return CLIContext(
             settings=Settings(),
             database=Database(database_path),
@@ -213,6 +213,24 @@ def _default_context() -> CLIContext:
                 )
             },
         )
+
+
+def _configured_database(override: str | None = None) -> Path:
+    """The store a command should act on, resolved exactly as the runtime resolves it (#196).
+
+    These commands used to read `QUANTBOT_DB_PATH` directly. Once `QUANTBOT_DATABASE_URL`
+    exists, that is a way for `create-database` to bootstrap a file the runtime will never open
+    -- an empty store that reports itself healthy while the real one goes untouched, which is
+    #86's failure reached through the configuration rather than through a typo. One resolver,
+    one answer, and the ambiguous case refused in both places.
+    """
+    from quantbot.storage.target import resolve_database_target
+
+    if override:
+        return Path(override)
+    target = resolve_database_target()
+    target.require_enabled()
+    return target.path
 
 
 def _unconfigured(command: str) -> dict[str, object]:
@@ -253,7 +271,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     from quantbot.console.app import DEFAULT_HOST, DEFAULT_PORT, create_app
     from quantbot.storage import Database
 
-    path = Path(os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    path = _configured_database()
     host = args.host or DEFAULT_HOST
     port = args.port or DEFAULT_PORT
     database = Database(path)
@@ -361,7 +379,7 @@ def _backup_database(args: argparse.Namespace, stream: TextIO) -> int:
     """
     from quantbot.storage.backup import BackupError, backup_database, fingerprint
 
-    source = Path(args.database or os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    source = _configured_database(args.database)
     payload: dict[str, object] = {
         "ok": False,
         "command": "backup-database",
@@ -586,7 +604,7 @@ def _create_database(args: argparse.Namespace, stream: TextIO) -> int:
     from quantbot.storage import Database
     from quantbot.storage.schema import SCHEMA_VERSION
 
-    path = Path(args.database or os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    path = _configured_database(args.database)
     payload: dict[str, object] = {
         "ok": False,
         "command": "create-database",
@@ -626,7 +644,7 @@ def _migrate_database(args: argparse.Namespace, stream: TextIO) -> int:
     from quantbot.storage import Database, MigrationRequiredError, UnsupportedSchemaVersionError
     from quantbot.storage.schema import SCHEMA_VERSION
 
-    path = Path(args.database or os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    path = _configured_database(args.database)
     payload: dict[str, object] = {
         "ok": False,
         "command": "migrate-database",
