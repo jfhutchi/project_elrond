@@ -41,16 +41,47 @@ TOKENIZER_WEIGHT_SHA256 = "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29
 TOKENIZER_CONFIG_SHA256 = "2366e7ccfec76cbc19cf3c4c1b9c5d901be336ca1e83f2d2292c9bff381b77a2"
 INTEGRATION_VERSION = "kronos-shadow-v1"
 INPUT_TRANSFORM_VERSION = "ohlcv-no-amount-v1"
-WORKER_ENVIRONMENT_ID = "kronos-worker-py311-requirements-v1"
-EXPECTED_PACKAGE_VERSIONS = {
-    "einops": "0.8.1",
-    "huggingface-hub": "0.33.1",
-    "numpy": "1.26.4",
-    "pandas": "2.2.2",
-    "safetensors": "0.6.2",
-    "torch": "2.5.1",
-    "tqdm": "4.67.1",
+#: Every worker environment this integration has ever attested, oldest first.
+#:
+#: Historical entries are **immutable records, not installation targets** (#200). A forecast
+#: recorded under `...-v1` was produced by exactly these package versions; editing that row
+#: would re-attribute existing evidence to an environment that never ran it. The repository
+#: installs only the current environment, which is why `requirements-kronos-worker.txt` holds
+#: one package set rather than one per identity -- the old one is history, and history is not
+#: something to keep shipping when it has nine open advisories against it.
+#:
+#: v1 -> v2 changes exactly one line. `torch==2.5.1` is behind three patched security releases
+#: (CVE-2025-32434 fixed in 2.6.0, CVE-2026-24747 in 2.10.0, CVE-2025-3000 in 2.13.0). PR #117
+#: showed the `torch.load` path is unreachable behind the safetensors-only loader, and that
+#: mitigation stays; an unreachable advisory is still not a patched dependency. Every other pin
+#: is unchanged, and that was measured rather than hoped for: torch 2.13.0 resolves and imports
+#: against the identical `einops`/`huggingface-hub`/`numpy`/`pandas`/`safetensors`/`tqdm` set.
+WORKER_ENVIRONMENTS = {
+    "kronos-worker-py311-requirements-v1": {
+        "einops": "0.8.1",
+        "huggingface-hub": "0.33.1",
+        "numpy": "1.26.4",
+        "pandas": "2.2.2",
+        "safetensors": "0.6.2",
+        "torch": "2.5.1",
+        "tqdm": "4.67.1",
+    },
+    "kronos-worker-py311-requirements-v2": {
+        "einops": "0.8.1",
+        "huggingface-hub": "0.33.1",
+        "numpy": "1.26.4",
+        "pandas": "2.2.2",
+        "safetensors": "0.6.2",
+        "torch": "2.13.0",
+        "tqdm": "4.67.1",
+    },
 }
+
+WORKER_ENVIRONMENT_ID = "kronos-worker-py311-requirements-v2"
+
+#: The set the running worker attests to. Derived rather than restated, so the identity and the
+#: package expectations cannot disagree -- the drift `.github/dependabot.yml` exists to prevent.
+EXPECTED_PACKAGE_VERSIONS = WORKER_ENVIRONMENTS[WORKER_ENVIRONMENT_ID]
 
 
 class WorkerContractError(RuntimeError):
@@ -397,10 +428,30 @@ def _peak_process_memory_bytes() -> int | None:
                 ("PeakPagefileUsage", ctypes.c_size_t),
             ]
 
+        # `restype`/`argtypes` are load-bearing, not tidiness. Without them ctypes gives
+        # `GetCurrentProcess` a default `c_int` return, so the 64-bit pseudo-handle
+        # `(HANDLE)-1` is truncated to a 32-bit `-1` and marshalled back as a 32-bit
+        # argument. The call then fails, `success` is 0, and the function returns `None` --
+        # silently, because a null peak-memory reading is a valid answer on a platform that
+        # cannot measure it. Measured during #200's environment qualification: every Kronos
+        # forecast ever produced on Windows recorded `peak_process_memory_bytes: null`, and
+        # nothing said the probe was broken rather than unavailable. With the signatures
+        # declared the same call returns a real figure.
+        kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        psapi = ctypes.WinDLL("psapi", use_last_error=True)
+        kernel32.GetCurrentProcess.argtypes = []
+        kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+        psapi.GetProcessMemoryInfo.argtypes = [
+            wintypes.HANDLE,
+            ctypes.POINTER(ProcessMemoryCounters),
+            wintypes.DWORD,
+        ]
+        psapi.GetProcessMemoryInfo.restype = wintypes.BOOL
+
         counters = ProcessMemoryCounters()
         counters.cb = ctypes.sizeof(counters)
-        success = ctypes.windll.psapi.GetProcessMemoryInfo(
-            ctypes.windll.kernel32.GetCurrentProcess(),
+        success = psapi.GetProcessMemoryInfo(
+            kernel32.GetCurrentProcess(),
             ctypes.byref(counters),
             counters.cb,
         )

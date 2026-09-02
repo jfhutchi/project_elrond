@@ -1,0 +1,9 @@
+{
+  "ok": false,
+  "returncode": 1,
+  "stderr_tail": "Traceback (most recent call last):\n  File \"C:\\Users\\leepa\\AppData\\Local\\Packages\\Claude_pzs8sxrjxfjjc\\LocalCache\\Local\\quantbot-kronos-worker\\kronos-worker-v2.py\", line 651, in <module>\n    raise SystemExit(main())\n                     ^^^^^^\n  File \"C:\\Users\\leepa\\AppData\\Local\\Packages\\Claude_pzs8sxrjxfjjc\\LocalCache\\Local\\quantbot-kronos-worker\\kronos-worker-v2.py\", line 639, in main\n    result = run(\n             ^^^^\n  File \"C:\\Users\\leepa\\AppData\\Local\\Packages\\Claude_pzs8sxrjxfjjc\\LocalCache\\Local\\quantbot-kronos-worker\\kronos-worker-v2.py\", line 621, in run\n    return _run_forecast(\n           ^^^^^^^^^^^^^^\n  File \"C:\\Users\\leepa\\AppData\\Local\\Packages\\Claude_pzs8sxrjxfjjc\\LocalCache\\Local\\quantbot-kronos-worker\\kronos-worker-v2.py\", line 478, in _run_forecast\n    versions = _verify_worker_environment()\n               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"C:\\Users\\leepa\\AppData\\Local\\Packages\\Claude_pzs8sxrjxfjjc\\LocalCache\\Local\\quantbot-kronos-worker\\kronos-worker-v2.py\", line 125, in _verify_worker_environment\n    raise WorkerContractError(f\"worker dependency version is not pinned: {distribution}\")\nWorkerContractError: worker dependency version is not pinned: torch\n",
+  "wall_seconds": 0.191276,
+  "worker_environment_id": "kronos-worker-py311-requirements-v2",
+  "worker_entry_sha256": "ff56d4f33272e691258ba8d06531d6b59934db0d57a4df57487f40af1a2a169b",
+  "corpus_hash": "11f86ed0bf11e6f1a6541bcddc607dd460f16ef99de39e99067e5de94ff0ba25"
+}

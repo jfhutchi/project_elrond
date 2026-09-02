@@ -61,11 +61,28 @@ An **image digest**, not a requirements filename.
 image digest names the environment itself, byte for byte. It is a strictly stronger attestation,
 and it is the thing a container can actually prove about itself.
 
-This matters beyond tidiness. The pinned-artifact verification is what makes the nine open
+This matters beyond tidiness. The pinned-artifact verification is what made the then-open
 `torch==2.5.1` advisories unreachable (#117): the loader requires exactly one safetensors file,
 hash-verified, so a pickle never reaches `torch.load`. That argument is environment-specific. A
 container backend has to carry an equivalent argument, and its test has to assert it *there*, not
 inherit the venv's.
+
+## The first time this decision actually bit
+
+#200 moved the worker to `kronos-worker-py311-requirements-v2` on patched `torch 2.13.0`. Until
+then this document described a rule with one identity in existence, so nothing could violate it.
+
+The qualification measured what the rule predicts and found it true: v1 and v2 diverge on 236 of
+240 sampled values on the same frozen input, while each reproduces itself exactly at a fixed
+seed. They are two forecasters. v1 forecasts keep `kronos-worker-py311-requirements-v1`
+permanently; v2 starts a new series; the two are not pooled. The full measurement, the tolerance
+policy it was read against, and its limits are in
+[`kronos-worker-v2-qualification.md`](kronos-worker-v2-qualification.md).
+
+Nothing pools forecast evaluations today -- no aggregation surface over them exists yet -- so
+this is a constraint on the first one built rather than a defect being fixed. The identity is on
+every row inside `request_json` and is baked into `forecast_id`, since the request id hashes the
+config; promoting it to a queryable column is worth doing when something needs to group by it.
 
 ## Superseding this
 
