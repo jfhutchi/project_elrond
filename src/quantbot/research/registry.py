@@ -57,6 +57,11 @@ from sqlalchemy.orm import Session
 
 from quantbot.research.critic import Critique
 from quantbot.research.datasets import equivalent_datasets
+from quantbot.research.hypothesis_graph import (
+    HypothesisGraph,
+    HypothesisLineage,
+    validate_lineage,
+)
 from quantbot.research.manifest import canonical_result_json
 from quantbot.research.power import (
     EffectSpecification,
@@ -200,6 +205,7 @@ class RefusalReason(StrEnum):
     ALREADY_REGISTERED = "ALREADY_REGISTERED"
     NOT_REGISTERED = "NOT_REGISTERED"
     TAMPERED = "TAMPERED"
+    INVALID_LINEAGE = "INVALID_LINEAGE"
     UNVERIFIED_SAMPLE = "UNVERIFIED_SAMPLE"
     #: A window lifecycle transition asked for from a state that does not permit it (#22).
     WINDOW_NOT_RESERVED = "WINDOW_NOT_RESERVED"
@@ -268,6 +274,11 @@ class HypothesisDraft(FrozenModel):
     parent_hypothesis_id: str | None = None
     parent_version: int | None = Field(default=None, ge=1)
 
+    #: Optional for legacy registrations, required as a pair for componentized ones. The graph
+    #: describes behaviour; lineage describes provenance and deliberately carries no verdict.
+    graph: HypothesisGraph | None = None
+    lineage: HypothesisLineage | None = None
+
     question: Text
     prediction: Text
     null_hypothesis: Text
@@ -317,6 +328,15 @@ class HypothesisDraft(FrozenModel):
     def validate_draft(self) -> Self:
         if (self.parent_hypothesis_id is None) != (self.parent_version is None):
             raise ValueError("a parent reference needs both id and version")
+        if (self.graph is None) != (self.lineage is None):
+            raise ValueError("a component graph and its lineage must be declared together")
+        if self.graph is not None and self.lineage is not None:
+            if self.parent_hypothesis_id is not None:
+                raise ValueError(
+                    "componentized hypotheses declare all parents in lineage; the legacy "
+                    "single-parent fields would create a second source of truth"
+                )
+            validate_lineage(self.graph, self.lineage)
         if self.search_origin is SearchOrigin.LEGACY_SELF_REPORTED:
             raise ValueError(
                 "LEGACY_SELF_REPORTED describes rows that predate the search-origin distinction "
@@ -414,7 +434,8 @@ class NoveltyReport:
     """
 
     hypothesis_id: str
-    #: Highest Jaccard overlap with any prior hypothesis, over universe and features together.
+    #: Highest overlap with any prior hypothesis: legacy universe/features or exact component
+    #: content, whichever says more of the proposed behaviour has already been seen.
     highest_overlap: float
     nearest: tuple[str, ...]
     consumption: tuple[WindowConsumption, ...]
@@ -535,6 +556,8 @@ class HypothesisRegistry:
                 " material changes require a new version",
             )
 
+        self._verify_lineage(draft)
+
         contamination = self._contamination(draft, now=now.date())
         if contamination:
             raise RegistrationRefused(
@@ -621,6 +644,29 @@ class HypothesisRegistry:
         return [
             Registration.model_validate_json(str(row["document_json"]))
             for row in self._session.execute(statement).mappings()
+        ]
+
+    def registrations_for_component(self, component_id: str) -> list[Registration]:
+        """Every frozen claim that contained this exact component version.
+
+        This is a representation lookup, not an evidence query. A returned registration may
+        have survived, failed, or never run; none of those outcomes is attributed to the
+        component here. Component evidence belongs to #188 and must identify the component.
+        """
+        return [
+            registration
+            for registration in self.list_registrations()
+            if registration.draft.graph is not None
+            and component_id in registration.draft.graph.component_ids
+        ]
+
+    def registrations_for_graph(self, graph_id: str) -> list[Registration]:
+        """Every frozen claim with behaviourally equivalent graph content."""
+        return [
+            registration
+            for registration in self.list_registrations()
+            if registration.draft.graph is not None
+            and registration.draft.graph.graph_id == graph_id
         ]
 
     def record_assessment(self, assessment: PowerAssessment) -> None:
@@ -857,9 +903,21 @@ class HypothesisRegistry:
             if str(row["hypothesis_id"]) == draft.hypothesis_id:
                 continue
             prior = Registration.model_validate_json(str(row["document_json"])).draft
+            signature_overlap = _jaccard(
+                signature, _signature(prior.universe, prior.features)
+            )
+            component_overlap = 0.0
+            if draft.graph is not None and prior.graph is not None:
+                if draft.graph.graph_id == prior.graph.graph_id:
+                    component_overlap = 1.0
+                else:
+                    component_overlap = _jaccard(
+                        frozenset(draft.graph.component_ids),
+                        frozenset(prior.graph.component_ids),
+                    )
             overlaps.append(
                 (
-                    _jaccard(signature, _signature(prior.universe, prior.features)),
+                    max(signature_overlap, component_overlap),
                     f"{prior.hypothesis_id} v{prior.version}",
                 )
             )
@@ -1054,6 +1112,57 @@ class HypothesisRegistry:
                 f"search run {draft.search_run_id!r}, which recorded {recorded}",
             )
 
+    def _verify_lineage(self, draft: HypothesisDraft) -> None:
+        """Bind every lineage claim to artifacts frozen in exact stored parent graphs.
+
+        A model or external worker may propose lineage, but the registry is the authority that
+        decides whether those parents and artifacts really exist. This check also prevents a
+        child from naming the latest version of a parent while silently taking a component from
+        an older one.
+        """
+        if draft.graph is None or draft.lineage is None:
+            return
+        parent_graphs: dict[tuple[str, int], HypothesisGraph] = {}
+        for parent in draft.lineage.parents:
+            row = self._row(parent.hypothesis_id, parent.version)
+            if row is None:
+                raise RegistrationRefused(
+                    RefusalReason.INVALID_LINEAGE,
+                    f"parent {parent.hypothesis_id} v{parent.version} is not registered",
+                )
+            registration = Registration.model_validate_json(str(row["document_json"]))
+            if registration.content_hash != str(row["content_hash"]):
+                raise RegistrationRefused(
+                    RefusalReason.TAMPERED,
+                    f"parent {parent.hypothesis_id} v{parent.version} hashes to "
+                    f"{registration.content_hash} but was frozen as {row['content_hash']}",
+                )
+            graph = registration.draft.graph
+            if graph is None:
+                raise RegistrationRefused(
+                    RefusalReason.INVALID_LINEAGE,
+                    f"parent {parent.hypothesis_id} v{parent.version} has no component graph",
+                )
+            if graph.graph_id != parent.graph_id:
+                raise RegistrationRefused(
+                    RefusalReason.INVALID_LINEAGE,
+                    f"parent {parent.hypothesis_id} v{parent.version} registered graph "
+                    f"{graph.graph_id}, not {parent.graph_id}",
+                )
+            parent_graphs[(parent.hypothesis_id, parent.version)] = graph
+
+        for change in draft.lineage.changes:
+            if change.parent is None or change.parent_content_id is None:
+                continue
+            graph = parent_graphs[(change.parent.hypothesis_id, change.parent.version)]
+            if change.parent_content_id not in graph.artifact_ids(change.artifact_kind):
+                raise RegistrationRefused(
+                    RefusalReason.INVALID_LINEAGE,
+                    f"{change.parent.hypothesis_id} v{change.parent.version} graph "
+                    f"{change.parent.graph_id} has no {change.artifact_kind.value.lower()} "
+                    f"{change.parent_content_id}",
+                )
+
     def cumulative_trials(self) -> int:
         """The multiple-testing burden as it stands right now.
 
@@ -1183,6 +1292,18 @@ def summarize(registration: Registration) -> dict[str, object]:
         "falsified_if": draft.falsified_if,
         "registered_at": encode_utc(registration.registered_at),
         "content_hash": registration.content_hash,
+        "graph_id": None if draft.graph is None else draft.graph.graph_id,
+        "lineage_id": None if draft.lineage is None else draft.lineage.lineage_id,
+        "component_ids": [] if draft.graph is None else list(draft.graph.component_ids),
+        "relationship_ids": [] if draft.graph is None else list(draft.graph.relationship_ids),
+        "lineage_parents": (
+            []
+            if draft.lineage is None
+            else [
+                f"{parent.hypothesis_id} v{parent.version}@{parent.graph_id}"
+                for parent in draft.lineage.parents
+            ]
+        ),
         "cumulative_trials": registration.cumulative_trials,
         "luck_threshold_z": str(power.luck_threshold_z),
         "estimand": power.estimand.value,

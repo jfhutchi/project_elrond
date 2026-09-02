@@ -17,6 +17,15 @@ from sqlalchemy import text
 
 from quantbot.research.builder import OutcomeVerdict, compile_experiment
 from quantbot.research.critic import DeterministicCritic, DeterministicReview
+from quantbot.research.hypothesis_graph import (
+    BehaviorTerm,
+    GraphArtifactKind,
+    HypothesisComponent,
+    HypothesisGraph,
+    HypothesisLineage,
+    LineageAction,
+    LineageChange,
+)
 from quantbot.research.manifest import (
     CodeProvenance,
     DatasetSnapshot,
@@ -164,9 +173,11 @@ def provenance() -> tuple[CodeProvenance, EnvironmentFingerprint]:
     )
 
 
-def _register(database: Database):
+def _register(database: Database, **overrides: object):
     with database.transaction() as session:
-        return HypothesisRegistry(session).register(draft(), now=NOW, critique=critique())
+        return HypothesisRegistry(session).register(
+            draft(**overrides), now=NOW, critique=critique()
+        )
 
 
 def _window_state(session) -> str:
@@ -221,6 +232,83 @@ def test_the_holdout_is_spent_before_the_measurement_reads_it(
         )
 
     assert observed_during_run == [WindowState.CONSUMED.value]
+
+
+def test_a_componentized_run_carries_the_exact_graph_into_its_manifest(
+    database: Database, manifests: Path
+) -> None:
+    signal = HypothesisComponent(
+        component_type="signal",
+        behavior=(
+            BehaviorTerm(key="implementation", value="close-above-sma"),
+            BehaviorTerm(key="lookback", value=200),
+        ),
+    )
+    graph = HypothesisGraph(components=(signal,))
+    lineage = HypothesisLineage(
+        changes=(
+            LineageChange(
+                artifact_kind=GraphArtifactKind.COMPONENT,
+                action=LineageAction.INTRODUCED,
+                child_content_id=signal.component_id,
+            ),
+        )
+    )
+    registration = _register(database, graph=graph, lineage=lineage)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+    code, environment = provenance()
+
+    with database.transaction() as session:
+
+        def measurement(_plan, _access: ProtectedAccess) -> Measured:
+            return Measured(
+                effect=Decimal("2.1"),
+                test_statistic=Decimal("4.0"),
+                probes_run=plan.probes,
+            )
+
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            plan,
+            registration,
+            measurement,
+            now=NOW,
+            code=code,
+            environment=environment,
+            applied_costs=COSTS,
+            design=DESIGN,
+        )
+
+    assert plan.hypothesis_graph_hash == graph.graph_id
+    assert result.manifest.hypothesis_graph_hash == graph.graph_id
+    persisted = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert persisted["hypothesis_graph_hash"] == graph.graph_id
+
+
+def test_a_plan_cannot_spoof_graph_provenance(
+    database: Database, manifests: Path
+) -> None:
+    registration = _register(database)
+    honest = compile_experiment(registration, datasets=[snapshot()])
+    spoofed = honest.model_copy(update={"hypothesis_graph_hash": "f" * 64})
+    code, environment = provenance()
+
+    with database.transaction() as session, pytest.raises(
+        ExperimentRunError, match="graph provenance"
+    ):
+        ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            spoofed,
+            registration,
+            lambda _plan, _access: Measured(
+                effect=Decimal("2.1"),
+                test_statistic=Decimal("4.0"),
+                probes_run=spoofed.probes,
+            ),
+            now=NOW,
+            code=code,
+            environment=environment,
+            applied_costs=COSTS,
+            design=DESIGN,
+        )
 
 
 def test_a_crashing_measurement_still_spends_the_holdout(

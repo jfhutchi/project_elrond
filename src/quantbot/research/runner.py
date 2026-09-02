@@ -259,6 +259,15 @@ class ExperimentRunner:
                 f"{registration.content_hash}; a result frozen against one claim cannot be "
                 "reported against another"
             )
+        registered_graph_hash = (
+            None if registration.draft.graph is None else registration.draft.graph.graph_id
+        )
+        if plan.hypothesis_graph_hash != registered_graph_hash:
+            raise ExperimentRunError(
+                f"plan names component graph {plan.hypothesis_graph_hash} but registration "
+                f"{registration.content_hash} froze {registered_graph_hash}; graph provenance "
+                "cannot be supplied or changed independently of the registered claim"
+            )
 
         access = self._spend(plan, now=now)
 
@@ -521,6 +530,7 @@ class ExperimentRunner:
             hypothesis_id=plan.hypothesis_id,
             hypothesis_version=plan.hypothesis_version,
             registration_hash=plan.registration_hash,
+            hypothesis_graph_hash=plan.hypothesis_graph_hash,
             minimum_detectable_effect=str(registration.power.minimum_detectable_effect),
             power_verdict="OVERRIDDEN" if registration.power.override else "POWERED",
             datasets=tuple(plan.datasets),

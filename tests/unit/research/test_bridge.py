@@ -9,6 +9,15 @@ import pytest
 
 from quantbot.research.bridge import CandidateNotRegistrable, draft_from_candidate
 from quantbot.research.discovery import Candidate, DiscoveryMode
+from quantbot.research.hypothesis_graph import (
+    BehaviorTerm,
+    GraphArtifactKind,
+    HypothesisComponent,
+    HypothesisGraph,
+    HypothesisLineage,
+    LineageAction,
+    LineageChange,
+)
 from quantbot.research.power import (
     ComparisonStructure,
     EconomicProfile,
@@ -89,6 +98,37 @@ def test_a_candidate_becomes_a_registrable_draft() -> None:
     assert draft.universe == ("SPY",)
     assert draft.falsified_if.startswith("regress drawdown")
     assert draft.basis.status is EpistemicStatus.DATA_DRIVEN_NO_EXTERNAL_SOURCE
+
+
+def test_a_candidate_graph_and_lineage_reach_registration_unchanged() -> None:
+    """A generator may propose structure; only the downstream registry makes it authoritative."""
+    signal = HypothesisComponent(
+        component_type="signal",
+        behavior=(BehaviorTerm(key="implementation", value="revision-dispersion"),),
+        display_name="Revision dispersion",
+    )
+    graph = HypothesisGraph(components=(signal,))
+    lineage = HypothesisLineage(
+        changes=(
+            LineageChange(
+                artifact_kind=GraphArtifactKind.COMPONENT,
+                action=LineageAction.INTRODUCED,
+                child_content_id=signal.component_id,
+            ),
+        )
+    )
+
+    draft = draft_from_candidate(
+        candidate(graph=graph, lineage=lineage),
+        effect=effect(),
+        windows=[window()],
+        available_observations=2669,
+        hypothesis_id="H-COMPONENTIZED",
+    )
+
+    assert draft.graph == graph
+    assert draft.lineage == lineage
+    assert draft.graph.graph_id == graph.graph_id
 
 
 def test_the_search_cardinality_is_carried_not_restated() -> None:
