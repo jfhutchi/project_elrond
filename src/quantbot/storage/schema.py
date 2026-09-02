@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 25
+SCHEMA_VERSION = 26
 
 metadata = MetaData(
     naming_convention={
@@ -1565,3 +1565,63 @@ Index(
     component_heartbeats.c.component_id,
     component_heartbeats.c.observed_at,
 )
+
+
+# --- Deployed-state record (#190) -----------------------------------------------------------
+#
+# The #190 inventory of the coordinator took filesystem archaeology to establish facts the
+# system should have been able to state: which commit was checked out, whether anything was
+# running, which database was authoritative, and whether a second host might wake up and become
+# a competing writer. The answers were recoverable only because nothing was running. Had a
+# process been alive on an old checkout, the same archaeology would have been ambiguous.
+#
+# `strategy_deployments` records that a strategy version was deployed from a commit. It does not
+# record that *this host*, in *this process*, is running that commit against *this* database
+# right now, and that is the fact the inventory needed and could not get.
+#
+# Append-only. Each row is one observation, not a mutable "current state": a coordinator that
+# died cannot update its row to say so, and overwriting would erase the evidence that an older
+# checkout ran at all -- which is exactly the stale-host signal worth keeping.
+
+runtime_deployments = Table(
+    "runtime_deployments",
+    metadata,
+    Column("observation_id", String(200), primary_key=True),
+    Column("host_id", String(128), nullable=False),
+    # Process identity, so two coordinators on one host are two rows rather than one confused
+    # one. A second active writer is the failure #190 Phase 4 exists to prevent, and it is only
+    # visible if the process is recorded.
+    Column("instance_id", String(128), nullable=False),
+    Column("role", String(32), nullable=False),
+    # `UNKNOWN` when the runtime cannot say. That is itself reportable: a stale checkout cannot
+    # be detected on a process that will not name its commit.
+    Column("git_commit", String(64), nullable=False),
+    Column("package_version", String(64), nullable=False),
+    Column("python_version", String(32), nullable=False),
+    Column("host_platform", String(160), nullable=False),
+    Column("trading_mode", String(16), nullable=False),
+    # SHA-256 of the resolved database path. A fingerprint rather than the path itself: it
+    # answers "is this the same store?" across hosts without publishing a filesystem layout.
+    Column("database_fingerprint", String(64), nullable=False),
+    Column("schema_version", Integer, nullable=False),
+    Column("strategy_id", String(128)),
+    Column("strategy_version", String(64)),
+    Column("configuration_hash", String(128)),
+    Column("process_started_at", String(40), nullable=False),
+    Column("observed_at", String(40), nullable=False),
+    Column("detail_json", Text, nullable=False, server_default=text("'{}'")),
+    CheckConstraint(
+        "role IN ('COORDINATOR', 'WORKER', 'CONSOLE', 'TOOL')", name="runtime_role_is_known"
+    ),
+    CheckConstraint("trading_mode IN ('PAPER', 'LIVE')", name="runtime_mode_is_known"),
+    CheckConstraint("schema_version >= 1", name="runtime_schema_version_is_positive"),
+    CheckConstraint(
+        "observed_at >= process_started_at", name="an_observation_follows_its_process_start"
+    ),
+)
+Index(
+    "ix_runtime_deployments_role_observed",
+    runtime_deployments.c.role,
+    runtime_deployments.c.observed_at,
+)
+Index("ix_runtime_deployments_commit", runtime_deployments.c.git_commit)

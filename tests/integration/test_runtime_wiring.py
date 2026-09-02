@@ -765,3 +765,103 @@ async def test_a_collection_that_fails_leaves_a_durable_failure_rather_than_sile
         ]
 
     database.close()
+
+
+async def test_the_wired_cycle_records_what_it_is_running(tmp_path: Path) -> None:
+    """#190's first caller: the coordinator states its own identity while it holds the lock.
+
+    A record only its own unit tests wrote would answer no operational question, so this
+    asserts against the wired path -- and specifically that the observation lands *before*
+    anything can halt, because "what is running" and "what succeeded" are different questions
+    and the first one matters most when the second one is failing.
+    """
+    from quantbot.operations.deployment import (
+        DeploymentRegistry,
+        DeploymentWarning,
+        RuntimeContext,
+        RuntimeRole,
+        database_fingerprint,
+    )
+
+    config = load_strategy_config(_write_config(tmp_path))
+    database = Database.create(tmp_path / "quantbot.db")
+    KillSwitchController(database).clear(
+        reason="test fixture readiness",
+        measured=measured(),
+        updated_at=NOW,
+    )
+    cycle, strategy, broker = _build_cycle(tmp_path, config, database)
+    cycle._runtime = RuntimeContext(  # noqa: SLF001 - the wired runtime supplies this
+        role=RuntimeRole.COORDINATOR,
+        database_path=tmp_path / "quantbot.db",
+        trading_mode="PAPER",
+        process_started_at=NOW,
+        host_id="omen",
+        process_id="pid-1",
+        git_commit="c0ffee1",
+    )
+    strategy.bind_run("run-1")
+
+    result = await cycle.run("run-1", started_at=NOW, trading_date=NOW.date())
+    assert result.status == "SUCCEEDED"
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW)
+
+    assert status.ok is True, status.reasons
+    coordinator = status.latest_coordinator
+    assert coordinator is not None
+    assert coordinator.host_id == "omen"
+    assert coordinator.git_commit == "c0ffee1"
+    assert coordinator.strategy_id == strategy._identity.strategy_id  # noqa: SLF001
+    assert coordinator.database_fingerprint == database_fingerprint(tmp_path / "quantbot.db")
+    assert status.last_successful_cycle_at is not None
+
+    # A second cycle from the same process is the same coordinator, not a second one.
+    cycle_two, strategy_two, _ = _build_cycle(tmp_path, config, database, broker)
+    cycle_two._runtime = cycle._runtime  # noqa: SLF001
+    strategy_two.bind_run("run-2")
+    await cycle_two.run("run-2", started_at=NOW + timedelta(minutes=1), trading_date=NOW.date())
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=1))
+    assert len(status.active_coordinators) == 1
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+    database.close()
+
+
+def test_a_wired_runtime_describes_the_database_it_actually_writes_to(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The context is built where the settings and the path already live, for this reason.
+
+    A cycle that worked out its own database path could describe a different store from the one
+    it writes to, which is exactly the ambiguity the record exists to remove.
+    """
+    from quantbot.operations.deployment import RuntimeRole, database_fingerprint
+
+    monkeypatch.setenv("QUANTBOT_CONFIG", str(_write_config(tmp_path)))
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
+    Database.create(tmp_path / "quantbot.db").close()
+    monkeypatch.setenv("QUANTBOT_LOCK_PATH", str(tmp_path / "quantbot.lock"))
+    monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "0123456789abcdef")
+
+    runtime = build_runtime(_ready_settings())
+    try:
+        context = runtime.runtime_context()
+        assert context.role is RuntimeRole.COORDINATOR
+        assert context.trading_mode == "PAPER"
+
+        # Observed on the real clock, not the fixture's frozen past one: the process really did
+        # start just now, and using NOW would exercise the backwards-clock clamp instead of the
+        # thing under test.
+        observation = context.observe(now=datetime.now(UTC), identity=runtime.identity)
+        assert observation.process_started_at <= observation.observed_at
+        assert observation.git_commit == "0123456789abcdef"
+        assert observation.database_fingerprint == database_fingerprint(runtime.paths.database)
+        assert observation.strategy_id == runtime.identity.strategy_id
+        assert observation.configuration_hash == runtime.identity.configuration_hash
+    finally:
+        runtime.database.close()
