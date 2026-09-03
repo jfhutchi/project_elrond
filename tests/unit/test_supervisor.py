@@ -9,6 +9,7 @@ property had no test — only a hand-run `--self-check`.
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -176,3 +177,28 @@ def test_a_missing_ledger_is_critical(
     assert len(findings) == 1
     assert findings[0].severity == "CRITICAL"
     assert findings[0].check == "ledger"
+
+
+def test_the_watchdog_can_only_ever_restart_its_own_checkout() -> None:
+    r"""A stale copy must not resurrect a coordinator from somewhere else (#190).
+
+    The shipped script named an absolute checkout -- `E:\Documents\GitHub\project_elrond\
+    .claude\worktrees\...` -- for its working directory, its config, its venv and its
+    supervisor. The coordinator inventoried for #190 has no `E:` drive, so on that host the
+    file was inert. On the host where that path *does* exist, a copy left in a Startup folder
+    would have restarted a daemon from a months-old checkout against the same paper account:
+    the second-writer hazard #190 Phase 4 exists to close, hiding in a version-controlled file.
+
+    Asserting merely that the script mentions `%~dp0` would pass on a script that derived a
+    root and then ignored it, which is close to what the broken version did. So the absence of
+    any absolute path is asserted directly, and separately from the presence of the derivation.
+    """
+    script = (ROOT / "scripts" / "quantbot-watchdog.cmd").read_text(encoding="utf-8")
+
+    absolute = re.findall(r"[A-Za-z]:\\[^\s\"]*", script)
+    assert absolute == [], f"the watchdog names paths outside its own checkout: {absolute}"
+
+    assert "%~dp0" in script, "the watchdog must derive its root from its own location"
+    assert "supervisor.py" in script and "--watch" in script, (
+        "path-relative or not, this file's job is still to run the supervisor"
+    )

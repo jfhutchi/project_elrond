@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -22,7 +23,6 @@ from quantbot.operations.deployment import (
     DeploymentWarning,
     RuntimeContext,
     RuntimeRole,
-    database_fingerprint,
     describe_runtime,
     instance_id,
     summarize,
@@ -61,12 +61,14 @@ def _context(
     commit: str = "aaaa111",
     mode: str = "PAPER",
     host: str = "omen",
+    started: datetime = STARTED,
+    store_identity: str = "store-identity-1",
 ) -> RuntimeContext:
     return RuntimeContext(
         role=role,
-        database_path=tmp_path / "quantbot.db",
+        store_identity=store_identity,
         trading_mode=mode,
-        process_started_at=STARTED,
+        process_started_at=started,
         host_id=host,
         process_id=process,
         git_commit=commit,
@@ -96,7 +98,7 @@ def test_a_recorded_coordinator_answers_the_question_archaeology_had_to(
     database: Database, tmp_path: Path
 ) -> None:
     """Commit, host, process, database identity and schema, from the runtime itself."""
-    context = _context(tmp_path)
+    context = _context(tmp_path, store_identity=database.store_identity)
     with database.transaction() as session:
         DeploymentRegistry(session).record(context.observe(now=NOW, identity=_identity()))
 
@@ -114,12 +116,10 @@ def test_a_recorded_coordinator_answers_the_question_archaeology_had_to(
     assert coordinator.schema_version == SCHEMA_VERSION
     assert coordinator.strategy_id == "adaptive-momentum-v1"
     assert coordinator.configuration_hash == "c" * 64
-    assert coordinator.database_fingerprint == database_fingerprint(tmp_path / "quantbot.db")
+    assert coordinator.store_identity == database.store_identity
     assert status.active_coordinators == (coordinator,)
 
-    # The fingerprint identifies the store without publishing where it lives.
-    assert str(tmp_path) not in coordinator.database_fingerprint
-    assert len(coordinator.database_fingerprint) == 64
+    assert str(tmp_path) not in coordinator.store_identity
 
 
 def test_a_coordinator_that_stopped_is_not_reported_as_running(
@@ -172,48 +172,248 @@ def test_two_active_coordinators_are_the_second_writer_condition_made_visible(
     assert "old-desktop/pid-9" in detail and "omen/pid-1" in detail
 
 
-def test_an_older_checkout_starting_after_a_newer_one_is_a_stale_checkout(
+def test_a_normal_same_host_restart_does_not_create_a_second_writer_warning(
     database: Database, tmp_path: Path
 ) -> None:
-    """The hazard the watchdog fix closed at the source, now detectable if it recurs.
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(days=1),
+            ).observe(now=NOW - timedelta(minutes=1))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW,
+            ).observe(now=NOW + timedelta(minutes=1))
+        )
 
-    Detected without a network call and without a deploy manifest: the history *is* the
-    manifest. A commit that ran here before, and is not the one running now, means something
-    has gone backwards.
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=1))
+
+    assert status.latest_coordinator is not None
+    assert status.latest_coordinator.instance_id == "pid-2"
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+
+def test_a_same_host_restart_at_the_recorded_handoff_boundary_is_not_overlap(
+    database: Database, tmp_path: Path
+) -> None:
+    """Touching intervals do not establish that both processes ran concurrently."""
+    handoff = NOW
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=handoff)
+        )
+        registry.record(
+            _context(tmp_path, process="pid-2", started=handoff).observe(
+                now=handoff + timedelta(minutes=1)
+            )
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=handoff + timedelta(minutes=1))
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+
+def test_same_host_coordinators_with_recorded_overlap_create_a_second_writer_warning(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW - timedelta(minutes=30))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW,
+            ).observe(now=NOW + timedelta(minutes=1))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW + timedelta(minutes=2))
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=2))
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS in status.warnings
+    detail = " ".join(status.reasons)
+    assert "same-host recorded intervals overlap" in detail
+    assert "omen/pid-1 + omen/pid-2" in detail
+
+
+def test_cross_host_coordinators_with_recorded_overlap_create_a_second_writer_warning(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                host="omen",
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW)
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                host="old-desktop",
+                process="pid-9",
+                started=NOW - timedelta(minutes=30),
+            ).observe(now=NOW + timedelta(minutes=1))
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=1))
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS in status.warnings
+    detail = " ".join(status.reasons)
+    assert "cross-host wall-clock intervals are consistent with overlap" in detail
+    assert "timestamps do not prove concurrency" in detail
+    assert "demonstrably" not in detail
+
+
+def test_cross_host_clock_skew_that_separates_recorded_intervals_does_not_claim_overlap(
+    database: Database, tmp_path: Path
+) -> None:
+    """Different host clocks cannot supply concurrency that their timestamps do not record.
+
+    These actual processes could have overlapped if the second host's clock was two hours fast.
+    The registry has no clock-synchronization evidence, so it neither invents overlap nor claims
+    that absence of this warning proves a clean handoff.
     """
     with database.transaction() as session:
         registry = DeploymentRegistry(session)
-        registry.record(_context(tmp_path, commit="newc0de", process="pid-1").observe(now=NOW))
         registry.record(
-            _context(tmp_path, commit="old0001", process="pid-2").observe(
-                now=NOW + timedelta(hours=1)
-            )
+            _context(
+                tmp_path,
+                host="omen",
+                process="pid-1",
+                started=NOW - timedelta(hours=2),
+            ).observe(now=NOW - timedelta(hours=1))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                host="old-desktop",
+                process="pid-9",
+                started=NOW + timedelta(hours=1),
+            ).observe(now=NOW + timedelta(hours=2))
         )
 
     with database.transaction() as session:
-        status = DeploymentRegistry(session).status(now=NOW + timedelta(hours=1))
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(hours=2))
 
-    assert DeploymentWarning.STALE_CHECKOUT in status.warnings
-    detail = " ".join(status.reasons)
-    assert "old0001" in detail and "newc0de" in detail
+    assert len(status.active_coordinators) == 2
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
 
-    # And a coordinator that will not name its commit cannot be checked at all, which is worth
-    # saying rather than reporting as clean.
+
+def test_a_recent_observation_before_replacement_start_does_not_prove_overlap(
+    database: Database, tmp_path: Path
+) -> None:
     with database.transaction() as session:
-        DeploymentRegistry(session).record(
-            _context(tmp_path, commit="", process="pid-3").observe(
-                now=NOW + timedelta(hours=2)
-            )
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=2),
+            ).observe(now=NOW - timedelta(hours=1))
         )
-    with database.transaction() as session:
-        blind = DeploymentRegistry(session).status(now=NOW + timedelta(hours=2))
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW - timedelta(minutes=30),
+            ).observe(now=NOW)
+        )
 
-    assert blind.latest_coordinator is not None
-    assert blind.latest_coordinator.git_commit == UNKNOWN_COMMIT
-    assert DeploymentWarning.UNIDENTIFIED_CHECKOUT in blind.warnings
-    assert DeploymentWarning.STALE_CHECKOUT not in blind.warnings, (
-        "an unidentified checkout is unknown, not proven stale"
-    )
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW)
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+
+def test_the_100_hour_window_keeps_a_long_weekend_latest_coordinator_without_overlap_warning(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=100),
+            ).observe(now=NOW - timedelta(hours=96))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW)
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW)
+
+    assert status.latest_coordinator is not None
+    assert status.latest_coordinator.instance_id == "pid-2"
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+
+@pytest.mark.parametrize(
+    ("commits", "stale", "unidentified"),
+    [
+        (("aaaa111", "bbbb222"), False, False),
+        (("aaaa111", "bbbb222", "aaaa111"), True, False),
+        (("aaaa111", "bbbb222", "cccc333"), False, False),
+        (("aaaa111", ""), False, True),
+    ],
+    ids=["upgrade", "reversion", "multi-step-upgrade", "unknown"],
+)
+def test_stale_checkout_requires_a_reappearing_commit_in_history(
+    database: Database, tmp_path: Path, commits: tuple[str, ...], stale: bool, unidentified: bool
+) -> None:
+    """Only A -> B -> A proves a checkout reversion from append-only history."""
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        for index, commit in enumerate(commits):
+            registry.record(
+                _context(tmp_path, commit=commit, process="pid-1").observe(
+                    now=NOW + timedelta(minutes=index)
+                )
+            )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=len(commits)))
+
+    assert (DeploymentWarning.STALE_CHECKOUT in status.warnings) is stale
+    assert (DeploymentWarning.UNIDENTIFIED_CHECKOUT in status.warnings) is unidentified
+    if unidentified:
+        assert status.latest_coordinator is not None
+        assert status.latest_coordinator.git_commit == UNKNOWN_COMMIT
 
 
 def test_worker_availability_is_reported_separately_from_coordinator_authority(
@@ -236,7 +436,8 @@ def test_worker_availability_is_reported_separately_from_coordinator_authority(
     )
     report = summarize(status)
     assert report["coordinator"] is None
-    assert [item["instance_id"] for item in report["active_workers"]] == ["kronos-1"]  # type: ignore[index,union-attr]
+    active_workers = cast(list[dict[str, object]], report["active_workers"])
+    assert [item["instance_id"] for item in active_workers] == ["kronos-1"]
 
 
 def test_a_live_trading_runtime_is_reported_and_never_acted_on(
@@ -312,7 +513,7 @@ def test_a_backwards_clock_records_the_runtime_instead_of_aborting_the_cycle(
     """
     observation = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=NOW + timedelta(seconds=1),
@@ -322,12 +523,42 @@ def test_a_backwards_clock_records_the_runtime_instead_of_aborting_the_cycle(
 
     ordinary = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=STARTED,
     )
     assert ordinary.process_started_at == STARTED < ordinary.observed_at
+
+
+def test_a_backwards_clock_does_not_change_one_process_into_a_second_coordinator(
+    database: Database,
+) -> None:
+    context = RuntimeContext(
+        role=RuntimeRole.COORDINATOR,
+        store_identity=database.store_identity,
+        trading_mode="PAPER",
+        process_started_at=NOW,
+        host_id="omen",
+        git_commit="abc1234",
+    )
+    before_correction = context.observe(now=NOW + timedelta(seconds=1))
+    after_correction = context.observe(now=NOW - timedelta(seconds=1))
+
+    assert before_correction.instance_id == after_correction.instance_id
+    assert before_correction.process_started_at == NOW
+    assert after_correction.process_started_at == after_correction.observed_at
+
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(before_correction)
+        registry.record(after_correction)
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(seconds=1))
+
+    assert len(status.active_coordinators) == 1
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
 
 
 def test_two_processes_on_one_host_get_two_instance_ids() -> None:
@@ -344,7 +575,7 @@ def test_the_commit_comes_from_the_environment_when_the_caller_does_not_supply_o
     monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "  env0c0mmit  ")
     observation = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=STARTED,
@@ -354,7 +585,7 @@ def test_the_commit_comes_from_the_environment_when_the_caller_does_not_supply_o
     monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "   ")
     blank = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=STARTED,

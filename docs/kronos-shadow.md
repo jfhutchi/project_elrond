@@ -161,11 +161,19 @@ snapshot_download("NeoQuasar/Kronos-Tokenizer-base", revision="0e0117387f39004a9
 EOF
 ```
 
-**Install Torch from PyPI, not the CPU wheel index.** `torch==2.5.1` from the CPU index reports
-its version as `2.5.1+cpu`, which is not the pinned string, and the worker refuses the
-environment. The refusal is correct -- a different build is a different environment -- but the
-failure surfaces as a bare `WORKER_FAILED`, so it is worth knowing before debugging it. The
-default PyPI wheel bundles CUDA libraries and still runs on CPU; expect roughly 3 GB installed.
+**Install Torch from PyPI, not the CPU wheel index.** The pinned `torch` from the CPU index
+reports its version with a `+cpu` local suffix, which is not the pinned string, and the worker
+refuses the environment. The refusal is correct -- a different build is a different environment
+-- but the failure surfaces as a bare `WORKER_FAILED`, so it is worth knowing before debugging
+it. On Linux the default PyPI wheel pulls the CUDA runtime packages and still runs on CPU;
+expect roughly 3 GB installed. On Windows there are no bundled CUDA libraries: the v2 (`torch
+2.13.0`) environment measures 655 MB, and the retired v1 (`torch 2.5.1`) one measured 1.3 GB.
+
+**On Windows, set `HF_HUB_DISABLE_SYMLINKS=1` before pre-warming.** Without Developer Mode or an
+elevated shell, `huggingface_hub` cannot create its cache symlinks and the download dies with
+`OSError: [WinError 1314] A required privilege is not held by the client`. The variable makes it
+copy instead, at the cost of some disk. Found by following this procedure on the coordinator for
+#200, where it failed on the tokenizer's `.gitattributes`.
 
 Worker stderr is deliberately never reflected into records or CLI output, so a failing worker
 reports only `WORKER_FAILED`. To see why, run the staged worker directly:
@@ -233,6 +241,12 @@ evaluator; this integration does not import or execute the protected strategy to
   `KronosSignalProvider` rather than by calling the model directly: 64 daily bars in, horizon 3,
   2 sample paths, model initialization 0.23 s, inference 0.18 s, peak process memory 660 MB. The
   GPU field remains null; GPU measurement is deferred with the CPU-only first integration.
+- The worker environment moved to `kronos-worker-py311-requirements-v2` (`torch 2.13.0`) on
+  2026-09-02 for #200. **v1 and v2 are not the same forecaster**: on one frozen synthetic corpus
+  they diverge on 236 of 240 sampled values, while each reproduces itself exactly at a fixed
+  seed. v1 forecasts keep their identity permanently and are not pooled with v2 forecasts. See
+  [`kronos-worker-v2-qualification.md`](kronos-worker-v2-qualification.md) for the measurement,
+  the tolerance policy it was read against, and what it does not establish.
 ## Measured value: none, at this configuration
 
 A 42-window baseline study ran on 2026-08-22 and is recorded as REFUTED.md #25. Zero-shot

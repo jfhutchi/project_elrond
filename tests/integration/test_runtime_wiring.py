@@ -780,7 +780,6 @@ async def test_the_wired_cycle_records_what_it_is_running(tmp_path: Path) -> Non
         DeploymentWarning,
         RuntimeContext,
         RuntimeRole,
-        database_fingerprint,
     )
 
     config = load_strategy_config(_write_config(tmp_path))
@@ -793,7 +792,7 @@ async def test_the_wired_cycle_records_what_it_is_running(tmp_path: Path) -> Non
     cycle, strategy, broker = _build_cycle(tmp_path, config, database)
     cycle._runtime = RuntimeContext(  # noqa: SLF001 - the wired runtime supplies this
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity=database.store_identity,
         trading_mode="PAPER",
         process_started_at=NOW,
         host_id="omen",
@@ -814,7 +813,7 @@ async def test_the_wired_cycle_records_what_it_is_running(tmp_path: Path) -> Non
     assert coordinator.host_id == "omen"
     assert coordinator.git_commit == "c0ffee1"
     assert coordinator.strategy_id == strategy._identity.strategy_id  # noqa: SLF001
-    assert coordinator.database_fingerprint == database_fingerprint(tmp_path / "quantbot.db")
+    assert coordinator.store_identity == database.store_identity
     assert status.last_successful_cycle_at is not None
 
     # A second cycle from the same process is the same coordinator, not a second one.
@@ -840,7 +839,7 @@ def test_a_wired_runtime_describes_the_database_it_actually_writes_to(
     A cycle that worked out its own database path could describe a different store from the one
     it writes to, which is exactly the ambiguity the record exists to remove.
     """
-    from quantbot.operations.deployment import RuntimeRole, database_fingerprint
+    from quantbot.operations.deployment import RuntimeRole
 
     monkeypatch.setenv("QUANTBOT_CONFIG", str(_write_config(tmp_path)))
     monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "quantbot.db"))
@@ -860,7 +859,7 @@ def test_a_wired_runtime_describes_the_database_it_actually_writes_to(
         observation = context.observe(now=datetime.now(UTC), identity=runtime.identity)
         assert observation.process_started_at <= observation.observed_at
         assert observation.git_commit == "0123456789abcdef"
-        assert observation.database_fingerprint == database_fingerprint(runtime.paths.database)
+        assert observation.store_identity == runtime.database.store_identity
         assert observation.strategy_id == runtime.identity.strategy_id
         assert observation.configuration_hash == runtime.identity.configuration_hash
     finally:

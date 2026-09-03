@@ -11,7 +11,7 @@ import pytest
 
 from quantbot.domain import Bar
 from quantbot.forecasting import kronos_worker as worker
-from quantbot.forecasting.models import KronosConfig
+from quantbot.forecasting.models import ForecastRequest, KronosConfig
 from quantbot.forecasting.snapshots import build_forecast_request
 
 
@@ -21,7 +21,7 @@ def test_worker_module_import_does_not_load_heavy_model_dependencies() -> None:
     assert "huggingface_hub" not in sys.modules
 
 
-def _raw_request() -> dict[str, object]:
+def _raw_request(config: KronosConfig | None = None) -> dict[str, object]:
     as_of = datetime(2026, 8, 14, 20, tzinfo=UTC)
     request = build_forecast_request(
         bars=[
@@ -49,7 +49,7 @@ def _raw_request() -> dict[str, object]:
         },
         lookback=1,
         horizon=1,
-        config=KronosConfig(sample_count=1),
+        config=config or KronosConfig(sample_count=1),
     )
     return request.model_dump(mode="json")
 
@@ -424,3 +424,104 @@ def test_the_two_copies_of_the_pinned_contract_agree() -> None:
     assert worker.TOKENIZER_WEIGHT_SHA256 == models.KRONOS_TOKENIZER_WEIGHT_SHA256
     assert worker.TOKENIZER_CONFIG_SHA256 == models.KRONOS_TOKENIZER_CONFIG_SHA256
     assert worker.WORKER_ENVIRONMENT_ID == models.KRONOS_WORKER_ENVIRONMENT_ID
+
+
+def test_the_retired_v1_environment_record_is_never_rewritten() -> None:
+    """Historical attribution is the whole reason a version bump mints a new identity (#200).
+
+    Every shadow forecast produced before this change ran under `torch==2.5.1`. If a later edit
+    "tidied" the v1 entry to the current package set, those rows would silently become forecasts
+    attributed to an environment that never ran them -- and provenance is the one thing here with
+    no independent check, because a result whose recorded environment is wrong cannot be caught by
+    looking at the result.
+
+    So the v1 record is asserted literally rather than derived. A future v3 adds a key; it does
+    not touch this one.
+    """
+    assert worker.WORKER_ENVIRONMENTS["kronos-worker-py311-requirements-v1"] == {
+        "einops": "0.8.1",
+        "huggingface-hub": "0.33.1",
+        "numpy": "1.26.4",
+        "pandas": "2.2.2",
+        "safetensors": "0.6.2",
+        "torch": "2.5.1",
+        "tqdm": "4.67.1",
+    }
+
+
+def test_the_running_attestation_is_derived_from_the_declared_identity() -> None:
+    """`EXPECTED_PACKAGE_VERSIONS` cannot drift from `WORKER_ENVIRONMENT_ID`, by construction."""
+    assert worker.WORKER_ENVIRONMENT_ID in worker.WORKER_ENVIRONMENTS
+    assert (
+        worker.EXPECTED_PACKAGE_VERSIONS
+        is worker.WORKER_ENVIRONMENTS[worker.WORKER_ENVIRONMENT_ID]
+    )
+    assert worker.EXPECTED_PACKAGE_VERSIONS["torch"] == "2.13.0", (
+        "the patched release #200 qualified; a change here is a new environment identity"
+    )
+
+
+def test_a_retired_environment_can_be_read_but_never_run() -> None:
+    """v1 rows must keep deserialising; nothing may be produced under a retired identity.
+
+    Both halves matter. Dropping v1 from the `Literal` would make every historical forecast
+    unreadable, which destroys the evidence the versioning exists to preserve. Leaving it
+    *runnable* would let a caller quietly keep producing forecasts on the vulnerable stack.
+
+    The second half is enforced by the worker rather than by the model: `_validate_request`
+    refuses any request whose `worker_environment_id` is not the running worker's own, so a v1
+    config cannot reach a v2 worker whatever constructs it.
+    """
+    from quantbot.forecasting import models
+
+    assert models.KRONOS_WORKER_ENVIRONMENT_ID == "kronos-worker-py311-requirements-v2"
+    assert KronosConfig().worker_environment_id == models.KRONOS_WORKER_ENVIRONMENT_ID
+    assert set(models.RETIRED_KRONOS_WORKER_ENVIRONMENT_IDS) == (
+        set(worker.WORKER_ENVIRONMENTS) - {worker.WORKER_ENVIRONMENT_ID}
+    )
+
+    historical = KronosConfig(worker_environment_id="kronos-worker-py311-requirements-v1")
+    assert historical.worker_environment_id == "kronos-worker-py311-requirements-v1"
+
+    # The property that actually matters for a stored row: a whole v1 request survives a
+    # round-trip through JSON, including its `request_id`. That id hashes the config, so the v1
+    # identity is part of it -- a v1 row cannot be re-derived under the v2 default, and if the
+    # Literal ever dropped v1 this would fail rather than the row quietly becoming unreadable.
+    stored = _raw_request(
+        config=KronosConfig(
+            sample_count=1,
+            worker_environment_id="kronos-worker-py311-requirements-v1",
+        )
+    )
+    reloaded = ForecastRequest.model_validate(stored)
+    assert reloaded.config.worker_environment_id == "kronos-worker-py311-requirements-v1"
+    assert reloaded.model_dump(mode="json") == stored
+
+    payload = _raw_request()
+    config = payload["config"]
+    assert isinstance(config, dict)
+    config["worker_environment_id"] = "kronos-worker-py311-requirements-v1"
+    with pytest.raises(worker.WorkerContractError, match="not the pinned shadow value"):
+        worker._validate_request(payload)
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="the Windows peak-memory probe is win32 only")
+def test_the_windows_peak_memory_probe_actually_measures_something() -> None:
+    """A null reading is a valid answer, which is exactly why the break went unseen (#200).
+
+    `_peak_process_memory_bytes` returns `None` when the API call fails, and `None` is also the
+    honest answer on a platform that cannot report the figure -- so a broken probe and an
+    unavailable one are indistinguishable in the record. They were not distinguishable in the
+    code either: without `restype`/`argtypes`, ctypes truncated the 64-bit `GetCurrentProcess`
+    pseudo-handle to a 32-bit `-1`, the call failed, and every Kronos forecast ever produced on
+    Windows recorded `peak_process_memory_bytes: null`. Found by running the environment
+    qualification for #200 and noticing the field was empty on both sides.
+
+    Asserting "not None" alone would pass on a probe that returned zero, so the reading is
+    checked against the interpreter's own footprint: this process has certainly touched more
+    than 8 MB.
+    """
+    peak = worker._peak_process_memory_bytes()
+
+    assert peak is not None, "the probe reported nothing on a platform that can measure it"
+    assert peak > 8 * 1024 * 1024, f"implausible peak working set: {peak} bytes"

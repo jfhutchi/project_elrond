@@ -1,0 +1,104 @@
+{
+  "comparable": true,
+  "identical": false,
+  "reasons": [],
+  "shape": {
+    "baseline": [
+      4,
+      [
+        12,
+        12,
+        12,
+        12
+      ],
+      [
+        "close",
+        "high",
+        "low",
+        "open",
+        "volume"
+      ]
+    ],
+    "candidate": [
+      4,
+      [
+        12,
+        12,
+        12,
+        12
+      ],
+      [
+        "close",
+        "high",
+        "low",
+        "open",
+        "volume"
+      ]
+    ]
+  },
+  "repeatability": {
+    "baseline": {
+      "checked": true,
+      "values_compared": 240,
+      "values_differing": 0,
+      "max_absolute_deviation": 0.0,
+      "max_relative_deviation": 0.0
+    },
+    "candidate": {
+      "checked": true,
+      "values_compared": 240,
+      "values_differing": 0,
+      "max_absolute_deviation": 0.0,
+      "max_relative_deviation": 0.0
+    }
+  },
+  "cross_environment": {
+    "values_compared": 240,
+    "values_differing": 236,
+    "max_absolute_deviation": 356663.1875,
+    "max_relative_deviation": 0.4942087379670762
+  },
+  "mean_terminal_return": {
+    "baseline": -0.03179399379723691,
+    "candidate": -0.032726681684492887,
+    "direction_agrees": true
+  },
+  "runtime_seconds": {
+    "baseline": [
+      6.525003,
+      6.212803
+    ],
+    "candidate": [
+      11.791707,
+      11.642185
+    ]
+  },
+  "worker_reported": {
+    "baseline": {
+      "runtime_environment_hash": "81e994e0986d1c23189e3b656d55b1ec89351753c2f16ab20da2b83c4d32c2de",
+      "device": "cpu",
+      "model_initialization_seconds": "0.305449600",
+      "inference_seconds": "2.317794600",
+      "peak_process_memory_bytes": null,
+      "peak_gpu_memory_bytes": null
+    },
+    "candidate": {
+      "runtime_environment_hash": "0ddfc9b9c35fa327db6072a02b93cfff5ee1b5d34fcf57d77499de368ffb56f0",
+      "device": "cpu",
+      "model_initialization_seconds": "0.496866800",
+      "inference_seconds": "2.982825500",
+      "peak_process_memory_bytes": 481296384,
+      "peak_gpu_memory_bytes": null
+    }
+  },
+  "verdict": "DISTINCT_FORECASTER_NEW_EVIDENCE_SERIES",
+  "corpus_hash": "11f86ed0bf11e6f1a6541bcddc607dd460f16ef99de39e99067e5de94ff0ba25",
+  "environments": {
+    "baseline": [
+      "kronos-worker-py311-requirements-v1"
+    ],
+    "candidate": [
+      "kronos-worker-py311-requirements-v2"
+    ]
+  }
+}

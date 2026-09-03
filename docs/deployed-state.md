@@ -1,6 +1,6 @@
 # Deployed state: what is actually running
 
-**Issue:** #190 · **Schema:** 26 · **Command:** `quantbot deployment-status`
+**Issue:** #190 · **Schema:** 27 · **Command:** `quantbot deployment-status`
 
 ---
 
@@ -30,7 +30,7 @@ the same transaction as the run row:
 
 ```
 host_id  instance_id  role  git_commit  package_version  python_version  platform
-trading_mode  database_fingerprint  schema_version
+trading_mode  store_identity  schema_version
 strategy_id  strategy_version  configuration_hash
 process_started_at  observed_at
 ```
@@ -41,12 +41,18 @@ would go missing exactly when an operator most needs to know which checkout was 
 
 Append-only, not mutable current state, for one reason: **a coordinator that died cannot update
 its row to say so.** Absence of a recent observation is the signal, and a crashed process cannot
-suppress it. Overwriting would also erase the evidence that an older checkout ran at all, which
-is the stale-host tell worth keeping.
+suppress it. Overwriting would also erase the sequence needed to see a known commit reappear
+after a different known commit — the A → B → A checkout-reversion signal worth keeping.
 
-**Nothing recorded is secret.** The database is identified by a SHA-256 of its resolved path
-rather than by the path: that answers "is this the same store?" across hosts without publishing a
-filesystem layout. No credential, key or account identifier is read.
+**Nothing recorded is secret.** `store_identity` is a random UUID persisted in the singleton
+`schema_version` row. It is a durable store-lineage identity: a byte-for-byte backup or moved copy
+preserves it, but it does not prove that two files are the same physical file. It contains no path,
+hostname, credential, account identifier, or other deployment secret.
+
+Migration 0027 intentionally cannot downgrade to 0026. The upgrade replaces historical path
+hashes with the lineage UUID, so the old hashes cannot be reconstructed truthfully. Relabeling a
+UUID as `database_fingerprint` would make older code read it as a SHA-256 path hash. The downgrade
+therefore fails before changing the schema and directs the operator to a pre-0027 backup.
 
 ## The warnings
 
@@ -54,16 +60,18 @@ filesystem layout. No credential, key or account identifier is read.
 |---|---|
 | `NO_RUNTIME_RECORDED` | nothing has ever said what it is running — the state #190 found |
 | `NO_ACTIVE_COORDINATOR` | nothing observed within 100 hours; the last one seen is still readable |
-| `MULTIPLE_ACTIVE_COORDINATORS` | two processes are active; the second-writer condition, visible |
-| `STALE_CHECKOUT` | a commit that ran here before is not the one running now |
+| `MULTIPLE_ACTIVE_COORDINATORS` | two recent same-host recorded intervals overlap, or cross-host wall-clock intervals are consistent with overlap |
+| `STALE_CHECKOUT` | the current known commit reappeared after a different known commit (A → B → A) |
 | `UNIDENTIFIED_CHECKOUT` | the coordinator did not record a commit, so staleness cannot be judged |
 | `SCHEMA_VERSION_MISMATCH` | an active runtime recorded a schema this build does not have |
 | `LIVE_TRADING_RECORDED` | a runtime reported `LIVE` mode |
 
 **Stale-checkout detection needs no network and no deploy manifest.** The history *is* the
-manifest: a commit observed here earlier, which is not the one observed now, means something went
-backwards. That is precisely the hazard the `E:\...\quantbot-watchdog.cmd` fix closed at the
-source, and this makes a recurrence detectable rather than only prevented.
+manifest, but only reappearance establishes a reversal without pretending commit names encode Git
+ancestry. A → B is a normal change and A → B → C is another forward history; neither is stale.
+A → B → A is stale because A appeared, a different known commit ran, and A then reappeared. That
+is precisely the hazard the `E:\...\quantbot-watchdog.cmd` fix closed at the source, and this makes
+a recurrence detectable rather than only prevented.
 
 `UNIDENTIFIED_CHECKOUT` is deliberately separate from `STALE_CHECKOUT`. A runtime that will not
 name its commit is *unknown*, not *proven stale*, and collapsing the two would either invent a
@@ -71,7 +79,18 @@ problem or hide one. Set `QUANTBOT_GIT_COMMIT` to make the distinction go away.
 
 The 100-hour activity bound is `scripts/supervisor.py::STALE_RUN_HOURS` — an existing deployed
 value, CLAUDE.md's first tiebreak for an unspecified threshold — chosen there because consecutive
-cycles are 96h apart across a Monday holiday.
+cycles are 96h apart across a Monday holiday. The second-writer warning does not treat that
+freshness alone as liveness: it requires observations from both processes whose recorded intervals
+strictly cross each other's `process_started_at`. Intervals that only touch are a handoff boundary,
+not established concurrency, so a recent observation at or before a replacement starts is a normal
+restart.
+
+For two processes on the same host, the warning reports that their intervals overlap on the
+host's recorded clock. For processes on different hosts, separately corrected wall clocks cannot
+literally prove concurrency. The warning therefore says only that the cross-host timestamps are
+*consistent* with overlap and explicitly names clock skew/NTP uncertainty. Non-overlapping
+cross-host timestamps do not produce the warning, but they also do not prove the hosts were never
+concurrent. No OS process inspection, network call, or deployment authority is implied.
 
 ## Nothing here has authority
 
