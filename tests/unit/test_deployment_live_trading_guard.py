@@ -201,13 +201,34 @@ def test_a_missing_env_file_is_an_error_rather_than_a_pass(tmp_path: Path) -> No
     assert result.returncode == 2
 
 
-@pytest.mark.parametrize("installer", ["deploy/omen/setup.sh", "deploy/pi/setup.sh"])
-def test_both_installers_invoke_the_guard(installer: str) -> None:
+@pytest.mark.parametrize(
+    ("installer", "invocation", "resolved"),
+    [
+        # Each installer names the guard by a path relative to a variable it sets. Both are
+        # resolved here to a real file, because "the script mentions the guard" is satisfied by
+        # a path that does not exist -- and a deployment script whose safety check is a broken
+        # path fails at the check, or worse, is edited out by whoever hits it at 2am.
+        (
+            "deploy/omen/setup.sh",
+            '"${here}/../refuse-live-trading.sh"',
+            "deploy/refuse-live-trading.sh",
+        ),
+        (
+            "deploy/pi/setup.sh",
+            '"$QUANTBOT_HOME/deploy/refuse-live-trading.sh"',
+            "deploy/refuse-live-trading.sh",
+        ),
+    ],
+)
+def test_both_installers_invoke_the_guard(installer: str, invocation: str, resolved: str) -> None:
     """The guard being correct is worth nothing if an installer stops calling it. Asserted by
     reading the scripts, because running them installs systemd units on the host."""
     body = (REPO / installer).read_text(encoding="utf-8")
 
-    assert "refuse-live-trading.sh" in body, f"{installer} no longer calls the guard"
+    assert invocation in body, f"{installer} no longer calls the guard at the expected path"
+    # `here` is the installer's own directory and `QUANTBOT_HOME` is the checkout root, so both
+    # spellings land on the same file. Resolved rather than assumed.
+    assert (REPO / resolved).is_file(), f"{installer} names a guard that does not exist"
 
 
 def test_no_installer_still_greps_for_the_setting_that_does_not_exist() -> None:
