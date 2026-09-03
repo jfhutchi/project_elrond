@@ -69,6 +69,8 @@ uv run quantbot doctor
 | `quantbot hypotheses` | Registered hypotheses |
 | `quantbot register-hypothesis` | Freeze a pre-registration |
 | `quantbot research-status` | Research queue and model configuration |
+| `quantbot deployment-status` | What is actually running, without filesystem archaeology |
+| `quantbot ingestion-status` | Collection cursors, run history, incidents, heartbeats |
 | `quantbot research-capacity` | What statistical capacity is left, without spending any |
 | `quantbot research-cycle` | Advance the research loop |
 | `quantbot integrity-sweep` | Demote strategies with unresolved incidents |
@@ -114,6 +116,7 @@ Every package under `src/quantbot/`:
 | `operations/` | Cycle, kill switch, readiness, supervisor, protection, qualification |
 | `storage/` | Durable SQLite ledger, Alembic migrations, repositories |
 | `research/` | Registry, power, critic, memory, budget, workers, promotion, synthesis |
+| `ingestion/` | Durable collection state: cursors, run history, incidents, heartbeats |
 | `anomaly/` | Anomaly and catalyst detection, and the routing it earns |
 | `forecasting/` | The Kronos shadow worker and its separate forecast-only ledger |
 | `sandbox/` | Isolation for generated code — Windows and WSL2 backends |
@@ -141,7 +144,11 @@ statistical confidence.
 | [deploy/omen/README.md](deploy/omen/README.md) | Bringing the coordinator up on WSL2, and the operator steps it deliberately leaves |
 | [docs/runtime-topology.md](docs/runtime-topology.md) | Which machine runs what, measured, and why the Pi Zero W is not the coordinator |
 | [docs/node-deployment.md](docs/node-deployment.md) | What a second machine would need, and what the repository actually assumes today |
+| [docs/deployed-state.md](docs/deployed-state.md) | What is actually running, stated by the runtime instead of reconstructed later |
+| [docs/ingestion-control.md](docs/ingestion-control.md) | Collection cursors, run history and heartbeats — a stopped collector that is answerable |
+| [docs/database-target.md](docs/database-target.md) | The storage seam, and why it deliberately enables no new backend |
 | [docs/kronos-shadow.md](docs/kronos-shadow.md) | The Kronos forecasting worker: setup, limits, and what it does not establish |
+| [docs/kronos-worker-v2-qualification.md](docs/kronos-worker-v2-qualification.md) | The patched worker environment, measured rather than assumed |
 | [docs/worker-environment-identity.md](docs/worker-environment-identity.md) | Why a worker's environment identity is recomputed per backend, never held constant |
 | [docs/tranching-spec.md](docs/tranching-spec.md) | Staggering the rebalance date, its measurements, and what is still unwired |
 | [docs/per-session-trend-spec.md](docs/per-session-trend-spec.md) | A resolved investigation, six wrong diagnoses kept as written |
@@ -243,20 +250,25 @@ described an "edge-progress panel" that was never built. A document claiming a v
 same defect as a milestone reached by writing about it, which is why it is corrected rather than
 quietly dropped.
 
-The project is at **M0** on a store whose research memory has been seeded — the platform runs
-valid experiments and honestly refutes them — and **BELOW_M0** on one that has not, because a
-platform that has never recorded a refutation has not shown it can reject anything. Either way
-**no candidate edge has been established**, and no level above M1 is close. Concluding
-`NO_EDGE_ESTABLISHED` is a legitimate research result, not a software failure.
+The project is at **M0**: the platform runs valid experiments and honestly refutes them.
+`create-database` seeds `REFUTED.md`'s settled findings into research memory and reports the
+count, so a freshly created store reaches M0 without any credential configured (#52, #190).
+Before that, a new store reported **BELOW_M0** — nothing showed it could reject a hypothesis —
+while its refutation history sat checked into the repository, and the reported milestone
+depended on an LLM endpoint that has nothing to do with whether anything was ever refuted.
+
+**No candidate edge has been established**, and no level above M1 is close. Reaching M0 is a
+statement about the platform, not about the market. Concluding `NO_EDGE_ESTABLISHED` is a
+legitimate research result, not a software failure.
 
 ---
 
 ## Status
 
 Engineering on the v0.2 research architecture is in progress, tracked in the
-[v0.2 roadmap issue](https://github.com/jfhutchi/project_elrond/issues/2). 2,320 tests (2,302
+[v0.2 roadmap issue](https://github.com/jfhutchi/project_elrond/issues/2). 2,402 tests (2,384
 passing, 18 skipped for an absent WSL distribution and an unconfigured model endpoint); `ruff`
-and `mypy --strict` clean on both platforms across 210 source files. Schema is at V24.
+and `mypy --strict` clean on both platforms across 219 source files. Schema is at V27.
 
 Forward paper evidence is a separate question and this repository is not the place to read it
 from. The committed `PROJECT_STATUS.md` is a snapshot generated on 2026-08-18 reporting **day 1

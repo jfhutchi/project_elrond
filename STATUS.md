@@ -117,11 +117,13 @@ Branch: `main`. Sections 1–6ll were hand-written between 2026-08-15 and 2026-0
 work up to about issue #75. **Everything merged after that — #82 the console and its control
 plane, #136 worker dispatch, #137 environment identity, #157/#171/#175 position protection,
 #187–#189 componentised hypothesis lineage, component evidence memory and evidence-aware
-recombination — is not described here.** Read the git log and the issue threads for those; this
+recombination, #190 deployed-state reporting, #196 the backend-neutral storage target, #198 the
+ingestion control plane, and #200/#204 the qualified Kronos worker environment — is not
+described here.** Read the git log and the issue threads for those; this
 file will not tell you they exist.
 
 Numbers about the software (test counts, file counts, schema version) were re-verified against
-`main` on **2026-09-02** and are corrected in place where they had drifted. Numbers about the
+`main` on **2026-09-03** and are corrected in place where they had drifted. Numbers about the
 *market* are dated where they were measured and are not re-run.
 
 For *verified numbers* (equity, trade count, run ids) read **`PROJECT_STATUS.md`** instead —
@@ -907,9 +909,9 @@ same boundary from the trading side.
 Branch `main` (renamed from `elrond-v0.2` on 2026-08-22, when v0.2 became the default and
 `codex/quantbot` was retired).
 
-**Counts re-measured on 2026-09-02: 2,320 tests collected — 2,302 pass, 18 skip for an absent
+**Counts re-measured on 2026-09-03: 2,402 tests collected — 2,384 pass, 18 skip for an absent
 WSL distribution and an unconfigured model endpoint — and `ruff` plus `mypy --strict` are clean
-on both `--platform linux` and `--platform win32` across 210 source files.** The figures this
+on both `--platform linux` and `--platform win32` across 219 source files.** The figures this
 paragraph carried (1,332 tests, 146 source files) were true when written on 2026-08-22 and
 described roughly half the tree; they are corrected rather than deleted because a stale count
 that reads as current is how a reader concludes nothing has landed since.
@@ -939,14 +941,15 @@ shipped, and so did #36, #37 and #38's enforcement. See `## 6aa` for what change
 | #4 arXiv connector | this branch | an outage raises; it never reads as "no literature exists" |
 | #3 Research director | `98f60b7` | lifecycle, computed priority, no route to the broker |
 
-Schema was at V6 with revisions 0001–0006 when this table was written. **It is now at V24 with
-revisions 0001–0024** (`storage/schema.py`, `SCHEMA_VERSION = 24`), and the eighteen added since
+Schema was at V6 with revisions 0001–0006 when this table was written. **It is now at V27 with
+revisions 0001–0027** (`storage/schema.py`, `SCHEMA_VERSION = 27`), and the twenty-one added since
 are, in order: reservation and search origin, the promotion ladder, search runs, literature
 searches, promotion-claim binding, rejected candidates, rejection evidence, market anomaly
 events, capacity assessments, market regime snapshots, counterfactual outcomes, instruments,
 veto policy versions, catalyst assessments, session observations, position protection, position
-protection actions, and artifact evidence. The forecasting ledger is a separate store on its own
-revision 0001. Every revision declares its own tables.
+protection actions, artifact evidence, ingestion control (#198), runtime deployments (#190) and
+store identity (#190). The forecasting ledger is a separate store on its own revision 0001.
+Every revision declares its own tables.
 
 ### Not built
 

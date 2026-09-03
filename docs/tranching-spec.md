@@ -72,7 +72,7 @@ below were written in dependency order when none of them existed. Their status o
    `AdaptiveMomentumRunner._tranche_rosters` builds one roster per tranche, omitting tranches whose first
    rebalance has not happened rather than passing them as empty; `_target_fractions` blends the
    result with `tranche_weights`. **Neither is called by anything.** The live path is
-   `runners.py:1186`, which calls `self._roster` — the single month-end roster — and `size_entry`
+   `runners.py:1312`, which calls `self._roster` — the single month-end roster — and `size_entry`
    still caps at the full `max_position_value_bps` regardless of how many tranches hold a name.
 
 So what is genuinely left is:

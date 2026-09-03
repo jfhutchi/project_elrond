@@ -303,7 +303,7 @@ Three rules make it hard to flatter:
 
   *Updated 2026-09-02:* this paragraph ended "today no production path computes one, so the
   `unassessed` entry is what an operator sees". There is one now. `AdaptiveMomentumRunner` calls
-  `_record_capacity_assessment` every cycle (`runners.py:1242`), which assembles inputs from
+  `_record_capacity_assessment` every cycle (`runners.py:1368`), which assembles inputs from
   durable state through `research.capacity_production` and persists a content-addressed row.
   **This does not move M4.** With no measured benchmark-relative excess the verdict it computes
   is `UNASSESSED`, which is the project's actual position — so what changed is that the entry is

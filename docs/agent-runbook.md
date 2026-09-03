@@ -68,6 +68,7 @@ dotenv file, so export these in the service unit or shell):
 | `BROKER_HEALTHY`, `MARKET_DATA_HEALTHY`, `RISK_ENGINE_HEALTHY`, `RECONCILIATION_SUCCESSFUL` | Operator assertions that must all be true before any order is allowed |
 | `QUANTBOT_CONFIG` | Strategy config path (default `config/strategy-v1.yaml`) |
 | `QUANTBOT_DB_PATH` | Durable SQLite ledger (default `quantbot.db`) |
+| `QUANTBOT_DATABASE_URL` | The backend-neutral alternative (#196). `sqlite:///<path>` today; a `postgresql://` URL is *recognised and refused*. Setting it **and** `QUANTBOT_DB_PATH` is an error rather than a precedence rule. See [database-target.md](database-target.md) |
 | `QUANTBOT_LOCK_PATH` | Single-writer lock (default `quantbot.lock`) |
 | `QUANTBOT_REPORTS_DIR` | Weekly report output (default `reports`) |
 | `QUANTBOT_MARKET_DATA_FEED` | `iex` (free tier) or `sip` (subscription) |
