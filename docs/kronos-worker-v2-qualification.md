@@ -52,8 +52,10 @@ upstream artifacts, which nothing had checked since they were written.
 ## The qualification
 
 `scripts/qualify_kronos_environment.py` drives a worker entry file exactly as
-`KronosSubprocessProvider` does — same argument vector, same allowlisted offline environment,
-same isolated interpreter flags — and compares two environments on one frozen corpus.
+`KronosSignalProvider` does (`forecasting/provider.py`) — same argument vector, same allowlisted
+offline environment, same isolated interpreter flags — and compares two environments on one
+frozen corpus. (Named `KronosSubprocessProvider` here until 2026-09-03; no such class exists, so
+a reader checking the claim would have grepped and found nothing.)
 
 The corpus is **synthetic**, from a fixed seed: 256 daily bars of a geometric random walk with
 plausible drift and volatility, `corpus_hash =

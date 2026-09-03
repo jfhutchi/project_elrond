@@ -29,7 +29,15 @@ saw would be fabricated provenance a later agent would read as real.
 and a question answered as REFUTED #22 (t=0.05) passed it. The 25 settled findings are now
 seeded (`quantbot.research.prior`) and loaded by `research-cycle`.
 
-**Not deployed:** the Pi runs an older checkout.
+**Updated 2026-09-03 (#52, #190).** `research-cycle` is no longer the only loader.
+`create-database` seeds the prior findings too and reports the count, because tying them to
+`research-cycle` made them depend on `QUANTBOT_MODEL_GENERATOR` — so a fresh store reported
+`BELOW_M0`, "nothing shows this platform can reject a hypothesis", while its refutation history
+sat checked into this repository, and the reported milestone hung on an LLM endpoint that has
+nothing to do with whether anything was ever refuted.
+
+**Not deployed:** the Pi runs an older checkout. Establish what a host is actually running with
+`quantbot deployment-status` (#190) rather than by inspecting its filesystem.
 
 ### ⚠ SEVERITY-1 (FIX BUILT, NOT DEPLOYED): the drawdown halt is a trap
 
@@ -1792,6 +1800,13 @@ whether or not the correlation guards fired.
       already measured stays valid; editing a value does, and forces reassessment.
 - [ ] **Deploy the seeded findings to the Pi.** Its store is still empty; it runs an older
       checkout and this session had no working SSH credential for it.
+      **Partly obsolete as of 2026-09-03 (#52, #190).** Seeding is no longer a deployment step
+      for a *new* store: `create-database` loads `REFUTED.md`'s settled findings and reports the
+      count, so any store created from this checkout starts at M0 without a credential. What
+      remains is a store that already exists on an older checkout, which is not a seeding task
+      but a redeploy — and `quantbot deployment-status` (#190) is now the way to establish what
+      that host is actually running, instead of inferring it from a reflog. See
+      `docs/deployed-state.md`.
 - [ ] **Move the ledger to the coordinator and start the daemon there** — **operator action**,
       sequence in `deploy/omen/README.md`. Deliberately not scripted.
 - [x] **~~Kronos criterion 9 (#36)~~ — CLOSED 2026-08-22.** H-2026-026 pre-registered before
