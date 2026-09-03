@@ -12,6 +12,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import cast
 
 import pytest
 
@@ -172,48 +173,37 @@ def test_two_active_coordinators_are_the_second_writer_condition_made_visible(
     assert "old-desktop/pid-9" in detail and "omen/pid-1" in detail
 
 
-def test_an_older_checkout_starting_after_a_newer_one_is_a_stale_checkout(
-    database: Database, tmp_path: Path
+@pytest.mark.parametrize(
+    ("commits", "stale", "unidentified"),
+    [
+        (("aaaa111", "bbbb222"), False, False),
+        (("aaaa111", "bbbb222", "aaaa111"), True, False),
+        (("aaaa111", "bbbb222", "cccc333"), False, False),
+        (("aaaa111", ""), False, True),
+    ],
+    ids=["upgrade", "reversion", "multi-step-upgrade", "unknown"],
+)
+def test_stale_checkout_requires_a_reappearing_commit_in_history(
+    database: Database, tmp_path: Path, commits: tuple[str, ...], stale: bool, unidentified: bool
 ) -> None:
-    """The hazard the watchdog fix closed at the source, now detectable if it recurs.
-
-    Detected without a network call and without a deploy manifest: the history *is* the
-    manifest. A commit that ran here before, and is not the one running now, means something
-    has gone backwards.
-    """
+    """Only A -> B -> A proves a checkout reversion from append-only history."""
     with database.transaction() as session:
         registry = DeploymentRegistry(session)
-        registry.record(_context(tmp_path, commit="newc0de", process="pid-1").observe(now=NOW))
-        registry.record(
-            _context(tmp_path, commit="old0001", process="pid-2").observe(
-                now=NOW + timedelta(hours=1)
+        for index, commit in enumerate(commits):
+            registry.record(
+                _context(tmp_path, commit=commit, process="pid-1").observe(
+                    now=NOW + timedelta(minutes=index)
+                )
             )
-        )
 
     with database.transaction() as session:
-        status = DeploymentRegistry(session).status(now=NOW + timedelta(hours=1))
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=len(commits)))
 
-    assert DeploymentWarning.STALE_CHECKOUT in status.warnings
-    detail = " ".join(status.reasons)
-    assert "old0001" in detail and "newc0de" in detail
-
-    # And a coordinator that will not name its commit cannot be checked at all, which is worth
-    # saying rather than reporting as clean.
-    with database.transaction() as session:
-        DeploymentRegistry(session).record(
-            _context(tmp_path, commit="", process="pid-3").observe(
-                now=NOW + timedelta(hours=2)
-            )
-        )
-    with database.transaction() as session:
-        blind = DeploymentRegistry(session).status(now=NOW + timedelta(hours=2))
-
-    assert blind.latest_coordinator is not None
-    assert blind.latest_coordinator.git_commit == UNKNOWN_COMMIT
-    assert DeploymentWarning.UNIDENTIFIED_CHECKOUT in blind.warnings
-    assert DeploymentWarning.STALE_CHECKOUT not in blind.warnings, (
-        "an unidentified checkout is unknown, not proven stale"
-    )
+    assert (DeploymentWarning.STALE_CHECKOUT in status.warnings) is stale
+    assert (DeploymentWarning.UNIDENTIFIED_CHECKOUT in status.warnings) is unidentified
+    if unidentified:
+        assert status.latest_coordinator is not None
+        assert status.latest_coordinator.git_commit == UNKNOWN_COMMIT
 
 
 def test_worker_availability_is_reported_separately_from_coordinator_authority(
@@ -236,7 +226,8 @@ def test_worker_availability_is_reported_separately_from_coordinator_authority(
     )
     report = summarize(status)
     assert report["coordinator"] is None
-    assert [item["instance_id"] for item in report["active_workers"]] == ["kronos-1"]  # type: ignore[index,union-attr]
+    active_workers = cast(list[dict[str, object]], report["active_workers"])
+    assert [item["instance_id"] for item in active_workers] == ["kronos-1"]
 
 
 def test_a_live_trading_runtime_is_reported_and_never_acted_on(

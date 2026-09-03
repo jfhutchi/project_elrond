@@ -354,23 +354,32 @@ class DeploymentRegistry:
                 "be detected; set QUANTBOT_GIT_COMMIT"
             )
         elif latest_coordinator is not None:
-            # A newer commit that ran *earlier* means something has gone backwards. Comparing
-            # against the newest commit ever recorded needs no network and no deploy manifest:
-            # the history is the manifest.
-            newer = [
-                item
-                for item in coordinators
-                if item.identifies_its_checkout
-                and item.git_commit != latest_coordinator.git_commit
-                and item.observed_at < latest_coordinator.observed_at
-            ]
-            seen_commits = {item.git_commit for item in newer}
-            if seen_commits:
+            # A reappearance after a different known commit proves a reversion without
+            # pretending that commit names reveal Git ancestry. A normal upgrade (A -> B) has
+            # no such reappearance, so it is not stale. Unknown commits are excluded because
+            # they cannot prove that a different checkout replaced the current one.
+            current_commit = latest_coordinator.git_commit
+            saw_current = False
+            saw_different_after_current = False
+            reverted = False
+            for item in reversed(coordinators):
+                if not item.identifies_its_checkout:
+                    continue
+                if item.git_commit == current_commit:
+                    if saw_current and saw_different_after_current:
+                        reverted = True
+                        break
+                    saw_current = True
+                    saw_different_after_current = False
+                elif saw_current:
+                    saw_different_after_current = True
+
+            if reverted:
                 warnings.append(DeploymentWarning.STALE_CHECKOUT)
                 reasons.append(
-                    f"the running coordinator is on {latest_coordinator.git_commit}, but "
-                    + ", ".join(sorted(seen_commits))
-                    + " ran here before it; an older checkout has been started"
+                    f"the running coordinator is on {current_commit}, which reappeared after "
+                    "a different known commit in coordinator history; a checkout reversion "
+                    "was observed"
                 )
 
         for item in active:
