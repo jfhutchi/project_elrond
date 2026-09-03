@@ -9,6 +9,13 @@
 > `reports/research/spy-sma200-resolved-2026-08-19.md`. The six diagnoses recorded below are kept
 > as they were written — each was right about one of four causes, which is why none of them closed
 > the question alone.
+>
+> **Line references re-anchored to `main` on 2026-09-02.** `engine.py` and `benchmarks.py` have
+> moved under this document; every `file.py:NNN` below now points at the code it describes, and
+> the prose around them is unchanged. Two of the arguments here reason from *indentation depth
+> and line adjacency*, so the numbers are load-bearing rather than decorative — a stale pointer
+> would send a reader to the wrong block and the argument would read as nonsense. They will
+> drift again; check them before trusting one.
 
 The highest-value engineering task left in this project, and it is now narrowed to one line.
 
@@ -77,7 +84,7 @@ unchanged and pinned by test. **Its effect is unmeasured.**
 
 The attempt to measure it was invalid and that is worth recording. `run_research_backtest.py`
 runs the six fixed benchmark variants through `component_switches_for(variant)`
-(`engine.py:212`), so `FULL_STRATEGY` enables every component regardless of what the config
+(`engine.py:237`), so `FULL_STRATEGY` enables every component regardless of what the config
 file says. Three separate config changes — `target_weight_sizing`, `trend_gate_per_session`,
 and the component switches themselves — all produced byte-identical output because **none of
 them ever reached the code under test.**
@@ -119,17 +126,17 @@ work and which it currently cannot run.
 
 ## Next step, narrowed further
 
-The entry gates are **not** the cause. `engine.py:686-696` applies, in order: ATR availability,
+The entry gates are **not** the cause. `engine.py:716-726` applies, in order: ATR availability,
 `market_regime`, `asset_trend`, `momentum`, `donchian_entry`. With trend-v4's components only
 `asset_trend` is active, so entry requires SPY above its 200-day average — true on ~77% of
 sessions, which is exactly the target exposure.
 
-Exits are also correct: `roster_exit` is off, and `engine.py:644` exits on the same trend
+Exits are also correct: `roster_exit` is off, and `engine.py:675` exits on the same trend
 condition.
 
 So entries are permitted and exits are appropriate, yet the config trades 6 times and holds 27%
 exposure. The loss is therefore **between candidate selection and a filled position** — most
-likely roster interaction (`engine.py:601-605` builds the roster with `use_momentum=False`,
+likely roster interaction (`engine.py:623-638` builds the roster with `use_momentum=False`,
 which may produce an empty or degenerate ranking) or sizing rejecting the order.
 
 Two concrete places to look, in order:
@@ -146,7 +153,7 @@ already been wrong twice by reasoning ahead of measurement.
 ## The invariant that should drive the next attempt
 
 `trend_gate_per_session` is now also wired into the backtest engine's roster construction
-(`engine.py:601`) — the earlier fix only touched `build_monthly_roster` in
+(`engine.py:630`) — the earlier fix only touched `build_monthly_roster` in
 `adaptive_momentum.py`, which the backtest never calls. That was a real bug and worth fixing.
 
 **It did not help.** Exposure moved 27.28% -> 19.24% and CAGR 1.66% -> 1.65%.
@@ -174,8 +181,8 @@ This document has now been wrong three times by reasoning ahead of measurement.
 
 ## The specific thing to check first
 
-`engine.py:677` is `for symbol in active_roster:` — entry can only ever consider names in the
-roster, and `active_roster` is rebuilt **only when `is_month_end`** (`engine.py:597`). So an
+`engine.py:702` is `for symbol in active_roster:` — entry can only ever consider names in the
+roster, and `active_roster` is rebuilt **only when `is_month_end`** (`engine.py:622`). So an
 empty roster means zero entries for the whole following month, whatever the gates allow.
 
 trend-v4 sets `momentum: false`, which reaches `rank_assets` as `use_momentum=False`.
@@ -200,16 +207,16 @@ of measurement, and the correct next action is to run that one call, not to act 
 
 ## That hypothesis is REFUTED — checked, not assumed
 
-`rank_assets` (`benchmarks.py:94-124`) handles `use_momentum=False` correctly. Line 116 skips a
+`rank_assets` (`benchmarks.py:127-157`) handles `use_momentum=False` correctly. Line 149 skips a
 symbol only when momentum is *required* and missing (`if use_momentum and momentum is None`),
-and line 118 assigns a score of zero otherwise. With `require_positive=False` and
+and line 151 assigns a score of zero otherwise. With `require_positive=False` and
 `require_trend=False` a single-name universe returns SPY every month. **The roster is not
 empty**, so that is not the cause of the 6-trade invariant.
 
 ## What is left, stated as structure rather than a guess
 
-The entry loop is `engine.py:677`, `for symbol in active_roster:`, at 20-space indentation —
-the same depth as the body of `if is_month_end:` at line 597, whose own body starts at line 598.
+The entry loop is `engine.py:702`, `for symbol in active_roster:`, at 20-space indentation —
+the same depth as the body of `if is_month_end:` at line 622, whose own body starts at line 623.
 Meanwhile `drawdown = calculate_drawdown(...)` sits at 16 spaces, i.e. back outside that block.
 
 So entry is nested under *some* 16-space condition rather than running unconditionally each
@@ -218,15 +225,15 @@ history and a 6-trade count stops being mysterious: SPY exits mid-month when it 
 trend and cannot re-enter until the next month end, which is precisely the behaviour
 `SPY_SMA200` does not have.
 
-**Do not act on that paragraph.** Read `engine.py:600-680` and identify the enclosing condition
+**Do not act on that paragraph.** Read `engine.py:621-702` and identify the enclosing condition
 first. This is the fourth diagnosis on this question; the previous three were all confidently
 wrong, and every one of them was reasoning from partial reads rather than from the code.
 
 
 ## Both structural hypotheses REFUTED — the block, read properly
 
-`engine.py:617-626` sits at 16 spaces, **outside** `if is_month_end:`, so it runs every session.
-Exits (`627`) run every session. Entry is at `663`:
+`engine.py:642-651` sits at 16 spaces, **outside** `if is_month_end:`, so it runs every session.
+Exits (`652`) run every session. Entry is at `688`:
 
 ```python
 if not drawdown.entry_halted and not drawdown.liquidation_required:   # 16 spaces

@@ -28,21 +28,33 @@ Sizing note: for this universe the `POSITION_VALUE` cap binds, not the ATR risk 
 positions are effectively equal-weight 10%. The 0.5% ATR risk cap only becomes the binding
 constraint when 2×ATR exceeds 5% of price. That is scale-invariant and by design.
 
-## Current state (2026-08-15)
+## Current state
 
-Implementation is complete and verified end to end against fake transports. **No forward
-paper observation has begun**, because Alpaca paper credentials are not configured in this
-environment. Nothing in the durable ledger has been synthesized.
+**Re-verified against `main` on 2026-09-02.** 2,320 tests collected — 2,302 pass, 18 skip for an
+absent WSL distribution and an unconfigured model endpoint; `ruff check` clean; `mypy --strict`
+clean on both `--platform linux` and `--platform win32` across 210 source files. Nothing in the
+durable ledger has been synthesized.
 
-- 458 tests pass, `ruff check` clean, `mypy --strict` clean.
-- The composition root (`src/quantbot/runtime.py`) was the missing piece: every policy
-  module existed and was tested, but nothing constructed them into a runnable application
-  and every CLI command returned `OPERATION_HANDLER_NOT_CONFIGURED`.
+The composition root (`src/quantbot/runtime.py`) was the missing piece in the original v0.1
+build: every policy module existed and was tested, but nothing constructed them into a runnable
+application and every CLI command returned `OPERATION_HANDLER_NOT_CONFIGURED`.
+
+> **Corrected 2026-09-02.** This section was dated 2026-08-15 and said "**No forward paper
+> observation has begun**, because Alpaca paper credentials are not configured in this
+> environment", alongside a count of 458 tests. Paper trading started on **2026-08-18** —
+> `PROJECT_STATUS.md`, generated from the ledger, records the first observed trading day and a
+> verified broker connection — so the sentence was false within three days of being written and
+> stayed for two weeks. It is corrected rather than deleted because "no forward observation has
+> begun" is precisely the kind of claim a later agent would act on.
+>
+> How much forward evidence exists **now** is not answerable from this repository: the ledger is
+> not version-controlled and the committed `PROJECT_STATUS.md` is a 2026-08-18 snapshot showing
+> day 1 of 30. Run `quantbot status` against the real store.
 
 ## Operating it
 
 ```bash
-uv sync --all-extras
+uv sync
 ```
 
 Required environment (see `.env.example`; the process reads the environment only, never a

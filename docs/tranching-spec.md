@@ -1,8 +1,15 @@
 # Tranching the rebalance date — implementation spec
 
 Cycle 11 S1 measured the effect; cycle 13 measured it on the real rotation and settled the
-design questions. This is the largest free improvement found in 13 research cycles and it is
-**not yet implemented**. This spec exists so it gets built correctly rather than quickly.
+design questions. This is the largest free improvement found in 13 research cycles. This spec
+exists so it gets built correctly rather than quickly.
+
+> **Status, re-verified against `main` on 2026-09-02.** This document said "**not yet
+> implemented**" and listed three steps as remaining. Two of them are built and the third is
+> half-built, so the header was wrong in the direction that costs the most: a reader would have
+> rebuilt work that exists. **Nothing is switched on** — `rebalance_tranches` defaults to 1 and
+> no deployed config raises it — which is why the claim survived. See *What remains* below for
+> what is actually left, which is one wire into the risk path plus the backtest engine.
 
 ## What is being fixed
 
@@ -45,19 +52,40 @@ its default so all four deployed identities stay byte-identical (pinned by test)
 
 ## What remains
 
-`build_monthly_roster` still enforces `evaluation_at` being the final XNYS session of its month
-(`adaptive_momentum.py:250`). Tranching needs **5 independent rosters evaluated on 5 staggered
-sessions**. In dependency order:
+Tranching needs **5 independent rosters evaluated on 5 staggered sessions**. The three steps
+below were written in dependency order when none of them existed. Their status on `main` as of
+2026-09-02:
 
-1. **Roster identity.** `MonthlyRoster` gains a tranche index, and `build_monthly_roster` stops
-   rejecting non-month-end evaluation dates (`adaptive_momentum.py:250`), accepting instead any
-   session the schedule assigns to that tranche. `roster_expiry_after` delegates to
-   `next_rebalance_index`.
-2. **Durable state.** Roster state must record which tranche opened what, or exits cannot be
-   attributed. **This is the part most likely to produce a reconciliation defect** and deserves
-   the most care — a mis-attributed exit shows up as a position diff that halts trading.
-3. **Runner and sizing.** Build one roster per tranche, blend with `tranche_weights`, and scale
-   the position-value cap by the resulting fraction.
+1. **Roster identity — built.** `MonthlyRoster` carries `tranche` and `tranche_count`;
+   `build_monthly_roster` takes a `tranche` argument and validates `evaluation_at` against
+   `tranche_schedule_map` instead of insisting on month-end
+   (`adaptive_momentum.py:290-303`). `XNYSSessionSequence.tranche_expiry_after` delegates to
+   `next_rebalance_index`. The single-tranche case is pinned month-by-month against the calendar,
+   so today's behaviour is still the degenerate case rather than a second code path.
+2. **Durable state — built.** `RosterPosition.tranche` and `PositionContext.tranche` record which
+   tranche opened what, and `_prior_position_state` reads `tranche` out of `position_state`
+   defaulting to `0` when absent, so state written before tranching existed still loads — which
+   is the shape the live account's positions are in right now. This was called out as the part
+   most likely to produce a reconciliation defect, and a mis-attributed exit still shows up as a
+   position diff that halts trading, so it stays the part to be careful with.
+3. **Runner and sizing — half built, and the built half is unreachable.**
+   `AdaptiveMomentumRunner._tranche_rosters` builds one roster per tranche, omitting tranches whose first
+   rebalance has not happened rather than passing them as empty; `_target_fractions` blends the
+   result with `tranche_weights`. **Neither is called by anything.** The live path is
+   `runners.py:1186`, which calls `self._roster` — the single month-end roster — and `size_entry`
+   still caps at the full `max_position_value_bps` regardless of how many tranches hold a name.
+
+So what is genuinely left is:
+
+* **Wire the blended fraction into position sizing.** That is a change to the risk path and the
+  reason it was stopped short of: the two helpers above are dead code until it happens, and dead
+  code that looks finished is exactly what made this document's old header wrong.
+* **Call `_tranche_rosters` from the session path** instead of `_roster`, once sizing can accept
+  a fractional target.
+* **The backtest engine has no tranching at all.** `backtest/engine.py` contains no reference to
+  a tranche; it rebuilds `active_roster` only at `is_month_end` (`engine.py:622`). Until that
+  changes, tranching cannot be backtested — only run forward — which means the measurements this
+  spec is built on cannot be reproduced through the production engine.
 
 ## Constraints to respect
 

@@ -15,12 +15,20 @@ fail, and the system is built so that failing is cheap, honest and permanent.
 
 ## The safety boundary
 
-**`LIVE_TRADING` is disabled. Real-money trading is not authorized.**
+**Live trading is disabled. Real-money trading is not authorized.**
+
+The two settings that say so are `TRADING_MODE` (default `PAPER`) and
+`LIVE_TRADING_ACKNOWLEDGED` (default `false`); `TradingMode.LIVE` without the acknowledgement is
+refused in `config.py`, and credentials are read from the pair matching the mode. There is no
+setting called `LIVE_TRADING` — the project's prose has used that as shorthand for the boundary,
+including in `CLAUDE.md`, and it is worth knowing that a file which *sets* it is configuring
+nothing.
 
 Paper trading against Alpaca's paper environment *is* authorized and runs autonomously. The two
 are never treated as equivalent. The promotion ladder terminates at `LIVE_REVIEW_ELIGIBLE` and
 there is no stage after it — implemented by the **absence of a destination** in the transition
-table, not by a permission check that could be misconfigured.
+table (`ALLOWED_PROMOTIONS[Stage.LIVE_REVIEW_ELIGIBLE]` is the empty set), not by a permission
+check that could be misconfigured.
 
 No agent may enable live trading, insert real broker credentials, weaken a risk control to
 improve apparent performance, clear a kill switch without verifying the underlying conditions,
@@ -42,22 +50,41 @@ uv run quantbot doctor
 |---|---|
 | `quantbot create-database` | Bootstrap a new store. The only command that creates one |
 | `quantbot migrate-database` | Upgrade an existing store. The only command that rewrites one |
-| `quantbot console` | Read-only operator console on http://127.0.0.1:8787 |
+| `quantbot backup-database` | Copy a store to a new path. Refuses to overwrite |
+| `quantbot console` | Operator console on http://127.0.0.1:8787. Mostly read; see below |
 | `quantbot config` | Every setting in force, its source, and why it is immutable |
 | `quantbot status` | Durable state: kill switch, last run, reconciliation |
 | `quantbot doctor` | Preflight checks against config, ledger and broker |
+| `quantbot preflight` | What this host is configured to do, and what each capability is missing. Exits 1 if anything is unready |
+| `quantbot sync-data` | Pull bars into the durable store |
 | `quantbot run-once` | One operational cycle |
 | `quantbot daemon` | Continuous paper trading |
+| `quantbot protection-daemon` | After-entry position protection, independent of strategy and research |
 | `quantbot reconcile` | Reconcile the ledger against the broker |
 | `quantbot kill-switch engage --reason ...` | Halt trading. Always permitted |
 | `quantbot kill-switch clear --reason ...` | Resume, **only** if readiness probes pass |
+| `quantbot paper-smoke --acknowledgement ...` | One order against the paper account, behind every paper gate plus an exact second acknowledgement |
 | `quantbot backtest` | Historical evaluation |
+| `quantbot report-weekly` | Regenerate a week's report from the ledger |
 | `quantbot hypotheses` | Registered hypotheses |
 | `quantbot register-hypothesis` | Freeze a pre-registration |
 | `quantbot research-status` | Research queue and model configuration |
+| `quantbot research-capacity` | What statistical capacity is left, without spending any |
 | `quantbot research-cycle` | Advance the research loop |
 | `quantbot integrity-sweep` | Demote strategies with unresolved incidents |
 | `quantbot verify-manifest` | Check an experiment bundle's invariants |
+| `quantbot reproduce-experiment` | Re-run the bundle a manifest names |
+
+`quantbot-kronos` is a second entry point for the shadow forecasting worker
+([docs/kronos-shadow.md](docs/kronos-shadow.md)); it has no order path.
+
+**The console is not read-only.** It was, through #82 slice 2; slice 3 added a control plane.
+It can engage and clear the kill switch, trigger `reconcile` and `sync-data`, and propose,
+apply and roll back portfolio-veto policy versions. What it cannot do is bounded by
+construction rather than by convention: the route table is an allowlist, order submission is
+not on it, credentials never round-trip through a browser, an apply appends a *successor*
+policy version instead of editing one that historical refusals already cite, and
+`PolicyAuthority.OPERATOR` is unreachable from any automated path.
 
 Python 3.11+. Run the suite with `uv run pytest tests/`.
 
@@ -73,18 +100,26 @@ market data ──▶ discovery ──▶ ELROND TRUST BOUNDARY ──▶ eviden
               multiple-testing correction
 ```
 
+Every package under `src/quantbot/`:
+
 | Package | Responsibility |
 |---|---|
-| `strategy/` | Strategy identity, configuration, versioning |
-| `market_data/` | Point-in-time data, validation, survivorship, FRED, SEC filings |
+| `domain/` | Ids, enums, lifecycle and the models the other packages share |
+| `strategy/` | Strategy identity, configuration, versioning, rebalance tranching |
+| `market_data/` | Point-in-time data, validation, survivorship, FRED, instruments |
 | `backtest/` | The engine that scores a signal, including externally generated ones |
-| `risk/` | Sizing, gates, drawdown, portfolio state |
-| `execution/` | Order intents, broker orders, fills, reconciliation |
+| `risk/` | Sizing, gates, drawdown, vetoes, exposure, protection, portfolio state |
+| `execution/` | Order intents, broker orders, fills, reconciliation, recovery |
 | `brokers/` | Alpaca paper adapter behind a provider-neutral interface |
-| `operations/` | Cycle, kill switch, readiness, control surface, supervisor, qualification |
+| `operations/` | Cycle, kill switch, readiness, supervisor, protection, qualification |
 | `storage/` | Durable SQLite ledger, Alembic migrations, repositories |
 | `research/` | Registry, power, critic, memory, budget, workers, promotion, synthesis |
+| `anomaly/` | Anomaly and catalyst detection, and the routing it earns |
+| `forecasting/` | The Kronos shadow worker and its separate forecast-only ledger |
 | `sandbox/` | Isolation for generated code — Windows and WSL2 backends |
+| `node/` | Machine identity, capability detection, role policy |
+| `console/` | The operator console: pages, state, and the policy control plane |
+| `reporting/` | Weekly reports, performance, `PROJECT_STATUS.md` |
 
 **Elrond is the judge, not another voter.** Kronos, TradingAgents, RD-Agent and any language
 model are *untrusted research workers*. They may propose; only Elrond's empirical gates may
@@ -105,7 +140,13 @@ statistical confidence.
 | [deploy/pi/README.md](deploy/pi/README.md) | Deployment, dashboard, and the operator control surface |
 | [deploy/omen/README.md](deploy/omen/README.md) | Bringing the coordinator up on WSL2, and the operator steps it deliberately leaves |
 | [docs/runtime-topology.md](docs/runtime-topology.md) | Which machine runs what, measured, and why the Pi Zero W is not the coordinator |
+| [docs/node-deployment.md](docs/node-deployment.md) | What a second machine would need, and what the repository actually assumes today |
 | [docs/kronos-shadow.md](docs/kronos-shadow.md) | The Kronos forecasting worker: setup, limits, and what it does not establish |
+| [docs/worker-environment-identity.md](docs/worker-environment-identity.md) | Why a worker's environment identity is recomputed per backend, never held constant |
+| [docs/tranching-spec.md](docs/tranching-spec.md) | Staggering the rebalance date, its measurements, and what is still unwired |
+| [docs/per-session-trend-spec.md](docs/per-session-trend-spec.md) | A resolved investigation, six wrong diagnoses kept as written |
+| [docs/anomaly-routing-value.md](docs/anomaly-routing-value.md) | The falsification gate the anomaly detector had to clear before it was built on |
+| [docs/COMPETITIVE_FRONTIER_2026-08-29.md](docs/COMPETITIVE_FRONTIER_2026-08-29.md) | A dated audit against the outside world. A snapshot, not a live document |
 
 `PROJECT_STATUS.md` is generated by `run-once` and `doctor`; do not hand-edit it.
 
@@ -156,7 +197,15 @@ This exists because a green suite reported by the agent that wrote the code is t
 in the project still exempt from its own rule: *a gate must not trust the party that benefits
 from it passing.*
 
-**Operator action outstanding:** `main` is currently unprotected. To require the gate:
+**`main` is unprotected, and on this repository's current plan it cannot be protected.** Both
+the branch-protection and the rulesets APIs answer `403 Upgrade to GitHub Pro or make this
+repository public to enable this feature` — verified 2026-09-02, not inferred. So the gate runs
+on every push and pull request and reports honestly, and nothing enforces it at the merge
+button.
+
+Two ways out, both operator decisions: GitHub Pro, or making the repository public. Until one
+of them happens, the command below returns 403 rather than configuring anything, and CI is a
+signal an operator has to read rather than a gate that blocks.
 
 ```bash
 gh api -X PUT repos/jfhutchi/project_elrond/branches/main/protection -F required_status_checks[strict]=true -F 'required_status_checks[contexts][]=checks (ubuntu-latest)' -F 'required_status_checks[contexts][]=checks (windows-latest)' -F enforce_admins=false -F required_pull_request_reviews=null -F restrictions=null -F allow_force_pushes=false
@@ -167,6 +216,11 @@ than guessed from the job key. An earlier version of this command required a con
 `checks`, which is the *job* id and not a status any run reports: branch protection would have
 waited forever for a check that never arrives, and the gate would have read as configured while
 blocking everything. A matrix job reports one context per cell, `<job name> (<matrix value>)`.
+
+An earlier version of this section said only that protection was outstanding, which read as
+"nobody has run the command yet" when the truth is that the command cannot succeed. That
+distinction is the whole point: a control believed to be one click away is not treated the same
+way as one that is unavailable.
 
 Left to the operator deliberately: branch protection is a repository setting, and an agent
 changing the rules it is judged by is the shape of defect this file is full of.
@@ -199,7 +253,16 @@ platform that has never recorded a refutation has not shown it can reject anythi
 
 ## Status
 
-Engineering on the v0.2 research architecture is in progress; forward paper evidence is
-accumulating. Both are tracked in the [v0.2 roadmap issue](https://github.com/jfhutchi/project_elrond/issues/2).
+Engineering on the v0.2 research architecture is in progress, tracked in the
+[v0.2 roadmap issue](https://github.com/jfhutchi/project_elrond/issues/2). 2,320 tests (2,302
+passing, 18 skipped for an absent WSL distribution and an unconfigured model endpoint); `ruff`
+and `mypy --strict` clean on both platforms across 210 source files. Schema is at V24.
+
+Forward paper evidence is a separate question and this repository is not the place to read it
+from. The committed `PROJECT_STATUS.md` is a snapshot generated on 2026-08-18 reporting **day 1
+of the 30-day window**; the ledger it was generated from is not in version control (`*.db` is
+ignored), so a fresh clone can confirm nothing about what has accrued since. Run `quantbot
+status` against the real store for the current figure, and treat any prose in this repository
+about forward progress — including this paragraph — as older than that store.
 
 `version_01` is the preserved known-good baseline and is never developed on directly.

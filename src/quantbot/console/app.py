@@ -1,8 +1,22 @@
-"""The operator console's read-only surface (#82 slice 2).
+"""The operator console (#82 slices 2 and 3).
 
-Server-rendered from `console.state`, which reads authoritative storage. Nothing here decides
-anything: no business logic lives in a template, and there is no mutation endpoint to find,
-because slice 2's job is to render the system truthfully before slice 3 lets anyone change it.
+Server-rendered from `console.state`, which reads authoritative storage. No business logic lives
+in a template: a page that decided something would be a second implementation of a rule that
+already exists.
+
+**This module is no longer read-only, and this docstring said it was.** Slice 2 rendered the
+system truthfully and had no mutation endpoint; slice 3 added the control plane, and the
+sentence claiming there was "no mutation endpoint to find" outlived it. The endpoints that
+change something are: `POST /kill-switch/engage` and `/kill-switch/clear`,
+`POST /operations/reconcile` and `/operations/sync-data`, and `POST /config/policy/preview`,
+`/apply` and `/rollback`.
+
+What bounds them is construction rather than convention. The route table is an allowlist and
+order submission is not on it. Clearing the kill switch calls `measure`, which probes the world,
+rather than trusting a form -- and where no broker can be built there is no button, with the
+reason rendered. An apply *appends* a successor policy version instead of editing one that
+historical refusals already cite, rollback is itself a forward operation, and
+`PolicyAuthority.OPERATOR` is unreachable from any automated path (`console.control`).
 
 **Two audiences, one source.** `/api/...` returns the same `ConsoleState` the pages render, so a
 future frontend, a script or an operator with `curl` all see identical values. A page that

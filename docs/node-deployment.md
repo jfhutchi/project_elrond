@@ -20,16 +20,26 @@ installer for a system that does not exist.
 default paths in `.env.example` are *relative* — `quantbot.db`, `reports`, `quantbot.lock` —
 so durable state follows whichever directory the process started in.
 
-**Nothing is containerised.** There is no Dockerfile, no compose file, and no container
-reference anywhere in the tree. The dependency set is SQLAlchemy, Alembic, httpx, pydantic,
-structlog, websockets, PyYAML. There is no PostgreSQL driver, no Redis client, and no queue
-library.
+**Nothing is containerised.** There is no Dockerfile and no compose file, and nothing in the tree
+runs a container: `node/capabilities.py` *detects* one, `sandbox/policy.py` names it as a
+backend, and `research/dispatch.py` lists Docker as a future target behind the same protocol.
+The runtime dependency set is SQLAlchemy, Alembic, httpx, pydantic, pydantic-settings, PyYAML,
+structlog, websockets, tzdata, and — for the operator console — FastAPI, Jinja2 and uvicorn.
+There is no PostgreSQL driver, no Redis client, and no queue library. (This paragraph previously
+said "no container reference anywhere in the tree" and listed seven dependencies, omitting the
+three that serve a network listener. Both are corrected; an installer written from the old list
+would not have known this repository serves HTTP.)
 
 **Capability matching exists; inventory does not.** `placement.place(job, hosts)` is a real
 capability gate with a measured-provenance token, and it is good. But `hosts` is supplied by
-the caller — nothing builds that list from a durable registry, nothing persists a profile, and
-#38's own review notes that `place()` is *not wired into the dispatch path*. It is a rule that
-exists rather than a rule that runs.
+the caller and nothing builds that list from a durable registry or persists a profile.
+
+*Partly superseded by #136:* `research/dispatch.py` now puts a `WorkerDispatcher` in front of
+the backends and asks each one `can_run(requirements)`, built on placement's `unmet_requirement`
+and `NoCapableHost`. So the capability rule *does* run on the path that starts work — but with
+exactly one backend (`SubprocessWorker`, this machine), so it can still only ever refuse, never
+route. The sentence this replaces said `place()` was "a rule that exists rather than a rule that
+runs", which stopped being true when the dispatcher landed.
 
 **A worker abstraction exists and is local-only.** `research/workers.py` defines the
 `ResearchWorker` protocol, `WorkerSpec`, `WorkerCapability` and `WorkerTrust`;
@@ -127,18 +137,50 @@ Dependency-ordered. Each is independently reviewable. Parent: #38. Roadmap: #2.
 
 ## Networking
 
-Current listeners, both loopback-only by design: dashboard `127.0.0.1:8080`, control surface
-`127.0.0.1:8081`.
+> **Corrected 2026-09-02.** This section said "Current listeners, both loopback-only by design:
+> dashboard `127.0.0.1:8080`, control surface `127.0.0.1:8081`." Neither half was true. Both bind
+> `0.0.0.0` on purpose — a LAN dashboard is the entire point of the Pi deployment — and there are
+> three listeners, not two. Getting a listener's bind address wrong in the document an installer
+> would be written from is the failure mode this file exists to prevent.
 
-No port becomes LAN-reachable in N1–N8. If N9 introduces remote dispatch, the node-to-node
-channel must be authenticated before it binds to anything other than loopback, and every
-reachable port has to be documented in N13 with the reason it is open.
+| Listener | Binds | Confined by |
+|---|---|---|
+| Pi dashboard, port 8080 | `0.0.0.0` (`dashboard.service`) | systemd `IPAddressAllow` = localhost + RFC1918 only, `IPAddressDeny=any`. Static files, no credentials, no `EnvironmentFile` |
+| Pi control surface, port 8081 | `0.0.0.0` (`scripts/control_server.py`) | Same systemd address filter, plus a bearer token. Holds the ledger, not the broker keys |
+| Operator console, port 8787 | `127.0.0.1` (`quantbot console`) | Loopback default; `--host` widens it deliberately |
+
+So two ports are already LAN-reachable, both by design and both confined at the systemd layer
+rather than by the process. The rule going forward is unchanged and now has to be stated against
+that baseline: **N1–N8 add no new reachable port.** If N9 introduces remote dispatch, the
+node-to-node channel must be authenticated before it binds to anything other than loopback, and
+every reachable port has to be documented in N13 with the reason it is open.
 
 ## Safety
 
-`LIVE_TRADING` is untouched by all of this. Installing a node must never enable it, and
-`deploy/omen/setup.sh` already refuses to deploy against an env file that sets it — that check
-belongs in the new installer too.
+Live trading is untouched by all of this. Installing a node must never enable it.
+
+> **⚠ The existing guard does not guard anything. Found 2026-09-02, not yet fixed.**
+>
+> This section said "`deploy/omen/setup.sh` already refuses to deploy against an env file that
+> sets it". The script does contain a check (`setup.sh:25`), and the check greps for
+> `LIVE_TRADING=true`. **There is no `LIVE_TRADING` setting.** `Settings` reads `TRADING_MODE`
+> (`PAPER`/`LIVE`) and `LIVE_TRADING_ACKNOWLEDGED`, with `extra="ignore"`, so a variable named
+> `LIVE_TRADING` is discarded by the config layer and matched by nothing else.
+>
+> The regex also cannot match `LIVE_TRADING_ACKNOWLEDGED=true`, because it requires `=`
+> immediately after `LIVE_TRADING`. So an env file setting `TRADING_MODE=LIVE` and
+> `LIVE_TRADING_ACKNOWLEDGED=true` passes the guard silently, and the deployment script installs
+> the units reporting that it refused to.
+>
+> The real boundary is elsewhere and is intact — `TradingMode.LIVE` without acknowledgement is
+> refused in `config.py:140`, and no agent may supply live credentials — so this is a guard that
+> proves nothing, not an open door. It is exactly the defect class CLAUDE.md's engineering
+> standard is written about: *a check that passes for a reason unrelated to the property it
+> claims*. The fix is to grep for `TRADING_MODE` and `LIVE_TRADING_ACKNOWLEDGED`, and it belongs
+> in this installer as well as in the new one.
+
+`deploy/pi/setup.sh` writes `TRADING_MODE=PAPER` and `LIVE_TRADING_ACKNOWLEDGED=false` into the
+env file it generates, which is a real default rather than a check.
 
 Adding a node adds capacity, never authority. A new node cannot clear a kill switch, cannot
 ratify a mandate, and cannot become coordinator by describing itself as one.
