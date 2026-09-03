@@ -22,10 +22,16 @@ also reached, so a gap cannot be stepped over. A deployment that somehow showed 
 with no surviving candidate behind it would report M0, not M3, and the M1 check would say why.
 
 **A level that cannot be assessed does not pass.** `unassessed` blocks, exactly as it does in #7
-and in forward evidence. M4 currently carries one permanently: #51 is open, so nothing here can
-say whether an effect survives at the intended capital rather than at the paper account's $100.
-That is the honest state, and reporting M4 without it would be the surrogate-objective failure
-this module exists to prevent, arriving through the module itself.
+and in forward evidence. Reporting M4 without it would be the surrogate-objective failure this
+module exists to prevent, arriving through the module itself.
+
+This paragraph used to say M4 "currently carries one permanently: #51 is open".
+`AdaptiveMomentumRunner` now records a `CapacityAssessment` every cycle, so the gate reads a
+persisted artifact rather than an empty table -- and it still blocks, because with no measured
+benchmark-relative excess the verdict is `UNASSESSED`. The block is unchanged; what changed is
+that it is now a refusal
+somebody looked at, which is the distinction the three states exist to preserve. As ever, the
+gate reads the assessment and never the issue's state.
 
 **No calendar deadline, deliberately.** #52 asks for the milestone to constrain *claims and
 resource allocation*, not to pressure agents into mining until something wins. Nothing here

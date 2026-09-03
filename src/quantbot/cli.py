@@ -85,9 +85,11 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # #82 slice 1. Read-only by construction: this command reports what is in force and why
     # it cannot be changed here, which is the whole of what the registry can honestly offer
     # before a control plane exists.
-    # #82 slice 2. Read-only, and bound to loopback by default: a console is not implicitly
-    # trustworthy merely because it is local, and the default that refuses more is the one that
-    # is not reachable from the network at all.
+    # #82 slices 2 and 3. Bound to loopback by default: a console is not implicitly trustworthy
+    # merely because it is local, and the default that refuses more is the one that is not
+    # reachable from the network at all. This comment said "read-only" until 2026-09-02, which
+    # was true of slice 2 and stopped being true when slice 3 added the control plane -- see
+    # `console.app` for the endpoints that change something and what bounds them.
     console = commands.add_parser("console")
     console.add_argument("--host", default=None, help="default 127.0.0.1; widen deliberately")
     console.add_argument("--port", type=int, default=None)
