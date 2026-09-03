@@ -24,14 +24,18 @@ The long-term success metric is **risk-adjusted, repeatable real-world profitabi
 
 ## Non-Negotiable Safety Boundary
 
-`LIVE_TRADING` remains disabled.
+Real-money trading remains disabled and unauthorized.
+
+The current configuration boundary is `TRADING_MODE=PAPER` with
+`LIVE_TRADING_ACKNOWLEDGED=false`. There is no operative setting named `LIVE_TRADING`; older prose
+may use that phrase as shorthand for the real-capital boundary, but code and deployment guidance
+must refer to the settings that actually exist.
 
 No AI agent may:
 
-- Enable live trading.
+- Enable live trading or change the live-capital acknowledgement on its own authority.
 - Insert live broker credentials.
 - Move a strategy directly from research into live capital.
-- Clear a kill switch without verifying the actual underlying conditions.
 - Weaken risk controls to improve apparent performance.
 - Fabricate forward observations, fills, trading days, statistical significance, or profitability.
 
@@ -41,6 +45,16 @@ This boundary is about **actions**, not classifications. An agent may not enable
 supply credentials, or move money. An agent *may* conclude that a package is ready for a human to
 review with real capital in mind, provided the package states plainly what authority its success
 criteria carried (#72).
+
+### Kill-switch authority is role-specific
+
+Research agents, external workers, and model-generated tools must never receive authority to clear
+the global kill switch.
+
+An operational control path may clear the paper-mode kill switch only through the existing
+authoritative readiness mechanism, after the actual underlying conditions have been mechanically
+verified and the action is durably audited. No LLM assertion, confidence score, environment flag,
+or operator-intent guess can substitute for those readiness checks.
 
 ## Baseline
 
@@ -65,6 +79,30 @@ Preserve the existing:
 - `REFUTED.md` institutional knowledge.
 
 Do not replace working infrastructure merely because another framework exists.
+
+## Operational Truth and Forward Evidence
+
+A Git checkout is not evidence of what is deployed.
+
+Never infer any of the following from repository files alone:
+
+- active coordinator or writer identity;
+- authoritative durable-store identity;
+- current strategy actually running on a host;
+- current broker/account state;
+- forward trading days;
+- fills, trades, or current equity;
+- paper-qualification progress;
+- current kill-switch or reconciliation state.
+
+Runtime databases are intentionally not version-controlled, and committed status artifacts may be
+stale snapshots. Establish deployed state using measured runtime evidence such as the authoritative
+durable store, broker reconciliation, `quantbot deployment-status`, host/process identity, and
+recorded deployment/heartbeat metadata (#190).
+
+If those facts cannot be established, report them as `UNKNOWN` / unverified. Never reconstruct or
+fabricate forward evidence from elapsed calendar time, repository history, historical backtests, or
+a stale `PROJECT_STATUS.md`.
 
 ## Architecture Review Protocol
 
@@ -209,19 +247,41 @@ Design interfaces so additional worker machines can be added later without requi
 
 ## External Frameworks
 
-Evaluate projects such as RD-Agent, Qlib, TradingAgents, and future open-source research systems for reusable components.
+Evaluate external research and trading projects for reusable components, but adopt capabilities by
+bounded role rather than importing another project's authority model wholesale.
 
-They may become Elrond workers or libraries.
+Examples of useful roles include:
+
+- Qlib-style systems as quantitative laboratory/backtest/model workers.
+- RD-Agent-style systems as bounded factor/model candidate-generation workers.
+- ResearcherOS-style patterns for explicit hypothesis graphs, preregistered verdict contracts,
+  contradiction preservation, and cross-experiment knowledge curation.
+- TradingAgents/WhenTrade-style systems for semantic, adversarial, and contextual research.
+- QuantDinger-style patterns for capability scoping, idempotency, audit, and agent-facing safety
+  boundaries.
+
+They may become Elrond workers, libraries, or independently reimplemented patterns.
 
 They do **not** become authorities over:
 
 - Evidence.
+- Protected-data access.
+- Statistical/search accounting.
 - Risk.
 - Strategy promotion.
 - Broker execution.
+- Kill-switch authority.
 - Live trading.
 
 Elrond remains the controlling research/evidence architecture.
+
+### License before reuse
+
+Before copying source code, prompts, templates, skills, or other implementation text from an
+external project, verify that its license permits the intended reuse and comply with any
+notice/attribution obligations. If licensing is absent, unclear, or incompatible, study the
+architecture and reimplement the concept independently; do not copy the source merely because the
+repository is public.
 
 ## Implementation Priority
 
