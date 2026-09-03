@@ -282,10 +282,21 @@ from trading.
 ### This applies to the DEPLOYED strategy
 
 `config/strategy-v1-2.yaml` carries the same `drawdown_thresholds_bps: [500, 1000, 1500, 2000]`.
-Its historical max drawdown is 26.4%. **If the live account reaches a 15% drawdown, it stops
+~~Its historical max drawdown is 26.4%.~~ **If the live account reaches a 15% drawdown, it stops
 entering and cannot recover by trading.** Only a deposit or a manual reset would release it.
 
 This should be treated as a severity-1 design defect, not a research finding.
+
+> **The 26.4% was retracted on 2026-08-19; struck here 2026-09-03.** Measured through the
+> production engine it is **9.09%** on SIP (10.87% on IEX), and v1.2.0 never reaches the 15% halt
+> on that window. `REFUTED.md`, thirteenth analysis defect.
+>
+> **The severity-1 claim survives the correction**, and it is worth being explicit about why,
+> because a retracted number usually takes its conclusion with it. The defect is *structural* —
+> a halted account holds nothing, so equity is frozen, so drawdown is frozen, so no
+> drawdown-based release can ever fire — and that argument never depended on how close the
+> deployed config sits to the threshold. What the correction changes is urgency: latent hazard,
+> not active one.
 
 ### Fixes to consider, none yet tested
 

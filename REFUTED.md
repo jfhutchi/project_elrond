@@ -319,9 +319,15 @@ worse than unlevered at 3x; it turned the sleeve ensemble from +1.78% to **−2.
   (#8, +427.9% gross) nets -28.8% at 5bps. `scripts/snowball_math.py`.
 * **Execution cost, not prediction, is usually binding.** #8 and #9 both died on spread, not
   on signal quality.
-* **The deployed strategy violates its own risk rule.** V1.2.0's historical max drawdown is
+* ~~**The deployed strategy violates its own risk rule.** V1.2.0's historical max drawdown is
   26.4% against a 20% halt, so it is expected to trip the halt it ships with. This is a design
-  incoherence, not a returns question, and is the sole justification for v1.3.0. Cycle 13.
+  incoherence, not a returns question, and is the sole justification for v1.3.0. Cycle 13.~~
+  **RETRACTED 2026-08-19, struck here 2026-09-03.** 26.4% does not reproduce: measured through
+  the production engine it is **9.09%** on SIP and 10.87% on IEX, and v1.2.0 never reaches even
+  the 15% entry halt on that window. See the thirteenth analysis defect below, which recorded
+  the retraction while this bullet went on asserting the retracted figure — in the file whose
+  purpose is to stop exactly that. The halt genuinely has no exit, so the design defect is real;
+  it is latent rather than active, and it is no longer a justification for v1.3.0.
 * **Tranching is real, measured, and needs 5 tranches at $100.** The $61.24 spread per $100 is
   the largest free effect found in 13 cycles. 5 tranches removes 88% of it at a $2.00 minimum
   trade; 21 would remove 100% but needs $0.48 trades, below Alpaca's $1 floor. The binding

@@ -280,9 +280,27 @@ identities are unchanged and a regression test pins them:
 | strategy-v1-3.yaml | `...f785a11dc906265f` | built, **not deployed** |
 
 Why v1.3.0 exists: the configured thresholds are `[500, 1000, 1500, 2000]` bps, so **entries
-halt at 15% and LIQUIDATION is required at 20%**. V1.2.0's historical max drawdown is **26.4%**
-— the live strategy would have been *liquidated* historically, not merely halted. Vol targeting
-at 100bps brings it to **14.4%, inside both thresholds**.
+halt at 15% and LIQUIDATION is required at 20%**. ~~V1.2.0's historical max drawdown is **26.4%**
+— the live strategy would have been *liquidated* historically, not merely halted.~~ Vol targeting
+at 100bps brings it to **14.4%**.
+
+> **⚠ The premise of this section was retracted on 2026-08-19 and this text was not updated
+> until 2026-09-03.** Measured through the production engine on SIP 2016-2026, v1.2.0's max
+> drawdown is **9.09%** (IEX 10.87%), not 26.4%, and it never reaches the 15% halt on that
+> window. The 26.4% came from the era of the disconnected harness and does not reproduce on any
+> window tried — `REFUTED.md`'s thirteenth analysis defect, and the START HERE block at the top
+> of this file.
+>
+> **So v1.3.0's stated justification does not hold.** It was "the deployed strategy would have
+> been liquidated historically"; the measurement says it would not have been halted. That does
+> not make v1.3.0 wrong — vol targeting reducing drawdown is separately established at
+> p=0.0007, and a backtest maximum is not a bound on future drawdown — but the reason to deploy
+> it is now *prospective risk management* rather than *repairing a config that breaches its own
+> rule*, and deploying restarts the 30-day qualification window either way. §7's "decide whether
+> to deploy v1.3.0" should be read against 9.09%, not 26.4%.
+>
+> Left in place, struck through, because six sections and two other files were reasoning from
+> this number and a silent edit would leave them unexplained.
 
 Correction worth knowing: an earlier version of this section said the halt was at 20% and that
 150bps (17.1%) was inside it. Both were wrong — 17.1% still trips the 15% entry halt. The
@@ -331,9 +349,14 @@ few percent a year; the choice of how much capital enters is worth multiples.
 
 ## 6e. Three configs now exist. Only one is deployed.
 
+*The heading counts the three this section compares. `config/` holds more —
+`strategy-v1.yaml`, `strategy-v1-1.yaml`, `strategy-trend-v4.yaml`,
+`strategy-trend-v4-floor.yaml` and `strategy-crypto-v2.yaml` besides — so read the table as the
+options that were measured against each other, not as an inventory. Still only one deployed.*
+
 | config | identity | what it is |
 |---|---|---|
-| `strategy-v1-2.yaml` | `...309894d8d8a5296e` | **DEPLOYED**. 10-name momentum rotation. Worst of the measured options under the risk rules; 26.4% historical drawdown breaches the 20% liquidation threshold. |
+| `strategy-v1-2.yaml` | `...309894d8d8a5296e` | **DEPLOYED**. 10-name momentum rotation. Worst of the measured options under the risk rules. ~~26.4% historical drawdown breaches the 20% liquidation threshold~~ — **that figure is wrong; see START HERE.** Measured through the production engine on SIP 2016-2026 it is **9.09%** (IEX 10.87%), and it never reaches the 15% halt threshold on that window. |
 | `strategy-v1-3.yaml` | `...358c3bd691239575` | v1.2 plus vol targeting at 100bps. Drawdown 14.4%, inside both thresholds. |
 | `strategy-index-v3.yaml` | `...5e14d03a647f4e6b` | Hold SPY, size by volatility. **DEAD END, do not deploy.** Runs at ~9% invested against the 62.5% designed; raising the risk parameter to 190 and 300 only reached 26% and 30% and still returned 0.98% CAGR. The engine's plain `SPY_SMA200` benchmark beats it tenfold with none of the machinery. |
 
@@ -1509,13 +1532,25 @@ Four implemented: `NET_EXPOSURE` (gross was capped, net was not), `STALE_MARKET_
 `DAILY_LOSS` (keyed on the **Eastern** session, the same off-by-one that already cost this project
 correct fill attribution), and `LIQUIDITY` (participation in average daily volume).
 
-**Which are enforced is operator policy, and the default is deliberately partial.** `DAILY_LOSS`
-needs an equity mark from the current session; `LIQUIDITY` needs twenty sessions of volume. On a
-fresh ledger neither exists, so both correctly refuse — and enabling them by default would halt
-the entries this project needs in order to accumulate forward evidence at all. The default enables
-the two a thin ledger can always answer; the other two are implemented, tested, and **off until
-the operator turns them on**. Same shape as the economic mandate: an agent may propose the values,
-the operator decides.
+~~**Which are enforced is operator policy, and the default is deliberately partial.** The default
+enables the two a thin ledger can always answer; the other two are implemented, tested, and **off
+until the operator turns them on**. Same shape as the economic mandate: an agent may propose the
+values, the operator decides.~~
+
+**Superseded by #75, corrected here 2026-09-03: every implemented veto ships on.**
+`PortfolioVetoPolicy.enabled` contains all four, and §7's first item recorded the change while
+this paragraph went on describing the old default — the two halves of one file disagreeing about
+what the risk engine enforces, which is worse than either answer being wrong.
+
+The reasoning above was not wrong about the mechanism and was wrong about who decides.
+`DAILY_LOSS` still needs an equity mark from the current session and `LIQUIDITY` still needs
+twenty sessions of volume, and on a fresh ledger both correctly refuse. What changed is #72: a
+threshold nobody has stated is a **versioned project default an agent selects and labels
+honestly**, not a reason to ship a safety control disabled. Waiting for an operator to enable an
+implemented risk control meant the safest configuration was the one nobody had chosen. The
+thresholds are `PROJECT_DEFAULT`, recorded as policy version 1 with
+`ChangeAuthority.PROJECT_DEFAULT` so history starts where the system did — **not** approved, and
+every refusal measured under them says so.
 
 **Sector and correlation are declared and unimplemented, and the policy refuses to enable them.**
 There is no sector classification anywhere in this repository, and classifying a historical
@@ -1869,7 +1904,13 @@ whether or not the correlation guards fired.
       at the full `max_position_value_bps` regardless of how many tranches hold the name. That
       is a change to the risk path and deserves a fresh session rather than a tired one.
       Nothing is switched on; `rebalance_tranches` is still at its default of 1.
-- [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window
+- [ ] **Decide whether to deploy v1.3.0** — see 6c; restarts the qualification window.
+      **Read it against 9.09%, not 26.4% (noted 2026-09-03).** Its stated justification was that
+      v1.2.0 "would have been liquidated historically". That number was retracted on 2026-08-19
+      and does not reproduce; the deployed config never reaches even the 15% entry halt on the
+      measured window. Vol targeting still reduces drawdown (16/18 assets, p=0.0007), so the case
+      for v1.3.0 is prospective risk management rather than repairing a config that breaches its
+      own rule — a weaker case, against the same cost of restarting the 30-day window.
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
 - [ ] **Recalibrate the cost model** from 5bps — deliberately NOT done yet. Two independent
       estimates say the assumption is 5-20x too high (quoted NBBO 0.26-3.31bps; realised fills
