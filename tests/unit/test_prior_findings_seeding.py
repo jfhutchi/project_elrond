@@ -100,3 +100,34 @@ def test_seeding_cannot_overwrite_a_record_a_decision_was_based_on(
             assert len(memory.recall("", kinds=[RecordKind.FINDING])) == before
     finally:
         database.close()
+
+
+def test_failed_seeding_publishes_no_database_and_a_retry_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Creation is failure-atomic across schema creation and application-data seeding."""
+    from quantbot.research import prior
+
+    target = tmp_path / "quantbot.db"
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(target))
+    original_loader = prior.load_prior_findings
+
+    def fail_seeding(_memory: ResearchMemory) -> int:
+        raise RuntimeError("forced prior-findings seed failure")
+
+    monkeypatch.setattr(prior, "load_prior_findings", fail_seeding)
+    with pytest.raises(RuntimeError, match="forced prior-findings seed failure"):
+        main(["create-database", "--confirm"], output=StringIO())
+
+    assert not target.exists(), "a failed bootstrap published a partial store"
+    assert not Path(f"{target}-wal").exists()
+    assert not Path(f"{target}-shm").exists()
+    assert list(tmp_path.iterdir()) == [], "bootstrap staging files survived the failure"
+
+    monkeypatch.setattr(prior, "load_prior_findings", original_loader)
+    output = StringIO()
+    assert main(["create-database", "--confirm"], output=output) == 0
+    assert json.loads(output.getvalue())["created"] is True
+    assert target.is_file()
+
+    Database(target).close()

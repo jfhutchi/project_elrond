@@ -121,10 +121,10 @@ class RuntimeConfigurationError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class RuntimePaths:
     config: Path
-    #: The SQLite path, kept for every caller that legitimately needs a file -- backups, the
-    #: single-writer lock's neighbourhood, the console's disk checks. `target` is the
-    #: backend-neutral form (#196); this stays because SQLite is the only enabled backend and
-    #: making a hundred call sites pretend otherwise would be ceremony, not portability.
+    #: The SQLite path, kept for every caller that legitimately needs a file -- backups and the
+    #: console's disk checks. `target` is the backend-neutral form (#196); this stays because
+    #: SQLite is the only enabled backend and making a hundred call sites pretend otherwise
+    #: would be ceremony, not portability.
     database: Path
     #: Where the store is, without assuming a filesystem. Resolving both from one call means a
     #: caller cannot end up with a path and a target that disagree.

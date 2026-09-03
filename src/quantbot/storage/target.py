@@ -29,7 +29,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
-from urllib.parse import urlsplit, urlunsplit
+from urllib.parse import parse_qsl, unquote, urlencode, urlsplit, urlunsplit
 
 #: The environment variable this project has always used. Unchanged, and still the default.
 PATH_VARIABLE = "QUANTBOT_DB_PATH"
@@ -41,6 +41,17 @@ URL_VARIABLE = "QUANTBOT_DATABASE_URL"
 DEFAULT_SQLITE_PATH = "quantbot.db"
 
 REDACTED = "***"
+
+_CREDENTIAL_QUERY_MARKERS = (
+    "apikey",
+    "credential",
+    "passfile",
+    "passwd",
+    "password",
+    "pwd",
+    "secret",
+    "token",
+)
 
 
 class DatabaseBackend(StrEnum):
@@ -91,24 +102,50 @@ class BackendNotEnabled(DatabaseTargetError):
 
 
 def redact_database_url(value: str) -> str:
-    """Strip the password from a URL, leaving everything an operator needs to identify it.
+    """Strip credentials from a URL while retaining useful routing information.
 
-    The username, host, port and database name stay: a redaction that removed them would make
-    the diagnostic useless, and they are not the secret.
+    The username, host, port, database name, and non-secret query settings stay. Passwords in
+    userinfo and credential-shaped query parameters do not. Fragments are redacted wholesale:
+    they are not sent to a database server, add no routing evidence, and can contain arbitrary
+    client-side credentials.
     """
     try:
         parts = urlsplit(value)
-    except ValueError:
+    except (UnicodeError, ValueError):
         return REDACTED
-    if not parts.password:
+
+    changed = False
+    netloc = parts.netloc
+    userinfo, separator, address = netloc.rpartition("@")
+    if separator and ":" in userinfo:
+        username, _, _password = userinfo.partition(":")
+        netloc = f"{username}:{REDACTED}@{address}"
+        changed = True
+
+    try:
+        query_items = parse_qsl(parts.query, keep_blank_values=True)
+        redacted_query: list[tuple[str, str]] = []
+        for key, item_value in query_items:
+            normalized_key = "".join(
+                character for character in key.lower() if character.isalnum()
+            )
+            if any(marker in normalized_key for marker in _CREDENTIAL_QUERY_MARKERS):
+                redacted_query.append((key, REDACTED))
+                changed = True
+            else:
+                redacted_query.append((key, item_value))
+        query = urlencode(redacted_query)
+    except (UnicodeError, ValueError):
+        return REDACTED
+
+    fragment = parts.fragment
+    if fragment:
+        fragment = REDACTED
+        changed = True
+
+    if not changed:
         return value
-    userinfo = f"{parts.username or ''}:{REDACTED}"
-    host = parts.hostname or ""
-    if parts.port:
-        host = f"{host}:{parts.port}"
-    return urlunsplit(
-        (parts.scheme, f"{userinfo}@{host}", parts.path, parts.query, parts.fragment)
-    )
+    return urlunsplit((parts.scheme, netloc, parts.path, query, fragment))
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +207,10 @@ def parse_database_url(value: str) -> DatabaseTarget:
     text = value.strip()
     if not text:
         raise UnsupportedDatabaseUrl("database URL is empty")
-    parts = urlsplit(text)
+    try:
+        parts = urlsplit(text)
+    except (UnicodeError, ValueError) as error:
+        raise UnsupportedDatabaseUrl("database URL is malformed") from error
     scheme = parts.scheme.split("+", maxsplit=1)[0].lower()
     backend = _SCHEMES.get(scheme)
     if backend is None:
@@ -184,10 +224,12 @@ def parse_database_url(value: str) -> DatabaseTarget:
         # store that vanishes with the process cannot be the one holding the ledger.
         # `sqlite:///relative.db` gives path `/relative.db`; `sqlite:////abs/x.db` gives
         # `//abs/x.db`. Dropping one leading slash yields the intended path in both cases.
-        location = parts.path[1:] if parts.path.startswith("/") else parts.path
-        if parts.netloc or not location:
+        encoded_location = parts.path[1:] if parts.path.startswith("/") else parts.path
+        location = unquote(encoded_location)
+        if parts.netloc or not location or parts.query or parts.fragment:
             raise UnsupportedDatabaseUrl(
-                "a SQLite URL is sqlite:///<path>; a host or an empty path is not a durable store"
+                "a SQLite URL is sqlite:///<path>; hosts, empty paths, query parameters, and "
+                "fragments are not supported for the durable store"
             )
         return DatabaseTarget(backend=DatabaseBackend.SQLITE, location=location)
     return DatabaseTarget(backend=backend, location=text)
@@ -202,7 +244,8 @@ def resolve_database_target(
 
     Three rules, and the third is the one worth stating:
 
-    1. `QUANTBOT_DB_PATH` alone -> SQLite at that path, unchanged from every prior release.
+    1. `QUANTBOT_DB_PATH` alone -> the legacy filesystem path; URL-shaped values are parsed so
+       they cannot masquerade as filenames.
     2. `QUANTBOT_DATABASE_URL` alone -> whatever the URL names, refused later if not enabled.
     3. **Both -> a hard error.** No precedence is invented, because a precedence rule means one
        of the two settings silently does nothing while the operator who set it believes it took
@@ -213,14 +256,16 @@ def resolve_database_target(
     url_value = (source.get(URL_VARIABLE) or "").strip()
 
     if path_value and url_value:
+        displayed_path = redact_database_url(path_value) if "://" in path_value else path_value
         raise AmbiguousDatabaseTarget(
             f"{PATH_VARIABLE} and {URL_VARIABLE} are both set "
-            f"({path_value!r} and {redact_database_url(url_value)!r}). Set one: choosing between "
+            f"({displayed_path!r} and {redact_database_url(url_value)!r}). Set one: choosing "
+            "between "
             "them here would make the other silently do nothing"
         )
     if url_value:
         return parse_database_url(url_value)
-    return DatabaseTarget(backend=DatabaseBackend.SQLITE, location=path_value or default_path)
+    return coerce_target(path_value or default_path)
 
 
 def sqlite_target(path: str | Path) -> DatabaseTarget:
@@ -230,7 +275,14 @@ def sqlite_target(path: str | Path) -> DatabaseTarget:
 
 def coerce_target(value: str | Path | DatabaseTarget) -> DatabaseTarget:
     """Accept either form, so the seam does not force a rewrite of every call site."""
-    return value if isinstance(value, DatabaseTarget) else sqlite_target(value)
+    if isinstance(value, DatabaseTarget):
+        return value
+    if isinstance(value, str):
+        if not value.strip():
+            raise DatabaseTargetError("database target is empty")
+        if "://" in value:
+            return parse_database_url(value)
+    return sqlite_target(value)
 
 
 __all__ = [

@@ -92,7 +92,8 @@ class DatabaseNotFoundError(FileNotFoundError):
             f"no database at {path}; opening a store does not create one. If this path is "
             "correct and the system is being installed for the first time, run "
             "`quantbot create-database` to bootstrap it deliberately. Otherwise the configured "
-            "path is wrong -- check QUANTBOT_DB_PATH and the working directory"
+            "target is wrong -- check QUANTBOT_DB_PATH or QUANTBOT_DATABASE_URL and the "
+            "working directory"
         )
 
 

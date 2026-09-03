@@ -7,6 +7,7 @@ import asyncio
 import json
 import os
 import sys
+import tempfile
 from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
@@ -138,7 +139,7 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     migrate = commands.add_parser("migrate-database")
     migrate.add_argument(
         "--database",
-        help="store to upgrade; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
+        help="store to upgrade; defaults to the same configured target everything else reads",
     )
     # Refusing by default is the point: an upgrade is not reversible and the operator should have
     # seen what it would do before it does it.
@@ -149,14 +150,14 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     create = commands.add_parser("create-database")
     create.add_argument(
         "--database",
-        help="store to create; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
+        help="store to create; defaults to the same configured target everything else reads",
     )
     create.add_argument("--confirm", action="store_true")
     commands.add_parser("preflight")
     backup = commands.add_parser("backup-database")
     backup.add_argument(
         "--database",
-        help="store to back up; defaults to QUANTBOT_DB_PATH, the same one everything else reads",
+        help="store to back up; defaults to the same configured target everything else reads",
     )
     backup.add_argument("--to", required=True, help="destination path; must not already exist")
     verify = commands.add_parser("verify-manifest")
@@ -224,11 +225,9 @@ def _configured_database(override: str | None = None) -> Path:
     #86's failure reached through the configuration rather than through a typo. One resolver,
     one answer, and the ambiguous case refused in both places.
     """
-    from quantbot.storage.target import resolve_database_target
+    from quantbot.storage.target import coerce_target, resolve_database_target
 
-    if override:
-        return Path(override)
-    target = resolve_database_target()
+    target = coerce_target(override) if override is not None else resolve_database_target()
     target.require_enabled()
     return target.path
 
@@ -604,16 +603,16 @@ def _create_database(args: argparse.Namespace, stream: TextIO) -> int:
     from quantbot.storage import Database
     from quantbot.storage.schema import SCHEMA_VERSION
 
-    path = _configured_database(args.database)
+    path = _configured_database(args.database).expanduser().resolve()
     payload: dict[str, object] = {
         "ok": False,
         "command": "create-database",
-        "database": str(path.resolve()),
+        "database": str(path),
         "target_schema_version": SCHEMA_VERSION,
         "created": False,
     }
 
-    if path.exists() and path.stat().st_size > 0:
+    if path.exists():
         payload["error"] = f"{path} already holds a database; nothing to create"
         json.dump(payload, stream, sort_keys=True)
         return 2
@@ -621,38 +620,53 @@ def _create_database(args: argparse.Namespace, stream: TextIO) -> int:
         # The resolved path is echoed rather than the argument, because the mistake this guards
         # against is usually a relative path resolving somewhere unexpected.
         payload["error"] = (
-            f"would create a new store at {path.resolve()} with an engaged kill switch. Check "
+            f"would create a new store at {path} with an engaged kill switch. Check "
             "that path is where you mean, then re-run with --confirm"
         )
         json.dump(payload, stream, sort_keys=True)
         return 2
 
-    database = Database.create(path)
-    try:
-        # A new store starts from what this project already knows, not from nothing.
-        #
-        # `REFUTED.md` holds settled findings from cycles 2-12, and `load_prior_findings` exists
-        # because the live store was once empty while that file held twenty-four of them -- so
-        # the novelty gate passed questions the project had already answered. Until now the only
-        # caller was `research-cycle`, which fails closed without `QUANTBOT_MODEL_GENERATOR`.
-        # That made a freshly created store report `BELOW_M0` -- "nothing shows this platform can
-        # reject a hypothesis" -- while its refutation history sat checked into the repository,
-        # and made the milestone depend on an LLM endpoint that has nothing to do with whether
-        # anything was ever refuted. Measured on 2026-09-02: seeding moves a new store from
-        # `BELOW_M0` to `M0_RESEARCH_PLATFORM_OPERATIONAL` with no credential configured, and
-        # leaves the real M1 blocker legible instead of hidden behind a model error.
-        #
-        # Idempotent through `ResearchMemory.record`, which accepts an exact repeat and refuses a
-        # conflicting one -- so this cannot overwrite a record a decision was based on. Done here
-        # rather than in `Database.create`, which is schema: seeding institutional knowledge is
-        # an application decision, and every test that creates a store should not pay for it.
-        from quantbot.research.memory import ResearchMemory
-        from quantbot.research.prior import load_prior_findings
+    # Build and seed in a sibling temporary directory, then publish with a same-filesystem hard
+    # link. The final name therefore appears only after every fallible initialization step has
+    # succeeded, and the link refuses to replace a store created by another process after the
+    # existence check above. Removing the temporary name leaves the linked database intact.
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix=f".{path.name}.", dir=path.parent) as staging_dir:
+        staged_path = Path(staging_dir) / path.name
+        database = Database.create(staged_path)
+        try:
+            # A new store starts from what this project already knows, not from nothing.
+            #
+            # `REFUTED.md` holds settled findings from cycles 2-12, and
+            # `load_prior_findings` exists because the live store was once empty while that file
+            # held twenty-four of them -- so the novelty gate passed questions the project had
+            # already answered. Until now the only caller was `research-cycle`, which fails
+            # closed without `QUANTBOT_MODEL_GENERATOR`. That made a freshly created store report
+            # `BELOW_M0` -- "nothing shows this platform can reject a hypothesis" -- while its
+            # refutation history sat checked into the repository, and made the milestone depend
+            # on an LLM endpoint that has nothing to do with whether anything was ever refuted.
+            # Measured on 2026-09-02: seeding moves a new store from `BELOW_M0` to
+            # `M0_RESEARCH_PLATFORM_OPERATIONAL` with no credential configured, and leaves the
+            # real M1 blocker legible instead of hidden behind a model error.
+            #
+            # Idempotent through `ResearchMemory.record`, which accepts an exact repeat and
+            # refuses a conflicting one -- so this cannot overwrite a record a decision was
+            # based on. Done here rather than in `Database.create`, which is schema: seeding
+            # institutional knowledge is an application decision, and every test that creates a
+            # store should not pay for it.
+            from quantbot.research.memory import ResearchMemory
+            from quantbot.research.prior import load_prior_findings
 
-        with database.transaction() as session:
-            payload["prior_findings_seeded"] = load_prior_findings(ResearchMemory(session))
-    finally:
-        database.close()
+            with database.transaction() as session:
+                payload["prior_findings_seeded"] = load_prior_findings(ResearchMemory(session))
+        finally:
+            database.close()
+        try:
+            os.link(staged_path, path)
+        except FileExistsError:
+            payload["error"] = f"{path} already holds a database; nothing to create"
+            json.dump(payload, stream, sort_keys=True)
+            return 2
     payload["ok"] = True
     payload["created"] = True
     json.dump(payload, stream, sort_keys=True)

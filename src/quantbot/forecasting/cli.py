@@ -130,7 +130,6 @@ def _parse_timestamp(value: str) -> datetime:
 
 def _database_paths_are_isolated(source: Path, forecast: Path) -> bool:
     from quantbot.storage.target import (
-        DatabaseBackend,
         DatabaseTargetError,
         resolve_database_target,
     )
@@ -144,12 +143,12 @@ def _database_paths_are_isolated(source: Path, forecast: Path) -> bool:
     # turning this isolation check green for exactly the collision it exists to refuse.
     try:
         target = resolve_database_target()
+        target.require_enabled()
     except DatabaseTargetError:
         # The active store cannot be identified, so isolation from it cannot be asserted.
         # Refusing is the only honest answer; a shadow forecast is never worth guessing here.
         return False
-    if target.backend is DatabaseBackend.SQLITE:
-        protected.append(target.path.resolve())
+    protected.append(target.path.resolve())
     for protected_path in protected:
         if protected_path == forecast_path:
             return False

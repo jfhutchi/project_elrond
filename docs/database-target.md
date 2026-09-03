@@ -24,7 +24,7 @@ no caller had to be rewritten.
 | Setting | Meaning |
 |---|---|
 | neither | SQLite at `quantbot.db` — unchanged from every prior release |
-| `QUANTBOT_DB_PATH` | SQLite at that path — unchanged |
+| `QUANTBOT_DB_PATH` | SQLite at that filesystem path — unchanged for path values |
 | `QUANTBOT_DATABASE_URL=sqlite:///path` | the same store, named as a URL |
 | `QUANTBOT_DATABASE_URL=postgresql://…` | recognised, and refused with `BACKEND_NOT_ENABLED` |
 | **both** | `DATABASE_TARGET_AMBIGUOUS` |
@@ -33,6 +33,13 @@ no caller had to be rewritten.
 two settings silently does nothing while the operator who set it believes it took effect — which
 is how a system ends up writing to a store nobody meant to use, with both settings present and
 looking deliberate.
+
+Explicit command/API arguments use the same coercion rule. A URL-shaped string is parsed as a
+URL, never treated as a quirky SQLite filename. This also applies if a URL is accidentally put in
+the legacy path variable: a PostgreSQL URL is recognised and refused before filesystem access.
+SQLite query parameters and fragments are rejected because this seam does not implement their
+URI semantics; silently ignoring `?mode=ro`, for example, would open a writable store after the
+operator asked for a read-only one.
 
 ## Why PostgreSQL is recognised rather than ignored
 
@@ -57,20 +64,27 @@ A target says *where*; it grants nothing.
 - `create` and `migrate` remain separate named operations;
 - a schema mismatch still fails closed.
 
-All three entry points refuse a disabled backend **before touching the filesystem**, so a
-PostgreSQL URL cannot leave a directory or a file named after itself behind — the quieter form of
-the same wrong signal.
+All three entry points, including direct string arguments, refuse a disabled backend **before
+touching the filesystem**, so a PostgreSQL URL cannot leave a directory or a file named after
+itself behind — the quieter form of the same wrong signal.
+
+`create-database` creates and seeds the store under a temporary sibling name, closes it, and only
+then publishes the completed SQLite file without overwriting any path that appeared concurrently.
+If prior-finding seeding fails, no final database or SQLite sidecar remains and the operator can
+retry the same command. Schema creation followed by failed application seeding must not leave an
+empty-but-apparently-valid store.
 
 ## Credentials
 
 A PostgreSQL URL carries a password, and this project prints its configuration into CLI output,
 doctor reports, exceptions and the console.
 
-`__str__`, `__repr__`, `display` and every message in the module go through the redactor. `__repr__`
+`__str__`, `__repr__`, `display` and every message in the module go through the redactor. It masks
+userinfo passwords, credential-shaped query parameters, and the entire fragment. `__repr__`
 matters as much as `__str__` and is the easier one to forget: a dataclass prints its fields
 verbatim, and a target reaches a log line or a traceback through `repr` far more often than
-through `str`. One test asserts the property against every renderer at once rather than trusting
-each call site to remember.
+through `str`. Tests assert the property against every renderer rather than trusting each call
+site to remember.
 
 The username, host, port and database name survive redaction. They are not the secret, and a
 diagnostic that removed them would be useless.
@@ -82,8 +96,8 @@ the active trading store. It built its protected list from `QUANTBOT_DB_PATH` al
 `sqlite:///quantbot.db` URL, which leaves that variable unset, would have dropped the active store
 out of the list and turned the check green for exactly the collision it exists to refuse.
 
-It now resolves the target, and refuses when the configuration cannot be resolved at all: if the
-active store cannot be identified, isolation from it cannot be asserted.
+It now resolves the target, requires that its backend is enabled, and refuses when the active
+store cannot be identified: isolation from an invalid or disabled target cannot be asserted.
 
 ## What this is not
 

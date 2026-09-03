@@ -9,10 +9,12 @@ failure arriving through the configuration instead of through a typo.
 
 from __future__ import annotations
 
+from io import StringIO
 from pathlib import Path
 
 import pytest
 
+from quantbot.cli import main
 from quantbot.storage import Database
 from quantbot.storage.target import (
     PATH_VARIABLE,
@@ -21,6 +23,7 @@ from quantbot.storage.target import (
     BackendNotEnabled,
     DatabaseBackend,
     DatabaseTarget,
+    DatabaseTargetError,
     UnsupportedDatabaseUrl,
     parse_database_url,
     redact_database_url,
@@ -29,6 +32,12 @@ from quantbot.storage.target import (
 
 SECRET = "hunter2-do-not-log-me"
 POSTGRES_URL = f"postgresql://elrond:{SECRET}@db.internal:5432/quantbot"
+QUERY_SECRET = "query-secret-do-not-log-me"
+FRAGMENT_SECRET = "fragment-secret-do-not-log-me"
+POSTGRES_QUERY_URL = (
+    f"postgresql://elrond@db.internal:5432/quantbot?sslmode=require&password={QUERY_SECRET}"
+    f"&access_token={QUERY_SECRET}#{FRAGMENT_SECRET}"
+)
 
 
 def test_an_unset_environment_means_exactly_what_it_always_meant() -> None:
@@ -114,6 +123,31 @@ def test_a_password_never_reaches_any_diagnostic() -> None:
     assert "elrond" in target.display
 
 
+def test_query_credentials_and_fragments_never_reach_a_diagnostic() -> None:
+    target = resolve_database_target({URL_VARIABLE: POSTGRES_QUERY_URL})
+
+    renderings = [
+        str(target),
+        repr(target),
+        target.display,
+        redact_database_url(POSTGRES_QUERY_URL),
+    ]
+    with pytest.raises(BackendNotEnabled) as refused:
+        target.require_enabled()
+    renderings.append(str(refused.value))
+    with pytest.raises(AmbiguousDatabaseTarget) as ambiguous:
+        resolve_database_target(
+            {PATH_VARIABLE: POSTGRES_QUERY_URL, URL_VARIABLE: POSTGRES_URL}
+        )
+    renderings.append(str(ambiguous.value))
+
+    for rendering in renderings:
+        assert QUERY_SECRET not in rendering
+        assert FRAGMENT_SECRET not in rendering
+        assert "sslmode=require" in rendering
+        assert "***" in rendering
+
+
 def test_a_url_with_no_password_is_left_alone() -> None:
     plain = "postgresql://elrond@db.internal:5432/quantbot"
     assert redact_database_url(plain) == plain
@@ -131,10 +165,19 @@ def test_a_sqlite_url_resolves_to_the_path_it_names() -> None:
     # A driver suffix names the same backend.
     assert parse_database_url("sqlite+pysqlite:///x.db").backend is DatabaseBackend.SQLITE
 
+    # URL encoding names the filesystem path, not a literal percent sign.
+    encoded = parse_database_url("sqlite:///stores/my%20database.db")
+    assert encoded.path == Path("stores/my database.db")
+
 
 def test_a_store_that_vanishes_with_the_process_is_not_a_durable_store() -> None:
     """Every authority rule here is about a store that outlives the process."""
-    for rejected in ("sqlite://", "sqlite://host/x.db"):
+    for rejected in (
+        "sqlite://",
+        "sqlite://host/x.db",
+        "sqlite:///x.db?mode=ro",
+        "sqlite:///x.db#client-secret",
+    ):
         with pytest.raises(UnsupportedDatabaseUrl):
             parse_database_url(rejected)
 
@@ -149,20 +192,57 @@ def test_an_unrecognised_scheme_is_refused_rather_than_guessed_at() -> None:
         parse_database_url("   ")
 
 
-def test_a_disabled_backend_cannot_open_create_or_migrate_a_store(tmp_path: Path) -> None:
+def test_an_empty_direct_target_is_refused_instead_of_becoming_the_working_directory() -> None:
+    for operation in (Database, Database.create, Database.migrate):
+        with pytest.raises(DatabaseTargetError, match="target is empty"):
+            operation("  ")  # type: ignore[operator]
+
+
+def test_a_disabled_backend_cannot_open_create_or_migrate_a_store(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     """The seam must not become a way to acquire authority the path form never had.
 
     All three entry points refuse, and they refuse *before* touching the filesystem: a
     PostgreSQL URL must not leave a directory or a file named after itself behind, which is the
     quieter form of the same wrong signal `DatabaseNotFoundError` exists to give.
     """
-    target = DatabaseTarget(backend=DatabaseBackend.POSTGRESQL, location=POSTGRES_URL)
+    monkeypatch.chdir(tmp_path)
+    targets = [
+        DatabaseTarget(backend=DatabaseBackend.POSTGRESQL, location=POSTGRES_URL),
+        POSTGRES_URL,
+    ]
 
-    for operation in (Database, Database.create, Database.migrate):
-        with pytest.raises(BackendNotEnabled):
-            operation(target)  # type: ignore[operator]
+    for target in targets:
+        for operation in (Database, Database.create, Database.migrate):
+            with pytest.raises(BackendNotEnabled):
+                operation(target)  # type: ignore[operator]
 
     assert list(tmp_path.iterdir()) == [], "a refused open left something on disk"
+
+
+def test_cli_database_override_refuses_a_url_before_touching_the_filesystem(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    with pytest.raises(BackendNotEnabled) as refused:
+        main(
+            ["create-database", "--database", POSTGRES_QUERY_URL, "--confirm"],
+            output=StringIO(),
+        )
+
+    assert QUERY_SECRET not in str(refused.value)
+    assert FRAGMENT_SECRET not in str(refused.value)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_a_url_shaped_legacy_path_setting_is_not_treated_as_a_filename() -> None:
+    target = resolve_database_target({PATH_VARIABLE: POSTGRES_URL})
+
+    assert target.backend is DatabaseBackend.POSTGRESQL
+    with pytest.raises(BackendNotEnabled):
+        target.require_enabled()
 
 
 def test_the_facade_still_takes_a_plain_path_and_reports_its_target(tmp_path: Path) -> None:
@@ -199,6 +279,12 @@ def test_the_url_form_opens_the_same_store_the_path_form_does(tmp_path: Path) ->
         assert database.path == path.resolve()
     finally:
         database.close()
+
+    directly_from_url = Database(f"sqlite:///{path.as_posix()}")
+    try:
+        assert directly_from_url.path == path.resolve()
+    finally:
+        directly_from_url.close()
 
 
 def test_the_runtime_refuses_to_start_against_a_backend_it_cannot_open(
@@ -263,4 +349,10 @@ def test_the_shadow_ledger_still_cannot_collide_with_a_url_configured_trading_st
 
     # And a configuration this cannot resolve is refused rather than assumed isolated.
     monkeypatch.setenv(PATH_VARIABLE, str(active))
+    assert _database_paths_are_isolated(source, tmp_path / "shadow.db") is False
+
+    # A recognised but disabled backend is no more identifiable than an invalid target. Its URL
+    # must not be taken as evidence that a file-backed shadow ledger is isolated from it.
+    monkeypatch.delenv(PATH_VARIABLE)
+    monkeypatch.setenv(URL_VARIABLE, POSTGRES_URL)
     assert _database_paths_are_isolated(source, tmp_path / "shadow.db") is False
