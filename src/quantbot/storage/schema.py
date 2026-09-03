@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 26
+SCHEMA_VERSION = 27
 
 metadata = MetaData(
     naming_convention={
@@ -33,6 +33,10 @@ schema_version = Table(
     metadata,
     Column("id", Integer, primary_key=True),
     Column("version", Integer, nullable=False),
+    # Durable store-lineage identity. It survives a byte-for-byte backup or move, so it
+    # identifies the logical store lineage rather than claiming two files are the same physical
+    # file.
+    Column("store_identity", String(36), nullable=False),
     CheckConstraint("id = 1", name="singleton"),
 )
 
@@ -1600,9 +1604,9 @@ runtime_deployments = Table(
     Column("python_version", String(32), nullable=False),
     Column("host_platform", String(160), nullable=False),
     Column("trading_mode", String(16), nullable=False),
-    # SHA-256 of the resolved database path. A fingerprint rather than the path itself: it
-    # answers "is this the same store?" across hosts without publishing a filesystem layout.
-    Column("database_fingerprint", String(64), nullable=False),
+    # Persisted identity read from the store's singleton schema row; it is not derived from the
+    # path, host, or any other deployment detail.
+    Column("store_identity", String(36), nullable=False),
     Column("schema_version", Integer, nullable=False),
     Column("strategy_id", String(128)),
     Column("strategy_version", String(64)),

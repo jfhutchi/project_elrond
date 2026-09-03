@@ -12,14 +12,14 @@ checkout is a fact an operator needs, not a reason for software to refuse -- and
 deployed-state check that could halt trading would be a new way for the system to stop itself
 over a bookkeeping disagreement.
 
-**Every field is non-secret by construction.** The database is identified by a SHA-256 of its
-resolved path rather than by the path, which answers "is this the same store?" across hosts
-without publishing a filesystem layout, and no credential, key or account identifier is read.
+**Every field is non-secret by construction.** The database is identified by a random UUID
+persisted in its singleton schema row. That durable store-lineage identity survives a move or
+byte-for-byte backup without publishing a filesystem layout, and no credential, key or account
+identifier is read.
 """
 
 from __future__ import annotations
 
-import hashlib
 import json
 import os
 import platform as platform_module
@@ -27,7 +27,6 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
-from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.engine import RowMapping
@@ -89,7 +88,7 @@ class RuntimeObservation:
     python_version: str
     host_platform: str
     trading_mode: str
-    database_fingerprint: str
+    store_identity: str
     schema_version: int
     strategy_id: str | None
     strategy_version: str | None
@@ -127,11 +126,6 @@ class DeploymentStatus:
         return tuple(item for item in self.active if item.role is RuntimeRole.WORKER)
 
 
-def database_fingerprint(path: str | Path) -> str:
-    """Identify a store without publishing where it lives."""
-    return hashlib.sha256(str(Path(path).expanduser().resolve()).encode("utf-8")).hexdigest()
-
-
 def instance_id(*, pid: int | None = None, started_at: datetime | None = None) -> str:
     """Identify this process. Two coordinators on one host must be two ids, not one."""
     process = os.getpid() if pid is None else pid
@@ -142,7 +136,7 @@ def instance_id(*, pid: int | None = None, started_at: datetime | None = None) -
 def describe_runtime(
     *,
     role: RuntimeRole,
-    database_path: str | Path,
+    store_identity: str,
     trading_mode: str,
     now: datetime,
     process_started_at: datetime,
@@ -186,7 +180,7 @@ def describe_runtime(
         python_version=platform_module.python_version(),
         host_platform=f"{platform_module.platform()} {sys.platform}"[:160],
         trading_mode=trading_mode.strip().upper(),
-        database_fingerprint=database_fingerprint(database_path),
+        store_identity=store_identity,
         schema_version=SCHEMA_VERSION,
         strategy_id=None if identity is None else identity.strategy_id,
         strategy_version=None if identity is None else identity.version,
@@ -201,12 +195,13 @@ class RuntimeContext:
     """The parts of a runtime's identity that do not change while the process lives.
 
     Built once by whoever wired the process -- that layer already holds the settings and the
-    database path -- so the cycle stamps only the time. Passing the whole thing rather than four
-    loose arguments keeps a caller from wiring up a runtime that describes the wrong database.
+    persisted store identity -- so the cycle stamps only the time. Passing the whole thing rather
+    than four loose arguments keeps a caller from wiring up a runtime that describes the wrong
+    database.
     """
 
     role: RuntimeRole
-    database_path: Path
+    store_identity: str
     trading_mode: str
     process_started_at: datetime
     host_id: str | None = None
@@ -218,7 +213,7 @@ class RuntimeContext:
     ) -> RuntimeObservation:
         return describe_runtime(
             role=self.role,
-            database_path=self.database_path,
+            store_identity=self.store_identity,
             trading_mode=self.trading_mode,
             now=now,
             process_started_at=self.process_started_at,
@@ -261,7 +256,7 @@ class DeploymentRegistry:
                 python_version=observation.python_version,
                 host_platform=observation.host_platform,
                 trading_mode=observation.trading_mode,
-                database_fingerprint=observation.database_fingerprint,
+                store_identity=observation.store_identity,
                 schema_version=observation.schema_version,
                 strategy_id=observation.strategy_id,
                 strategy_version=observation.strategy_version,
@@ -322,12 +317,14 @@ class DeploymentRegistry:
                 "is deployed, which is the state #190 found the coordinator in"
             )
 
-        active_coordinator_processes = {
+        # Freshness identifies candidates for the current state, not liveness. The warning below
+        # is intentionally narrower: only recorded temporal overlap establishes concurrency.
+        recent_coordinator_process_keys = {
             (item.host_id, item.instance_id)
             for item in active
             if item.role is RuntimeRole.COORDINATOR
         }
-        if history and not active_coordinator_processes:
+        if history and not recent_coordinator_process_keys:
             warnings.append(DeploymentWarning.NO_ACTIVE_COORDINATOR)
             last_seen = (
                 "never"
@@ -335,13 +332,28 @@ class DeploymentRegistry:
                 else latest_coordinator.observed_at.isoformat()
             )
             reasons.append(f"no coordinator observed within {active_within}; last seen {last_seen}")
-        elif len(active_coordinator_processes) > 1:
+
+        coordinator_history: dict[tuple[str, str], list[RuntimeObservation]] = {}
+        for item in coordinators:
+            process_key = (item.host_id, item.instance_id)
+            coordinator_history.setdefault(process_key, []).append(item)
+
+        recent_coordinator_processes = sorted(recent_coordinator_process_keys)
+        overlapping_coordinator_processes: set[tuple[str, str]] = set()
+        for index, first_key in enumerate(recent_coordinator_processes):
+            for second_key in recent_coordinator_processes[index + 1 :]:
+                if _processes_overlap(
+                    coordinator_history[first_key], coordinator_history[second_key]
+                ):
+                    overlapping_coordinator_processes.update((first_key, second_key))
+
+        if overlapping_coordinator_processes:
             warnings.append(DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS)
             reasons.append(
-                "more than one coordinator process is active: "
+                "more than one coordinator has demonstrably overlapping recorded lifetimes: "
                 + ", ".join(
                     f"{host}/{process}"
-                    for host, process in sorted(active_coordinator_processes)
+                    for host, process in sorted(overlapping_coordinator_processes)
                 )
                 + "; two writers against one account is the condition #190 Phase 4 exists"
                 " to prevent"
@@ -435,7 +447,7 @@ def _observation_from_row(row: RowMapping) -> RuntimeObservation:
         python_version=str(row["python_version"]),
         host_platform=str(row["host_platform"]),
         trading_mode=str(row["trading_mode"]),
-        database_fingerprint=str(row["database_fingerprint"]),
+        store_identity=str(row["store_identity"]),
         schema_version=int(row["schema_version"]),
         strategy_id=None if row["strategy_id"] is None else str(row["strategy_id"]),
         strategy_version=None if row["strategy_version"] is None else str(row["strategy_version"]),
@@ -470,7 +482,7 @@ def summarize(status: DeploymentStatus) -> dict[str, object]:
                 "python_version": status.latest_coordinator.python_version,
                 "platform": status.latest_coordinator.host_platform,
                 "trading_mode": status.latest_coordinator.trading_mode,
-                "database_fingerprint": status.latest_coordinator.database_fingerprint,
+                "store_identity": status.latest_coordinator.store_identity,
                 "schema_version": status.latest_coordinator.schema_version,
                 "strategy_id": status.latest_coordinator.strategy_id,
                 "strategy_version": status.latest_coordinator.strategy_version,
@@ -499,6 +511,18 @@ def summarize(status: DeploymentStatus) -> dict[str, object]:
     }
 
 
+def _processes_overlap(
+    first: list[RuntimeObservation], second: list[RuntimeObservation]
+) -> bool:
+    """Prove two recorded process lifetimes overlapped without inspecting the operating system."""
+    return any(
+        left.observed_at >= right.process_started_at
+        and right.observed_at >= left.process_started_at
+        for left in first
+        for right in second
+    )
+
+
 __all__ = [
     "ACTIVE_WITHIN",
     "UNKNOWN_COMMIT",
@@ -508,7 +532,6 @@ __all__ = [
     "DeploymentWarning",
     "RuntimeObservation",
     "RuntimeRole",
-    "database_fingerprint",
     "describe_runtime",
     "instance_id",
     "summarize",

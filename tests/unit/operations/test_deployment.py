@@ -23,7 +23,6 @@ from quantbot.operations.deployment import (
     DeploymentWarning,
     RuntimeContext,
     RuntimeRole,
-    database_fingerprint,
     describe_runtime,
     instance_id,
     summarize,
@@ -62,12 +61,14 @@ def _context(
     commit: str = "aaaa111",
     mode: str = "PAPER",
     host: str = "omen",
+    started: datetime = STARTED,
+    store_identity: str = "store-identity-1",
 ) -> RuntimeContext:
     return RuntimeContext(
         role=role,
-        database_path=tmp_path / "quantbot.db",
+        store_identity=store_identity,
         trading_mode=mode,
-        process_started_at=STARTED,
+        process_started_at=started,
         host_id=host,
         process_id=process,
         git_commit=commit,
@@ -97,7 +98,7 @@ def test_a_recorded_coordinator_answers_the_question_archaeology_had_to(
     database: Database, tmp_path: Path
 ) -> None:
     """Commit, host, process, database identity and schema, from the runtime itself."""
-    context = _context(tmp_path)
+    context = _context(tmp_path, store_identity=database.store_identity)
     with database.transaction() as session:
         DeploymentRegistry(session).record(context.observe(now=NOW, identity=_identity()))
 
@@ -115,12 +116,10 @@ def test_a_recorded_coordinator_answers_the_question_archaeology_had_to(
     assert coordinator.schema_version == SCHEMA_VERSION
     assert coordinator.strategy_id == "adaptive-momentum-v1"
     assert coordinator.configuration_hash == "c" * 64
-    assert coordinator.database_fingerprint == database_fingerprint(tmp_path / "quantbot.db")
+    assert coordinator.store_identity == database.store_identity
     assert status.active_coordinators == (coordinator,)
 
-    # The fingerprint identifies the store without publishing where it lives.
-    assert str(tmp_path) not in coordinator.database_fingerprint
-    assert len(coordinator.database_fingerprint) == 64
+    assert str(tmp_path) not in coordinator.store_identity
 
 
 def test_a_coordinator_that_stopped_is_not_reported_as_running(
@@ -171,6 +170,149 @@ def test_two_active_coordinators_are_the_second_writer_condition_made_visible(
     assert len(status.active_coordinators) == 2
     detail = " ".join(status.reasons)
     assert "old-desktop/pid-9" in detail and "omen/pid-1" in detail
+
+
+def test_a_normal_same_host_restart_does_not_create_a_second_writer_warning(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(days=1),
+            ).observe(now=NOW - timedelta(minutes=1))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW,
+            ).observe(now=NOW + timedelta(minutes=1))
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=1))
+
+    assert status.latest_coordinator is not None
+    assert status.latest_coordinator.instance_id == "pid-2"
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+
+def test_same_host_coordinators_with_recorded_overlap_create_a_second_writer_warning(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW - timedelta(minutes=30))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW,
+            ).observe(now=NOW + timedelta(minutes=1))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW + timedelta(minutes=2))
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=2))
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS in status.warnings
+
+
+def test_cross_host_coordinators_with_recorded_overlap_create_a_second_writer_warning(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                host="omen",
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW)
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                host="old-desktop",
+                process="pid-9",
+                started=NOW - timedelta(minutes=30),
+            ).observe(now=NOW + timedelta(minutes=1))
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=1))
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS in status.warnings
+
+
+def test_a_recent_observation_before_replacement_start_does_not_prove_overlap(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=2),
+            ).observe(now=NOW - timedelta(hours=1))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW - timedelta(minutes=30),
+            ).observe(now=NOW)
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW)
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+
+def test_the_100_hour_window_keeps_a_long_weekend_latest_coordinator_without_overlap_warning(
+    database: Database, tmp_path: Path
+) -> None:
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=100),
+            ).observe(now=NOW - timedelta(hours=96))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-2",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=NOW)
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW)
+
+    assert status.latest_coordinator is not None
+    assert status.latest_coordinator.instance_id == "pid-2"
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
 
 
 @pytest.mark.parametrize(
@@ -303,7 +445,7 @@ def test_a_backwards_clock_records_the_runtime_instead_of_aborting_the_cycle(
     """
     observation = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=NOW + timedelta(seconds=1),
@@ -313,7 +455,7 @@ def test_a_backwards_clock_records_the_runtime_instead_of_aborting_the_cycle(
 
     ordinary = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=STARTED,
@@ -335,7 +477,7 @@ def test_the_commit_comes_from_the_environment_when_the_caller_does_not_supply_o
     monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "  env0c0mmit  ")
     observation = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=STARTED,
@@ -345,7 +487,7 @@ def test_the_commit_comes_from_the_environment_when_the_caller_does_not_supply_o
     monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "   ")
     blank = describe_runtime(
         role=RuntimeRole.COORDINATOR,
-        database_path=tmp_path / "quantbot.db",
+        store_identity="store-identity-1",
         trading_mode="PAPER",
         now=NOW,
         process_started_at=STARTED,

@@ -56,6 +56,7 @@ REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {
     24: "0024",
     25: "0025",
     26: "0026",
+    27: "0027",
 }
 
 
@@ -198,6 +199,10 @@ class Database:
         self.engine: Engine = create_engine(f"sqlite+pysqlite:///{self.path.as_posix()}")
         event.listen(self.engine, "connect", self._configure_connection)
         self._initialize_schema()
+        with self.engine.connect() as connection:
+            self.store_identity = str(
+                connection.execute(select(schema_version.c.store_identity)).scalar_one()
+            )
 
     @classmethod
     def create(cls, path: str | Path, *, busy_timeout_ms: int = 5000) -> Database:

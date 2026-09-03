@@ -1,6 +1,6 @@
 # Deployed state: what is actually running
 
-**Issue:** #190 · **Schema:** 26 · **Command:** `quantbot deployment-status`
+**Issue:** #190 · **Schema:** 27 · **Command:** `quantbot deployment-status`
 
 ---
 
@@ -30,7 +30,7 @@ the same transaction as the run row:
 
 ```
 host_id  instance_id  role  git_commit  package_version  python_version  platform
-trading_mode  database_fingerprint  schema_version
+trading_mode  store_identity  schema_version
 strategy_id  strategy_version  configuration_hash
 process_started_at  observed_at
 ```
@@ -44,9 +44,10 @@ its row to say so.** Absence of a recent observation is the signal, and a crashe
 suppress it. Overwriting would also erase the evidence that an older checkout ran at all, which
 is the stale-host tell worth keeping.
 
-**Nothing recorded is secret.** The database is identified by a SHA-256 of its resolved path
-rather than by the path: that answers "is this the same store?" across hosts without publishing a
-filesystem layout. No credential, key or account identifier is read.
+**Nothing recorded is secret.** `store_identity` is a random UUID persisted in the singleton
+`schema_version` row. It is a durable store-lineage identity: a byte-for-byte backup or moved copy
+preserves it, but it does not prove that two files are the same physical file. It contains no path,
+hostname, credential, account identifier, or other deployment secret.
 
 ## The warnings
 
@@ -54,7 +55,7 @@ filesystem layout. No credential, key or account identifier is read.
 |---|---|
 | `NO_RUNTIME_RECORDED` | nothing has ever said what it is running — the state #190 found |
 | `NO_ACTIVE_COORDINATOR` | nothing observed within 100 hours; the last one seen is still readable |
-| `MULTIPLE_ACTIVE_COORDINATORS` | two processes are active; the second-writer condition, visible |
+| `MULTIPLE_ACTIVE_COORDINATORS` | two recent coordinator processes have demonstrably overlapping recorded lifetimes |
 | `STALE_CHECKOUT` | a commit that ran here before is not the one running now |
 | `UNIDENTIFIED_CHECKOUT` | the coordinator did not record a commit, so staleness cannot be judged |
 | `SCHEMA_VERSION_MISMATCH` | an active runtime recorded a schema this build does not have |
@@ -71,7 +72,10 @@ problem or hide one. Set `QUANTBOT_GIT_COMMIT` to make the distinction go away.
 
 The 100-hour activity bound is `scripts/supervisor.py::STALE_RUN_HOURS` — an existing deployed
 value, CLAUDE.md's first tiebreak for an unspecified threshold — chosen there because consecutive
-cycles are 96h apart across a Monday holiday.
+cycles are 96h apart across a Monday holiday. The second-writer warning does not treat that
+freshness alone as liveness: it requires observations from both processes that cross each other's
+recorded `process_started_at`, proving temporal overlap. A recent observation before a replacement
+starts is therefore a normal restart, not concurrent activity.
 
 ## Nothing here has authority
 

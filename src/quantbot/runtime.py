@@ -331,13 +331,13 @@ class Runtime:
     def runtime_context(self) -> RuntimeContext:
         """What this process is, for the deployed-state record (#190).
 
-        Built here because this is the layer that already knows the settings and the database
-        path. A cycle that had to work them out itself could describe a different database from
-        the one it writes to, which is precisely the ambiguity the record exists to remove.
+        Built here because this is the layer that owns the settings and the opened database. The
+        persisted store identity comes from that exact database, so a cycle cannot describe a
+        different store from the one it writes to.
         """
         return RuntimeContext(
             role=RuntimeRole.COORDINATOR,
-            database_path=self.paths.database,
+            store_identity=self.database.store_identity,
             trading_mode=self.settings.TRADING_MODE.value,
             process_started_at=PROCESS_STARTED_AT,
         )

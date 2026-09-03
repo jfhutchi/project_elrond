@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import shutil
 import sqlite3
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
@@ -195,6 +196,51 @@ def test_database_initializes_versioned_schema_and_connection_pragmas(database: 
             assert credential_name not in table_sql
 
 
+def test_database_create_assigns_a_stable_store_lineage_identity(tmp_path: Path) -> None:
+    path = tmp_path / "quantbot.db"
+    database = Database.create(path)
+    identity = database.store_identity
+    database.close()
+
+    assert identity
+    assert str(tmp_path) not in identity
+
+    reopened = Database(path)
+    try:
+        assert reopened.store_identity == identity
+    finally:
+        reopened.close()
+
+
+def test_a_moved_copy_preserves_store_lineage_identity(tmp_path: Path) -> None:
+    source = tmp_path / "source" / "quantbot.db"
+    moved = tmp_path / "moved" / "quantbot.db"
+    moved.parent.mkdir()
+
+    source_database = Database.create(source)
+    source_identity = source_database.store_identity
+    source_database.close()
+    shutil.copy2(source, moved)
+
+    moved_database = Database(moved)
+    try:
+        assert moved_database.store_identity == source_identity
+    finally:
+        moved_database.close()
+
+
+def test_independently_created_stores_have_different_lineage_identities(
+    tmp_path: Path,
+) -> None:
+    first = Database.create(tmp_path / "first" / "quantbot.db")
+    second = Database.create(tmp_path / "second" / "quantbot.db")
+    try:
+        assert first.store_identity != second.store_identity
+    finally:
+        first.close()
+        second.close()
+
+
 def test_database_rejects_unsupported_schema_version(tmp_path: Path) -> None:
     path = tmp_path / "unsupported.db"
     db = Database.create(path)
@@ -291,7 +337,11 @@ def test_database_stamps_supported_pre_alembic_schema_at_head(tmp_path: Path) ->
     engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
     with engine.begin() as connection:
         metadata.create_all(connection)
-        connection.execute(schema_version.insert().values(id=1, version=SCHEMA_VERSION))
+        connection.execute(
+            schema_version.insert().values(
+                id=1, version=SCHEMA_VERSION, store_identity="store-identity-pre-alembic"
+            )
+        )
         connection.execute(
             kill_switch_state.insert().values(
                 id=1,
@@ -382,7 +432,11 @@ def test_database_rejects_corrupt_supported_pre_alembic_schema_without_mutation(
     engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
     with engine.begin() as connection:
         metadata.create_all(connection)
-        connection.execute(schema_version.insert().values(id=1, version=SCHEMA_VERSION))
+        connection.execute(
+            schema_version.insert().values(
+                id=1, version=SCHEMA_VERSION, store_identity="store-identity-corrupt"
+            )
+        )
         connection.execute(
             kill_switch_state.insert().values(
                 id=1,
@@ -877,13 +931,14 @@ def test_a_v1_database_upgrades_to_head_and_carries_its_ledger_across(tmp_path: 
     after later revisions extend `metadata`.
     """
     v1_migration = import_module("quantbot.storage.migrations.versions.0001_initial_schema")
-    v1_tables = [metadata.tables[name] for name in v1_migration.V1_TABLES]
+    v1_metadata = v1_migration.v1_tables()
+    v1_tables = [v1_metadata.tables[name] for name in v1_migration.V1_TABLES]
 
     path = tmp_path / "v1-with-history.db"
     engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
     with engine.begin() as connection:
-        metadata.create_all(connection, tables=v1_tables)
-        connection.execute(schema_version.insert().values(id=1, version=1))
+        v1_metadata.create_all(connection, tables=v1_tables)
+        connection.execute(v1_metadata.tables["schema_version"].insert().values(id=1, version=1))
         connection.execute(
             kill_switch_state.insert().values(
                 id=1, engaged=True, reason="engaged before the upgrade", updated_at=encode_utc(NOW)

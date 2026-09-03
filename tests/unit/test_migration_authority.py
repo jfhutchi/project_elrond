@@ -27,7 +27,7 @@ from quantbot.storage import (
     UnsupportedSchemaVersionError,
 )
 from quantbot.storage.database import encode_utc
-from quantbot.storage.schema import SCHEMA_VERSION, kill_switch_state, metadata, schema_version
+from quantbot.storage.schema import SCHEMA_VERSION, kill_switch_state
 from tests.unit.test_storage import NOW
 
 
@@ -41,10 +41,15 @@ def behind_head(path: Path, *, version: int = 1) -> None:
     from importlib import import_module
 
     v1 = import_module("quantbot.storage.migrations.versions.0001_initial_schema")
+    historical_metadata = v1.v1_tables()
     engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
     with engine.begin() as connection:
-        metadata.create_all(connection, tables=[metadata.tables[n] for n in v1.V1_TABLES])
-        connection.execute(schema_version.insert().values(id=1, version=version))
+        historical_metadata.create_all(
+            connection, tables=[historical_metadata.tables[n] for n in v1.V1_TABLES]
+        )
+        connection.execute(
+            historical_metadata.tables["schema_version"].insert().values(id=1, version=version)
+        )
         connection.execute(
             kill_switch_state.insert().values(
                 id=1,
@@ -124,6 +129,39 @@ def test_an_explicit_migration_upgrades_and_verifies(tmp_path: Path) -> None:
         connection.close()
     assert bool(engaged) is True
     assert reason == "engaged before anyone opened it"
+
+
+def test_explicit_migration_creates_store_identity_once_and_ordinary_open_preserves_it(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "deployment.db"
+    behind_head(path)
+
+    with pytest.raises(MigrationRequiredError):
+        Database(path)
+
+    raw = sqlite3.connect(path)
+    try:
+        columns = {str(row[1]) for row in raw.execute("PRAGMA table_info(schema_version)")}
+    finally:
+        raw.close()
+    assert "store_identity" not in columns
+
+    migrated = Database.migrate(path)
+    identity = migrated.store_identity
+    migrated.close()
+
+    reopened = Database(path)
+    try:
+        assert reopened.store_identity == identity
+    finally:
+        reopened.close()
+
+    migrated_again = Database.migrate(path)
+    try:
+        assert migrated_again.store_identity == identity
+    finally:
+        migrated_again.close()
 
 
 def test_a_store_ahead_of_this_build_stays_fail_closed_and_untouched(tmp_path: Path) -> None:
