@@ -3,6 +3,16 @@
 How Elrond decides what counts as evidence, and the mechanisms that stop it being talked into
 something. This complements [STATUS.md](../STATUS.md), which covers the trading side.
 
+> **Scope, stated so it is not mistaken for an inventory (checked 2026-09-02).** This document
+> describes the *patterns* — the trust boundary, the gates, and the failure mode they share. It
+> is not a module list, and `src/quantbot/research/` holds substantially more than appears
+> below. Subsystems merged after this was written and **not described here** include componentised
+> hypothesis lineage, component evidence memory and evidence-aware recombination (#187–#189),
+> worker dispatch (#136), artifact evidence and testing, forward-excess and hindsight analysis,
+> causality, and the anomaly/catalyst detectors in `quantbot.anomaly` (whose falsification gate is
+> in [anomaly-routing-value.md](anomaly-routing-value.md)). The patterns below apply to them; the
+> absence of a section does not mean the code is absent.
+
 ---
 
 ## The recurring problem
@@ -36,9 +46,21 @@ then announces its evidence cleared it has not been gated, it has been asked pol
 
 **A relationship is fixed by making it durable, not by making it a token.** The claim behind a
 strategy is now written to `promotion_state` at `REGISTERED` and read everywhere after; the id is
-refused as an argument at every other transition. A definition of success is fixed by requiring a
-signature from outside the system: `PAPER_QUALIFIED` and `LIVE_REVIEW_ELIGIBLE` both require a
-`RATIFIED` mandate, and a `ratified_by` that reads as an automated identity is refused at load.
+refused as an argument at every other transition.
+
+**A definition of success is fixed by freezing it, not by signing it.** This paragraph used to
+end "by requiring a signature from outside the system: `PAPER_QUALIFIED` and
+`LIVE_REVIEW_ELIGIBLE` both require a `RATIFIED` mandate". **#72 removed that**, because it
+manufactured a deadlock: ratification also gated `LIVE_REVIEW_ELIGIBLE`, the stage that means *a
+human should look at this*, so human review became a prerequisite for its own eligibility.
+`MandateStatus` now has two usable states, `PROJECT_DEFAULT` and `RATIFIED`, and a frozen
+agent-authored bar resists metric shopping exactly as well as a frozen human-authored one — what
+stops an agent choosing the criterion after seeing the result is that the criterion was written
+down first, not that somebody countersigned it. A **draft** still cannot back a claim, and
+neither can a superseded objective. The provenance distinction did not disappear; it moved to
+`authority`, which every artifact measured against an objective reports, so a qualification claim
+says in plain words who set the bar. `RATIFIED` and `ratified_by` remain unreachable from code,
+and a `ratified_by` that reads as an automated identity is refused at load.
 
 ---
 
@@ -206,7 +228,11 @@ the next day and would credit a session that had not happened.
 Clearing that floor is **authenticity, not economics**. Thirty losing trades satisfy it
 completely. `PAPER_QUALIFIED` additionally requires `assess_forward_evidence` to return
 `FORWARD_EDGE_SUPPORTED`: a benchmark-relative, beta-adjusted, adequately powered, positive result
-on a claim frozen before the window opened, measured against a **ratified** economic objective.
+on a claim frozen before the window opened, measured against a **usable** economic objective —
+frozen and versioned, `PROJECT_DEFAULT` or `RATIFIED`, never a draft. (This line said "ratified"
+until 2026-09-02, which stopped being the rule at #72; the deployed
+`config/economic-objective-v1.yaml` is `PROJECT_DEFAULT`, so the old wording described the
+mandate in force as unusable.)
 
 Session returns are paired on **adjacent exchange sessions**, not on consecutive entries in the
 list of qualified dates. A session the deployment failed on leaves no entry, and zipping the list
@@ -273,8 +299,16 @@ Three rules make it hard to flatter:
   `CapacityAssessment` whose verdict is `SURVIVES_MANDATE` does. The three states stay
   distinguishable — absent is `unassessed` ("nobody looked"), a computed assessment that does not
   support intended capital is `blocking` ("somebody looked, and the answer was no"), and only a
-  supporting one clears. Today no production path computes one, so the `unassessed` entry is what
-  an operator sees.
+  supporting one clears.
+
+  *Updated 2026-09-02:* this paragraph ended "today no production path computes one, so the
+  `unassessed` entry is what an operator sees". There is one now. `AdaptiveMomentumRunner` calls
+  `_record_capacity_assessment` every cycle (`runners.py:1242`), which assembles inputs from
+  durable state through `research.capacity_production` and persists a content-addressed row.
+  **This does not move M4.** With no measured benchmark-relative excess the verdict it computes
+  is `UNASSESSED`, which is the project's actual position — so what changed is that the entry is
+  now a persisted refusal somebody can read rather than an empty table, and the distinction
+  between "nobody looked" and "the answer was no" finally has both sides populated.
 - **A reached level names an artifact.** "Nothing blocks it" is not "something shows it".
 
 M2 rests on one inference worth stating: probe results are not stored in a queryable table, so it

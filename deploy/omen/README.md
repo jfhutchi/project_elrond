@@ -48,8 +48,16 @@ Then `wsl --shutdown` from Windows and reopen. Leaving it alone is a legitimate 
 heavy jobs are sized against 15 GB, which is still far above anything currently declared.
 
 **4. Credentials.** `~/.config/quantbot/quantbot.env`, mode 600, outside the repository, exactly
-as on the Pi. `LIVE_TRADING` stays absent or false. The units read it via `EnvironmentFile`;
-never put a credential in a unit file, which is world-readable.
+as on the Pi. Set `TRADING_MODE=PAPER` and leave `LIVE_TRADING_ACKNOWLEDGED=false`; those are the
+two settings the code actually reads (`config.py`), and both already default to the safe value.
+The units read the file via `EnvironmentFile`; never put a credential in a unit file, which is
+world-readable.
+
+> **This line named `LIVE_TRADING` until 2026-09-02, and so does `setup.sh:25`.** No such setting
+> exists — `Settings` ignores unknown variables — so the script's pre-flight check greps for a
+> name nothing reads and would pass an env file that really did set `TRADING_MODE=LIVE`. The
+> refusal in `config.py` is the boundary that holds; the one in `setup.sh` is decoration.
+> Recorded in `docs/node-deployment.md` under *Safety*, with the fix. Not yet applied.
 
 ## Install
 

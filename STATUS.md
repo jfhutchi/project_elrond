@@ -58,7 +58,7 @@ the floor restarts the qualification window, and that trade-off now has honest n
 sides.
 
 **Fixed in code, off by default, not yet deployed.** `drawdown_halt_floor_bps` trades at reduced
-size instead of stopping, and it *is* wired into the engine (`engine.py:617` →
+size instead of stopping, and it *is* wired into the engine (`engine.py:642` →
 `risk/drawdown.py:39`). The four candidate fixes were measured in `scripts/halt_policy_study.py`,
 which is a **standalone simulation that never calls `BacktestEngine`** — under #8's rules that is
 a `RESEARCH_SCRIPT` result, the same class as the `f77ea08` study that was reproducible and wrong
@@ -113,12 +113,23 @@ concluding the hypothesis failed. `REFUTED.md` has the full list.
 
 
 **Read this first if you are an agent picking up this project.**
-Last hand-updated: 2026-08-18. Branch: `claude/quantbot-trading-system-2bbc25`.
+Branch: `main`. Sections 1–6ll were hand-written between 2026-08-15 and 2026-08-22 and cover
+work up to about issue #75. **Everything merged after that — #82 the console and its control
+plane, #136 worker dispatch, #137 environment identity, #157/#171/#175 position protection,
+#187–#189 componentised hypothesis lineage, component evidence memory and evidence-aware
+recombination — is not described here.** Read the git log and the issue threads for those; this
+file will not tell you they exist.
+
+Numbers about the software (test counts, file counts, schema version) were re-verified against
+`main` on **2026-09-02** and are corrected in place where they had drifted. Numbers about the
+*market* are dated where they were measured and are not re-run.
 
 For *verified numbers* (equity, trade count, run ids) read **`PROJECT_STATUS.md`** instead —
 it is regenerated from the durable ledger every cycle and is the only trustworthy source for
-current figures. This file holds the things a generator cannot know: the goal, the rules, and
-what is in flight.
+current figures. Note that the copy committed here was generated on 2026-08-18 and the ledger
+itself is not in version control, so in a fresh clone it is a stale artifact rather than a live
+reading. This file holds the things a generator cannot know: the goal, the rules, and what is
+in flight.
 
 ---
 
@@ -360,7 +371,7 @@ distressed small caps. Data cached at `research/stocks.db` so no future cycle re
 
 **That diagnosis was backwards, corrected 2026-08-19 by measurement**
 (`reports/research/exposure-diagnosis-2026-08-19.md`). `exposure_fraction` is **capital**
-exposure — the mean of `gross_exposure / equity`, `metrics.py:161` — not the fraction of sessions
+exposure — the mean of `gross_exposure / equity`, `metrics.py:163` — not the fraction of sessions
 holding a position. The finding read the first as the second.
 
 Measured separately, `universe: [SPY]` with the trend gate only:
@@ -403,8 +414,9 @@ ladder**, and the ladder is the correct component of the two. `SPY_SMA200` draws
 above the 15% halt — so the engine cannot express it at full size without accepting a drawdown the
 risk engine exists to refuse. A real limitation, but a *risk-budget* one, not a sizing bug.
 
-**Narrowed to one line.** `adaptive_momentum.py:273` applies the trend filter when the roster
-is *built* (monthly). A symbol below its 200-day average at month end is locked out for the
+**Narrowed to one line.** `adaptive_momentum.py:329-336` applies the trend filter when the roster
+is *built* (monthly) — `below_trend`, suppressed when `trend_gate_per_session` is on. (Cited as
+`:273` when this was written; re-anchored 2026-09-02.) A symbol below its 200-day average at month end is locked out for the
 whole following month, and a symbol absent from the roster cannot be entered at any size —
 which is why every sizing knob looked inert. The trend gate is a hold-while-true predicate and
 belongs in the per-session `evaluate_symbol` path, where it already exists.
@@ -881,9 +893,17 @@ same boundary from the trading side.
 ## 6z. Where v0.2 stands, and what to do next
 
 Branch `main` (renamed from `elrond-v0.2` on 2026-08-22, when v0.2 became the default and
-`codex/quantbot` was retired). **1,332 tests**; `ruff` and `mypy` clean across 146 source files.
-Read
-this section first if you are resuming.
+`codex/quantbot` was retired).
+
+**Counts re-measured on 2026-09-02: 2,320 tests collected — 2,302 pass, 18 skip for an absent
+WSL distribution and an unconfigured model endpoint — and `ruff` plus `mypy --strict` are clean
+on both `--platform linux` and `--platform win32` across 210 source files.** The figures this
+paragraph carried (1,332 tests, 146 source files) were true when written on 2026-08-22 and
+described roughly half the tree; they are corrected rather than deleted because a stale count
+that reads as current is how a reader concludes nothing has landed since.
+
+Read this section first if you are resuming, and read the header's list of what it does not
+cover before trusting it as an inventory.
 
 **Updated 2026-08-22.** The table below was written when four issues were outstanding; all four
 shipped, and so did #36, #37 and #38's enforcement. See `## 6aa` for what changed.
@@ -907,7 +927,14 @@ shipped, and so did #36, #37 and #38's enforcement. See `## 6aa` for what change
 | #4 arXiv connector | this branch | an outage raises; it never reads as "no literature exists" |
 | #3 Research director | `98f60b7` | lifecycle, computed priority, no route to the broker |
 
-Schema is at V6 with revisions 0001–0006. Every revision declares its own tables.
+Schema was at V6 with revisions 0001–0006 when this table was written. **It is now at V24 with
+revisions 0001–0024** (`storage/schema.py`, `SCHEMA_VERSION = 24`), and the eighteen added since
+are, in order: reservation and search origin, the promotion ladder, search runs, literature
+searches, promotion-claim binding, rejected candidates, rejection evidence, market anomaly
+events, capacity assessments, market regime snapshots, counterfactual outcomes, instruments,
+veto policy versions, catalyst assessments, session observations, position protection, position
+protection actions, and artifact evidence. The forecasting ledger is a separate store on its own
+revision 0001. Every revision declares its own tables.
 
 ### Not built
 
@@ -916,14 +943,34 @@ All four shipped; this section is kept for the reasoning, not the status.
 
 ~~Nothing calls an LLM anywhere in this system.~~ Superseded: #9 was exercised against a live
 Ollama endpoint and the semantic worker (#37) ran against `mistral:7b`. `ModelRuntime` is wired and unused; the critic is
-deterministic and names the five judgment dimensions it did not assess. No autonomous loop runs:
-each gate is callable, none is driven.
+deterministic and names the five judgment dimensions it did not assess.
 
-`research.transports.HttpxModelTransport` now supplies the wire the runtime was missing — an
+~~No autonomous loop runs: each gate is callable, none is driven.~~ **Corrected 2026-09-02: a
+driver exists.** `quantbot research-cycle --max-steps N --commit` calls `cycle.drain`, which
+advances queued tasks through the stages that can be decided mechanically — `capacity_stage` then
+`novelty_stage` — and seeds prior findings first so the novelty gate reads what the project
+already knows. It is not a continuously running loop and it is not on by default: `--max-steps`
+is required with no default and `--commit` is opt-in, both because each stage a run advances can
+permanently raise the luck bar. Stages needing a model or a measurement have no handler and stay
+*visibly stuck* rather than being advanced by something that did not run them, which is what
+keeps "a driver exists" from meaning "the loop is closed".
+
+`research.transports.HttpxModelTransport` supplies the wire the runtime was missing — an
 OpenAI-compatible `/chat/completions` client covering Ollama, LM Studio, llama.cpp, vLLM and the
 hosted APIs. It is exercised through `httpx.MockTransport`, which drives the production request
-path with no network. **No endpoint has been contacted and no composition root constructs one**;
-the runtime remains infrastructure waiting for #13 and #3 to have something to route.
+path with no network.
+
+~~**No endpoint has been contacted and no composition root constructs one.**~~ **Half of that is
+now wrong.** `research.composition.build_model_runtime` *is* a composition root: it reads
+`QUANTBOT_MODEL_*` from the environment, refuses with `ResearchNotConfigured` rather than
+defaulting to something permissive, and assembles `ModelRuntime` over
+`OpenAICompatibleTransport(HttpxModelTransport(...))`. **Nothing in `src/` calls it** — the only
+callers are `tests/unit/research/test_composition.py` and the live integration suite
+`tests/integration/test_model_runtime_live.py`, which skips unless an endpoint is configured (it
+accounts for four of the 18 skips). `research-status`, `preflight` and the console call
+`model_configuration()`, which reports whether a runtime *could* be built without building one or
+contacting anything. So the runtime remains infrastructure waiting for something to route — but
+the thing that would construct it now exists, and a reader looking for it will find it.
 
 ### The next action
 
@@ -1713,12 +1760,21 @@ whether or not the correlation guards fired.
       which needs a confirmatory run, which needs M1. Not blocked on engineering.
 - [ ] Accumulate paper observations toward the 30-day qualification window (day 1 of 30).
       Note that the window is now an authenticity floor rather than the qualification: see 6bb.
-- [ ] **Ratify or replace `config/economic-objective-v1.yaml` — operator action, and it blocks
-      `PAPER_QUALIFIED` entirely.** Five values in it are marked `[PROPOSED]` because an agent
-      chose them, not the operator. Nothing may be labelled an economic success against a bar
-      this system wrote for itself. Set `status: RATIFIED` with a human `ratified_by`, or edit
-      the values first — editing creates a new identity and forces reassessment, which is
-      intended.
+- [ ] **~~Ratify `config/economic-objective-v1.yaml`; it blocks `PAPER_QUALIFIED` entirely.~~
+      It does not, and has not since #72.** The file's `status` is `PROJECT_DEFAULT`, and
+      `MandateStatus` accepts that alongside `RATIFIED` (`research/mandate.py`) — a frozen,
+      versioned bar an agent wrote still stops metric shopping, because what stops it is
+      freezing the criterion before the results and not signing it. The old design gated
+      `LIVE_REVIEW_ELIGIBLE` on ratification too, which made human review a prerequisite for its
+      own eligibility; that deadlock is what #72 removed.
+      **What remains is a label, not a gate.** Five values are still marked `[PROPOSED]` because
+      an agent chose them, and every artifact measured against this objective reports its
+      `authority` so a qualification claim says in plain words who set the bar. Ratifying is
+      still worth doing — `intended_capital_range_usd` and `minimum_meaningful_improvement_bps`
+      in particular are guesses at operator intent — and it is an operator action:
+      `RATIFIED`/`ratified_by` are unreachable from code, and a value that reads as an automated
+      identity is refused at load. Ratifying does not change the identity hash, so evidence
+      already measured stays valid; editing a value does, and forces reassessment.
 - [ ] **Deploy the seeded findings to the Pi.** Its store is still empty; it runs an older
       checkout and this session had no working SSH credential for it.
 - [ ] **Move the ledger to the coordinator and start the daemon there** — **operator action**,

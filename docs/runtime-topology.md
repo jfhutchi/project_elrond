@@ -13,7 +13,10 @@ thrashing a 512MB host onto a microSD and taking the broker, risk engine and rec
 with it.
 
 So the rule is enforced in code rather than written down as guidance. See
-[`quantbot.research.placement`](../src/quantbot/research/placement.py).
+[`quantbot.placement`](../src/quantbot/placement.py). (This line named
+`quantbot.research.placement` until 2026-09-02. The module moved to the package root in `2e385d2`
+under #38 — placement is not a research concern, because the daemon it protects is the trading
+one — and the link went stale in the move.)
 
 ## Measured hosts
 
