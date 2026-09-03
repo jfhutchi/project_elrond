@@ -211,6 +211,10 @@ class RuntimeContext:
     def observe(
         self, *, now: datetime, identity: StrategyIdentity | None = None
     ) -> RuntimeObservation:
+        # Derive the default id from the context's original captured start, not from the start
+        # value `describe_runtime` may clamp after a backwards clock step. Otherwise one real
+        # process changes identity precisely when NTP correction makes its timestamps unusual.
+        stable_process_id = self.process_id or instance_id(started_at=self.process_started_at)
         return describe_runtime(
             role=self.role,
             store_identity=self.store_identity,
@@ -219,7 +223,7 @@ class RuntimeContext:
             process_started_at=self.process_started_at,
             identity=identity,
             host_id=self.host_id,
-            process_id=self.process_id,
+            process_id=stable_process_id,
             git_commit=self.git_commit,
         )
 
@@ -339,24 +343,49 @@ class DeploymentRegistry:
             coordinator_history.setdefault(process_key, []).append(item)
 
         recent_coordinator_processes = sorted(recent_coordinator_process_keys)
-        overlapping_coordinator_processes: set[tuple[str, str]] = set()
+        same_host_overlap_pairs: list[
+            tuple[tuple[str, str], tuple[str, str]]
+        ] = []
+        cross_host_overlap_pairs: list[
+            tuple[tuple[str, str], tuple[str, str]]
+        ] = []
         for index, first_key in enumerate(recent_coordinator_processes):
             for second_key in recent_coordinator_processes[index + 1 :]:
                 if _processes_overlap(
                     coordinator_history[first_key], coordinator_history[second_key]
                 ):
-                    overlapping_coordinator_processes.update((first_key, second_key))
+                    pairs = (
+                        same_host_overlap_pairs
+                        if first_key[0] == second_key[0]
+                        else cross_host_overlap_pairs
+                    )
+                    pairs.append((first_key, second_key))
 
-        if overlapping_coordinator_processes:
+        if same_host_overlap_pairs or cross_host_overlap_pairs:
             warnings.append(DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS)
-            reasons.append(
-                "more than one coordinator has demonstrably overlapping recorded lifetimes: "
-                + ", ".join(
-                    f"{host}/{process}"
-                    for host, process in sorted(overlapping_coordinator_processes)
+            overlap_evidence: list[str] = []
+            if same_host_overlap_pairs:
+                overlap_evidence.append(
+                    "same-host recorded intervals overlap: "
+                    + ", ".join(
+                        _format_process_pair(first, second)
+                        for first, second in same_host_overlap_pairs
+                    )
                 )
-                + "; two writers against one account is the condition #190 Phase 4 exists"
-                " to prevent"
+            if cross_host_overlap_pairs:
+                overlap_evidence.append(
+                    "cross-host wall-clock intervals are consistent with overlap: "
+                    + ", ".join(
+                        _format_process_pair(first, second)
+                        for first, second in cross_host_overlap_pairs
+                    )
+                    + "; clock skew or NTP corrections mean those timestamps do not prove "
+                    "concurrency"
+                )
+            reasons.append(
+                "; ".join(overlap_evidence)
+                + "; two writers against one account is the condition #190 Phase 4 exists "
+                "to prevent"
             )
 
         if latest_coordinator is not None and not latest_coordinator.identifies_its_checkout:
@@ -514,13 +543,25 @@ def summarize(status: DeploymentStatus) -> dict[str, object]:
 def _processes_overlap(
     first: list[RuntimeObservation], second: list[RuntimeObservation]
 ) -> bool:
-    """Prove two recorded process lifetimes overlapped without inspecting the operating system."""
+    """Whether two persisted wall-clock intervals overlap rather than merely touch.
+
+    On one host the observations share a clock domain, subject to that clock being corrected.
+    Across hosts this establishes only that the recorded intervals are *consistent* with overlap:
+    wall clocks can be skewed or stepped independently. The caller preserves that distinction in
+    its operator-facing reason and never claims OS-verified liveness.
+    """
     return any(
-        left.observed_at >= right.process_started_at
-        and right.observed_at >= left.process_started_at
+        left.observed_at > right.process_started_at
+        and right.observed_at > left.process_started_at
         for left in first
         for right in second
     )
+
+
+def _format_process_pair(
+    first: tuple[str, str], second: tuple[str, str]
+) -> str:
+    return f"{first[0]}/{first[1]} + {second[0]}/{second[1]}"
 
 
 __all__ = [

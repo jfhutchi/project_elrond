@@ -16,8 +16,11 @@ import hashlib
 import sqlite3
 from io import StringIO
 from pathlib import Path
+from uuid import UUID
 
 import pytest
+from alembic import command
+from alembic.config import Config
 from sqlalchemy import create_engine
 
 from quantbot.storage import (
@@ -73,6 +76,17 @@ def marker(path: Path) -> tuple[int | None, str | None]:
     finally:
         connection.close()
     return (int(version[0]) if version else None, str(revision[0]) if revision else None)
+
+
+def upgrade_to_revision(path: Path, revision: str) -> None:
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+    try:
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, revision)
+    finally:
+        engine.dispose()
 
 
 def test_opening_a_store_that_is_behind_head_changes_nothing_on_disk(tmp_path: Path) -> None:
@@ -162,6 +176,145 @@ def test_explicit_migration_creates_store_identity_once_and_ordinary_open_preser
         assert migrated_again.store_identity == identity
     finally:
         migrated_again.close()
+
+
+def test_migration_from_0026_replaces_path_hashes_with_one_persisted_lineage_uuid(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "deployment.db"
+    upgrade_to_revision(path, "0026")
+    legacy_path_hash = "a" * 64
+    raw = sqlite3.connect(path)
+    try:
+        raw.execute(
+            """
+            INSERT INTO runtime_deployments (
+                observation_id, host_id, instance_id, role, git_commit, package_version,
+                python_version, host_platform, trading_mode, database_fingerprint,
+                schema_version, process_started_at, observed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "legacy-observation",
+                "omen",
+                "pid-1",
+                "COORDINATOR",
+                "abc1234",
+                "0.1.0",
+                "3.13.0",
+                "Windows",
+                "PAPER",
+                legacy_path_hash,
+                26,
+                "2026-09-02T20:00:00Z",
+                "2026-09-02T21:00:00Z",
+            ),
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    before_open = fingerprint(path)
+    with pytest.raises(MigrationRequiredError):
+        Database(path)
+    assert fingerprint(path) == before_open, "ordinary open must not assign the identity"
+
+    migrated = Database.migrate(path)
+    identity = migrated.store_identity
+    migrated.close()
+    assert str(UUID(identity)) == identity
+
+    raw = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        schema_rows = raw.execute("SELECT store_identity FROM schema_version").fetchall()
+        deployment_rows = raw.execute(
+            "SELECT store_identity FROM runtime_deployments"
+        ).fetchall()
+        deployment_columns = {
+            str(row[1]) for row in raw.execute("PRAGMA table_info(runtime_deployments)")
+        }
+    finally:
+        raw.close()
+
+    assert schema_rows == [(identity,)]
+    assert deployment_rows == [(identity,)]
+    assert "database_fingerprint" not in deployment_columns
+
+    migrated_again = Database.migrate(path)
+    try:
+        assert migrated_again.store_identity == identity
+    finally:
+        migrated_again.close()
+
+
+def test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "deployment.db"
+    database = Database.create(path)
+    identity = database.store_identity
+    with database.engine.begin() as connection:
+        connection.exec_driver_sql(
+            """
+            INSERT INTO runtime_deployments (
+                observation_id, host_id, instance_id, role, git_commit, package_version,
+                python_version, host_platform, trading_mode, store_identity, schema_version,
+                process_started_at, observed_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "current-observation",
+                "omen",
+                "pid-1",
+                "COORDINATOR",
+                "abc1234",
+                "0.1.0",
+                "3.13.0",
+                "Windows",
+                "PAPER",
+                identity,
+                SCHEMA_VERSION,
+                "2026-09-02T20:00:00Z",
+                "2026-09-02T21:00:00Z",
+            ),
+        )
+    database.close()
+    before = fingerprint(path)
+
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+    try:
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            with pytest.raises(RuntimeError, match="unsafe.*pre-0027 backup"):
+                command.downgrade(config, "0026")
+    finally:
+        engine.dispose()
+
+    assert fingerprint(path) == before, "a refused downgrade must not change the store"
+    assert marker(path) == (SCHEMA_VERSION, "0027")
+    raw = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        schema_columns = {str(row[1]) for row in raw.execute("PRAGMA table_info(schema_version)")}
+        deployment_columns = {
+            str(row[1]) for row in raw.execute("PRAGMA table_info(runtime_deployments)")
+        }
+        deployment_identities = raw.execute(
+            "SELECT store_identity FROM runtime_deployments"
+        ).fetchall()
+    finally:
+        raw.close()
+
+    assert "store_identity" in schema_columns
+    assert "store_identity" in deployment_columns
+    assert "database_fingerprint" not in deployment_columns
+    assert deployment_identities == [(identity,)]
+
+    reopened = Database(path)
+    try:
+        assert reopened.store_identity == identity
+    finally:
+        reopened.close()
 
 
 def test_a_store_ahead_of_this_build_stays_fail_closed_and_untouched(tmp_path: Path) -> None:

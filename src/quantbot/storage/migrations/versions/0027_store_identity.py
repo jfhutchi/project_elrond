@@ -5,6 +5,11 @@ Revises: 0026
 
 The identity lives in the existing singleton ``schema_version`` row. It is generated only by
 explicit creation or migration, not by an ordinary database open.
+
+Downgrade is intentionally refused. Revision 0027 replaces the legacy path hashes in every
+runtime observation with the new lineage UUID, so the original values no longer exist. Renaming
+the UUID column back would make revision-0026 code interpret lineage UUIDs as path hashes and draw
+false operational conclusions.
 """
 
 from __future__ import annotations
@@ -60,16 +65,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    with op.batch_alter_table("schema_version") as batch:
-        batch.drop_column("store_identity")
-    with op.batch_alter_table("runtime_deployments") as batch:
-        batch.alter_column(
-            "store_identity",
-            existing_type=String(36),
-            existing_nullable=False,
-            new_column_name="database_fingerprint",
-            type_=String(64),
-        )
-    connection = op.get_bind()
-    schema = _schema_version()
-    connection.execute(update(schema).where(schema.c.id == 1).values(version=26))
+    raise RuntimeError(
+        "downgrade from 0027 to 0026 is unsafe: 0027 replaced the legacy SHA-256 path "
+        "fingerprints with a persisted store-lineage UUID, and the original fingerprints "
+        "cannot be reconstructed. Restore a pre-0027 backup instead"
+    )

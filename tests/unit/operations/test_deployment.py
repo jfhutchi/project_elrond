@@ -200,6 +200,32 @@ def test_a_normal_same_host_restart_does_not_create_a_second_writer_warning(
     assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
 
 
+def test_a_same_host_restart_at_the_recorded_handoff_boundary_is_not_overlap(
+    database: Database, tmp_path: Path
+) -> None:
+    """Touching intervals do not establish that both processes ran concurrently."""
+    handoff = NOW
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                process="pid-1",
+                started=NOW - timedelta(hours=1),
+            ).observe(now=handoff)
+        )
+        registry.record(
+            _context(tmp_path, process="pid-2", started=handoff).observe(
+                now=handoff + timedelta(minutes=1)
+            )
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=handoff + timedelta(minutes=1))
+
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
+
+
 def test_same_host_coordinators_with_recorded_overlap_create_a_second_writer_warning(
     database: Database, tmp_path: Path
 ) -> None:
@@ -231,6 +257,9 @@ def test_same_host_coordinators_with_recorded_overlap_create_a_second_writer_war
         status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=2))
 
     assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS in status.warnings
+    detail = " ".join(status.reasons)
+    assert "same-host recorded intervals overlap" in detail
+    assert "omen/pid-1 + omen/pid-2" in detail
 
 
 def test_cross_host_coordinators_with_recorded_overlap_create_a_second_writer_warning(
@@ -259,6 +288,45 @@ def test_cross_host_coordinators_with_recorded_overlap_create_a_second_writer_wa
         status = DeploymentRegistry(session).status(now=NOW + timedelta(minutes=1))
 
     assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS in status.warnings
+    detail = " ".join(status.reasons)
+    assert "cross-host wall-clock intervals are consistent with overlap" in detail
+    assert "timestamps do not prove concurrency" in detail
+    assert "demonstrably" not in detail
+
+
+def test_cross_host_clock_skew_that_separates_recorded_intervals_does_not_claim_overlap(
+    database: Database, tmp_path: Path
+) -> None:
+    """Different host clocks cannot supply concurrency that their timestamps do not record.
+
+    These actual processes could have overlapped if the second host's clock was two hours fast.
+    The registry has no clock-synchronization evidence, so it neither invents overlap nor claims
+    that absence of this warning proves a clean handoff.
+    """
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(
+            _context(
+                tmp_path,
+                host="omen",
+                process="pid-1",
+                started=NOW - timedelta(hours=2),
+            ).observe(now=NOW - timedelta(hours=1))
+        )
+        registry.record(
+            _context(
+                tmp_path,
+                host="old-desktop",
+                process="pid-9",
+                started=NOW + timedelta(hours=1),
+            ).observe(now=NOW + timedelta(hours=2))
+        )
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(hours=2))
+
+    assert len(status.active_coordinators) == 2
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
 
 
 def test_a_recent_observation_before_replacement_start_does_not_prove_overlap(
@@ -461,6 +529,36 @@ def test_a_backwards_clock_records_the_runtime_instead_of_aborting_the_cycle(
         process_started_at=STARTED,
     )
     assert ordinary.process_started_at == STARTED < ordinary.observed_at
+
+
+def test_a_backwards_clock_does_not_change_one_process_into_a_second_coordinator(
+    database: Database,
+) -> None:
+    context = RuntimeContext(
+        role=RuntimeRole.COORDINATOR,
+        store_identity=database.store_identity,
+        trading_mode="PAPER",
+        process_started_at=NOW,
+        host_id="omen",
+        git_commit="abc1234",
+    )
+    before_correction = context.observe(now=NOW + timedelta(seconds=1))
+    after_correction = context.observe(now=NOW - timedelta(seconds=1))
+
+    assert before_correction.instance_id == after_correction.instance_id
+    assert before_correction.process_started_at == NOW
+    assert after_correction.process_started_at == after_correction.observed_at
+
+    with database.transaction() as session:
+        registry = DeploymentRegistry(session)
+        registry.record(before_correction)
+        registry.record(after_correction)
+
+    with database.transaction() as session:
+        status = DeploymentRegistry(session).status(now=NOW + timedelta(seconds=1))
+
+    assert len(status.active_coordinators) == 1
+    assert DeploymentWarning.MULTIPLE_ACTIVE_COORDINATORS not in status.warnings
 
 
 def test_two_processes_on_one_host_get_two_instance_ids() -> None:
