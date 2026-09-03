@@ -171,6 +171,15 @@ exists for this.
 
 ## 4. Current state
 
+> **Unverified on the current coordinator as of 2026-09-02 (#190).** Everything in this section
+> describes a deployment that was running somewhere else. The read-only inventory of the HP Omen
+> found no `quantbot.db` anywhere on the machine, no `QUANTBOT_*` or broker environment variables,
+> no daemon or watchdog process, no service, no scheduled task and no Startup entry; `logs/` holds
+> only `.gitkeep`. The positions, queued orders and deployed identity below therefore cannot be
+> confirmed from here, and nothing should be reconciled against them until an authoritative
+> durable store is located or a new one is deliberately created. They are left in place because
+> they may still be true of a host this inventory could not see — not because they were checked.
+
 - **Deployed:** v1.2.0 — `adaptive-momentum-v1-309894d8d8a5296e`, config `config/strategy-v1-2.yaml`
   - Active components: momentum, asset_trend, roster_exit
   - Disabled: market_regime, donchian_entry, donchian_exit, trailing_stop
@@ -185,6 +194,9 @@ exists for this.
 |---|---|
 | `quantbot daemon` | Broker-clock driven. Sleeps to each session close + 5 min, runs one cycle. Auto-starts via `%APPDATA%\...\Startup\quantbot-daemon.cmd`. |
 | `scripts/supervisor.py --watch` | Watchdog. Restarts a *dead* daemon. **Never** clears the kill switch or resolves a reconciliation failure. Launched by the startup entry, which is version-controlled at `scripts/quantbot-watchdog.cmd` and installed to the Windows Startup folder. |
+
+Neither is installed on the current coordinator (#190) — the Startup folder holds only
+`desktop.ini`. The table says what the unattended runtime *is*, not what is running today.
 
 Verify both are alive with `scripts/supervisor.py`. `logs/watchdog-stderr.log` should stay
 **empty** — anything in it means the watchdog itself is crashing.

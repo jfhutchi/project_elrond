@@ -15,6 +15,7 @@ from pydantic import Field
 from quantbot.config import SafetyValidation, Settings, validate_trading_safety
 from quantbot.domain import BrokerEnvironment, OrderIntent, StrategyIdentity, TradingMode
 from quantbot.execution import StartupRecoveryResult, SubmissionResult
+from quantbot.operations.deployment import DeploymentRegistry, RuntimeContext
 from quantbot.operations.health import OperationsModel
 from quantbot.operations.kill_switch import (
     KillSwitchController,
@@ -153,9 +154,15 @@ class RunOnceCycle:
         submitter: OrderSubmitter,
         metrics: OperationalMetrics,
         max_data_age_seconds: int = 900,
+        runtime: RuntimeContext | None = None,
     ) -> None:
         if max_data_age_seconds <= 0:
             raise ValueError("max_data_age_seconds must be positive")
+        #: Optional, and `None` records nothing. A cycle assembled directly in a test is not a
+        #: deployment, and inventing an observation for it would put fictional coordinators in
+        #: the record the multiple-coordinator check reads (#190). The wired runtime supplies
+        #: one; anything else stays silent, which is the honest default.
+        self._runtime = runtime
         self._database = database
         self._lock_path = Path(lock_path)
         self._identity = strategy_identity
@@ -266,6 +273,16 @@ class RunOnceCycle:
                         started_at=started_at,
                         detail={"trading_date": trading_date.isoformat()},
                     )
+                    # Recorded here, holding the writer lock, before anything can halt. A
+                    # coordinator that stops at reconciliation has still run, and #190's
+                    # question is "what is running", not "what succeeded" -- an observation
+                    # written only on a clean cycle would go missing exactly when the operator
+                    # most needs to know which checkout was up.
+                    if self._runtime is not None:
+                        DeploymentRegistry(session).record(
+                            self._runtime.observe(now=started_at, identity=self._identity),
+                            detail={"run_id": run_id},
+                        )
                 created = True
                 self._metrics.increment("quantbot_cycles_total")
                 recovery = await self._recovery.recover(

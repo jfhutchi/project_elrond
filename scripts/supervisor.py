@@ -97,7 +97,14 @@ def restart_daemon() -> Finding:
 
 
 def inspect_durable(now: datetime) -> list[Finding]:
-    path = Path(os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    # Resolved rather than read from one variable (#196). A `sqlite:///...` URL leaves
+    # `QUANTBOT_DB_PATH` unset, and a watchdog inspecting the wrong store would report a healthy
+    # ledger, a clear kill switch and a fresh cycle while the real one sat stale.
+    from quantbot.storage.target import resolve_database_target
+
+    target = resolve_database_target()
+    target.require_enabled()
+    path = target.path
     if not path.exists():
         return [Finding("CRITICAL", "ledger", f"database missing at {path}")]
     database = Database(path)

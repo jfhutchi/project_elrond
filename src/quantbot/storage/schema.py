@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 24
+SCHEMA_VERSION = 27
 
 metadata = MetaData(
     naming_convention={
@@ -33,6 +33,10 @@ schema_version = Table(
     metadata,
     Column("id", Integer, primary_key=True),
     Column("version", Integer, nullable=False),
+    # Durable store-lineage identity. It survives a byte-for-byte backup or move, so it
+    # identifies the logical store lineage rather than claiming two files are the same physical
+    # file.
+    Column("store_identity", String(36), nullable=False),
     CheckConstraint("id = 1", name="singleton"),
 )
 
@@ -1394,3 +1398,234 @@ Index(
     "ix_position_protection_action_evaluations_evaluation",
     position_protection_action_evaluations.c.evaluation_id,
 )
+
+
+# --- Ingestion control plane (#198) -------------------------------------------------------
+#
+# Collection has never had durable control state. `AlpacaDataSyncRunner.sync` refetches a fixed
+# session window every cycle and stores idempotently, which is restart-safe by accident: it
+# survives a restart because it never remembers anything. What it cannot do is say *when a
+# source last succeeded*, and a collector silently stopped for three weeks is indistinguishable
+# from one that ran ten minutes ago. Missing data does not announce itself; it quietly removes
+# future research capacity, and by the time a hypothesis needs that window the provider no
+# longer serves it.
+#
+# These five tables are operational state, not research evidence. Nothing here is admissible in
+# a manifest, and nothing here is read by the risk engine, the broker, or the kill switch.
+#
+# **Ingestion is deliberately not coupled to the trading kill switch.** An engaged kill switch
+# halts order submission; it says nothing about whether market data may be collected, and
+# stopping collection because trading is halted would destroy exactly the observations needed
+# to understand why it halted. The two are independent by construction: nothing in
+# `quantbot.ingestion` reads `kill_switch_state`, and a test asserts that rather than trusting
+# it.
+
+ingestion_sources = Table(
+    "ingestion_sources",
+    metadata,
+    Column("source_id", String(128), primary_key=True),
+    Column("provider", String(128), nullable=False),
+    Column("source_kind", String(64), nullable=False),
+    # What the source was configured to collect. A configuration change is a new hash, so a
+    # cursor cannot silently carry across a change in what "this stream" means.
+    Column("configuration_hash", String(64), nullable=False),
+    # Deliberately explicit rather than inferred from absence. "Nobody turned it on", "somebody
+    # turned it off" and "it crashed" are three different operational facts, and only the middle
+    # one is benign.
+    Column("enabled", Boolean, nullable=False),
+    Column("created_at", String(40), nullable=False),
+    Column("updated_at", String(40), nullable=False),
+)
+Index("ix_ingestion_sources_enabled", ingestion_sources.c.enabled)
+
+ingestion_cursors = Table(
+    "ingestion_cursors",
+    metadata,
+    Column(
+        "source_id",
+        String(128),
+        ForeignKey("ingestion_sources.source_id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+    Column("stream_key", String(128), primary_key=True),
+    Column("cursor_value", Text),
+    # The newest observation this stream has seen, from any run. A backfill legitimately moves
+    # it, because a backfill really did observe those bars.
+    Column("last_observation_at", String(40)),
+    # When *live* collection last succeeded, and only live. A backfill cannot write it, because
+    # a source that has only ever been caught up historically is not a source that is currently
+    # collecting -- and freshness reads this field.
+    Column("last_success_at", String(40)),
+    Column("updated_at", String(40), nullable=False),
+    # Optimistic concurrency. Two collectors racing on one stream is the case where a cursor
+    # silently goes backwards, and a lost update here is a permanently skipped window.
+    Column("version", Integer, nullable=False),
+    CheckConstraint("version >= 1", name="cursor_versions_start_at_one"),
+)
+
+ingestion_runs = Table(
+    "ingestion_runs",
+    metadata,
+    Column("ingestion_run_id", String(128), primary_key=True),
+    Column(
+        "source_id",
+        String(128),
+        ForeignKey("ingestion_sources.source_id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    # LIVE or BACKFILL. Historical catch-up must never be countable as forward evidence merely
+    # because it was ingested later, so the two are distinguishable in the row rather than by
+    # inference from the requested range.
+    Column("mode", String(16), nullable=False),
+    Column("started_at", String(40), nullable=False),
+    Column("finished_at", String(40)),
+    Column("status", String(16), nullable=False),
+    Column("requested_start", Text),
+    Column("requested_end", Text),
+    Column("records_seen", Integer, nullable=False),
+    Column("records_inserted", Integer, nullable=False),
+    Column("records_duplicate", Integer, nullable=False),
+    Column("records_rejected", Integer, nullable=False),
+    Column("error_code", String(64)),
+    Column("detail_json", Text, nullable=False),
+    CheckConstraint("mode IN ('LIVE', 'BACKFILL')", name="run_mode_is_known"),
+    CheckConstraint(
+        "status IN ('RUNNING', 'SUCCEEDED', 'FAILED', 'ABANDONED')", name="run_status_is_known"
+    ),
+    CheckConstraint(
+        "(status = 'RUNNING') = (finished_at IS NULL)", name="finished_runs_have_an_end"
+    ),
+    # An error code on a successful run would let a failure be filed as a success with a note.
+    CheckConstraint(
+        "error_code IS NULL OR status IN ('FAILED', 'ABANDONED')",
+        name="only_unsuccessful_runs_carry_an_error",
+    ),
+    CheckConstraint(
+        "records_seen >= 0 AND records_inserted >= 0 AND records_duplicate >= 0"
+        " AND records_rejected >= 0",
+        name="record_counts_are_nonnegative",
+    ),
+    CheckConstraint(
+        "records_inserted + records_duplicate + records_rejected <= records_seen",
+        name="record_outcomes_fit_inside_what_was_seen",
+    ),
+)
+Index("ix_ingestion_runs_source_started", ingestion_runs.c.source_id, ingestion_runs.c.started_at)
+Index("ix_ingestion_runs_status", ingestion_runs.c.status, ingestion_runs.c.started_at)
+
+ingestion_events = Table(
+    "ingestion_events",
+    metadata,
+    Column("event_id", String(128), primary_key=True),
+    Column(
+        "source_id",
+        String(128),
+        ForeignKey("ingestion_sources.source_id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("stream_key", String(128)),
+    Column("event_kind", String(32), nullable=False),
+    Column("severity", String(16), nullable=False),
+    Column("occurred_at", String(40), nullable=False),
+    # An incident stays open until something observed it recover. Absence of a resolution is the
+    # signal: a collector that stopped emitting cannot close its own incident by going quiet.
+    Column("resolved_at", String(40)),
+    Column("detail_json", Text, nullable=False),
+    CheckConstraint(
+        "severity IN ('INFO', 'WARNING', 'CRITICAL')", name="event_severity_is_known"
+    ),
+    CheckConstraint(
+        "resolved_at IS NULL OR resolved_at >= occurred_at",
+        name="events_resolve_after_they_open",
+    ),
+)
+Index(
+    "ix_ingestion_events_open",
+    ingestion_events.c.source_id,
+    ingestion_events.c.event_kind,
+    ingestion_events.c.resolved_at,
+)
+Index("ix_ingestion_events_occurred", ingestion_events.c.occurred_at)
+
+component_heartbeats = Table(
+    "component_heartbeats",
+    metadata,
+    Column("heartbeat_id", String(128), primary_key=True),
+    Column("component_id", String(128), nullable=False),
+    # Which process wrote it. Two instances beating for one component is a second-writer
+    # condition, and it is only visible if the instance is recorded.
+    Column("instance_id", String(128), nullable=False),
+    Column("observed_at", String(40), nullable=False),
+    Column("status", String(16), nullable=False),
+    Column("last_success_at", String(40)),
+    Column("detail_json", Text, nullable=False),
+    CheckConstraint(
+        "status IN ('STARTING', 'HEALTHY', 'DEGRADED', 'STOPPING')",
+        name="heartbeat_status_is_known",
+    ),
+)
+Index(
+    "ix_component_heartbeats_component",
+    component_heartbeats.c.component_id,
+    component_heartbeats.c.observed_at,
+)
+
+
+# --- Deployed-state record (#190) -----------------------------------------------------------
+#
+# The #190 inventory of the coordinator took filesystem archaeology to establish facts the
+# system should have been able to state: which commit was checked out, whether anything was
+# running, which database was authoritative, and whether a second host might wake up and become
+# a competing writer. The answers were recoverable only because nothing was running. Had a
+# process been alive on an old checkout, the same archaeology would have been ambiguous.
+#
+# `strategy_deployments` records that a strategy version was deployed from a commit. It does not
+# record that *this host*, in *this process*, is running that commit against *this* database
+# right now, and that is the fact the inventory needed and could not get.
+#
+# Append-only. Each row is one observation, not a mutable "current state": a coordinator that
+# died cannot update its row to say so, and overwriting would erase the evidence that an older
+# checkout ran at all -- which is exactly the stale-host signal worth keeping.
+
+runtime_deployments = Table(
+    "runtime_deployments",
+    metadata,
+    Column("observation_id", String(200), primary_key=True),
+    Column("host_id", String(128), nullable=False),
+    # Process identity, so two coordinators on one host are two rows rather than one confused
+    # one. A second active writer is the failure #190 Phase 4 exists to prevent, and it is only
+    # visible if the process is recorded.
+    Column("instance_id", String(128), nullable=False),
+    Column("role", String(32), nullable=False),
+    # `UNKNOWN` when the runtime cannot say. That is itself reportable: a stale checkout cannot
+    # be detected on a process that will not name its commit.
+    Column("git_commit", String(64), nullable=False),
+    Column("package_version", String(64), nullable=False),
+    Column("python_version", String(32), nullable=False),
+    Column("host_platform", String(160), nullable=False),
+    Column("trading_mode", String(16), nullable=False),
+    # Persisted identity read from the store's singleton schema row; it is not derived from the
+    # path, host, or any other deployment detail.
+    Column("store_identity", String(36), nullable=False),
+    Column("schema_version", Integer, nullable=False),
+    Column("strategy_id", String(128)),
+    Column("strategy_version", String(64)),
+    Column("configuration_hash", String(128)),
+    Column("process_started_at", String(40), nullable=False),
+    Column("observed_at", String(40), nullable=False),
+    Column("detail_json", Text, nullable=False, server_default=text("'{}'")),
+    CheckConstraint(
+        "role IN ('COORDINATOR', 'WORKER', 'CONSOLE', 'TOOL')", name="runtime_role_is_known"
+    ),
+    CheckConstraint("trading_mode IN ('PAPER', 'LIVE')", name="runtime_mode_is_known"),
+    CheckConstraint("schema_version >= 1", name="runtime_schema_version_is_positive"),
+    CheckConstraint(
+        "observed_at >= process_started_at", name="an_observation_follows_its_process_start"
+    ),
+)
+Index(
+    "ix_runtime_deployments_role_observed",
+    runtime_deployments.c.role,
+    runtime_deployments.c.observed_at,
+)
+Index("ix_runtime_deployments_commit", runtime_deployments.c.git_commit)

@@ -87,7 +87,12 @@ def _broker() -> dict[str, object]:
 
 
 def _durable() -> dict[str, object]:
-    path = os.environ.get("QUANTBOT_DB_PATH", "quantbot.db")
+    # Resolved, so a URL-configured store is the one the dashboard reports on (#196).
+    from quantbot.storage.target import resolve_database_target
+
+    target = resolve_database_target()
+    target.require_enabled()
+    path = target.path
     if not Path(path).exists():
         return {"available": False}
     database = Database(path)

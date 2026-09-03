@@ -7,6 +7,8 @@ decision comes from :mod:`quantbot.strategy` and :mod:`quantbot.risk`.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -39,6 +41,12 @@ from quantbot.domain import (
 from quantbot.domain.ids import build_client_order_id
 from quantbot.execution import StartupRecovery, StartupRecoveryResult
 from quantbot.execution.recovery import is_open_order
+from quantbot.ingestion import (
+    CursorAdvance,
+    IngestionControlPlane,
+    RecordCounts,
+    RunMode,
+)
 from quantbot.market_data import (
     AdjustmentMode,
     BarQuery,
@@ -377,6 +385,19 @@ class LedgerSyncingRecovery:
         return result.model_copy(update={"ready": False, "reasons": reasons})
 
 
+#: The single stream this collector checkpoints. It fetches the whole universe in one query, so
+#: one checkpoint describes one fetch; per-symbol cursors would claim a granularity the fetch
+#: does not have.
+UNIVERSE_STREAM = "universe"
+
+#: How long a `RUNNING` collection row may stay open before a later process closes it as
+#: abandoned. **Project default (#198).** A market-data sync completes in seconds and the daemon
+#: schedules one per session, so six hours is far beyond any honest run and far inside a cycle
+#: -- an unclosed row older than this belongs to a process that is not coming back. The single
+#: writer lock already prevents two syncs overlapping, so this cannot close a live run.
+ABANDON_RUNS_AFTER = timedelta(hours=6)
+
+
 class MarketDataSync:
     """Fetch, validate and durably cache completed daily bars for the universe."""
 
@@ -402,8 +423,84 @@ class MarketDataSync:
         self._veto_policy = veto_policy or PortfolioVetoPolicy()
         self._clock = clock
 
+    @property
+    def source_id(self) -> str:
+        """Stable identity for this collector.
+
+        The provider is part of the id rather than only of the row, so switching provider
+        registers a *new* source with its own cursor instead of failing the cycle or silently
+        continuing a checkpoint measured against different data.
+        """
+        return f"market-data:{self._market_data.provider}:{self._market_data.timeframe}"
+
+    def _configuration_hash(self) -> str:
+        """What this source is configured to collect.
+
+        The universe is included deliberately. Adding a symbol changes what the stream contains,
+        and a checkpoint carried silently across that change describes a window that was never
+        collected for the new name. The change is recorded, not acted on: `register_source`
+        writes a `CONFIGURATION_CHANGED` event and leaves the cursor alone.
+        """
+        payload = json.dumps(
+            {
+                "adjustment": self._market_data.adjustment.value,
+                "calendar": self._config.calendar,
+                "feed": self._market_data.feed.value,
+                "provider": self._market_data.provider,
+                "timeframe": self._market_data.timeframe,
+                "universe": sorted(self._config.universe),
+            },
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
     async def sync(self) -> DataSyncResult:
         now = self._clock().astimezone(UTC)
+
+        # The attempt is committed *before* the fetch, on purpose. A run recorded only on
+        # success cannot distinguish "collection never started" from "collection started and the
+        # process died", and the second is the case #198 exists to make visible. The price is a
+        # `RUNNING` row nothing will close from the inside, which is why the previous ones are
+        # abandoned here by the process that outlived them.
+        with self._database.transaction() as session:
+            plane = IngestionControlPlane(session)
+            run_id = plane.next_run_id(self.source_id, now)
+            plane.register_source(
+                source_id=self.source_id,
+                provider=self._market_data.provider,
+                source_kind="daily-bars",
+                configuration_hash=self._configuration_hash(),
+                now=now,
+            )
+            plane.abandon_stale_runs(
+                older_than=now - ABANDON_RUNS_AFTER,
+                now=now,
+                source_id=self.source_id,
+            )
+            plane.begin_run(
+                ingestion_run_id=run_id,
+                source_id=self.source_id,
+                mode=RunMode.LIVE,
+                now=now,
+            )
+        try:
+            return await self._collect(run_id, now=now)
+        except Exception as error:
+            # Recorded and re-raised. The cycle still fails the way it always did; what changes
+            # is that the failure survives the process, so a feed that has been broken since
+            # Tuesday is answerable rather than merely absent.
+            with self._database.transaction() as session:
+                IngestionControlPlane(session).fail_run(
+                    run_id,
+                    error_code=type(error).__name__,
+                    now=self._clock().astimezone(UTC),
+                    detail={"error": str(error)[:500]},
+                )
+            raise
+
+    async def _collect(self, run_id: str, *, now: datetime) -> DataSyncResult:
         calendar_sessions = await self._sessions.sessions()
         completed = latest_completed_session(calendar_sessions, now)
         if completed is None:
@@ -447,8 +544,37 @@ class MarketDataSync:
             expected_timestamps=expected,
             completed_through=completed.close_at,
         )
+        # The observations and the checkpoint that points past them are one transaction. That
+        # is the whole guarantee: a cursor that survived a crash its bars did not would make the
+        # next run start after data nobody stored, and the gap would be permanent and silent.
         with self._database.transaction() as session:
+            plane = IngestionControlPlane(session)
             stored = MarketDataCache(StorageRepository(session)).store(report)
+            existing = plane.cursor(self.source_id, UNIVERSE_STREAM)
+            plane.complete_run(
+                run_id,
+                counts=RecordCounts(
+                    seen=len(in_window),
+                    inserted=stored,
+                    duplicate=len(report.valid_bars) - stored,
+                    rejected=len(in_window) - len(report.valid_bars),
+                ),
+                now=self._clock().astimezone(UTC),
+                cursor=CursorAdvance(
+                    stream_key=UNIVERSE_STREAM,
+                    cursor_value=completed.close_at.isoformat(),
+                    last_observation_at=(
+                        max(bar.timestamp for bar in report.valid_bars)
+                        if report.valid_bars
+                        else None
+                    ),
+                    expected_version=None if existing is None else existing.version,
+                ),
+                detail={
+                    "completed_through": completed.close_at.isoformat(),
+                    "ineligible_symbols": list(report.ineligible_symbols),
+                },
+            )
 
         reasons: list[str] = []
         if report.ineligible_symbols:

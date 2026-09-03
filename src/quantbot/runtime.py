@@ -72,6 +72,7 @@ from quantbot.operations import (
     evaluate_operational_health,
     measure_readiness,
 )
+from quantbot.operations.deployment import RuntimeContext, RuntimeRole
 from quantbot.operations.protection import (
     PositionProtectionDaemonRunner,
     PositionProtectionSupervisor,
@@ -91,6 +92,7 @@ from quantbot.risk import (
 from quantbot.risk.exposure import load_exposure_classification
 from quantbot.risk.policy_versions import PolicySource, PolicyVersion, active_policy_version
 from quantbot.storage import Database, StateConflictError, StorageRepository
+from quantbot.storage.target import DatabaseTarget, resolve_database_target
 from quantbot.strategy import (
     StrategyConfig,
     build_strategy_identity,
@@ -105,6 +107,12 @@ DEFAULT_REPORTS_DIR = "reports"
 DEFAULT_MAX_DATA_AGE_SECONDS = 86_400
 CREDENTIALS_MISSING = "PAPER_CREDENTIALS_NOT_CONFIGURED"
 
+#: When this interpreter started, captured at import so every observation from one process
+#: reports the same start. Read from the clock rather than the OS process table: `psutil` is not
+#: a dependency and the exact boot instant does not matter -- what matters is that two
+#: coordinators on one host get two different instance ids, and two imports cannot share one.
+PROCESS_STARTED_AT = datetime.now(UTC)
+
 
 class RuntimeConfigurationError(RuntimeError):
     """Raised when the process environment cannot produce a runnable system."""
@@ -113,7 +121,14 @@ class RuntimeConfigurationError(RuntimeError):
 @dataclass(frozen=True, slots=True)
 class RuntimePaths:
     config: Path
+    #: The SQLite path, kept for every caller that legitimately needs a file -- backups and the
+    #: console's disk checks. `target` is the backend-neutral form (#196); this stays because
+    #: SQLite is the only enabled backend and making a hundred call sites pretend otherwise
+    #: would be ceremony, not portability.
     database: Path
+    #: Where the store is, without assuming a filesystem. Resolving both from one call means a
+    #: caller cannot end up with a path and a target that disagree.
+    target: DatabaseTarget
     lock: Path
     #: Separate from the writer lock: this excludes a second scheduler, while the
     #: writer lock excludes a second writer and is held only during a cycle.
@@ -128,9 +143,20 @@ def _env_path(name: str, default: str) -> Path:
 
 
 def runtime_paths() -> RuntimePaths:
+    # `resolve_database_target` reads both variables and refuses the ambiguous case, so a
+    # process cannot start against a store it was only half told about (#196). It raises the
+    # typed `DatabaseTargetError`; nothing here catches it, because a misconfigured location is
+    # exactly the condition that must stop a runtime rather than be worked around.
+    target = resolve_database_target(default_path=DEFAULT_DATABASE_PATH)
+    # Refused here rather than at the first `Database(...)`, so a disabled backend stops the
+    # process with its own message instead of surfacing later as a path that does not exist.
+    # There is deliberately no fallback: quietly using SQLite when someone configured
+    # PostgreSQL is #86's empty-healthy-store failure with a different cause.
+    target.require_enabled()
     return RuntimePaths(
         config=_env_path("QUANTBOT_CONFIG", DEFAULT_CONFIG_PATH),
-        database=_env_path("QUANTBOT_DB_PATH", DEFAULT_DATABASE_PATH),
+        database=target.path,
+        target=target,
         lock=_env_path("QUANTBOT_LOCK_PATH", DEFAULT_LOCK_PATH),
         daemon_lock=_env_path("QUANTBOT_LOCK_PATH", DEFAULT_LOCK_PATH).with_suffix(
             ".daemon.lock"
@@ -321,6 +347,20 @@ class Runtime:
             max_data_age_seconds=max_data_age_seconds(),
         )
 
+    def runtime_context(self) -> RuntimeContext:
+        """What this process is, for the deployed-state record (#190).
+
+        Built here because this is the layer that owns the settings and the opened database. The
+        persisted store identity comes from that exact database, so a cycle cannot describe a
+        different store from the one it writes to.
+        """
+        return RuntimeContext(
+            role=RuntimeRole.COORDINATOR,
+            store_identity=self.database.store_identity,
+            trading_mode=self.settings.TRADING_MODE.value,
+            process_started_at=PROCESS_STARTED_AT,
+        )
+
     def cycle(self) -> RunOnceCycle:
         return RunOnceCycle(
             database=self.database,
@@ -332,6 +372,7 @@ class Runtime:
             submitter=self.coordinator,
             metrics=self.metrics,
             max_data_age_seconds=max_data_age_seconds(),
+            runtime=self.runtime_context(),
         )
 
     async def aclose(self) -> None:

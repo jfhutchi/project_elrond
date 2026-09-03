@@ -24,7 +24,23 @@ KRONOS_MODEL_CONFIG_SHA256 = "5e0f6a605d5f81b5c9b559fe5cf716a1acb041c744e6f41bd0
 KRONOS_TOKENIZER_WEIGHT_SHA256 = "59d85f6af76a2c3b8240ea06cb21db4213b4eeca053f246b23e29cf832fc6bee"
 KRONOS_TOKENIZER_CONFIG_SHA256 = "2366e7ccfec76cbc19cf3c4c1b9c5d901be336ca1e83f2d2292c9bff381b77a2"
 SCORING_VERSION = "shadow-terminal-return-v1"
-KRONOS_WORKER_ENVIRONMENT_ID = "kronos-worker-py311-requirements-v1"
+
+#: The environment new forecasts are produced under. Mirrors `kronos_worker.WORKER_ENVIRONMENT_ID`
+#: -- the worker cannot import this module, so the pins exist twice and
+#: `test_the_two_copies_of_the_pinned_contract_agree` asserts they agree.
+KRONOS_WORKER_ENVIRONMENT_ID = "kronos-worker-py311-requirements-v2"
+
+#: Identities that remain readable but can no longer be produced (#200). A `KronosConfig` frozen
+#: inside an existing forecast row must keep validating: v1 forecasts were produced under
+#: `torch==2.5.1` and stay attributed to it permanently, per the #137 decision in
+#: `docs/worker-environment-identity.md`. Nothing can *run* under a retired identity, because the
+#: worker refuses a request whose `worker_environment_id` is not its own -- so the deserialisation
+#: allowance here cannot become a production path.
+#:
+#: Forecasts under different identities are not pooled without a bridging measurement. See
+#: `docs/worker-environment-identity.md` for the qualification actually run for #200 and what it
+#: found; the result is recorded there rather than restated here.
+RETIRED_KRONOS_WORKER_ENVIRONMENT_IDS = ("kronos-worker-py311-requirements-v1",)
 
 
 def _identity_hash(payload: object) -> str:
@@ -68,9 +84,10 @@ class KronosConfig(FrozenModel):
     device: Literal["cpu"] = "cpu"
     max_context: int = Field(default=512, ge=2, le=512)
     input_transform_version: Literal["ohlcv-no-amount-v1"] = "ohlcv-no-amount-v1"
-    worker_environment_id: Literal["kronos-worker-py311-requirements-v1"] = (
-        "kronos-worker-py311-requirements-v1"
-    )
+    worker_environment_id: Literal[
+        "kronos-worker-py311-requirements-v1",
+        "kronos-worker-py311-requirements-v2",
+    ] = "kronos-worker-py311-requirements-v2"
 
     @model_validator(mode="after")
     def require_small_pinned_model(self) -> Self:

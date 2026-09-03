@@ -24,6 +24,7 @@ from quantbot.storage.schema import (
     metadata,
     schema_version,
 )
+from quantbot.storage.target import DatabaseTarget, coerce_target
 
 #: The Alembic revision whose upgrade produces each schema version. Databases written before
 #: Alembic was introduced carry only the `schema_version` marker, so they are stamped at the
@@ -54,6 +55,9 @@ REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {
     22: "0022",
     23: "0023",
     24: "0024",
+    25: "0025",
+    26: "0026",
+    27: "0027",
 }
 
 
@@ -88,7 +92,8 @@ class DatabaseNotFoundError(FileNotFoundError):
             f"no database at {path}; opening a store does not create one. If this path is "
             "correct and the system is being installed for the first time, run "
             "`quantbot create-database` to bootstrap it deliberately. Otherwise the configured "
-            "path is wrong -- check QUANTBOT_DB_PATH and the working directory"
+            "target is wrong -- check QUANTBOT_DB_PATH or QUANTBOT_DATABASE_URL and the "
+            "working directory"
         )
 
 
@@ -155,7 +160,7 @@ class Database:
 
     def __init__(
         self,
-        path: str | Path,
+        path: str | Path | DatabaseTarget,
         *,
         busy_timeout_ms: int = 5000,
         may_migrate: bool = False,
@@ -179,7 +184,13 @@ class Database:
         """
         if busy_timeout_ms <= 0:
             raise ValueError("busy_timeout_ms must be positive")
-        self.path = Path(path).expanduser().resolve()
+        # A `DatabaseTarget` is accepted so callers can carry a backend-neutral location (#196),
+        # and refused here if it names a backend this build cannot open. Checked before anything
+        # touches the filesystem: a PostgreSQL URL must not silently become a SQLite file named
+        # after it, which is #86's empty-healthy-store failure arriving through a new door.
+        self.target = coerce_target(path)
+        self.target.require_enabled()
+        self.path = self.target.path.resolve()
         self.busy_timeout_ms = busy_timeout_ms
         existed = self.path.exists() and self.path.stat().st_size > 0
         if not existed and not may_create:
@@ -196,11 +207,19 @@ class Database:
         self.engine: Engine = create_engine(f"sqlite+pysqlite:///{self.path.as_posix()}")
         event.listen(self.engine, "connect", self._configure_connection)
         self._initialize_schema()
+        with self.engine.connect() as connection:
+            self.store_identity = str(
+                connection.execute(select(schema_version.c.store_identity)).scalar_one()
+            )
 
     @classmethod
-    def create(cls, path: str | Path, *, busy_timeout_ms: int = 5000) -> Database:
+    def create(
+        cls, path: str | Path | DatabaseTarget, *, busy_timeout_ms: int = 5000
+    ) -> Database:
         """Create a new store at head, refusing to touch one that already exists."""
-        location = Path(path).expanduser().resolve()
+        target = coerce_target(path)
+        target.require_enabled()
+        location = target.path.resolve()
         if location.exists() and location.stat().st_size > 0:
             raise FileExistsError(
                 f"{location} already holds a database; use Database.migrate to upgrade it, or "
@@ -211,12 +230,16 @@ class Database:
         )
 
     @classmethod
-    def migrate(cls, path: str | Path, *, busy_timeout_ms: int = 5000) -> Database:
+    def migrate(
+        cls, path: str | Path | DatabaseTarget, *, busy_timeout_ms: int = 5000
+    ) -> Database:
         """Upgrade an existing store to head. The only path in this module that may rewrite one.
 
         Deliberately not reachable by opening: a caller has to name this to get the authority.
         """
-        location = Path(path).expanduser().resolve()
+        target = coerce_target(path)
+        target.require_enabled()
+        location = target.path.resolve()
         if not location.exists() or location.stat().st_size == 0:
             raise FileNotFoundError(
                 f"{location} holds no database to migrate; use Database.create for a new one"
