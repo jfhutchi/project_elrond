@@ -48,9 +48,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import StrEnum
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    model_serializer,
+    model_validator,
+)
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
@@ -79,6 +87,9 @@ from quantbot.research.power import (
     luck_threshold,
 )
 from quantbot.research.sources import EvidenceBasis
+from quantbot.research.validation_campaign import (
+    ValidationCampaign,
+)
 from quantbot.storage.database import encode_utc
 from quantbot.storage.schema import (
     artifact_test_registrations,
@@ -133,6 +144,22 @@ PRIOR_CONSUMER = "cycles 2-10 (pre-v0.2, see REFUTED.md)"
 #: rather than wait to be released: nothing observes abandonment, so an explicitly-released-only
 #: reservation is the old permanent-consumption behaviour wearing a state column.
 RESERVATION_DAYS = 90
+
+#: How a validation campaign's selection appears in `search_runs`. Campaign burden is counted by
+#: matching this actor, so the ledger itself distinguishes a campaign selection from a
+#: candidate-generation search without a second table or a new column to disagree with it.
+VALIDATION_CAMPAIGN_ACTOR = "validation-campaign"
+VALIDATION_CAMPAIGN_ACTOR_VERSION = "1"
+
+#: Which role a campaign's ledger row is attributed to when its scenarios span several. The most
+#: protected role wins, because the burden that matters is the one spent on the data that cannot
+#: be spent twice. Ordering, not a set: a campaign touching a protected window is a claim on that
+#: window whatever else it also reads.
+_ROLE_PROTECTION_ORDER: tuple[str, ...] = (
+    "VALIDATION",
+    "PROTECTED_EVALUATION",
+    "FORWARD_PAPER",
+)
 
 
 class SearchOrigin(StrEnum):
@@ -330,6 +357,35 @@ class HypothesisDraft(FrozenModel):
     basis: EvidenceBasis
     proposed_by: Text
     prompt_version: str | None = None
+    #: The hostile-validation scenarios frozen with this question (#159). Selection freedom is
+    #: charged once through an append-only `search_runs` row; twelve scenarios chosen by one
+    #: frozen rule are one comparison, and redrawing after an outcome is what costs more.
+    validation_campaign: ValidationCampaign | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Omit `validation_campaign` entirely when absent, so old hashes do not move.
+
+        `content_hash` is `sha256(canonical_result_json(self))`, and `canonical_result_json`
+        serialises through `model_dump`, which includes fields left at `None`. Adding an
+        ordinary optional field would therefore have inserted `"validation_campaign":null` into
+        every registration's canonical form and changed the content hash of **every already
+        stored registration** -- which `_load` verifies against the stored value, so every one of
+        them would have failed to load.
+
+        Measured before writing this, not assumed: the draft used by `tests/unit/research/
+        test_runner.py` hashes to `7cd29b70...` on the commit before this field existed, and
+        `test_a_campaignless_draft_hashes_exactly_as_it_did_before_this_field_existed` pins that
+        literal. A registration made before #159 means exactly what it meant when it was made.
+
+        Omission rather than exclusion: `Field(exclude=True)` would drop the campaign from the
+        hash even when one is present, which would let the frozen selection change without
+        changing the registration's identity -- the opposite of what this field is for.
+        """
+        data = dict(handler(self))
+        if self.validation_campaign is None:
+            data.pop("validation_campaign", None)
+        return data
 
     @model_validator(mode="after")
     def validate_draft(self) -> Self:
@@ -590,6 +646,7 @@ class HypothesisRegistry:
             )
 
         self._verify_measured_search(draft)
+        self._verify_campaign_frozen(draft)
         trials = self._cumulative_trials(draft.search_cardinality)
 
         # #35, resolved: a verified count is *accepted* here and not *required*.
@@ -683,6 +740,166 @@ class HypothesisRegistry:
             if registration.draft.graph is not None
             and registration.draft.graph.graph_id == graph_id
         ]
+
+    def freeze_validation_campaign(self, campaign: ValidationCampaign, *, now: datetime) -> str:
+        """Record a campaign's scenario selection before any outcome can be seen (#159).
+
+        **What is being charged is selection freedom, not scenario count.** Twelve scenarios
+        produced by one frozen rule are one comparison: nobody chose them after seeing anything,
+        and the dispersion across them is the result rather than twelve chances to find a winner.
+        So one campaign is one row and one trial, whatever its length.
+
+        What costs more is redrawing. Reseeding, adding or removing a scenario, or moving a
+        window changes `campaign_id`, therefore changes `selection_search_id`, therefore writes a
+        *second* append-only row -- and the burden the next registration is judged against goes
+        up. That is the whole mechanism: the increment comes from the ledger having two rows, not
+        from anybody declaring that a redraw happened.
+
+        Idempotent by content address. Re-freezing the identical campaign verifies the existing
+        row and charges nothing further, so reopening or re-verifying a registration cannot
+        inflate its own burden. A different campaign presenting an existing `search_id` is
+        refused rather than accepted or silently overwritten: the row is append-only, and a
+        campaign that could rewrite another's record could hide its own selection freedom.
+
+        Returns the `search_id` the campaign is charged under.
+        """
+        datasets = {scenario.dataset for scenario in campaign.scenarios}
+        if len(datasets) != 1:
+            # One row carries one dataset, and that is what attributes a count to the window it
+            # spent. Splitting a campaign across rows would charge selection freedom once per
+            # dataset, and inventing a composite label would corrupt the attribution the column
+            # exists for. Refused until there is a design decision, rather than guessed at.
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                "a validation campaign is recorded as one search over one dataset; this one "
+                f"spans {', '.join(sorted(datasets))}",
+            )
+        dataset = datasets.pop()
+        role = max(
+            (scenario.data_role for scenario in campaign.scenarios),
+            key=_ROLE_PROTECTION_ORDER.index,
+        )
+        self._refuse_consumed_campaign_windows(campaign, dataset)
+        search_id = campaign.selection_search_id
+        existing = (
+            self._session.execute(
+                select(search_runs).where(search_runs.c.search_id == search_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            if str(existing["configuration_hash"]) != campaign.campaign_id:
+                raise RegistrationRefused(
+                    RefusalReason.TAMPERED,
+                    f"search run {search_id!r} already records campaign "
+                    f"{existing['configuration_hash']}, not {campaign.campaign_id}; a campaign "
+                    "cannot take over another selection's record",
+                )
+            return search_id
+        self._session.execute(
+            search_runs.insert().values(
+                search_id=search_id,
+                actor=VALIDATION_CAMPAIGN_ACTOR,
+                actor_version=VALIDATION_CAMPAIGN_ACTOR_VERSION,
+                candidates_evaluated=campaign.trial_charge,
+                dataset=dataset,
+                start_date=campaign.eligible_period.start.isoformat(),
+                end_date=campaign.eligible_period.end.isoformat(),
+                data_role=role,
+                started_at=encode_utc(now),
+                finished_at=encode_utc(now),
+                configuration_hash=campaign.campaign_id,
+                # The frozen design, so the selection can be reproduced from the ledger alone
+                # rather than only from a registration that may not exist yet.
+                detail_json=campaign.model_dump_json(),
+            )
+        )
+        return search_id
+
+    def _refuse_consumed_campaign_windows(
+        self, campaign: ValidationCampaign, dataset: str
+    ) -> None:
+        """A campaign cannot be frozen over a window whose outcome has already been seen.
+
+        This is the freeze-before-measurement property, and it is the one that makes the rest
+        mean anything: without it the lifecycle *read the protected result, then write a campaign
+        that fits it, then call the campaign preregistered* is available, and every burden count
+        below would be arithmetic about a fiction.
+
+        Only `CONSUMED` blocks, deliberately. `RESERVED` is a claim on data nobody has looked at,
+        so a campaign frozen while a reservation is live is still frozen before measurement --
+        and refusing there would make a second version of a hypothesis unable to declare
+        scenarios at all.
+        """
+        consumed = [
+            f"{row['dataset']} {row['start_date']}..{row['end_date']}"
+            for scenario in campaign.scenarios
+            for row in self._session.execute(
+                select(hypothesis_data_windows).where(
+                    hypothesis_data_windows.c.dataset == dataset,
+                    hypothesis_data_windows.c.state == WindowState.CONSUMED.value,
+                    hypothesis_data_windows.c.start_date <= scenario.period.end.isoformat(),
+                    hypothesis_data_windows.c.end_date >= scenario.period.start.isoformat(),
+                )
+            ).mappings()
+        ]
+        if consumed:
+            raise RegistrationRefused(
+                RefusalReason.CONTAMINATED_WINDOW,
+                "a validation campaign cannot be frozen over an already-consumed window: "
+                + "; ".join(sorted(set(consumed)))
+                + ". A selection made after its outcome was visible is not a preregistration, "
+                "whatever it is called",
+            )
+
+    def campaign_trials_spent(self) -> int:
+        """Selection freedom already charged to validation campaigns, read from the ledger.
+
+        Derived, never declared. A caller's `trial_charge=1` is a claim; this is the count of
+        append-only rows that actually exist, which is what makes a redraw cost something even
+        when the caller says it did not.
+        """
+        return int(
+            self._session.execute(
+                select(func.coalesce(func.sum(search_runs.c.candidates_evaluated), 0)).where(
+                    search_runs.c.actor == VALIDATION_CAMPAIGN_ACTOR
+                )
+            ).scalar_one()
+        )
+
+    def _verify_campaign_frozen(self, draft: HypothesisDraft) -> None:
+        """A registration carrying a campaign must name one the ledger already recorded.
+
+        Fails closed. Without the row the campaign is a design nobody committed to before the
+        outcome, which is the entire thing preregistration is for -- and its burden would not be
+        charged, so an uncharged selection would be judged against a bar that never saw it.
+        """
+        campaign = draft.validation_campaign
+        if campaign is None:
+            return
+        row = (
+            self._session.execute(
+                select(search_runs.c.configuration_hash).where(
+                    search_runs.c.search_id == campaign.selection_search_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{draft.hypothesis_id} carries validation campaign {campaign.campaign_id}, "
+                "which has no frozen search record; freeze the campaign before registering "
+                "against it, or the selection is preregistered only in the telling",
+            )
+        if str(row["configuration_hash"]) != campaign.campaign_id:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"{draft.hypothesis_id} cites search run "
+                f"{campaign.selection_search_id!r}, which records a different campaign",
+            )
 
     def register_artifact_test(
         self,
@@ -1410,7 +1627,16 @@ class HypothesisRegistry:
         artifact_spend = self._session.execute(
             select(func.coalesce(func.sum(artifact_test_registrations.c.trial_charge), 0))
         ).scalar_one()
-        return self._prior_trials + int(hypothesis_spend) + int(artifact_spend) + search_cardinality
+        # Campaign selection freedom, counted from the append-only ledger rather than from a
+        # column anyone can edit or a number a caller supplies (#159). A redraw is visible here
+        # as a second row, so the bar rises for everything registered afterwards.
+        return (
+            self._prior_trials
+            + int(hypothesis_spend)
+            + int(artifact_spend)
+            + self.campaign_trials_spent()
+            + search_cardinality
+        )
 
     def _blocking(self, dataset: str, start: date, end: date, *, now: date) -> list[RowMapping]:
         """Every window row that still holds a claim over this range, as of `now` (#22).
