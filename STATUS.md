@@ -1847,7 +1847,10 @@ whether or not the correlation guards fired.
 - [x] **~~Kronos criterion 9 (#36)~~ — CLOSED 2026-08-22.** H-2026-026 pre-registered before
       measurement, critic `PROCEED`, and the power gate refused it `UNDERPOWERED`: an IC of 0.15
       needs 4,485 observations against 688 available (57.3 independent after 12x inflation).
-      The refusal cost nothing — trials still 68, window still `UNTOUCHED`. **#36 is closed**;
+      The refusal cost nothing — trials still 68, and the window read `UNTOUCHED` (which was the
+      severity-1 at the top of this file, fixed the same day: `sip-us-equities-daily` reports
+      `EXHAUSTED` now. The conclusion is unchanged either way — a refused hypothesis consumes
+      nothing — but the reading quoted here is one the system no longer produces). **#36 is closed**;
       Sol's unanswered question on OHLC ordering is recorded disagreement in the thread, not an
       unmet criterion. The aligned correlation stays uncomputed: below the 0.375 detectable
       effect it is uninterpretable, and a number under that ceiling gets quoted without it.

@@ -17,14 +17,64 @@ rather than leaving them green against a script that exits non-zero for some unr
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 GUARD = REPO / "deploy" / "refuse-live-trading.sh"
+
+
+def _usable_bash() -> str | None:
+    """A `bash` that can actually run a script at a native path, proven rather than assumed.
+
+    `shutil.which("bash")` is not that question. On the `windows-latest` runner it resolves to
+    `C:\\Windows\\System32\\bash.exe`, the WSL launcher, which on a host with no distribution
+    installed prints a UTF-16 "use `wsl --install`" message and exits 1 -- so every case here ran
+    against a shell that never saw the guard. It was found by CI, and only because these tests
+    assert the *named* refusal: a suite checking `returncode == 1` would have gone green on
+    Windows off the back of the stub's failure, which is the defect this whole file exists about
+    arriving through the file itself.
+
+    So the probe runs a trivial script the same way `run_guard` runs the real one -- argv, native
+    path, no `-c` -- and requires the output back. A `bash` that cannot do that is not a bash for
+    this purpose, whatever it is called.
+    """
+    candidates = [
+        shutil.which("bash"),
+        # Git for Windows, which the runner has even when `bash` on PATH is the WSL stub.
+        r"C:\Program Files\Git\bin\bash.exe",
+        r"C:\Program Files (x86)\Git\bin\bash.exe",
+    ]
+    for candidate in candidates:
+        if candidate is None or not Path(candidate).exists():
+            continue
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                probe = Path(directory) / "probe.sh"
+                # Bytes, so this is LF on every platform. A CRLF script is the `$'\r': command
+                # not found` failure `.gitattributes` exists to prevent, and a probe that tripped
+                # over it would report a working bash as unusable.
+                probe.write_bytes(b"printf ok\n")
+                result = subprocess.run(
+                    [candidate, str(probe)],
+                    capture_output=True,
+                    text=True,
+                    timeout=60,
+                    check=False,
+                )
+        except OSError:
+            continue
+        if result.returncode == 0 and result.stdout.strip() == "ok":
+            return candidate
+    return None
+
+
+BASH = _usable_bash()
 
 #: A paper env file with nothing objectionable in it. Every case below is this plus one line, so
 #: a refusal can only be attributable to the line under test.
@@ -37,16 +87,27 @@ ALPACA_PAPER_API_KEY=not-a-real-key
 EXPECTED_ACCOUNT_ID=PA000000
 """
 
+# Skipping is a Windows-only concession. The guard is a Linux deployment artifact, so on a POSIX
+# host -- which includes the `ubuntu-latest` runner, where this protection has to be genuinely
+# exercised -- a missing usable bash is a failure rather than a quiet pass. A safety check that
+# silently stops being tested everywhere is the same defect as one that silently stops working.
+if BASH is None and os.name != "nt":
+    raise RuntimeError(
+        "no bash on a POSIX host: the deployment guard cannot be exercised, and skipping here "
+        "would leave it untested on the only platform that runs it"
+    )
+
 pytestmark = pytest.mark.skipif(
-    shutil.which("bash") is None,
-    reason="the guard is a bash script; there is no bash on this host to run it with",
+    BASH is None,
+    reason="no bash on this Windows host that can run a script (the WSL stub does not count)",
 )
 
 
 def run_guard(env_file: Path) -> subprocess.CompletedProcess[str]:
     """Invoke the guard exactly as a deployment script does."""
+    assert BASH is not None  # guaranteed by pytestmark; narrows the type
     return subprocess.run(
-        ["bash", str(GUARD), str(env_file)],
+        [BASH, str(GUARD), str(env_file)],
         capture_output=True,
         text=True,
         timeout=30,
@@ -54,9 +115,15 @@ def run_guard(env_file: Path) -> subprocess.CompletedProcess[str]:
     )
 
 
-def write_env(tmp_path: Path, body: str) -> Path:
+def write_env(tmp_path: Path, body: str, *, newline: str = "\n") -> Path:
+    """Write an env file with explicit line endings.
+
+    LF by default rather than the platform's, so a case means the same thing on both runners.
+    `newline` exists for the one test that deliberately supplies CRLF -- the shape a file gets
+    when it is edited on Windows and copied to the Pi.
+    """
     target = tmp_path / "quantbot.env"
-    target.write_text(body, encoding="utf-8")
+    target.write_bytes(body.replace("\n", newline).encode("utf-8"))
     return target
 
 
@@ -191,6 +258,26 @@ def test_a_meaningless_live_trading_line_warns_without_refusing(tmp_path: Path) 
     assert result.returncode == 0, result.stderr
     assert "configures nothing" in result.stderr
     assert "TRADING_MODE" in result.stderr
+
+
+def test_a_crlf_env_file_does_not_get_a_live_mode_past_the_guard(tmp_path: Path) -> None:
+    """A file edited on Windows and copied to the Pi arrives with CRLF. `\\r` is in POSIX
+    `[:space:]` so the trailing-whitespace strip handles it -- asserted rather than assumed,
+    because this is the family of defect `.gitattributes` was added for."""
+    body = PAPER.replace("TRADING_MODE=PAPER", "TRADING_MODE=LIVE")
+
+    result = run_guard(write_env(tmp_path, body, newline="\r\n"))
+
+    assert result.returncode == 1
+    assert "TRADING_MODE" in result.stderr
+
+
+def test_a_crlf_paper_file_is_still_accepted(tmp_path: Path) -> None:
+    """The control: CRLF must not become a refusal of its own, or every Windows-edited file
+    would be rejected and the guard would be removed by whoever hit that."""
+    result = run_guard(write_env(tmp_path, PAPER, newline="\r\n"))
+
+    assert result.returncode == 0, result.stderr
 
 
 def test_a_missing_env_file_is_an_error_rather_than_a_pass(tmp_path: Path) -> None:
