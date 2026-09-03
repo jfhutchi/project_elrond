@@ -166,7 +166,14 @@ def main() -> int:
         print(f"{TOKEN_ENV} is not set; refusing to expose an unguarded control surface")
         return 2
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 8081
-    database = Database(os.environ.get("QUANTBOT_DB_PATH", "quantbot.db"))
+    # Resolved, so a URL-configured store is the one this surface reads and clears against
+    # (#196). A control server pointed at a different database than the daemon would report
+    # readiness for a system nobody is running.
+    from quantbot.storage.target import resolve_database_target
+
+    target = resolve_database_target()
+    target.require_enabled()
+    database = Database(target)
 
     async def measure():
         # No broker adapter here on purpose: this process should not hold trading credentials
