@@ -59,6 +59,7 @@ from quantbot.research.manifest import (
     write_experiment_manifest,
 )
 from quantbot.research.memory import RecordKind, ResearchRecord, Verdict
+from quantbot.research.power import supports_registered_direction
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
 
 
@@ -400,9 +401,22 @@ class ExperimentRunner:
             # not survived, or the probes would be decorative.
             verdict = OutcomeVerdict.REFUTED
             detail = f"adversarial probes objected: {', '.join(measured.probes_failed)}"
-        elif abs(statistic) >= threshold:
+        elif supports_registered_direction(statistic, threshold):
             verdict = OutcomeVerdict.SURVIVED
             detail = f"t={statistic} cleared the {threshold} luck bar"
+        elif statistic <= -threshold:
+            # Signed, not `abs()`. Every registration claims the effect *exceeds* its null, so a
+            # large negative statistic is overwhelming evidence against the preregistered
+            # direction -- and the previous `abs(statistic) >= threshold` called it SURVIVED.
+            # Separated from the ordinary miss below because the two are different findings and
+            # a later reader deciding whether to keep pursuing the mechanism needs to tell them
+            # apart: one says "no signal", this says "signal, pointing the other way".
+            verdict = OutcomeVerdict.REFUTED
+            detail = (
+                f"t={statistic} is significant in the direction opposite to the registered "
+                f"claim, which is evidence against it rather than for it; the {threshold} luck "
+                "bar is one-sided because the registration is"
+            )
         else:
             verdict = OutcomeVerdict.REFUTED
             detail = f"t={statistic} did not clear the {threshold} luck bar"
@@ -469,11 +483,24 @@ class ExperimentRunner:
                 elif result.probes_failed:
                     verdict = ArtifactOutcomeVerdict.REFUTED
                     detail = "artifact probes objected: " + ", ".join(result.probes_failed)
-                elif abs(result.test_statistic) >= test.power.luck_threshold_z:
+                elif supports_registered_direction(
+                    result.test_statistic, test.power.luck_threshold_z
+                ):
                     verdict = ArtifactOutcomeVerdict.SURVIVED
                     detail = (
                         f"t={result.test_statistic} cleared the artifact test's frozen "
                         f"{test.power.luck_threshold_z} luck bar"
+                    )
+                elif result.test_statistic <= -test.power.luck_threshold_z:
+                    # The same one-sided rule as the primary claim, for the same reason. A
+                    # component contrast is registered as "this component contributes", so a
+                    # large negative statistic says it *costs*, which is a refutation.
+                    verdict = ArtifactOutcomeVerdict.REFUTED
+                    detail = (
+                        f"t={result.test_statistic} is significant in the direction opposite to "
+                        "the registered artifact claim, which is evidence against it rather "
+                        f"than for it; the {test.power.luck_threshold_z} bar is one-sided "
+                        "because the registration is"
                     )
                 else:
                     verdict = ArtifactOutcomeVerdict.REFUTED

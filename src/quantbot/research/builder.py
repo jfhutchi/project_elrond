@@ -47,7 +47,12 @@ from quantbot.research.manifest import (
     StatisticalPlan,
     StatisticalTest,
 )
-from quantbot.research.power import ComparisonStructure, Estimand, PowerVerdict
+from quantbot.research.power import (
+    ComparisonStructure,
+    Estimand,
+    PowerVerdict,
+    supports_registered_direction,
+)
 from quantbot.research.registry import Registration
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -310,10 +315,17 @@ class ExperimentOutcome(FrozenModel):
                 )
             if self.test_statistic is None:
                 raise ValueError("a survivor must report the statistic it cleared the bar with")
-            if abs(self.test_statistic) < self.plan.statistics.luck_threshold_z:
+            # Signed. This validator is the structural backstop behind `runner._grade`: even if
+            # a caller constructs an `ExperimentOutcome` directly, a SURVIVED verdict cannot
+            # carry a statistic that fails its own one-sided bar. It read `abs(...)`, so it
+            # would have certified a t of -9 against a claim of "greater than null" -- the same
+            # inversion as the grader, in the type that exists to make the grader unnecessary.
+            if not supports_registered_direction(
+                self.test_statistic, self.plan.statistics.luck_threshold_z
+            ):
                 raise ValueError(
-                    f"a survivor must clear its own frozen bar: |{self.test_statistic}| < "
-                    f"{self.plan.statistics.luck_threshold_z}"
+                    f"a survivor must clear its own frozen bar in the registered direction: "
+                    f"{self.test_statistic} < {self.plan.statistics.luck_threshold_z}"
                 )
         return self
 

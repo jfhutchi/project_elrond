@@ -504,6 +504,32 @@ def assess(
     )
 
 
+def supports_registered_direction(statistic: Decimal, threshold: Decimal) -> bool:
+    """Whether a measured statistic supports the claim, rather than merely being large.
+
+    **Every hypothesis this schema can express is one-sided in the positive direction.**
+    `EffectSpecification.validate_effect` refuses `expected <= null_value` and
+    `minimum_practical <= null_value`, so there is no way to register "the effect is negative"
+    or "the effect differs from the null in either direction". A registration always claims
+    *the effect exceeds the null*, and the test statistic is signed evidence about exactly that
+    claim: positive means above the null, negative means below it.
+
+    So the comparison is signed. `abs(statistic) >= threshold` was the previous rule and it is
+    unsafe here: a t of -9 against a claim of "greater than null" is overwhelming evidence
+    **against** the preregistered direction, and calling it `SURVIVED` inverts the finding. That
+    is not a hypothetical -- it is the failure mode this project exists to be resistant to,
+    sitting inside the grader that is supposed to enforce it.
+
+    **If two-sided or negative-direction hypotheses are ever added**, this function is where the
+    decision has to be made explicitly rather than inherited. It cannot stay a single signed
+    comparison, because a two-sided claim is genuinely served by `abs()` and a one-sided claim
+    genuinely is not, and the caller would then have to pass the registered direction through.
+    `test_the_schema_cannot_express_a_hypothesis_this_grading_would_misread` fails the moment
+    the schema stops enforcing one-sidedness, so this comment cannot go quietly out of date.
+    """
+    return statistic >= threshold
+
+
 def explain(assessment: PowerAssessment) -> str:
     """A refusal in the units the hypothesis used, not in abstract sample counts."""
     if assessment.verdict is PowerVerdict.UNECONOMIC:

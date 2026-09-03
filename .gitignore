@@ -31,3 +31,13 @@ crypto.lock
 crypto-probe.db
 crypto-probe.lock
 research/stocks.db
+
+# Local agent-tooling conveniences. `.codex-read-skills.cmd` was committed in 6bc3e4b (a
+# catch-all "latest" commit), was referenced by nothing, and only ran `type` over three
+# SKILL.md files under `C:\Users\JHutc\...` -- another machine's home directory, one of them
+# pinned to a plugin cache version. It could not work for anyone else and had no project
+# runtime purpose. Scratch files that describe one workstation do not belong in a repository
+# two agents and two machines share.
+.codex-read-skills.cmd
+.codex/
+.agents/
