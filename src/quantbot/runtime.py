@@ -72,6 +72,7 @@ from quantbot.operations import (
     evaluate_operational_health,
     measure_readiness,
 )
+from quantbot.operations.deployment import RuntimeContext, RuntimeRole
 from quantbot.operations.protection import (
     PositionProtectionDaemonRunner,
     PositionProtectionSupervisor,
@@ -104,6 +105,12 @@ DEFAULT_LOCK_PATH = "quantbot.lock"
 DEFAULT_REPORTS_DIR = "reports"
 DEFAULT_MAX_DATA_AGE_SECONDS = 86_400
 CREDENTIALS_MISSING = "PAPER_CREDENTIALS_NOT_CONFIGURED"
+
+#: When this interpreter started, captured at import so every observation from one process
+#: reports the same start. Read from the clock rather than the OS process table: `psutil` is not
+#: a dependency and the exact boot instant does not matter -- what matters is that two
+#: coordinators on one host get two different instance ids, and two imports cannot share one.
+PROCESS_STARTED_AT = datetime.now(UTC)
 
 
 class RuntimeConfigurationError(RuntimeError):
@@ -321,6 +328,20 @@ class Runtime:
             max_data_age_seconds=max_data_age_seconds(),
         )
 
+    def runtime_context(self) -> RuntimeContext:
+        """What this process is, for the deployed-state record (#190).
+
+        Built here because this is the layer that owns the settings and the opened database. The
+        persisted store identity comes from that exact database, so a cycle cannot describe a
+        different store from the one it writes to.
+        """
+        return RuntimeContext(
+            role=RuntimeRole.COORDINATOR,
+            store_identity=self.database.store_identity,
+            trading_mode=self.settings.TRADING_MODE.value,
+            process_started_at=PROCESS_STARTED_AT,
+        )
+
     def cycle(self) -> RunOnceCycle:
         return RunOnceCycle(
             database=self.database,
@@ -332,6 +353,7 @@ class Runtime:
             submitter=self.coordinator,
             metrics=self.metrics,
             max_data_age_seconds=max_data_age_seconds(),
+            runtime=self.runtime_context(),
         )
 
     async def aclose(self) -> None:

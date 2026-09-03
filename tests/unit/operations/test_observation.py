@@ -294,6 +294,10 @@ def _staged_at_v20(path) -> None:  # type: ignore[no-untyped-def]
     import sqlite3
 
     connection = sqlite3.connect(path)
+    connection.execute("ALTER TABLE schema_version DROP COLUMN store_identity")
+    connection.execute(
+        "ALTER TABLE runtime_deployments RENAME COLUMN store_identity TO database_fingerprint"
+    )
     connection.execute("DROP TABLE session_observations")
     connection.execute("UPDATE schema_version SET version = 20")
     connection.execute("UPDATE alembic_version SET version_num = '0020'")

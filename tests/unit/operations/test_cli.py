@@ -31,6 +31,7 @@ from tests.support import measured
         ["hypotheses"],
         ["register-hypothesis", "--draft", "d.json", "--critique", "c.json"],
         ["research-status"],
+        ["deployment-status"],
         ["ingestion-status"],
         ["ingestion-status", "--stale-after-hours", "24"],
         ["integrity-sweep"],

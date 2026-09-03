@@ -96,6 +96,10 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
         "--subsystem", help="limit to one subsystem, e.g. risk, broker, safety, market-data"
     )
     commands.add_parser("research-status")
+    # #190. The command that answers "what is actually running?" without filesystem
+    # archaeology. Read-only: asking must not create an observation, or the act of checking
+    # would put a coordinator in the record that was never trading.
+    commands.add_parser("deployment-status")
     # #198. Read-only by construction: it opens no run, moves no cursor and records no
     # incident. A status command that wrote history would be the worst thing to run while
     # trying to work out what happened to collection.
@@ -797,6 +801,16 @@ def main(
                     "any other analysis is EXPLORATORY and is not evidence"
                 ),
             }
+        elif args.command == "deployment-status":
+            # Aliased: `research.summarize` is already bound in this scope for `hypotheses`,
+            # and two functions of that name mean two different things here.
+            from quantbot.operations.deployment import DeploymentRegistry
+            from quantbot.operations.deployment import summarize as summarize_deployment
+
+            with active.database.transaction() as session:
+                result = summarize_deployment(
+                    DeploymentRegistry(session).status(now=datetime.now(UTC))
+                )
         elif args.command == "ingestion-status":
             # Function-scope import for the same reason as the research commands: the kill
             # switch lives in this file and must keep working when anything else does not.
