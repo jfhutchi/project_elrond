@@ -206,6 +206,8 @@ from quantbot.research.recombination_evaluation import (
     ComparisonRefused,
     GenerationEfficiency,
     GenerationPathMetrics,
+    MetricComparison,
+    MetricOutcome,
     compare_generation_paths,
 )
 from quantbot.research.registry import (
@@ -311,6 +313,8 @@ __all__ = [
     "ComparisonRefused",
     "GenerationEfficiency",
     "GenerationPathMetrics",
+    "MetricComparison",
+    "MetricOutcome",
     "compare_generation_paths",
     "IdentificationArm",
     "IdentificationMethod",
