@@ -220,6 +220,12 @@ else
   echo "     $ENV_FILE already exists, left untouched."
 fi
 
+# An existing env file is left untouched above, so writing a paper one on first run is not a
+# guarantee about what is there on the tenth. This installer had no live-trading check at all
+# until 2026-09-03 -- the same file the Omen installer checked with a grep that matched nothing.
+sudo bash "$QUANTBOT_HOME/deploy/refuse-live-trading.sh" "$ENV_FILE" \
+  || fail "$ENV_FILE did not pass the live-trading check (reason above); not installing the daemon."
+
 say "7/7  Installing the systemd service"
 if [ "$INSTALL_MODE" = uv ]; then
   EXEC_START="ExecStart=$HOME/.local/bin/uv run quantbot daemon"

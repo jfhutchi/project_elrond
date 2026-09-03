@@ -53,11 +53,20 @@ two settings the code actually reads (`config.py`), and both already default to 
 The units read the file via `EnvironmentFile`; never put a credential in a unit file, which is
 world-readable.
 
-> **This line named `LIVE_TRADING` until 2026-09-02, and so does `setup.sh:25`.** No such setting
-> exists — `Settings` ignores unknown variables — so the script's pre-flight check greps for a
-> name nothing reads and would pass an env file that really did set `TRADING_MODE=LIVE`. The
-> refusal in `config.py` is the boundary that holds; the one in `setup.sh` is decoration.
-> Recorded in `docs/node-deployment.md` under *Safety*, with the fix. Not yet applied.
+`setup.sh` refuses to install against a credential file that says otherwise, via
+`deploy/refuse-live-trading.sh`. Check one yourself at any time:
+
+```bash
+bash deploy/refuse-live-trading.sh ~/.config/quantbot/quantbot.env
+```
+
+> **This line named `LIVE_TRADING` until 2026-09-03, and so did `setup.sh:25`.** No such setting
+> exists — `Settings` ignores unknown variables — so the pre-flight check grepped for a name
+> nothing reads, and would have passed an env file that really did set `TRADING_MODE=LIVE` while
+> printing that it refused. The refusal in `config.py` was the boundary that held; the one here
+> was decoration. Now shared with the Pi installer, which had no check at all, and covered by
+> `tests/unit/test_deployment_live_trading_guard.py`. See `docs/node-deployment.md` under
+> *Safety*.
 
 ## Install
 

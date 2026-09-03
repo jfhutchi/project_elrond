@@ -159,28 +159,45 @@ every reachable port has to be documented in N13 with the reason it is open.
 
 Live trading is untouched by all of this. Installing a node must never enable it.
 
-> **⚠ The existing guard does not guard anything. Found 2026-09-02, not yet fixed.**
->
-> This section said "`deploy/omen/setup.sh` already refuses to deploy against an env file that
-> sets it". The script does contain a check (`setup.sh:25`), and the check greps for
-> `LIVE_TRADING=true`. **There is no `LIVE_TRADING` setting.** `Settings` reads `TRADING_MODE`
-> (`PAPER`/`LIVE`) and `LIVE_TRADING_ACKNOWLEDGED`, with `extra="ignore"`, so a variable named
-> `LIVE_TRADING` is discarded by the config layer and matched by nothing else.
->
-> The regex also cannot match `LIVE_TRADING_ACKNOWLEDGED=true`, because it requires `=`
-> immediately after `LIVE_TRADING`. So an env file setting `TRADING_MODE=LIVE` and
-> `LIVE_TRADING_ACKNOWLEDGED=true` passes the guard silently, and the deployment script installs
-> the units reporting that it refused to.
->
-> The real boundary is elsewhere and is intact — `TradingMode.LIVE` without acknowledgement is
-> refused in `config.py:140`, and no agent may supply live credentials — so this is a guard that
-> proves nothing, not an open door. It is exactly the defect class CLAUDE.md's engineering
-> standard is written about: *a check that passes for a reason unrelated to the property it
-> claims*. The fix is to grep for `TRADING_MODE` and `LIVE_TRADING_ACKNOWLEDGED`, and it belongs
-> in this installer as well as in the new one.
+`deploy/refuse-live-trading.sh` is the check, and **both** installers call it before installing
+anything. Run it directly against a credential file at any time:
 
-`deploy/pi/setup.sh` writes `TRADING_MODE=PAPER` and `LIVE_TRADING_ACKNOWLEDGED=false` into the
-env file it generates, which is a real default rather than a check.
+```bash
+bash deploy/refuse-live-trading.sh ~/.config/quantbot/quantbot.env
+```
+
+It refuses a present-and-not-`PAPER` `TRADING_MODE` or `BROKER_ENVIRONMENT`, and any spelling of
+`LIVE_TRADING_ACKNOWLEDGED` that pydantic reads as true. Absence is accepted, because both
+settings already default to `PAPER`. A lowercase `paper` is refused: `TradingMode` is a StrEnum
+whose only value is `PAPER`, so anything else fails to parse, and a value that would crash the
+daemon at startup should not get as far as being installed. Exit 1 is *"looked, and no"*; exit 2
+is *"could not look"*, kept distinct so an unreadable file cannot read as a clean one.
+
+> **Fixed 2026-09-03. What it replaced is worth keeping, because it is this file's own failure
+> mode.** This section used to say "`deploy/omen/setup.sh` already refuses to deploy against an
+> env file that sets it". The script did contain a check — and the check grepped for
+> `LIVE_TRADING=true`. **There is no `LIVE_TRADING` setting.** `Settings` reads `TRADING_MODE`
+> and `LIVE_TRADING_ACKNOWLEDGED` with `extra="ignore"`, so a variable named `LIVE_TRADING` is
+> discarded by the config layer and read by nothing else in the tree. The regex could not match
+> `LIVE_TRADING_ACKNOWLEDGED` either, because it required `=` immediately after `LIVE_TRADING`.
+> An env file setting `TRADING_MODE=LIVE` passed silently while the script reported that it had
+> refused.
+>
+> `deploy/pi/setup.sh` was worse and quieter: it had **no** check. It writes a paper env file,
+> but only `if [ ! -f "$ENV_FILE" ]`, so an existing live one survived untouched.
+>
+> The real boundary was intact throughout — `TradingMode.LIVE` without acknowledgement is refused
+> in `config.py:140`, and no agent may supply live credentials — so this was a guard that proved
+> nothing rather than an open door. It is exactly the class CLAUDE.md's engineering standard is
+> written about: *a check that passes for a reason unrelated to the property it claims*.
+>
+> One file with two callers, rather than two copies, because duplicated safety checks drift and
+> the drift is invisible until the day it matters. `tests/unit/test_deployment_live_trading_guard.py`
+> asserts the **named** refusal with a control for each case, and was confirmed to fail — 18 of
+> 31 cases — when the old logic was put back.
+
+`deploy/pi/setup.sh` also writes `TRADING_MODE=PAPER` and `LIVE_TRADING_ACKNOWLEDGED=false` into
+the env file it generates, which is a real default in addition to the check.
 
 Adding a node adds capacity, never authority. A new node cannot clear a kill switch, cannot
 ratify a mandate, and cannot become coordinator by describing itself as one.

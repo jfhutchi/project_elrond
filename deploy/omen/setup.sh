@@ -22,9 +22,11 @@ mode="$(stat -c '%a' "${env_file}")"
 [ "${mode}" = "600" ] || fail "${env_file} is mode ${mode}; it must be 600"
 
 # The daemon must never be brought up with live trading enabled by a deployment script.
-if grep -Eqi '^[[:space:]]*LIVE_TRADING[[:space:]]*=[[:space:]]*(1|true|yes)' "${env_file}"; then
-  fail "LIVE_TRADING is enabled in ${env_file}; only the human operator may authorize real capital"
-fi
+#
+# This was an inline grep for `LIVE_TRADING=true` until 2026-09-03, and there is no such setting
+# -- so it passed an env file that really did set `TRADING_MODE=LIVE`, while printing that it had
+# refused. Shared with `deploy/pi/setup.sh` now, because two copies of a safety check drift.
+bash "${here}/../refuse-live-trading.sh" "${env_file}" || exit 1
 
 if [ "$(loginctl show-user "${USER}" --property=Linger --value 2>/dev/null || echo no)" != "yes" ]; then
   fail "lingering is off, so these services would stop when your last session ends.
