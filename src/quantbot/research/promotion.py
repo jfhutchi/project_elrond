@@ -76,6 +76,7 @@ from quantbot.research.power import (
     PowerAssessment,
     luck_threshold,
     quantize,
+    supports_registered_direction,
 )
 from quantbot.research.power import assess as assess_power
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
@@ -290,10 +291,23 @@ def survivor_objections(outcome: ExperimentOutcome) -> tuple[str, ...]:
         )
     if outcome.test_statistic is None:
         objections.append("no test statistic was reported")
-    elif abs(outcome.test_statistic) < plan.luck_threshold_z:
+    elif not supports_registered_direction(outcome.test_statistic, plan.luck_threshold_z):
+        # Signed, and this is the gate that matters most: it is what stands between a result and
+        # `RESEARCH_SURVIVOR`, and therefore between a result and shadow, paper and M1. It read
+        # `abs(...)`, so a strategy measured at t=-9 against its own registered claim -- strong
+        # evidence it does the opposite of what was predicted -- cleared it and was reported as
+        # having no objections. The bar is one-sided because every registration this schema can
+        # express is; see `power.supports_registered_direction`.
         objections.append(
-            f"|{outcome.test_statistic}| does not clear the {plan.luck_threshold_z} bar frozen "
-            f"for {plan.cumulative_trials} cumulative trials"
+            f"a test statistic of {outcome.test_statistic} does not clear the "
+            f"{plan.luck_threshold_z} bar frozen for {plan.cumulative_trials} cumulative trials "
+            "in the direction the hypothesis registered"
+            + (
+                "; it is significant in the opposite direction, which is evidence against the "
+                "claim rather than for it"
+                if outcome.test_statistic <= -plan.luck_threshold_z
+                else ""
+            )
         )
     return tuple(objections)
 
@@ -1040,15 +1054,26 @@ def assess_forward_evidence(
             )
 
     if report is not None:
-        if abs(report.excess_t) < threshold:
+        # Signed, like every other bar in this file. Both of these asked `abs(t) < threshold`,
+        # which reads a strongly *negative* t -- the strategy significantly behind its benchmark,
+        # or significant negative alpha -- as clearing a bar whose stated purpose is directional.
+        #
+        # This is narrower than the survivor gate's version of the same defect: `_forward_verdict`
+        # separately refuses a non-positive `excess_sharpe` or `alpha_bps_per_session` as
+        # `FORWARD_NEGATIVE`, so no wrong *verdict* could be reached through here. What was wrong
+        # was the reported reason: a strategy losing significantly to its benchmark had no
+        # objection recorded on these lines, so the evidence record understated the case against
+        # it. Making them signed can only ever add objections.
+        if not supports_registered_direction(report.excess_t, threshold):
             blocking.append(
                 f"an excess-return t of {report.excess_t} does not clear the {threshold} bar "
-                f"frozen for {cumulative_trials} cumulative trials"
+                f"frozen for {cumulative_trials} cumulative trials in the strategy's favour"
             )
-        if abs(report.alpha_t) < threshold:
+        if not supports_registered_direction(report.alpha_t, threshold):
             blocking.append(
                 f"an alpha t of {report.alpha_t} against beta {report.beta} does not clear the "
-                f"{threshold} bar; a positive excess that is index exposure is not an edge"
+                f"{threshold} bar in the strategy's favour; a positive excess that is index "
+                "exposure is not an edge, and negative alpha is not one either"
             )
 
     return ForwardEvidence(
