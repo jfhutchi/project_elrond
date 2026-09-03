@@ -41,8 +41,22 @@ jobs:
         os: [ubuntu-latest, windows-latest]
     timeout-minutes: 30
     env:
-      # A test that reaches for real credentials should fail loudly rather than find some.
-      QUANTBOT_LIVE_TRADING: "false"
+      # `QUANTBOT_LIVE_TRADING: "false"` stood here until 2026-09-03, under a comment saying a
+      # test reaching for real credentials should fail loudly rather than find some. It
+      # configured nothing: `Settings` reads `TRADING_MODE` and `LIVE_TRADING_ACKNOWLEDGED` with
+      # `extra="ignore"`, so that name was discarded on arrival. The same defect was in
+      # `deploy/omen/setup.sh`'s guard, and finding it here too is worse -- this file exists to
+      # be the check that does not trust the party it judges.
+      #
+      # These are the settings the code actually reads, and they restate the defaults rather
+      # than adding protection. **What makes the suite incapable of reaching a broker is that
+      # this workflow references no secrets at all**, which is a property of the file and not of
+      # its environment block. Pinned anyway, so a runner with something inherited in its
+      # environment cannot quietly change what the suite runs as.
+      TRADING_MODE: PAPER
+      BROKER_ENVIRONMENT: PAPER
+      LIVE_TRADING_ACKNOWLEDGED: "false"
+      KILL_SWITCH: "true"
       UV_LINK_MODE: copy
     steps:
       - uses: actions/checkout@v7
