@@ -86,7 +86,21 @@ simply exposes more capital to it. The justification for the fix is capital safe
 drawdown is frozen, so no drawdown-based release can ever fire. Measured byte-identical to the
 broken policy at every resume threshold.
 
-Deploying it to the live config is an operator decision: it restarts the qualification window.
+> **⚠ SUPERSEDED 2026-08-30 by #72; corrected here 2026-09-03.** This line read "Deploying it to
+> the live config is an operator decision: it restarts the qualification window." §6c carried the
+> same sentence and was corrected; this copy at the top of the file, which is the one every
+> session reads first, was not.
+>
+> **Paper deployment moves no real capital, so it is not a human gate.** Under #72 it is an agent
+> decision taken against a versioned project default and labelled as one, after the required gates
+> pass. Restarting the 30-day qualification window is a real evidence cost to weigh — that is
+> research accounting, not authority — and weighing it is the agent's job.
+>
+> The real-capital boundary is unchanged and lives elsewhere: `TRADING_MODE=PAPER` with
+> `LIVE_TRADING_ACKNOWLEDGED=false`, and only a human may move either.
+>
+> **This correction is not a reason to deploy v1.3.0.** Its stated justification was retracted (see
+> START HERE and §7); what changed here is who decides, not whether the case holds.
 
 
 Run these two first. They take a minute and tell you whether anything is on fire:
@@ -1914,6 +1928,10 @@ whether or not the correlation guards fired.
       measured window. Vol targeting still reduces drawdown (16/18 assets, p=0.0007), so the case
       for v1.3.0 is prospective risk management rather than repairing a config that breaches its
       own rule — a weaker case, against the same cost of restarting the 30-day window.
+      **Whose decision: the agent's, under #72** — paper deployment moves no real capital. The
+      qualification reset is the cost to weigh, not a human gate to wait at. Weighing it needs a
+      fact this repository cannot supply: whether authoritative forward evidence for v1.2.0
+      actually exists to be reset. That is #190, and it comes first.
 - [ ] **Automate halt resumption** (cycle 11 S4) — worth more than any signal tested
 - [ ] **Recalibrate the cost model** from 5bps — deliberately NOT done yet. Two independent
       estimates say the assumption is 5-20x too high (quoted NBBO 0.26-3.31bps; realised fills
