@@ -714,6 +714,84 @@ class HypothesisRegistry:
         row = self._row(hypothesis_id, version)
         return None if row is None else Registration.model_validate_json(str(row["document_json"]))
 
+    def _load_intact_registration(
+        self, hypothesis_id: str, version: int
+    ) -> tuple[Registration, str]:
+        """The stored registration, proven intact against the hash frozen beside it (#159).
+
+        `get()` parses `document_json` and stops there, which is fine for a read and is not
+        enough for an execution path. The store keeps two things about a registration: the
+        document, and the `content_hash` column recorded when it was frozen. Trusting the
+        document alone makes an edit to it invisible -- the parsed object is self-consistent, so
+        its own `content_hash` property agrees with the edited content, and a caller presenting
+        that same edited hash matches perfectly. Nothing in that chain ever consults the number
+        the store actually froze.
+
+        So both are read, and the recomputed hash must equal the stored column before the
+        registration is handed to anything. A disagreement is refused, never repaired: the two
+        values disagreeing is precisely the evidence that one of them is not what was frozen,
+        and nothing in here can tell which.
+
+        This is the single authoritative loader. `verify_for_execution` and `resolve_for_run`
+        both go through it rather than each spelling out what an intact stored registration is,
+        because two definitions of that is how one execution path comes to accept what the other
+        refuses.
+
+        Returns the registration and the store's own frozen hash, which is the value callers
+        should compare against and report -- not the recomputed one, even though the two are
+        proven equal here.
+        """
+        row = self._row(hypothesis_id, version)
+        if row is None:
+            raise RegistrationRefused(
+                RefusalReason.NOT_REGISTERED,
+                f"{hypothesis_id} v{version} has no frozen registration in this store, so "
+                "there is no claim for a run to be about",
+            )
+        stored_hash = str(row["content_hash"])
+        registration = Registration.model_validate_json(str(row["document_json"]))
+        if registration.content_hash != stored_hash:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"{hypothesis_id} v{version} hashes to {registration.content_hash}"
+                f" but was frozen as {stored_hash}",
+            )
+        return registration, stored_hash
+
+    def resolve_for_run(
+        self, hypothesis_id: str, version: int, *, content_hash: str
+    ) -> Registration:
+        """The *persisted* registration, proven to be the one the caller says it is (#159).
+
+        `ExperimentRunner` was checking `registration.content_hash == plan.registration_hash`,
+        and both of those objects come from the caller. Two consistent forgeries agree with each
+        other perfectly: a caller could build registration B with the same hypothesis id and
+        version, compile plan B from it, and the pair would validate while the durable store held
+        registration A. Window consumption still addressed A's id, so A's holdout was spent to
+        grade B's campaign.
+
+        So the store is asked, through `_load_intact_registration` -- which proves the row is
+        internally intact before any of it is believed -- and the run's presented hash is then
+        checked against the **stored column**, not against the parsed document's own recomputed
+        digest. Comparing the caller to the document would leave the tampered-document case
+        matching itself; comparing the caller to what the store froze is what closes it. It is
+        the returned object, not the caller's, that the rest of the run reads.
+
+        The campaign freeze is re-verified through `_verify_campaign_frozen`, which is #216's
+        authority unchanged. A campaign whose ledger row has since been tampered with cannot
+        become evidence just because the registration document still names it.
+        """
+        persisted, stored_hash = self._load_intact_registration(hypothesis_id, version)
+        if stored_hash != content_hash:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"{hypothesis_id} v{version} is stored at {stored_hash} and the run "
+                f"presented {content_hash}; a result frozen against one claim cannot be reported "
+                "against another, and the store is the authority on which claim exists",
+            )
+        self._verify_campaign_frozen(persisted.draft)
+        return persisted
+
     def list_registrations(self, *, family_id: str | None = None) -> list[Registration]:
         statement = select(hypotheses).order_by(
             hypotheses.c.registered_at, hypotheses.c.hypothesis_id, hypotheses.c.version
@@ -1347,21 +1425,7 @@ class HypothesisRegistry:
         reporting a clean pass. An operator override does not excuse it either: an override is a
         judgement that a known shortfall is acceptable, not permission to skip measuring.
         """
-        row = self._row(hypothesis_id, version)
-        if row is None:
-            raise RegistrationRefused(
-                RefusalReason.NOT_REGISTERED,
-                f"{hypothesis_id} v{version} has no frozen registration",
-            )
-
-        stored_hash = str(row["content_hash"])
-        registration = Registration.model_validate_json(str(row["document_json"]))
-        if registration.content_hash != stored_hash:
-            raise RegistrationRefused(
-                RefusalReason.TAMPERED,
-                f"{hypothesis_id} v{version} hashes to {registration.content_hash}"
-                f" but was frozen as {stored_hash}",
-            )
+        registration, stored_hash = self._load_intact_registration(hypothesis_id, version)
 
         if observed is None:
             raise RegistrationRefused(
@@ -1480,6 +1544,29 @@ class HypothesisRegistry:
                 f"{hypothesis_id} v{version}'s {role.value} window on {dataset!r} stopped being"
                 " RESERVED between the check and the write; another caller took it",
             )
+
+    def commit_consumption(self) -> None:
+        """Make a protected-window consumption durable before the data is handed over (#159).
+
+        **This is not a general commit affordance and must not become one.** It exists for one
+        caller and one moment: `ExperimentRunner._spend` has recorded `RESERVED -> CONSUMED` and
+        is about to issue `ProtectedAccess`, after which the data is read and cannot be unread.
+        Everything else in this class deliberately leaves commit timing to the caller who owns
+        the transaction.
+
+        It commits the caller's whole unit of work, not only the window rows, and that is forced
+        rather than chosen. `hypothesis_data_windows` is foreign-keyed to `hypotheses`, so a
+        consumption cannot be durable while the registration that owns it is not; and a second
+        connection cannot see this transaction's uncommitted rows at all, so performing the
+        consumption on a connection of its own would not find the registration to consume
+        against. Measured, not assumed: a separate connection reads zero rows of an open
+        transaction's work.
+
+        The honest statement of the resulting contract is that **the protected handoff is a
+        commit point.** A caller that does not want its earlier work made durable must not hand
+        a holdout to a measurement in the same transaction as that work.
+        """
+        self._session.commit()
 
     def release(self, hypothesis_id: str, version: int, *, dataset: str, role: DataRole) -> None:
         """Give up a reservation before the data was read, for when someone knows it is dead.

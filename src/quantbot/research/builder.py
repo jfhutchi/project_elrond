@@ -54,6 +54,7 @@ from quantbot.research.power import (
     supports_registered_direction,
 )
 from quantbot.research.registry import Registration
+from quantbot.research.validation_campaign import CampaignOutcome, CampaignVerdict
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -161,6 +162,23 @@ class ExperimentPlan(FrozenModel):
     execution_path: ExecutionPath
     #: Separately preregistered, powered comparisons that may support artifact-level evidence.
     artifact_tests: tuple[ArtifactTestRegistration, ...] = ()
+    #: The hostile-validation campaign the registration froze, if any (#159).
+    #:
+    #: Carried so an outcome can be checked against what the registration *required*, not only
+    #: against what the outcome happens to carry. Without it, `ExperimentOutcome` had no way to
+    #: tell "this claim registered no campaign" from "this claim registered one and the outcome
+    #: omitted it", so a directly constructed SURVIVED outcome with `validation_outcome=None`
+    #: walked past the gate by declining to mention it. A gate you pass by omission is not a
+    #: gate.
+    #:
+    #: A plain optional field rather than #216's omit-when-absent serializer, because the
+    #: compatibility constraint that forced that treatment does not exist here. `HypothesisDraft`
+    #: is content-addressed and stored in `document_json`, so a new key moved every historical
+    #: registration hash. `ExperimentPlan` is compiled per run, never persisted, never hashed and
+    #: never embedded in a manifest -- `ExperimentManifest` records the registration hash and the
+    #: snapshots, not the plan -- so nothing downstream can observe the added key. Verified by
+    #: grep before adding it rather than assumed.
+    validation_campaign_id: Text | None = Field(default=None, min_length=64, max_length=64)
 
     @model_validator(mode="after")
     def validate_plan(self) -> Self:
@@ -264,6 +282,11 @@ def compile_experiment(
         probes=tuple(probes),
         execution_path=execution_path,
         artifact_tests=tuple(artifact_tests),
+        # Read from the registration, so a plan cannot decline to require the campaign its own
+        # claim was frozen with. `None` is the honest value only when the draft froze none.
+        validation_campaign_id=(
+            None if draft.validation_campaign is None else draft.validation_campaign.campaign_id
+        ),
     )
 
 
@@ -282,11 +305,23 @@ class ExperimentOutcome(FrozenModel):
     probes_failed: tuple[Text, ...] = ()
     diagnostics: dict[str, str] = Field(default_factory=dict)
     artifact_outcomes: tuple[ArtifactOutcome, ...] = ()
+    #: The hostile-validation campaign frozen with the registration, graded by
+    #: `validation_campaign.grade_campaign` (#159). `None` when the registration froze no
+    #: campaign, which is every registration made before #159 and every one that declines to
+    #: declare scenarios. It is an *additional* gate: it can block a survivor and can never
+    #: manufacture one, so it is recorded beside the primary verdict rather than folded into it.
+    validation_outcome: CampaignOutcome | None = None
     detail: Text
     completed_at: datetime
 
     @model_validator(mode="after")
     def validate_outcome(self) -> Self:
+        # Campaign identity first, and for every verdict rather than only for survivors. A
+        # FAILED or INCONCLUSIVE outcome that names the wrong campaign, or silently drops the
+        # one its plan required, is still a misrecorded run -- and the FAILED path is exactly
+        # where a missing campaign would be least likely to be noticed.
+        self._validate_campaign_binding()
+
         # FAILED did not complete; INCONCLUSIVE completed and is explicitly not evidence. Both
         # may carry an incomplete probe set, and the second exemption matters: without it a run
         # that finished but dropped a probe had to be recorded as FAILED, which says the
@@ -320,6 +355,20 @@ class ExperimentOutcome(FrozenModel):
             # carry a statistic that fails its own one-sided bar. It read `abs(...)`, so it
             # would have certified a t of -9 against a claim of "greater than null" -- the same
             # inversion as the grader, in the type that exists to make the grader unnecessary.
+            # A survivor cannot carry a campaign that refused it. `runner._grade` downgrades on
+            # a blocking campaign, and this is the structural backstop behind that: a caller
+            # constructing the outcome directly must not be able to keep SURVIVED while
+            # attaching the record of the gate that objected. Without it the hostile-validation
+            # result becomes decoration on a verdict it was supposed to control.
+            if (
+                self.validation_outcome is not None
+                and self.validation_outcome.verdict is not CampaignVerdict.SURVIVED
+            ):
+                raise ValueError(
+                    "a survivor cannot carry a validation campaign that did not survive: "
+                    f"campaign {self.validation_outcome.campaign_id} is "
+                    f"{self.validation_outcome.verdict.value}"
+                )
             if not supports_registered_direction(
                 self.test_statistic, self.plan.statistics.luck_threshold_z
             ):
@@ -329,6 +378,41 @@ class ExperimentOutcome(FrozenModel):
                 )
         return self
 
+    def _validate_campaign_binding(self) -> None:
+        """Hold the outcome to the campaign the *plan* required, not the one it volunteered.
+
+        The previous rule only refused a survivor carrying a campaign that objected, which
+        leaves the cheaper route open: carry no campaign at all. `plan.validation_campaign_id`
+        is what closes it -- the plan states whether a campaign is required, and the outcome is
+        checked against that statement rather than against its own contents.
+
+        Both directions are refused. A plan that required no campaign cannot acquire a
+        validation outcome, because a campaign nobody registered is not hostile validation; and
+        a plan that required campaign A cannot be satisfied by campaign B, because a favourable
+        result under a campaign chosen after the fact is the search this whole slice exists to
+        make expensive.
+        """
+        required = self.plan.validation_campaign_id
+        campaign = self.validation_outcome
+        if required is None:
+            if campaign is not None:
+                raise ValueError(
+                    f"this experiment registered no validation campaign, so outcome "
+                    f"{campaign.campaign_id} is not hostile validation of it"
+                )
+            return
+        if campaign is None:
+            raise ValueError(
+                f"the registration froze validation campaign {required} and this outcome "
+                "carries none; a gate passed by omitting it is not a gate"
+            )
+        if campaign.campaign_id != required:
+            raise ValueError(
+                f"the registration froze validation campaign {required} and this outcome "
+                f"carries {campaign.campaign_id}; a result graded under a different campaign "
+                "is a result about a different claim"
+            )
+
     @property
     def minimum_detectable_effect(self) -> Decimal:
         """Carried so a null reads "no effect larger than X" rather than "no effect found"."""
@@ -336,10 +420,30 @@ class ExperimentOutcome(FrozenModel):
 
     @property
     def citable(self) -> bool:
-        """Whether this may be cited as confirmatory evidence about Elrond."""
+        """Whether this may be cited as confirmatory evidence about Elrond.
+
+        Conservative about the campaign as well as the verdict, and it states the whole
+        campaign rule itself rather than the half the validator makes convenient. The validator
+        above already refuses every combination refused here, so all of this is redundant today
+        -- and it is written out anyway, because `citable` is what a reader consults to decide
+        whether a result may be quoted, and a rule that is only correct while some other rule
+        holds is one refactor away from quietly citing an ungated survivor.
+        """
+        required = self.plan.validation_campaign_id
+        campaign = self.validation_outcome
+        campaign_supports = (
+            campaign is None
+            if required is None
+            else (
+                campaign is not None
+                and campaign.campaign_id == required
+                and campaign.verdict is CampaignVerdict.SURVIVED
+            )
+        )
         return (
             self.verdict is OutcomeVerdict.SURVIVED
             and self.plan.execution_path is ExecutionPath.PRODUCTION_ENGINE
+            and campaign_supports
         )
 
 

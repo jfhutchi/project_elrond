@@ -45,6 +45,7 @@ from quantbot.research.registry import (
     DataWindow,
     HypothesisDraft,
     HypothesisRegistry,
+    RegistrationRefused,
     SearchOrigin,
     WindowState,
 )
@@ -318,6 +319,12 @@ def test_a_crashing_measurement_still_spends_the_holdout(
 
     If consumption were recorded on success, failing would be a way to inspect a protected
     window for free and register against it again afterwards.
+
+    Checked twice, and the second read is the one that proves it. The runner works inside the
+    caller's transaction, so a state read from *within* that transaction is the runner's
+    intention, not a durable fact -- it passes identically when the transaction is about to roll
+    back and discard the transition. The read after the block is what says the consumption
+    committed, which is the property #159 Finding 9 depends on.
     """
     registration = _register(database)
     plan = compile_experiment(registration, datasets=[snapshot()])
@@ -341,6 +348,11 @@ def test_a_crashing_measurement_still_spends_the_holdout(
 
     assert result.outcome.verdict is OutcomeVerdict.FAILED
     assert "ZeroDivisionError" in result.outcome.detail
+
+    with database.transaction() as session:
+        assert _window_state(session) == WindowState.CONSUMED.value, (
+            "the consumption has to survive the commit, not merely happen inside it"
+        )
 
 
 def test_protected_access_cannot_be_forged() -> None:
@@ -765,3 +777,272 @@ def test_a_run_that_stored_nothing_promises_no_rerun(
         "a bundle with nothing stored beside it must not claim it can be rerun"
     )
     assert not (manifests / f"{result.manifest.experiment_id}.inputs").exists()
+
+
+# --- #159 Finding 10: the handoff is a durable boundary, not a transaction participant ---------
+#
+# Finding 9 made a *grading refusal* durable by recording a failure instead of raising. That
+# closed one path and left the shape of the defect: the consumption was still a row in the
+# caller's open transaction, so a pydantic `ValidationError`, a manifest the validator refuses,
+# an `OSError` from the write, or a plain bug in the runner would still escape `run()`, unwind
+# the transaction, and erase the record that a protected window had been read.
+#
+# The fix is not a wider `except`. Catching a runner bug and filing it as a research FAILED
+# outcome is a defect wearing a result's clothes. `_spend` commits before it issues
+# `ProtectedAccess`, so every later failure mode is safe without any of them being anticipated,
+# and genuine bugs still propagate -- loudly, and still having cost the holdout, which is the
+# correct price for having read it.
+#
+# Every test below reads the window state from a NEW transaction. Reading it inside the one the
+# runner used proves nothing: that read passes identically when the transaction is about to roll
+# back, which is precisely the state this defect produced.
+
+#: Credential-shaped, so `ExperimentManifest` refuses any bundle carrying it. Not a real token.
+FAKE_TOKEN = "ghp_" + "a" * 24
+
+
+def _committed_state(database: Database, hypothesis_id: str = "H-RUN-1") -> str | None:
+    """The window's state as a *separate* transaction sees it."""
+    with database.transaction() as session:
+        row = session.execute(
+            text("SELECT state FROM hypothesis_data_windows WHERE hypothesis_id = :h"),
+            {"h": hypothesis_id},
+        ).one_or_none()
+    return None if row is None else str(row[0])
+
+
+def _refuses_a_second_handoff(database: Database, manifests: Path, plan, registration) -> None:
+    """A spent window cannot be handed over again, and the measurement must not run."""
+    reached: list[str] = []
+
+    def again(_plan, _access) -> Measured:
+        reached.append("measured")
+        return Measured(effect=None)
+
+    code, environment = provenance()
+    with database.transaction() as session:
+        with pytest.raises(RegistrationRefused, match="is CONSUMED"):
+            ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+                plan, registration, again, now=NOW, code=code, environment=environment,
+                applied_costs=COSTS, design=DESIGN,
+            )
+    assert reached == [], "a spent holdout must not be readable a second time"
+
+
+def _run_expecting(
+    database: Database,
+    manifests: Path,
+    measurement,
+    *,
+    applied_costs=None,
+    registration=None,
+    plan=None,
+):
+    """Run inside its own transaction and hand back whatever escaped, plus the plan used."""
+    registration = registration or _register(database)
+    plan = plan or compile_experiment(registration, datasets=[snapshot()])
+    code, environment = provenance()
+    escaped: list[BaseException] = []
+    try:
+        with database.transaction() as session:
+            ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+                plan,
+                registration,
+                measurement,
+                now=NOW,
+                code=code,
+                environment=environment,
+                applied_costs=COSTS if applied_costs is None else applied_costs,
+                design=DESIGN,
+            )
+    except BaseException as error:  # noqa: BLE001 -- propagation is the property under test
+        escaped.append(error)
+    return escaped, plan, registration
+
+
+def _good_measurement(plan):
+    def measurement(_plan, _access) -> Measured:
+        return Measured(
+            effect=Decimal("2.5"), test_statistic=Decimal("9.0"), probes_run=plan.probes
+        )
+
+    return measurement
+
+
+def test_a_runner_bug_after_the_handoff_still_costs_the_holdout(
+    database: Database, manifests: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """**The core of Finding 10.** Not an `ExperimentRunError`, so Finding 9 does not catch it.
+
+    A defect inside `_grade` is the case that must not be laundered into a research verdict: it
+    propagates, exactly as a bug should, and the consumption survives it anyway.
+    """
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+
+    def boom(*_args, **_kwargs):
+        raise RuntimeError("a defect in the runner, not a finding about the hypothesis")
+
+    monkeypatch.setattr(ExperimentRunner, "_grade", boom)
+    escaped, plan, registration = _run_expecting(
+        database, manifests, _good_measurement(plan), registration=registration, plan=plan
+    )
+
+    assert [type(error).__name__ for error in escaped] == ["RuntimeError"], (
+        "a runner bug must propagate rather than be recorded as a research result"
+    )
+    assert _committed_state(database) == WindowState.CONSUMED.value
+    monkeypatch.undo()
+    _refuses_a_second_handoff(database, manifests, plan, registration)
+
+
+def test_measurement_output_that_fails_validation_still_costs_the_holdout(
+    database: Database, manifests: Path
+) -> None:
+    """A pydantic `ValidationError` while building the outcome, from the measurement's own output.
+
+    An empty probe name is rejected by `ExperimentOutcome`, which raises a `ValidationError` --
+    not an `ExperimentRunError`, so nothing catches it. The data was read regardless.
+    """
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+
+    def measurement(_plan, _access) -> Measured:
+        return Measured(
+            effect=Decimal("2.5"),
+            test_statistic=Decimal("9.0"),
+            probes_run=("", *plan.probes),
+        )
+
+    escaped, plan, registration = _run_expecting(
+        database, manifests, measurement, registration=registration, plan=plan
+    )
+
+    assert escaped and not isinstance(escaped[0], ExperimentRunError)
+    assert _committed_state(database) == WindowState.CONSUMED.value
+    _refuses_a_second_handoff(database, manifests, plan, registration)
+
+
+def test_a_manifest_the_validator_refuses_still_costs_the_holdout(
+    database: Database, manifests: Path
+) -> None:
+    """`ExperimentManifest` refuses a bundle carrying a credential-shaped string.
+
+    The refusal happens in `_record`, after the measurement has read the holdout, and it is a
+    `ValueError` rather than an `ExperimentRunError`. Nothing is written, and the consumption
+    still stands.
+    """
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+
+    escaped, plan, registration = _run_expecting(
+        database,
+        manifests,
+        _good_measurement(plan),
+        applied_costs={**COSTS, "broker_note": f"key {FAKE_TOKEN}"},
+        registration=registration,
+        plan=plan,
+    )
+
+    assert escaped and "must not carry credentials" in str(escaped[0])
+    written = list(manifests.glob("*.json")) if manifests.exists() else []
+    assert written == [], "a bundle the validator refused must not reach disk"
+    assert _committed_state(database) == WindowState.CONSUMED.value
+    _refuses_a_second_handoff(database, manifests, plan, registration)
+
+
+def test_a_manifest_that_cannot_be_written_still_costs_the_holdout(
+    database: Database, tmp_path: Path
+) -> None:
+    """An `OSError` from the filesystem, after the data has been read.
+
+    The manifest directory is a regular file, so creating it fails. Disk-full, a revoked
+    permission or a vanished mount are the same case, and none of them can un-read a holdout.
+    """
+    blocked = tmp_path / "manifests-is-a-file"
+    blocked.write_text("not a directory", encoding="utf-8")
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+
+    escaped, plan, registration = _run_expecting(
+        database, blocked, _good_measurement(plan), registration=registration, plan=plan
+    )
+
+    assert escaped and isinstance(escaped[0], OSError)
+    assert _committed_state(database) == WindowState.CONSUMED.value
+    _refuses_a_second_handoff(database, blocked, plan, registration)
+
+
+def test_a_failure_before_the_handoff_does_not_spend_anything(
+    database: Database, manifests: Path
+) -> None:
+    """The other side of the boundary, and the reason it is a boundary rather than a policy.
+
+    Nothing has been read yet, so refusing must leave the reservation exactly as it was. A fix
+    that made consumption durable by consuming earlier, or more often, would pass every test
+    above and fail this one.
+    """
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+    reached: list[str] = []
+
+    def measurement(_plan, _access) -> Measured:
+        reached.append("measured")
+        return Measured(effect=None)
+
+    escaped, _plan, _registration = _run_expecting(
+        database,
+        manifests,
+        measurement,
+        # Missing `slippage_bps`, refused at the top of `run()` long before `_spend`.
+        applied_costs={"commission_per_order": "0"},
+        registration=registration,
+        plan=plan,
+    )
+
+    assert escaped and isinstance(escaped[0], ExperimentRunError)
+    assert reached == []
+    assert _committed_state(database) == WindowState.RESERVED.value, (
+        "a refusal before the handoff must leave the holdout unspent"
+    )
+
+    # And the window is still usable, which is what "unspent" has to mean.
+    code, environment = provenance()
+    with database.transaction() as session:
+        result = ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            plan, registration, _good_measurement(plan), now=NOW, code=code,
+            environment=environment, applied_costs=COSTS, design=DESIGN,
+        )
+    assert result.outcome.verdict is OutcomeVerdict.SURVIVED
+    assert _committed_state(database) == WindowState.CONSUMED.value
+
+
+def test_the_handoff_commits_before_the_token_is_issued(
+    database: Database, manifests: Path
+) -> None:
+    """Ordering, asserted from inside the measurement rather than after the run.
+
+    The consumption is visible to a *separate* transaction while the measurement is still
+    running, which is only true if the commit precedes the handoff. Checking afterwards would
+    pass just as well if the commit happened at the end, and that ordering is the whole defect:
+    a window consumed but not yet committed must not be reachable by a measurement.
+    """
+    registration = _register(database)
+    plan = compile_experiment(registration, datasets=[snapshot()])
+    code, environment = provenance()
+    seen_by_another_transaction: list[str | None] = []
+
+    def measurement(_plan, access: ProtectedAccess) -> Measured:
+        assert access.windows == ((DATASET, DataRole.PROTECTED_EVALUATION),)
+        seen_by_another_transaction.append(_committed_state(database))
+        return Measured(
+            effect=Decimal("2.1"), test_statistic=Decimal("4.0"), probes_run=plan.probes
+        )
+
+    with database.transaction() as session:
+        ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+            plan, registration, measurement, now=NOW, code=code, environment=environment,
+            applied_costs=COSTS, design=DESIGN,
+        )
+
+    assert seen_by_another_transaction == [WindowState.CONSUMED.value]
