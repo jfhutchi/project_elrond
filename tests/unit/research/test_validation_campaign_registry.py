@@ -20,15 +20,18 @@ forensic audit found missing from both the abandoned branch and its stash.
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import date
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 
 import pytest
 from sqlalchemy import select, text
+from sqlalchemy.exc import IntegrityError
 
 from quantbot.research.manifest import ExperimentPeriod, content_id
 from quantbot.research.registry import (
     VALIDATION_CAMPAIGN_ACTOR,
+    DataRole,
+    DataWindow,
     HypothesisRegistry,
     RegistrationRefused,
     WindowState,
@@ -42,6 +45,7 @@ from quantbot.research.validation_campaign import (
     select_rotation_periods,
 )
 from quantbot.storage import Database
+from quantbot.storage.database import encode_utc
 from quantbot.storage.schema import hypothesis_data_windows, search_runs
 from tests.unit.research.test_runner import NOW, critique, draft
 
@@ -130,17 +134,34 @@ def seeded_campaign(*, seed: int, count: int = 3) -> ValidationCampaign:
     )
 
 
-def consume_window(session, registry: HypothesisRegistry, hypothesis_id: str) -> None:
+#: A consumption strictly after `NOW`, so "the freeze came first" is a real ordering rather than
+#: a tie. Chronology tests that pass only because two timestamps happen to be equal prove nothing
+#: about ordering.
+CONSUMED_AT = NOW + timedelta(hours=6)
+
+
+def consume_window(
+    session,
+    registry: HypothesisRegistry,
+    hypothesis_id: str,
+    *,
+    consumed_at: datetime | None = CONSUMED_AT,
+) -> None:
     """Put a real reserved window into CONSUMED: an outcome has now been seen.
 
     Driven through a genuine registration rather than a synthetic row, because
     `hypothesis_data_windows` carries a foreign key to `hypotheses` -- a hand-built row would be
     a window belonging to no hypothesis, which is not a state the system can reach.
+
+    `consumed_at=None` reproduces a CONSUMED window that cannot say when it was consumed.
     """
     session.execute(
         hypothesis_data_windows.update()
         .where(hypothesis_data_windows.c.hypothesis_id == hypothesis_id)
-        .values(state=WindowState.CONSUMED.value, consumed_at="2026-08-20T14:30:00Z")
+        .values(
+            state=WindowState.CONSUMED.value,
+            consumed_at=None if consumed_at is None else encode_utc(consumed_at),
+        )
     )
 
 
@@ -771,3 +792,220 @@ def test_a_new_campaign_after_consumption_is_still_refused(database: Database) -
             registry.freeze_validation_campaign(redrawn, now=NOW)
 
         assert campaign_rows(session) == 1, "the refused redraw charged nothing"
+
+
+# --- chronology: an existing row must prove it came first ------------------------------------
+#
+# Verifying content made the fast path safe against a row describing the *wrong* campaign. It
+# did not make it safe against a row describing the right campaign that was written afterwards.
+#
+# The fast path is what excuses an exact campaign from the consumed-window barrier, so it has to
+# carry the proof itself. Row existence is not chronology: inferring order from it would turn the
+# exception into a way around the barrier. Timestamps are compared through `decode_utc`, never as
+# text -- the columns are strings, and string order agrees with time order for one canonical
+# spelling only.
+
+
+def freeze_then_consume(session, registry: HypothesisRegistry, **consume: object):
+    """Freeze a campaign, then consume an overlapping window after it. The honest lifecycle."""
+    subject = declared_campaign()
+    registry.freeze_validation_campaign(subject, now=NOW)
+    registry.register(draft(), now=NOW, critique=critique())
+    consume_window(session, registry, "H-RUN-1", **consume)  # type: ignore[arg-type]
+    return subject
+
+
+def clean_window_draft(hypothesis_id: str, campaign: ValidationCampaign):
+    """A draft declaring an uncontaminated window while carrying `campaign`.
+
+    Registration checks contamination on the draft's own declared windows *before* it verifies
+    the campaign, so a draft declaring the consumed window is refused for that reason and never
+    reaches the chronology check. Declaring a clean window is what makes the campaign check the
+    thing under test rather than the thing hidden behind an earlier refusal.
+    """
+    return draft(
+        hypothesis_id=hypothesis_id,
+        windows=(
+            DataWindow(
+                dataset=f"{DATASET}-{hypothesis_id.lower()}",
+                snapshot="2026-08-20",
+                role=DataRole.PROTECTED_EVALUATION,
+                start=date(2016, 1, 4),
+                end=date(2026, 8, 14),
+            ),
+        ),
+        materially_different=f"clean declared window for {hypothesis_id}",
+        validation_campaign=campaign,
+    )
+
+
+def test_a_genuine_preregistration_survives_a_strictly_later_consumption(
+    database: Database,
+) -> None:
+    """Test A, strengthened to prove ordering rather than a tie.
+
+    The freeze is at `NOW`; consumption is six hours later. The campaign predates the outcome by
+    a real interval, so re-freezing must still be accepted, reuse the same record, and charge
+    nothing further.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = freeze_then_consume(session, registry)
+        assert CONSUMED_AT > NOW, "the fixture must express a real ordering, not an equality"
+
+        again = registry.freeze_validation_campaign(subject, now=NOW)
+
+        assert again == subject.selection_search_id
+        assert campaign_rows(session) == 1
+        assert registry.campaign_trials_spent() == 1
+        # And the registration path agrees with the freeze path.
+        registry.register(
+            clean_window_draft("H-LATER", subject), now=NOW, critique=critique("H-LATER")
+        )
+
+
+def test_a_row_frozen_after_consumption_fails_closed(database: Database) -> None:
+    """**Test B, the load-bearing case.**
+
+    Every content check passes: right `search_id`, actor, version, count, dataset, role, range,
+    `configuration_hash`, and a `detail_json` that rebuilds the same campaign. Only the
+    chronology is wrong -- the row was written after the outcome was consumed.
+
+    Normal `freeze_validation_campaign()` could never produce this. That is the point: this PR
+    treats malformed ledger state as something that must fail closed, and chronology is part of
+    the evidence rather than a property of how the row happened to be created.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = freeze_then_consume(session, registry)
+
+        # The freeze is back-dated forward: recorded an hour *after* the window was consumed.
+        forged = encode_utc(CONSUMED_AT + timedelta(hours=1))
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(started_at=forged, finished_at=forged)
+        )
+
+        with pytest.raises(RegistrationRefused, match="after window") as freeze:
+            registry.freeze_validation_campaign(subject, now=NOW)
+        assert "is not a preregistration" in str(freeze.value)
+
+        with pytest.raises(RegistrationRefused, match="after window"):
+            registry.register(
+                clean_window_draft("H-FORGED", subject), now=NOW, critique=critique("H-FORGED")
+            )
+
+
+def test_a_consumed_window_cannot_exist_without_a_consumption_time(
+    database: Database,
+) -> None:
+    """Test C, answered by the schema rather than by the application.
+
+    The review asked that a CONSUMED window with no `consumed_at` fail closed. It cannot occur:
+    `hypothesis_data_windows` already carries
+    `CHECK ((state = 'CONSUMED') = (consumed_at IS NOT NULL))`, so the store refuses the state
+    outright. Pinned here because the guarantee is what the chronology check *relies on* -- if
+    that constraint were ever relaxed, this fails and sends whoever relaxed it to the check that
+    assumed it.
+
+    `_verify_campaign_predates_consumption` still refuses a null `consumed_at` defensively. That
+    branch is unreachable while the constraint stands, and it is kept rather than removed
+    because the alternative is an assumption living only in a comment.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registry.freeze_validation_campaign(declared_campaign(), now=NOW)
+        registry.register(draft(), now=NOW, critique=critique())
+
+        with pytest.raises(IntegrityError, match="consumption_is_dated"):
+            consume_window(session, registry, "H-RUN-1", consumed_at=None)
+
+
+def test_an_unreadable_consumption_time_fails_closed(database: Database) -> None:
+    """The other half of test C: present but unparseable is no better than absent."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = freeze_then_consume(session, registry)
+        session.execute(
+            hypothesis_data_windows.update()
+            .where(hypothesis_data_windows.c.hypothesis_id == "H-RUN-1")
+            .values(consumed_at="whenever")
+        )
+
+        with pytest.raises(RegistrationRefused, match="unreadable consumption time"):
+            registry.freeze_validation_campaign(subject, now=NOW)
+
+
+def test_an_unreadable_freeze_time_fails_closed(database: Database) -> None:
+    """A row that cannot say when it was frozen cannot show it was frozen first."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = freeze_then_consume(session, registry)
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(finished_at="sometime last week")
+        )
+
+        with pytest.raises(RegistrationRefused, match="unreadable freeze timestamp"):
+            registry.freeze_validation_campaign(subject, now=NOW)
+
+
+def test_actor_version_one_freezes_at_a_single_instant(database: Database) -> None:
+    """Version 1 writes `started_at == finished_at`, so a row claiming a span is malformed.
+
+    Keyed on the actor version rather than assumed universally: a later actor that genuinely
+    searches over time carries a different `actor_version`, which is already pinned, so this
+    invariant will not silently apply to it.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = freeze_then_consume(session, registry)
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(started_at=encode_utc(NOW - timedelta(days=2)))
+        )
+
+        with pytest.raises(RegistrationRefused, match="freezes a selection at one instant"):
+            registry.freeze_validation_campaign(subject, now=NOW)
+
+
+def test_a_campaign_with_no_consumed_overlap_needs_no_temporal_comparison(
+    database: Database,
+) -> None:
+    """Test E. Chronology is checked only where an outcome exists to be preceded.
+
+    A campaign with no consumed overlap verifies on content alone, so the new rule constrains
+    the case it was written for and leaves the ordinary path exactly as it was -- including when
+    a *different* dataset has been consumed entirely.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = declared_campaign()
+        first = registry.freeze_validation_campaign(subject, now=NOW)
+
+        # An unrelated dataset is consumed. It overlaps no scenario in this campaign.
+        registry.register(
+            draft(
+                hypothesis_id="H-OTHER",
+                windows=(
+                    DataWindow(
+                        dataset=f"{DATASET}-unrelated",
+                        snapshot="2026-08-20",
+                        role=DataRole.PROTECTED_EVALUATION,
+                        start=date(2016, 1, 4),
+                        end=date(2026, 8, 14),
+                    ),
+                ),
+                materially_different="unrelated window",
+            ),
+            now=NOW,
+            critique=critique("H-OTHER"),
+        )
+        consume_window(session, registry, "H-OTHER")
+
+        assert registry.freeze_validation_campaign(subject, now=NOW) == first
+        assert campaign_rows(session) == 1
+        assert registry.campaign_trials_spent() == 1

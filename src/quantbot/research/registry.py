@@ -90,7 +90,7 @@ from quantbot.research.sources import EvidenceBasis
 from quantbot.research.validation_campaign import (
     ValidationCampaign,
 )
-from quantbot.storage.database import encode_utc
+from quantbot.storage.database import decode_utc, encode_utc
 from quantbot.storage.schema import (
     artifact_test_registrations,
     hypotheses,
@@ -820,6 +820,10 @@ class HypothesisRegistry:
                 f"search run {campaign.selection_search_id!r} stores a design that rebuilds as "
                 f"{stored.campaign_id}, not {campaign.campaign_id}",
             )
+        # Content, then chronology. The row now proves it describes this exact campaign; it must
+        # also prove it was written before the outcome it claims to precede, because reusing it
+        # is what excuses this campaign from the consumed-window barrier.
+        self._verify_campaign_predates_consumption(campaign, row, str(expected["dataset"]))
 
     def freeze_validation_campaign(self, campaign: ValidationCampaign, *, now: datetime) -> str:
         """Record a campaign's scenario selection before any outcome can be seen (#159).
@@ -893,6 +897,28 @@ class HypothesisRegistry:
         """
         consumed = [
             f"{row['dataset']} {row['start_date']}..{row['end_date']}"
+            for row in self._consumed_overlaps(campaign, dataset)
+        ]
+        if consumed:
+            raise RegistrationRefused(
+                RefusalReason.CONTAMINATED_WINDOW,
+                "a validation campaign cannot be frozen over an already-consumed window: "
+                + "; ".join(sorted(set(consumed)))
+                + ". A selection made after its outcome was visible is not a preregistration, "
+                "whatever it is called",
+            )
+
+    def _consumed_overlaps(
+        self, campaign: ValidationCampaign, dataset: str
+    ) -> list[RowMapping]:
+        """Every CONSUMED window row overlapping any scenario in this campaign.
+
+        One query behind both the new-freeze barrier and the chronology check on an existing
+        row, so the two cannot end up disagreeing about which windows are relevant -- the shape
+        of defect this PR has already had twice.
+        """
+        return [
+            row
             for scenario in campaign.scenarios
             for row in self._session.execute(
                 select(hypothesis_data_windows).where(
@@ -903,14 +929,89 @@ class HypothesisRegistry:
                 )
             ).mappings()
         ]
-        if consumed:
+
+    def _campaign_frozen_at(self, campaign: ValidationCampaign, row: RowMapping) -> datetime:
+        """When this campaign's freeze completed, decoded through the storage authority.
+
+        Parsed with `decode_utc`, never compared as text. The column is a string, and string
+        order agrees with chronological order only for one canonical representation -- an
+        imported row carrying `+01:00` would sort as though it were an hour later than it is.
+        `decode_utc` refuses a tz-naive value and normalises to UTC, so the comparison below is
+        about instants rather than about spelling.
+
+        Actor version 1 writes `started_at == finished_at == now`, so that equality is the
+        invariant for this version and a row claiming a span under it is malformed. A later
+        actor version that genuinely searches over time carries a different `actor_version`,
+        which `_verify_campaign_row` has already pinned, so this branch will not silently apply
+        to it.
+        """
+        try:
+            started = decode_utc(str(row["started_at"]))
+            finished = decode_utc(str(row["finished_at"]))
+        except ValueError as error:
             raise RegistrationRefused(
-                RefusalReason.CONTAMINATED_WINDOW,
-                "a validation campaign cannot be frozen over an already-consumed window: "
-                + "; ".join(sorted(set(consumed)))
-                + ". A selection made after its outcome was visible is not a preregistration, "
-                "whatever it is called",
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} carries an unreadable freeze "
+                f"timestamp: {error}",
+            ) from error
+        if (
+            str(row["actor_version"]) == VALIDATION_CAMPAIGN_ACTOR_VERSION
+            and started != finished
+        ):
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} spans "
+                f"{row['started_at']}..{row['finished_at']}; actor version "
+                f"{VALIDATION_CAMPAIGN_ACTOR_VERSION} freezes a selection at one instant",
             )
+        return finished
+
+    def _verify_campaign_predates_consumption(
+        self, campaign: ValidationCampaign, row: RowMapping, dataset: str
+    ) -> None:
+        """The row must show the freeze happened no later than the outcome it precedes.
+
+        The existing-row fast path is what lets an exact campaign stay reusable after its window
+        is consumed, so that path has to carry the proof itself. Content identity alone does not:
+        a row can name the right campaign and still have been written afterwards. Row existence
+        is not chronology -- inferring order from it would make the fast path a way around the
+        barrier rather than an exception justified by evidence.
+
+        A `CONSUMED` window with no readable `consumed_at` cannot establish the ordering either
+        way, so it refuses. Missing chronology is not safe chronology, and treating an absent
+        timestamp as permission is the same fail-open shape as treating an absent regime
+        diagnostic as agreement.
+        """
+        overlaps = self._consumed_overlaps(campaign, dataset)
+        if not overlaps:
+            return
+        frozen_at = self._campaign_frozen_at(campaign, row)
+        for window in overlaps:
+            label = f"{window['dataset']} {window['start_date']}..{window['end_date']}"
+            raw = window["consumed_at"]
+            if raw is None:
+                raise RegistrationRefused(
+                    RefusalReason.CONTAMINATED_WINDOW,
+                    f"window {label} is CONSUMED but records no consumption time, so search "
+                    f"run {campaign.selection_search_id!r} cannot show it was frozen first",
+                )
+            try:
+                consumed_at = decode_utc(str(raw))
+            except ValueError as error:
+                raise RegistrationRefused(
+                    RefusalReason.CONTAMINATED_WINDOW,
+                    f"window {label} records an unreadable consumption time ({raw!r}), so "
+                    f"search run {campaign.selection_search_id!r} cannot show it was frozen "
+                    f"first: {error}",
+                ) from error
+            if frozen_at > consumed_at:
+                raise RegistrationRefused(
+                    RefusalReason.CONTAMINATED_WINDOW,
+                    f"search run {campaign.selection_search_id!r} was frozen at "
+                    f"{encode_utc(frozen_at)}, after window {label} was consumed at "
+                    f"{encode_utc(consumed_at)}; a selection recorded after its outcome was "
+                    "visible is not a preregistration, whatever the ledger calls it",
+                )
 
     def campaign_trials_spent(self) -> int:
         """Selection freedom already charged to validation campaigns, read from the ledger.
