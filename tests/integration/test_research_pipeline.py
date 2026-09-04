@@ -318,6 +318,11 @@ def test_a_candidate_on_new_data_reaches_protected_evaluation(database: Database
             reason="registered",
             actor="director",
             updated_at=NOW,
+            # Bound to the claim this whole test has been establishing. It was left unbound,
+            # which meant the end-to-end pipeline reached RESEARCH_SURVIVOR carrying no claim at
+            # all -- a survivor of nothing in particular.
+            hypothesis_id=plan.hypothesis_id,
+            hypothesis_version=plan.hypothesis_version,
         ),
         Stage.RESEARCH_SURVIVOR,
         actor="director",

@@ -80,6 +80,12 @@ from quantbot.research.power import (
 )
 from quantbot.research.power import assess as assess_power
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
+from quantbot.research.validation_campaign import (
+    UNRESOLVED_SCENARIO_VERDICTS,
+    CampaignOutcome,
+    CampaignVerdict,
+    ScenarioVerdict,
+)
 from quantbot.storage.repositories import PromotionEvent, PromotionRecord, StorageRepository
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -267,6 +273,18 @@ def survivor_objections(outcome: ExperimentOutcome) -> tuple[str, ...]:
 
     Passing a pre-registered test is not enough. Cycle 11 produced two candidates that passed
     theirs and were both wrong, because the flaw was in the statistic rather than the protocol.
+
+    **The hostile-validation rule is stated here as well as in `ExperimentOutcome` and the
+    runner, on purpose.** `ExperimentOutcome.validate_outcome` already refuses every combination
+    refused below, so all of it is redundant today -- and that is the same arrangement signed
+    grading ended up with after #212, for the same reason. This function is the explicit gate
+    between a result and `RESEARCH_SURVIVOR`, and therefore between a result and shadow, paper
+    and M1. A gate that is only correct while a validator two modules away holds is one refactor
+    from passing an ungated survivor, and the failure would be silent: it reports no objections,
+    which reads exactly like a clean result.
+
+    Three layers that agree is not duplication of logic, it is a claim checked three times. If
+    they ever disagree, the disagreement is the finding.
     """
     objections: list[str] = []
     if outcome.verdict is not OutcomeVerdict.SURVIVED:
@@ -282,6 +300,7 @@ def survivor_objections(outcome: ExperimentOutcome) -> tuple[str, ...]:
             f"{outcome.plan.execution_path.value}, so it is a standalone model rather than a "
             "measurement of this system"
         )
+    objections.extend(_campaign_objections(outcome))
 
     plan = outcome.plan.statistics
     if plan.comparison not in VALID_FOR[plan.test]:
@@ -310,6 +329,122 @@ def survivor_objections(outcome: ExperimentOutcome) -> tuple[str, ...]:
             )
         )
     return tuple(objections)
+
+
+def _campaign_objections(outcome: ExperimentOutcome) -> list[str]:
+    """Whether the hostile-validation campaign the registration froze actually supports this.
+
+    Read from the in-memory `CampaignOutcome`, never from the manifest's readable renderings.
+    Those flatten collections with delimiters that are not reserved -- `" | "` between integrity
+    defects, `"x=1, y=2"` between regime metrics -- so parsing them back recovers something that
+    resembles the campaign and is not it, in exactly the cases where the campaign is most
+    unusual. #217 put an exact `outcome_json` in the bundle for the durable path; nothing here
+    needs it, because the object itself is in hand.
+
+    A campaign can only subtract. There is deliberately no branch in which a surviving campaign
+    excuses anything: every objection the primary experiment earns is still returned beside
+    these. Hostile validation is a second hurdle, not a second route to yes.
+    """
+    required = outcome.plan.validation_campaign_id
+    campaign = outcome.validation_outcome
+    if required is None:
+        if campaign is not None:
+            return [
+                f"this experiment registered no validation campaign, so outcome "
+                f"{campaign.campaign_id} is not hostile validation of it"
+            ]
+        return []
+    if campaign is None:
+        return [
+            f"the registration froze validation campaign {required} and this result carries "
+            "none; a gate passed by omitting it is not a gate"
+        ]
+    if campaign.campaign_id != required:
+        return [
+            f"the registration froze validation campaign {required} and this result was graded "
+            f"under {campaign.campaign_id}; a result from another campaign is a result about "
+            "another question"
+        ]
+    if campaign.verdict is not CampaignVerdict.SURVIVED:
+        return [
+            f"validation campaign {required} is {campaign.verdict.value}: {campaign.detail}"
+        ]
+    return _campaign_contradictions(campaign)
+
+
+def _campaign_contradictions(campaign: CampaignOutcome) -> list[str]:
+    """Contradictions this layer can prove without the frozen campaign's own policy.
+
+    `CampaignOutcome` now refuses these too, and that is not a reason to omit them. The whole
+    argument for a promotion-stage campaign gate is that it holds when the layers above it do
+    not, and an object built through `model_construct` -- or unpickled, or reconstructed by a
+    future caller that has not been through the validator -- reaches here with its verdict
+    intact and its scenarios saying otherwise. `verdict` is a summary; the scenarios are the
+    evidence, and where they disagree the summary is the thing that is wrong.
+
+    **The scope is exactly what is decidable here.** Whether a REFUTED or UNDERPOWERED scenario
+    should have carried the aggregate down depends on which scenarios the campaign froze as
+    `required` and on its `maximum_underpowered_fraction`, and `ExperimentOutcome` does not carry
+    the `ValidationCampaign`. Guessing would produce a second aggregation policy that drifts from
+    #215's, so a campaign this function cannot contradict is left to #215's authority. An
+    optional scenario may fail while every required one passes, and that campaign survived.
+
+    "Not one scenario survived" is decidable without any of that, though. Every campaign freezes
+    a mandatory adverse scenario, and `grade_campaign` sends every fate of a required scenario
+    somewhere other than SURVIVED, so a surviving campaign has a surviving scenario in it. This
+    function is only reached for a campaign claiming SURVIVED, which is why the check needs no
+    verdict guard of its own.
+    """
+    objections: list[str] = []
+    if not campaign.scenarios:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} claims to have survived without "
+            "grading a single scenario; a campaign carries scenarios and every one is graded"
+        )
+        return objections
+    identifiers = [item.scenario_id for item in campaign.scenarios]
+    if len(identifiers) != len(set(identifiers)):
+        objections.append(
+            f"validation campaign {campaign.campaign_id} grades the same scenario more than "
+            "once, so its aggregate is computed over an ambiguous set"
+        )
+    if campaign.integrity_defects:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} reports itself as survived while "
+            "carrying unresolved integrity defects: " + "; ".join(campaign.integrity_defects)
+        )
+    if not any(item.verdict is ScenarioVerdict.SURVIVED for item in campaign.scenarios):
+        objections.append(
+            f"validation campaign {campaign.campaign_id} reports itself as survived without a "
+            "single surviving scenario; every campaign freezes a mandatory adverse scenario, "
+            "and a required scenario that did not survive sends the aggregate somewhere else"
+        )
+    unresolved = [
+        item.scenario_id
+        for item in campaign.scenarios
+        if item.verdict in UNRESOLVED_SCENARIO_VERDICTS
+    ]
+    if unresolved:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} reports itself as survived while "
+            + ", ".join(unresolved)
+            + " resolved nothing"
+        )
+    underpowered = [
+        item for item in campaign.scenarios if item.verdict is ScenarioVerdict.UNDERPOWERED
+    ]
+    if campaign.underpowered_count != len(underpowered):
+        objections.append(
+            f"validation campaign {campaign.campaign_id} declares {campaign.underpowered_count} "
+            f"underpowered scenarios and grades {len(underpowered)}"
+        )
+    expected = Decimal(len(underpowered)) / Decimal(len(campaign.scenarios))
+    if campaign.underpowered_fraction != expected:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} declares an underpowered share of "
+            f"{campaign.underpowered_fraction} and its scenarios give {expected}"
+        )
+    return objections
 
 
 #: Stages that assert something economic about a strategy rather than something procedural.
@@ -1190,6 +1325,32 @@ def promote(
     if target is Stage.RESEARCH_SURVIVOR:
         if outcome is None:
             raise PromotionRefused(state.strategy_id, target, "no experiment outcome was supplied")
+        # The result has to be about the claim this strategy carries (#53, #159). `promote`
+        # already refuses a caller-supplied `hypothesis_id` at every transition but `REGISTERED`,
+        # which stopped the *binding* from being chosen -- and left the **evidence** free. A
+        # caller holding a genuine SURVIVED outcome for hypothesis B could promote a strategy
+        # bound to hypothesis A with it: every existing objection passes, because every one of
+        # them is a question about B, correctly answered. That is the same gate-input
+        # substitution class, one argument over.
+        #
+        # Checked against `state.claim` rather than by accepting an id here. Taking one would
+        # reintroduce exactly what #53 removed: the caller choosing which claim the gate checks.
+        if state.claim is None:
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                "RESEARCH_SURVIVOR means a frozen claim survived its own experiment, and this "
+                "strategy carries no claim for a result to be about; bind one at REGISTERED",
+            )
+        reported = (outcome.plan.hypothesis_id, outcome.plan.hypothesis_version)
+        if reported != state.claim:
+            raise PromotionRefused(
+                state.strategy_id,
+                target,
+                f"this strategy is bound to {state.hypothesis_id} v{state.hypothesis_version} "
+                f"and the result is about {reported[0]} v{reported[1]}; a survivor is a claim "
+                "that survived its own experiment, not one that survived somebody else's",
+            )
         objections = survivor_objections(outcome)
         if objections:
             raise PromotionRefused(state.strategy_id, target, "; ".join(objections))
