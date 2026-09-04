@@ -61,6 +61,12 @@ from quantbot.research.manifest import (
 from quantbot.research.memory import RecordKind, ResearchRecord, Verdict
 from quantbot.research.power import supports_registered_direction
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
+from quantbot.research.validation_campaign import (
+    CampaignOutcome,
+    CampaignVerdict,
+    ScenarioMeasured,
+    grade_campaign,
+)
 
 
 def _refuse_bad_input_name(name: str) -> None:
@@ -98,6 +104,17 @@ def _describe_inputs(inputs: Mapping[str, str] | None) -> tuple[ReproductionInpu
             )
         )
     return tuple(described)
+
+
+#: How a campaign verdict lands on the primary outcome when the primary already survived. Not a
+#: general translation: it is only ever read in the downgrade direction, so `SURVIVED -> SURVIVED`
+#: means "the gate did not object", never "the gate produced support".
+_CAMPAIGN_VERDICTS: dict[CampaignVerdict, OutcomeVerdict] = {
+    CampaignVerdict.SURVIVED: OutcomeVerdict.SURVIVED,
+    CampaignVerdict.REFUTED: OutcomeVerdict.REFUTED,
+    CampaignVerdict.UNDERPOWERED: OutcomeVerdict.UNDERPOWERED,
+    CampaignVerdict.INCONCLUSIVE: OutcomeVerdict.INCONCLUSIVE,
+}
 
 
 class ExperimentRunError(RuntimeError):
@@ -160,6 +177,10 @@ class Measured:
     detail: str = ""
     #: Numeric results for preregistered artifact tests. Verdicts are derived by the runner.
     artifact_measurements: tuple[ArtifactMeasured, ...] = ()
+    #: Numeric results for the registration's frozen validation scenarios (#159). Keyed by
+    #: frozen `scenario_id`, and `ScenarioMeasured` carries no verdict field at all -- a worker
+    #: reports what it measured and the runner decides what that is allowed to be called.
+    scenario_measurements: tuple[ScenarioMeasured, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -321,7 +342,7 @@ class ExperimentRunner:
             )
 
         resources = _usage(started_at, cpu_before, tracemalloc)
-        outcome = self._grade(plan, measured, now=now)
+        outcome = self._grade(plan, registration, measured, now=now)
         return self._record(
             plan,
             registration,
@@ -364,8 +385,49 @@ class ExperimentRunner:
             _issued=_ISSUE_TOKEN,
         )
 
+    def _grade_validation_campaign(
+        self, registration: Registration, measured: Measured
+    ) -> CampaignOutcome | None:
+        """Grade the campaign the *registration* froze, using #215's grader unchanged.
+
+        **The campaign is read from the frozen registration, never accepted from the caller.**
+        That is the binding: there is no parameter through which campaign B could be offered in
+        place of registered campaign A after results are visible. `run()` separately refuses a
+        registration whose `content_hash` does not match the plan, and the campaign is inside
+        that hash, so the substitution is closed twice.
+
+        Scenario measurements are matched by frozen `scenario_id`, so a result computed for one
+        scenario cannot satisfy another. Missing, duplicated and unknown ids are integrity
+        defects `grade_campaign` already derives; none of that logic is restated here, because a
+        second copy of the rules is how the two come to disagree.
+
+        Supplying scenario results for a registration that froze no campaign is refused rather
+        than ignored. Silently dropping them would let a worker believe hostile validation had
+        been graded when nothing was.
+        """
+        campaign = registration.draft.validation_campaign
+        if campaign is None:
+            if measured.scenario_measurements:
+                raise ExperimentRunError(
+                    "the measurement reported validation scenarios, but "
+                    f"{registration.draft.hypothesis_id} v{registration.draft.version} froze no "
+                    "validation campaign; results for a campaign nobody registered are not "
+                    "hostile validation"
+                )
+            return None
+        return grade_campaign(
+            campaign,
+            tuple(measured.scenario_measurements),
+            luck_threshold_z=registration.power.luck_threshold_z,
+        )
+
     def _grade(
-        self, plan: ExperimentPlan, measured: Measured, *, now: datetime
+        self,
+        plan: ExperimentPlan,
+        registration: Registration,
+        measured: Measured,
+        *,
+        now: datetime,
     ) -> ExperimentOutcome:
         """Decide what the measurement is allowed to be called.
 
@@ -383,6 +445,7 @@ class ExperimentRunner:
                 probes_failed=tuple(measured.probes_failed),
                 diagnostics=dict(measured.diagnostics),
                 artifact_outcomes=self._grade_artifacts(plan, measured),
+                validation_outcome=self._grade_validation_campaign(registration, measured),
                 detail=(
                     "probes required by the plan did not run, so the number cannot be read as "
                     f"evidence either way: {', '.join(missing)}"
@@ -429,6 +492,20 @@ class ExperimentRunner:
         if measured.detail:
             diagnostics["measurement_detail"] = measured.detail
 
+        campaign = self._grade_validation_campaign(registration, measured)
+        # **A hostile gate subtracts; it never adds.** The campaign is consulted only where the
+        # primary result already stands, so it can block a survivor and can never turn a refuted,
+        # underpowered or unreadable primary into one. Applying it symmetrically would make a
+        # favourable set of scenarios a second route to support -- exactly the "another way to
+        # get to yes" this project keeps having to close.
+        if campaign is not None and verdict is OutcomeVerdict.SURVIVED:
+            downgraded = _CAMPAIGN_VERDICTS[campaign.verdict]
+            if downgraded is not OutcomeVerdict.SURVIVED:
+                detail = (
+                    f"validation campaign {campaign.verdict.value.lower()}: {campaign.detail}"
+                )
+            verdict = downgraded
+
         return ExperimentOutcome(
             plan=plan,
             verdict=verdict,
@@ -440,6 +517,7 @@ class ExperimentRunner:
             probes_failed=tuple(measured.probes_failed),
             diagnostics=diagnostics,
             artifact_outcomes=self._grade_artifacts(plan, measured),
+            validation_outcome=campaign,
             detail=detail,
             completed_at=now,
         )

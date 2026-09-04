@@ -54,6 +54,7 @@ from quantbot.research.power import (
     supports_registered_direction,
 )
 from quantbot.research.registry import Registration
+from quantbot.research.validation_campaign import CampaignOutcome
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -282,6 +283,12 @@ class ExperimentOutcome(FrozenModel):
     probes_failed: tuple[Text, ...] = ()
     diagnostics: dict[str, str] = Field(default_factory=dict)
     artifact_outcomes: tuple[ArtifactOutcome, ...] = ()
+    #: The hostile-validation campaign frozen with the registration, graded by
+    #: `validation_campaign.grade_campaign` (#159). `None` when the registration froze no
+    #: campaign, which is every registration made before #159 and every one that declines to
+    #: declare scenarios. It is an *additional* gate: it can block a survivor and can never
+    #: manufacture one, so it is recorded beside the primary verdict rather than folded into it.
+    validation_outcome: CampaignOutcome | None = None
     detail: Text
     completed_at: datetime
 
