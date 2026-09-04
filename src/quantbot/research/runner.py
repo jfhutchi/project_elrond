@@ -55,12 +55,13 @@ from quantbot.research.manifest import (
     ExperimentPeriod,
     ReproductionInput,
     ResourceUsage,
+    canonical_result_json,
     content_id,
     write_experiment_manifest,
 )
 from quantbot.research.memory import RecordKind, ResearchRecord, Verdict
 from quantbot.research.power import supports_registered_direction
-from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
+from quantbot.research.registry import DataRole, DataWindow, HypothesisRegistry, Registration
 from quantbot.research.validation_campaign import (
     CampaignOutcome,
     CampaignVerdict,
@@ -137,6 +138,19 @@ def _campaign_results(outcome: CampaignOutcome | None) -> dict[str, dict[str, st
     Collections are rendered deterministically -- scenarios keyed by their own id, regime metrics
     sorted -- because a manifest hash that depended on dict ordering would make two identical runs
     produce two different bundles.
+
+    **`outcome_json` is the record; everything else here is a rendering of it.** The readable
+    fields flatten collections with delimiters -- `" | "` between integrity defects, `", "` and
+    `"="` between regime metrics -- and none of those delimiters is reserved. A defect quoting a
+    scenario detail can contain a pipe; a regime metric may legitimately be named `spread=bps,
+    net`. Parsing those strings back would recover something that looks like the campaign and is
+    not it, in exactly the cases where the campaign is most unusual.
+
+    So the whole `CampaignOutcome` is also written through `canonical_result_json`, the same
+    serializer the content addresses use, and `CampaignOutcome.model_validate_json` reads it back
+    exactly. Promotion and reproduction take that path. The flattened fields stay for the
+    operator reading a bundle by eye, and nothing downstream is entitled to reconstruct
+    scientific state from them.
     """
     if outcome is None:
         return {}
@@ -148,6 +162,8 @@ def _campaign_results(outcome: CampaignOutcome | None) -> dict[str, dict[str, st
             "underpowered_fraction": str(outcome.underpowered_fraction),
             "integrity_defects": " | ".join(outcome.integrity_defects),
             "detail": outcome.detail,
+            # Exact and lossless. Read this, never the flattened neighbours above.
+            "outcome_json": canonical_result_json(outcome),
         }
     }
     for scenario in outcome.scenarios:
@@ -416,14 +432,21 @@ class ExperimentRunner:
             # only on success would make the archive a record of things that worked, which is
             # the selection bias this project exists to resist.
             return self._record(
-                plan, registration, outcome, code, environment, applied_costs, design, resources
+                plan,
+                persisted_registration,
+                outcome,
+                code,
+                environment,
+                applied_costs,
+                design,
+                resources,
             )
 
         resources = _usage(started_at, cpu_before, tracemalloc)
         outcome = self._grade(plan, persisted_registration, measured, now=now)
         return self._record(
             plan,
-            registration,
+            persisted_registration,
             outcome,
             code,
             environment,
@@ -434,19 +457,87 @@ class ExperimentRunner:
         )
 
     @staticmethod
-    def _covering_snapshot(
+    def _covering_snapshots(
         plan: ExperimentPlan, dataset: str, role: str, period: ExperimentPeriod
-    ) -> DatasetSnapshot | None:
-        """A supplied snapshot of exactly this dataset and role that spans the whole period."""
-        for snapshot in plan.datasets:
+    ) -> tuple[DatasetSnapshot, ...]:
+        """Every supplied snapshot of exactly this dataset and role spanning the whole period.
+
+        All of them, not the first match. The vintage check below has to see the whole set: a
+        plan supplying two vintages of the same window cannot say which one the measurement
+        read, and picking one here would decide that question by iteration order.
+        """
+        return tuple(
+            snapshot
+            for snapshot in plan.datasets
+            if snapshot.dataset == dataset
+            and snapshot.role == role
+            and snapshot.start <= period.start
+            and snapshot.end >= period.end
+        )
+
+    @staticmethod
+    def _registered_window(
+        persisted: Registration, dataset: str, role: str, period: ExperimentPeriod
+    ) -> DataWindow | None:
+        """The preregistered window covering this range, which also fixes its vintage.
+
+        `HypothesisDraft` allows one window per dataset and role, so at most one can match and
+        the vintage it names is unambiguous.
+        """
+        for window in persisted.draft.windows:
             if (
-                snapshot.dataset == dataset
-                and snapshot.role == role
-                and snapshot.start <= period.start
-                and snapshot.end >= period.end
+                window.dataset == dataset
+                and window.role.value == role
+                and window.start <= period.start
+                and window.end >= period.end
             ):
-                return snapshot
+                return window
         return None
+
+    def _bind_range(
+        self,
+        plan: ExperimentPlan,
+        persisted: Registration,
+        *,
+        label: str,
+        dataset: str,
+        role: str,
+        period: ExperimentPeriod,
+        unsupplied: str,
+    ) -> None:
+        """Prove one scenario range was preregistered, supplied, and supplied at its vintage.
+
+        Three conditions, and each closes a different hole. The run must *supply* data covering
+        the range, or nothing was read. The registration must have *declared* it, or the
+        scenario is reading data this claim never preregistered -- which is where a campaign
+        would otherwise reach outside its own frozen footprint. And the supplied snapshot must
+        carry the *vintage* the declared window named, because `DataWindow.snapshot` exists
+        precisely so a re-pull cannot pass as the original: same dataset, same dates, revised
+        values is a different experiment wearing the frozen one's identity.
+
+        The supply check runs first only so the refusal a reader sees names the most immediate
+        problem. All three must hold; the order decides which message is reported, not which
+        rules apply.
+        """
+        covering = self._covering_snapshots(plan, dataset, role, period)
+        if not covering:
+            raise ExperimentRunError(unsupplied)
+        window = self._registered_window(persisted, dataset, role, period)
+        if window is None:
+            raise ExperimentRunError(
+                f"{label} reads {dataset}/{role} {period.start}..{period.end}, which "
+                f"{persisted.draft.hypothesis_id} v{persisted.draft.version} never reserved as "
+                "a declared data window; a scenario cannot draw on data the registration itself "
+                "did not preregister"
+            )
+        wrong = sorted({item.snapshot for item in covering if item.snapshot != window.snapshot})
+        if wrong:
+            raise ExperimentRunError(
+                f"{label} reads {dataset}/{role} {period.start}..{period.end}, preregistered at "
+                f"vintage {window.snapshot}, and this run supplies {', '.join(wrong)}; a "
+                "re-pulled dataset over the same dates is not the data the scenario was frozen "
+                "over, however well the dates line up"
+            )
 
     def _bind_campaign_to_data(self, plan: ExperimentPlan, persisted: Registration) -> None:
         """Prove every evidence-bearing scenario could have run on the data actually supplied.
@@ -458,17 +549,25 @@ class ExperimentRunner:
         could then report a favourable number under a frozen id, and the run would mint fresh
         protected evidence out of data nobody checked.
 
-        So each observed-market scenario must have an exact covering `DatasetSnapshot` on the
-        plan: same dataset, same role, and a range spanning the whole scenario period. A
-        walk-forward scenario needs a second covering snapshot for its fit period under the
-        declared fitting role, because a fit window nobody supplied is a fit that did not happen.
+        So each observed-market scenario must be preregistered as a `DataWindow` on the
+        **persisted** registration, supplied as a covering `DatasetSnapshot` on the plan, and
+        supplied at the *vintage* that window named. A walk-forward scenario has to satisfy all
+        three for its fit range too, under the declared fitting role, because a fit window
+        nobody supplied is a fit that did not happen.
 
-        A `PROTECTED_EVALUATION` scenario carries the extra requirement, because it is the only
-        kind that can become fresh evidence: the **persisted** registration must itself own a
-        protected `DataWindow` covering that dataset and period, so the scenario is reading a
-        holdout this claim actually reserved, and that dataset must be among the protected
-        snapshots `_spend` is about to consume. Fresh evidence is then something the protected
-        lifecycle handed over, not something a scenario asserted.
+        The window requirement covers every observed-market role, not only the protected one.
+        Requiring it only where fresh evidence was at stake left a validation scenario free to
+        read a dataset and date range the registration had never declared -- data outside the
+        frozen footprint of the claim being tested, chosen after the claim was frozen.
+
+        The vintage requirement is what `DataWindow.snapshot` was put there for. Same dataset,
+        same dates, revised values is a different dataset, and a scenario graded on it is not
+        the scenario that was frozen.
+
+        A `PROTECTED_EVALUATION` scenario carries one further requirement, because it is the
+        only kind that can become fresh evidence: its dataset must be among the protected
+        snapshots `_spend` is about to consume, so fresh evidence is something the protected
+        lifecycle handed over rather than something a scenario asserted.
 
         Resampled paths are exempt from the snapshot requirement and only from that: their
         numbers come from simulation, and `grade_campaign` already refuses them
@@ -482,6 +581,17 @@ class ExperimentRunner:
         did.
         """
         campaign = persisted.draft.validation_campaign
+        # The plan states whether a campaign is required and the store says which one was
+        # frozen. Reconciled here, before the holdout is spent, so a caller-compiled plan cannot
+        # quietly declare a claim ungated -- and so `ExperimentOutcome`'s structural backstop
+        # reports a mismatch as a run refusal rather than a validation error at the end.
+        expected = None if campaign is None else campaign.campaign_id
+        if plan.validation_campaign_id != expected:
+            raise ExperimentRunError(
+                f"the plan declares validation campaign {plan.validation_campaign_id} and "
+                f"{persisted.draft.hypothesis_id} v{persisted.draft.version} froze {expected}; "
+                "the store is the authority on which campaign this claim registered"
+            )
         if campaign is None:
             return
         protected_datasets = {
@@ -493,49 +603,40 @@ class ExperimentRunner:
             label = f"scenario {scenario.scenario_id} ({scenario.kind.value})"
             if scenario.evidence_source is not ScenarioEvidenceSource.OBSERVED_MARKET:
                 continue
-            if (
-                self._covering_snapshot(
-                    plan, scenario.dataset, scenario.data_role, scenario.period
-                )
-                is None
-            ):
-                raise ExperimentRunError(
+            self._bind_range(
+                plan,
+                persisted,
+                label=label,
+                dataset=scenario.dataset,
+                role=scenario.data_role,
+                period=scenario.period,
+                unsupplied=(
                     f"{label} is frozen over {scenario.dataset}/{scenario.data_role} "
                     f"{scenario.period.start}..{scenario.period.end}, and this run supplies no "
                     "dataset snapshot covering it; a scenario id is not evidence that the "
                     "scenario's data was read"
-                )
+                ),
+            )
             if scenario.fit_period is not None and scenario.fit_data_role is not None:
-                if (
-                    self._covering_snapshot(
-                        plan, scenario.dataset, scenario.fit_data_role, scenario.fit_period
-                    )
-                    is None
-                ):
-                    raise ExperimentRunError(
+                self._bind_range(
+                    plan,
+                    persisted,
+                    label=label,
+                    dataset=scenario.dataset,
+                    role=scenario.fit_data_role,
+                    period=scenario.fit_period,
+                    unsupplied=(
                         f"{label} fits on {scenario.dataset}/{scenario.fit_data_role} "
                         f"{scenario.fit_period.start}..{scenario.fit_period.end}, which this run "
                         "supplies no snapshot for; a fit window nobody supplied is a fit that "
                         "did not happen"
-                    )
+                    ),
+                )
             if scenario.data_role != DataRole.PROTECTED_EVALUATION.value:
                 continue
-            # Only a protected scenario can become fresh evidence, so only it has to show the
-            # holdout was reserved by this claim and is about to be spent by this run.
-            owned = any(
-                window.dataset == scenario.dataset
-                and window.role is DataRole.PROTECTED_EVALUATION
-                and window.start <= scenario.period.start
-                and window.end >= scenario.period.end
-                for window in persisted.draft.windows
-            )
-            if not owned:
-                raise ExperimentRunError(
-                    f"{label} reads protected {scenario.dataset} "
-                    f"{scenario.period.start}..{scenario.period.end}, which "
-                    f"{persisted.draft.hypothesis_id} v{persisted.draft.version} never reserved; "
-                    "a holdout this claim does not own cannot become its fresh evidence"
-                )
+            # Ownership and vintage are already proven by `_bind_range` above, for every role.
+            # What remains is specific to a holdout: only a protected scenario can become fresh
+            # evidence, so only it must show the window is being spent by this very run.
             if scenario.dataset not in protected_datasets:
                 raise ExperimentRunError(
                     f"{label} reads protected {scenario.dataset}, which this run does not spend; "
@@ -807,7 +908,7 @@ class ExperimentRunner:
     def _record(
         self,
         plan: ExperimentPlan,
-        registration: Registration,
+        persisted: Registration,
         outcome: ExperimentOutcome,
         code: CodeProvenance,
         environment: EnvironmentFingerprint,
@@ -835,7 +936,7 @@ class ExperimentRunner:
         recorded_inputs = _describe_inputs(measured_inputs)
         manifest = self._manifest(
             plan,
-            registration,
+            persisted,
             outcome,
             code,
             environment,
@@ -871,7 +972,7 @@ class ExperimentRunner:
     def _manifest(
         self,
         plan: ExperimentPlan,
-        registration: Registration,
+        persisted: Registration,
         outcome: ExperimentOutcome,
         code: CodeProvenance,
         environment: EnvironmentFingerprint,
@@ -885,6 +986,13 @@ class ExperimentRunner:
         `mode` defaults to EXPLORATORY everywhere else on purpose -- a run that forgets to
         declare one must not pass as evidence. Here the registration is in hand, so the stronger
         claim is the true one.
+
+        The registration read here is the **persisted** one `resolve_for_run` returned, not the
+        caller's. `run()` proves the two carry the same content hash before reaching this point,
+        so today they are interchangeable -- and the bundle's power verdict and minimum
+        detectable effect are still taken from the store's copy, because after a run declares one
+        object authoritative there should not be a second object still being read for the
+        durable record.
         """
         window = _plan_window(plan.datasets)
         experiment_id = content_id(
@@ -950,8 +1058,8 @@ class ExperimentRunner:
             hypothesis_version=plan.hypothesis_version,
             registration_hash=plan.registration_hash,
             hypothesis_graph_hash=plan.hypothesis_graph_hash,
-            minimum_detectable_effect=str(registration.power.minimum_detectable_effect),
-            power_verdict="OVERRIDDEN" if registration.power.override else "POWERED",
+            minimum_detectable_effect=str(persisted.power.minimum_detectable_effect),
+            power_verdict="OVERRIDDEN" if persisted.power.override else "POWERED",
             datasets=tuple(plan.datasets),
             statistics=plan.statistics,
             code=code,

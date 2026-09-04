@@ -714,6 +714,50 @@ class HypothesisRegistry:
         row = self._row(hypothesis_id, version)
         return None if row is None else Registration.model_validate_json(str(row["document_json"]))
 
+    def _load_intact_registration(
+        self, hypothesis_id: str, version: int
+    ) -> tuple[Registration, str]:
+        """The stored registration, proven intact against the hash frozen beside it (#159).
+
+        `get()` parses `document_json` and stops there, which is fine for a read and is not
+        enough for an execution path. The store keeps two things about a registration: the
+        document, and the `content_hash` column recorded when it was frozen. Trusting the
+        document alone makes an edit to it invisible -- the parsed object is self-consistent, so
+        its own `content_hash` property agrees with the edited content, and a caller presenting
+        that same edited hash matches perfectly. Nothing in that chain ever consults the number
+        the store actually froze.
+
+        So both are read, and the recomputed hash must equal the stored column before the
+        registration is handed to anything. A disagreement is refused, never repaired: the two
+        values disagreeing is precisely the evidence that one of them is not what was frozen,
+        and nothing in here can tell which.
+
+        This is the single authoritative loader. `verify_for_execution` and `resolve_for_run`
+        both go through it rather than each spelling out what an intact stored registration is,
+        because two definitions of that is how one execution path comes to accept what the other
+        refuses.
+
+        Returns the registration and the store's own frozen hash, which is the value callers
+        should compare against and report -- not the recomputed one, even though the two are
+        proven equal here.
+        """
+        row = self._row(hypothesis_id, version)
+        if row is None:
+            raise RegistrationRefused(
+                RefusalReason.NOT_REGISTERED,
+                f"{hypothesis_id} v{version} has no frozen registration in this store, so "
+                "there is no claim for a run to be about",
+            )
+        stored_hash = str(row["content_hash"])
+        registration = Registration.model_validate_json(str(row["document_json"]))
+        if registration.content_hash != stored_hash:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"{hypothesis_id} v{version} hashes to {registration.content_hash}"
+                f" but was frozen as {stored_hash}",
+            )
+        return registration, stored_hash
+
     def resolve_for_run(
         self, hypothesis_id: str, version: int, *, content_hash: str
     ) -> Registration:
@@ -726,25 +770,22 @@ class HypothesisRegistry:
         registration A. Window consumption still addressed A's id, so A's holdout was spent to
         grade B's campaign.
 
-        So the store is asked. The row is fetched by identity, required to exist, and required to
-        match the hash the caller presented -- and it is the returned object, not the caller's,
-        that the rest of the run reads its campaign from.
+        So the store is asked, through `_load_intact_registration` -- which proves the row is
+        internally intact before any of it is believed -- and the run's presented hash is then
+        checked against the **stored column**, not against the parsed document's own recomputed
+        digest. Comparing the caller to the document would leave the tampered-document case
+        matching itself; comparing the caller to what the store froze is what closes it. It is
+        the returned object, not the caller's, that the rest of the run reads.
 
         The campaign freeze is re-verified through `_verify_campaign_frozen`, which is #216's
         authority unchanged. A campaign whose ledger row has since been tampered with cannot
         become evidence just because the registration document still names it.
         """
-        persisted = self.get(hypothesis_id, version)
-        if persisted is None:
-            raise RegistrationRefused(
-                RefusalReason.NOT_REGISTERED,
-                f"{hypothesis_id} v{version} is not in this store, so there is no frozen claim "
-                "for a run to be about",
-            )
-        if persisted.content_hash != content_hash:
+        persisted, stored_hash = self._load_intact_registration(hypothesis_id, version)
+        if stored_hash != content_hash:
             raise RegistrationRefused(
                 RefusalReason.TAMPERED,
-                f"{hypothesis_id} v{version} is stored at {persisted.content_hash} and the run "
+                f"{hypothesis_id} v{version} is stored at {stored_hash} and the run "
                 f"presented {content_hash}; a result frozen against one claim cannot be reported "
                 "against another, and the store is the authority on which claim exists",
             )
@@ -1384,21 +1425,7 @@ class HypothesisRegistry:
         reporting a clean pass. An operator override does not excuse it either: an override is a
         judgement that a known shortfall is acceptable, not permission to skip measuring.
         """
-        row = self._row(hypothesis_id, version)
-        if row is None:
-            raise RegistrationRefused(
-                RefusalReason.NOT_REGISTERED,
-                f"{hypothesis_id} v{version} has no frozen registration",
-            )
-
-        stored_hash = str(row["content_hash"])
-        registration = Registration.model_validate_json(str(row["document_json"]))
-        if registration.content_hash != stored_hash:
-            raise RegistrationRefused(
-                RefusalReason.TAMPERED,
-                f"{hypothesis_id} v{version} hashes to {registration.content_hash}"
-                f" but was frozen as {stored_hash}",
-            )
+        registration, stored_hash = self._load_intact_registration(hypothesis_id, version)
 
         if observed is None:
             raise RegistrationRefused(
