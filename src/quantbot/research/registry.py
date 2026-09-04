@@ -151,6 +151,13 @@ RESERVATION_DAYS = 90
 VALIDATION_CAMPAIGN_ACTOR = "validation-campaign"
 VALIDATION_CAMPAIGN_ACTOR_VERSION = "1"
 
+#: The reserved search-id namespace for validation campaigns, matching
+#: `ValidationCampaign.selection_search_id` (#215). Campaign burden is discovered by this prefix
+#: rather than by `actor`, because a row's search identity is what puts it in the namespace while
+#: `actor` is an ordinary column that can be made to disagree with it -- and a row that stopped
+#: being counted because a column changed would take real selection freedom off the luck bar.
+VALIDATION_SEARCH_NAMESPACE = "validation:"
+
 #: Which role a campaign's ledger row is attributed to when its scenarios span several. The most
 #: protected role wins, because the burden that matters is the one spent on the data that cannot
 #: be spent twice. Ordering, not a set: a campaign touching a protected window is a claim on that
@@ -1013,20 +1020,65 @@ class HypothesisRegistry:
                     "visible is not a preregistration, whatever the ledger calls it",
                 )
 
+    def _campaign_from_row(self, row: RowMapping) -> ValidationCampaign:
+        """Rebuild the campaign a reserved-namespace row claims to record.
+
+        The row's `search_id` is the claim; `detail_json` is the design behind it. They have to
+        agree, or the row is sitting in the namespace under an identity it cannot reconstruct.
+        """
+        search_id = str(row["search_id"])
+        try:
+            campaign = ValidationCampaign.model_validate_json(str(row["detail_json"]))
+        except ValueError as error:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {search_id!r} occupies the reserved "
+                f"{VALIDATION_SEARCH_NAMESPACE!r} namespace but holds no readable campaign "
+                f"design, so the selection freedom it recorded cannot be counted: {error}",
+            ) from error
+        if campaign.selection_search_id != search_id:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {search_id!r} stores a design whose own identity is "
+                f"{campaign.selection_search_id!r}",
+            )
+        return campaign
+
     def campaign_trials_spent(self) -> int:
         """Selection freedom already charged to validation campaigns, read from the ledger.
 
-        Derived, never declared. A caller's `trial_charge=1` is a claim; this is the count of
-        append-only rows that actually exist, which is what makes a redraw cost something even
-        when the caller says it did not.
+        **Discovered by reserved namespace, not by `actor`.** Every campaign search id is
+        `validation:<campaign_id>` (#215), and that prefix is the one part of the row a campaign
+        cannot occupy by accident. Summing `WHERE actor = VALIDATION_CAMPAIGN_ACTOR` looked
+        equivalent and was not: Finding 1 established that `actor` can disagree with what the
+        row's own search identity says it is, and under the actor query such a row contributed
+        **zero**. Selection freedom that genuinely happened would then vanish from the global
+        luck bar the moment its metadata was malformed -- and an unrelated hypothesis
+        registering afterwards would be judged against a bar that had quietly dropped it.
+
+        Failing closed rather than charging a guess. A malformed row in this namespace means the
+        burden and its provenance cannot both be trusted, and the two ways of guessing are worse
+        than refusing: charging the row's own number trusts a value that has already been shown
+        wrong, and charging the reconstructed campaign's trusts a design the ledger contradicts.
+
+        Verification is `_verify_campaign_row`, the same authority the freeze and the
+        registration paths use. A fourth notion of a valid campaign row is how the three that
+        exist come to disagree.
         """
-        return int(
+        total = 0
+        for row in (
             self._session.execute(
-                select(func.coalesce(func.sum(search_runs.c.candidates_evaluated), 0)).where(
-                    search_runs.c.actor == VALIDATION_CAMPAIGN_ACTOR
+                select(search_runs).where(
+                    search_runs.c.search_id.like(f"{VALIDATION_SEARCH_NAMESPACE}%")
                 )
-            ).scalar_one()
-        )
+            )
+            .mappings()
+            .all()
+        ):
+            campaign = self._campaign_from_row(row)
+            self._verify_campaign_row(campaign, row, self._expected_campaign_row(campaign))
+            total += int(row["candidates_evaluated"])
+        return total
 
     def _verify_campaign_frozen(self, draft: HypothesisDraft) -> None:
         """A registration carrying a campaign must name one the ledger already recorded.

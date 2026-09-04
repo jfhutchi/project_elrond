@@ -30,6 +30,7 @@ from sqlalchemy.exc import IntegrityError
 from quantbot.research.manifest import ExperimentPeriod, content_id
 from quantbot.research.registry import (
     VALIDATION_CAMPAIGN_ACTOR,
+    VALIDATION_SEARCH_NAMESPACE,
     DataRole,
     DataWindow,
     HypothesisRegistry,
@@ -459,11 +460,17 @@ def test_no_campaign_can_reduce_accumulated_burden(database: Database) -> None:
             high_water = registry.cumulative_trials()
 
 
-def test_the_charge_is_read_from_the_ledger_not_from_the_payload(database: Database) -> None:
-    """`trial_charge` on the model is a claim; the ledger is the authority.
+def test_a_ledger_and_campaign_that_disagree_fail_closed(database: Database) -> None:
+    """Neither number is trusted when the row and the design contradict each other.
 
-    Proven by contradiction: the stored row is edited to a different count, and the burden
-    follows the row rather than the campaign object's own `trial_charge`.
+    An earlier version of this test asserted the burden simply *followed* the row: edit
+    `candidates_evaluated` to 7 and the charge became 7. That was the right instinct -- the
+    ledger is the authority, not the caller's `trial_charge` -- and the wrong conclusion, because
+    it trusted a value already shown to be wrong.
+
+    Charging the row's number trusts a column that has been tampered with. Charging the
+    reconstructed campaign's trusts a design the ledger contradicts. Both are guesses about which
+    corruption is the convenient one, so the disagreement itself is the finding.
     """
     with database.transaction() as session:
         registry = HypothesisRegistry(session)
@@ -478,8 +485,8 @@ def test_the_charge_is_read_from_the_ledger_not_from_the_payload(database: Datab
             .values(candidates_evaluated=7)
         )
 
-        assert subject.trial_charge == 1
-        assert registry.campaign_trials_spent() == 7
+        with pytest.raises(RegistrationRefused, match="candidates_evaluated"):
+            registry.campaign_trials_spent()
 
 
 # --- backward compatibility ------------------------------------------------------------------
@@ -682,8 +689,11 @@ def test_a_foreign_actor_row_cannot_become_an_uncharged_accepted_campaign(
         registry = HypothesisRegistry(session)
         subject = frozen_row_with(session, registry, actor="not-the-campaign-actor")
 
-        # The row exists and its configuration hash is right, which is all the old check asked.
-        assert registry.campaign_trials_spent() == 0, "a foreign-actor row charges nothing"
+        # Under the old actor-keyed sum this row charged nothing while still looking valid
+        # enough to accept. It is now discovered by its reserved namespace and refuses instead,
+        # so the burden cannot quietly drop -- see the global-accounting tests below.
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
+            registry.campaign_trials_spent()
 
         with pytest.raises(RegistrationRefused, match="not an authoritative record"):
             registry.freeze_validation_campaign(subject, now=NOW)
@@ -1009,3 +1019,189 @@ def test_a_campaign_with_no_consumed_overlap_needs_no_temporal_comparison(
         assert registry.freeze_validation_campaign(subject, now=NOW) == first
         assert campaign_rows(session) == 1
         assert registry.campaign_trials_spent() == 1
+
+
+# --- global burden: selection freedom cannot vanish -------------------------------------------
+#
+# Finding 1 stopped a malformed row from *proving* preregistration. It did not stop that row
+# from disappearing out of the global luck bar, because the burden was summed
+# `WHERE actor = VALIDATION_CAMPAIGN_ACTOR` -- the same column Finding 1 had just established can
+# be made to disagree with the row's own search identity.
+#
+# So a campaign whose selection genuinely happened stopped counting the moment its metadata was
+# malformed, and an *unrelated* hypothesis registering afterwards was judged against a bar that
+# had quietly dropped it. That is the opposite of what this slice is for.
+#
+# Burden is now discovered by the reserved `validation:` namespace, which is what puts a row in
+# the campaign accounting in the first place, and a malformed row there refuses rather than
+# evaporating. The distinction from Finding 1 throughout: none of these tests register the
+# malformed campaign. They register something else, or nothing at all.
+
+
+def test_the_reserved_namespace_is_the_one_the_campaign_model_uses() -> None:
+    """The prefix is defined in two modules and must stay one namespace.
+
+    `selection_search_id` lives on `ValidationCampaign`; the discovery constant lives here.
+    Pinned so a change to either is caught, rather than silently splitting the namespace and
+    leaving every campaign row undiscoverable.
+    """
+    assert declared_campaign().selection_search_id.startswith(VALIDATION_SEARCH_NAMESPACE)
+
+
+@pytest.mark.parametrize(
+    ("corruption", "reason"),
+    [
+        ({"actor": "some-other-worker"}, "actor"),
+        ({"actor_version": "99"}, "actor_version"),
+        ({"candidates_evaluated": 4}, "candidates_evaluated"),
+    ],
+)
+def test_a_malformed_row_cannot_hide_burden_from_the_global_bar(
+    database: Database, corruption: dict[str, object], reason: str
+) -> None:
+    """Malformed campaign metadata refuses; it never reports a lower burden.
+
+    The check is deliberately on `campaign_trials_spent()` and `cumulative_trials()` -- the
+    global figures an unrelated registration is judged against -- not on anything to do with the
+    malformed campaign itself. That is what separates this from Finding 1.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = declared_campaign()
+        registry.freeze_validation_campaign(subject, now=NOW)
+        assert registry.campaign_trials_spent() == 1
+        charged = registry.cumulative_trials()
+
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(**corruption)
+        )
+
+        with pytest.raises(RegistrationRefused, match="not an authoritative record") as spent:
+            registry.campaign_trials_spent()
+        assert reason in str(spent.value)
+
+        # And the figure a registration would be judged against refuses too, rather than
+        # silently returning the pre-campaign total.
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
+            assert registry.cumulative_trials() < charged
+
+
+def test_an_unrelated_registration_cannot_proceed_on_a_bar_missing_a_campaign(
+    database: Database,
+) -> None:
+    """**The load-bearing end-to-end case.**
+
+    Campaign A's selection freedom really happened. Its actor is then malformed. Hypothesis B
+    carries no campaign at all and is entirely unrelated to A -- and under the old actor-keyed
+    sum it would have registered happily against a luck bar with A's trial silently removed.
+
+    Fails closed instead: the burden cannot be established, so nothing is judged against a guess
+    at it. B never touches A, which is the whole point.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = declared_campaign()
+        registry.freeze_validation_campaign(subject, now=NOW)
+        with_campaign = registry.cumulative_trials()
+
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(actor="some-other-worker")
+        )
+
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
+            registry.register(
+                draft(hypothesis_id="H-UNRELATED"),
+                now=NOW,
+                critique=critique("H-UNRELATED"),
+            )
+
+    # The bar the campaign had already raised, recorded before the tampering, is what a silent
+    # omission would have thrown away.
+    assert with_campaign >= 1
+
+
+def test_a_row_in_the_namespace_that_cannot_rebuild_its_campaign_fails_closed(
+    database: Database,
+) -> None:
+    """A row occupying the reserved namespace must be able to say what it recorded.
+
+    Two ways it cannot: unreadable design, or a design whose own `selection_search_id` is not
+    the id the row is filed under. Both leave the burden unestablished.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = declared_campaign()
+        registry.freeze_validation_campaign(subject, now=NOW)
+
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(detail_json="{not a campaign")
+        )
+        with pytest.raises(RegistrationRefused, match="no readable campaign design"):
+            registry.campaign_trials_spent()
+
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(detail_json=seeded_campaign(seed=11).model_dump_json())
+        )
+        with pytest.raises(RegistrationRefused, match="own identity is"):
+            registry.campaign_trials_spent()
+
+
+def test_two_intact_campaigns_still_sum_normally(database: Database) -> None:
+    """The control. A rule that refused everything would satisfy every case above."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        first = declared_campaign()
+        second = seeded_campaign(seed=20260904)
+        assert second.campaign_id != first.campaign_id
+
+        registry.freeze_validation_campaign(first, now=NOW)
+        assert registry.campaign_trials_spent() == 1
+        registry.freeze_validation_campaign(second, now=NOW)
+
+        assert registry.campaign_trials_spent() == 2
+        assert campaign_rows(session) == 2
+        # And an ordinary registration proceeds, judged against a bar that includes both.
+        registration = registry.register(draft(), now=NOW, critique=critique())
+        assert registration.cumulative_trials >= 2
+
+
+def test_ordinary_search_rows_are_not_read_as_campaigns(database: Database) -> None:
+    """A worker's own `search_runs` row is not a validation campaign and must not be verified
+    as one. The namespace is what makes a row campaign accounting; nothing else does.
+
+    The row below is deliberately unlike a campaign in every way a campaign row is checked --
+    different actor, different count, no campaign design in `detail_json` -- and it must still
+    pass unexamined, because it never claimed the namespace.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registry.freeze_validation_campaign(declared_campaign(), now=NOW)
+
+        session.execute(
+            search_runs.insert().values(
+                search_id="recombination-run-7",
+                actor="evidence-aware-recombination",
+                actor_version="3",
+                candidates_evaluated=250,
+                dataset=DATASET,
+                start_date="2016-01-04",
+                end_date="2026-08-14",
+                data_role="DISCOVERY",
+                started_at=encode_utc(NOW),
+                finished_at=encode_utc(NOW),
+                configuration_hash="whatever-this-worker-uses",
+                detail_json='{"candidates": 250}',
+            )
+        )
+
+        # Unaffected: still exactly the one campaign, and no attempt to verify the worker row.
+        assert registry.campaign_trials_spent() == 1
+        registry.register(draft(), now=NOW, critique=critique())
