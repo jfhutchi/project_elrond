@@ -1545,6 +1545,29 @@ class HypothesisRegistry:
                 " RESERVED between the check and the write; another caller took it",
             )
 
+    def commit_consumption(self) -> None:
+        """Make a protected-window consumption durable before the data is handed over (#159).
+
+        **This is not a general commit affordance and must not become one.** It exists for one
+        caller and one moment: `ExperimentRunner._spend` has recorded `RESERVED -> CONSUMED` and
+        is about to issue `ProtectedAccess`, after which the data is read and cannot be unread.
+        Everything else in this class deliberately leaves commit timing to the caller who owns
+        the transaction.
+
+        It commits the caller's whole unit of work, not only the window rows, and that is forced
+        rather than chosen. `hypothesis_data_windows` is foreign-keyed to `hypotheses`, so a
+        consumption cannot be durable while the registration that owns it is not; and a second
+        connection cannot see this transaction's uncommitted rows at all, so performing the
+        consumption on a connection of its own would not find the registration to consume
+        against. Measured, not assumed: a separate connection reads zero rows of an open
+        transaction's work.
+
+        The honest statement of the resulting contract is that **the protected handoff is a
+        commit point.** A caller that does not want its earlier work made durable must not hand
+        a holdout to a measurement in the same transaction as that work.
+        """
+        self._session.commit()
+
     def release(self, hypothesis_id: str, version: int, *, dataset: str, role: DataRole) -> None:
         """Give up a reservation before the data was read, for when someone knows it is dead.
 

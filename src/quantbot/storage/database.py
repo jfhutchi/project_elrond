@@ -418,9 +418,32 @@ class Database:
 
     @contextmanager
     def transaction(self) -> Iterator[Session]:
-        """Open a transaction that commits on success and rolls back on error."""
-        with Session(self.engine, expire_on_commit=False) as session, session.begin():
-            yield session
+        """Open a transaction that commits on success and rolls back on error.
+
+        Managed by hand rather than through `session.begin()`, and the difference is one
+        capability: a caller may commit *inside* the block and keep using the session. Under
+        `with session.begin()` the first statement after an inner `commit()` raises
+        `InvalidRequestError: Can't operate on closed transaction inside context manager`, so
+        no work in the middle of a block could ever be made durable.
+
+        `ExperimentRunner` needs exactly that (#159 Finding 10). It consumes a protected window
+        and then hands the data to a measurement, and while the consumption is only part of the
+        caller's transaction, *any* later exception -- a validation error, a failed manifest
+        write, a plain bug -- unwinds it and erases the record that the holdout was ever read.
+        A durable boundary at the handoff is the only thing that makes "this data has been seen"
+        survive the ways a run can go wrong afterwards.
+
+        Behaviour for every existing caller is unchanged: commit on clean exit, roll back on
+        exception. `BaseException` is caught rather than `Exception` so a `KeyboardInterrupt` or
+        a cancellation rolls back rather than leaving the transaction dangling.
+        """
+        with Session(self.engine, expire_on_commit=False) as session:
+            try:
+                yield session
+            except BaseException:
+                session.rollback()
+                raise
+            session.commit()
 
     def close(self) -> None:
         """Dispose pooled connections while leaving the durable file intact."""

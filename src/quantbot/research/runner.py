@@ -727,7 +727,33 @@ class ExperimentRunner:
                 )
 
     def _spend(self, plan: ExperimentPlan, *, now: datetime) -> ProtectedAccess:
-        """Consume every protected window the plan names, before any of it is read."""
+        """Consume every protected window the plan names and make that durable, before any of
+        it is read (#159 Finding 10).
+
+        The ordering is the whole protection:
+
+            preflight -> consume -> COMMIT -> issue ProtectedAccess -> measure -> grade -> record
+
+        Finding 9 made a *grading refusal* durable by returning a recorded failure instead of
+        raising. That closed one path and left the shape of the defect intact, because the
+        consumption was still a row in the caller's open transaction: a pydantic
+        `ValidationError`, a manifest the validator refuses, an `OSError` from the write, or an
+        ordinary bug in this class would still escape `run()`, unwind the transaction, and take
+        `CONSUMED` with it. The measurement had read the holdout and nothing recorded that it
+        had.
+
+        Catching those as well would have been the smaller change and the wrong one: a runner
+        bug recorded as a research `FAILED` outcome is a defect wearing a result's clothes. So
+        the boundary moves instead. Once the token is issued the consumption is already
+        committed, which makes every later failure mode safe *without* any of them having to be
+        anticipated -- including the ones nobody has thought of yet. Genuine bugs still
+        propagate, loudly, and still cost the holdout, which is the correct price for having
+        read it.
+
+        The commit is placed before `ProtectedAccess` is constructed rather than after, because
+        the token is the thing that authorises reading. A window consumed but not yet committed
+        must not be reachable by a measurement.
+        """
         protected = tuple(
             snapshot
             for snapshot in plan.datasets
@@ -748,6 +774,7 @@ class ExperimentRunner:
                 now=now,
             )
             spent.append((snapshot.dataset, DataRole.PROTECTED_EVALUATION))
+        self._registry.commit_consumption()
         return ProtectedAccess(
             hypothesis_id=plan.hypothesis_id,
             version=plan.hypothesis_version,
