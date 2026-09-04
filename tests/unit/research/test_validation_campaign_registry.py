@@ -225,7 +225,7 @@ def test_a_redraw_cannot_hide_inside_the_first_campaigns_record(database: Databa
             .values(configuration_hash=second.campaign_id)
         )
 
-        with pytest.raises(RegistrationRefused, match="cannot take over another selection"):
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
             registry.freeze_validation_campaign(first, now=NOW)
 
 
@@ -347,7 +347,7 @@ def test_a_registration_citing_a_record_for_another_campaign_is_refused(
             .values(configuration_hash="f" * 64)
         )
 
-        with pytest.raises(RegistrationRefused, match="records a different campaign"):
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
             registry.register(
                 draft(validation_campaign=subject), now=NOW, critique=critique()
             )
@@ -584,3 +584,190 @@ def test_the_ledger_row_records_enough_to_reproduce_the_selection(
     rebuilt = ValidationCampaign.model_validate_json(str(row["detail_json"]))
     assert rebuilt.campaign_id == subject.campaign_id
     assert rebuilt == subject
+
+
+# --- the ledger row is an authoritative record, or it is nothing ----------------------------
+#
+# Matching `configuration_hash` alone was a fail-open gap, and the shape of it is worth stating
+# because it is not obvious: `campaign_trials_spent()` counts rows by `actor`, so a row carrying
+# the right `search_id` and `configuration_hash` under some *other* actor satisfied the freeze
+# and the registration check while contributing no burden. A campaign accepted as preregistered
+# and charged nothing is the exact failure this slice exists to prevent.
+#
+# Each case below corrupts exactly one column of an otherwise valid row, so a refusal can only
+# be attributable to that column.
+
+
+def frozen_row_with(session, registry: HypothesisRegistry, **corruption: object):
+    """Freeze a real campaign, then corrupt one column of its authoritative row."""
+    subject = declared_campaign()
+    registry.freeze_validation_campaign(subject, now=NOW)
+    session.execute(
+        search_runs.update()
+        .where(search_runs.c.search_id == subject.selection_search_id)
+        .values(**corruption)
+    )
+    return subject
+
+
+@pytest.mark.parametrize(
+    ("corruption", "column"),
+    [
+        # The load-bearing one: burden is counted by actor, so a foreign actor is a row that
+        # proves preregistration while paying nothing.
+        ({"actor": "someone-else"}, "actor"),
+        ({"actor_version": "99"}, "actor_version"),
+        # A campaign is one frozen selection comparison. A ledger disagreeing about the count
+        # is a disagreement between campaign semantics and the evidence for them.
+        ({"candidates_evaluated": 5}, "candidates_evaluated"),
+        ({"dataset": "some-other-dataset"}, "dataset"),
+        # Most-protected-role attribution decides which window the burden is charged against.
+        ({"data_role": "VALIDATION"}, "data_role"),
+        ({"start_date": "2017-01-01"}, "start_date"),
+        ({"end_date": "2025-01-01"}, "end_date"),
+    ],
+)
+def test_a_corrupted_column_cannot_prove_preregistration(
+    database: Database, corruption: dict[str, object], column: str
+) -> None:
+    """Every material column is verified, and a mismatch fails closed on both paths.
+
+    Asserted on the freeze *and* on registration, because the two used to disagree about what a
+    valid record is, and one of them being lenient is enough.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = frozen_row_with(session, registry, **corruption)
+
+        with pytest.raises(RegistrationRefused, match="not an authoritative record") as freeze:
+            registry.freeze_validation_campaign(subject, now=NOW)
+        assert column in str(freeze.value)
+
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
+            registry.register(draft(validation_campaign=subject), now=NOW, critique=critique())
+
+
+def test_a_foreign_actor_row_cannot_become_an_uncharged_accepted_campaign(
+    database: Database,
+) -> None:
+    """The gap stated as the property it protects, not as a column comparison.
+
+    A row under a foreign actor contributes nothing to `campaign_trials_spent()`. If it could
+    still satisfy the freeze, the campaign would be accepted as preregistered while its
+    selection freedom went uncounted -- and every later registration would be judged against a
+    bar that never saw it.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = frozen_row_with(session, registry, actor="not-the-campaign-actor")
+
+        # The row exists and its configuration hash is right, which is all the old check asked.
+        assert registry.campaign_trials_spent() == 0, "a foreign-actor row charges nothing"
+
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
+            registry.freeze_validation_campaign(subject, now=NOW)
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
+            registry.register(draft(validation_campaign=subject), now=NOW, critique=critique())
+
+
+def test_a_tampered_detail_json_cannot_prove_preregistration(database: Database) -> None:
+    """The stored design must rebuild the campaign it claims to be.
+
+    Without this, every verified column could match while the row held the design of a different
+    selection -- so the ledger would reproduce the wrong campaign, which is the one thing
+    `detail_json` is there for.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        other = seeded_campaign(seed=7)
+
+        subject = frozen_row_with(session, registry, detail_json=other.model_dump_json())
+        with pytest.raises(RegistrationRefused, match="rebuilds as"):
+            registry.freeze_validation_campaign(subject, now=NOW)
+
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(detail_json="{not json at all")
+        )
+        with pytest.raises(RegistrationRefused, match="readable frozen"):
+            registry.freeze_validation_campaign(subject, now=NOW)
+
+
+def test_an_intact_row_still_verifies(database: Database) -> None:
+    """The control for every corruption above. A check refusing everything would satisfy them
+    all, so the untouched row must still be accepted and still charge exactly once."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = declared_campaign()
+        first = registry.freeze_validation_campaign(subject, now=NOW)
+
+        assert registry.freeze_validation_campaign(subject, now=NOW) == first
+        assert registry.campaign_trials_spent() == 1
+        registry.register(draft(validation_campaign=subject), now=NOW, critique=critique())
+
+
+# --- ordering: proven history is not post-hoc -------------------------------------------------
+
+
+def test_an_identical_campaign_stays_reusable_after_its_window_is_consumed(
+    database: Database,
+) -> None:
+    """A campaign frozen *before* measurement remains verifiable after it.
+
+    The consumed-window barrier used to run first, so re-freezing a legitimately preregistered
+    campaign was refused as post-hoc once its results existed -- the ledger row proving the
+    campaign predates the outcome being read as evidence that it does not. That made a correct
+    campaign impossible to re-verify at exactly the moment it had something to say.
+
+    Nothing here weakens contamination: the row is reusable only because it already exists and
+    verifies completely as this exact campaign.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        subject = declared_campaign()
+        first = registry.freeze_validation_campaign(subject, now=NOW)
+        assert registry.campaign_trials_spent() == 1
+
+        # The outcome is now visible on a window the campaign covers.
+        registry.register(draft(), now=NOW, critique=critique())
+        consume_window(session, registry, "H-RUN-1")
+
+        again = registry.freeze_validation_campaign(subject, now=NOW)
+
+        assert again == first, "the same campaign keeps its original record"
+        assert campaign_rows(session) == 1, "no second row"
+        assert registry.campaign_trials_spent() == 1, "and no second charge"
+
+
+def test_a_new_campaign_after_consumption_is_still_refused(database: Database) -> None:
+    """The control for the case above, and the protection it must not have weakened.
+
+    A materially different selection has a different `campaign_id`, so it finds no row, falls
+    through to the barrier, and is refused. Idempotency is available only to a campaign that can
+    show it was already there.
+    """
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registry.freeze_validation_campaign(declared_campaign(), now=NOW)
+        registry.register(draft(), now=NOW, critique=critique())
+        consume_window(session, registry, "H-RUN-1")
+
+        redrawn = declared_campaign(
+            scenarios=(
+                scenario(minimum_trades=31),
+                scenario(
+                    kind=ScenarioKind.GENERALIZATION,
+                    adverse=False,
+                    period=ExperimentPeriod(
+                        name="g", start=date(2020, 1, 2), end=date(2021, 12, 31)
+                    ),
+                ),
+            )
+        )
+        assert redrawn.campaign_id != declared_campaign().campaign_id
+
+        with pytest.raises(RegistrationRefused, match="already-consumed window"):
+            registry.freeze_validation_campaign(redrawn, now=NOW)
+
+        assert campaign_rows(session) == 1, "the refused redraw charged nothing"

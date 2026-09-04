@@ -741,6 +741,86 @@ class HypothesisRegistry:
             and registration.draft.graph.graph_id == graph_id
         ]
 
+    def _expected_campaign_row(self, campaign: ValidationCampaign) -> dict[str, object]:
+        """The one canonical shape a campaign's ledger row must have.
+
+        Derived in a single place and used for both the insert and the verification, so there
+        cannot be two slightly different notions of what a valid frozen campaign record is. A
+        second notion is how a row comes to satisfy one check while failing the property the
+        other check exists to guarantee.
+        """
+        datasets = {scenario.dataset for scenario in campaign.scenarios}
+        if len(datasets) != 1:
+            # One row carries one dataset, and that is what attributes a count to the window it
+            # spent. Splitting a campaign across rows would charge selection freedom once per
+            # dataset, and inventing a composite label would corrupt the attribution the column
+            # exists for. Refused until there is a design decision, rather than guessed at.
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                "a validation campaign is recorded as one search over one dataset; this one "
+                f"spans {', '.join(sorted(datasets))}",
+            )
+        return {
+            "search_id": campaign.selection_search_id,
+            "actor": VALIDATION_CAMPAIGN_ACTOR,
+            "actor_version": VALIDATION_CAMPAIGN_ACTOR_VERSION,
+            "candidates_evaluated": campaign.trial_charge,
+            "dataset": datasets.pop(),
+            "start_date": campaign.eligible_period.start.isoformat(),
+            "end_date": campaign.eligible_period.end.isoformat(),
+            "data_role": max(
+                (scenario.data_role for scenario in campaign.scenarios),
+                key=_ROLE_PROTECTION_ORDER.index,
+            ),
+            "configuration_hash": campaign.campaign_id,
+        }
+
+    def _verify_campaign_row(
+        self, campaign: ValidationCampaign, row: RowMapping, expected: dict[str, object]
+    ) -> None:
+        """Refuse unless the row is a complete, authoritative record of *this* campaign.
+
+        Matching `configuration_hash` alone was not enough, and the gap was a fail-open one.
+        `campaign_trials_spent()` counts rows by `actor`, so a row carrying the right
+        `search_id` and `configuration_hash` under some other actor would have satisfied the
+        freeze requirement and the registration check while contributing **no selection burden
+        at all** -- a campaign accepted as preregistered and charged nothing. The two checks have
+        to agree about what a campaign row is, or one of them is decorative.
+
+        So every field that makes the row mean "this exact campaign was frozen" is compared, and
+        `detail_json` is parsed back and required to reproduce the same identity: a row whose
+        stored design does not rebuild the campaign it claims cannot prove that campaign was the
+        thing frozen.
+
+        Nothing is repaired. A malformed row is a fact about what happened to the ledger, and
+        silently correcting it would destroy the evidence that it was ever wrong.
+        """
+        mismatched = [
+            f"{column}={row[column]!r} (expected {value!r})"
+            for column, value in sorted(expected.items())
+            if row[column] != value
+        ]
+        if mismatched:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} is not an authoritative record of "
+                f"campaign {campaign.campaign_id}: " + "; ".join(mismatched),
+            )
+        try:
+            stored = ValidationCampaign.model_validate_json(str(row["detail_json"]))
+        except ValueError as error:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} does not hold a readable frozen "
+                f"campaign: {error}",
+            ) from error
+        if stored.campaign_id != campaign.campaign_id:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} stores a design that rebuilds as "
+                f"{stored.campaign_id}, not {campaign.campaign_id}",
+            )
+
     def freeze_validation_campaign(self, campaign: ValidationCampaign, *, now: datetime) -> str:
         """Record a campaign's scenario selection before any outcome can be seen (#159).
 
@@ -755,31 +835,20 @@ class HypothesisRegistry:
         up. That is the whole mechanism: the increment comes from the ledger having two rows, not
         from anybody declaring that a redraw happened.
 
-        Idempotent by content address. Re-freezing the identical campaign verifies the existing
-        row and charges nothing further, so reopening or re-verifying a registration cannot
-        inflate its own burden. A different campaign presenting an existing `search_id` is
-        refused rather than accepted or silently overwritten: the row is append-only, and a
-        campaign that could rewrite another's record could hide its own selection freedom.
+        **Ordering is load-bearing.** An existing valid row is checked *before* the
+        consumed-window barrier, because that row is itself the proof the campaign was frozen
+        first. Checking contamination first would refuse to re-acknowledge a campaign that was
+        legitimately preregistered and whose window has since been consumed -- reading its own
+        evidence of innocence as evidence of guilt, and making a correct campaign impossible to
+        re-verify exactly when its results exist.
+
+        The barrier still stands where it matters: a redraw is a different `campaign_id` and
+        therefore a different `search_id`, so it finds no row, falls through, and meets the
+        contamination check as a genuinely new freeze.
 
         Returns the `search_id` the campaign is charged under.
         """
-        datasets = {scenario.dataset for scenario in campaign.scenarios}
-        if len(datasets) != 1:
-            # One row carries one dataset, and that is what attributes a count to the window it
-            # spent. Splitting a campaign across rows would charge selection freedom once per
-            # dataset, and inventing a composite label would corrupt the attribution the column
-            # exists for. Refused until there is a design decision, rather than guessed at.
-            raise RegistrationRefused(
-                RefusalReason.UNVERIFIED_SAMPLE,
-                "a validation campaign is recorded as one search over one dataset; this one "
-                f"spans {', '.join(sorted(datasets))}",
-            )
-        dataset = datasets.pop()
-        role = max(
-            (scenario.data_role for scenario in campaign.scenarios),
-            key=_ROLE_PROTECTION_ORDER.index,
-        )
-        self._refuse_consumed_campaign_windows(campaign, dataset)
+        expected = self._expected_campaign_row(campaign)
         search_id = campaign.selection_search_id
         existing = (
             self._session.execute(
@@ -789,27 +858,17 @@ class HypothesisRegistry:
             .one_or_none()
         )
         if existing is not None:
-            if str(existing["configuration_hash"]) != campaign.campaign_id:
-                raise RegistrationRefused(
-                    RefusalReason.TAMPERED,
-                    f"search run {search_id!r} already records campaign "
-                    f"{existing['configuration_hash']}, not {campaign.campaign_id}; a campaign "
-                    "cannot take over another selection's record",
-                )
+            # Complete verification, or refusal. Never a repair, and never a partial match.
+            self._verify_campaign_row(campaign, existing, expected)
             return search_id
+
+        # Only a genuinely new freeze reaches here.
+        self._refuse_consumed_campaign_windows(campaign, str(expected["dataset"]))
         self._session.execute(
             search_runs.insert().values(
-                search_id=search_id,
-                actor=VALIDATION_CAMPAIGN_ACTOR,
-                actor_version=VALIDATION_CAMPAIGN_ACTOR_VERSION,
-                candidates_evaluated=campaign.trial_charge,
-                dataset=dataset,
-                start_date=campaign.eligible_period.start.isoformat(),
-                end_date=campaign.eligible_period.end.isoformat(),
-                data_role=role,
+                **expected,
                 started_at=encode_utc(now),
                 finished_at=encode_utc(now),
-                configuration_hash=campaign.campaign_id,
                 # The frozen design, so the selection can be reproduced from the ledger alone
                 # rather than only from a registration that may not exist yet.
                 detail_json=campaign.model_dump_json(),
@@ -878,9 +937,10 @@ class HypothesisRegistry:
         campaign = draft.validation_campaign
         if campaign is None:
             return
+        expected = self._expected_campaign_row(campaign)
         row = (
             self._session.execute(
-                select(search_runs.c.configuration_hash).where(
+                select(search_runs).where(
                     search_runs.c.search_id == campaign.selection_search_id
                 )
             )
@@ -894,12 +954,9 @@ class HypothesisRegistry:
                 "which has no frozen search record; freeze the campaign before registering "
                 "against it, or the selection is preregistered only in the telling",
             )
-        if str(row["configuration_hash"]) != campaign.campaign_id:
-            raise RegistrationRefused(
-                RefusalReason.TAMPERED,
-                f"{draft.hypothesis_id} cites search run "
-                f"{campaign.selection_search_id!r}, which records a different campaign",
-            )
+        # The same authority the freeze uses. Two notions of a valid campaign record is how a
+        # row satisfies one check while failing the property the other check guarantees.
+        self._verify_campaign_row(campaign, row, expected)
 
     def register_artifact_test(
         self,
