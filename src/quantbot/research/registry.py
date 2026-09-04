@@ -48,9 +48,17 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from enum import StrEnum
-from typing import Annotated, Self
+from typing import Annotated, Any, Self
 
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    StringConstraints,
+    model_serializer,
+    model_validator,
+)
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
@@ -79,7 +87,10 @@ from quantbot.research.power import (
     luck_threshold,
 )
 from quantbot.research.sources import EvidenceBasis
-from quantbot.storage.database import encode_utc
+from quantbot.research.validation_campaign import (
+    ValidationCampaign,
+)
+from quantbot.storage.database import decode_utc, encode_utc
 from quantbot.storage.schema import (
     artifact_test_registrations,
     hypotheses,
@@ -133,6 +144,29 @@ PRIOR_CONSUMER = "cycles 2-10 (pre-v0.2, see REFUTED.md)"
 #: rather than wait to be released: nothing observes abandonment, so an explicitly-released-only
 #: reservation is the old permanent-consumption behaviour wearing a state column.
 RESERVATION_DAYS = 90
+
+#: How a validation campaign's selection appears in `search_runs`. Campaign burden is counted by
+#: matching this actor, so the ledger itself distinguishes a campaign selection from a
+#: candidate-generation search without a second table or a new column to disagree with it.
+VALIDATION_CAMPAIGN_ACTOR = "validation-campaign"
+VALIDATION_CAMPAIGN_ACTOR_VERSION = "1"
+
+#: The reserved search-id namespace for validation campaigns, matching
+#: `ValidationCampaign.selection_search_id` (#215). Campaign burden is discovered by this prefix
+#: rather than by `actor`, because a row's search identity is what puts it in the namespace while
+#: `actor` is an ordinary column that can be made to disagree with it -- and a row that stopped
+#: being counted because a column changed would take real selection freedom off the luck bar.
+VALIDATION_SEARCH_NAMESPACE = "validation:"
+
+#: Which role a campaign's ledger row is attributed to when its scenarios span several. The most
+#: protected role wins, because the burden that matters is the one spent on the data that cannot
+#: be spent twice. Ordering, not a set: a campaign touching a protected window is a claim on that
+#: window whatever else it also reads.
+_ROLE_PROTECTION_ORDER: tuple[str, ...] = (
+    "VALIDATION",
+    "PROTECTED_EVALUATION",
+    "FORWARD_PAPER",
+)
 
 
 class SearchOrigin(StrEnum):
@@ -330,6 +364,35 @@ class HypothesisDraft(FrozenModel):
     basis: EvidenceBasis
     proposed_by: Text
     prompt_version: str | None = None
+    #: The hostile-validation scenarios frozen with this question (#159). Selection freedom is
+    #: charged once through an append-only `search_runs` row; twelve scenarios chosen by one
+    #: frozen rule are one comparison, and redrawing after an outcome is what costs more.
+    validation_campaign: ValidationCampaign | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        """Omit `validation_campaign` entirely when absent, so old hashes do not move.
+
+        `content_hash` is `sha256(canonical_result_json(self))`, and `canonical_result_json`
+        serialises through `model_dump`, which includes fields left at `None`. Adding an
+        ordinary optional field would therefore have inserted `"validation_campaign":null` into
+        every registration's canonical form and changed the content hash of **every already
+        stored registration** -- which `_load` verifies against the stored value, so every one of
+        them would have failed to load.
+
+        Measured before writing this, not assumed: the draft used by `tests/unit/research/
+        test_runner.py` hashes to `7cd29b70...` on the commit before this field existed, and
+        `test_a_campaignless_draft_hashes_exactly_as_it_did_before_this_field_existed` pins that
+        literal. A registration made before #159 means exactly what it meant when it was made.
+
+        Omission rather than exclusion: `Field(exclude=True)` would drop the campaign from the
+        hash even when one is present, which would let the frozen selection change without
+        changing the registration's identity -- the opposite of what this field is for.
+        """
+        data = dict(handler(self))
+        if self.validation_campaign is None:
+            data.pop("validation_campaign", None)
+        return data
 
     @model_validator(mode="after")
     def validate_draft(self) -> Self:
@@ -590,6 +653,7 @@ class HypothesisRegistry:
             )
 
         self._verify_measured_search(draft)
+        self._verify_campaign_frozen(draft)
         trials = self._cumulative_trials(draft.search_cardinality)
 
         # #35, resolved: a verified count is *accepted* here and not *required*.
@@ -683,6 +747,369 @@ class HypothesisRegistry:
             if registration.draft.graph is not None
             and registration.draft.graph.graph_id == graph_id
         ]
+
+    def _expected_campaign_row(self, campaign: ValidationCampaign) -> dict[str, object]:
+        """The one canonical shape a campaign's ledger row must have.
+
+        Derived in a single place and used for both the insert and the verification, so there
+        cannot be two slightly different notions of what a valid frozen campaign record is. A
+        second notion is how a row comes to satisfy one check while failing the property the
+        other check exists to guarantee.
+        """
+        datasets = {scenario.dataset for scenario in campaign.scenarios}
+        if len(datasets) != 1:
+            # One row carries one dataset, and that is what attributes a count to the window it
+            # spent. Splitting a campaign across rows would charge selection freedom once per
+            # dataset, and inventing a composite label would corrupt the attribution the column
+            # exists for. Refused until there is a design decision, rather than guessed at.
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                "a validation campaign is recorded as one search over one dataset; this one "
+                f"spans {', '.join(sorted(datasets))}",
+            )
+        return {
+            "search_id": campaign.selection_search_id,
+            "actor": VALIDATION_CAMPAIGN_ACTOR,
+            "actor_version": VALIDATION_CAMPAIGN_ACTOR_VERSION,
+            "candidates_evaluated": campaign.trial_charge,
+            "dataset": datasets.pop(),
+            "start_date": campaign.eligible_period.start.isoformat(),
+            "end_date": campaign.eligible_period.end.isoformat(),
+            "data_role": max(
+                (scenario.data_role for scenario in campaign.scenarios),
+                key=_ROLE_PROTECTION_ORDER.index,
+            ),
+            "configuration_hash": campaign.campaign_id,
+        }
+
+    def _verify_campaign_row(
+        self, campaign: ValidationCampaign, row: RowMapping, expected: dict[str, object]
+    ) -> None:
+        """Refuse unless the row is a complete, authoritative record of *this* campaign.
+
+        Matching `configuration_hash` alone was not enough, and the gap was a fail-open one.
+        `campaign_trials_spent()` counts rows by `actor`, so a row carrying the right
+        `search_id` and `configuration_hash` under some other actor would have satisfied the
+        freeze requirement and the registration check while contributing **no selection burden
+        at all** -- a campaign accepted as preregistered and charged nothing. The two checks have
+        to agree about what a campaign row is, or one of them is decorative.
+
+        So every field that makes the row mean "this exact campaign was frozen" is compared, and
+        `detail_json` is parsed back and required to reproduce the same identity: a row whose
+        stored design does not rebuild the campaign it claims cannot prove that campaign was the
+        thing frozen.
+
+        Nothing is repaired. A malformed row is a fact about what happened to the ledger, and
+        silently correcting it would destroy the evidence that it was ever wrong.
+        """
+        mismatched = [
+            f"{column}={row[column]!r} (expected {value!r})"
+            for column, value in sorted(expected.items())
+            if row[column] != value
+        ]
+        if mismatched:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} is not an authoritative record of "
+                f"campaign {campaign.campaign_id}: " + "; ".join(mismatched),
+            )
+        try:
+            stored = ValidationCampaign.model_validate_json(str(row["detail_json"]))
+        except ValueError as error:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} does not hold a readable frozen "
+                f"campaign: {error}",
+            ) from error
+        if stored.campaign_id != campaign.campaign_id:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} stores a design that rebuilds as "
+                f"{stored.campaign_id}, not {campaign.campaign_id}",
+            )
+        # Content, then chronology. The row now proves it describes this exact campaign; it must
+        # also prove it was written before the outcome it claims to precede, because reusing it
+        # is what excuses this campaign from the consumed-window barrier.
+        self._verify_campaign_predates_consumption(campaign, row, str(expected["dataset"]))
+
+    def freeze_validation_campaign(self, campaign: ValidationCampaign, *, now: datetime) -> str:
+        """Record a campaign's scenario selection before any outcome can be seen (#159).
+
+        **What is being charged is selection freedom, not scenario count.** Twelve scenarios
+        produced by one frozen rule are one comparison: nobody chose them after seeing anything,
+        and the dispersion across them is the result rather than twelve chances to find a winner.
+        So one campaign is one row and one trial, whatever its length.
+
+        What costs more is redrawing. Reseeding, adding or removing a scenario, or moving a
+        window changes `campaign_id`, therefore changes `selection_search_id`, therefore writes a
+        *second* append-only row -- and the burden the next registration is judged against goes
+        up. That is the whole mechanism: the increment comes from the ledger having two rows, not
+        from anybody declaring that a redraw happened.
+
+        **Ordering is load-bearing.** An existing valid row is checked *before* the
+        consumed-window barrier, because that row is itself the proof the campaign was frozen
+        first. Checking contamination first would refuse to re-acknowledge a campaign that was
+        legitimately preregistered and whose window has since been consumed -- reading its own
+        evidence of innocence as evidence of guilt, and making a correct campaign impossible to
+        re-verify exactly when its results exist.
+
+        The barrier still stands where it matters: a redraw is a different `campaign_id` and
+        therefore a different `search_id`, so it finds no row, falls through, and meets the
+        contamination check as a genuinely new freeze.
+
+        Returns the `search_id` the campaign is charged under.
+        """
+        expected = self._expected_campaign_row(campaign)
+        search_id = campaign.selection_search_id
+        existing = (
+            self._session.execute(
+                select(search_runs).where(search_runs.c.search_id == search_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if existing is not None:
+            # Complete verification, or refusal. Never a repair, and never a partial match.
+            self._verify_campaign_row(campaign, existing, expected)
+            return search_id
+
+        # Only a genuinely new freeze reaches here.
+        self._refuse_consumed_campaign_windows(campaign, str(expected["dataset"]))
+        self._session.execute(
+            search_runs.insert().values(
+                **expected,
+                started_at=encode_utc(now),
+                finished_at=encode_utc(now),
+                # The frozen design, so the selection can be reproduced from the ledger alone
+                # rather than only from a registration that may not exist yet.
+                detail_json=campaign.model_dump_json(),
+            )
+        )
+        return search_id
+
+    def _refuse_consumed_campaign_windows(
+        self, campaign: ValidationCampaign, dataset: str
+    ) -> None:
+        """A campaign cannot be frozen over a window whose outcome has already been seen.
+
+        This is the freeze-before-measurement property, and it is the one that makes the rest
+        mean anything: without it the lifecycle *read the protected result, then write a campaign
+        that fits it, then call the campaign preregistered* is available, and every burden count
+        below would be arithmetic about a fiction.
+
+        Only `CONSUMED` blocks, deliberately. `RESERVED` is a claim on data nobody has looked at,
+        so a campaign frozen while a reservation is live is still frozen before measurement --
+        and refusing there would make a second version of a hypothesis unable to declare
+        scenarios at all.
+        """
+        consumed = [
+            f"{row['dataset']} {row['start_date']}..{row['end_date']}"
+            for row in self._consumed_overlaps(campaign, dataset)
+        ]
+        if consumed:
+            raise RegistrationRefused(
+                RefusalReason.CONTAMINATED_WINDOW,
+                "a validation campaign cannot be frozen over an already-consumed window: "
+                + "; ".join(sorted(set(consumed)))
+                + ". A selection made after its outcome was visible is not a preregistration, "
+                "whatever it is called",
+            )
+
+    def _consumed_overlaps(
+        self, campaign: ValidationCampaign, dataset: str
+    ) -> list[RowMapping]:
+        """Every CONSUMED window row overlapping any scenario in this campaign.
+
+        One query behind both the new-freeze barrier and the chronology check on an existing
+        row, so the two cannot end up disagreeing about which windows are relevant -- the shape
+        of defect this PR has already had twice.
+        """
+        return [
+            row
+            for scenario in campaign.scenarios
+            for row in self._session.execute(
+                select(hypothesis_data_windows).where(
+                    hypothesis_data_windows.c.dataset == dataset,
+                    hypothesis_data_windows.c.state == WindowState.CONSUMED.value,
+                    hypothesis_data_windows.c.start_date <= scenario.period.end.isoformat(),
+                    hypothesis_data_windows.c.end_date >= scenario.period.start.isoformat(),
+                )
+            ).mappings()
+        ]
+
+    def _campaign_frozen_at(self, campaign: ValidationCampaign, row: RowMapping) -> datetime:
+        """When this campaign's freeze completed, decoded through the storage authority.
+
+        Parsed with `decode_utc`, never compared as text. The column is a string, and string
+        order agrees with chronological order only for one canonical representation -- an
+        imported row carrying `+01:00` would sort as though it were an hour later than it is.
+        `decode_utc` refuses a tz-naive value and normalises to UTC, so the comparison below is
+        about instants rather than about spelling.
+
+        Actor version 1 writes `started_at == finished_at == now`, so that equality is the
+        invariant for this version and a row claiming a span under it is malformed. A later
+        actor version that genuinely searches over time carries a different `actor_version`,
+        which `_verify_campaign_row` has already pinned, so this branch will not silently apply
+        to it.
+        """
+        try:
+            started = decode_utc(str(row["started_at"]))
+            finished = decode_utc(str(row["finished_at"]))
+        except ValueError as error:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} carries an unreadable freeze "
+                f"timestamp: {error}",
+            ) from error
+        if (
+            str(row["actor_version"]) == VALIDATION_CAMPAIGN_ACTOR_VERSION
+            and started != finished
+        ):
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {campaign.selection_search_id!r} spans "
+                f"{row['started_at']}..{row['finished_at']}; actor version "
+                f"{VALIDATION_CAMPAIGN_ACTOR_VERSION} freezes a selection at one instant",
+            )
+        return finished
+
+    def _verify_campaign_predates_consumption(
+        self, campaign: ValidationCampaign, row: RowMapping, dataset: str
+    ) -> None:
+        """The row must show the freeze happened no later than the outcome it precedes.
+
+        The existing-row fast path is what lets an exact campaign stay reusable after its window
+        is consumed, so that path has to carry the proof itself. Content identity alone does not:
+        a row can name the right campaign and still have been written afterwards. Row existence
+        is not chronology -- inferring order from it would make the fast path a way around the
+        barrier rather than an exception justified by evidence.
+
+        A `CONSUMED` window with no readable `consumed_at` cannot establish the ordering either
+        way, so it refuses. Missing chronology is not safe chronology, and treating an absent
+        timestamp as permission is the same fail-open shape as treating an absent regime
+        diagnostic as agreement.
+        """
+        overlaps = self._consumed_overlaps(campaign, dataset)
+        if not overlaps:
+            return
+        frozen_at = self._campaign_frozen_at(campaign, row)
+        for window in overlaps:
+            label = f"{window['dataset']} {window['start_date']}..{window['end_date']}"
+            raw = window["consumed_at"]
+            if raw is None:
+                raise RegistrationRefused(
+                    RefusalReason.CONTAMINATED_WINDOW,
+                    f"window {label} is CONSUMED but records no consumption time, so search "
+                    f"run {campaign.selection_search_id!r} cannot show it was frozen first",
+                )
+            try:
+                consumed_at = decode_utc(str(raw))
+            except ValueError as error:
+                raise RegistrationRefused(
+                    RefusalReason.CONTAMINATED_WINDOW,
+                    f"window {label} records an unreadable consumption time ({raw!r}), so "
+                    f"search run {campaign.selection_search_id!r} cannot show it was frozen "
+                    f"first: {error}",
+                ) from error
+            if frozen_at > consumed_at:
+                raise RegistrationRefused(
+                    RefusalReason.CONTAMINATED_WINDOW,
+                    f"search run {campaign.selection_search_id!r} was frozen at "
+                    f"{encode_utc(frozen_at)}, after window {label} was consumed at "
+                    f"{encode_utc(consumed_at)}; a selection recorded after its outcome was "
+                    "visible is not a preregistration, whatever the ledger calls it",
+                )
+
+    def _campaign_from_row(self, row: RowMapping) -> ValidationCampaign:
+        """Rebuild the campaign a reserved-namespace row claims to record.
+
+        The row's `search_id` is the claim; `detail_json` is the design behind it. They have to
+        agree, or the row is sitting in the namespace under an identity it cannot reconstruct.
+        """
+        search_id = str(row["search_id"])
+        try:
+            campaign = ValidationCampaign.model_validate_json(str(row["detail_json"]))
+        except ValueError as error:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {search_id!r} occupies the reserved "
+                f"{VALIDATION_SEARCH_NAMESPACE!r} namespace but holds no readable campaign "
+                f"design, so the selection freedom it recorded cannot be counted: {error}",
+            ) from error
+        if campaign.selection_search_id != search_id:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"search run {search_id!r} stores a design whose own identity is "
+                f"{campaign.selection_search_id!r}",
+            )
+        return campaign
+
+    def campaign_trials_spent(self) -> int:
+        """Selection freedom already charged to validation campaigns, read from the ledger.
+
+        **Discovered by reserved namespace, not by `actor`.** Every campaign search id is
+        `validation:<campaign_id>` (#215), and that prefix is the one part of the row a campaign
+        cannot occupy by accident. Summing `WHERE actor = VALIDATION_CAMPAIGN_ACTOR` looked
+        equivalent and was not: Finding 1 established that `actor` can disagree with what the
+        row's own search identity says it is, and under the actor query such a row contributed
+        **zero**. Selection freedom that genuinely happened would then vanish from the global
+        luck bar the moment its metadata was malformed -- and an unrelated hypothesis
+        registering afterwards would be judged against a bar that had quietly dropped it.
+
+        Failing closed rather than charging a guess. A malformed row in this namespace means the
+        burden and its provenance cannot both be trusted, and the two ways of guessing are worse
+        than refusing: charging the row's own number trusts a value that has already been shown
+        wrong, and charging the reconstructed campaign's trusts a design the ledger contradicts.
+
+        Verification is `_verify_campaign_row`, the same authority the freeze and the
+        registration paths use. A fourth notion of a valid campaign row is how the three that
+        exist come to disagree.
+        """
+        total = 0
+        for row in (
+            self._session.execute(
+                select(search_runs).where(
+                    search_runs.c.search_id.like(f"{VALIDATION_SEARCH_NAMESPACE}%")
+                )
+            )
+            .mappings()
+            .all()
+        ):
+            campaign = self._campaign_from_row(row)
+            self._verify_campaign_row(campaign, row, self._expected_campaign_row(campaign))
+            total += int(row["candidates_evaluated"])
+        return total
+
+    def _verify_campaign_frozen(self, draft: HypothesisDraft) -> None:
+        """A registration carrying a campaign must name one the ledger already recorded.
+
+        Fails closed. Without the row the campaign is a design nobody committed to before the
+        outcome, which is the entire thing preregistration is for -- and its burden would not be
+        charged, so an uncharged selection would be judged against a bar that never saw it.
+        """
+        campaign = draft.validation_campaign
+        if campaign is None:
+            return
+        expected = self._expected_campaign_row(campaign)
+        row = (
+            self._session.execute(
+                select(search_runs).where(
+                    search_runs.c.search_id == campaign.selection_search_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if row is None:
+            raise RegistrationRefused(
+                RefusalReason.UNVERIFIED_SAMPLE,
+                f"{draft.hypothesis_id} carries validation campaign {campaign.campaign_id}, "
+                "which has no frozen search record; freeze the campaign before registering "
+                "against it, or the selection is preregistered only in the telling",
+            )
+        # The same authority the freeze uses. Two notions of a valid campaign record is how a
+        # row satisfies one check while failing the property the other check guarantees.
+        self._verify_campaign_row(campaign, row, expected)
 
     def register_artifact_test(
         self,
@@ -1410,7 +1837,16 @@ class HypothesisRegistry:
         artifact_spend = self._session.execute(
             select(func.coalesce(func.sum(artifact_test_registrations.c.trial_charge), 0))
         ).scalar_one()
-        return self._prior_trials + int(hypothesis_spend) + int(artifact_spend) + search_cardinality
+        # Campaign selection freedom, counted from the append-only ledger rather than from a
+        # column anyone can edit or a number a caller supplies (#159). A redraw is visible here
+        # as a second row, so the bar rises for everything registered afterwards.
+        return (
+            self._prior_trials
+            + int(hypothesis_spend)
+            + int(artifact_spend)
+            + self.campaign_trials_spent()
+            + search_cardinality
+        )
 
     def _blocking(self, dataset: str, start: date, end: date, *, now: date) -> list[RowMapping]:
         """Every window row that still holds a claim over this range, as of `now` (#22).
