@@ -22,7 +22,7 @@ from quantbot.domain import (
     StrategyIdentity,
     TimeInForce,
 )
-from quantbot.research.builder import OutcomeVerdict
+from quantbot.research.builder import ExperimentOutcome, OutcomeVerdict
 from quantbot.research.mandate import (
     DEFAULT_MANDATE_PATH,
     EconomicObjective,
@@ -30,7 +30,7 @@ from quantbot.research.mandate import (
     Objective,
     load_economic_objective,
 )
-from quantbot.research.manifest import ExecutionPath, StatisticalTest
+from quantbot.research.manifest import ExecutionPath, ExperimentPeriod, StatisticalTest
 from quantbot.research.memory import RecordKind, ResearchMemory, ResearchRecord, Verdict
 from quantbot.research.power import PowerVerdict
 from quantbot.research.promotion import (
@@ -60,6 +60,16 @@ from quantbot.research.promotion import (
     survivor_objections,
 )
 from quantbot.research.registry import DataRole, HypothesisRegistry
+from quantbot.research.validation_campaign import (
+    CampaignOutcome,
+    CampaignVerdict,
+    ScenarioKind,
+    ScenarioMeasured,
+    ScenarioSelectionMethod,
+    ValidationCampaign,
+    ValidationScenario,
+    grade_campaign,
+)
 from quantbot.storage import Database, StorageRepository
 from tests.unit.research.test_builder import (  # reuse the compiled plan and outcome fixtures
     outcome,
@@ -78,7 +88,13 @@ REPOSITORY = Path(__file__).resolve().parents[3]
 #: The registration the fixture strategy is testing. A deployment carrying no claim is a
 #: legitimate state -- `OPERATIONAL_BASELINE` -- but it is not the common one, so it is opted
 #: into with `hypothesis_id=None` rather than being the default.
-CLAIM_ID = "H-2026-047"
+#:
+#: **This has to be the hypothesis the `outcome()` fixture is actually about.** It was
+#: `H-2026-047` while the imported outcome fixture compiled its plan from `H-2026-001`, so every
+#: promotion here bound one claim and promoted it with another claim's evidence -- the exact
+#: substitution the RESEARCH_SURVIVOR identity check now refuses, sitting unnoticed in the
+#: fixtures of the tests meant to police it. Nothing failed, because nothing compared them.
+CLAIM_ID = "H-2026-001"
 
 
 def state(stage: Stage = Stage.REGISTERED, **overrides: object) -> PromotionState:
@@ -2151,3 +2167,355 @@ def test_the_qualifying_assessment_is_durable_on_the_event_not_just_the_state(
     assert granted[0].evidence_identity == qualified.evidence_identity
     assert granted[0].objective_identity == recomputed.objective_identity
     assert granted[0].hypothesis_id == CLAIM_ID
+
+
+# --- #159: a survivor is a claim that survived its OWN experiment -------------------------------
+#
+# `PromotionState` binds a claim at REGISTERED, and #53 stopped `promote` accepting a
+# `hypothesis_id` anywhere else -- so the *binding* could no longer be chosen by the caller. The
+# **evidence** stayed free. `survivor_objections(outcome)` asked every question about whichever
+# outcome it was handed, and answered all of them correctly, about the wrong hypothesis.
+#
+# The fixtures in this file were doing exactly that: `CLAIM_ID` was `H-2026-047` while the
+# imported `outcome()` compiled its plan from `H-2026-001`. Every promotion test here bound one
+# claim and promoted it with another claim's evidence, and nothing failed, because nothing
+# compared them.
+
+CAMPAIGN_WINDOW = ExperimentPeriod(name="eligible", start=date(2016, 1, 4), end=date(2026, 8, 18))
+
+
+def validation_campaign(**overrides: object) -> ValidationCampaign:
+    """A minimal well-formed campaign: one mandatory adverse scenario and one generalization."""
+    fields: dict[str, object] = {
+        "selection_method": ScenarioSelectionMethod.DECLARED,
+        "selection_policy_version": "declared-v1",
+        "eligible_period": CAMPAIGN_WINDOW,
+        "regime_classifier_version": "regime-v1",
+        "stress_policy_version": "stress-v1",
+        "neighborhood_grid": {"trend_period": (150, 200, 250)},
+        "scenarios": (
+            ValidationScenario(
+                kind=ScenarioKind.EXECUTION_STRESS,
+                dataset="sip-us-equities-daily",
+                data_role="PROTECTED_EVALUATION",
+                period=ExperimentPeriod(
+                    name="stress", start=date(2018, 1, 2), end=date(2019, 12, 31)
+                ),
+                required=True,
+                adverse=True,
+                minimum_trades=30,
+                minimum_effective_observations=200,
+            ),
+            ValidationScenario(
+                kind=ScenarioKind.GENERALIZATION,
+                dataset="sip-us-equities-daily",
+                data_role="PROTECTED_EVALUATION",
+                period=ExperimentPeriod(
+                    name="general", start=date(2020, 1, 2), end=date(2021, 12, 31)
+                ),
+                required=True,
+                adverse=False,
+                minimum_trades=30,
+                minimum_effective_observations=200,
+            ),
+        ),
+        "maximum_underpowered_fraction": Decimal("0.5"),
+    }
+    fields.update(overrides)
+    return ValidationCampaign(**fields)
+
+
+def campaign_plan(subject: ValidationCampaign | None = None):
+    """A compiled plan that genuinely requires `subject`, read from the frozen registration."""
+    subject = validation_campaign() if subject is None else subject
+    compiled = outcome().plan.model_copy(update={"validation_campaign_id": subject.campaign_id})
+    assert compiled.validation_campaign_id == subject.campaign_id
+    return subject, compiled
+
+
+def campaign_result(subject: ValidationCampaign, verdict: CampaignVerdict) -> CampaignOutcome:
+    """A campaign outcome at an arbitrary verdict, for exercising the gate's own rule."""
+    return CampaignOutcome(
+        campaign_id=subject.campaign_id,
+        scenarios=(),
+        verdict=verdict,
+        underpowered_count=0,
+        underpowered_fraction=Decimal("0"),
+        detail=f"fixture campaign at {verdict.value}",
+    )
+
+
+def campaign_base(subject: ValidationCampaign, plan) -> ExperimentOutcome:
+    """A fully valid outcome for a campaign-requiring plan, as the base for mutation.
+
+    It has to be built through the real constructor and it has to be *correct* to get through
+    one: #217's validator refuses a campaign-requiring plan whose outcome carries no campaign,
+    which is the very state several tests below need. So the honest version is assembled first
+    and `ungated` breaks exactly one thing about it.
+    """
+    return outcome(
+        plan=plan, validation_outcome=campaign_result(subject, CampaignVerdict.SURVIVED)
+    )
+
+
+def ungated(base: ExperimentOutcome, **overrides: object) -> ExperimentOutcome:
+    """An outcome assembled past `ExperimentOutcome`'s own validator.
+
+    `validate_outcome` already refuses most of the combinations below, which is the point of the
+    layering: the promotion gate has to hold on its own, not because a validator two modules away
+    happened to run first. `model_construct` is the only way to ask that question.
+    """
+    return ExperimentOutcome.model_construct(**{**dict(base), **overrides})
+
+
+# --- the bound claim ----------------------------------------------------------------------------
+
+
+def test_a_result_about_another_hypothesis_cannot_promote_this_one() -> None:
+    """**The core defect.** A genuine, spotless SURVIVED outcome -- about somebody else's claim.
+
+    Every existing objection passes, because every one of them is a question about B, correctly
+    answered. Only comparing the result's own identity against the bound claim catches it.
+    """
+    other = outcome(
+        plan=outcome().plan.model_copy(update={"hypothesis_id": "H-2026-999"})
+    )
+    assert survivor_objections(other) == (), "the substituted result is itself impeccable"
+
+    with pytest.raises(PromotionRefused, match="survived somebody else's"):
+        promote(
+            state(),
+            Stage.RESEARCH_SURVIVOR,
+            actor="director",
+            reason="clears the bar",
+            now=NOW,
+            outcome=other,
+        )
+
+
+def test_a_result_about_another_version_of_the_same_hypothesis_is_also_refused() -> None:
+    """Version is part of the claim. v2 is a different frozen question from v1."""
+    revised = outcome(plan=outcome().plan.model_copy(update={"hypothesis_version": 2}))
+
+    with pytest.raises(PromotionRefused, match="survived somebody else's"):
+        promote(
+            state(),
+            Stage.RESEARCH_SURVIVOR,
+            actor="director",
+            reason="clears the bar",
+            now=NOW,
+            outcome=revised,
+        )
+
+
+def test_the_strategys_own_result_promotes_it() -> None:
+    """The control. A check that refused everything would satisfy both tests above."""
+    promoted = promote(
+        state(),
+        Stage.RESEARCH_SURVIVOR,
+        actor="director",
+        reason="clears the bar",
+        now=NOW,
+        outcome=outcome(),
+    )
+
+    assert promoted.stage is Stage.RESEARCH_SURVIVOR
+    assert promoted.claim == (CLAIM_ID, 1)
+
+
+def test_a_strategy_carrying_no_claim_cannot_become_a_survivor() -> None:
+    """RESEARCH_SURVIVOR asserts that a frozen claim survived. There has to be one."""
+    with pytest.raises(PromotionRefused, match="carries no claim"):
+        promote(
+            state(hypothesis_id=None, hypothesis_version=None),
+            Stage.RESEARCH_SURVIVOR,
+            actor="director",
+            reason="clears the bar",
+            now=NOW,
+            outcome=outcome(),
+        )
+
+
+# --- the hostile-validation gate -----------------------------------------------------------------
+
+
+def test_a_required_campaign_that_is_missing_objects() -> None:
+    """Omission was the cheap route past the campaign, so omission is refused."""
+    subject, plan = campaign_plan()
+    stripped = ungated(campaign_base(subject, plan), validation_outcome=None)
+
+    objections = survivor_objections(stripped)
+    assert any("passed by omitting it is not a gate" in item for item in objections)
+    assert any(subject.campaign_id in item for item in objections)
+
+
+def test_a_campaign_from_another_registration_objects() -> None:
+    """A result graded under a campaign chosen after the fact is about another question."""
+    subject, plan = campaign_plan()
+    other = validation_campaign(stress_policy_version="stress-v2")
+    assert other.campaign_id != subject.campaign_id
+    swapped = ungated(
+        campaign_base(subject, plan),
+        validation_outcome=campaign_result(other, CampaignVerdict.SURVIVED),
+    )
+
+    objections = survivor_objections(swapped)
+    assert any("another question" in item for item in objections)
+    assert any(other.campaign_id in item for item in objections)
+
+
+@pytest.mark.parametrize(
+    "verdict",
+    [CampaignVerdict.REFUTED, CampaignVerdict.UNDERPOWERED, CampaignVerdict.INCONCLUSIVE],
+)
+def test_a_campaign_that_did_not_survive_objects(verdict: CampaignVerdict) -> None:
+    """Every non-surviving verdict blocks, and each is named rather than lumped together.
+
+    UNDERPOWERED and INCONCLUSIVE are not weak refutations -- they are the campaign saying it
+    could not resolve the question. Treating "we could not tell" as "it passed" is the exact
+    substitution `ScenarioVerdict` was split up to prevent.
+    """
+    subject, plan = campaign_plan()
+    blocked = ungated(
+        campaign_base(subject, plan), validation_outcome=campaign_result(subject, verdict)
+    )
+
+    objections = survivor_objections(blocked)
+    assert any(f"is {verdict.value}" in item for item in objections)
+
+
+def test_a_surviving_campaign_raises_no_campaign_objection() -> None:
+    """The control for the four refusals above, and it uses a genuinely graded campaign.
+
+    Not a hand-built `CampaignOutcome`: the scenarios are measured and `grade_campaign` derives
+    the verdict, so this exercises the same object the runner would attach.
+    """
+    subject, plan = campaign_plan()
+    graded = grade_campaign(
+        subject,
+        tuple(
+            ScenarioMeasured(
+                scenario_id=item.scenario_id,
+                effect=Decimal("1.0"),
+                test_statistic=Decimal("9.0"),
+                trades=60,
+                effective_observations=400,
+            )
+            for item in subject.scenarios
+        ),
+        luck_threshold_z=plan.statistics.luck_threshold_z,
+    )
+    assert graded.verdict is CampaignVerdict.SURVIVED
+
+    assert survivor_objections(outcome(plan=plan, validation_outcome=graded)) == ()
+
+
+def test_a_campaign_nobody_registered_cannot_be_attached() -> None:
+    """The other direction: a fabricated campaign on a claim that froze none."""
+    fabricated = ungated(
+        outcome(),
+        validation_outcome=campaign_result(validation_campaign(), CampaignVerdict.SURVIVED),
+    )
+
+    assert any(
+        "registered no validation campaign" in item
+        for item in survivor_objections(fabricated)
+    )
+
+
+def test_a_campaignless_result_is_unaffected() -> None:
+    """Every registration made before #159 froze no campaign, and still promotes normally."""
+    plain = outcome()
+    assert plain.plan.validation_campaign_id is None
+    assert plain.validation_outcome is None
+
+    assert survivor_objections(plain) == ()
+
+
+# --- the campaign subtracts and never adds --------------------------------------------------------
+
+
+def test_a_surviving_campaign_cannot_rescue_a_refuted_primary() -> None:
+    """Hostile validation is a second hurdle, not a second route to yes."""
+    subject, plan = campaign_plan()
+    refuted = ungated(campaign_base(subject, plan), verdict=OutcomeVerdict.REFUTED)
+
+    objections = survivor_objections(refuted)
+    assert any("the experiment verdict is REFUTED" in item for item in objections)
+    assert not any("campaign" in item for item in objections), (
+        "the campaign passed; it is the primary result that failed"
+    )
+
+
+def test_a_surviving_campaign_cannot_rescue_a_failing_primary_in_any_other_way() -> None:
+    """The statistic, the probes and the execution path each still stand on their own."""
+    subject, plan = campaign_plan()
+
+    inverted = ungated(
+        campaign_base(subject, plan),
+        test_statistic=-plan.statistics.luck_threshold_z - Decimal("1"),
+    )
+    assert any("opposite direction" in item for item in survivor_objections(inverted))
+
+    unprobed = ungated(campaign_base(subject, plan), probes_run=())
+    assert any("probes did not run" in item for item in survivor_objections(unprobed))
+
+    standalone = ungated(
+        campaign_base(subject, plan),
+        plan=plan.model_copy(update={"execution_path": ExecutionPath.RESEARCH_SCRIPT}),
+    )
+    assert any("standalone model" in item for item in survivor_objections(standalone))
+
+
+# --- REGISTERED -> RESEARCH_SURVIVOR, end to end --------------------------------------------------
+
+
+def test_the_exact_claim_and_the_exact_campaign_promote_together() -> None:
+    """The integration: a real compiled plan, a real graded campaign, the bound claim.
+
+    And the same strategy refuses the same campaign attached to another claim's result, so the
+    two protections are shown to be independent rather than one standing in for the other.
+    """
+    subject, plan = campaign_plan()
+    graded = grade_campaign(
+        subject,
+        tuple(
+            ScenarioMeasured(
+                scenario_id=item.scenario_id,
+                effect=Decimal("1.0"),
+                test_statistic=Decimal("9.0"),
+                trades=60,
+                effective_observations=400,
+            )
+            for item in subject.scenarios
+        ),
+        luck_threshold_z=plan.statistics.luck_threshold_z,
+    )
+    supported = outcome(plan=plan, validation_outcome=graded)
+    assert supported.plan.hypothesis_id == CLAIM_ID
+
+    promoted = promote(
+        state(),
+        Stage.RESEARCH_SURVIVOR,
+        actor="director",
+        reason="survived its own campaign",
+        now=NOW,
+        outcome=supported,
+    )
+    assert promoted.stage is Stage.RESEARCH_SURVIVOR
+    assert promoted.claim == (CLAIM_ID, 1)
+
+    # Same campaign, same verdict, different claim: still refused.
+    substituted = outcome(
+        plan=plan.model_copy(update={"hypothesis_id": "H-2026-999"}),
+        validation_outcome=graded,
+    )
+    with pytest.raises(PromotionRefused, match="survived somebody else's"):
+        promote(
+            state(),
+            Stage.RESEARCH_SURVIVOR,
+            actor="director",
+            reason="survived its own campaign",
+            now=NOW,
+            outcome=substituted,
+        )
