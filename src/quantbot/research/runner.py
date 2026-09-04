@@ -57,6 +57,7 @@ from quantbot.research.manifest import (
     ResourceUsage,
     canonical_result_json,
     content_id,
+    redact,
     write_experiment_manifest,
 )
 from quantbot.research.memory import RecordKind, ResearchRecord, Verdict
@@ -192,6 +193,24 @@ def _campaign_results(outcome: CampaignOutcome | None) -> dict[str, dict[str, st
     return results
 
 
+def _manifest_text(value: str) -> str:
+    """Free-text from a run, rendered so recording it can never be what breaks the recording.
+
+    `ExperimentManifest` *refuses* a bundle containing a credential-shaped string. That is the
+    right default for a field somebody chose, and the wrong one for text this module does not
+    control: a measurement's diagnostic, or an exception message, arrives as whatever it
+    arrives as. A refusal there raises out of `_record`, which unwinds the caller's transaction
+    and takes the `RESERVED -> CONSUMED` transition with it -- the #159 Finding 9 defect
+    reached through the recording path instead of the grading path.
+
+    So the manifest module's own `redact` is applied first, replacing a credential-shaped string
+    wholesale rather than rejecting the bundle that carries it. One rule, defined once, in the
+    module that owns it. `str()` is a no-op for the `str` input and only satisfies the signature
+    of `redact`, which is written for arbitrary nested values.
+    """
+    return str(redact(value))
+
+
 class ExperimentRunError(RuntimeError):
     """Raised when a run cannot proceed honestly. Distinct from the experiment failing."""
 
@@ -287,9 +306,17 @@ class ExperimentDesign:
     not synthesise any -- recording a walk-forward that never ran, or an empty grid, would make
     the bundle assert robustness testing that did not happen.
 
-    These belong on `ExperimentPlan`, which is compiled before the run and hashed. Taking them
-    here is the weaker arrangement and a deliberate interim: moving them requires changing the
-    compiler's signature, which is a separate change with its own callers to update.
+    These belong on `ExperimentPlan`, which is compiled from the frozen registration before the
+    run. Taking them here is the weaker arrangement and a deliberate interim: moving them
+    requires changing the compiler's signature, which is a separate change with its own callers
+    to update.
+
+    This comment used to say the plan was "compiled before the run and hashed". It is not. #159
+    Finding 6 checked, because adding a field to it would have been a compatibility question if
+    it were: a plan is built per run, never persisted, never content-addressed, and never
+    embedded in a manifest -- `ExperimentManifest` carries the registration hash and the dataset
+    snapshots, not the plan. The claim is corrected rather than deleted so a later reader does
+    not re-derive the wrong constraint from it.
     """
 
     walk_forward_splits: tuple[ExperimentPeriod, ...]
@@ -412,25 +439,33 @@ class ExperimentRunner:
             measured = measurement(plan, access)
         except Exception as error:  # noqa: BLE001 -- a failed run is a result, not an absence
             resources = _usage(started_at, cpu_before, tracemalloc)
-            empty = Measured(effect=None)
-            outcome = ExperimentOutcome(
-                plan=plan,
-                verdict=OutcomeVerdict.FAILED,
-                artifact_outcomes=self._grade_artifacts(plan, empty),
-                # A failed run still spent the protected handoff, so the campaign frozen against
-                # it is part of what happened. Graded with no results, which makes every frozen
-                # scenario explicitly UNASSESSED rather than absent: "nobody answered this" and
-                # "this was never asked" are different facts, and only the first is true here.
-                # No measurement is manufactured to fill the gap.
-                validation_outcome=self._grade_validation_campaign(
-                    persisted_registration, empty
-                ),
-                detail=f"{type(error).__name__}: {error}",
-                completed_at=now,
-            )
             # A failed run is recorded exactly as fully as a successful one. A bundle written
             # only on success would make the archive a record of things that worked, which is
             # the selection bias this project exists to resist.
+            return self._record(
+                plan,
+                persisted_registration,
+                self._failed_outcome(
+                    plan,
+                    persisted_registration,
+                    detail=f"{type(error).__name__}: {error}",
+                    now=now,
+                ),
+                code,
+                environment,
+                applied_costs,
+                design,
+                resources,
+            )
+
+        resources = _usage(started_at, cpu_before, tracemalloc)
+        # #159 Finding 9. Past this line the holdout has been read, and an exception that
+        # escapes `run()` unwinds the caller's transaction with it -- taking the CONSUMED
+        # transition along. A measurement whose output violates a contract could therefore look
+        # at a protected window and leave no trace that it had, which is precisely the free look
+        # `_spend`-before-measurement exists to prevent. See `_failed_outcome`.
+        try:
+            outcome = self._grade(plan, persisted_registration, measured, now=now)
             return self._record(
                 plan,
                 persisted_registration,
@@ -440,20 +475,67 @@ class ExperimentRunner:
                 applied_costs,
                 design,
                 resources,
+                measured.reproduction_inputs,
+            )
+        except ExperimentRunError as error:
+            return self._record(
+                plan,
+                persisted_registration,
+                self._failed_outcome(
+                    plan,
+                    persisted_registration,
+                    detail=f"the run was refused after the protected handoff: {error}",
+                    now=now,
+                ),
+                code,
+                environment,
+                applied_costs,
+                design,
+                resources,
             )
 
-        resources = _usage(started_at, cpu_before, tracemalloc)
-        outcome = self._grade(plan, persisted_registration, measured, now=now)
-        return self._record(
-            plan,
-            persisted_registration,
-            outcome,
-            code,
-            environment,
-            applied_costs,
-            design,
-            resources,
-            measured.reproduction_inputs,
+    def _failed_outcome(
+        self,
+        plan: ExperimentPlan,
+        persisted: Registration,
+        *,
+        detail: str,
+        now: datetime,
+    ) -> ExperimentOutcome:
+        """The one shape a run that spent the holdout and produced nothing readable takes.
+
+        Two paths reach it, and they are the same fact: the measurement raised, or its output
+        broke a contract the runner will not record as a result. Either way the protected window
+        was handed over and read, and the honest bundle says so.
+
+        **This is what makes a post-handoff refusal durable (#159).** `ExperimentRunner` runs
+        inside the caller's `Database.transaction()`, so an exception leaving `run()` rolls that
+        transaction back -- and the `RESERVED -> CONSUMED` transition `_spend` wrote goes back
+        with it. A measurement could then read a protected window, return output the grader
+        refuses, and leave the holdout looking untouched: a free look at the data, granted by the
+        error path of the check that was supposed to prevent exactly that. Returning a recorded
+        failure instead of raising is what keeps the consumption committed.
+
+        The scope is deliberately `ExperimentRunError` and nothing wider. That type means "this
+        run cannot proceed honestly", which is the measurement-contract family. A pydantic
+        `ValidationError` from building the outcome would be a defect in this runner, and
+        laundering a runner bug into a recorded research failure would hide it behind a bundle
+        that looks like evidence about the hypothesis.
+
+        No measurement is manufactured to fill the gap. The campaign frozen against the claim is
+        graded with *no* results, so every frozen scenario is explicitly UNASSESSED rather than
+        absent -- "nobody answered this" and "this was never asked" are different facts, and only
+        the first is true here. That also keeps the outcome satisfying the plan's campaign
+        requirement from Finding 6, which a `None` here would violate.
+        """
+        empty = Measured(effect=None)
+        return ExperimentOutcome(
+            plan=plan,
+            verdict=OutcomeVerdict.FAILED,
+            artifact_outcomes=self._grade_artifacts(plan, empty),
+            validation_outcome=self._grade_validation_campaign(persisted, empty),
+            detail=detail,
+            completed_at=now,
         )
 
     @staticmethod
@@ -1022,7 +1104,7 @@ class ExperimentRunner:
                 # so discarding them meant the bundle could not say what produced the number.
                 # Namespaced rather than merged into `primary`, so a diagnostic key can never
                 # collide with a result key and quietly overwrite a verdict.
-                **{f"diagnostic:{key}": {"value": value}
+                **{f"diagnostic:{key}": {"value": _manifest_text(value)}
                    for key, value in sorted(outcome.diagnostics.items())},
                 # The hostile-validation record, under its own namespace for the same reason.
                 # Empty when no campaign was frozen, so a non-campaign bundle is unchanged.
@@ -1051,6 +1133,10 @@ class ExperimentRunner:
                     ),
                     "probes_run": ", ".join(outcome.probes_run),
                     "probes_failed": ", ".join(outcome.probes_failed),
+                    # Why, not only what. `artifact:` and `validation:campaign` entries have
+                    # always carried their reasoning and the primary result did not, so a FAILED
+                    # bundle recorded that a run failed and could not say what failed in it.
+                    "detail": _manifest_text(outcome.detail),
                 }
             },
             mode="CONFIRMATORY",

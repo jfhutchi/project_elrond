@@ -29,6 +29,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pytest
+from sqlalchemy import select
 
 from quantbot.research.builder import ExperimentOutcome, OutcomeVerdict, compile_experiment
 from quantbot.research.manifest import ExperimentPeriod
@@ -37,6 +38,7 @@ from quantbot.research.registry import (
     DataWindow,
     HypothesisRegistry,
     RegistrationRefused,
+    WindowState,
 )
 from quantbot.research.runner import (
     ExperimentRunError,
@@ -60,7 +62,7 @@ from quantbot.research.validation_campaign import (
     ValidationScenario,
 )
 from quantbot.storage import Database
-from quantbot.storage.schema import hypotheses, search_runs
+from quantbot.storage.schema import hypotheses, hypothesis_data_windows, search_runs
 from tests.unit.research.test_runner import (
     COSTS,
     DATASET,
@@ -552,22 +554,139 @@ def test_a_measurement_cannot_carry_a_scenario_or_campaign_verdict() -> None:
         )
 
 
-def test_scenario_results_for_a_registration_without_a_campaign_are_refused(
+def test_orphan_scenario_results_fail_the_run_without_handing_back_the_holdout(
     database: Database, manifests: Path
 ) -> None:
-    """Silently dropping them would let a worker believe hostile validation had been graded
-    when nothing was."""
+    """**Finding 9.** A refusal reached *after* the handoff must not unwind the consumption.
+
+    Silently dropping orphan scenario results would let a worker believe hostile validation had
+    been graded when nothing was, so the run must not survive them. But raising was the wrong
+    way to refuse: `ExperimentRunner` runs inside the caller's `Database.transaction()`, so an
+    escaping exception rolls that transaction back -- including the `RESERVED -> CONSUMED`
+    transition `_spend` wrote before the measurement read the data.
+
+    That handed an invalid measurement a free look at a protected window: read the holdout,
+    return output the grader refuses, and leave the window looking untouched. The refusal became
+    the exemption.
+
+    So the run fails durably instead. Every assertion below is about that durability, and the
+    ones after the `with` block are the load-bearing half -- reading CONSUMED inside the
+    original transaction passes just as well when the transaction is about to roll back.
+    """
     bound = campaign()
     stress, _general = bound.scenarios
+    code, environment = provenance()
+    handed_over: list[tuple[str, DataRole]] = []
 
-    with pytest.raises(ExperimentRunError, match="froze no validation campaign"):
-        run_campaign(
-            database,
-            manifests,
-            case="orphan",
-            subject=None,
-            scenarios=(measured_scenario(stress),),
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registration = registry.register(
+            draft(hypothesis_id="H-ORPHAN"), now=NOW, critique=critique("H-ORPHAN")
         )
+        plan = compile_experiment(registration, datasets=[snapshot()])
+
+        def orphan(_plan, access):
+            # Otherwise valid primary numbers. The only defect is the scenario result, which
+            # belongs to a campaign this registration never froze.
+            handed_over.extend(access.windows)
+            return Measured(
+                effect=Decimal("2.5"),
+                test_statistic=Decimal("9.0"),
+                probes_run=plan.probes,
+                scenario_measurements=(measured_scenario(stress),),
+            )
+
+        result = ExperimentRunner(registry, manifests=manifests).run(
+            plan, registration, orphan, now=NOW, code=code, environment=environment,
+            applied_costs=COSTS, design=DESIGN,
+        )
+
+    # The protected data really was handed over before the refusal; this is not a preflight.
+    assert handed_over == [(DATASET, DataRole.PROTECTED_EVALUATION)]
+
+    # Returned, not raised -- and as an explicit non-evidence failure, not a quiet survival.
+    assert result.outcome.verdict is OutcomeVerdict.FAILED
+    assert not result.outcome.citable
+    assert result.outcome.validation_outcome is None
+    assert "after the protected handoff" in result.outcome.detail
+    assert "froze no validation campaign" in result.outcome.detail
+
+    # And the bundle exists and says why, rather than only that something failed.
+    assert result.manifest_path.exists(), "a post-handoff refusal must still leave a record"
+    written = json.loads(result.manifest_path.read_text(encoding="utf-8"))
+    assert written["results"]["primary"]["verdict"] == "FAILED"
+    assert "froze no validation campaign" in written["results"]["primary"]["detail"]
+
+    # The transaction above exited normally, so this reads committed state.
+    with database.transaction() as session:
+        state = session.execute(
+            select(hypothesis_data_windows.c.state).where(
+                hypothesis_data_windows.c.hypothesis_id == "H-ORPHAN"
+            )
+        ).scalar_one()
+        assert state == WindowState.CONSUMED.value, "the holdout must stay spent across commit"
+
+    # And the proof that matters operationally: the window cannot be handed over again.
+    second: list[str] = []
+    with database.transaction() as session:
+
+        def again(_plan, _access):
+            second.append("measured")
+            return Measured(effect=None)
+
+        with pytest.raises(RegistrationRefused, match="is CONSUMED"):
+            ExperimentRunner(HypothesisRegistry(session), manifests=manifests).run(
+                plan, registration, again, now=NOW, code=code, environment=environment,
+                applied_costs=COSTS, design=DESIGN,
+            )
+    assert second == [], "a spent holdout must not be readable a second time"
+
+
+def test_a_campaign_survives_a_post_handoff_refusal_as_explicitly_unanswered(
+    database: Database, manifests: Path
+) -> None:
+    """A fallback failure still has to satisfy the plan's campaign requirement (Finding 6).
+
+    Omitting the campaign would be the easier fallback and the wrong record: it would say this
+    claim registered no hostile validation. Graded with no results instead, so every frozen
+    scenario is UNASSESSED -- "nobody answered this", which is true, rather than "this was never
+    asked", which is not. Nothing is manufactured to fill the gap.
+    """
+    subject = campaign()
+    code, environment = provenance()
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registry.freeze_validation_campaign(subject, now=NOW)
+        registration = registry.register(
+            draft(hypothesis_id="H-UNANS", validation_campaign=subject),
+            now=NOW,
+            critique=critique("H-UNANS"),
+        )
+        plan = compile_experiment(registration, datasets=[snapshot()])
+
+        def explodes(_plan, _access):
+            raise ZeroDivisionError("the covariance matrix was singular")
+
+        result = ExperimentRunner(registry, manifests=manifests).run(
+            plan, registration, explodes, now=NOW, code=code, environment=environment,
+            applied_costs=COSTS, design=DESIGN,
+        )
+
+    assert result.outcome.verdict is OutcomeVerdict.FAILED
+    graded = result.outcome.validation_outcome
+    assert graded is not None, "the frozen campaign is part of what happened"
+    assert graded.campaign_id == subject.campaign_id
+    assert {item.verdict for item in graded.scenarios} == {ScenarioVerdict.UNASSESSED}
+    assert graded.verdict is CampaignVerdict.INCONCLUSIVE
+
+    with database.transaction() as session:
+        state = session.execute(
+            select(hypothesis_data_windows.c.state).where(
+                hypothesis_data_windows.c.hypothesis_id == "H-UNANS"
+            )
+        ).scalar_one()
+        assert state == WindowState.CONSUMED.value
 
 
 def test_a_caller_cannot_substitute_another_campaigns_results(

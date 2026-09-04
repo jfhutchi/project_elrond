@@ -318,6 +318,12 @@ def test_a_crashing_measurement_still_spends_the_holdout(
 
     If consumption were recorded on success, failing would be a way to inspect a protected
     window for free and register against it again afterwards.
+
+    Checked twice, and the second read is the one that proves it. The runner works inside the
+    caller's transaction, so a state read from *within* that transaction is the runner's
+    intention, not a durable fact -- it passes identically when the transaction is about to roll
+    back and discard the transition. The read after the block is what says the consumption
+    committed, which is the property #159 Finding 9 depends on.
     """
     registration = _register(database)
     plan = compile_experiment(registration, datasets=[snapshot()])
@@ -341,6 +347,11 @@ def test_a_crashing_measurement_still_spends_the_holdout(
 
     assert result.outcome.verdict is OutcomeVerdict.FAILED
     assert "ZeroDivisionError" in result.outcome.detail
+
+    with database.transaction() as session:
+        assert _window_state(session) == WindowState.CONSUMED.value, (
+            "the consumption has to survive the commit, not merely happen inside it"
+        )
 
 
 def test_protected_access_cannot_be_forged() -> None:
