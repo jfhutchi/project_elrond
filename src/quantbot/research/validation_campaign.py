@@ -549,6 +549,20 @@ class CampaignOutcome(FrozenModel):
         unresolved = [
             item for item in self.scenarios if item.verdict in UNRESOLVED_SCENARIO_VERDICTS
         ]
+        # An unresolved scenario always becomes an integrity defect in `grade_campaign`, whatever
+        # the aggregate turns out to be, so the two cannot be separated. Without this the
+        # unresolved rule only bound SURVIVED, which left `REFUTED` beside an UNASSESSED scenario
+        # and no defects -- a shape no measurements produce, and one that reads as a campaign
+        # that resolved its question when a scenario in it answered nothing.
+        #
+        # The converse is deliberately not required: an unknown scenario id in the supplied
+        # measurements raises a defect while every frozen scenario outcome is itself resolved.
+        if unresolved and not self.integrity_defects:
+            raise ValueError(
+                "a campaign whose scenarios include "
+                + ", ".join(item.scenario_id for item in unresolved)
+                + " resolved nothing and reports no integrity defect"
+            )
         # Integrity defects take precedence in `grade_campaign`, so they and INCONCLUSIVE imply
         # each other. A defect sitting beside any other verdict means something derived one of
         # them and not the other.
@@ -566,6 +580,25 @@ class CampaignOutcome(FrozenModel):
                 "a campaign cannot have survived while "
                 + ", ".join(item.scenario_id for item in unresolved)
                 + " resolved nothing"
+            )
+        # A surviving campaign contains at least one surviving scenario, and this follows without
+        # knowing *which* scenarios were required. `ValidationCampaign` refuses to exist without
+        # a mandatory adverse scenario, and `grade_campaign` sends every fate of a required
+        # scenario somewhere other than SURVIVED: unresolved becomes an integrity defect and so
+        # INCONCLUSIVE, underpowered becomes UNDERPOWERED, refuted becomes REFUTED. So a
+        # campaign that survived has a required scenario that survived.
+        #
+        # This is not the overreach the rules above avoid. It says nothing about which scenarios
+        # were required and does not infer the aggregate from the scenarios -- optional REFUTED
+        # and optional UNDERPOWERED scenarios still sit happily inside a surviving campaign. It
+        # only refuses a campaign that survived on the strength of nothing at all.
+        if self.verdict is CampaignVerdict.SURVIVED and not any(
+            item.verdict is ScenarioVerdict.SURVIVED for item in self.scenarios
+        ):
+            raise ValueError(
+                "a campaign cannot have survived without a single surviving scenario; every "
+                "campaign freezes a mandatory adverse scenario, and a required scenario that "
+                "did not survive sends the aggregate somewhere else"
             )
         if self.verdict is CampaignVerdict.UNDERPOWERED and not underpowered:
             raise ValueError(

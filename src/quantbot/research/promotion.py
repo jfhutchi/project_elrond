@@ -388,6 +388,12 @@ def _campaign_contradictions(campaign: CampaignOutcome) -> list[str]:
     the `ValidationCampaign`. Guessing would produce a second aggregation policy that drifts from
     #215's, so a campaign this function cannot contradict is left to #215's authority. An
     optional scenario may fail while every required one passes, and that campaign survived.
+
+    "Not one scenario survived" is decidable without any of that, though. Every campaign freezes
+    a mandatory adverse scenario, and `grade_campaign` sends every fate of a required scenario
+    somewhere other than SURVIVED, so a surviving campaign has a surviving scenario in it. This
+    function is only reached for a campaign claiming SURVIVED, which is why the check needs no
+    verdict guard of its own.
     """
     objections: list[str] = []
     if not campaign.scenarios:
@@ -406,6 +412,12 @@ def _campaign_contradictions(campaign: CampaignOutcome) -> list[str]:
         objections.append(
             f"validation campaign {campaign.campaign_id} reports itself as survived while "
             "carrying unresolved integrity defects: " + "; ".join(campaign.integrity_defects)
+        )
+    if not any(item.verdict is ScenarioVerdict.SURVIVED for item in campaign.scenarios):
+        objections.append(
+            f"validation campaign {campaign.campaign_id} reports itself as survived without a "
+            "single surviving scenario; every campaign freezes a mandatory adverse scenario, "
+            "and a required scenario that did not survive sends the aggregate somewhere else"
         )
     unresolved = [
         item.scenario_id

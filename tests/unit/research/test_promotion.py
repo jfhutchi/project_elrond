@@ -2655,3 +2655,51 @@ def test_promotion_does_not_infer_the_aggregate_from_the_scenarios() -> None:
     assert survivor_objections(permitted) == (), (
         "a scenario failing inside a surviving campaign is #215's business, not this gate's"
     )
+
+
+def test_promotion_objects_to_a_survivor_with_no_surviving_scenario() -> None:
+    """**Blocker 1's promotion backstop.** A campaign that survived nothing at all.
+
+    Decidable here without the frozen campaign's policy: every `ValidationCampaign` freezes a
+    mandatory adverse scenario, and `grade_campaign` sends every fate of a required scenario
+    somewhere other than SURVIVED. So a surviving campaign has a surviving scenario in it, and
+    this object -- past every validator above it -- does not.
+    """
+    subject, plan = campaign_plan()
+    base = graded(subject, plan, CampaignVerdict.SURVIVED)
+    all_refuted = tuple(
+        item.model_copy(update={"verdict": ScenarioVerdict.REFUTED})
+        for item in base.scenarios
+    )
+    hollow = contradicted(scenarios=all_refuted)
+
+    assert any(
+        "without a single surviving scenario" in item
+        for item in survivor_objections(hollow)
+    )
+
+
+def test_promotion_objects_when_every_scenario_was_underpowered() -> None:
+    """The same backstop where the counts are internally consistent.
+
+    Two underpowered scenarios out of two, with `underpowered_count` and `underpowered_fraction`
+    both exactly right, so no other contradiction fires and this rule is the only thing standing
+    between the object and a clean report.
+    """
+    subject, plan = campaign_plan()
+    base = graded(subject, plan, CampaignVerdict.SURVIVED)
+    all_underpowered = tuple(
+        item.model_copy(update={"verdict": ScenarioVerdict.UNDERPOWERED, "fresh_evidence": False})
+        for item in base.scenarios
+    )
+    hollow = contradicted(
+        scenarios=all_underpowered,
+        underpowered_count=2,
+        underpowered_fraction=Decimal("1"),
+    )
+
+    objections = survivor_objections(hollow)
+    assert any("without a single surviving scenario" in item for item in objections)
+    assert not any("underpowered scenarios and grades" in item for item in objections), (
+        "the counts are correct; only the absence of a survivor is wrong"
+    )

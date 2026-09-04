@@ -843,3 +843,115 @@ def test_an_optional_scenario_may_be_underpowered_within_the_frozen_ceiling() ->
     assert result.verdict is CampaignVerdict.SURVIVED
     assert result.underpowered_count == 1
     assert result.underpowered_fraction == Decimal("0.5")
+
+
+# --- #159: SURVIVED on the strength of nothing, and unresolved without a defect ----------------
+#
+# Two shapes the first structural pass still let through the ordinary constructor. Both follow
+# from properties of `grade_campaign` that hold whatever the frozen campaign's required/adverse
+# policy is, so neither needs that policy to be reconstructed.
+
+
+def refuted_outcome() -> CampaignOutcome:
+    """A genuinely graded REFUTED campaign: the required stress resolves below the bar."""
+    subject = campaign()
+    stress, general = subject.scenarios
+    result = graded(subject, measured(stress, test_statistic=Decimal("0.4")), measured(general))
+    assert result.verdict is CampaignVerdict.REFUTED
+    return result
+
+
+def underpowered_outcome() -> CampaignOutcome:
+    """A genuinely graded UNDERPOWERED campaign: the required stress is below the floor."""
+    subject = campaign()
+    stress, general = subject.scenarios
+    result = graded(subject, measured(stress, trades=1), measured(general))
+    assert result.verdict is CampaignVerdict.UNDERPOWERED
+    return result
+
+
+def test_a_campaign_cannot_survive_with_no_surviving_scenario() -> None:
+    """**Blocker 1.** Every campaign freezes a mandatory adverse scenario.
+
+    `grade_campaign` sends every fate of a required scenario somewhere other than SURVIVED --
+    unresolved to INCONCLUSIVE, underpowered to UNDERPOWERED, refuted to REFUTED -- so a campaign
+    that survived has a scenario in it that survived. A top-level SURVIVED over nothing but
+    failures is a verdict resting on no supporting measurement at all.
+    """
+    base = refuted_outcome()
+    all_refuted = tuple(
+        item.model_copy(update={"verdict": ScenarioVerdict.REFUTED}) for item in base.scenarios
+    )
+
+    with pytest.raises(ValueError, match="without a single surviving scenario"):
+        CampaignOutcome(
+            **rebuilt(base, scenarios=all_refuted, verdict=CampaignVerdict.SURVIVED)
+        )
+
+
+def test_a_campaign_cannot_survive_on_underpowered_scenarios_alone() -> None:
+    """The same rule where the counts are internally consistent, so nothing else objects.
+
+    Two underpowered scenarios out of two: `underpowered_count` and `underpowered_fraction` are
+    both exactly right, and the campaign still cannot have survived them.
+    """
+    base = underpowered_outcome()
+    all_underpowered = tuple(
+        item.model_copy(update={"verdict": ScenarioVerdict.UNDERPOWERED, "fresh_evidence": False})
+        for item in base.scenarios
+    )
+
+    with pytest.raises(ValueError, match="without a single surviving scenario"):
+        CampaignOutcome(
+            **rebuilt(
+                base,
+                scenarios=all_underpowered,
+                verdict=CampaignVerdict.SURVIVED,
+                underpowered_count=2,
+                underpowered_fraction=Decimal("1"),
+            )
+        )
+
+
+def test_a_refuted_campaign_cannot_hide_an_unresolved_scenario() -> None:
+    """**Blocker 2.** An unresolved scenario always becomes an integrity defect.
+
+    The previous rule bound only SURVIVED, which left REFUTED beside an UNASSESSED scenario and
+    no defects -- a shape no measurements produce, reading as a campaign that resolved its
+    question while a scenario in it answered nothing.
+    """
+    base = refuted_outcome()
+    stalled = base.scenarios[1].model_copy(
+        update={"verdict": ScenarioVerdict.UNASSESSED, "fresh_evidence": False}
+    )
+
+    with pytest.raises(ValueError, match="reports no integrity defect"):
+        CampaignOutcome(**rebuilt(base, scenarios=(base.scenarios[0], stalled)))
+
+
+def test_an_underpowered_campaign_cannot_hide_an_unresolved_scenario() -> None:
+    """The same rule under the other confident aggregate, with counts left consistent."""
+    base = underpowered_outcome()
+    stalled = base.scenarios[1].model_copy(
+        update={"verdict": ScenarioVerdict.UNVERIFIED, "fresh_evidence": False}
+    )
+
+    with pytest.raises(ValueError, match="reports no integrity defect"):
+        CampaignOutcome(**rebuilt(base, scenarios=(base.scenarios[0], stalled)))
+
+
+def test_an_unresolved_scenario_round_trips_when_its_defect_is_present() -> None:
+    """The control for blocker 2: the honest INCONCLUSIVE shape is untouched.
+
+    `grade_campaign` produced it, so it carries both the unresolved scenario and the defect that
+    unresolved scenario raised, and it survives the same canonical round trip #217's
+    `outcome_json` takes out of a manifest.
+    """
+    subject = campaign()
+    _stress, general = subject.scenarios
+    result = graded(subject, measured(general))
+
+    assert result.verdict is CampaignVerdict.INCONCLUSIVE
+    assert result.integrity_defects
+    assert any(item.verdict is ScenarioVerdict.UNASSESSED for item in result.scenarios)
+    assert CampaignOutcome.model_validate(result.model_dump()) == result
