@@ -64,6 +64,7 @@ from quantbot.research.registry import DataRole, HypothesisRegistry, Registratio
 from quantbot.research.validation_campaign import (
     CampaignOutcome,
     CampaignVerdict,
+    ScenarioEvidenceSource,
     ScenarioMeasured,
     grade_campaign,
 )
@@ -115,6 +116,64 @@ _CAMPAIGN_VERDICTS: dict[CampaignVerdict, OutcomeVerdict] = {
     CampaignVerdict.UNDERPOWERED: OutcomeVerdict.UNDERPOWERED,
     CampaignVerdict.INCONCLUSIVE: OutcomeVerdict.INCONCLUSIVE,
 }
+
+
+def _campaign_results(outcome: CampaignOutcome | None) -> dict[str, dict[str, str]]:
+    """The campaign, rendered into the manifest's `results` so the bundle can be audited.
+
+    Without this the durable record kept only the *downgraded* primary verdict and lost
+    everything that produced it: which campaign, which scenarios failed, on what statistics, how
+    much was unresolved, and why. A gate whose reasoning is not written down cannot be checked,
+    and a REFUTED bundle that cannot say what refuted it is barely more useful than no bundle.
+
+    Written into `results`, which already exists as `dict[str, dict[str, str]]`, so no schema
+    changes and no migration. It therefore participates in the manifest hash, which is intended:
+    **two runs whose hostile validation came out differently are not the same experiment**, and a
+    hash that said otherwise would be describing something other than the run.
+
+    Nothing is emitted when the registration froze no campaign, so a non-campaign bundle hashes
+    exactly as it did before this existed.
+
+    Collections are rendered deterministically -- scenarios keyed by their own id, regime metrics
+    sorted -- because a manifest hash that depended on dict ordering would make two identical runs
+    produce two different bundles.
+    """
+    if outcome is None:
+        return {}
+    results: dict[str, dict[str, str]] = {
+        "validation:campaign": {
+            "campaign_id": outcome.campaign_id,
+            "verdict": outcome.verdict.value,
+            "underpowered_count": str(outcome.underpowered_count),
+            "underpowered_fraction": str(outcome.underpowered_fraction),
+            "integrity_defects": " | ".join(outcome.integrity_defects),
+            "detail": outcome.detail,
+        }
+    }
+    for scenario in outcome.scenarios:
+        results[f"validation:scenario:{scenario.scenario_id}"] = {
+            "scenario_id": scenario.scenario_id,
+            "verdict": scenario.verdict.value,
+            "effect": "" if scenario.effect is None else str(scenario.effect),
+            "confidence_low": (
+                "" if scenario.confidence_low is None else str(scenario.confidence_low)
+            ),
+            "confidence_high": (
+                "" if scenario.confidence_high is None else str(scenario.confidence_high)
+            ),
+            "test_statistic": (
+                "" if scenario.test_statistic is None else str(scenario.test_statistic)
+            ),
+            "trades": str(scenario.trades),
+            "effective_observations": str(scenario.effective_observations),
+            "fresh_evidence": "true" if scenario.fresh_evidence else "false",
+            "regime_metrics": ", ".join(
+                f"{name}={scenario.regime_metrics[name]}"
+                for name in sorted(scenario.regime_metrics)
+            ),
+            "detail": scenario.detail,
+        }
+    return results
 
 
 class ExperimentRunError(RuntimeError):
@@ -313,6 +372,16 @@ class ExperimentRunner:
                     f"artifact test {artifact_test.test_id} is not the exact preregistered design"
                 )
 
+        # #159 Finding 3. The store is the authority on which claim exists, not the pair of
+        # objects the caller handed in -- two consistent forgeries agree with each other
+        # perfectly. Everything after this reads `persisted`, never `registration`.
+        persisted_registration = self._registry.resolve_for_run(
+            plan.hypothesis_id, plan.hypothesis_version, content_hash=plan.registration_hash
+        )
+        # #159 Finding 4. Before the holdout is spent and before any measurement runs, prove the
+        # frozen scenarios could actually have been executed on the data the plan supplies.
+        self._bind_campaign_to_data(plan, persisted_registration)
+
         access = self._spend(plan, now=now)
 
         # Measured, not declared. `ResourceUsage` is provenance, and a fabricated zero would be
@@ -327,10 +396,19 @@ class ExperimentRunner:
             measured = measurement(plan, access)
         except Exception as error:  # noqa: BLE001 -- a failed run is a result, not an absence
             resources = _usage(started_at, cpu_before, tracemalloc)
+            empty = Measured(effect=None)
             outcome = ExperimentOutcome(
                 plan=plan,
                 verdict=OutcomeVerdict.FAILED,
-                artifact_outcomes=self._grade_artifacts(plan, Measured(effect=None)),
+                artifact_outcomes=self._grade_artifacts(plan, empty),
+                # A failed run still spent the protected handoff, so the campaign frozen against
+                # it is part of what happened. Graded with no results, which makes every frozen
+                # scenario explicitly UNASSESSED rather than absent: "nobody answered this" and
+                # "this was never asked" are different facts, and only the first is true here.
+                # No measurement is manufactured to fill the gap.
+                validation_outcome=self._grade_validation_campaign(
+                    persisted_registration, empty
+                ),
                 detail=f"{type(error).__name__}: {error}",
                 completed_at=now,
             )
@@ -342,7 +420,7 @@ class ExperimentRunner:
             )
 
         resources = _usage(started_at, cpu_before, tracemalloc)
-        outcome = self._grade(plan, registration, measured, now=now)
+        outcome = self._grade(plan, persisted_registration, measured, now=now)
         return self._record(
             plan,
             registration,
@@ -354,6 +432,116 @@ class ExperimentRunner:
             resources,
             measured.reproduction_inputs,
         )
+
+    @staticmethod
+    def _covering_snapshot(
+        plan: ExperimentPlan, dataset: str, role: str, period: ExperimentPeriod
+    ) -> DatasetSnapshot | None:
+        """A supplied snapshot of exactly this dataset and role that spans the whole period."""
+        for snapshot in plan.datasets:
+            if (
+                snapshot.dataset == dataset
+                and snapshot.role == role
+                and snapshot.start <= period.start
+                and snapshot.end >= period.end
+            ):
+                return snapshot
+        return None
+
+    def _bind_campaign_to_data(self, plan: ExperimentPlan, persisted: Registration) -> None:
+        """Prove every evidence-bearing scenario could have run on the data actually supplied.
+
+        **`scenario_id` is not provenance.** It proves a measurement names a frozen scenario; it
+        proves nothing about where the numbers came from. That distinction was inert while the
+        campaign model had no executor -- and it stopped being inert the moment `grade_campaign`
+        could mark a resolved observed-market protected scenario `fresh_evidence=True`. A worker
+        could then report a favourable number under a frozen id, and the run would mint fresh
+        protected evidence out of data nobody checked.
+
+        So each observed-market scenario must have an exact covering `DatasetSnapshot` on the
+        plan: same dataset, same role, and a range spanning the whole scenario period. A
+        walk-forward scenario needs a second covering snapshot for its fit period under the
+        declared fitting role, because a fit window nobody supplied is a fit that did not happen.
+
+        A `PROTECTED_EVALUATION` scenario carries the extra requirement, because it is the only
+        kind that can become fresh evidence: the **persisted** registration must itself own a
+        protected `DataWindow` covering that dataset and period, so the scenario is reading a
+        holdout this claim actually reserved, and that dataset must be among the protected
+        snapshots `_spend` is about to consume. Fresh evidence is then something the protected
+        lifecycle handed over, not something a scenario asserted.
+
+        Resampled paths are exempt from the snapshot requirement and only from that: their
+        numbers come from simulation, and `grade_campaign` already refuses them
+        `fresh_evidence`. Requiring market data for a path that is explicitly not market data
+        would be theatre.
+
+        **Refusal is deliberate where the architecture cannot honestly comply.** A campaign whose
+        scenarios reach datasets or windows a single run cannot demonstrate it read is refused
+        rather than executed on the assumption it worked out. That narrows what this slice can
+        run, and the alternative is a bundle asserting a scenario ran somewhere nothing proves it
+        did.
+        """
+        campaign = persisted.draft.validation_campaign
+        if campaign is None:
+            return
+        protected_datasets = {
+            snapshot.dataset
+            for snapshot in plan.datasets
+            if snapshot.role == DataRole.PROTECTED_EVALUATION.value
+        }
+        for scenario in campaign.scenarios:
+            label = f"scenario {scenario.scenario_id} ({scenario.kind.value})"
+            if scenario.evidence_source is not ScenarioEvidenceSource.OBSERVED_MARKET:
+                continue
+            if (
+                self._covering_snapshot(
+                    plan, scenario.dataset, scenario.data_role, scenario.period
+                )
+                is None
+            ):
+                raise ExperimentRunError(
+                    f"{label} is frozen over {scenario.dataset}/{scenario.data_role} "
+                    f"{scenario.period.start}..{scenario.period.end}, and this run supplies no "
+                    "dataset snapshot covering it; a scenario id is not evidence that the "
+                    "scenario's data was read"
+                )
+            if scenario.fit_period is not None and scenario.fit_data_role is not None:
+                if (
+                    self._covering_snapshot(
+                        plan, scenario.dataset, scenario.fit_data_role, scenario.fit_period
+                    )
+                    is None
+                ):
+                    raise ExperimentRunError(
+                        f"{label} fits on {scenario.dataset}/{scenario.fit_data_role} "
+                        f"{scenario.fit_period.start}..{scenario.fit_period.end}, which this run "
+                        "supplies no snapshot for; a fit window nobody supplied is a fit that "
+                        "did not happen"
+                    )
+            if scenario.data_role != DataRole.PROTECTED_EVALUATION.value:
+                continue
+            # Only a protected scenario can become fresh evidence, so only it has to show the
+            # holdout was reserved by this claim and is about to be spent by this run.
+            owned = any(
+                window.dataset == scenario.dataset
+                and window.role is DataRole.PROTECTED_EVALUATION
+                and window.start <= scenario.period.start
+                and window.end >= scenario.period.end
+                for window in persisted.draft.windows
+            )
+            if not owned:
+                raise ExperimentRunError(
+                    f"{label} reads protected {scenario.dataset} "
+                    f"{scenario.period.start}..{scenario.period.end}, which "
+                    f"{persisted.draft.hypothesis_id} v{persisted.draft.version} never reserved; "
+                    "a holdout this claim does not own cannot become its fresh evidence"
+                )
+            if scenario.dataset not in protected_datasets:
+                raise ExperimentRunError(
+                    f"{label} reads protected {scenario.dataset}, which this run does not spend; "
+                    "fresh evidence has to come through the protected-window lifecycle rather "
+                    "than from a scenario asserting it did"
+                )
 
     def _spend(self, plan: ExperimentPlan, *, now: datetime) -> ProtectedAccess:
         """Consume every protected window the plan names, before any of it is read."""
@@ -386,7 +574,7 @@ class ExperimentRunner:
         )
 
     def _grade_validation_campaign(
-        self, registration: Registration, measured: Measured
+        self, persisted: Registration, measured: Measured
     ) -> CampaignOutcome | None:
         """Grade the campaign the *registration* froze, using #215's grader unchanged.
 
@@ -405,12 +593,12 @@ class ExperimentRunner:
         than ignored. Silently dropping them would let a worker believe hostile validation had
         been graded when nothing was.
         """
-        campaign = registration.draft.validation_campaign
+        campaign = persisted.draft.validation_campaign
         if campaign is None:
             if measured.scenario_measurements:
                 raise ExperimentRunError(
                     "the measurement reported validation scenarios, but "
-                    f"{registration.draft.hypothesis_id} v{registration.draft.version} froze no "
+                    f"{persisted.draft.hypothesis_id} v{persisted.draft.version} froze no "
                     "validation campaign; results for a campaign nobody registered are not "
                     "hostile validation"
                 )
@@ -418,13 +606,13 @@ class ExperimentRunner:
         return grade_campaign(
             campaign,
             tuple(measured.scenario_measurements),
-            luck_threshold_z=registration.power.luck_threshold_z,
+            luck_threshold_z=persisted.power.luck_threshold_z,
         )
 
     def _grade(
         self,
         plan: ExperimentPlan,
-        registration: Registration,
+        persisted: Registration,
         measured: Measured,
         *,
         now: datetime,
@@ -445,7 +633,7 @@ class ExperimentRunner:
                 probes_failed=tuple(measured.probes_failed),
                 diagnostics=dict(measured.diagnostics),
                 artifact_outcomes=self._grade_artifacts(plan, measured),
-                validation_outcome=self._grade_validation_campaign(registration, measured),
+                validation_outcome=self._grade_validation_campaign(persisted, measured),
                 detail=(
                     "probes required by the plan did not run, so the number cannot be read as "
                     f"evidence either way: {', '.join(missing)}"
@@ -492,7 +680,7 @@ class ExperimentRunner:
         if measured.detail:
             diagnostics["measurement_detail"] = measured.detail
 
-        campaign = self._grade_validation_campaign(registration, measured)
+        campaign = self._grade_validation_campaign(persisted, measured)
         # **A hostile gate subtracts; it never adds.** The campaign is consulted only where the
         # primary result already stands, so it can block a survivor and can never turn a refuted,
         # underpowered or unreadable primary into one. Applying it symmetrically would make a
@@ -728,6 +916,9 @@ class ExperimentRunner:
                 # collide with a result key and quietly overwrite a verdict.
                 **{f"diagnostic:{key}": {"value": value}
                    for key, value in sorted(outcome.diagnostics.items())},
+                # The hostile-validation record, under its own namespace for the same reason.
+                # Empty when no campaign was frozen, so a non-campaign bundle is unchanged.
+                **_campaign_results(outcome.validation_outcome),
                 **{
                     f"artifact:{artifact.test_id}": {
                         "test_registration_hash": artifact.test_registration_hash,

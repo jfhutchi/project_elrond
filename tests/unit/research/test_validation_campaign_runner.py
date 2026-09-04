@@ -22,6 +22,7 @@ Nothing here is evidence about a market. Every measurement is a synthetic fixtur
 from __future__ import annotations
 
 import dataclasses
+import json
 from collections.abc import Iterator
 from datetime import date
 from decimal import Decimal
@@ -31,7 +32,7 @@ import pytest
 
 from quantbot.research.builder import OutcomeVerdict, compile_experiment
 from quantbot.research.manifest import ExperimentPeriod
-from quantbot.research.registry import HypothesisRegistry
+from quantbot.research.registry import HypothesisRegistry, RegistrationRefused
 from quantbot.research.runner import (
     ExperimentRunError,
     ExperimentRunner,
@@ -51,6 +52,7 @@ from quantbot.research.validation_campaign import (
     ValidationScenario,
 )
 from quantbot.storage import Database
+from quantbot.storage.schema import search_runs
 from tests.unit.research.test_runner import (
     COSTS,
     DATASET,
@@ -139,31 +141,21 @@ def run_campaign(
 ):
     """Freeze a campaign, register it, run it, and return the graded outcome.
 
-    A distinct hypothesis id and dataset per case: a registration is frozen once and a protected
-    window is claimed by one hypothesis, so sharing either would make a case fail on contention
-    rather than on the property it names.
+    **Scenarios live on the dataset the plan actually supplies.** An earlier version of this
+    fixture put them on `f"{DATASET}-{case}"` while `snapshot()` supplied `DATASET`, so every
+    campaign here was frozen over data the run never read -- the fixtures were demonstrating the
+    defect Finding 4 exists to close, and the tests passed anyway because nothing checked. Each
+    case gets its own `database`, so there is no window contention to route around.
     """
-    dataset = f"{DATASET}-{case}"
-    bound = (
-        None
-        if subject is None
-        else subject.model_copy(
-            update={
-                "scenarios": tuple(
-                    item.model_copy(update={"dataset": dataset}) for item in subject.scenarios
-                )
-            }
-        )
-    )
     with database.transaction() as session:
         registry = HypothesisRegistry(session)
-        if bound is not None:
-            registry.freeze_validation_campaign(bound, now=NOW)
+        if subject is not None:
+            registry.freeze_validation_campaign(subject, now=NOW)
         registration = registry.register(
             draft(
                 hypothesis_id=f"H-RUN-{case}",
                 materially_different=f"runner fixture {case}",
-                validation_campaign=bound,
+                validation_campaign=subject,
             ),
             now=NOW,
             critique=critique(f"H-RUN-{case}"),
@@ -188,18 +180,6 @@ def run_campaign(
         ).outcome
 
 
-def rebind(subject: ValidationCampaign, case: str) -> ValidationCampaign:
-    """The campaign as `run_campaign` will have frozen it, so scenario ids line up."""
-    dataset = f"{DATASET}-{case}"
-    return subject.model_copy(
-        update={
-            "scenarios": tuple(
-                item.model_copy(update={"dataset": dataset}) for item in subject.scenarios
-            )
-        }
-    )
-
-
 # --- the happy path, and the control for everything below ------------------------------------
 
 
@@ -207,7 +187,7 @@ def test_a_complete_valid_campaign_is_graded_and_recorded(
     database: Database, manifests: Path
 ) -> None:
     """Measurements in, mechanically derived verdicts out, attached to the outcome."""
-    bound = rebind(campaign(), "ok")
+    bound = campaign()
     stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -249,7 +229,7 @@ def test_a_strong_negative_scenario_cannot_support_through_the_runner(
     it is required, the campaign is refuted, and because the campaign is a gate the primary
     survivor is blocked. No new `abs()` anywhere on the path.
     """
-    bound = rebind(campaign(), "neg")
+    bound = campaign()
     stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -279,7 +259,7 @@ def test_a_strong_negative_primary_stays_refuted_whatever_the_campaign_says(
 ) -> None:
     """The primary path keeps its own signed authority. A campaign full of survivors cannot
     rescue a primary measured at t=-9."""
-    bound = rebind(campaign(), "negprim")
+    bound = campaign()
     stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -321,7 +301,7 @@ def test_a_required_adverse_failure_blocks_a_surviving_primary(
     So a wiring that scored the campaign on an average, or consulted it only when convenient,
     would report SURVIVED for all three.
     """
-    bound = rebind(campaign(), case)
+    bound = campaign()
     stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -349,7 +329,7 @@ def test_a_mislabeled_regime_blocks(database: Database, manifests: Path) -> None
             ),
         ),
     )
-    bound = rebind(campaign(scenarios=(regime, GENERAL)), "mislabel")
+    bound = campaign(scenarios=(regime, GENERAL))
     frozen_regime, general = bound.scenarios
 
     outcome = run_campaign(
@@ -382,7 +362,7 @@ def test_an_unverified_regime_blocks(database: Database, manifests: Path) -> Non
             ),
         ),
     )
-    bound = rebind(campaign(scenarios=(regime, GENERAL)), "unverified")
+    bound = campaign(scenarios=(regime, GENERAL))
     frozen_regime, general = bound.scenarios
 
     outcome = run_campaign(
@@ -408,7 +388,7 @@ def test_an_unverified_regime_blocks(database: Database, manifests: Path) -> Non
 
 def test_a_missing_required_measurement_blocks(database: Database, manifests: Path) -> None:
     """Reporting nothing for a mandatory adverse scenario is the cheapest way to delete it."""
-    bound = rebind(campaign(), "missing")
+    bound = campaign()
     _stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -426,7 +406,7 @@ def test_a_missing_required_measurement_blocks(database: Database, manifests: Pa
 
 def test_a_duplicate_measurement_blocks(database: Database, manifests: Path) -> None:
     """Two answers for one frozen scenario is ambiguity, not a choice of which to believe."""
-    bound = rebind(campaign(), "dupe")
+    bound = campaign()
     stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -448,7 +428,7 @@ def test_a_duplicate_measurement_blocks(database: Database, manifests: Path) -> 
 
 def test_an_unknown_scenario_measurement_blocks(database: Database, manifests: Path) -> None:
     """Grading only what was reported would let a campaign be answered with a different one."""
-    bound = rebind(campaign(), "unknown")
+    bound = campaign()
     stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -481,7 +461,7 @@ def test_a_result_for_one_scenario_cannot_satisfy_another(
 ) -> None:
     """Measurements are keyed by frozen `scenario_id`, so answering the easy scenario twice
     leaves the hard one unanswered rather than covered."""
-    bound = rebind(campaign(), "swap")
+    bound = campaign()
     stress, general = bound.scenarios
 
     outcome = run_campaign(
@@ -523,7 +503,7 @@ def test_an_extra_favourable_result_cannot_wash_out_a_required_failure(
         for index in range(3)
     )
     subject = campaign(scenarios=(scenario(), *extras))
-    bound = rebind(subject, "wash")
+    bound = subject
     stress, *rest = bound.scenarios
 
     outcome = run_campaign(
@@ -569,7 +549,7 @@ def test_scenario_results_for_a_registration_without_a_campaign_are_refused(
 ) -> None:
     """Silently dropping them would let a worker believe hostile validation had been graded
     when nothing was."""
-    bound = rebind(campaign(), "orphan")
+    bound = campaign()
     stress, _general = bound.scenarios
 
     with pytest.raises(ExperimentRunError, match="froze no validation campaign"):
@@ -592,14 +572,11 @@ def test_a_caller_cannot_substitute_another_campaigns_results(
     scenarios, and every one of those is an unknown id -- so the registered scenarios go
     unanswered and the campaign refuses rather than being quietly answered by another.
     """
-    other = rebind(
-        campaign(
-            scenarios=(scenario(minimum_trades=31), GENERAL),
-            stress_policy_version="stress-v2",
-        ),
-        "sub",
+    other = campaign(
+        scenarios=(scenario(minimum_trades=31), GENERAL),
+        stress_policy_version="stress-v2",
     )
-    registered = rebind(campaign(), "sub")
+    registered = campaign()
     assert other.campaign_id != registered.campaign_id
 
     outcome = run_campaign(
@@ -629,7 +606,7 @@ def test_a_resampled_scenario_cannot_mint_fresh_evidence_through_the_runner(
         resampling_method=ResamplingMethod.STATIONARY_BLOCK_BOOTSTRAP,
     )
     subject = campaign(scenarios=(resampled, GENERAL))
-    bound = rebind(subject, "resampled")
+    bound = subject
     frozen_resampled, general = bound.scenarios
 
     outcome = run_campaign(
@@ -654,3 +631,653 @@ def test_a_resampled_scenario_cannot_mint_fresh_evidence_through_the_runner(
     assert simulated.verdict is ScenarioVerdict.SURVIVED
     assert simulated.fresh_evidence is False
     assert observed.fresh_evidence is True
+
+
+# --- Finding 1: the campaign has to survive into the durable bundle ---------------------------
+#
+# The gate can downgrade SURVIVED -> REFUTED. If the manifest records only the downgraded primary
+# verdict, the bundle says a result was refuted and cannot say by what -- no campaign id, no
+# scenario verdicts, no statistics, no integrity defects. A gate whose reasoning is not written
+# down cannot be audited, and this project's whole claim is that its conclusions can be.
+
+
+def run_result(
+    database: Database,
+    manifests: Path,
+    *,
+    case: str,
+    subject: ValidationCampaign | None,
+    scenarios: tuple[ScenarioMeasured, ...] = (),
+    statistic: Decimal = Decimal("9.0"),
+):
+    """As `run_campaign`, but returns the whole `RunResult` so the manifest can be read."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        if subject is not None:
+            registry.freeze_validation_campaign(subject, now=NOW)
+        registration = registry.register(
+            draft(
+                hypothesis_id=f"H-RUN-{case}",
+                materially_different=f"runner fixture {case}",
+                validation_campaign=subject,
+            ),
+            now=NOW,
+            critique=critique(f"H-RUN-{case}"),
+        )
+        plan = compile_experiment(registration, datasets=[snapshot()])
+        code, environment = provenance()
+        return ExperimentRunner(registry, manifests=manifests).run(
+            plan,
+            registration,
+            lambda _plan, _access: Measured(
+                effect=Decimal("2.5"),
+                test_statistic=statistic,
+                probes_run=plan.probes,
+                scenario_measurements=scenarios,
+            ),
+            now=NOW,
+            code=code,
+            environment=environment,
+            applied_costs=COSTS,
+            design=DESIGN,
+        )
+
+
+def test_a_surviving_campaign_is_durable_in_the_manifest(
+    database: Database, manifests: Path
+) -> None:
+    """Aggregate and per-scenario entries both reach the bundle."""
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    result = run_result(
+        database,
+        manifests,
+        case="durable-ok",
+        subject=subject,
+        scenarios=(measured_scenario(stress), measured_scenario(general)),
+    )
+
+    aggregate = result.manifest.results["validation:campaign"]
+    assert aggregate["campaign_id"] == subject.campaign_id
+    assert aggregate["verdict"] == "SURVIVED"
+    assert aggregate["underpowered_count"] == "0"
+    assert aggregate["integrity_defects"] == ""
+
+    entry = result.manifest.results[f"validation:scenario:{stress.scenario_id}"]
+    assert entry["verdict"] == "SURVIVED"
+    assert entry["test_statistic"] == "9.0"
+    assert entry["trades"] == "60"
+    assert entry["effective_observations"] == "400"
+    assert entry["fresh_evidence"] == "true"
+
+
+def test_a_refuted_campaign_records_what_refuted_it(
+    database: Database, manifests: Path
+) -> None:
+    """**The case the durability gap hid.** The primary is downgraded to REFUTED, and the bundle
+    has to be able to say which scenario did it and on what number."""
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    result = run_result(
+        database,
+        manifests,
+        case="durable-refuted",
+        subject=subject,
+        scenarios=(
+            measured_scenario(stress, test_statistic=Decimal("-9.0"), effect=Decimal("-1.0")),
+            measured_scenario(general),
+        ),
+    )
+
+    assert result.outcome.verdict is OutcomeVerdict.REFUTED
+    assert result.manifest.results["validation:campaign"]["verdict"] == "REFUTED"
+    entry = result.manifest.results[f"validation:scenario:{stress.scenario_id}"]
+    assert entry["verdict"] == "REFUTED"
+    assert entry["test_statistic"] == "-9.0"
+    assert "opposite to the registered claim" in entry["detail"]
+    # And the scenario that passed is still there, so the record shows the contrast.
+    assert result.manifest.results[
+        f"validation:scenario:{general.scenario_id}"
+    ]["verdict"] == "SURVIVED"
+
+
+def test_integrity_defects_are_durable(database: Database, manifests: Path) -> None:
+    """Missing, duplicate and unknown results are all recorded rather than inferred later."""
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    result = run_result(
+        database,
+        manifests,
+        case="durable-defects",
+        subject=subject,
+        scenarios=(
+            measured_scenario(general),
+            measured_scenario(general),
+            ScenarioMeasured(
+                scenario_id="d" * 64, trades=1, effective_observations=1,
+                test_statistic=Decimal("9.0"),
+            ),
+        ),
+    )
+
+    aggregate = result.manifest.results["validation:campaign"]
+    assert aggregate["verdict"] == "INCONCLUSIVE"
+    assert "unknown scenario ids" in aggregate["integrity_defects"]
+    # The unanswered required scenario is present and visibly unanswered.
+    assert result.manifest.results[
+        f"validation:scenario:{stress.scenario_id}"
+    ]["verdict"] == "UNASSESSED"
+    assert result.manifest.results[
+        f"validation:scenario:{general.scenario_id}"
+    ]["verdict"] == "UNASSESSED"
+
+
+def test_the_campaign_survives_manifest_serialisation(
+    database: Database, manifests: Path
+) -> None:
+    """Written to disk and read back unchanged, so the bundle is self-contained."""
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    result = run_result(
+        database,
+        manifests,
+        case="durable-reload",
+        subject=subject,
+        scenarios=(measured_scenario(stress), measured_scenario(general)),
+    )
+
+    written = json.loads(
+        next(manifests.glob("*.json")).read_text(encoding="utf-8")
+    )
+    reloaded = written["results"]
+    assert reloaded["validation:campaign"]["campaign_id"] == subject.campaign_id
+    assert (
+        reloaded[f"validation:scenario:{stress.scenario_id}"]
+        == result.manifest.results[f"validation:scenario:{stress.scenario_id}"]
+    )
+
+
+def test_different_scenario_outcomes_produce_different_manifest_hashes(
+    tmp_path: Path,
+) -> None:
+    """Two runs whose hostile validation came out differently are not the same experiment.
+
+    **Both runs survive, at both levels.** An earlier version of this test used t=9 against
+    t=-9, which also flipped the *primary* verdict -- so the hashes differed for a reason that
+    had nothing to do with the campaign, and the test passed even with campaign entries removed
+    from the manifest entirely. Mutation testing caught that, which is what it is for.
+
+    Here the stress scenario clears its bar in both runs, so every other recorded field is
+    identical and the hash can only differ because the scenario's own statistic entered it.
+    """
+    subject = campaign()
+    stress, general = subject.scenarios
+    hashes = []
+    for label, stress_statistic in (("high", Decimal("9.0")), ("low", Decimal("4.0"))):
+        database = Database.create(tmp_path / f"{label}.db")
+        try:
+            result = run_result(
+                database,
+                tmp_path / f"manifests-{label}",
+                case="hash",
+                subject=subject,
+                scenarios=(
+                    measured_scenario(stress, test_statistic=stress_statistic),
+                    measured_scenario(general),
+                ),
+            )
+            hashes.append(result.manifest.manifest_hash)
+        finally:
+            database.close()
+
+    assert hashes[0] != hashes[1]
+
+
+def test_a_non_campaign_run_writes_no_validation_keys(
+    database: Database, manifests: Path
+) -> None:
+    """Historical bundles are unchanged: no campaign, no keys, so the hash is what it was."""
+    result = run_result(database, manifests, case="durable-plain", subject=None)
+
+    assert result.outcome.validation_outcome is None
+    assert not [key for key in result.manifest.results if key.startswith("validation:")]
+
+
+# --- Finding 2: a failed measurement must not erase the campaign -------------------------------
+
+
+def test_a_failed_measurement_keeps_the_campaign_visible(
+    database: Database, manifests: Path
+) -> None:
+    """A failed run still spent the protected handoff, so the campaign frozen against it is part
+    of what happened. Every scenario stays visibly unanswered rather than absent -- 'nobody
+    answered this' and 'this was never asked' are different facts."""
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registry.freeze_validation_campaign(subject, now=NOW)
+        registration = registry.register(
+            draft(hypothesis_id="H-RUN-boom", validation_campaign=subject),
+            now=NOW,
+            critique=critique("H-RUN-boom"),
+        )
+        plan = compile_experiment(registration, datasets=[snapshot()])
+        code, environment = provenance()
+
+        def explode(_plan, _access):
+            raise RuntimeError("the measurement fell over")
+
+        result = ExperimentRunner(registry, manifests=manifests).run(
+            plan, registration, explode, now=NOW, code=code, environment=environment,
+            applied_costs=COSTS, design=DESIGN,
+        )
+
+    assert result.outcome.verdict is OutcomeVerdict.FAILED
+    assert result.outcome.validation_outcome is not None
+    assert result.outcome.validation_outcome.verdict is CampaignVerdict.INCONCLUSIVE
+    assert {item.verdict for item in result.outcome.validation_outcome.scenarios} == {
+        ScenarioVerdict.UNASSESSED
+    }
+    # And it is durable, not only in memory.
+    assert result.manifest.results["validation:campaign"]["verdict"] == "INCONCLUSIVE"
+    assert result.manifest.results[
+        f"validation:scenario:{stress.scenario_id}"
+    ]["verdict"] == "UNASSESSED"
+    assert f"validation:scenario:{general.scenario_id}" in result.manifest.results
+
+
+def test_a_failed_measurement_without_a_campaign_records_none(
+    database: Database, manifests: Path
+) -> None:
+    """The control: no campaign frozen, nothing invented to fill the space."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registration = registry.register(
+            draft(hypothesis_id="H-RUN-boom2"), now=NOW, critique=critique("H-RUN-boom2")
+        )
+        plan = compile_experiment(registration, datasets=[snapshot()])
+        code, environment = provenance()
+
+        def explode(_plan, _access):
+            raise RuntimeError("the measurement fell over")
+
+        result = ExperimentRunner(registry, manifests=manifests).run(
+            plan, registration, explode, now=NOW, code=code, environment=environment,
+            applied_costs=COSTS, design=DESIGN,
+        )
+
+    assert result.outcome.verdict is OutcomeVerdict.FAILED
+    assert result.outcome.validation_outcome is None
+    assert not [key for key in result.manifest.results if key.startswith("validation:")]
+
+
+# --- Finding 3: the persisted registration is the authority -------------------------------------
+#
+# `run()` compared the caller's registration against the caller's plan. Two consistent forgeries
+# agree with each other perfectly, so the pair proved nothing about what the store holds.
+
+
+def substitution_attempt(
+    database: Database, manifests: Path, *, registered, forged, called: list[str]
+):
+    """Register `registered`, then try to run a plan compiled from `forged` instead."""
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        if registered is not None:
+            registry.freeze_validation_campaign(registered, now=NOW)
+        persisted = registry.register(
+            draft(hypothesis_id="H-SUB", validation_campaign=registered),
+            now=NOW,
+            critique=critique("H-SUB"),
+        )
+        if forged is not None:
+            registry.freeze_validation_campaign(forged, now=NOW)
+        # Same hypothesis id and version, different campaign: exactly what the old check missed.
+        forged_registration = persisted.model_copy(
+            update={
+                "draft": persisted.draft.model_copy(update={"validation_campaign": forged})
+            }
+        )
+        plan = compile_experiment(forged_registration, datasets=[snapshot()])
+
+        def record(_plan, _access):
+            called.append("measured")
+            return Measured(effect=Decimal("2.5"), test_statistic=Decimal("9.0"),
+                            probes_run=plan.probes)
+
+        code, environment = provenance()
+        return ExperimentRunner(registry, manifests=manifests).run(
+            plan, forged_registration, record, now=NOW, code=code, environment=environment,
+            applied_costs=COSTS, design=DESIGN,
+        )
+
+
+def test_a_forged_registration_with_a_different_campaign_is_refused(
+    database: Database, manifests: Path
+) -> None:
+    """**The substitution the previous check could not see.** Registration B carries a different
+    campaign under the same id and version; its plan hash agrees with it perfectly; and the store
+    still holds A. The store is asked, and the run is refused before anything is measured."""
+    called: list[str] = []
+
+    with pytest.raises(RegistrationRefused, match="is stored at"):
+        substitution_attempt(
+            database, manifests,
+            registered=campaign(),
+            forged=campaign(stress_policy_version="stress-v2"),
+            called=called,
+        )
+
+    assert called == [], "the measurement must never run after a preflight refusal"
+
+
+def test_a_forged_registration_with_no_campaign_cannot_replace_one(
+    database: Database, manifests: Path
+) -> None:
+    """Dropping the campaign is a substitution too -- it would run the claim ungated."""
+    called: list[str] = []
+
+    with pytest.raises(RegistrationRefused, match="is stored at"):
+        substitution_attempt(
+            database, manifests, registered=campaign(), forged=None, called=called
+        )
+
+    assert called == []
+
+
+def test_the_persisted_registration_runs_normally(
+    database: Database, manifests: Path
+) -> None:
+    """The control. A check refusing every run would satisfy both cases above."""
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    outcome = run_campaign(
+        database, manifests, case="persisted", subject=subject,
+        scenarios=(measured_scenario(stress), measured_scenario(general)),
+    )
+
+    assert outcome.verdict is OutcomeVerdict.SURVIVED
+
+
+def test_a_tampered_campaign_freeze_refuses_before_measurement(
+    database: Database, manifests: Path
+) -> None:
+    """#216's row verification is re-run at execution time, not only at registration.
+
+    A campaign whose ledger row has since been tampered with cannot become evidence just because
+    the registration document still names it.
+    """
+    subject = campaign()
+    called: list[str] = []
+
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registry.freeze_validation_campaign(subject, now=NOW)
+        registration = registry.register(
+            draft(hypothesis_id="H-TAMPER", validation_campaign=subject),
+            now=NOW,
+            critique=critique("H-TAMPER"),
+        )
+        plan = compile_experiment(registration, datasets=[snapshot()])
+        session.execute(
+            search_runs.update()
+            .where(search_runs.c.search_id == subject.selection_search_id)
+            .values(actor="someone-else")
+        )
+
+        def record(_plan, _access):
+            called.append("measured")
+            return Measured(effect=Decimal("2.5"), test_statistic=Decimal("9.0"),
+                            probes_run=plan.probes)
+
+        code, environment = provenance()
+        with pytest.raises(RegistrationRefused, match="not an authoritative record"):
+            ExperimentRunner(registry, manifests=manifests).run(
+                plan, registration, record, now=NOW, code=code, environment=environment,
+                applied_costs=COSTS, design=DESIGN,
+            )
+
+    assert called == []
+
+
+# --- Finding 4: a scenario id is not data provenance --------------------------------------------
+#
+# `grade_campaign` can mark a resolved observed-market protected scenario `fresh_evidence=True`.
+# So the runner must prove the frozen data boundary was honoured, or a worker reporting a
+# favourable number under a frozen id mints protected evidence out of data nobody checked.
+
+
+def bind_attempt(database: Database, manifests: Path, subject: ValidationCampaign,
+                 called: list[str], *, datasets=None):
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        registry.freeze_validation_campaign(subject, now=NOW)
+        registration = registry.register(
+            draft(hypothesis_id="H-BIND", validation_campaign=subject),
+            now=NOW,
+            critique=critique("H-BIND"),
+        )
+        plan = compile_experiment(
+            registration, datasets=list(datasets) if datasets else [snapshot()]
+        )
+
+        def record(_plan, _access):
+            called.append("measured")
+            return Measured(effect=Decimal("2.5"), test_statistic=Decimal("9.0"),
+                            probes_run=plan.probes)
+
+        code, environment = provenance()
+        return ExperimentRunner(registry, manifests=manifests).run(
+            plan, registration, record, now=NOW, code=code, environment=environment,
+            applied_costs=COSTS, design=DESIGN,
+        )
+
+
+def test_a_scenario_on_a_dataset_the_run_does_not_supply_is_refused(
+    database: Database, manifests: Path
+) -> None:
+    """**The core of Finding 4.** The scenario names a dataset nothing in the plan covers, so
+    nothing shows its data was read. Refused before measurement."""
+    # Both scenarios move together: #216 records a campaign as one search over one dataset, so
+    # a mixed campaign is refused at freeze and would never reach the binding check under test.
+    subject = campaign(
+        scenarios=(
+            scenario(dataset="some-other-corpus"),
+            GENERAL.model_copy(update={"dataset": "some-other-corpus"}),
+        )
+    )
+    called: list[str] = []
+
+    with pytest.raises(ExperimentRunError, match="supplies no dataset snapshot covering it"):
+        bind_attempt(database, manifests, subject, called)
+
+    assert called == []
+
+
+def test_a_scenario_whose_role_the_run_does_not_supply_is_refused(
+    database: Database, manifests: Path
+) -> None:
+    """Right dataset, wrong role. The plan supplies PROTECTED_EVALUATION; the scenario claims
+    VALIDATION, which nothing here covers."""
+    subject = campaign(
+        scenarios=(scenario(data_role="VALIDATION"), GENERAL)
+    )
+    called: list[str] = []
+
+    with pytest.raises(ExperimentRunError, match="supplies no dataset snapshot covering it"):
+        bind_attempt(database, manifests, subject, called)
+
+    assert called == []
+
+
+def test_a_scenario_period_outside_the_supplied_snapshot_is_refused(
+    database: Database, manifests: Path
+) -> None:
+    """Right dataset and role, but the snapshot does not span the frozen scenario period."""
+    narrow = snapshot().model_copy(
+        update={"start": date(2021, 1, 4), "end": date(2026, 8, 14)}
+    )
+    subject = campaign()
+    called: list[str] = []
+
+    with pytest.raises(ExperimentRunError, match="supplies no dataset snapshot covering it"):
+        bind_attempt(database, manifests, subject, called, datasets=[narrow])
+
+    assert called == []
+
+
+def test_a_protected_scenario_outside_the_registrations_windows_is_refused(
+    database: Database, manifests: Path
+) -> None:
+    """A holdout this claim never reserved cannot become its fresh evidence.
+
+    The plan supplies a snapshot covering the scenario, so the dataset check passes -- what fails
+    is that the persisted registration owns no protected window over it.
+    """
+    early = ExperimentPeriod(name="early", start=date(2014, 1, 2), end=date(2015, 12, 31))
+    wide = snapshot().model_copy(update={"start": date(2014, 1, 2)})
+    subject = campaign(
+        eligible_period=ExperimentPeriod(
+            name="eligible", start=date(2014, 1, 2), end=date(2026, 8, 14)
+        ),
+        scenarios=(scenario(period=early), GENERAL),
+    )
+    called: list[str] = []
+
+    with pytest.raises(ExperimentRunError, match="never reserved"):
+        bind_attempt(database, manifests, subject, called, datasets=[wide])
+
+    assert called == []
+
+
+def test_a_walk_forward_scenario_without_its_fit_snapshot_is_refused(
+    database: Database, manifests: Path
+) -> None:
+    """A fit window nobody supplied is a fit that did not happen."""
+    walk = scenario(
+        kind=ScenarioKind.WALK_FORWARD,
+        period=ExperimentPeriod(name="test", start=date(2020, 1, 2), end=date(2021, 12, 31)),
+        fit_period=ExperimentPeriod(name="fit", start=date(2017, 1, 3), end=date(2019, 12, 31)),
+        fit_data_role="DISCOVERY",
+    )
+    subject = campaign(scenarios=(walk, GENERAL))
+    called: list[str] = []
+
+    with pytest.raises(ExperimentRunError, match="supplies no snapshot for"):
+        bind_attempt(database, manifests, subject, called)
+
+    assert called == []
+
+
+def test_a_resampled_scenario_needs_no_market_snapshot(
+    database: Database, manifests: Path
+) -> None:
+    """Resampled paths are exempt from the snapshot requirement, and only from that.
+
+    Requiring market data for a path that is explicitly not market data would be theatre --
+    and `grade_campaign` still refuses it `fresh_evidence`, which is the protection that matters.
+    """
+    def simulated(name: str, start: date, end: date, *, adverse: bool) -> ValidationScenario:
+        return scenario(
+            kind=ScenarioKind.RESAMPLED_PATH,
+            dataset="simulated-paths",
+            adverse=adverse,
+            period=ExperimentPeriod(name=name, start=start, end=end),
+            evidence_source=ScenarioEvidenceSource.RESAMPLED_PATH,
+            resampling_method=ResamplingMethod.STATIONARY_BLOCK_BOOTSTRAP,
+        )
+
+    # Every scenario simulated and on one dataset the plan supplies nothing for, so the run can
+    # only proceed if resampled paths are genuinely exempt from the snapshot requirement.
+    subject = campaign(
+        scenarios=(
+            simulated("sim-a", date(2018, 1, 2), date(2019, 12, 31), adverse=True),
+            simulated("sim-b", date(2020, 1, 2), date(2021, 12, 31), adverse=False),
+        )
+    )
+    called: list[str] = []
+
+    result = bind_attempt(database, manifests, subject, called)
+
+    assert called == ["measured"], "a resampled scenario must not block the run"
+    assert result.outcome.validation_outcome is not None
+
+
+def test_an_exactly_covered_protected_scenario_is_allowed(
+    database: Database, manifests: Path
+) -> None:
+    """The control for every refusal above: the ordinary shape still runs."""
+    called: list[str] = []
+
+    result = bind_attempt(database, manifests, campaign(), called)
+
+    assert called == ["measured"]
+    assert result.outcome.validation_outcome is not None
+
+
+# --- structural backstop ------------------------------------------------------------------------
+
+
+def test_an_outcome_cannot_survive_while_carrying_a_refused_campaign(
+    database: Database, manifests: Path
+) -> None:
+    """`runner._grade` downgrades on a blocking campaign; this is the type-level backstop.
+
+    A caller constructing the outcome directly must not be able to keep SURVIVED while attaching
+    the record of the gate that objected -- that would make hostile validation decoration on a
+    verdict it was supposed to control.
+    """
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    result = run_result(
+        database,
+        manifests,
+        case="backstop",
+        subject=subject,
+        scenarios=(
+            measured_scenario(stress, test_statistic=Decimal("-9.0")),
+            measured_scenario(general),
+        ),
+    )
+    refused = result.outcome.validation_outcome
+    assert refused is not None and refused.verdict is CampaignVerdict.REFUTED
+
+    with pytest.raises(ValueError, match="cannot carry a validation campaign that did not"):
+        result.outcome.model_copy(
+            update={"verdict": OutcomeVerdict.SURVIVED}
+        ).model_validate(
+            {
+                **result.outcome.model_dump(),
+                "verdict": OutcomeVerdict.SURVIVED,
+            }
+        )
+
+    # And `citable` is conservative about it independently of the validator.
+    assert not result.outcome.citable
+
+
+def test_a_surviving_campaign_leaves_citable_intact(
+    database: Database, manifests: Path
+) -> None:
+    """The control: a clean campaign does not make a genuine survivor uncitable."""
+    subject = campaign()
+    stress, general = subject.scenarios
+
+    result = run_result(
+        database,
+        manifests,
+        case="citable",
+        subject=subject,
+        scenarios=(measured_scenario(stress), measured_scenario(general)),
+    )
+
+    assert result.outcome.verdict is OutcomeVerdict.SURVIVED
+    assert result.outcome.citable

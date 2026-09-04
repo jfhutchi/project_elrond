@@ -714,6 +714,43 @@ class HypothesisRegistry:
         row = self._row(hypothesis_id, version)
         return None if row is None else Registration.model_validate_json(str(row["document_json"]))
 
+    def resolve_for_run(
+        self, hypothesis_id: str, version: int, *, content_hash: str
+    ) -> Registration:
+        """The *persisted* registration, proven to be the one the caller says it is (#159).
+
+        `ExperimentRunner` was checking `registration.content_hash == plan.registration_hash`,
+        and both of those objects come from the caller. Two consistent forgeries agree with each
+        other perfectly: a caller could build registration B with the same hypothesis id and
+        version, compile plan B from it, and the pair would validate while the durable store held
+        registration A. Window consumption still addressed A's id, so A's holdout was spent to
+        grade B's campaign.
+
+        So the store is asked. The row is fetched by identity, required to exist, and required to
+        match the hash the caller presented -- and it is the returned object, not the caller's,
+        that the rest of the run reads its campaign from.
+
+        The campaign freeze is re-verified through `_verify_campaign_frozen`, which is #216's
+        authority unchanged. A campaign whose ledger row has since been tampered with cannot
+        become evidence just because the registration document still names it.
+        """
+        persisted = self.get(hypothesis_id, version)
+        if persisted is None:
+            raise RegistrationRefused(
+                RefusalReason.NOT_REGISTERED,
+                f"{hypothesis_id} v{version} is not in this store, so there is no frozen claim "
+                "for a run to be about",
+            )
+        if persisted.content_hash != content_hash:
+            raise RegistrationRefused(
+                RefusalReason.TAMPERED,
+                f"{hypothesis_id} v{version} is stored at {persisted.content_hash} and the run "
+                f"presented {content_hash}; a result frozen against one claim cannot be reported "
+                "against another, and the store is the authority on which claim exists",
+            )
+        self._verify_campaign_frozen(persisted.draft)
+        return persisted
+
     def list_registrations(self, *, family_id: str | None = None) -> list[Registration]:
         statement = select(hypotheses).order_by(
             hypotheses.c.registered_at, hypotheses.c.hypothesis_id, hypotheses.c.version

@@ -54,7 +54,7 @@ from quantbot.research.power import (
     supports_registered_direction,
 )
 from quantbot.research.registry import Registration
-from quantbot.research.validation_campaign import CampaignOutcome
+from quantbot.research.validation_campaign import CampaignOutcome, CampaignVerdict
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
@@ -327,6 +327,20 @@ class ExperimentOutcome(FrozenModel):
             # carry a statistic that fails its own one-sided bar. It read `abs(...)`, so it
             # would have certified a t of -9 against a claim of "greater than null" -- the same
             # inversion as the grader, in the type that exists to make the grader unnecessary.
+            # A survivor cannot carry a campaign that refused it. `runner._grade` downgrades on
+            # a blocking campaign, and this is the structural backstop behind that: a caller
+            # constructing the outcome directly must not be able to keep SURVIVED while
+            # attaching the record of the gate that objected. Without it the hostile-validation
+            # result becomes decoration on a verdict it was supposed to control.
+            if (
+                self.validation_outcome is not None
+                and self.validation_outcome.verdict is not CampaignVerdict.SURVIVED
+            ):
+                raise ValueError(
+                    "a survivor cannot carry a validation campaign that did not survive: "
+                    f"campaign {self.validation_outcome.campaign_id} is "
+                    f"{self.validation_outcome.verdict.value}"
+                )
             if not supports_registered_direction(
                 self.test_statistic, self.plan.statistics.luck_threshold_z
             ):
@@ -343,10 +357,21 @@ class ExperimentOutcome(FrozenModel):
 
     @property
     def citable(self) -> bool:
-        """Whether this may be cited as confirmatory evidence about Elrond."""
+        """Whether this may be cited as confirmatory evidence about Elrond.
+
+        Conservative about the campaign as well as the verdict. The validator above already
+        refuses a SURVIVED outcome carrying a non-surviving campaign, so this condition is
+        redundant today -- and it is stated anyway, because `citable` is what a reader consults
+        to decide whether a result may be quoted, and it should not depend on a rule enforced
+        somewhere else to be correct.
+        """
         return (
             self.verdict is OutcomeVerdict.SURVIVED
             and self.plan.execution_path is ExecutionPath.PRODUCTION_ENGINE
+            and (
+                self.validation_outcome is None
+                or self.validation_outcome.verdict is CampaignVerdict.SURVIVED
+            )
         )
 
 
