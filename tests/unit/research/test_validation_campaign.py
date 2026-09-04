@@ -25,6 +25,7 @@ import pytest
 from quantbot.research.manifest import ExperimentPeriod
 from quantbot.research.validation_campaign import (
     CONTIGUOUS_ROTATION_POLICY_VERSION,
+    CampaignOutcome,
     CampaignVerdict,
     ConstraintOperator,
     RegimeConstraint,
@@ -32,6 +33,7 @@ from quantbot.research.validation_campaign import (
     ScenarioEvidenceSource,
     ScenarioKind,
     ScenarioMeasured,
+    ScenarioOutcome,
     ScenarioSelectionMethod,
     ScenarioVerdict,
     ValidationCampaign,
@@ -651,3 +653,193 @@ def test_the_luck_bar_must_be_positive_and_finite() -> None:
     for bad in (Decimal("0"), Decimal("-1")):
         with pytest.raises(ValueError, match="must be positive and finite"):
             grade_campaign(subject, (), luck_threshold_z=bad)
+
+
+# --- #159: a campaign outcome has to be a shape some measurements could have produced ----------
+#
+# `promotion.survivor_objections` reads `CampaignOutcome.verdict` and treats it as the campaign's
+# truth. So do the runner and `ExperimentOutcome`. All three were described as independently
+# agreeing, while nothing established that a `CampaignOutcome` could hold the values it claimed:
+# a caller needed no `model_construct` to declare a top-level SURVIVED campaign with no scenarios
+# in it at all. `grade_campaign` cannot emit that -- a frozen campaign carries at least two
+# scenarios and the grader writes one outcome for every one of them -- so the aggregate was
+# effectively caller-declared, wearing a derived verdict's clothes.
+#
+# The rules below are only those true of *every* output of `grade_campaign`. Which scenarios
+# carry the aggregate down depends on `required` and `maximum_underpowered_fraction`, neither of
+# which is reachable from a `CampaignOutcome`; reimplementing that here would create a second
+# aggregation policy to drift from #215's. The last two tests in this section are the guard
+# against exactly that overreach.
+
+
+def survived_outcome() -> CampaignOutcome:
+    """A genuinely graded, genuinely surviving campaign: the base every mutation starts from."""
+    subject = campaign()
+    stress, general = subject.scenarios
+    result = graded(subject, measured(stress), measured(general))
+    assert result.verdict is CampaignVerdict.SURVIVED
+    return result
+
+
+def rebuilt(base: CampaignOutcome, **overrides: object) -> dict[str, object]:
+    """The fields of a graded outcome with one thing changed, for the normal constructor."""
+    return {**dict(base), **overrides}
+
+
+def test_a_campaign_outcome_with_no_scenarios_describes_no_campaign() -> None:
+    """**The core of the finding.** This is the object that made `verdict` caller-declared.
+
+    It went through the ordinary constructor, so no test needed `model_construct` to invent a
+    surviving campaign out of nothing.
+    """
+    with pytest.raises(ValueError, match="no scenario outcomes"):
+        CampaignOutcome(**rebuilt(survived_outcome(), scenarios=()))
+
+
+def test_a_campaign_outcome_cannot_grade_the_same_scenario_twice() -> None:
+    base = survived_outcome()
+    with pytest.raises(ValueError, match="same scenario twice"):
+        CampaignOutcome(**rebuilt(base, scenarios=(base.scenarios[0], base.scenarios[0])))
+
+
+def test_the_underpowered_count_is_derived_not_declared() -> None:
+    with pytest.raises(ValueError, match="underpowered_count is 1"):
+        CampaignOutcome(**rebuilt(survived_outcome(), underpowered_count=1))
+
+
+def test_the_underpowered_fraction_is_derived_not_declared() -> None:
+    with pytest.raises(ValueError, match="underpowered_fraction is 0.5"):
+        CampaignOutcome(**rebuilt(survived_outcome(), underpowered_fraction=Decimal("0.5")))
+
+
+def test_a_campaign_cannot_survive_an_unresolved_scenario() -> None:
+    """MISLABELED, UNVERIFIED and UNASSESSED are not weak passes. Nothing was established."""
+    base = survived_outcome()
+    for unresolved in (
+        ScenarioVerdict.MISLABELED,
+        ScenarioVerdict.UNVERIFIED,
+        ScenarioVerdict.UNASSESSED,
+    ):
+        stalled = base.scenarios[0].model_copy(
+            update={"verdict": unresolved, "fresh_evidence": False}
+        )
+        with pytest.raises(ValueError, match="resolved nothing"):
+            CampaignOutcome(**rebuilt(base, scenarios=(stalled, base.scenarios[1])))
+
+
+def test_integrity_defects_and_a_confident_verdict_cannot_coexist() -> None:
+    """`grade_campaign` gives defects precedence as INCONCLUSIVE, so the two imply each other."""
+    base = survived_outcome()
+    for claimed in (
+        CampaignVerdict.SURVIVED,
+        CampaignVerdict.REFUTED,
+        CampaignVerdict.UNDERPOWERED,
+    ):
+        with pytest.raises(ValueError, match="unresolved integrity defects"):
+            CampaignOutcome(
+                **rebuilt(base, verdict=claimed, integrity_defects=("something went wrong",))
+            )
+
+
+def test_an_inconclusive_campaign_has_to_say_what_it_could_not_resolve() -> None:
+    with pytest.raises(ValueError, match="could not resolve"):
+        CampaignOutcome(**rebuilt(survived_outcome(), verdict=CampaignVerdict.INCONCLUSIVE))
+
+
+def test_an_underpowered_campaign_needs_an_underpowered_scenario() -> None:
+    with pytest.raises(ValueError, match="at least one underpowered scenario"):
+        CampaignOutcome(**rebuilt(survived_outcome(), verdict=CampaignVerdict.UNDERPOWERED))
+
+
+def test_a_refuted_campaign_needs_a_refuted_scenario() -> None:
+    with pytest.raises(ValueError, match="at least one refuted scenario"):
+        CampaignOutcome(**rebuilt(survived_outcome(), verdict=CampaignVerdict.REFUTED))
+
+
+def test_a_scenario_that_resolved_nothing_cannot_have_produced_fresh_evidence() -> None:
+    """A holdout spent on an unanswered question bought nothing, whatever the window says."""
+    base = survived_outcome().scenarios[0]
+    with pytest.raises(ValueError, match="cannot have produced"):
+        ScenarioOutcome(
+            **{
+                **dict(base),
+                "verdict": ScenarioVerdict.UNASSESSED,
+                "fresh_evidence": True,
+            }
+        )
+
+
+def test_every_graded_campaign_validates_and_round_trips() -> None:
+    """The control. A validator that refused real grader output would be worse than none.
+
+    Each of the four aggregate verdicts is produced by measuring the scenarios differently, and
+    each is then re-validated from its own canonical JSON -- the same path #217's `outcome_json`
+    takes back out of a manifest.
+    """
+    subject = campaign()
+    stress, general = subject.scenarios
+    produced = {
+        CampaignVerdict.SURVIVED: graded(subject, measured(stress), measured(general)),
+        CampaignVerdict.REFUTED: graded(
+            subject, measured(stress, test_statistic=Decimal("0.4")), measured(general)
+        ),
+        CampaignVerdict.UNDERPOWERED: graded(
+            subject, measured(stress, trades=1), measured(general)
+        ),
+        CampaignVerdict.INCONCLUSIVE: graded(subject, measured(general)),
+    }
+    for expected, result in produced.items():
+        assert result.verdict is expected
+        assert CampaignOutcome.model_validate(result.model_dump()) == result
+
+
+def test_an_optional_scenario_may_fail_without_carrying_the_campaign_down() -> None:
+    """**The overreach guard.** "any REFUTED scenario means a REFUTED campaign" is wrong.
+
+    Whether a failing scenario sinks the campaign depends on whether the frozen campaign marked
+    it `required`, and a `CampaignOutcome` cannot see that. If the structural validator ever
+    starts inferring the aggregate from the scenarios, this is the test that fails.
+    """
+    subject = campaign(
+        scenarios=(
+            scenario(),
+            scenario(
+                kind=ScenarioKind.GENERALIZATION,
+                adverse=False,
+                required=False,
+                period=period("optional", date(2020, 1, 2), date(2021, 12, 31)),
+            ),
+        )
+    )
+    stress, optional = subject.scenarios
+
+    result = graded(subject, measured(stress), measured(optional, test_statistic=Decimal("0.4")))
+
+    assert result.verdict is CampaignVerdict.SURVIVED
+    assert verdict_of(result, optional) is ScenarioVerdict.REFUTED
+
+
+def test_an_optional_scenario_may_be_underpowered_within_the_frozen_ceiling() -> None:
+    """The same guard for the underpowered rule, which has its own policy input.
+
+    `maximum_underpowered_fraction` is frozen on the campaign and unreachable from the outcome,
+    so "any underpowered scenario means an underpowered campaign" would be wrong too.
+    """
+    subject = campaign(
+        scenarios=(
+            scenario(),
+            scenario(
+                kind=ScenarioKind.GENERALIZATION,
+                adverse=False,
+                required=False,
+                period=period("optional", date(2020, 1, 2), date(2021, 12, 31)),
+            ),
+        )
+    )
+    stress, optional = subject.scenarios
+
+    result = graded(subject, measured(stress), measured(optional, trades=1))
+
+    assert result.verdict is CampaignVerdict.SURVIVED
+    assert result.underpowered_count == 1
+    assert result.underpowered_fraction == Decimal("0.5")

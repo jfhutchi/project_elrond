@@ -80,7 +80,12 @@ from quantbot.research.power import (
 )
 from quantbot.research.power import assess as assess_power
 from quantbot.research.registry import DataRole, HypothesisRegistry, Registration
-from quantbot.research.validation_campaign import CampaignVerdict
+from quantbot.research.validation_campaign import (
+    UNRESOLVED_SCENARIO_VERDICTS,
+    CampaignOutcome,
+    CampaignVerdict,
+    ScenarioVerdict,
+)
 from quantbot.storage.repositories import PromotionEvent, PromotionRecord, StorageRepository
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
@@ -364,7 +369,70 @@ def _campaign_objections(outcome: ExperimentOutcome) -> list[str]:
         return [
             f"validation campaign {required} is {campaign.verdict.value}: {campaign.detail}"
         ]
-    return []
+    return _campaign_contradictions(campaign)
+
+
+def _campaign_contradictions(campaign: CampaignOutcome) -> list[str]:
+    """Contradictions this layer can prove without the frozen campaign's own policy.
+
+    `CampaignOutcome` now refuses these too, and that is not a reason to omit them. The whole
+    argument for a promotion-stage campaign gate is that it holds when the layers above it do
+    not, and an object built through `model_construct` -- or unpickled, or reconstructed by a
+    future caller that has not been through the validator -- reaches here with its verdict
+    intact and its scenarios saying otherwise. `verdict` is a summary; the scenarios are the
+    evidence, and where they disagree the summary is the thing that is wrong.
+
+    **The scope is exactly what is decidable here.** Whether a REFUTED or UNDERPOWERED scenario
+    should have carried the aggregate down depends on which scenarios the campaign froze as
+    `required` and on its `maximum_underpowered_fraction`, and `ExperimentOutcome` does not carry
+    the `ValidationCampaign`. Guessing would produce a second aggregation policy that drifts from
+    #215's, so a campaign this function cannot contradict is left to #215's authority. An
+    optional scenario may fail while every required one passes, and that campaign survived.
+    """
+    objections: list[str] = []
+    if not campaign.scenarios:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} claims to have survived without "
+            "grading a single scenario; a campaign carries scenarios and every one is graded"
+        )
+        return objections
+    identifiers = [item.scenario_id for item in campaign.scenarios]
+    if len(identifiers) != len(set(identifiers)):
+        objections.append(
+            f"validation campaign {campaign.campaign_id} grades the same scenario more than "
+            "once, so its aggregate is computed over an ambiguous set"
+        )
+    if campaign.integrity_defects:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} reports itself as survived while "
+            "carrying unresolved integrity defects: " + "; ".join(campaign.integrity_defects)
+        )
+    unresolved = [
+        item.scenario_id
+        for item in campaign.scenarios
+        if item.verdict in UNRESOLVED_SCENARIO_VERDICTS
+    ]
+    if unresolved:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} reports itself as survived while "
+            + ", ".join(unresolved)
+            + " resolved nothing"
+        )
+    underpowered = [
+        item for item in campaign.scenarios if item.verdict is ScenarioVerdict.UNDERPOWERED
+    ]
+    if campaign.underpowered_count != len(underpowered):
+        objections.append(
+            f"validation campaign {campaign.campaign_id} declares {campaign.underpowered_count} "
+            f"underpowered scenarios and grades {len(underpowered)}"
+        )
+    expected = Decimal(len(underpowered)) / Decimal(len(campaign.scenarios))
+    if campaign.underpowered_fraction != expected:
+        objections.append(
+            f"validation campaign {campaign.campaign_id} declares an underpowered share of "
+            f"{campaign.underpowered_fraction} and its scenarios give {expected}"
+        )
+    return objections
 
 
 #: Stages that assert something economic about a strategy rather than something procedural.

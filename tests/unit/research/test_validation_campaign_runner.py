@@ -60,6 +60,7 @@ from quantbot.research.validation_campaign import (
     ScenarioVerdict,
     ValidationCampaign,
     ValidationScenario,
+    grade_campaign,
 )
 from quantbot.storage import Database
 from quantbot.storage.schema import hypotheses, hypothesis_data_windows, search_runs
@@ -1618,14 +1619,16 @@ def test_a_campaignless_plan_refuses_a_fabricated_validation_outcome(
     result = run_result(database, manifests, case="legacy", subject=None)
     assert result.outcome.plan.validation_campaign_id is None
     assert result.outcome.validation_outcome is None
-    fabricated = CampaignOutcome(
-        campaign_id="a" * 64,
-        scenarios=(),
-        verdict=CampaignVerdict.SURVIVED,
-        underpowered_count=0,
-        underpowered_fraction=Decimal("0"),
-        detail="invented after the fact",
+    # A genuinely graded campaign, not an invented aggregate. `CampaignOutcome` now refuses a
+    # verdict its own scenarios could not have produced, so an impossible object would be
+    # rejected for the wrong reason and prove nothing about the rule under test here.
+    invented = campaign()
+    fabricated = grade_campaign(
+        invented,
+        tuple(measured_scenario(item) for item in invented.scenarios),
+        luck_threshold_z=Decimal("3.0"),
     )
+    assert fabricated.verdict is CampaignVerdict.SURVIVED
     fields = result.outcome.model_dump()
     fields["validation_outcome"] = fabricated.model_dump()
 

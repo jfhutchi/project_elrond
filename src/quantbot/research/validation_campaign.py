@@ -442,6 +442,16 @@ class CampaignVerdict(StrEnum):
     INCONCLUSIVE = "INCONCLUSIVE"
 
 
+#: Scenario verdicts that mean the scenario did not answer its question. Not failures -- a
+#: failure is REFUTED, which is an answer. These are the states where nothing was established,
+#: and `grade_campaign` turns any of them into an integrity defect. Defined once and read by
+#: both the grader and `CampaignOutcome`'s structural validator, because two copies of "what
+#: counts as unresolved" is how the aggregate comes to disagree with its own scenarios.
+UNRESOLVED_SCENARIO_VERDICTS: frozenset[ScenarioVerdict] = frozenset(
+    {ScenarioVerdict.MISLABELED, ScenarioVerdict.UNVERIFIED, ScenarioVerdict.UNASSESSED}
+)
+
+
 class ScenarioOutcome(FrozenModel):
     scenario_id: Digest
     verdict: ScenarioVerdict
@@ -457,6 +467,26 @@ class ScenarioOutcome(FrozenModel):
     fresh_evidence: bool
     detail: Text
 
+    @model_validator(mode="after")
+    def validate_scenario_outcome(self) -> Self:
+        """Only a scenario that actually resolved can have produced fresh evidence.
+
+        Universal, and deliberately the only rule here. `grade_campaign` sets `fresh_evidence`
+        exclusively where the verdict is SURVIVED or REFUTED -- an answer, either way. A scenario
+        that was mislabeled, unverified or never assessed established nothing, so a holdout it
+        claims to have spent bought nothing, and recording that as fresh protected evidence is
+        the cheapest possible way to launder an unanswered question into a used-up window.
+        """
+        if self.fresh_evidence and self.verdict not in {
+            ScenarioVerdict.SURVIVED,
+            ScenarioVerdict.REFUTED,
+        }:
+            raise ValueError(
+                f"a {self.verdict.value} scenario resolved nothing, so it cannot have produced "
+                "fresh evidence"
+            )
+        return self
+
 
 class CampaignOutcome(FrozenModel):
     campaign_id: Digest
@@ -468,6 +498,84 @@ class CampaignOutcome(FrozenModel):
     #: favourable mean is not a mandatory failure.
     integrity_defects: tuple[Text, ...] = ()
     detail: Text
+
+    @model_validator(mode="after")
+    def validate_campaign_outcome(self) -> Self:
+        """Refuse a campaign result whose own fields cannot have come from one campaign (#159).
+
+        **Why this exists.** `promotion.survivor_objections` reads `verdict` and treats it as the
+        campaign's truth, and the runner and `ExperimentOutcome` do the same. All three were
+        described as independently agreeing -- while nothing established that a `CampaignOutcome`
+        could hold the values it claimed. A caller needed no `model_construct` to declare a
+        top-level SURVIVED campaign with no scenarios in it at all, which `grade_campaign` cannot
+        emit: a `ValidationCampaign` carries at least two scenarios and the grader writes one
+        outcome for every frozen one. An aggregate verdict that no set of measurements could have
+        produced is a caller-declared verdict wearing a derived one's clothes.
+
+        **What it deliberately does not check.** Whether a REFUTED or UNDERPOWERED *scenario*
+        should make the *campaign* REFUTED or UNDERPOWERED depends on which scenarios the frozen
+        campaign marked `required`, and on its `maximum_underpowered_fraction`. None of that is
+        reachable from here, and reimplementing it would create a second aggregation policy to
+        drift from #215's. An optional scenario may fail while every required one passes, and
+        that campaign genuinely SURVIVED. So the rules below are only those true of *every*
+        output of `grade_campaign` regardless of the campaign's policy.
+        """
+        if not self.scenarios:
+            raise ValueError(
+                "a campaign outcome with no scenario outcomes describes no campaign: a frozen "
+                "campaign carries scenarios and every one of them is graded"
+            )
+        identifiers = [item.scenario_id for item in self.scenarios]
+        if len(identifiers) != len(set(identifiers)):
+            raise ValueError("a campaign outcome cannot grade the same scenario twice")
+
+        underpowered = [
+            item for item in self.scenarios if item.verdict is ScenarioVerdict.UNDERPOWERED
+        ]
+        if self.underpowered_count != len(underpowered):
+            raise ValueError(
+                f"underpowered_count is {self.underpowered_count} and {len(underpowered)} "
+                "scenario outcomes are underpowered; the count is derived from the scenarios, "
+                "not declared beside them"
+            )
+        # The same expression `grade_campaign` uses, so the two cannot round differently.
+        expected = Decimal(len(underpowered)) / Decimal(len(self.scenarios))
+        if self.underpowered_fraction != expected:
+            raise ValueError(
+                f"underpowered_fraction is {self.underpowered_fraction} and the scenarios give "
+                f"{expected}"
+            )
+
+        unresolved = [
+            item for item in self.scenarios if item.verdict in UNRESOLVED_SCENARIO_VERDICTS
+        ]
+        # Integrity defects take precedence in `grade_campaign`, so they and INCONCLUSIVE imply
+        # each other. A defect sitting beside any other verdict means something derived one of
+        # them and not the other.
+        if self.integrity_defects and self.verdict is not CampaignVerdict.INCONCLUSIVE:
+            raise ValueError(
+                f"a campaign with unresolved integrity defects cannot be {self.verdict.value}: "
+                + "; ".join(self.integrity_defects)
+            )
+        if self.verdict is CampaignVerdict.INCONCLUSIVE and not self.integrity_defects:
+            raise ValueError(
+                "an inconclusive campaign has to say what it could not resolve"
+            )
+        if self.verdict is CampaignVerdict.SURVIVED and unresolved:
+            raise ValueError(
+                "a campaign cannot have survived while "
+                + ", ".join(item.scenario_id for item in unresolved)
+                + " resolved nothing"
+            )
+        if self.verdict is CampaignVerdict.UNDERPOWERED and not underpowered:
+            raise ValueError(
+                "an underpowered campaign needs at least one underpowered scenario"
+            )
+        if self.verdict is CampaignVerdict.REFUTED and not any(
+            item.verdict is ScenarioVerdict.REFUTED for item in self.scenarios
+        ):
+            raise ValueError("a refuted campaign needs at least one refuted scenario")
+        return self
 
 
 def _scenario_verdict(
@@ -602,14 +710,7 @@ def grade_campaign(
         )
 
     unresolved = [
-        outcome
-        for outcome in outcomes
-        if outcome.verdict
-        in {
-            ScenarioVerdict.MISLABELED,
-            ScenarioVerdict.UNASSESSED,
-            ScenarioVerdict.UNVERIFIED,
-        }
+        outcome for outcome in outcomes if outcome.verdict in UNRESOLVED_SCENARIO_VERDICTS
     ]
     if unresolved:
         integrity_defects = (
@@ -680,6 +781,7 @@ __all__ = [
     "ScenarioOutcome",
     "ScenarioSelectionMethod",
     "ScenarioVerdict",
+    "UNRESOLVED_SCENARIO_VERDICTS",
     "ValidationCampaign",
     "ValidationScenario",
     "grade_campaign",
