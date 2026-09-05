@@ -9,11 +9,10 @@
 # suite must be incapable of reaching a broker, so it is never handed the means to.
 name: CI
 
+# TEMPORARILY MANUAL-ONLY (2026-09-05): hosted GitHub Actions automatic CI is disabled while
+# the monthly hosted-runner allowance is exhausted. Issue #218 tracks a local CI replacement.
+# Restore push/pull_request triggers deliberately when hosted CI is intended to run again.
 on:
-  push:
-    branches: ["**"]
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
 permissions:
