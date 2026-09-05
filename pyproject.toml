@@ -24,7 +24,7 @@ dependencies = [
     "sqlalchemy>=2.0,<3",
     "structlog>=26.1,<27",
     "tzdata>=2025.1",
-    "websockets>=15,<16",
+    "websockets>=15,<18",
 ]
 
 [project.scripts]
