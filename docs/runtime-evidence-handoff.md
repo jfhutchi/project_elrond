@@ -22,10 +22,11 @@ not authenticated statements of host identity or authority.
 To reproduce the archive from the reviewed PR commit in a development checkout:
 
 ```powershell
-git archive --format=tar --output="$env:USERPROFILE\elrond-recovery-tools-190.tar" HEAD scripts/recovery_evidence.py src/quantbot/operations/store_inventory.py src/quantbot/operations/checkout.py src/quantbot/operations/host_inventory.py src/quantbot/operations/recovery_compare.py src/quantbot/storage/target.py docs/runtime-evidence-handoff.md
+git -c core.autocrlf=false archive --format=tar --output="$env:USERPROFILE\elrond-recovery-tools-190.tar" HEAD scripts/recovery_evidence.py src/quantbot/operations/store_inventory.py src/quantbot/operations/checkout.py src/quantbot/operations/host_inventory.py src/quantbot/operations/recovery_compare.py src/quantbot/storage/target.py docs/runtime-evidence-handoff.md
 Get-FileHash -Algorithm SHA256 -LiteralPath "$env:USERPROFILE\elrond-recovery-tools-190.tar"
 ```
 
+The explicit line-ending setting keeps archive bytes consistent across Windows/Linux.
 Only run that packaging command from the reviewed commit; HEAD on an old host is not the tool
 version to use. The archive contains source and this guide, never a database or credentials.
 
