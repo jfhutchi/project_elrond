@@ -27,12 +27,14 @@ import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from pathlib import Path
 
 from sqlalchemy import select
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
 from quantbot.domain import StrategyIdentity
+from quantbot.operations.checkout import commit_id, compare_commit
 from quantbot.storage.database import decode_utc, encode_utc
 from quantbot.storage.schema import SCHEMA_VERSION, runs, runtime_deployments
 
@@ -73,6 +75,8 @@ class DeploymentWarning(StrEnum):
     UNIDENTIFIED_CHECKOUT = "UNIDENTIFIED_CHECKOUT"
     SCHEMA_VERSION_MISMATCH = "SCHEMA_VERSION_MISMATCH"
     LIVE_TRADING_RECORDED = "LIVE_TRADING_RECORDED"
+    DEPLOYMENT_INTENT_MISMATCH = "DEPLOYMENT_INTENT_MISMATCH"
+    UNKNOWN_DEPLOYMENT_INTENT = "UNKNOWN_DEPLOYMENT_INTENT"
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +115,8 @@ class DeploymentStatus:
     last_successful_cycle_at: datetime | None
     warnings: tuple[DeploymentWarning, ...]
     reasons: tuple[str, ...]
+    intended_commit: str = UNKNOWN_COMMIT
+    deployment_drift: str = UNKNOWN_COMMIT
 
     @property
     def ok(self) -> bool:
@@ -289,7 +295,8 @@ class DeploymentRegistry:
         return [_observation_from_row(row) for row in rows]
 
     def status(
-        self, *, now: datetime, active_within: timedelta = ACTIVE_WITHIN
+        self, *, now: datetime, active_within: timedelta = ACTIVE_WITHIN,
+        intended_commit: str | None = None, repo: Path | None = None,
     ) -> DeploymentStatus:
         """Latest observation per process, and what is wrong with the picture."""
         moment = now.astimezone(UTC)
@@ -313,6 +320,22 @@ class DeploymentRegistry:
 
         warnings: list[DeploymentWarning] = []
         reasons: list[str] = []
+        expected = commit_id(intended_commit)
+        drift = "UNKNOWN"
+        if intended_commit is not None:
+            if expected == "UNKNOWN":
+                warnings.append(DeploymentWarning.UNKNOWN_DEPLOYMENT_INTENT)
+                reasons.append("intended deployment commit is unavailable or invalid")
+            elif latest_coordinator is not None:
+                drift = compare_commit(latest_coordinator.git_commit, expected, repo or Path.cwd())
+                if drift == "UNKNOWN":
+                    warnings.append(DeploymentWarning.UNIDENTIFIED_CHECKOUT)
+                    reasons.append("recorded coordinator has no full SHA to compare with intent")
+                if drift not in ("UNKNOWN", "MATCH"):
+                    warnings.append(DeploymentWarning.DEPLOYMENT_INTENT_MISMATCH)
+                    if drift == "BEHIND":
+                        warnings.append(DeploymentWarning.STALE_CHECKOUT)
+                    reasons.append(f"recorded coordinator versus intended deployment: {drift}")
 
         if not history:
             warnings.append(DeploymentWarning.NO_RUNTIME_RECORDED)
@@ -448,6 +471,8 @@ class DeploymentRegistry:
             last_successful_cycle_at=self._last_successful_cycle(),
             warnings=tuple(dict.fromkeys(warnings)),
             reasons=tuple(reasons),
+            intended_commit=expected,
+            deployment_drift=drift,
         )
 
     def _last_successful_cycle(self) -> datetime | None:
@@ -493,6 +518,12 @@ def summarize(status: DeploymentStatus) -> dict[str, object]:
     return {
         "ok": status.ok,
         "as_of": status.as_of.isoformat(),
+        "intended_commit": status.intended_commit,
+        "deployment_drift": status.deployment_drift,
+        "process_liveness": "UNKNOWN",
+        "coordinator_authority": "UNKNOWN",
+        "store_authority": "UNKNOWN",
+        "activity_basis": "recent durable observations; not OS liveness or writer authority",
         "warnings": [warning.value for warning in status.warnings],
         "reasons": list(status.reasons),
         "last_successful_cycle_at": (
@@ -530,6 +561,7 @@ def summarize(status: DeploymentStatus) -> dict[str, object]:
                 "instance_id": item.instance_id,
                 "git_commit": item.git_commit,
                 "observed_at": item.observed_at.isoformat(),
+                "coordinator_authority": False,
             }
             for item in status.active_workers
         ],

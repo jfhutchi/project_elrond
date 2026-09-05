@@ -14,7 +14,7 @@ import signal
 import subprocess
 import threading
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -72,6 +72,7 @@ from quantbot.operations import (
     evaluate_operational_health,
     measure_readiness,
 )
+from quantbot.operations.checkout import running_checkout_commit
 from quantbot.operations.deployment import RuntimeContext, RuntimeRole
 from quantbot.operations.protection import (
     PositionProtectionDaemonRunner,
@@ -314,6 +315,8 @@ class Runtime:
     veto_version: PolicyVersion
     #: Whether that version was read from the store or written as version 1 on first sight.
     veto_source: PolicySource
+    # Captured once; later checkout/environment changes cannot relabel this interpreter.
+    running_git_commit: str = field(default_factory=running_checkout_commit)
 
     def protector(self) -> PositionProtectionSupervisor:
         """Build the after-entry authority without a strategy, model, or research collaborator."""
@@ -359,6 +362,7 @@ class Runtime:
             store_identity=self.database.store_identity,
             trading_mode=self.settings.TRADING_MODE.value,
             process_started_at=PROCESS_STARTED_AT,
+            git_commit=self.running_git_commit,
         )
 
     def cycle(self) -> RunOnceCycle:
