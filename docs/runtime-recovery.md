@@ -153,27 +153,27 @@ disabled `QuantBotDaemon` task and a historically cleared kill switch. Do not in
 broker readiness or clear anything from those historical rows. Global store/coordinator
 authority and Pi state remain **UNKNOWN**; #190 remains open.
 
-## Local verification — 2026-09-05
+## Local verification: 2026-09-05
 
-Executed in the isolated Astra worktree, Python 3.11.16 on Windows:
+Follow-up review of #220 against main `2bdf6f323464e485a6705bd088d2b1a2742f34b2`,
+in the isolated Astra worktree, existing locked environment, Python 3.11.16 on Windows:
 
 | Command | Result |
 |---|---|
-| `uv sync --frozen --group dev` | locked environment installed |
-| `uv run ruff check src tests` | clean |
-| `uv run mypy --platform linux src` | clean, 223 source files |
-| `uv run mypy --platform win32 src` | clean, 223 source files |
-| `uv run pytest` (final full run) | **2,653 passed, 18 skipped, 1 warning**, 377.88 seconds |
+| `.venv/Scripts/ruff.exe check src tests scripts/recovery_evidence.py` | clean |
+| `.venv/Scripts/mypy.exe --platform linux src` | clean, 225 source files |
+| `.venv/Scripts/mypy.exe --platform win32 src` | clean, 225 source files |
+| `.venv/Scripts/pytest.exe` | **2,665 passed, 18 skipped, 1 warning**, 380.95 seconds |
 | `git diff --check` / staged equivalent | clean |
-| `git status --short` | only the intended recovery changes before commit |
 
-31 tests added. The 18 skips are 12 OS-sandbox/WSL cases, four unconfigured real model-server
-cases and two Windows symlink cases. Native Linux/Pi execution, broker readiness, cross-host
-retirement and reboot recovery were not tested. The warning is the existing Starlette/httpx
-TestClient deprecation; dependencies were not changed.
+The follow-up adds 12 tests (43 total across this PR), including real SQLite divergence hidden
+behind identical latest dates/account IDs, byte preservation with site packages disabled,
+sidecar refusal, cross-capture file-ID collisions, offline report-only comparison, timestamp
+ordering, research-only candidates and private startup-wrapper inspection. Earlier tests of
+current-schema readers, startup guards and runtime identity remain in the full passing suite.
 
-An earlier full run reported one failure, 2,646 passed and 18 skipped: the new copied-lineage
-fixture left a WAL connection open, correctly causing content inspection to refuse. Closing
-the fixture before copying fixed the test; the final full run above includes that correction
-and all six new supervisor restart checks. No operational WAL was altered to make a check pass.
-Hosted Actions remain `workflow_dispatch` only, unchanged; no hosted run was requested.
+The 18 skips are 12 OS-sandbox/WSL cases, four unconfigured real model-server cases and two
+Windows symlink cases. Native Linux/Pi execution, broker readiness, cross-host retirement and
+reboot recovery were not exercised. The warning is the existing Starlette/httpx TestClient
+deprecation. No dependencies, ingestion control-plane schema, operational database or workflow
+were changed. Hosted Actions remain manual-only; no hosted run was requested.
