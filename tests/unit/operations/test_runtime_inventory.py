@@ -120,7 +120,7 @@ def test_changed_file_discards_even_otherwise_readable_evidence(
 ) -> None:
     path = tmp_path / "state.db"
     legacy(path)
-    from quantbot.operations import inventory as module
+    from quantbot.operations import store_inventory as module
 
     signatures = iter([((1, 1, 20, 1), None, None), ((1, 1, 20, 2), None, None)])
     monkeypatch.setattr(module, "_signature", lambda _: next(signatures))

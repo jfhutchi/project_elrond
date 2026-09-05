@@ -5,6 +5,10 @@ database command. `doctor` probes the broker and builds the runtime; constructio
 deployment/policy metadata. The ordinary supervisor can restart a daemon. Neither is a
 read-only inventory tool.
 
+For cross-host capture with no dependency installation, use the
+[Alienware/Pi evidence handoff](runtime-evidence-handoff.md). It supplies exact commands,
+offline Markdown/JSON comparison, evidence requirements and retirement prerequisites.
+
 ## Read-only recovery commands
 
 From the checkout to inspect, using its existing environment:
@@ -61,8 +65,9 @@ Git inspection disables optional locks, including index refresh writes.
   allowlisted non-secret runtime paths), and
   registered WSL distributions. Unknown access is reported, not converted to an empty list.
   Startup shortcuts/custom wrappers require review. WSL guests are never started to inspect
-  them. Linux reports visible `/proc` processes and named system/user systemd unit files;
-  cron/custom startup remains explicitly unknown. No endpoint availability is invented.
+  them. Linux reports visible `/proc` processes, named system/user systemd unit files,
+  bounded startup-file reference/hash scans and current-user crontab reference/hash evidence;
+  other users and indirect wrappers remain unknown. No endpoint availability is invented.
 * SQLite reads use URI `mode=ro&immutable=1`, `query_only`, and untrusted-schema restrictions.
   Nonempty WAL or rollback-journal files cause **content inspection to be refused**: reading
   only their base file could omit committed state. Source metadata changes during inspection
@@ -76,7 +81,7 @@ Git inspection disables optional locks, including index refresh writes.
 
 ## Authority and restart limits
 
-One plausible candidate is still `UNKNOWN`. Two physical candidates with legitimate-looking
+One plausible candidate is still `UNKNOWN`. Two physical candidates with recorded operational/research
 history yield `AMBIGUOUS`, even if one is configured or newer. Identical copied lineage UUIDs
 do not collapse two files into one; hard-link aliases do. Filesystem mtime never chooses a store.
 Compare real run/reconciliation/account/config/forward lineage across **all previously used
@@ -110,39 +115,10 @@ No step here authorizes LIVE or automatically clears the kill switch.
 ## Pi checks when access becomes available
 
 `PI_STATE=UNKNOWN` until measured. Use an already verified SSH host alias/key or physical access.
-Do not discover a host by guessing addresses, accept an unverified host key, or install new
-credentials just to turn UNKNOWN into a result. On the Pi, these are read-only:
-
-```sh
-hostname
-uname -a
-ps -eo pid,ppid,lstart,comm
-systemctl list-unit-files --no-pager | grep -Ei 'quantbot|elrond|kronos|dashboard|control'
-systemctl --user list-unit-files --no-pager | grep -Ei 'quantbot|elrond|kronos|dashboard|control'
-systemctl show quantbot.service dashboard.service control.service \
-  -p ActiveState -p SubState -p UnitFileState -p MainPID -p FragmentPath -p DropInPaths \
-  -p WorkingDirectory -p EnvironmentFiles
-find "$HOME" /opt /var/lib -type f \( -name '*.db' -o -name '*.sqlite' -o -name '*.sqlite3' \
-  -o -name '*.lock' \) -printf '%p %s bytes %TY-%Tm-%TdT%TH:%TM:%TS\n' 2>/dev/null
-find /etc/cron.d /etc/systemd/system "$HOME/.config/systemd/user" -type f -print 2>/dev/null
-```
-
-Record any permission errors separately; suppressed `find` errors mean the search is incomplete.
-Do not print `systemctl ... Environment`, credentials, raw command lines or journal payloads.
-For each located checkout, replace the path and record:
-
-```sh
-git --no-optional-locks -C /actual/checkout rev-parse HEAD
-git --no-optional-locks -C /actual/checkout branch --show-current
-git --no-optional-locks -C /actual/checkout status --short
-```
-
-Run the reviewed inventory command against the identified candidate files from an existing
-compatible Python environment; old Pi environments may not support this build. If unavailable,
-retain UNKNOWN schema/authority, preserve state and obtain an authorized consistent snapshot
-for inspection on the recovery host. Do not run `deploy/pi/setup.sh`: it installs/starts services.
-Review actual unit/cron/wrapper targets privately, record enabled state and intended checkout,
-and retire coordinator autostart only as a separate reviewed operator action.
+Do not guess addresses, accept an unverified key, install credentials, or run `deploy/pi/setup.sh`.
+Use the exact dependency-free commands in the [evidence handoff](runtime-evidence-handoff.md#pi-exact-commands-at-the-physical-console-or-over-already-trusted-access).
+They preserve stderr and scan coverage. If compatible Python or access is unavailable, retain
+UNKNOWN database evidence and return the OS metadata/errors; do not repair the runtime to inspect it.
 
 ## Measured Omen snapshot — 2026-09-05
 

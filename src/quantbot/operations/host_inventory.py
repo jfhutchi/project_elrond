@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -28,10 +29,16 @@ try {
 } catch { $result.processes = 'UNKNOWN' }
 try {
   $result.scheduled_tasks = @(Get-ScheduledTask | Where-Object {
-    $_.TaskName -match $pattern -or (($_.Actions | Out-String) -match $pattern)
+    $_.TaskName -match $pattern -or @($_.Actions | Where-Object {
+      $_.Execute -match "$pattern|python|uv.exe" -or $_.Arguments -match $pattern -or
+      $_.WorkingDirectory -match $pattern
+    }).Count -gt 0
   } | ForEach-Object {
     [pscustomobject]@{name=$_.TaskName; path=$_.TaskPath; state=[string]$_.State;
-      enabled=$_.Settings.Enabled; executables=@($_.Actions.Execute)}
+      enabled=$_.Settings.Enabled; executables=@($_.Actions.Execute);
+      working_directories=@($_.Actions.WorkingDirectory);
+      trigger_types=@($_.Triggers.CimClass.CimClassName);
+      trigger_enabled=@($_.Triggers.Enabled)}
   })
 } catch { $result.scheduled_tasks = 'UNKNOWN' }
 try {
@@ -62,7 +69,8 @@ try {
 try {
   $result.persisted_environment = @(foreach ($scope in 'User','Machine') {
     [Environment]::GetEnvironmentVariables($scope).Keys | Where-Object {
-      $_ -match '^QUANTBOT_|^ALPACA_|^TRADING_MODE$|^BROKER_ENVIRONMENT$|^EXPECTED_ACCOUNT_ID$'
+      $_ -match '^QUANTBOT_|^ALPACA_|^TRADING_MODE$|^BROKER_ENVIRONMENT$|^EXPECTED_ACCOUNT_ID$' -or
+        $_ -match '^LIVE_TRADING_ACKNOWLEDGED$|^KILL_SWITCH$'
     } | ForEach-Object {
       $value = '<withheld>'
       if ($_ -in @('QUANTBOT_DB_PATH','QUANTBOT_CONFIG','QUANTBOT_LOCK_PATH',
@@ -168,10 +176,92 @@ def _linux_inventory() -> dict[str, Any]:
                 if re.search(r"quantbot|elrond|kronos", line, re.I)
             ]
         )
+    startup = _linux_startup_files()
+    crontab = _command(["crontab", "-l"])
     return {
         "processes": processes,
         "unreadable_processes": denied,
         "systemd_unit_files": units,
-        "cron_and_other_startup": "UNKNOWN",
-        "scope": "visible /proc and named systemd units; custom wrappers require review",
+        "startup_files": startup,
+        "current_user_crontab": "UNKNOWN"
+        if crontab is None
+        else {
+            "sha256": hashlib.sha256(crontab.encode()).hexdigest(),
+            "elrond_reference": bool(
+                re.search(r"quantbot|elrond|kronos|supervisor|python", crontab, re.I)
+            ),
+        },
+        "other_users_and_custom_wrappers": "UNKNOWN",
+        "scope": "visible /proc, named systemd units and bounded startup file scan; "
+        "indirect wrappers, other users, containers and external schedulers need review",
+    }
+
+
+def _linux_startup_files() -> dict[str, Any]:
+    """Inspect references privately; report metadata/hashes, never cron or unit contents."""
+    roots = [
+        Path(path)
+        for path in (
+            "/etc/systemd/system",
+            "/usr/lib/systemd/system",
+            "/etc/cron.d",
+            "/etc/cron.daily",
+            "/etc/cron.hourly",
+            "/etc/cron.weekly",
+            "/etc/cron.monthly",
+            "/var/spool/cron",
+        )
+    ] + [Path.home() / ".config/systemd/user", Path.home() / ".config/autostart"]
+    files = [
+        Path("/etc/crontab"),
+        Path("/etc/rc.local"),
+        Path.home() / ".profile",
+        Path.home() / ".bashrc",
+        Path.home() / ".bash_profile",
+    ]
+    errors: list[str] = []
+    seen = 0
+    for root in roots:
+        if not root.exists():
+            errors.append(str(root) + ": absent or inaccessible")
+            continue
+        for directory, dirs, names in os.walk(
+            root, followlinks=False, onerror=lambda error: errors.append(str(error.filename))
+        ):
+            dirs[:] = sorted(dirs)
+            seen += len(names) + len(dirs)
+            if seen > 5000:
+                break
+            files.extend(Path(directory) / name for name in sorted(names))
+        if seen > 5000:
+            break
+    records = []
+    for path in sorted(set(files)):
+        try:
+            if not path.is_file():
+                errors.append(str(path) + ": absent or not a regular file")
+                continue
+            with path.open("rb") as source:
+                content = source.read(256 * 1024 + 1)
+            if len(content) > 256 * 1024:
+                errors.append(str(path) + ": size limit")
+                continue
+            records.append(
+                {
+                    "path": str(path),
+                    "sha256": hashlib.sha256(content).hexdigest(),
+                    "elrond_reference": bool(
+                        re.search(rb"quantbot|elrond|kronos|supervisor|python", content, re.I)
+                    ),
+                    "symlink": path.is_symlink(),
+                }
+            )
+        except OSError:
+            errors.append(str(path) + ": absent or unreadable")
+    return {
+        "files": records,
+        "unreadable_or_absent": errors,
+        "entries_seen": seen,
+        "limit_reached": seen > 5000,
+        "scope": [str(root) for root in roots],
     }
