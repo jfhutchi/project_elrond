@@ -149,3 +149,32 @@ removing it after confirming no associated job is running. Logs can be removed b
 individual completed `.local-ci/<run-id>` directory. A rerun creates fresh job state, so a failed
 test cannot contaminate the next checkout. Repair Docker/WSL through its normal operator controls,
 then rerun prerequisite detection; never turn an unavailable Linux check into a pass.
+## Qualification record (2026-09-06)
+
+Code tested: `ae5502688c3bba133ad442a8bcde872ae6968856`, on the available Windows host.
+This is not a measurement of an Omen deployment or a native Pi run.
+
+| Check | Measured result |
+| --- | --- |
+| Focused CI regression tests | 21 passed, including actual bootstrap UV configuration isolation and Windows descendant termination |
+| Ruff for src/tests and CI helpers | Passed |
+| Mypy for linux and win32 | Passed, 225 application files and 3 CI helper files |
+| Default PowerShell entry point | Exit 1; Linux NOT RUN, Windows FAIL; selected commit retained in summary |
+| Full native snapshot pytest | 2695 passed, 7 skipped, 2 failed, one existing deprecation warning; 393.52 seconds |
+| Git cleanliness and temporary checkout removal | Passed; temporary Windows checkout absent after exit |
+| Docker image build/execution | NOT RUN: Docker executable absent |
+
+The final failing tests were
+`test_a_registration_reaches_a_manifest_through_generated_code` (WSL could not prepare a workspace)
+and `test_the_repository_is_absent_even_when_the_exact_path_is_supplied` (WSL service returned
+`Wsl/Service/E_UNEXPECTED` during the control read). The unmodified baseline at `6ece2bf` also
+failed WSL workspace/control-read checks: 2673 passed, 8 skipped, 2 failed. A preceding native run
+hit the same WSL service error and a leftover sandbox-workspace assertion. These remain visible
+failures; no test was weakened or forced to skip to produce a green CI report.
+
+Final skips: four unconfigured real-model tests, two unprivileged-symlink tests, and the bootstrap
+integration probe because the temporary home has no separately installed managed Python. That
+bootstrap probe was exercised successfully in the separate 21-test host run. Raw logs and the
+JSON summary remain locally under `.local-ci/20260906T220919Z-a4eafa5d/`; private machine paths
+are not copied into GitHub. Keep #218 open pending actual Linux-container qualification and
+resolution of native WSL failures. Draft PR: #224.
