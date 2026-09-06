@@ -8,21 +8,22 @@ import json
 import os
 import platform
 import shutil
-import signal
 import subprocess
 import sys
 import tarfile
 import tempfile
-import threading
 import uuid
 from collections.abc import Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import TextIO
 
+# Isolated Python excludes the script path; add only this trusted checkout for its CI helper.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import ci_process  # noqa: E402
 
-class CIError(RuntimeError):
-    """A named local verification failure, never a passing fallback."""
+CIError = ci_process.CIProcessError
+run_command = ci_process.run_command
 
 
 class PrerequisiteError(CIError):
@@ -73,11 +74,13 @@ def export_snapshot(source: Path, destination: Path, env: Mapping[str, str]) -> 
     if autocrlf not in {"true", "false", "input"}:
         raise CIError("GIT_CONFIG_FAILED: invalid core.autocrlf")
     if git_output(
-        source, env, "-c", f"core.autocrlf={autocrlf}",
+        source, env, "-c", f"core.autocrlf={autocrlf}", "-c", "core.fsmonitor=false",
         "status", "--porcelain", "--untracked-files=all",
     ):
         raise CIError("SOURCE_DIRTY: commit tracked/untracked changes before running local CI")
     sha = git_output(source, env, "rev-parse", "HEAD")
+    if sha != env.get("ELROND_CI_COMMIT", sha):
+        raise CIError("SOURCE_CHANGED: HEAD changed after this verification run started")
     archive = subprocess.run(
         ["git", "-C", str(source), "-c", "core.autocrlf=false", "archive", sha],
         env=env, capture_output=True, check=False,
@@ -107,60 +110,6 @@ def export_snapshot(source: Path, destination: Path, env: Mapping[str, str]) -> 
     ):
         git_output(destination, env, *args)
     return sha
-
-
-def stop_process(process: subprocess.Popen[str]) -> None:
-    if process.poll() is not None:
-        return
-    if sys.platform == "win32":
-        subprocess.run(
-            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
-        )
-    else:
-        os.killpg(process.pid, signal.SIGKILL)
-    process.wait()
-
-
-def run_command(
-    command: Sequence[str], cwd: Path, env: Mapping[str, str], log: TextIO,
-    *, timeout: int = 1800,
-) -> None:
-    line = "+ " + " ".join(command)
-    print(line, flush=True)
-    log.write(line + "\n")
-    log.flush()
-    try:
-        process = subprocess.Popen(
-            command, cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace", start_new_session=os.name != "nt",
-        )
-    except OSError as error:
-        raise CIError(f"COMMAND_UNAVAILABLE: {command[0]}") from error
-    assert process.stdout is not None
-
-    def stream() -> None:
-        assert process.stdout is not None
-        for output in process.stdout:
-            print(output, end="", flush=True)
-            log.write(output)
-            log.flush()
-
-    reader = threading.Thread(target=stream, daemon=True)
-    reader.start()
-    try:
-        code = process.wait(timeout=timeout)
-    except subprocess.TimeoutExpired as error:
-        stop_process(process)
-        raise CIError(f"COMMAND_TIMEOUT: {command[0]} after {timeout}s") from error
-    except KeyboardInterrupt:
-        stop_process(process)
-        raise
-    finally:
-        reader.join(timeout=10)
-        process.stdout.close()
-    if code:
-        raise CIError(f"COMMAND_FAILED: {command[0]} exit {code}")
 
 
 def linux_prerequisite(cwd: Path, env: Mapping[str, str], log: TextIO) -> str:
@@ -211,11 +160,18 @@ def linux_job(source: Path, workspace: Path, env: dict[str, str], log: TextIO) -
     finally:
         # These names were generated for this invocation; never prune unrelated resources.
         for kind, identifier in (("container", name), ("image", image)):
-            exists = subprocess.run(
-                [docker, kind, "inspect", identifier], env=env,
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False,
+            selection = (
+                f"name=^/{identifier}$" if kind == "container" else f"reference={identifier}"
             )
-            if exists.returncode == 0:
+            exists = subprocess.run(
+                [docker, kind, "ls", "--all", "--quiet", "--filter", selection], env=env,
+                capture_output=True, text=True, check=False, timeout=30,
+            )
+            if exists.returncode:
+                raise CIError(
+                    f"CLEANUP_UNVERIFIED: Docker unavailable; inspect owned {kind} {identifier}"
+                )
+            if exists.stdout.strip():
                 run_command([docker, kind, "rm", "--force", identifier], job, env, log, timeout=60)
     return sha
 
@@ -229,9 +185,14 @@ def windows_job(source: Path, workspace: Path, env: dict[str, str], log: TextIO)
     job = workspace / "windows"
     sha = export_snapshot(source, job, env)
     # Reuse only the interpreter executable, never the operator's project environment/config.
-    env["UV_PYTHON"] = sys.executable
+    python = Path(sys.base_prefix) / "python.exe"
+    if not python.is_file():
+        raise PrerequisiteError("PYTHON_NOT_FOUND: install a managed Python 3.11 with uv")
+    env["UV_PYTHON"] = str(python)
     run_command([uv, "--version"], job, env, log)
-    run_command([sys.executable, str(job / "scripts/ci_checks.py")], job, env, log)
+    run_command(
+        [str(python), "-I", "-S", "-B", str(job / "scripts/ci_checks.py")], job, env, log
+    )
     return sha
 
 
@@ -251,14 +212,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(f"Local CI logs: {output}", flush=True)
     print("Local command reproduction; no GitHub check status or hosted job is submitted.")
     failed = False
+    source_commit = "UNKNOWN"
     try:
+        source_commit = git_output(source, os.environ, "rev-parse", "HEAD")
         for target, job in (("linux", linux_job), ("windows", windows_job)):
             if args.platform not in ("all", target):
                 continue
             with tempfile.TemporaryDirectory(prefix="elrond-local-ci-") as scratch:
                 workspace = Path(scratch).resolve()
                 env = clean_environment(os.environ, workspace / "home")
+                env["ELROND_CI_COMMIT"] = source_commit
                 with (output / f"{target}.log").open("w", encoding="utf-8") as log:
+                    log.write(f"Selected source commit: {source_commit}\n")
                     try:
                         if args.check_prerequisites:
                             if target == "linux":
@@ -285,9 +250,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     except KeyboardInterrupt:
         failed = True
         print("INTERRUPTED: unfinished platforms are NOT RUN", flush=True)
+    except CIError as error:
+        failed = True
+        print(str(error), flush=True)
     finally:
         report = {
             "run_id": run_id, "host_platform": platform.platform(),
+            "selected_source_commit": source_commit,
             "scope": "local commands, not GitHub-hosted image parity or independent approval",
             "jobs": statuses,
         }

@@ -6,6 +6,7 @@ import importlib.util
 import io
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -160,6 +161,12 @@ def test_shared_commands_preserve_lock_and_both_type_targets() -> None:
     assert ["uv", "run", "--frozen", "mypy", "--platform", "linux", "src"] in commands
     assert ["uv", "run", "--frozen", "mypy", "--platform", "win32", "src"] in commands
     assert ["uv", "run", "--frozen", "pytest"] in commands
+    for helper in ("scripts/ci_checks.py", "scripts/local_ci.py", "scripts/ci_process.py"):
+        assert any("ruff" in command and helper in command for command in commands)
+        assert any("mypy" in command and "linux" in command and helper in command
+                   for command in commands)
+        assert any("mypy" in command and "win32" in command and helper in command
+                   for command in commands)
 
 
 def test_linux_execution_has_no_network_socket_mount_or_privilege() -> None:
@@ -205,6 +212,7 @@ def test_unavailable_requested_platform_writes_not_run_and_fails(
     assert report["jobs"]["linux"]["status"] == "NOT RUN"
     assert "DOCKER_NOT_FOUND" in report["jobs"]["linux"]["reason"]
     assert report["jobs"]["windows"]["status"] == "NOT RUN"
+    assert report["selected_source_commit"] == git(repository, "rev-parse", "HEAD")
 
 
 def test_timeout_is_a_named_failure_and_stops_child(tmp_path: Path) -> None:
@@ -215,3 +223,52 @@ def test_timeout_is_a_named_failure_and_stops_child(tmp_path: Path) -> None:
             tmp_path, runner.clean_environment(os.environ, tmp_path / "home"),
             io.StringIO(), timeout=1,
         )
+
+
+def test_changed_head_cannot_test_a_different_commit(repository: Path, tmp_path: Path) -> None:
+    runner = module("local_ci")
+    env = runner.clean_environment(os.environ, tmp_path / "home")
+    env["ELROND_CI_COMMIT"] = "0" * 40
+    with pytest.raises(runner.CIError, match="SOURCE_CHANGED"):
+        runner.export_snapshot(repository, tmp_path / "job", env)
+
+
+def test_source_fsmonitor_is_not_executed(repository: Path, tmp_path: Path) -> None:
+    runner = module("local_ci")
+    marker = tmp_path / "operator-hook-ran"
+    hook = tmp_path / "operator-hook.sh"
+    hook.write_bytes(f"#!/bin/sh\necho ran > '{marker.as_posix()}'\n".encode())
+    hook.chmod(0o755)
+    git(repository, "config", "core.fsmonitor", hook.as_posix())
+    runner.export_snapshot(
+        repository, tmp_path / "job", runner.clean_environment(os.environ, tmp_path / "home")
+    )
+    assert not marker.exists()
+
+
+def test_powershell_bootstrap_does_not_inherit_uv_config(
+    repository: Path, tmp_path: Path
+) -> None:
+    shell = shutil.which("pwsh") or shutil.which("powershell")
+    if sys.platform != "win32" or not shell or not shutil.which("uv"):
+        pytest.skip("requires native Windows PowerShell and uv")
+    # Exercise actual uv option handling, rather than a fake executable that ignores UV_*.
+    found = subprocess.run(
+        ["uv", "--no-config", "python", "find", "--managed-python", "--system", "3.11"],
+        capture_output=True, check=False,
+    )
+    if found.returncode:
+        pytest.skip("no managed Python 3.11 installed for actual bootstrap verification")
+    scripts = repository / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(ROOT / "scripts/local-ci.ps1", scripts / "local-ci.ps1")
+    (scripts / "local_ci.py").write_text("print('ISOLATED_BOOTSTRAP_REACHED')\n")
+    env = dict(os.environ)
+    env["UV_CONFIG_FILE"] = str(tmp_path / "absent-config.toml")
+    env["UV_ENV_FILE"] = str(tmp_path / "absent-operator.env")
+    result = subprocess.run(
+        [shell, "-NoProfile", "-File", str(scripts / "local-ci.ps1"), "-CheckPrerequisites"],
+        env=env, capture_output=True, text=True, check=False, timeout=40,
+    )
+    assert result.returncode == 0, result.stderr
+    assert "ISOLATED_BOOTSTRAP_REACHED" in result.stdout

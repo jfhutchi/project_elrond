@@ -9,12 +9,16 @@ from pathlib import Path
 
 
 def commands() -> list[list[str]]:
+    helpers = ["scripts/ci_checks.py", "scripts/local_ci.py", "scripts/ci_process.py"]
     return [
         ["uv", "lock", "--check"],
         ["uv", "sync", "--frozen", "--group", "dev"],
         ["uv", "run", "--frozen", "ruff", "check", "src", "tests"],
         ["uv", "run", "--frozen", "mypy", "--platform", "linux", "src"],
         ["uv", "run", "--frozen", "mypy", "--platform", "win32", "src"],
+        ["uv", "run", "--frozen", "ruff", "check", *helpers],
+        ["uv", "run", "--frozen", "mypy", "--platform", "linux", *helpers],
+        ["uv", "run", "--frozen", "mypy", "--platform", "win32", *helpers],
         ["uv", "run", "--frozen", "pytest"],
     ]
 

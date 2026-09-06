@@ -180,10 +180,16 @@ leaves the test green, the test is measuring something else.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs `ruff check src tests`, `mypy` for **both** platforms, and
-`pytest`, on every push and pull request, on **ubuntu-latest and windows-latest**, then fails if
-the suite left the working tree dirty. The required status checks to protect `main` with are
+`.github/workflows/ci.yml` runs the shared `scripts/ci_checks.py` command contract: locked
+dependency verification/sync, lint, `mypy` for **both** platforms, `pytest`, and a failing dirty-tree
+gate on **ubuntu-latest and windows-latest**. Hosted CI is temporarily **manual-only** as of
+2026-09-05 while the hosted allowance is exhausted. The required status checks to protect `main` are
 **`checks (ubuntu-latest)`** and **`checks (windows-latest)`**.
+
+For local verification, run `.\scripts\local-ci.ps1` from a clean, committed checkout. It exports
+isolated source snapshots for Linux containers and native Windows, and reports unavailable
+platforms as NOT RUN. See [setup, coverage, cleanup and limitations](docs/local-ci.md). Local runs
+consume no hosted minutes and do not publish independent GitHub status checks.
 
 Both runners, and its first run is why rather than a guess: `mypy src` had been reported clean
 for months and fails with seven errors on Linux, because `msvcrt.locking` and `ctypes.windll`
@@ -206,9 +212,9 @@ from it passing.*
 
 **`main` is unprotected, and on this repository's current plan it cannot be protected.** Both
 the branch-protection and the rulesets APIs answer `403 Upgrade to GitHub Pro or make this
-repository public to enable this feature` — verified 2026-09-02, not inferred. So the gate runs
-on every push and pull request and reports honestly, and nothing enforces it at the merge
-button.
+repository public to enable this feature` — verified 2026-09-02, not inferred. That dated inspection
+found no enforcement at the merge button; the current manual-only workflow also does not report
+checks automatically. Local verification does not change either repository setting.
 
 Two ways out, both operator decisions: GitHub Pro, or making the repository public. Until one
 of them happens, the command below returns 403 rather than configuring anything, and CI is a

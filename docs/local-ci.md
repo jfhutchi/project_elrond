@@ -9,12 +9,14 @@ From a clean, committed checkout, run:
 This requests Linux and native Windows verification. A missing prerequisite or failed requested
 job returns nonzero. Logs stream to the terminal and are retained with `summary.json` under
 `.local-ci/<run-id>/`. Each platform reports PASS, FAIL or NOT RUN. The report identifies the
-original tested commit even though each exported checkout has a disposable Git baseline.
+original selected commit even though each exported checkout has a disposable Git baseline. A
+NOT RUN status does not claim that commit was tested; failed jobs also retain the selected SHA.
 
 ## Setup is an explicit operator step
 
-Required on Windows: Git for Windows, uv on PATH, and Python 3.11 (uv can download the interpreter
-when the entry point first runs). Start from a trusted checkout. No account tokens are needed.
+Required on Windows: Git for Windows, uv on PATH, and a managed Python 3.11 installed with
+`uv python install 3.11`. The entry point only locates that interpreter; it does not install tools.
+Start from a trusted checkout. No account tokens are needed.
 
 For Linux verification on Windows, the operator must install/enable WSL2 and Docker Desktop with
 the Linux container engine, including any required reboot and license acceptance. This script
@@ -59,13 +61,19 @@ git status --short (failure on tracked or untracked changes)
 
 `uv lock --check` checks manifest/lock consistency; `--frozen` by itself trusts the lockfile rather
 than checking whether the manifest changed. Checks stop on the first failing command, but the
-checkout-cleanliness gate also runs after a command failure. Skips remain visible in pytest output;
+checkout-cleanliness gate also runs after a command failure. The same lint and both type-check
+targets also cover the three CI Python helper files. Skips remain visible in pytest output;
 they must not be described as exercised WSL, model-server or symlink coverage.
 
 Linux dependencies are prepared during the Docker build. Verification then runs offline with no
 network, no host mounts, no Docker socket, dropped capabilities, no privilege escalation, a
 non-root user, 4 CPUs, 8 GiB memory and a 512-process limit. Image/tool identities are printed in
-the build log. Each subprocess has a 30-minute limit; interrupt/timeout stops its process tree.
+the build log. Each streamed command has a 30-minute limit, including output drainage; cleanup
+allows up to ten additional seconds for process/reader shutdown. Windows children start suspended
+and join a kill-on-close Job object before resuming, so descendants cannot outlive the job merely
+by keeping stdout open. Linux uses process groups inside the disposable container. Deliberately
+detached native POSIX sessions are outside a process-group boundary; hostile native code needs
+OS isolation. Docker cleanup queries also have explicit deadlines and fail if cleanup is unverified.
 
 The uv/Python image is pinned by digest in `scripts/ci/Dockerfile`. Its uv version is 0.8.15; the
 current repository lock was checked with that version during development. Debian Git installation
