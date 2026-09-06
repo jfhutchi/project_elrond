@@ -41,3 +41,6 @@ research/stocks.db
 .codex-read-skills.cmd
 .codex/
 .agents/
+
+# Local CI logs and summaries, never deployment state.
+.local-ci/
