@@ -1,5 +1,10 @@
 # Runtime topology
 
+> Deployment reality must be measured separately from this historical topology. The host
+> labels below conflate the desktop and Omen laptop; they do not prove either is running.
+> See [the 2026-09-05 recovery inventory and commands](runtime-recovery.md). Pi state and
+> global coordinator/store authority remain UNKNOWN until measured across hosts.
+
 Which machine runs what, and why the Raspberry Pi Zero W is no longer a candidate for the
 control plane (#38).
 

@@ -839,6 +839,7 @@ def test_a_wired_runtime_describes_the_database_it_actually_writes_to(
     A cycle that worked out its own database path could describe a different store from the one
     it writes to, which is exactly the ambiguity the record exists to remove.
     """
+    from quantbot.operations.checkout import running_checkout_commit
     from quantbot.operations.deployment import RuntimeRole
 
     monkeypatch.setenv("QUANTBOT_CONFIG", str(_write_config(tmp_path)))
@@ -847,6 +848,7 @@ def test_a_wired_runtime_describes_the_database_it_actually_writes_to(
     monkeypatch.setenv("QUANTBOT_LOCK_PATH", str(tmp_path / "quantbot.lock"))
     monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "0123456789abcdef")
 
+    expected_commit = running_checkout_commit()
     runtime = build_runtime(_ready_settings())
     try:
         context = runtime.runtime_context()
@@ -858,7 +860,12 @@ def test_a_wired_runtime_describes_the_database_it_actually_writes_to(
         # thing under test.
         observation = context.observe(now=datetime.now(UTC), identity=runtime.identity)
         assert observation.process_started_at <= observation.observed_at
-        assert observation.git_commit == "0123456789abcdef"
+        assert observation.git_commit == expected_commit
+        assert len(observation.git_commit) == 40
+        monkeypatch.setenv("QUANTBOT_GIT_COMMIT", "f" * 40)
+        monkeypatch.setattr("quantbot.operations.checkout.git_read", lambda *args: "e" * 40)
+        later = runtime.runtime_context().observe(now=datetime.now(UTC))
+        assert later.git_commit == expected_commit
         assert observation.store_identity == runtime.database.store_identity
         assert observation.strategy_id == runtime.identity.strategy_id
         assert observation.configuration_hash == runtime.identity.configuration_hash

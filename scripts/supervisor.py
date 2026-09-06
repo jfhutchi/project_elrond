@@ -16,6 +16,7 @@ Usage:
     uv run python scripts/supervisor.py            # one pass, print findings
     uv run python scripts/supervisor.py --watch    # loop until interrupted
     uv run python scripts/supervisor.py --self-check
+    uv run python scripts/supervisor.py --inventory   # strictly read-only recovery report
 """
 
 from __future__ import annotations
@@ -75,6 +76,18 @@ def daemon_holds_lock() -> bool:
 
 
 def restart_daemon() -> Finding:
+    from quantbot.operations.checkout import checkout_evidence
+
+    root = Path(__file__).resolve().parents[1]
+    if Path.cwd().resolve() != root:
+        return Finding("CRITICAL", "daemon-restart", "CHECKOUT_CWD_MISMATCH: restart refused")
+    checkout = checkout_evidence(root)
+    if checkout["checkout_drift"] != "MATCH" or checkout["dirty"] is not False:
+        return Finding(
+            "CRITICAL", "daemon-restart",
+            "CHECKOUT_NOT_VERIFIED: restart refused; need a clean checkout matching local "
+            "origin/main (fetch/approve intent separately); run deployment-status --inventory",
+        )
     exe = Path(".venv/Scripts/quantbot.exe")
     if not exe.exists():
         return Finding("CRITICAL", "daemon-restart", f"executable missing at {exe}")
@@ -212,6 +225,15 @@ def self_check() -> int:
 
 
 def main() -> int:
+    if "--inventory" in sys.argv:
+        # Before lock probing (which can create a file), logging, DB open, and restart.
+        import json
+
+        from quantbot.operations.inventory import inventory
+
+        report = inventory(repo=Path(__file__).resolve().parents[1], include_host=True)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report["ok"] else 1
     if "--self-check" in sys.argv:
         return self_check()
     watch = "--watch" in sys.argv

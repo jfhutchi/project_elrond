@@ -37,6 +37,25 @@ def _supervisor() -> ModuleType:
 NOW = datetime(2026, 8, 17, 20, 5, tzinfo=UTC)
 
 
+def test_inventory_cannot_probe_locks_log_or_restart(tmp_path, monkeypatch, capsys):
+    import json
+
+    supervisor = _supervisor()
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(tmp_path / "absent.db"))
+    monkeypatch.setattr(sys, "argv", ["supervisor.py", "--inventory"])
+    monkeypatch.setattr("quantbot.operations.host_inventory.host_inventory", lambda: {})
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("inventory reached mutating supervisor machinery")
+
+    for name in ("daemon_holds_lock", "restart_daemon", "inspect_durable", "_emit", "run_once"):
+        monkeypatch.setattr(supervisor, name, forbidden)
+    assert supervisor.main() == 1
+    assert json.loads(capsys.readouterr().out)["pi_state"] == "UNKNOWN"
+    assert list(tmp_path.iterdir()) == []
+
+
 def _ledger(tmp_path: Path) -> Database:
     return Database.create(tmp_path / "quantbot.db")
 
@@ -202,3 +221,51 @@ def test_the_watchdog_can_only_ever_restart_its_own_checkout() -> None:
     assert "supervisor.py" in script and "--watch" in script, (
         "path-relative or not, this file's job is still to run the supervisor"
     )
+
+
+@pytest.mark.parametrize("drift,dirty", [
+    ("BEHIND", False), ("UNKNOWN", False), ("MATCH", True), ("MATCH", "UNKNOWN"),
+])
+def test_restart_refuses_unverified_checkout_before_launch(tmp_path, monkeypatch, drift, dirty):
+    supervisor = _supervisor()
+    monkeypatch.setattr(supervisor, "__file__", str(tmp_path / "scripts" / "supervisor.py"))
+    monkeypatch.chdir(tmp_path)
+    exe = tmp_path / ".venv" / "Scripts" / "quantbot.exe"
+    exe.parent.mkdir(parents=True)
+    exe.touch()
+    monkeypatch.setattr("quantbot.operations.checkout.checkout_evidence",
+                        lambda _: {"checkout_drift": drift, "dirty": dirty})
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("unverified checkout launched a daemon")
+
+    monkeypatch.setattr(supervisor.subprocess, "Popen", forbidden)
+    finding = supervisor.restart_daemon()
+    assert finding.severity == "CRITICAL"
+    assert "CHECKOUT_NOT_VERIFIED" in finding.detail
+    assert not (tmp_path / "logs").exists()
+
+
+def test_restart_refuses_cwd_that_would_resolve_another_executable(tmp_path, monkeypatch):
+    supervisor = _supervisor()
+    monkeypatch.chdir(tmp_path)
+    assert "CHECKOUT_CWD_MISMATCH" in supervisor.restart_daemon().detail
+
+
+def test_verified_checkout_reaches_existing_restart_path(tmp_path, monkeypatch):
+    supervisor = _supervisor()
+    monkeypatch.setattr(supervisor, "__file__", str(tmp_path / "scripts" / "supervisor.py"))
+    monkeypatch.chdir(tmp_path)
+    exe = tmp_path / ".venv" / "Scripts" / "quantbot.exe"
+    exe.parent.mkdir(parents=True)
+    exe.touch()
+    monkeypatch.setattr("quantbot.operations.checkout.checkout_evidence",
+                        lambda _: {"checkout_drift": "MATCH", "dirty": False})
+    launched = []
+    monkeypatch.setattr(
+        supervisor.subprocess, "Popen", lambda args, **kwargs: launched.append(args)
+    )
+    monkeypatch.setattr(supervisor.time, "sleep", lambda _: None)
+    monkeypatch.setattr(supervisor, "daemon_holds_lock", lambda: True)
+    assert supervisor.restart_daemon().severity == "INFO"
+    assert launched == [[str(Path(".venv/Scripts/quantbot.exe")), "daemon"]]

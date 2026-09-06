@@ -1,5 +1,9 @@
 # Running the daemon on a Raspberry Pi
 
+> This describes an older deployment option, not the Pi's current measured role or state.
+> Complete [runtime recovery](../../docs/runtime-recovery.md) before running the installer.
+> It can start a coordinator, so using it while another host has authority risks two writers.
+
 The trading daemon has to be alive at every session close. A desktop that sleeps, or reboots for
 updates, is the wrong host for that. A dedicated Pi is a better one.
 

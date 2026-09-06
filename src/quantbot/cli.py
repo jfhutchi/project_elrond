@@ -102,7 +102,21 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # #190. The command that answers "what is actually running?" without filesystem
     # archaeology. Read-only: asking must not create an observation, or the act of checking
     # would put a coordinator in the record that was never trading.
-    commands.add_parser("deployment-status")
+    deployment = commands.add_parser("deployment-status")
+    deployment.add_argument(
+        "--inventory", action="store_true", help="also inspect local OS startup"
+    )
+    deployment.add_argument(
+        "--candidate", action="append", default=[], help="additional store path"
+    )
+    deployment.add_argument(
+        "--repo", default=".", help="checkout whose local origin/main is intended"
+    )
+    deployment.add_argument("--intended-commit", help="full intended SHA; no network fetch is done")
+    deployment.add_argument("--scan-root", action="append", default=[],
+                            help="bounded recursive search for local durable-store candidates")
+    deployment.add_argument("--startup-check", action="store_true",
+                            help="report recovery blockers; never launch or grant authority")
     # #198. Read-only by construction: it opens no run, moves no cursor and records no
     # incident. A status command that wrote history would be the worst thing to run while
     # trying to work out what happened to collection.
@@ -785,6 +799,19 @@ def main(
     parser = build_parser(output=stream)
     args = parser.parse_args(argv)
 
+    if args.command == "deployment-status" and (
+        context is None or args.inventory or args.startup_check or args.candidate or args.scan_root
+    ):
+        # Never build runtime here: construction can append deployment/policy metadata.
+        from quantbot.operations.inventory import inventory as runtime_inventory
+
+        recovery_report = runtime_inventory(
+            repo=Path(args.repo), candidates=args.candidate, scan_roots=args.scan_root,
+            intended_commit=args.intended_commit, include_host=args.inventory,
+        )
+        print(json.dumps(recovery_report, indent=2, sort_keys=True), file=stream)
+        return 0 if recovery_report["ok"] else 1
+
     if args.command == "migrate-database":
         # Handled before a context exists, because building one opens a database -- and the store
         # this command is for is precisely the one that cannot be opened. A migration command
@@ -868,7 +895,10 @@ def main(
 
             with active.database.transaction() as session:
                 result = summarize_deployment(
-                    DeploymentRegistry(session).status(now=datetime.now(UTC))
+                    DeploymentRegistry(session).status(
+                        now=datetime.now(UTC), intended_commit=args.intended_commit,
+                        repo=Path(args.repo),
+                    )
                 )
         elif args.command == "ingestion-status":
             # Function-scope import for the same reason as the research commands: the kill

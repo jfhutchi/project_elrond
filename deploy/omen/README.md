@@ -1,5 +1,10 @@
 # Coordinator deployment (HP Omen, WSL2 Ubuntu)
 
+> Before using this installer, complete [runtime recovery](../../docs/runtime-recovery.md).
+> The WSL observations below are historical desktop observations, not facts about the current
+> `Leannes-Laptop` Omen, where WSL was not installed at the 2026-09-05 inventory. This installer
+> can activate a coordinator; a local empty store is not evidence that the Pi is retired.
+
 Bringing Elrond up on the always-on coordinator described in
 [`docs/runtime-topology.md`](../../docs/runtime-topology.md) (#38).
 

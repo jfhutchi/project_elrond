@@ -66,16 +66,37 @@ therefore fails before changing the schema and directs the operator to a pre-002
 | `SCHEMA_VERSION_MISMATCH` | an active runtime recorded a schema this build does not have |
 | `LIVE_TRADING_RECORDED` | a runtime reported `LIVE` mode |
 
-**Stale-checkout detection needs no network and no deploy manifest.** The history *is* the
-manifest, but only reappearance establishes a reversal without pretending commit names encode Git
-ancestry. A → B is a normal change and A → B → C is another forward history; neither is stale.
+**Historical reversion detection needs no network.** Only reappearance establishes a reversal
+from observations alone, without pretending commit names encode Git ancestry.
+A → B is a normal change and A → B → C is another forward history; neither is stale.
 A → B → A is stale because A appeared, a different known commit ran, and A then reappeared. That
 is precisely the hazard the `E:\...\quantbot-watchdog.cmd` fix closed at the source, and this makes
 a recurrence detectable rather than only prevented.
 
 `UNIDENTIFIED_CHECKOUT` is deliberately separate from `STALE_CHECKOUT`. A runtime that will not
 name its commit is *unknown*, not *proven stale*, and collapsing the two would either invent a
-problem or hide one. Set `QUANTBOT_GIT_COMMIT` to make the distinction go away.
+problem or hide one. Runtime construction now captures the installed source checkout's full
+HEAD once, independent of cwd and later environment changes. Installed wheels can supply a full
+`QUANTBOT_GIT_COMMIT` pin; missing or invalid pins remain UNKNOWN. The strategy deployment's
+older commit is not reused as the running code's identity.
+
+## Recovery inventory and intended deployment
+
+`quantbot deployment-status` now runs before runtime construction, including when the database
+is missing or older than this build. `--inventory` adds bounded host/startup checks, `--candidate`
+and `--scan-root` discover comparison stores, and `--intended-commit` overrides the local
+`origin/main` reference. A full report and the exact recovery procedure are in
+[`runtime-recovery.md`](runtime-recovery.md).
+
+The existing status reader additionally compares recorded SHA to deployment intent. An ancestor
+is `BEHIND`/`STALE_CHECKOUT`; other differences are `DEPLOYMENT_INTENT_MISMATCH` with their
+relationship stated. Unknown intent is `UNKNOWN_DEPLOYMENT_INTENT`. History alone cannot tell
+whether a new main commit was never deployed, which is why both checks are necessary.
+
+The CLI envelope is a recovery assessment: `ok=false`/exit 1 while global authority remains
+unverified. A nested historical reader's `ok` describes its recorded warnings only. It grants
+no startup authority. Legacy `active` fields mean recently observed; explicit liveness and
+coordinator/store authority fields remain UNKNOWN without independent measurement.
 
 The 100-hour activity bound is `scripts/supervisor.py::STALE_RUN_HOURS` — an existing deployed
 value, CLAUDE.md's first tiebreak for an unspecified threshold — chosen there because consecutive
