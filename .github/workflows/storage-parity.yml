@@ -1,0 +1,39 @@
+name: Storage parity
+
+# Explicitly manual: do not consume hosted minutes on push or PR creation.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  storage-parity:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: elrond_test
+          POSTGRES_PASSWORD: ephemeral-test-only
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U elrond_test -d postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      QUANTBOT_TEST_POSTGRES_ADMIN_URL: postgresql+psycopg://elrond_test:ephemeral-test-only@127.0.0.1:5432/postgres
+      TRADING_MODE: PAPER
+      BROKER_ENVIRONMENT: PAPER
+      LIVE_TRADING_ACKNOWLEDGED: "false"
+      KILL_SWITCH: "true"
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+      - run: uv python install
+      - run: uv sync --frozen --group dev --group postgres
+      - run: uv run --frozen --group postgres pytest -q tests/integration/test_storage_parity.py

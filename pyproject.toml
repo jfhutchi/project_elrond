@@ -40,6 +40,9 @@ dev = [
     "ruff>=0.16.4,<1",
     "types-pyyaml>=6.0,<7",
 ]
+postgres = [
+    "psycopg[binary]>=3.2,<4",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/quantbot"]
