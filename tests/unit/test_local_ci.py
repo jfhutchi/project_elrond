@@ -103,6 +103,72 @@ def test_dirty_source_is_refused_instead_of_testing_old_commit(
         )
 
 
+@pytest.mark.parametrize("attribute_source", ["info", "local-config", "global-config"])
+@pytest.mark.parametrize("linked_worktree", [False, True])
+def test_snapshot_ignores_uncommitted_export_attributes(
+    repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    attribute_source: str, linked_worktree: bool,
+) -> None:
+    runner = module("local_ci")
+    (repository / "tests").mkdir()
+    test_content = "def test_failure():\n    assert False\n"
+    (repository / "tests/test_failure.py").write_text(test_content)
+    (repository / "literal.txt").write_text("$Format:%H$\n")
+    git(repository, "add", ".")
+    git(repository, "commit", "-qm", "tests must not disappear from CI")
+    source = repository
+    if linked_worktree:
+        source = tmp_path / "linked source"
+        git(repository, "worktree", "add", "--detach", str(source), "HEAD")
+    attributes = "tests/test_failure.py export-ignore\nliteral.txt export-subst\n"
+    if attribute_source == "info":
+        attribute_path = repository / ".git/info/attributes"
+    else:
+        attribute_path = tmp_path / "operator attributes"
+        if attribute_source == "local-config":
+            git(repository, "config", "core.attributesFile", attribute_path.as_posix())
+        else:
+            config = tmp_path / "operator.gitconfig"
+            git(repository, "config", "--file", str(config),
+                "core.attributesFile", attribute_path.as_posix())
+            monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(config))
+    attribute_path.write_text(attributes)
+    assert git(source, "status", "--porcelain") == ""
+    assert git(source, "check-attr", "export-ignore", "--", "tests/test_failure.py").endswith(
+        "export-ignore: set"
+    )
+    destination = tmp_path / "job"
+    sha = runner.export_snapshot(
+        source, destination, runner.clean_environment(os.environ, tmp_path / "home")
+    )
+    assert sha == git(source, "rev-parse", "HEAD")
+    exported_test = destination / "tests/test_failure.py"
+    assert exported_test.is_file(), "operator Git attributes hid a committed test from CI"
+    assert exported_test.read_text() == test_content
+    assert (destination / "literal.txt").read_text() == "$Format:%H$\n"
+    assert attribute_path.read_text() == attributes
+    assert git(source, "status", "--porcelain") == ""
+    assert git(destination, "status", "--porcelain") == ""
+
+
+def test_snapshot_preserves_committed_export_attributes(repository: Path, tmp_path: Path) -> None:
+    runner = module("local_ci")
+    (repository / ".gitattributes").write_text(
+        "excluded.txt export-ignore\nrevision.txt export-subst\n"
+    )
+    (repository / "excluded.txt").write_text("intentionally excluded by the commit\n")
+    (repository / "revision.txt").write_text("$Format:%H$\n")
+    git(repository, "add", ".")
+    git(repository, "commit", "-qm", "committed archive semantics")
+    destination = tmp_path / "job"
+    sha = runner.export_snapshot(
+        repository, destination, runner.clean_environment(os.environ, tmp_path / "home")
+    )
+    assert sha == git(repository, "rev-parse", "HEAD")
+    assert not (destination / "excluded.txt").exists()
+    assert (destination / "revision.txt").read_text() == sha + "\n"
+
+
 def test_tracked_operational_files_are_refused(repository: Path, tmp_path: Path) -> None:
     runner = module("local_ci")
     (repository / ".env").write_text("not-a-real-secret")

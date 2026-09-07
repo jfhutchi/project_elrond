@@ -81,10 +81,21 @@ def export_snapshot(source: Path, destination: Path, env: Mapping[str, str]) -> 
     sha = git_output(source, env, "rev-parse", "HEAD")
     if sha != env.get("ELROND_CI_COMMIT", sha):
         raise CIError("SOURCE_CHANGED: HEAD changed after this verification run started")
-    archive = subprocess.run(
-        ["git", "-C", str(source), "-c", "core.autocrlf=false", "archive", sha],
-        env=env, capture_output=True, check=False,
+    objects = git_output(
+        source, env, "rev-parse", "--path-format=absolute", "--git-path", "objects",
     )
+    # Source info/attributes and core.attributesFile can silently hide or rewrite tracked files.
+    # Read only its objects through fresh metadata; committed .gitattributes still apply.
+    with tempfile.TemporaryDirectory(prefix="elrond-local-ci-git-") as metadata:
+        archive_root = Path(metadata)
+        git_output(archive_root, env, "init", "--bare", "--template=", "-q")
+        archive_env = dict(env)
+        archive_env.update(GIT_OBJECT_DIRECTORY=objects, GIT_ATTR_NOSYSTEM="1")
+        archive = subprocess.run(
+            ["git", "-C", str(archive_root), "-c", f"core.attributesFile={os.devnull}",
+             "archive", sha],
+            env=archive_env, capture_output=True, check=False,
+        )
     if archive.returncode:
         raise CIError("SOURCE_EXPORT_FAILED")
     destination.mkdir(parents=True, exist_ok=True)

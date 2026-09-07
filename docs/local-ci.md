@@ -89,7 +89,10 @@ files, symbolic links and unsafe archive paths are refused. Each job receives a 
 allowlist, temporary home, caches and database defaults. Broker credentials, model endpoints,
 GitHub tokens, custom uv indexes and operator runtime variables are not forwarded. Git source
 inspection preserves its line-ending normalization; temporary Git metadata has no remote,
-credentials, global configuration or operator hooks.
+credentials, global configuration or operator hooks. Archive creation reads the selected commit's
+objects through a separate bare Git directory, so untracked `.git/info/attributes` and configured
+operator attributes cannot hide or rewrite committed files. Committed `.gitattributes` retains
+its archive semantics, including deliberate `export-ignore` and `export-subst` rules.
 
 Native Windows tests run as the current OS user. This is trusted-code verification with isolated
 inputs, **not an OS security sandbox for hostile tests**: user filesystem access and local network
