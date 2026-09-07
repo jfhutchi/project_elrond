@@ -7,12 +7,16 @@ in the already accepted #198 contract; the existing schema and collector remain 
 Use a bounded collection deadline around the existing provider retry implementation. Preserve
 the current strategy warmup/correlation lookback, extending it back to an older durable checkpoint
 or, for a legacy store without a checkpoint, the oldest latest observation across configured
-symbols. Refuse recovery if the available calendar cannot cover that position. Record expanded
-historical recovery as BACKFILL; it cannot refresh live-success timestamps. Record the requested
+symbols and the earliest recorded request range. Preserve unfinished ranges even when later
+attempts fail before receiving a calendar. Refuse recovery if the available calendar cannot cover
+that position. Record expanded historical recovery as BACKFILL; it cannot refresh live-success
+timestamps. Record the requested
 range before fetching. No external worker, queue, scheduler, or new database is needed.
 
-Capture the cursor version before network I/O. Commit validated observations and a successful
-checkpoint together. An incomplete universe commits useful valid observations but records FAILED
+Capture the complete cursor and source configuration before network I/O, and compare both before
+storing results. Comparing the full cursor also detects a reset and recreation at the same version.
+Commit validated observations and a successful checkpoint together. An incomplete universe
+commits useful valid observations but records FAILED
 without advancing any cursor. Exact response duplicates are deduplicated; conflicting duplicates
 are refused. Provider identity must match the configured query. Terminal provider errors and
 timeouts remain visible and propagate. Cancellation records failure and re-raises cancellation.
