@@ -1370,6 +1370,9 @@ Index(
     sqlite_where=text(
         "status IN ('PENDING', 'WORKING', 'UNCERTAIN', 'FILLED_UNVERIFIED', 'FAILED')"
     ),
+    postgresql_where=text(
+        "status IN ('PENDING', 'WORKING', 'UNCERTAIN', 'FILLED_UNVERIFIED', 'FAILED')"
+    ),
 )
 Index(
     "ix_position_protection_actions_status_time",
