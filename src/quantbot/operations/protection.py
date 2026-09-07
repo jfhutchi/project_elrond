@@ -53,7 +53,7 @@ from quantbot.storage.schema import (
     position_protection_evaluations,
 )
 
-PROTECTION_POLICY_VERSION = "position-protection-v1"
+PROTECTION_POLICY_VERSION = "position-protection-v2"
 POSITION_PROTECTION_INTERVAL = timedelta(minutes=15)
 FILLED_POSITION_CONFIRMATION_TIMEOUT = timedelta(minutes=30)
 
