@@ -68,34 +68,7 @@ jobs:
       - name: Set up Python
         run: uv python install
 
-      # --frozen, so a lockfile that no longer matches pyproject.toml is a failure rather than
-      # a silent resolution against something nobody reviewed.
-      - name: Sync the locked environment
-        run: uv sync --frozen --group dev
-
-      - name: Lint
-        run: uv run ruff check src tests
-
-      # Both platforms from every runner. `mypy` analyses only the host's half of a
-      # `sys.platform` branch, so a single-platform type-check silently exempts the other -- the
-      # defect this file's first run found, and then again in the opposite direction when the
-      # fix was written. Two commands make each runner prove both halves.
-      - name: Type-check (linux)
-        run: uv run mypy --platform linux src
-
-      - name: Type-check (windows)
-        run: uv run mypy --platform win32 src
-
-      - name: Test
-        run: uv run pytest
-
-      # A suite that writes into the working tree has state it did not declare, and the next
-      # run is no longer starting where this one did.
-      - name: The suite left the tree clean
-        shell: bash
-        run: |
-          if [ -n "$(git status --porcelain)" ]; then
-            echo "the test run modified tracked or untracked files:"
-            git status --porcelain
-            exit 1
-          fi
+      # Same locked sync, lint, both mypy targets, pytest and failing Git cleanliness gate
+      # as local CI (#218). Job names, triggers and independent hosted authority stay intact.
+      - name: Verify the shared CI contract
+        run: python scripts/ci_checks.py
