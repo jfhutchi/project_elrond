@@ -7,8 +7,10 @@ decision comes from :mod:`quantbot.strategy` and :mod:`quantbot.risk`.
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
+import math
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -43,7 +45,11 @@ from quantbot.execution import StartupRecovery, StartupRecoveryResult
 from quantbot.execution.recovery import is_open_order
 from quantbot.ingestion import (
     CursorAdvance,
+    CursorConflict,
     IngestionControlPlane,
+    IngestionCursor,
+    IngestionError,
+    IngestionSource,
     RecordCounts,
     RunMode,
 )
@@ -56,6 +62,7 @@ from quantbot.market_data import (
     align_daily_bars_to_session_closes,
     validate_bar_batch,
 )
+from quantbot.market_data.base import MarketDataProtocolError
 from quantbot.market_data.calendar import (
     AlpacaMarketCalendar,
     crypto_session_sequence,
@@ -244,9 +251,7 @@ class CryptoSessionCalendar:
 SessionCalendar = CachedSessionCalendar | CryptoSessionCalendar
 
 
-def sequence_for(
-    config: StrategyConfig, sessions: tuple[XNYSSession, ...]
-) -> XNYSSessionSequence:
+def sequence_for(config: StrategyConfig, sessions: tuple[XNYSSession, ...]) -> XNYSSessionSequence:
     """Build the session sequence stamped with the config's own calendar.
 
     The sequence carries a calendar label that the roster validates against, so an XNYS
@@ -397,6 +402,10 @@ UNIVERSE_STREAM = "universe"
 #: writer lock already prevents two syncs overlapping, so this cannot close a live run.
 ABANDON_RUNS_AFTER = timedelta(hours=6)
 
+# Project default: bound the entire calendar/pagination/retry operation, including Retry-After
+# sleeps. Individual Alpaca requests already have their own timeout and two retries.
+COLLECTION_TIMEOUT_SECONDS = 120.0
+
 
 class MarketDataSync:
     """Fetch, validate and durably cache completed daily bars for the universe."""
@@ -411,7 +420,11 @@ class MarketDataSync:
         market_data: MarketDataSettings | None = None,
         veto_policy: PortfolioVetoPolicy | None = None,
         clock: Clock = _utcnow,
+        collection_timeout_seconds: float = COLLECTION_TIMEOUT_SECONDS,
     ) -> None:
+        if not math.isfinite(collection_timeout_seconds) or collection_timeout_seconds <= 0:
+            raise ValueError("collection timeout must be positive and finite")
+        self._collection_timeout_seconds = collection_timeout_seconds
         self._database = database
         self._client = client
         self._sessions = sessions
@@ -458,6 +471,7 @@ class MarketDataSync:
 
     async def sync(self) -> DataSyncResult:
         now = self._clock().astimezone(UTC)
+        configuration_hash = self._configuration_hash()
 
         # The attempt is committed *before* the fetch, on purpose. A run recorded only on
         # success cannot distinguish "collection never started" from "collection started and the
@@ -467,13 +481,36 @@ class MarketDataSync:
         with self._database.transaction() as session:
             plane = IngestionControlPlane(session)
             run_id = plane.next_run_id(self.source_id, now)
-            plane.register_source(
+            source = plane.register_source(
                 source_id=self.source_id,
                 provider=self._market_data.provider,
                 source_kind="daily-bars",
-                configuration_hash=self._configuration_hash(),
+                configuration_hash=configuration_hash,
                 now=now,
             )
+            existing = plane.cursor(self.source_id, UNIVERSE_STREAM)
+            resume_from = None if existing is None else existing.last_observation_at
+            if existing is None:
+                # Legacy stores may contain real observations without ingestion control rows.
+                # Each symbol contributes its own position; the slowest stream sets recovery.
+                cache = MarketDataCache(StorageRepository(session))
+                positions = [
+                    values[-1].timestamp
+                    for symbol in self._config.universe
+                    if (
+                        values := cache.load(
+                            symbol=symbol,
+                            provider=self._market_data.provider,
+                            feed=self._market_data.feed,
+                            adjustment=self._market_data.adjustment,
+                            timeframe=self._market_data.timeframe,
+                        )
+                    )
+                ]
+                resume_from = min(positions, default=None)
+                start = plane.earliest_requested_start(self.source_id)
+                if start is not None:
+                    resume_from = start if resume_from is None else min(start, resume_from)
             plane.abandon_stale_runs(
                 older_than=now - ABANDON_RUNS_AFTER,
                 now=now,
@@ -486,8 +523,15 @@ class MarketDataSync:
                 now=now,
             )
         try:
-            return await self._collect(run_id, now=now)
-        except Exception as error:
+            async with asyncio.timeout(self._collection_timeout_seconds):
+                return await self._collect(
+                    run_id,
+                    now=now,
+                    existing=existing,
+                    resume_from=resume_from,
+                    source=source,
+                )
+        except (Exception, asyncio.CancelledError) as error:
             # Recorded and re-raised. The cycle still fails the way it always did; what changes
             # is that the failure survives the process, so a feed that has been broken since
             # Tuesday is answerable rather than merely absent.
@@ -500,19 +544,27 @@ class MarketDataSync:
                 )
             raise
 
-    async def _collect(self, run_id: str, *, now: datetime) -> DataSyncResult:
+    async def _collect(
+        self,
+        run_id: str,
+        *,
+        now: datetime,
+        existing: IngestionCursor | None,
+        resume_from: datetime | None,
+        source: IngestionSource,
+    ) -> DataSyncResult:
         calendar_sessions = await self._sessions.sessions()
         completed = latest_completed_session(calendar_sessions, now)
         if completed is None:
             raise StrategyDataError("broker calendar contains no completed session")
+        if resume_from is not None and resume_from > completed.close_at:
+            raise StrategyDataError("durable collection position is ahead of the calendar")
 
         # The strategy's warmup is not the only consumer of history any more. The correlation
         # veto measures dependence over its own window, and a store holding only what the signal
         # needs would leave that veto permanently unmeasurable -- refusing every order, correctly
         # and uselessly. Whichever consumer needs more sessions decides how many are fetched.
-        needed = max(
-            warmup_sessions(self._config), self._veto_policy.correlation_lookback_sessions
-        )
+        needed = max(warmup_sessions(self._config), self._veto_policy.correlation_lookback_sessions)
         history = [
             session for session in calendar_sessions if session.close_at <= completed.close_at
         ]
@@ -521,6 +573,14 @@ class MarketDataSync:
                 f"broker calendar provides {len(history)} completed sessions; {needed} required"
             )
         window = tuple(history[-needed:])
+        mode = RunMode.LIVE
+        if resume_from is not None and resume_from.date() < window[0].session_date:
+            if resume_from.date() < history[0].session_date:
+                raise StrategyDataError(
+                    "RECOVERY_CALENDAR_TOO_SHORT: calendar cannot cover the durable position"
+                )
+            window = tuple(item for item in history if item.session_date >= resume_from.date())
+            mode = RunMode.BACKFILL
         query = BarQuery(
             symbols=self._config.universe,
             start=datetime.combine(window[0].session_date, time.min, tzinfo=UTC),
@@ -530,17 +590,35 @@ class MarketDataSync:
             adjustment=self._market_data.adjustment,
             limit=10000,
         )
+        with self._database.transaction() as session:
+            IngestionControlPlane(session).plan_run(
+                run_id, requested_start=query.start, requested_end=query.end, mode=mode
+            )
         batch = await self._client.get_historical_bars(query)
+        if (
+            batch.provider != self._market_data.provider
+            or batch.feed != query.feed
+            or batch.adjustment != query.adjustment
+            or batch.timeframe != query.timeframe
+            or set(batch.requested_symbols) != set(query.symbols)
+            or batch.start != query.start
+            or batch.end != query.end
+        ):
+            raise MarketDataProtocolError("provider response identity does not match the query")
         aligned = align_daily_bars_to_session_closes(
             batch,
-            sessions=session_closes(
-                tuple(calendar_sessions), calendar=self._config.calendar
-            ),
+            sessions=session_closes(tuple(calendar_sessions), calendar=self._config.calendar),
         )
         expected = tuple(session.close_at for session in window)
         in_window = tuple(bar for bar in aligned.bars if bar.timestamp >= expected[0])
+        unique: dict[tuple[str, datetime], Bar] = {}
+        for bar in in_window:
+            key = (bar.symbol, bar.timestamp)
+            if key in unique and unique[key] != bar:
+                raise MarketDataProtocolError(f"conflicting duplicate bar for {bar.symbol}")
+            unique[key] = bar
         report = validate_bar_batch(
-            aligned.model_copy(update={"bars": in_window}),
+            aligned.model_copy(update={"bars": tuple(unique.values())}),
             expected_timestamps=expected,
             completed_through=completed.close_at,
         )
@@ -549,32 +627,58 @@ class MarketDataSync:
         # next run start after data nobody stored, and the gap would be permanent and silent.
         with self._database.transaction() as session:
             plane = IngestionControlPlane(session)
+            current_source = plane.get_source(self.source_id)
+            if current_source is None or not current_source.enabled:
+                raise IngestionError("source was disabled during collection")
+            if current_source != source:
+                raise CursorConflict("source configuration changed during collection")
+            current = plane.cursor(self.source_id, UNIVERSE_STREAM)
+            # A reset deletes the row and can recreate version 1. Compare the whole snapshot
+            # so a stale fetch cannot mistake that replacement for the original checkpoint.
+            if current != existing:
+                raise CursorConflict("another collector moved the checkpoint during the fetch")
             stored = MarketDataCache(StorageRepository(session)).store(report)
-            existing = plane.cursor(self.source_id, UNIVERSE_STREAM)
-            plane.complete_run(
-                run_id,
-                counts=RecordCounts(
-                    seen=len(in_window),
-                    inserted=stored,
-                    duplicate=len(report.valid_bars) - stored,
-                    rejected=len(in_window) - len(report.valid_bars),
-                ),
-                now=self._clock().astimezone(UTC),
-                cursor=CursorAdvance(
-                    stream_key=UNIVERSE_STREAM,
-                    cursor_value=completed.close_at.isoformat(),
-                    last_observation_at=(
-                        max(bar.timestamp for bar in report.valid_bars)
-                        if report.valid_bars
-                        else None
-                    ),
-                    expected_version=None if existing is None else existing.version,
-                ),
-                detail={
-                    "completed_through": completed.close_at.isoformat(),
-                    "ineligible_symbols": list(report.ineligible_symbols),
-                },
+            counts = RecordCounts(
+                seen=len(in_window),
+                inserted=stored,
+                duplicate=len(in_window) - len(unique) + len(report.valid_bars) - stored,
+                rejected=len(unique) - len(report.valid_bars),
             )
+            finished_at = self._clock().astimezone(UTC)
+            detail = {
+                "completed_through": completed.close_at.isoformat(),
+                "ineligible_symbols": list(report.ineligible_symbols),
+                "gap_count": len(report.gaps),
+            }
+            if report.ineligible_symbols:
+                plane.fail_run(
+                    run_id,
+                    counts=counts,
+                    now=finished_at,
+                    error_code="MARKET_DATA_INCOMPLETE_UNIVERSE",
+                    detail=detail,
+                )
+            else:
+                plane.complete_run(
+                    run_id,
+                    counts=counts,
+                    now=finished_at,
+                    cursor=CursorAdvance(
+                        stream_key=UNIVERSE_STREAM,
+                        cursor_value=completed.close_at.isoformat(),
+                        last_observation_at=(
+                            max(bar.timestamp for bar in report.valid_bars)
+                            if report.valid_bars
+                            else None
+                        ),
+                        expected_version=None if existing is None else existing.version,
+                    ),
+                    detail=detail,
+                )
+                if mode is RunMode.LIVE:
+                    plane.resolve_incidents(
+                        self.source_id, now=finished_at, detail="complete live collection recovered"
+                    )
 
         reasons: list[str] = []
         if report.ineligible_symbols:
@@ -703,9 +807,7 @@ class AdaptiveMomentumRunner:
             )
             return {}
 
-    def _record_contained_failure(
-        self, *, kind: str, message: str, occurred_at: datetime
-    ) -> None:
+    def _record_contained_failure(self, *, kind: str, message: str, occurred_at: datetime) -> None:
         """Record a contained observability failure, and never raise from doing so.
 
         A failure inside the handler for a failure must not be the thing that stops the cycle --
@@ -953,8 +1055,7 @@ class AdaptiveMomentumRunner:
             symbol = str(parent["symbol"])
             if symbol not in closes_by_symbol:
                 closes_by_symbol[symbol] = {
-                    bar.timestamp.date(): bar.close
-                    for bar in repository.list_bars(symbol=symbol)
+                    bar.timestamp.date(): bar.close for bar in repository.list_bars(symbol=symbol)
                 }
             outcome = evaluate_counterfactual(
                 observation_id=str(parent["observation_id"]),
@@ -1328,7 +1429,7 @@ class AdaptiveMomentumRunner:
         # entries stop at a 15% drawdown and cannot resume, because resuming needs the returns
         # that entries would have produced. See tests/unit/risk/test_drawdown_halt_is_absorbing.
         considered = (
-            equity_history[-self._config.drawdown_lookback_sessions:]
+            equity_history[-self._config.drawdown_lookback_sessions :]
             if self._config.drawdown_lookback_sessions > 0
             else equity_history
         )
@@ -1454,9 +1555,10 @@ class AdaptiveMomentumRunner:
                             research=research,
                         )
 
-                if request is not None and repository.get_order_intent(
-                    request.intent.intent_id
-                ) is not None:
+                if (
+                    request is not None
+                    and repository.get_order_intent(request.intent.intent_id) is not None
+                ):
                     # The same signal day already minted this client order identity, so a
                     # re-run must never submit a second order for it.
                     request = None
@@ -1613,13 +1715,11 @@ class AdaptiveMomentumRunner:
                 order_price=decision_price,
                 equity_marks=[
                     (snapshot.captured_at, snapshot.equity)
-                    for snapshot in repository.list_equity_snapshots(
-                        account_id=account.account_id
-                    )
+                    for snapshot in repository.list_equity_snapshots(account_id=account.account_id)
                 ],
-                symbol_bars=[(bar.timestamp, bar.volume) for bar in repository.list_bars(
-                    symbol=symbol
-                )],
+                symbol_bars=[
+                    (bar.timestamp, bar.volume) for bar in repository.list_bars(symbol=symbol)
+                ],
                 observed_at=created_at,
                 volume_sessions=self._veto_policy.minimum_volume_sessions,
                 classification=self._exposure,
