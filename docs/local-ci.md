@@ -181,3 +181,37 @@ bootstrap probe was exercised successfully in the separate 21-test host run. Raw
 JSON summary remain locally under `.local-ci/20260906T220919Z-a4eafa5d/`; private machine paths
 are not copied into GitHub. Keep #218 open pending actual Linux-container qualification and
 resolution of native WSL failures. Draft PR: #224.
+
+## Combined integration qualification (2026-09-07 UTC)
+
+This later run supersedes the Windows/WSL and Linux-container blockers in the historical record
+above. PRs #224, #225, #226 and #227 were combined at
+`0d12c8f1c31de2e5b2b6166beeabe9974f41af50`, including reviewed archive-attribute isolation and
+a correction to a Linux test fixture that remapped already-mapped temporary paths.
+
+| Check | Measured result |
+| --- | --- |
+| Native Windows entry point, isolated committed snapshot | PASS; 2782 passed, 33 skipped, 423.53 seconds |
+| Actual digest-pinned Docker build and offline Linux job | PASS; 2771 passed, 44 skipped, 467.05 seconds |
+| Ruff, both mypy platforms, lock consistency and Git cleanliness | PASS on both jobs; 226 application files and 3 helper files type-checked |
+| Focused CI/process/recovery tests | Windows: 40 passed; native Linux: 39 passed, 1 Windows-only skip |
+| Separate SQLite/PostgreSQL 16 UTF-8 matrix | 58 passed, 21.49 seconds; zero generated databases left; server stopped |
+| Independent review of all four PRs and archive-isolation follow-up | No remaining actionable findings |
+
+The Linux job used temporary Docker Engine 28.5.2 inside WSL on the available Windows host.
+Runtime inspection confirmed no host mounts, network none, all capabilities dropped,
+no-new-privileges, 4 CPUs, 8 GiB memory and 512 processes. The runner removed its owned container
+and image. This does not establish Docker Desktop or Omen/Pi deployment qualification.
+
+Windows skips comprise 26 optional PostgreSQL cases, four live-model cases, two symlink-privilege
+cases and one managed-Python bootstrap probe under the isolated home. Linux skips comprise the
+same 26 PostgreSQL and four live-model cases, 12 WSL/generated-code sandbox cases, and two
+Windows-only probes. PostgreSQL ran separately; the Windows run exercised the WSL cases, and the
+focused Windows run exercised bootstrap. Both full runs retained one existing Starlette warning.
+
+An earlier native Linux run exposed the corrected fixture bug. The first temporary PostgreSQL
+cluster used SQL-ASCII and failed driver initialization; the final qualification explicitly used
+UTF-8. No production change was made to disguise either failure. Full-suite evidence is tied to
+the combined code commit above; the subsequent documentation update does not change tested code.
+Hosted workflows remain manual-only and were not dispatched. Operational acceptance under #190
+and #218 remains distinct from this completed code-integration qualification.
