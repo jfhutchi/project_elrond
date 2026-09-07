@@ -26,7 +26,7 @@ operational cutover. SQLite PRAGMAs and backup logic are intentional backend-spe
 code; this issue covers the shared authoritative SQLAlchemy/Alembic schema path.
 
 
-- [ ] Publish the verified branch as a draft PR.
+- [x] Publish the verified branch as a draft PR.
 
 ## Verification
 
@@ -42,4 +42,8 @@ Independent review identified the libpq target override and CHECK-expression cov
 Both are corrected and regression-tested; follow-up review found no actionable issues.
 The disposable test cluster was stopped with no remaining generated databases; the existing
 PostgreSQL 16 main cluster remains online. No operational store was modified.
+
+
+Delivered as draft PR https://github.com/jfhutchi/project_elrond/pull/227.
+Final code and test commit: 995f6ce. Delivery follow-up changes documentation only.
 
