@@ -32,7 +32,7 @@ import json
 from collections.abc import Mapping
 from datetime import datetime
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 
@@ -190,9 +190,7 @@ class IngestionControlPlane:
 
     def list_sources(self) -> list[IngestionSource]:
         rows = (
-            self._session.execute(
-                select(ingestion_sources).order_by(ingestion_sources.c.source_id)
-            )
+            self._session.execute(select(ingestion_sources).order_by(ingestion_sources.c.source_id))
             .mappings()
             .all()
         )
@@ -249,6 +247,33 @@ class IngestionControlPlane:
         )
         self._session.execute(ingestion_runs.insert().values(**_run_values(run, detail)))
         return run
+
+    def plan_run(
+        self,
+        ingestion_run_id: str,
+        *,
+        requested_start: datetime,
+        requested_end: datetime,
+        mode: RunMode,
+    ) -> None:
+        """Freeze the range after calendar discovery and before the provider fetch.
+
+        Runs start before calendar I/O so failures there also survive a restart. Once planned,
+        the range and collection mode cannot be rewritten, including after completion.
+        """
+        run = self._require_running(ingestion_run_id)
+        start, end = utc(requested_start), utc(requested_end)
+        if end < start:
+            raise IngestionError("collection range ends before it starts")
+        if run.requested_start is not None or run.requested_end is not None:
+            raise IngestionError("collection range is already planned")
+        self._session.execute(
+            update(ingestion_runs)
+            .where(ingestion_runs.c.ingestion_run_id == ingestion_run_id)
+            .values(
+                requested_start=start.isoformat(), requested_end=end.isoformat(), mode=mode.value
+            )
+        )
 
     def complete_run(
         self,
@@ -371,9 +396,7 @@ class IngestionControlPlane:
     def get_run(self, ingestion_run_id: str) -> IngestionRun | None:
         row = (
             self._session.execute(
-                select(ingestion_runs).where(
-                    ingestion_runs.c.ingestion_run_id == ingestion_run_id
-                )
+                select(ingestion_runs).where(ingestion_runs.c.ingestion_run_id == ingestion_run_id)
             )
             .mappings()
             .one_or_none()
@@ -412,6 +435,19 @@ class IngestionControlPlane:
         )
         return [_run_from_row(row) for row in rows]
 
+    def earliest_requested_start(self, source_id: str) -> datetime | None:
+        """Retain known collection coverage when no trustworthy checkpoint exists.
+
+        An unplanned calendar failure must not hide an earlier incomplete fetch. Once a
+        checkpoint exists the collector uses it; without one, replay the full known range.
+        """
+        value = self._session.execute(
+            select(func.min(ingestion_runs.c.requested_start)).where(
+                ingestion_runs.c.source_id == source_id
+            )
+        ).scalar_one_or_none()
+        return None if value is None else utc(datetime.fromisoformat(str(value)))
+
     # --- cursors -------------------------------------------------------------------------
 
     def cursor(self, source_id: str, stream_key: str) -> IngestionCursor | None:
@@ -439,9 +475,7 @@ class IngestionControlPlane:
         )
         return [_cursor_from_row(row) for row in rows]
 
-    def reset_cursor(
-        self, source_id: str, stream_key: str, *, now: datetime, reason: str
-    ) -> None:
+    def reset_cursor(self, source_id: str, stream_key: str, *, now: datetime, reason: str) -> None:
         """Delete a checkpoint so the next run starts over, and say so durably.
 
         A cursor reset silently re-reads a range that was already collected. The re-read is

@@ -298,7 +298,7 @@ def resolve_health(
     last_success = None if cursor is None else cursor.last_success_at
 
     if latest_run is not None and latest_run.status in {RunStatus.FAILED, RunStatus.ABANDONED}:
-        if last_success is None or last_success < latest_run.started_at:
+        if last_success is None or last_success <= latest_run.started_at:
             verb = "failed" if latest_run.status is RunStatus.FAILED else "was abandoned"
             return (
                 SourceHealth.FAILED,

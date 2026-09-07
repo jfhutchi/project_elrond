@@ -152,15 +152,63 @@ which is the failure this whole issue is about.
 Zero sources is reported as zero sources, with a note saying so. That was the state the
 coordinator was found in during #190, and it is not health.
 
-## What is not here
+## Collector recovery and completion
 
-- **The retry loop.** This plane records attempts; it does not schedule them. Bounding retries
-  belongs to whatever drives collection (#143). What is guaranteed is that a provider failing all
-  afternoon is *visible*: every attempt is a countable row, the source does not drift back to
-  healthy because the last attempt was quiet, and one outage is one incident.
-- **Backfill orchestration.** `RunMode.BACKFILL` exists and is enforced; calculating a missing
-  interval from durable data and driving the catch-up is separate work, and it depends on an
-  authoritative store existing (#190).
+`MarketDataSync` retains the larger of the strategy warmup and frozen correlation lookbacks.
+If its durable position predates that window, it extends the request back to that position,
+including an overlapping session. A legacy store with no cursor uses the oldest latest bar across
+configured symbols, with the exact provider/feed/adjustment/timeframe identity. Previously planned
+ranges also survive without a cursor: the collector replays from the earliest recorded request,
+so a calendar failure cannot hide an older partially collected range. Resetting a cursor therefore
+requests conservative replay of the known range, rather than forgetting failed work.
+
+Recovery beyond the normal window is recorded as `BACKFILL` before fetching. It can store missing
+observations and checkpoint completed coverage, but cannot update `last_success_at` or resolve
+live-feed incidents. The following normal collection checks the latest window as `LIVE`. Neither
+operation writes paper fills, forward observations, experiment outcomes, or promotion evidence.
+
+The supplied calendar must cover the recovery position. If it does not, collection records a
+`RECOVERY_CALENDAR_TOO_SHORT` failure and stops before asking the provider for bars. Supply a
+calendar covering the actual outage before retrying; do not reset a checkpoint just to suppress
+this refusal. No dates are inferred from remembered deployment state, and no gap is synthesized.
+
+The run is recorded before calendar I/O, and its requested range and mode are frozen before the
+bar request. Observations and a successful checkpoint still commit together. An incomplete or
+empty response now records `FAILED` with `MARKET_DATA_INCOMPLETE_UNIVERSE`; valid observations may
+be retained, but the checkpoint and live-success timestamp stay unchanged. The caller still gets
+an unhealthy `DataSyncResult`. Replaying the range fills gaps without duplicating prior rows.
+Exact duplicates within a response are counted and deduplicated; conflicting duplicates or a
+response with the wrong provider/query identity are refused. Failures at the same timestamp as a
+previous success also report `FAILED`.
+
+The collector captures the complete source and cursor state before network I/O and compares them
+before writing. A second collector, source configuration change, pause, or checkpoint reset and
+recreation cannot silently authorize an obsolete fetch. The existing transaction and optimistic
+version check remain the final storage boundary.
+
+### Bounded requests and cancellation
+
+Alpaca bar and calendar clients already retry transient transport errors, HTTP 429, and HTTP 5xx
+up to twice. Collection reuses those retries. The collector adds a **120-second project-default
+async deadline** across calendar requests, pagination, and retry sleeps, including a very large
+provider `Retry-After`. It does not multiply the provider retry budget with an outer retry loop.
+The deadline is configurable through `MarketDataSync(collection_timeout_seconds=...)` and must be
+positive and finite. Exhaustion records a durable failed run/incident and propagates the error.
+Explicit task cancellation is also recorded as failed and remains cancellation to the caller.
+A hard process death leaves a running row for the existing abandoned-run recovery path.
+
+Verification includes a child process exiting after SQL bar inserts but before commit: SQLite
+rolls back those inserts, the checkpoint remains absent, and restart replays the range successfully.
+All recovery tests use temporary SQLite databases and fake provider I/O.
+
+## Operational work outside this implementation
+
+- **Running recovery on the deployed store.** This code does not select, create, migrate, or open
+  a deployment database. Inventory and activation remain subject to #190. Routine data sync will
+  use the recovery behavior after this change is reviewed, merged, and deliberately deployed.
+- **Independent stale monitoring and scheduling.** The control plane and operator report expose
+  freshness. A process that never wakes cannot emit its own incident; continuous scheduling and
+  external monitoring remain part of #143.
 - **A retention policy for heartbeats.** If the volume becomes material, a bounded policy may be
   added **for heartbeat rows only**. It must never delete market observations or research
   evidence.
