@@ -249,6 +249,9 @@ def test_linux_startup_scan_reports_wrapper_reference_without_exposing_content(
     original_path = Path
 
     def local_path(value):
+        candidate = original_path(value)
+        if candidate.is_relative_to(tmp_path):
+            return candidate
         return original_path(tmp_path / str(value).lstrip("/"))
 
     local_path.home = lambda: tmp_path / "home"
