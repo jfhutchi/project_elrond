@@ -25,6 +25,7 @@ from quantbot.domain import (
     IntentState,
     MarketClock,
     OrderIntent,
+    OrderSide,
     Position,
     StrategyIdentity,
 )
@@ -274,6 +275,48 @@ def stored_evaluations(database: Database) -> list[object]:
                 )
             ).mappings()
         )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("price", ["125", "75"])
+async def test_short_protection_routes_only_a_losing_short_to_a_buy_exit(database, price) -> None:
+    positions = (position("XLE", quantity="-2", price=price),)
+    seed_local(database, positions)
+    broker = ActionBroker(database, positions)
+    result = await action_supervisor(database, broker).evaluate(now=NOW)
+    if price == "125":
+        assert result.exit_required_count == 1
+        assert len(broker.submitted) == 1
+        assert broker.submitted[0].side is OrderSide.BUY
+        assert broker.submitted[0].quantity == Decimal("2")
+    else:
+        assert result.outcome is ProtectionCycleOutcome.HEALTHY
+        assert broker.submitted == []
+    with database.transaction() as session:
+        versions = (
+            session.execute(select(position_protection_cycles.c.policy_version)).scalars().all()
+        )
+    assert versions == ["position-protection-v2"]
+
+
+@pytest.mark.asyncio
+async def test_zero_broker_quantity_records_an_incident_without_crashing_or_submitting(
+    database,
+) -> None:
+    positions = (position("XLE", quantity="0", price="75"),)
+    seed_local(database, positions)
+    broker = ActionBroker(database, positions)
+    result = await action_supervisor(database, broker).evaluate(now=NOW)
+    assert result.outcome is ProtectionCycleOutcome.DEGRADED
+    assert result.unprotected_count == 1
+    assert broker.submitted == []
+    with database.transaction() as session:
+        outcomes = (
+            session.execute(select(position_protection_evaluations.c.outcome)).scalars().all()
+        )
+        actions = session.execute(select(position_protection_actions.c.action_id)).scalars().all()
+    assert outcomes == ["INCIDENT"]
+    assert actions == []
 
 
 @pytest.mark.asyncio

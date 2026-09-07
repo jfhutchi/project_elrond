@@ -44,7 +44,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from enum import StrEnum
 
@@ -99,7 +99,8 @@ class ProtectionDecision:
     observed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     #: The price the decision rested on, or `None` when there was not a usable one.
     price: Decimal | None = None
-    #: How far the position is from its entry, in basis points. `None` when unmeasurable.
+    #: Position-relative return from entry, in basis points: losses are negative for either side.
+    #: `None` when unmeasurable.
     move_bps: Decimal | None = None
 
     @property
@@ -131,16 +132,20 @@ class ProtectionPolicy:
     fires would make the whole supervisor look like it was working.
     """
 
-    #: Exit when a position is this far below its average entry, in basis points. 2000 = 20%.
+    #: Exit when a position loses this much relative to entry, in basis points. 2000 = 20%.
     hard_stop_bps: Decimal = Decimal("2000")
     #: Exit everything when account drawdown reaches this, in basis points. Matches the config's
     #: existing 20% halt rather than inventing a second number.
     account_drawdown_exit_bps: Decimal = Decimal("2000")
     maximum_price_age_days: int = MAXIMUM_PRICE_AGE_DAYS
 
-
-def _age_days(observed_at: datetime, priced_at: datetime) -> int:
-    return max((observed_at.astimezone(UTC) - priced_at.astimezone(UTC)).days, 0)
+    def __post_init__(self) -> None:
+        for name in ("hard_stop_bps", "account_drawdown_exit_bps"):
+            value = getattr(self, name)
+            if not isinstance(value, Decimal) or not value.is_finite() or value <= 0:
+                raise ValueError(f"{name} must be a positive finite Decimal")
+        if type(self.maximum_price_age_days) is not int or self.maximum_price_age_days < 0:
+            raise ValueError("maximum_price_age_days must be a nonnegative integer")
 
 
 def evaluate_position(
@@ -159,7 +164,17 @@ def evaluate_position(
     is the whole difference from the cycle's gates: a stale price or a broker mismatch changes
     the answer to `BLOCKED_STATE`, and does not cause the evaluation to be skipped.
     """
-    if position.average_entry_price <= 0:
+    if observed_at.tzinfo is None or observed_at.utcoffset() is None:
+        raise ValueError("observed_at must be timezone-aware")
+    if not position.quantity.is_finite() or position.quantity == 0:
+        return ProtectionDecision(
+            symbol=position.symbol,
+            outcome=ProtectionOutcome.INCIDENT,
+            rule=ProtectionRule.NONE,
+            reason="position quantity must be finite and nonzero to evaluate an open position",
+            observed_at=observed_at,
+        )
+    if not position.average_entry_price.is_finite() or position.average_entry_price <= 0:
         return ProtectionDecision(
             symbol=position.symbol,
             outcome=ProtectionOutcome.INCIDENT,
@@ -192,21 +207,58 @@ def evaluate_position(
             observed_at=observed_at,
         )
 
-    age = _age_days(observed_at, priced_at)
-    if age > policy.maximum_price_age_days:
+    if not price.is_finite() or price <= 0:
+        return ProtectionDecision(
+            symbol=position.symbol,
+            outcome=ProtectionOutcome.INCIDENT,
+            rule=ProtectionRule.NONE,
+            reason="market price must be positive and finite",
+            observed_at=observed_at,
+        )
+    if priced_at.tzinfo is None or priced_at.utcoffset() is None:
+        return ProtectionDecision(
+            symbol=position.symbol,
+            outcome=ProtectionOutcome.BLOCKED_STATE,
+            rule=ProtectionRule.NONE,
+            reason="price timestamp must be timezone-aware to establish freshness",
+            observed_at=observed_at,
+        )
+    age = observed_at.astimezone(UTC) - priced_at.astimezone(UTC)
+    if age < timedelta(0):
+        return ProtectionDecision(
+            symbol=position.symbol,
+            outcome=ProtectionOutcome.BLOCKED_STATE,
+            rule=ProtectionRule.NONE,
+            reason="price timestamp is in the future; freshness cannot be established",
+            observed_at=observed_at,
+        )
+    if age > timedelta(days=policy.maximum_price_age_days):
         return ProtectionDecision(
             symbol=position.symbol,
             outcome=ProtectionOutcome.BLOCKED_STATE,
             rule=ProtectionRule.NONE,
             reason=(
-                f"the last price is {age} days old; using it as though current is how a stop "
-                "fires at a level that no longer exists"
+                f"the last price is {age.days} days old (elapsed {age}); "
+                f"the maximum age is {policy.maximum_price_age_days} days"
             ),
             observed_at=observed_at,
             price=price,
         )
 
+    if account_drawdown_bps is not None and (
+        not account_drawdown_bps.is_finite() or account_drawdown_bps < 0
+    ):
+        return ProtectionDecision(
+            symbol=position.symbol,
+            outcome=ProtectionOutcome.INCIDENT,
+            rule=ProtectionRule.NONE,
+            reason="account drawdown must be finite and nonnegative",
+            observed_at=observed_at,
+        )
+
     move = (price - position.average_entry_price) / position.average_entry_price * Decimal(10_000)
+    if position.quantity < 0:
+        move = -move
 
     # Account drawdown before the per-position stop: it closes everything, so reporting a single
     # symbol's stop as the reason would name the smaller cause.

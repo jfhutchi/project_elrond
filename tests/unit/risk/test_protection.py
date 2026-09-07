@@ -238,7 +238,7 @@ def test_the_same_inputs_decide_the_same_way_twice() -> None:
 
 
 def test_every_position_gets_a_decision_including_the_unevaluable_ones() -> None:
-    """"Every open position is covered by a measurable protection state" needs the counts to match.
+    """ "Every open position is covered by a measurable protection state" needs the counts to match.
 
     A position omitted because it had no price would make the covered count look complete while
     the position nobody could evaluate quietly vanished -- which is exactly the shape of the
@@ -315,3 +315,71 @@ def test_a_price_past_the_window_is_not() -> None:
     result = decide(priced_at=NOW - timedelta(days=5), price=Decimal("99"))
 
     assert result.outcome is ProtectionOutcome.BLOCKED_STATE
+
+
+@pytest.mark.parametrize(
+    ("price", "move", "outcome"),
+    [
+        ("125", "-2500", ProtectionOutcome.EXIT_REQUIRED),
+        ("120", "-2000", ProtectionOutcome.EXIT_REQUIRED),
+        ("75", "2500", ProtectionOutcome.NO_ACTION),
+    ],
+)
+def test_short_stops_measure_loss_in_the_position_direction(price, move, outcome) -> None:
+    result = decide(position=position(quantity="-2"), price=Decimal(price))
+    assert result.outcome is outcome
+    assert result.move_bps == Decimal(move)
+
+
+def test_zero_quantity_is_an_incident_instead_of_an_exit() -> None:
+    result = decide(position=position(quantity="0"), price=Decimal("75"))
+    assert result.outcome is ProtectionOutcome.INCIDENT
+    assert not result.protected
+    assert "quantity" in result.reason
+
+
+@pytest.mark.parametrize("price", ["0", "-1", "NaN", "Infinity"])
+def test_invalid_price_is_an_incident_before_arithmetic(price: str) -> None:
+    result = decide(price=Decimal(price))
+    assert result.outcome is ProtectionOutcome.INCIDENT
+    assert not result.protected
+    assert "price" in result.reason
+
+
+@pytest.mark.parametrize("drawdown", ["-1", "NaN", "Infinity"])
+def test_invalid_account_drawdown_cannot_authorize_or_suppress_an_exit(drawdown: str) -> None:
+    result = decide(account_drawdown_bps=Decimal(drawdown))
+    assert result.outcome is ProtectionOutcome.INCIDENT
+    assert not result.protected
+    assert "drawdown" in result.reason
+
+
+@pytest.mark.parametrize("field", ["hard_stop_bps", "account_drawdown_exit_bps"])
+@pytest.mark.parametrize("threshold", ["0", "-1", "NaN", "Infinity"])
+def test_protection_thresholds_must_be_positive_and_finite(field: str, threshold: str) -> None:
+    with pytest.raises(ValueError, match=field):
+        ProtectionPolicy(**{field: Decimal(threshold)})
+
+
+@pytest.mark.parametrize("days", [-1, 1.5, True])
+def test_price_age_policy_must_be_a_nonnegative_integer(days) -> None:
+    with pytest.raises(ValueError, match="maximum_price_age_days"):
+        ProtectionPolicy(maximum_price_age_days=days)
+
+
+def test_price_one_microsecond_beyond_maximum_age_is_blocked() -> None:
+    result = decide(priced_at=NOW - timedelta(days=4, microseconds=1))
+    assert result.outcome is ProtectionOutcome.BLOCKED_STATE
+    assert not result.protected
+
+
+@pytest.mark.parametrize("priced_at", [NOW + timedelta(microseconds=1), NOW.replace(tzinfo=None)])
+def test_unusable_price_timestamp_cannot_be_treated_as_fresh(priced_at: datetime) -> None:
+    result = decide(priced_at=priced_at)
+    assert result.outcome is ProtectionOutcome.BLOCKED_STATE
+    assert not result.protected
+
+
+def test_naive_observation_time_is_refused() -> None:
+    with pytest.raises(ValueError, match="observed_at"):
+        decide(observed_at=NOW.replace(tzinfo=None))
