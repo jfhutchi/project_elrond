@@ -27,7 +27,7 @@ These defects are independently reproducible without deployment access.
   exact freshness, conservative invalid-input handling, and historical attribution.
 - [x] Run focused tests, Ruff, both mypy targets and the isolated full suite. Obtain independent
   review, fix findings, and record measured results.
-- [ ] Commit and publish a draft PR referencing #157, leaving deployment acceptance open.
+- [x] Commit and publish a draft PR referencing #157, leaving deployment acceptance open.
 
 Execution uses test-driven changes inline. Validation commands are `pytest -q
 tests/unit/risk/test_protection.py tests/unit/operations/test_position_protection_supervisor.py
@@ -39,4 +39,8 @@ Verification: baseline 56 passed; 29 new regression cases failed before the fix;
 Ruff and linux/win32 mypy passed (225 files each). Full isolated suite: 2,706 passed, 6 skipped,
 1 existing Starlette warning in 365.01s. Skips are four live-model and two Windows symlink tests.
 Independent review found no actionable issues. No deployment was activated.
+
+
+Delivered as draft PR https://github.com/jfhutchi/project_elrond/pull/226.
+Tested code commit: fd9ade4. The delivery follow-up changes documentation only.
 
