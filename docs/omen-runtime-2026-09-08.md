@@ -39,7 +39,9 @@ findings are checked-in institutional history, not newly performed experiments.
 Recovery used `quantbot deployment-status` before writable runtime commands. Bounded scans
 covered D:, the user profile, OneDrive, Documents, Downloads, prior recovery directories,
 ProgramData, Public, `.claude`, AppData/Roaming and Windows.old/Users. The whole-profile scan
-hit its cap in packaged dependencies; targeted operational scans did not. Unreadable system
+hit its cap in packaged dependencies; targeted operational scans did not. A final uncapped
+`rg --files --hidden --no-ignore` profile pass found 191 database-extension paths, with no
+additional operational Elrond candidate and no reported enumeration errors. Unreadable system
 directories and excluded dependencies remain explicit in local inventory JSON. Windows.old held
 774 Elrond-schema databases, all pytest temporary fixtures. `tests/conftest.py` establishes their
 `deployment*` fixture provenance; those candidates are not operational ledgers. No previous
