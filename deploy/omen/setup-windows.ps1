@@ -140,13 +140,17 @@ function Quote-TaskArgument([string] $Value) {
 }
 
 $StateDirectory = Split-Path -Parent $Database
+$ServiceHost = & (Join-Path $PSScriptRoot 'build-service-host.ps1') `
+    -OutputDirectory (Join-Path $StateDirectory 'service-host')
 foreach ($Definition in $Definitions) {
-    $Arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File ' +
+    $LauncherLog = Join-Path $StateDirectory ('launcher-logs\' + $Definition.Component + '.log')
+    $Arguments = (Quote-TaskArgument $LauncherLog) +
+        ' -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File ' +
         (Quote-TaskArgument $ServiceWrapper) + ' -Repository ' +
         (Quote-TaskArgument $Repository) + ' -EnvironmentFile ' +
         (Quote-TaskArgument $EnvironmentFile) + ' -Commit ' + $Commit + ' -Database ' +
         (Quote-TaskArgument $Database) + ' -Component ' + $Definition.Component
-    $Action = New-ScheduledTaskAction -Execute $PowerShell -Argument $Arguments `
+    $Action = New-ScheduledTaskAction -Execute $ServiceHost -Argument $Arguments `
         -WorkingDirectory $StateDirectory
     if ($Mode -eq 'Boot') {
         $PrimaryTrigger = New-ScheduledTaskTrigger -AtStartup

@@ -69,6 +69,20 @@ Before updating a running deployment, stop its tasks through Task Scheduler, ver
 then rerun with `-UpdateManaged` to pin the new clean commit and start enabled tasks again.
 The installer refuses to update running tasks because registration alone does not replace them.
 
+Scheduled actions run through a small Windows GUI executable so Windows does not allocate a
+terminal before PowerShell can hide it. `build-service-host.ps1` compiles the reviewed C# sources
+with the installed .NET Framework compiler into `service-host/<source fingerprint>/` beside the
+database, outside Git. The installer checks a cached executable's digest before reuse. The host
+owns a kill-on-close Job Object before launching PowerShell with `CreateNoWindow`; task shutdown
+therefore stops the complete descendant tree. Existing wrapper validation and nested jobs remain
+in place. Startup errors go to `launcher-logs/<component>.log` beside the database; normal
+application logs retain their configured location. Native exit codes become task results.
+
+The separately registered `ElrondModelServer` uses the same host with its existing
+`start-model-server.ps1` arguments and an absolute launcher log as the first host argument.
+Updating its action preserves its task triggers, principal and settings; stop it and verify
+descendant shutdown before replacing the action, then start it again.
+
 The smallest broker activation step is to supply `ALPACA_PAPER_API_KEY`, `ALPACA_PAPER_API_SECRET`
 and the verified `EXPECTED_ACCOUNT_ID` in the existing restricted external environment file.
 Do not put credential values in shell commands, chat, Git or task arguments. After injection,
