@@ -260,5 +260,44 @@ def test_a_review_with_no_reasons_is_not_a_critique() -> None:
     """
     reviewer = critic({"verdict": "PROCEED", "reasons": []})
 
-    with pytest.raises(Exception, match="not a valid ModelJudgment"):
+    with pytest.raises(ModelCriticRefused, match="not a valid ModelJudgment"):
         reviewer.review("H-1", 1, now=NOW)
+
+
+def test_non_json_is_a_typed_refusal_and_cannot_reuse_previous_provenance() -> None:
+    replies = iter([json.dumps({"verdict": "PROCEED", "reasons": ["example"]}),
+                    "```json\n{}\n``` PRIVATE_MODEL_TEXT"])
+
+    def post(url: str, payload: object, *, timeout_seconds: float) -> str:
+        return json.dumps({"choices": [{"message": {"content": next(replies)}}]})
+
+    runtime = ModelRuntime(
+        RoleRouting(chains={ModelRole.CRITIC: (spec(),)}), OpenAICompatibleTransport(post)
+    )
+    reviewer = ModelCritic(runtime, describe)
+    reviewer.review("H-1", 1, now=NOW)
+    assert reviewer.last_response is not None
+    with pytest.raises(ModelCriticRefused, match="did not return JSON") as refusal:
+        reviewer.review("H-2", 1, now=NOW)
+    assert reviewer.last_response is None
+    assert "PRIVATE_MODEL_TEXT" not in str(refusal.value)
+
+
+@pytest.mark.parametrize("dimension,severity", [
+    (MECHANICAL_CHECKS[0], "BLOCKING"),
+    ("economic mechanism plausibility", "kind of important"),
+])
+def test_rejected_objections_leave_no_accepted_provenance(
+    dimension: str, severity: str,
+) -> None:
+    judgment: dict[str, object] = {"verdict": "PROCEED", "reasons": ["example"]}
+    reviewer = critic(judgment)
+    reviewer.review("H-1", 1, now=NOW)
+    assert reviewer.last_response is not None
+    judgment["verdict"] = "REVISE"
+    judgment["objections"] = [
+        {"dimension": dimension, "severity": severity, "finding": "example concern"}
+    ]
+    with pytest.raises(ModelCriticRefused):
+        reviewer.review("H-2", 1, now=NOW)
+    assert reviewer.last_response is None

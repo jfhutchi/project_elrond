@@ -43,7 +43,13 @@ from quantbot.research.critic import (
     Severity,
 )
 from quantbot.research.manifest import ModelProvenance
-from quantbot.research.models import ModelResponse, ModelRole, ModelRuntime, PromptTemplate
+from quantbot.research.models import (
+    ModelResponse,
+    ModelRole,
+    ModelRuntime,
+    PromptTemplate,
+    StructuredOutputError,
+)
 
 CRITIC_PROMPT = PromptTemplate(
     name="adversarial-critic",
@@ -132,18 +138,23 @@ class ModelCritic:
         return self._last
 
     def review(self, hypothesis_id: str, version: int, *, now: datetime) -> Critique:
-        judgment, response = self._runtime.call_structured(
-            ModelRole.CRITIC,
-            self._template,
-            {
-                "dimensions": "\n".join(f"- {item}" for item in JUDGMENT_DIMENSIONS),
-                "hypothesis": self._describe(hypothesis_id, version),
-            },
-            ModelJudgment,
-            now=now,
-        )
-        self._last = response
-
+        # A failed second request must not expose the first hypothesis's provenance.
+        self._last = None
+        try:
+            judgment, response = self._runtime.call_structured(
+                ModelRole.CRITIC,
+                self._template,
+                {
+                    "dimensions": "\n".join(f"- {item}" for item in JUDGMENT_DIMENSIONS),
+                    "hypothesis": self._describe(hypothesis_id, version),
+                },
+                ModelJudgment,
+                now=now,
+            )
+        except StructuredOutputError as error:
+            # Preserve strict JSON/schema validation and expose the critic's refusal
+            # contract. StructuredOutputError deliberately omits the model's raw text.
+            raise ModelCriticRefused(str(error)) from error
         provenance = response.provenance()
         objections = tuple(_objection(raw, provenance) for raw in judgment.objections)
         mechanical = [item.check for item in objections if item.check in MECHANICAL_CHECKS]
@@ -165,7 +176,7 @@ class ModelCritic:
             else judgment.verdict
         )
 
-        return Critique(
+        critique = Critique(
             hypothesis_id=hypothesis_id,
             hypothesis_version=version,
             critic=self.name,
@@ -178,6 +189,8 @@ class ModelCritic:
             unassessed=tuple(judgment.unassessed) + MECHANICAL_CHECKS,
             produced_at=now,
         )
+        self._last = response
+        return critique
 
 
 def _objection(raw: dict[str, str], provenance: ModelProvenance) -> Objection:
