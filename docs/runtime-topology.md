@@ -15,8 +15,12 @@ changing the host.
 
 The policy designates Omen as the only authority allowed to run, but it does not manufacture proof
 that Omen currently holds global authority. Cross-host fencing remains `UNKNOWN`; a local lock does
-not fence an unmeasured stale installation on some other host. Broker state also remains unprobed.
-Until the trading task/process and broker evidence are recorded, deployment status is `PARTIAL`.
+not fence an unmeasured stale installation on some other host. PAPER broker reconciliation has
+been exercised and is clean. At 23:00 UTC the broker account, risk check and trade-stream check
+passed; readiness remains blocked by the durable kill switch after the 20:05 UTC order rejection.
+The tested entry-budget fix at `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` awaits deployment because
+Windows elevation was canceled. The running checkout remains `55cb00072f86a69091fc5094cc2a47fe235f151b`.
+Neither the software fix nor startup configuration alone establishes readiness to resume orders.
 
 ## Measured Omen capacity — 2026-09-08
 
@@ -33,12 +37,18 @@ Until the trading task/process and broker evidence are recorded, deployment stat
 
 No Elrond process, startup registration, operational ledger or credentials were discovered in the
 bounded pre-install inventory. An expanded old-profile scan found only pytest fixture databases,
-not an operational candidate. A fresh schema-27 PAPER ledger was then created at
-`D:\Elrond\state\quantbot-paper.db`, with an engaged kill switch, zero runs/fills/qualification and
-a verified initial backup. Native Task Scheduler registration for the signed-in user with an
-Interactive logon was exercised successfully. At-boot and S4U registration returned Access denied
-for the non-administrator account, so signed-in supervision is only `PARTIAL` and is not evidence
-of unattended reboot recovery.
+not an operational candidate. The initial store at `D:\Elrond\state\quantbot-paper.db` is preserved.
+After the operator supplied a fresh PAPER account, a separate schema-27 store was established at
+`D:\Elrond\state\quantbot-paper-fresh-20260908.db`, UUID `cd2a5911-853a-484e-bbc8-d0c27b5d27aa`.
+Its account was reconciled before activation. Prior forward history was not migrated; the seeded
+institutional findings are not trading history. A verified online backup retains its identity.
+
+All seven tasks now use local standard account `LEANNES-LAPTOP\erlond`, Password logon, Limited
+privileges, AtStartup and timed triggers. Console, PAPER daemon, protection and model server run
+in noninteractive session 0; ingestion, research and reporting complete between scheduled runs.
+Task Scheduler stop/start removed the console process tree and restored HTTP 200 against the
+same store. Startup registration is verified; a physical reboot has not been tested. Earlier
+Interactive registration and elevation failures are historical, superseded by this account setup.
 
 Portable Ollama 0.33.3 is registered as `ElrondModelServer` and measured listening only on
 `127.0.0.1:11434` in CPU mode. Two offline Kronos runs produced the same 240 values and peaked near

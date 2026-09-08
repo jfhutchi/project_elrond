@@ -2,6 +2,13 @@
 
 **Issue:** #190 · **Schema:** 27 · **Command:** `quantbot deployment-status`
 
+Current Omen observations are in [the September 8 runtime record](omen-runtime-2026-09-08.md).
+Local-account startup tasks run from commit `55cb00072f86a69091fc5094cc2a47fe235f151b` against
+`D:\Elrond\state\quantbot-paper-fresh-20260908.db`. PAPER reconciliation is clean, but new orders
+remain halted after a broker rejection. The tested entry-budget update awaits Windows elevation
+for deployment. This document describes the evidence mechanism; its historical inventory below
+must not be read as the current host's state.
+
 ---
 
 ## Why this exists

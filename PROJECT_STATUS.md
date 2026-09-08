@@ -2,8 +2,9 @@
 
 > Historical generated snapshot. It does not establish current broker, ledger or deployment
 > state. As of 2026-09-08, the Pi is retired by operator policy and the native Windows Omen is the
-> sole permitted PAPER coordinator. A fresh kill-engaged PAPER ledger exists, while trading and
-> broker evidence remain `PARTIAL`.
+> sole permitted PAPER coordinator. Its local-account startup tasks run and PAPER reconciliation
+> is clean, but new trading remains halted after a broker rejection. The tested entry-budget fix
+> awaits deployment; see [current runtime evidence](docs/omen-runtime-2026-09-08.md).
 
 Generated at: 2026-08-18T00:57:32Z
 

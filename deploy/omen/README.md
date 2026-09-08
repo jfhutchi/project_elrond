@@ -10,7 +10,7 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Latest status (22:28 UTC):** All seven tasks use local standard account
+**Latest status (23:00 UTC):** All seven tasks use local standard account
 `LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
 The console, PAPER daemon, protection and model server run; ingestion, research and report have
 completed successfully. Startup registration is verified, but a physical reboot has not been
@@ -19,9 +19,11 @@ processes were observed in noninteractive Windows session 0. The active ledger r
 `D:\Elrond\state\quantbot-paper-fresh-20260908.db`.
 Trading is halted: an earlier Alpaca HTTP 403 rejection engaged the kill switch at 20:05 UTC.
 Nine accepted PAPER orders remain unfilled; reconciliation finds zero differences. The switch
-has not been cleared during the account change. See the
+has not been cleared during the account change. Runtime commit `55cb00072f86a69091fc5094cc2a47fe235f151b`
+remains active. The tested entry-budget fix at `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` is pushed
+but not deployed because Windows elevation was canceled. See the
 [current evidence follow-up](../../docs/omen-runtime-2026-09-08.md) for measured details and the
-remaining broker-rejection investigation. Older inventory below is historical evidence.
+deployment limitation and rejection evidence. Older inventory below is historical evidence.
 
 The target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen 7 6800H
 (8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M (disabled, device error 22; CPU execution verified), approximately 781 GiB free on C: and 931 GiB free on D:. Python 3.11.16
@@ -130,12 +132,18 @@ another host.
 
 ## Ledger provenance
 
-No prior operational Elrond ledger was discovered in the bounded 2026-09-08 recovery scans. A fresh
-PAPER ledger now exists at `D:\Elrond\state\quantbot-paper.db`, schema 27 / revision 0027, lineage
-`2244c782-29e9-4ab0-bff8-bced024a226b`. It contains 25 seeded historical findings, zero runs,
-fills or qualification observations, and the default engaged kill switch. Its initial backup at
+No prior operational Elrond ledger was discovered in the bounded 2026-09-08 recovery scans. The
+initial PAPER ledger at `D:\Elrond\state\quantbot-paper.db`, schema 27 / revision 0027, lineage
+`2244c782-29e9-4ab0-bff8-bced024a226b`, was created with 25 seeded historical findings and no forward
+history. It is preserved as a prior store. Its initial backup at
 `D:\Elrond\backups\quantbot-paper-initial-20260908.db` passed integrity checking and has an
 identical logical dump. It does not inherit Alienware/Pi forward history.
+
+The **active** ledger is `D:\Elrond\state\quantbot-paper-fresh-20260908.db`, UUID
+`cd2a5911-853a-484e-bbc8-d0c27b5d27aa`, schema 27 / revision 0027. It belongs to the fresh PAPER
+account supplied by the operator and was reconciled before activation. Its verified online backup
+is `D:\Elrond\backups\quantbot-paper-local-account-20260908.db`. The nine accepted and one rejected
+intents are actual September 8 events; no previous forward history was migrated into this store.
 
 Portable Ollama 0.33.3 currently runs through the `ElrondModelServer` task on CPU and listens only
 on `127.0.0.1:11434`. Two deterministic offline Kronos runs completed with 240 values and an

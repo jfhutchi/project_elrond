@@ -10,10 +10,11 @@ and #38.
 
 ## Status
 
-`quantbot.node` exists: identity, capability detection, role policy. The Omen now has a fresh
-PAPER ledger and a loopback-only local model service, but the trading runtime and broker remain
-unverified, so deployment is `PARTIAL`. The backlog below is historical planning unless a future
-measured need justifies another node.
+`quantbot.node` exists: identity, capability detection, role policy. The Omen's local-account
+startup tasks, PAPER ledger, reconciliation and loopback model service have been exercised.
+New trading is halted by the kill switch after a broker rejection; the tested entry-budget fix
+awaits Windows elevation for deployment. See [current evidence](omen-runtime-2026-09-08.md).
+The backlog below is historical planning unless a future measured need justifies another node.
 
 ## What the repository actually assumes today
 
@@ -165,9 +166,11 @@ loopback, and every reachable port must be documented with its purpose.
 
 Live trading is untouched by all of this. Installing a node must never enable it.
 
-`deploy/refuse-live-trading.sh` remains the PAPER boundary for the active Omen installation path.
-The retired Pi installer does not read a credential file: it exits immediately with a named policy
-refusal before doing anything. Run the shared guard directly against a credential file at any time:
+The active native Windows path validates PAPER-only authority through the application parser in
+`quantbot.operations.service`, invoked by `deploy/omen/setup-windows.ps1` and the service wrapper.
+The shell guard `deploy/refuse-live-trading.sh` remains for historical shell deployment paths;
+it is not the native Windows startup boundary. The retired Pi installer exits immediately before
+reading credentials or inspecting the host. The shell guard can also be checked directly:
 
 ```bash
 bash deploy/refuse-live-trading.sh ~/.config/quantbot/quantbot.env

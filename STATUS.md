@@ -2,8 +2,9 @@
 
 > **Runtime correction — 2026-09-08:** the Pi is retired entirely by operator policy and must not
 > be contacted or used for any role. The native Windows Omen is the sole permitted PAPER
-> coordinator, with no Alienware dependency. A fresh kill-engaged ledger exists, but trading and
-> broker evidence remain `PARTIAL`; see [`docs/runtime-topology.md`](docs/runtime-topology.md) and
+> coordinator, with no Alienware dependency. Local-account startup tasks are running and PAPER
+> reconciliation is clean. The kill switch remains engaged after a broker rejection; deployment
+> of the tested entry-budget fix awaits Windows elevation. See [`docs/runtime-topology.md`](docs/runtime-topology.md) and
 > [`docs/omen-runtime-2026-09-08.md`](docs/omen-runtime-2026-09-08.md).
 
 ## START HERE
