@@ -430,6 +430,7 @@ class ModelRuntime:
         *,
         now: datetime,
         needs: Capability = frozenset(),
+        _response_format: Mapping[str, object] | None = None,
     ) -> ModelResponse:
         prompt = template.render(values)
         chain = self._routing.chain(role)
@@ -445,6 +446,16 @@ class ModelRuntime:
                 # unparseable text, which reads like a bad answer rather than a bad route.
                 attempted.append(f"{spec.model} (cannot {', '.join(lacking)})")
                 continue
+            if _response_format is not None:
+                # Keep the actual request contract in provenance without changing routing
+                # configuration or forcing subsequent plain-text calls to return JSON.
+                spec = ModelSpec.model_validate({
+                    **spec.model_dump(),
+                    "parameters": {
+                        **spec.parameters,
+                        "response_format": json.dumps(_response_format, sort_keys=True),
+                    },
+                })
             try:
                 text, prompt_tokens, completion_tokens = self._transport.complete(
                     spec, prompt, timeout_seconds=self._timeout
@@ -496,7 +507,13 @@ class ModelRuntime:
         leave a parsed result with nothing saying which model produced it or whether that model
         was a fallback.
         """
-        response = self.call(role, template, values, now=now, needs=STRUCTURED_OUTPUT)
+        response = self.call(
+            role, template, values, now=now, needs=STRUCTURED_OUTPUT,
+            _response_format={
+                "type": "json_schema",
+                "json_schema": {"name": schema.__name__, "schema": schema.model_json_schema()},
+            },
+        )
         try:
             payload = json.loads(response.text)
         except ValueError as error:
@@ -583,7 +600,8 @@ _WIRE_TYPES: Mapping[str, type] = MappingProxyType(
 def _typed_parameters(parameters: Mapping[str, str]) -> dict[str, object]:
     """Convert stored string parameters into the types an OpenAI-compatible server expects.
 
-    Only names in `_WIRE_TYPES` are converted, and anything else is passed through unchanged. A
+    Numeric names in `_WIRE_TYPES` and the JSON object `response_format` are converted;
+    other names pass through unchanged. A
     blanket "try float() on everything" would eventually mangle a parameter that is genuinely a
     string -- `stop` and `user` are the obvious ones -- and silently changing a value's type is
     how a request stops meaning what it said.
@@ -594,6 +612,15 @@ def _typed_parameters(parameters: Mapping[str, str]) -> dict[str, object]:
     """
     converted: dict[str, object] = {}
     for name, raw in parameters.items():
+        if name == "response_format":
+            try:
+                structured = json.loads(raw)
+                if not isinstance(structured, dict):
+                    raise ValueError("object required")
+            except (TypeError, ValueError) as error:
+                raise ModelError("response_format must encode a JSON object") from error
+            converted[name] = structured
+            continue
         wire = _WIRE_TYPES.get(name)
         if wire is None:
             converted[name] = raw
