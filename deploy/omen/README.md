@@ -34,7 +34,7 @@ Run from an ordinary PowerShell session at the reviewed checkout:
 ```powershell
 & .\deploy\omen\setup-windows.ps1 `
     -EnvironmentFile 'C:\Users\leepa\.config\quantbot\quantbot.env' `
-    -Database 'D:\Elrond\state\quantbot-paper.db' 
+    -Database 'D:\Elrond\state\quantbot-paper.db'
 ```
 
 The installer must keep `TRADING_MODE=PAPER`, `BROKER_ENVIRONMENT=PAPER`, and
