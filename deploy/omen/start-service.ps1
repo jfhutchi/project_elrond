@@ -26,18 +26,40 @@ if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
 if (-not (Test-Path -LiteralPath $Database -PathType Leaf)) {
     throw 'SERVICE_WRAPPER_DATABASE_NOT_FOUND'
 }
-$Python = Join-Path $Repository '.venv\Scripts\python.exe'
 $Source = Join-Path $Repository 'src'
+$Venv = Join-Path $Repository '.venv'
+$VenvConfig = Join-Path $Venv 'pyvenv.cfg'
+$SitePackages = Join-Path $Venv 'Lib\site-packages'
 $JobHelper = Join-Path $PSScriptRoot 'windows-job.ps1'
-if (-not (Test-Path -LiteralPath $Python -PathType Leaf) -or
+if (-not (Test-Path -LiteralPath $VenvConfig -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $SitePackages -PathType Container) -or
     -not (Test-Path -LiteralPath $Source -PathType Container) -or
     -not (Test-Path -LiteralPath $JobHelper -PathType Leaf)) {
     throw 'SERVICE_WRAPPER_RUNTIME_NOT_FOUND'
 }
+$Homes = @(
+    Get-Content -LiteralPath $VenvConfig | ForEach-Object {
+        if ($_ -match '^home\s*=\s*(.+?)\s*$') { $Matches[1] }
+    }
+)
+if ($Homes.Count -ne 1 -or -not [System.IO.Path]::IsPathRooted($Homes[0]) -or
+    $Homes[0].Contains('"')) {
+    throw 'SERVICE_WRAPPER_VENV_HOME_INVALID'
+}
+$Python = Join-Path $Homes[0] 'python.exe'
+if (-not (Test-Path -LiteralPath $Python -PathType Leaf)) {
+    throw 'SERVICE_WRAPPER_BASE_PYTHON_NOT_FOUND'
+}
 
-# Do not inherit a caller-controlled module path. The venv supplies third-party packages and this
-# fixed source root supplies the pinned application module validated by service.py itself.
-$env:PYTHONPATH = $Source
+# Bypass uv's venv redirector: Task Scheduler causes it to treat the opening executable quote as
+# part of its base-Python path. Supply exactly the venv packages and pinned source to the base
+# interpreter, disable the user site, and remove Python launcher variables inherited from the
+# scheduler service.
+$env:PYTHONPATH = $Source + [System.IO.Path]::PathSeparator + $SitePackages
+$env:PYTHONNOUSERSITE = '1'
+[Environment]::SetEnvironmentVariable('PYTHONHOME', $null, 'Process')
+[Environment]::SetEnvironmentVariable('PYTHONEXECUTABLE', $null, 'Process')
+[Environment]::SetEnvironmentVariable('__PYVENV_LAUNCHER__', $null, 'Process')
 . $JobHelper
 $ServiceJob = New-ElrondProcessJob
 
@@ -45,7 +67,7 @@ $ServiceJob = New-ElrondProcessJob
 # wraps native stderr as error records under Stop, even when the child is behaving correctly.
 $ErrorActionPreference = 'Continue'
 $global:LASTEXITCODE = $null
-& $Python -m quantbot.operations.service --env-file $EnvironmentFile --commit $Commit `
+& $Python -s -m quantbot.operations.service --env-file $EnvironmentFile --commit $Commit `
     --database $Database --component $Component
 if ($null -eq $LASTEXITCODE) { throw 'SERVICE_WRAPPER_NO_EXIT_CODE' }
 exit $LASTEXITCODE

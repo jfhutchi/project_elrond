@@ -442,9 +442,10 @@ def test_service_wrapper_terminates_its_python_process_tree(tmp_path: Path) -> N
     (operations / "__init__.py").write_text("", encoding="utf-8")
     ready = tmp_path / "ready"
     (operations / "service.py").write_text(
-        "import os, time\n"
+        "import json, os, sys, time\n"
         "from pathlib import Path\n"
-        "Path(os.environ['ELROND_WRAPPER_READY']).write_text(str(os.getpid()))\n"
+        "Path(os.environ['ELROND_WRAPPER_READY']).write_text(json.dumps({"
+        "'pid': os.getpid(), 'executable': sys.executable}))\n"
         "time.sleep(60)\n",
         encoding="utf-8",
     )
@@ -496,7 +497,16 @@ def test_service_wrapper_terminates_its_python_process_tree(tmp_path: Path) -> N
         while time.monotonic() < deadline and not ready.exists():
             time.sleep(0.05)
         assert ready.exists(), "service wrapper did not launch the fixed-checkout module"
-        child_id = int(ready.read_text(encoding="utf-8"))
+        launched = json.loads(ready.read_text(encoding="utf-8"))
+        child_id = int(launched["pid"])
+        home = next(
+            line.partition("=")[2].strip()
+            for line in (source_root / ".venv" / "pyvenv.cfg")
+            .read_text(encoding="utf-8")
+            .splitlines()
+            if line.startswith("home =")
+        )
+        assert Path(launched["executable"]).resolve() == Path(home, "python.exe").resolve()
 
         process.kill()
         process.wait(timeout=10)
