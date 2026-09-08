@@ -1,5 +1,43 @@
 # Omen deployment evidence — 2026-09-08
 
+## Tested entry-budget fix; deployment pending — 22:59 UTC
+
+Implementation commit `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` fixes a verified funding-budget
+defect: each newly planned order now consumes the remaining batch buying power exactly once.
+Existing broker orders retain their exposure/risk reservations without deducting buying power
+already reserved by the broker. The production settings add a project default reserve of 500
+basis points, applied once to available buying power. See [the rationale and limits](omen-entry-buying-power.md).
+No risk gate is removed, rejected intent revived, or historical result recomputed.
+
+Full Windows local CI on that exact clean commit passed **2,815 tests, 45 skipped, one warning
+in 521.45 seconds**, plus Ruff, Linux/win32 type checks and lock/snapshot checks. Linux execution
+was **NOT RUN / DOCKER_NOT_FOUND**, so aggregate CI exited 1. Focused risk/config/runtime tests
+passed 353 tests; independent review found no actionable issue. These are software checks,
+not forward trading evidence.
+
+A read-only broker probe at 22:56:36 UTC found PAPER account status ACTIVE, order entry allowed,
+buying power 49.44, nine open unfilled buys and zero positions. The candidate portfolio builder
+retained pending reference exposure 449.99922076 and computed new entry reference budget
+46.968 after the reserve. The historical DBC quantity at the latest stored close was
+49.999982375. This supports the mitigation; the original HTTP 403 response body is unavailable,
+so its exact reason remains unproven. This diagnostic generated/submitted no order and changed
+no trading ledger state.
+
+The elevation request for deployment was canceled before the deployment script started. The
+active checkout therefore remains `55cb00072f86a69091fc5094cc2a47fe235f151b`, and the new budgeting
+behavior is **not deployed**. Console, daemon, protection and model server remain Running under
+the local `erlond` account. Ingestion, research and report are Ready after successful exit 0;
+Ready is their normal between-run state. The existing durable kill switch remains engaged.
+The tested update and subsequent measured readiness/clearance still require deployment through
+the Windows administrator boundary. No canceled elevation was retried or bypassed.
+
+Evidence: `D:\Elrond\evidence\entry-budget-local-ci-summary.json`, `entry-budget-local-ci.log`,
+`entry-budget-readonly-proof.json`; full CI `.local-ci/20260908T224448Z-9434619b/summary.json`.
+The protected deployment procedure is prepared outside Git; it backs up the six task definitions,
+stops their process trees, fast-forwards to the tested commit, preserves local-account boot
+registration, and checks the restarted dashboard and process owners. Preparation is not proof
+of deployment or startup execution.
+
 ## Local Windows account and startup registration — 22:28 UTC
 
 The operator created the local standard account `LEANNES-LAPTOP\erlond` (the spelling is

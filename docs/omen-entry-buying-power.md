@@ -31,8 +31,8 @@ runtime commit and settings; the changed execution budget is not evidence of imp
 
 The accepted configuration range is 0 through 9,999 basis points, and its effective value is
 visible through the normal configuration inventory and safe settings summary. Overrides require
-service restart because the running settings are immutable. The current deployment uses the
-project default; no credential is needed to select it. No risk gate or kill-switch condition is
+service restart because the running settings are immutable. Deployments that omit the setting use
+the project default; no credential is needed to select it. No risk gate or kill-switch condition is
 removed, no rejected intent is revived, and broker rejection continues to follow the existing
 fail-closed path.
 
