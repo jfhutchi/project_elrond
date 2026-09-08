@@ -1,5 +1,46 @@
 # Omen deployment evidence — 2026-09-08
 
+## Fresh PAPER account activation — 16:59 UTC
+
+The operator supplied credentials for a newly created PAPER account. The application adapter
+authenticated it as a different, active account with zero historical fills, open orders, or
+positions and no reported restrictions. Its verified account ID and credentials remain only in
+the protected external environment file. The prior account and all its local files were preserved.
+
+A separate ledger was created through the supported CLI at
+`D:\Elrond\state\quantbot-paper-fresh-20260908.db`, schema 27, store identity
+`cd2a5911-853a-484e-bbc8-d0c27b5d27aa`. It has its own account lineage and 25 seeded institutional
+findings; it inherits no prior forward history. Ingestion stored 6,969 real daily bars. Reconciliation
+now returns exit 0, `RECONCILED`, zero differences, no unresolved intents and no blocking reasons.
+
+At 16:54:07 UTC the normal `kill-switch clear` command succeeded. A further application readiness
+measurement at 16:56:50 UTC verified broker health, account identity, reconciliation, market data
+and risk configuration, with no blocking or unprobed conditions. Only after this measurement and
+durable clearance were the documented process-level operator gates enabled and `KILL_SWITCH`
+set to false in the external configuration. No gate implementation or freshness threshold changed.
+Both modes remain PAPER and live acknowledgement remains false.
+
+The console, PAPER daemon, independent protection process and model server are running through
+Task Scheduler. Ingestion, research and reporting are enabled and have each completed with task
+result 0. Protection recorded a `HEALTHY` pass with zero positions. A supervisor stop/restart
+replaced all six prior application Python processes; none remained after shutdown settled.
+The console reports the same fresh store with a clear switch and clean reconciliation.
+
+`doctor` still reports `MARKET_DATA_STALE` under its 24-hour wall-clock check: September 4 remains
+the newest completed daily session before today's close. The collector reports no missing/stale
+symbols against the market calendar. The unchanged after-close cycle fetches completed daily
+data and applies its own safety gates before evaluating orders. No new trading run or qualification
+day is claimed from starting the services; the first daemon observation is still pending.
+
+This supersedes the recovery blocker described in the earlier snapshots below. The remaining
+startup limitation is unchanged: tasks survive/restart within a signed-in session, but startup
+before sign-in requires Windows privileges/credentials unavailable to this process. The Pi is
+retired, and no other computer is a runtime dependency.
+
+Evidence: `D:\Elrond\evidence\fresh-paper-account-verification.json` and
+`D:\Elrond\evidence\fresh-paper-activation`. Application code is unchanged from the full Windows
+CI run recorded below; this activation changes external configuration and deployment evidence.
+
 ## Credential activation follow-up — 15:49 UTC
 
 The operator subsequently supplied PAPER credentials. They were saved only in the existing
