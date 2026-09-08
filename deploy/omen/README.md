@@ -10,6 +10,13 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
+**Activation follow-up:** PAPER credentials now authenticate and scheduled ingestion succeeds.
+Trading remains disabled because the account has seven historical fills and seven open PAPER
+positions whose original order intents are unavailable in the fresh Omen ledger. The normal
+kill-switch clearance path refuses `RECONCILIATION_REQUIRED`. See the
+[current evidence follow-up](../../docs/omen-runtime-2026-09-08.md) for measured state; the initial
+inventory below predates credential injection. Startup before sign-in remains unavailable.
+
 The target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen 7 6800H
 (8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M (disabled, device error 22; CPU execution verified), approximately 781 GiB free on C: and 931 GiB free on D:. Python 3.11.16
 and `uv` are available natively.

@@ -1,5 +1,61 @@
 # Omen deployment evidence — 2026-09-08
 
+## Credential activation follow-up — 15:49 UTC
+
+The operator subsequently supplied PAPER credentials. They were saved only in the existing
+restricted external environment file, and authenticated through the application's Alpaca PAPER
+adapter. The account reported `ACTIVE`, with no trading restrictions. Its returned account UUID
+was pinned as `EXPECTED_ACCOUNT_ID`; no credential or account identifier is published here.
+
+The account is not empty: the broker returned seven historical fills spanning August 17–18,
+seven open PAPER positions, and zero open orders. The fresh Omen ledger has none of their original
+order intents or broker orders. Normal reconciliation refused with `StateConflictError` because
+a historical fill references an unknown broker order. The repository requires broker orders to
+link to durable order intents. No intents, fills, strategy history, or reconciled account state
+were invented, and no broker position was modified. Recovering the original ledger, or selecting
+a separate unused PAPER account, remains necessary; the current account was not reset.
+
+The ordinary `kill-switch clear` path was attempted after authentication and refused with
+`RECONCILIATION_REQUIRED`. The switch remains engaged. `doctor` also reports `MARKET_DATA_STALE`
+under its wall-clock age check: the newest completed daily session available is September 4,
+before the holiday weekend. Collection itself succeeded, storing 6,969 real IEX daily bars and
+reporting no stale symbols. No risk/readiness flag was manually marked healthy.
+
+Activation exposed relative lookups for the exposure classification and economic mandate when
+running from the external state directory. Commit `cee0a4d400d773ca00043b7ebe9bfc57ff4aa532`
+binds both default policy paths to the checkout supplying the module. Explicit caller paths still
+retain their meaning. Regression tests cover an external working directory and a conflicting
+local policy file; 347 relevant tests, Ruff, and Linux/win32 type checks passed.
+
+Full local CI on that application commit passed Windows: **2,801 passed, 45 skipped, one warning**
+in 561.54 seconds; Ruff, both mypy platforms, lockfile and checkout checks passed. Linux remained
+`NOT RUN: DOCKER_NOT_FOUND`. The outer command exited 1 and also reported a temporary-directory
+cleanup error: a negative launcher test's `.txt` fixture opened Notepad through file association.
+The fixture was changed to an invalid `.exe`, and all four launcher tests plus Ruff passed again.
+No application code changed after the full-suite snapshot. Automatic approval review blocked
+closing the test-created editor/removing the retained scratch directory; the logs preserve that
+cleanup failure. Full-suite evidence: `.local-ci/20260908T154801Z-e6e10366/summary.json` and
+`D:\Elrond\evidence\paper-activation\local-ci.log`.
+
+The console and model server are running. Ingestion is now enabled on its 30-minute schedule and
+has completed through Task Scheduler with result 0; research remains enabled on its six-hour
+schedule. Trading, protection and account reporting remain disabled pending reconciliation.
+The seven existing PAPER positions are therefore not under this deployment's position protection.
+SQLite integrity is `ok`; local fills, broker orders, order intents, reconciliation runs, trading
+runs and qualification days remain zero. Credentials did not repair the independent Windows
+startup-permission blocker: supervision still requires a signed-in session.
+
+The supported backup command preserved the post-ingestion store at
+`D:\Elrond\backups\quantbot-paper-post-ingestion-20260908.db` (schema 27, 3,227,648 bytes,
+zero trading runs and qualification days). The original pre-ingestion backup is also retained.
+
+External evidence is under `D:\Elrond\evidence\paper-activation` and
+`D:\Elrond\evidence\paper-account-verification.json`. The sections below preserve the initial
+deployment snapshot; this follow-up supersedes their absent-credential and disabled-ingestion
+statements.
+
+## Initial deployment snapshot
+
 **Partial deployment, not a running paper-trading account.** The Omen is the sole intended
 coordinator. The Pi is retired and has no current role. No other computer was contacted or made
 a dependency. Broker activation is blocked by absent PAPER credentials; unattended startup

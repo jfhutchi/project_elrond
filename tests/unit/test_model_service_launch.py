@@ -84,7 +84,9 @@ def test_native_stderr_does_not_stop_model_task_and_broker_secrets_are_removed(
 
 
 def test_an_existing_file_that_cannot_launch_is_not_reported_as_success(tmp_path: Path) -> None:
-    executable = tmp_path / "not-an-executable.txt"
+    # A .txt fixture invokes its Windows file association and may leave Notepad running.
+    # Exercise native executable failure without starting an unrelated document handler.
+    executable = tmp_path / "not-an-executable.exe"
     executable.write_text("this is not a Windows executable", encoding="utf-8")
     script = Path(__file__).resolve().parents[2] / "deploy/omen/start-model-server.ps1"
     powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
