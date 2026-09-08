@@ -10,29 +10,33 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Latest activation:** The operator selected a separate, verified empty PAPER account. Its ledger
-is `D:\Elrond\state\quantbot-paper-fresh-20260908.db`. Reconciliation passes and the normal
-measured-readiness path cleared the kill switch. All six application tasks are enabled; console,
-PAPER daemon and protection are running, and scheduled maintenance has succeeded. See the
-[current evidence follow-up](../../docs/omen-runtime-2026-09-08.md) for remaining freshness and
-startup limitations. The original ledger and older inventory below are preserved history.
+**Latest status (22:28 UTC):** All seven tasks use local standard account
+`LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
+The console, PAPER daemon, protection and model server run; ingestion, research and report have
+completed successfully. Startup registration is verified, but a physical reboot has not been
+tested. A console stop/start removed its full process tree and restored HTTP 200; all runtime
+processes were observed in noninteractive Windows session 0. The active ledger remains
+`D:\Elrond\state\quantbot-paper-fresh-20260908.db`.
+Trading is halted: an earlier Alpaca HTTP 403 rejection engaged the kill switch at 20:05 UTC.
+Nine accepted PAPER orders remain unfilled; reconciliation finds zero differences. The switch
+has not been cleared during the account change. See the
+[current evidence follow-up](../../docs/omen-runtime-2026-09-08.md) for measured details and the
+remaining broker-rejection investigation. Older inventory below is historical evidence.
 
 The target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen 7 6800H
 (8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M (disabled, device error 22; CPU execution verified), approximately 781 GiB free on C: and 931 GiB free on D:. Python 3.11.16
 and `uv` are available natively.
 
-The bounded pre-install inventory found no Elrond process, startup registration, operational ledger
+The historical bounded pre-install inventory found no Elrond process, startup registration, operational ledger
 or credentials. A later expanded scan found 774 old schema-12 databases under pytest temporary
 paths and classified all of them as test fixtures, not operational candidates. Task Scheduler
 registration was exercised with an Interactive logon for the current user. AtBoot and S4U
-registration returned Access denied under the non-administrator account. Therefore the supported
-configuration supervises Elrond while the user is signed in; it does not claim unattended reboot
-recovery.
+registration initially returned Access denied under the non-administrator account. That original
+Interactive registration has since been replaced by the password-backed startup tasks above.
 
-Deployment status remains `PARTIAL` until the trading task, launched processes and broker
-reconciliation are measured. Omen is the only host policy permits to hold
-authority, but global coordinator/store authority and other-host fencing remain `UNKNOWN`. Broker
-state is unprobed. Do not clear the kill switch or claim forward qualification from installation.
+Omen is the only host policy permits to hold authority, but global coordinator/store authority
+and other-host fencing remain `UNKNOWN` to the read-only recovery inventory. Installation alone
+does not establish broker readiness or forward qualification; consult the current evidence above.
 
 ## Install
 
@@ -88,8 +92,16 @@ and the verified `EXPECTED_ACCOUNT_ID` in the existing restricted external envir
 Do not put credential values in shell commands, chat, Git or task arguments. After injection,
 measure PAPER readiness and reconcile real orders/fills/positions through the normal CLI.
 Keep the kill switch engaged until its legitimate measured-clearance path permits otherwise.
-An elevated operator may use `-Mode Boot -Credential (Get-Credential)` for password-backed startup
-registration; this account cannot complete that step. No automatic Windows login is configured.
+For the current unattended configuration, an elevated operator uses
+`-Mode Boot -Credential (Get-Credential)` with the local runtime account, plus `-UpdateManaged`
+when replacing stopped managed tasks. The default Interactive mode above is a sign-in-dependent
+fallback, not the current deployment mode. The model task must also retain its startup trigger.
+Before switching identities, provision batch-logon permission, read/execute access to source,
+Python and Git metadata, read access to the protected environment file, and write access to state,
+logs and reports. Check the database's own protected ACL separately from its parent directory.
+An explicitly trusted Git checkout may be needed when its owner differs from the runtime user;
+never use a wildcard `safe.directory`. Verify actual launches under the new account. No automatic
+Windows login is configured.
 
 After registration, establish runtime truth with read-only inventory before commands that build a
 writable runtime:

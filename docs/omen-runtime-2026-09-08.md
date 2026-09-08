@@ -1,5 +1,72 @@
 # Omen deployment evidence — 2026-09-08
 
+## Local Windows account and startup registration — 22:28 UTC
+
+The operator created the local standard account `LEANNES-LAPTOP\erlond` (the spelling is
+intentional here: it is the actual Windows account name). All seven Elrond tasks now use that
+account with Password logon, Limited run level, an AtStartup trigger and their existing timed
+retry/scheduled triggers. No automatic Windows login is configured. A privileged setup step
+granted and verified `SeBatchLogonRight` for this account. Registration is verified; a physical
+reboot has not been performed.
+
+The active checkout remains clean at `C:\Users\leepa\elrond-omen-runtime`, commit
+`55cb00072f86a69091fc5094cc2a47fe235f151b`. This documentation update is prepared separately so it
+does not change the running services' commit pin. The new account has read/execute access to the
+checkout, its virtual environment and shared Git metadata, read access to the external environment
+file, and Modify access to the existing active database. The database's protected ACL is retained;
+its former owner, SYSTEM and Administrators retain their access. Git trusts only this specific
+runtime checkout through an added system `safe.directory` entry. No credentials are in the task
+arguments or these documents.
+
+After the operator stopped the former processes, Task Scheduler launched the new configuration.
+The first application launch correctly refused `DATABASE_INVALID` because the existing database
+had a separately protected ACL. Granting the runtime account access to that exact database
+resolved the startup refusal. At 22:19 UTC console, daemon and protection remained running;
+ingestion, research and report each completed with result 0. The model task was running, with
+HTTP 200 on port 11434; console HTTP returned 200 on port 8787. A real generator request to
+`qwen3:4b-instruct` returned `OK` in 3.60 seconds at 22:25 UTC. No new model evaluation or strategy
+qualification is claimed by that transport check.
+
+At 22:27 UTC a stop/start through Task Scheduler terminated all five console processes and
+restored HTTP 200 with a new process tree. All eleven persistent host/Python/model processes
+were observed in noninteractive Windows session 0. Direct cross-account process-owner inspection
+requires elevation and was not completed; the task principals and session IDs are the observed
+identity/session evidence. The existing account-bound task registrations, actual launches and
+console restart are verified; no physical reboot or forced-crash recovery under this new account
+is claimed. A new online SQLite backup at
+`D:\Elrond\backups\quantbot-paper-local-account-20260908.db` passes `integrity_check`, retains
+schema 27 and store UUID `cd2a5911-853a-484e-bbc8-d0c27b5d27aa`, and contains the nine accepted and
+one rejected intents.
+
+**Trading remains halted by a separate, earlier failure.** At 20:05:04 UTC, while the former
+account was still in use, the day's trading cycle raised `BrokerRequestError` (HTTP 403 from
+Alpaca) and engaged the durable kill switch with `UNHANDLED_OPERATIONAL_EXCEPTION`. The ledger
+records one ERROR run, nine BROKER_ACCEPTED buy intents and a REJECTED DBC buy intent. The read-only
+PAPER broker probe confirmed nine accepted, unfilled orders, zero positions, equity/cash 500
+and remaining buying power 49.37. DBC is active, tradable and fractionable. Insufficient buying
+power is consistent with this evidence and Alpaca's documented 403 response, but the rejected
+response body was not retained, so its exact cause is not claimed as proven. No retry of the
+rejected order, cancellation of the accepted orders, or kill-switch clearance was performed.
+
+Reconciliation at 22:20 UTC found zero differences and no unresolved intents, status RECONCILED;
+its overall exit code is 2 because the kill switch remains engaged. `doctor` likewise reports
+only `KILL_SWITCH_ENGAGED`. Ingestion is healthy through the completed September 8 session.
+`config`, `status`, `preflight`, `ingestion-status` and `research-status` return 0. Configuration
+still enforces PAPER/PAPER, no live credentials and live acknowledgement false. Research is
+operational with an empty queue; no forward-supported edge is established. Recovery inventory
+and startup selection still refuse to infer global fencing/authority from this local snapshot.
+
+This follow-up changes documentation and host account/task/ACL configuration only. It does not
+change application code; the implementation's most recent full Windows CI result remains the
+2,808 passed / 45 skipped run recorded below. The account switch does not resolve the broker
+rejection, and the stack must not be reported as cleared for autonomous new orders.
+
+Evidence: `D:\Elrond\evidence\local-account-admin-result.json`,
+`local-account-acl-before.json`, `local-account-database-acl-before.json`,
+`local-account-runtime-audit`, `local-account-broker-readonly.json`,
+`local-account-console-state.json`, `local-account-model-inference.json`,
+`local-account-supervisor-verification.json` and `local-account-backup.json`.
+
 ## Windowless supervision and crash recovery — 18:49 UTC
 
 Commit `f1c440b0e2d6c5ce0db7ecffe5726be4beff538a` replaces the scheduled task's console executable
