@@ -29,6 +29,17 @@ state is unprobed. Do not clear the kill switch or claim forward qualification f
 
 ## Install
 
+The runtime Python is installed at `D:\Elrond\tools\python`, outside packaged-app AppData
+virtualization. When preparing this host from packaged Codex, use an explicit external install:
+
+```powershell
+uv python install 3.11.16 --install-dir D:\Elrond\tools\python --no-bin
+uv venv --python D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\python.exe
+uv sync --locked
+```
+
+Do not replace an existing environment without first stopping its tasks and preserving needed
+configuration. A Python path visible inside Codex does not prove Task Scheduler can see it.
 Run from an ordinary PowerShell session at the reviewed checkout:
 
 ```powershell

@@ -13,7 +13,9 @@ and integrated Radeon graphics. RX 6650M has device error 22 (disabled); CPU exe
 MZVL21T0HCLR 1.024 TB. Initial free space was approximately 839 GB on C: and 999 GB on D:.
 AC automatic sleep was already disabled; battery sleep remains 600 seconds. No reboot performed.
 
-Native Python 3.11.16 is managed by uv 0.12.7. WSL reports not installed, no distributions or
+Native Python 3.11.16 is managed by uv 0.12.7. Its runtime installation is
+`D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none`; the isolated checkout venv
+was rebuilt from that interpreter with the unchanged lockfile. WSL reports not installed, no distributions or
 systemd guest exist, and Docker is absent. `wsl --install --no-distribution --no-launch` returned
 exit 1 without installing. Windows rejected boot and S4U task registration with `Access is
 denied`; current-user interactive task registration succeeded. Temporary permission probes were
@@ -27,6 +29,12 @@ Task Scheduler boot credentials/elevated registration remain an operator access 
 would supply the existing Linux sandbox but needs installation/access and its own Windows boot
 activation; lingering alone does not start a stopped WSL distribution. Docker would add an
 unavailable runtime dependency without improving the existing single-writer SQLite architecture.
+
+The original AppData interpreter was visible inside packaged Codex but mapped to its private
+`LocalCache\Roaming` directory. That namespace was unsuitable for ordinary scheduled tasks.
+The leading quote in Python's “No Python at” diagnostic is part of CPython's error formatting,
+not proof of a malformed task argument. Moving the interpreter to explicit external storage
+removes that packaged-app path dependency.
 
 ## Store provenance and controls
 
