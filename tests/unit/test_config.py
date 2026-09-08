@@ -25,6 +25,7 @@ ENVIRONMENT_FIELDS = (
     "BROKER_HEALTHY",
     "RISK_ENGINE_HEALTHY",
     "RECONCILIATION_SUCCESSFUL",
+    "ENTRY_BUYING_POWER_RESERVE_BPS",
 )
 
 
@@ -65,6 +66,13 @@ def test_settings_have_fail_closed_defaults() -> None:
     assert settings.BROKER_HEALTHY is False
     assert settings.RISK_ENGINE_HEALTHY is False
     assert settings.RECONCILIATION_SUCCESSFUL is False
+    assert settings.ENTRY_BUYING_POWER_RESERVE_BPS == 500
+
+
+@pytest.mark.parametrize("value", [-1, 10000])
+def test_invalid_entry_cash_reserve_is_refused(value: int) -> None:
+    with pytest.raises(ValidationError, match="ENTRY_BUYING_POWER_RESERVE_BPS"):
+        Settings(ENTRY_BUYING_POWER_RESERVE_BPS=value)
 
 
 def test_settings_load_environment_and_ignore_unrelated_values(

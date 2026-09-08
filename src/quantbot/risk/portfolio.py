@@ -39,11 +39,15 @@ def build_portfolio_risk_state(
     target_symbol: str,
     positions: Sequence[PositionRiskInput],
     reservations: Sequence[RiskReservation],
+    *,
+    buying_power_reserve_bps: int = 0,
 ) -> PortfolioRiskState:
     """Aggregate confirmed holdings and in-flight risk reservations exactly once."""
     if not account_snapshot_id or account_snapshot_id != account_snapshot_id.strip():
         raise ValueError("account_snapshot_id must be nonempty without surrounding whitespace")
     _validate_symbol(target_symbol)
+    if not 0 <= buying_power_reserve_bps < 10000:
+        raise ValueError("buying_power_reserve_bps must be between 0 and 9999")
 
     position_symbols = [item.position.symbol for item in positions]
     if len(position_symbols) != len(set(position_symbols)):
@@ -76,7 +80,10 @@ def build_portfolio_risk_state(
         committed_open_risk += broker_position.quantity * risk_per_share
 
     reserved_slot_symbols: set[str] = set()
+    newly_committed_buying_power = Decimal("0")
     for reservation in unique_reservations:
+        if not reservation.buying_power_already_reserved:
+            newly_committed_buying_power += reservation.position_value
         committed_open_risk += reservation.open_risk
         committed_gross += reservation.gross_exposure
         if reservation.symbol == target_symbol:
@@ -95,7 +102,13 @@ def build_portfolio_risk_state(
         account_snapshot_id=account_snapshot_id,
         target_symbol=target_symbol,
         equity=account.equity,
-        buying_power=account.buying_power,
+        # Reserve cash once from this broker snapshot, then charge each new commitment once.
+        # Charging pending broker orders again would double-count the broker's reservation.
+        buying_power=max(
+            Decimal("0"),
+            account.buying_power * Decimal(10000 - buying_power_reserve_bps) / Decimal(10000)
+            - newly_committed_buying_power,
+        ),
         committed_open_risk=committed_open_risk,
         committed_gross_exposure=committed_gross,
         committed_symbol_market_value=committed_symbol_value,

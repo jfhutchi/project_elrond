@@ -86,7 +86,7 @@ def test_portfolio_state_aggregates_positions_and_reservations_exactly_once() ->
     assert state.account_snapshot_id == "snapshot-1"
     assert state.target_symbol == "AAPL"
     assert state.equity == Decimal("100000")
-    assert state.buying_power == Decimal("80000")
+    assert state.buying_power == Decimal("79400")
     assert state.committed_open_risk == Decimal("270")
     assert state.committed_gross_exposure == Decimal("2600")
     assert state.committed_symbol_market_value == Decimal("1500")
@@ -94,6 +94,53 @@ def test_portfolio_state_aggregates_positions_and_reservations_exactly_once() ->
     assert state.is_new_position is False
     assert state.open_risk_available is True
     assert state.reasons == ()
+
+
+def test_new_commitments_cannot_reuse_buying_power_from_the_same_snapshot() -> None:
+    small = account().model_copy(update={"buying_power": Decimal("500")})
+    committed = RiskReservation(
+        reservation_id="earlier-in-batch", symbol="SPY",
+        position_value=Decimal("450"), gross_exposure=Decimal("450"),
+        open_risk=Decimal("10"), reserves_position_slot=True,
+    )
+    state = build_portfolio_risk_state("batch", small, "DBC", (), (committed, committed))
+    assert state.buying_power == Decimal("50")
+
+
+def test_broker_reserved_orders_are_not_deducted_from_available_power_twice() -> None:
+    small = account().model_copy(update={"buying_power": Decimal("49.37")})
+    pending = RiskReservation(
+        reservation_id="broker-pending", symbol="SPY",
+        position_value=Decimal("450.63"), gross_exposure=Decimal("450.63"),
+        open_risk=Decimal("10"), reserves_position_slot=True,
+        buying_power_already_reserved=True,
+    )
+    state = build_portfolio_risk_state("batch", small, "DBC", (), (pending,))
+    assert state.buying_power == Decimal("49.37")
+    assert state.committed_gross_exposure == Decimal("450.63")
+
+
+def test_entry_cash_reserve_survives_the_whole_batch() -> None:
+    small = account().model_copy(update={"buying_power": Decimal("500")})
+    committed = RiskReservation(
+        reservation_id="earlier-in-batch", symbol="SPY",
+        position_value=Decimal("450"), gross_exposure=Decimal("450"),
+        open_risk=Decimal("10"), reserves_position_slot=True,
+    )
+    state = build_portfolio_risk_state(
+        "batch", small, "DBC", (), (committed,), buying_power_reserve_bps=500,
+    )
+    assert state.buying_power == Decimal("25")
+
+
+def test_overcommitted_batch_has_zero_available_buying_power() -> None:
+    small = account().model_copy(update={"buying_power": Decimal("40")})
+    committed = RiskReservation(
+        reservation_id="earlier-in-batch", symbol="SPY",
+        position_value=Decimal("50"), gross_exposure=Decimal("50"),
+        open_risk=Decimal("10"), reserves_position_slot=True,
+    )
+    assert build_portfolio_risk_state("batch", small, "DBC", (), (committed,)).buying_power == 0
 
 
 def test_new_target_has_zero_symbol_value_and_reserves_unique_slots() -> None:

@@ -103,6 +103,12 @@ An explicitly trusted Git checkout may be needed when its owner differs from the
 never use a wildcard `safe.directory`. Verify actual launches under the new account. No automatic
 Windows login is configured.
 
+`ENTRY_BUYING_POWER_RESERVE_BPS` defaults to 500 (5% of currently available broker buying power).
+The runtime retains this amount before sizing a batch and deducts each newly planned entry once;
+already-pending broker orders are not charged again. This operational project default reduces
+funding pressure from price differences and does not guarantee acceptance of market orders.
+See [entry budgeting](../../docs/omen-entry-buying-power.md) for provenance and limitations.
+
 After registration, establish runtime truth with read-only inventory before commands that build a
 writable runtime:
 

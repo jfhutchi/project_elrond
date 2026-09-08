@@ -36,6 +36,9 @@ class Settings(BaseSettings):
     BROKER_HEALTHY: bool = False
     RISK_ENGINE_HEALTHY: bool = False
     RECONCILIATION_SUCCESSFUL: bool = False
+    # Runtime execution reserve, not a strategy signal or a claimed backtest cost model.
+    # Daily closes are sizing references; the broker values market orders at current prices.
+    ENTRY_BUYING_POWER_RESERVE_BPS: int = Field(default=500, ge=0, lt=10000)
 
     @field_validator("EXPECTED_ACCOUNT_ID", mode="before")
     @classmethod
@@ -67,6 +70,7 @@ class Settings(BaseSettings):
             "broker_healthy": self.BROKER_HEALTHY,
             "risk_engine_healthy": self.RISK_ENGINE_HEALTHY,
             "reconciliation_successful": self.RECONCILIATION_SUCCESSFUL,
+            "entry_buying_power_reserve_bps": str(self.ENTRY_BUYING_POWER_RESERVE_BPS),
         }
 
 
