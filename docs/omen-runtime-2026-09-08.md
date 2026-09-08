@@ -1,5 +1,52 @@
 # Omen deployment evidence — 2026-09-08
 
+## Windowless supervision and crash recovery — 18:49 UTC
+
+Commit `f1c440b0e2d6c5ce0db7ecffe5726be4beff538a` replaces the scheduled task's console executable
+with a small GUI executable that starts fixed system PowerShell without allocating a console.
+The host owns a kill-on-close job before creating children, preserves exit codes and argument
+quoting, and reports startup output to external launcher logs. An asynchronous logging failure
+deliberately exits 70 and closes the process tree instead of raising an unhandled GUI exception.
+The existing validated PAPER wrappers and their nested jobs remain in use.
+
+At 18:39 UTC all six application tasks and `ElrondModelServer` were switched to the host at
+`D:\Elrond\state\service-host\1188bba2cb38de299aad0768\elrond-service-host.exe`.
+All eleven previous service/model processes exited, and all four old `OpenConsole` processes
+disappeared. Four persistent GUI hosts ran after maintenance completed; no replacement console
+process was created. Console HTTP and the model API were reachable; PAPER mode, clean
+reconciliation and healthy protection remained verified.
+
+A controlled hard termination of the console host at 18:40:59 UTC removed its entire five-process
+tree. The configured one-minute `RestartOnFailure` did not recover this forced termination.
+The five-minute recurring trigger recovered it automatically at 18:45:04 UTC, about 245 seconds
+later, with a new process tree and zero console windows. No manual start was issued between
+failure and recovery. The daemon and protection continued running during this dashboard-only
+test. Recovery within one minute is therefore **not** claimed; the recurring trigger is the
+measured fallback. Process restart is verified, while unattended startup before Windows sign-in
+still requires unavailable Windows privileges/credentials.
+
+Fresh application-parser checks verify PAPER/PAPER, PAPER credentials and the expected account
+configured, no LIVE credentials, and live acknowledgement false. `config`, `status`, `preflight`,
+`ingestion-status`, `research-status` and `reconcile` return 0. `doctor` returns 2 solely for the
+unchanged daily-bar freshness warning. Read-only `deployment-status` recovery reports still
+refuse global authority and automatic recovery selection: remote fencing is unverified and the
+active SQLite WAL requires a consistent snapshot. No recovery authority was manufactured.
+A new online SQLite backup at
+`D:\Elrond\backups\quantbot-paper-windowless-f1c440b-20260908.db` passes `integrity_check` and
+reports Alembic `0027`. AC idle sleep and hibernation are already disabled; no power setting changed.
+
+Full Windows local CI on `f1c440b0e2d6c5ce0db7ecffe5726be4beff538a` passed:
+**2,808 passed, 45 skipped, one warning in 554.64 seconds**. Ruff, Linux/win32 type checks,
+lockfile and clean-checkout checks passed. Linux remains `NOT RUN: DOCKER_NOT_FOUND`, so the
+aggregate command returns 1. The five new host tests cover GUI subsystem/no console, stream
+output and exit codes, argument preservation, descendant teardown, startup log refusal and
+controlled callback failure. Independent review found no remaining blocker after the callback
+fix. Evidence-only commits after this snapshot do not change implementation.
+
+Evidence: `D:\Elrond\evidence\windowless-first-deployment.json`,
+`windowless-automatic-recovery.json`, `windowless-backup.json`, `windowless-runtime-audit`,
+`windowless-local-ci.log` and `.local-ci/20260908T183855Z-8e905766/summary.json`.
+
 ## Dashboard market-data sync feedback — 18:12 UTC
 
 Commit `71d8ae03a075917282cb14db8c8882cad1cf3851` fixes a misleading console action:
