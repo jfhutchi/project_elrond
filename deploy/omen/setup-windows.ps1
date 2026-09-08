@@ -18,7 +18,9 @@ $ErrorActionPreference = 'Stop'
 $ManagedMarker = 'Managed by project_elrond deploy/omen/setup-windows.ps1.'
 $Repository = [System.IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..\..'))
 $Python = Join-Path $Repository '.venv\Scripts\python.exe'
-$Pythonw = Join-Path $Repository '.venv\Scripts\pythonw.exe'
+$PowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
+$ServiceWrapper = Join-Path $PSScriptRoot 'start-service.ps1'
+$JobHelper = Join-Path $PSScriptRoot 'windows-job.ps1'
 
 function Refuse([string] $Code) {
     throw "Elrond installer refused: $Code"
@@ -37,8 +39,10 @@ $Database = [System.IO.Path]::GetFullPath($Database)
 if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) { Refuse 'ENV_FILE_NOT_FOUND' }
 if (-not (Test-Path -LiteralPath $Database -PathType Leaf)) { Refuse 'DATABASE_NOT_FOUND' }
 if (-not (Test-Path -LiteralPath $Python -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $Pythonw -PathType Leaf)) {
-    Refuse 'VENV_PYTHON_NOT_FOUND'
+    -not (Test-Path -LiteralPath $PowerShell -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $ServiceWrapper -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $JobHelper -PathType Leaf)) {
+    Refuse 'SERVICE_RUNTIME_NOT_FOUND'
 }
 
 $Commit = (& git --no-optional-locks -C $Repository rev-parse --verify 'HEAD^{commit}' 2>$null)
@@ -115,10 +119,12 @@ function Quote-TaskArgument([string] $Value) {
 
 $StateDirectory = Split-Path -Parent $Database
 foreach ($Definition in $Definitions) {
-    $Arguments = '-m quantbot.operations.service --env-file ' +
-        (Quote-TaskArgument $EnvironmentFile) + ' --commit ' + $Commit + ' --database ' +
-        (Quote-TaskArgument $Database) + ' --component ' + $Definition.Component
-    $Action = New-ScheduledTaskAction -Execute $Pythonw -Argument $Arguments `
+    $Arguments = '-NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File ' +
+        (Quote-TaskArgument $ServiceWrapper) + ' -Repository ' +
+        (Quote-TaskArgument $Repository) + ' -EnvironmentFile ' +
+        (Quote-TaskArgument $EnvironmentFile) + ' -Commit ' + $Commit + ' -Database ' +
+        (Quote-TaskArgument $Database) + ' -Component ' + $Definition.Component
+    $Action = New-ScheduledTaskAction -Execute $PowerShell -Argument $Arguments `
         -WorkingDirectory $StateDirectory
     if ($Mode -eq 'Boot') {
         $PrimaryTrigger = New-ScheduledTaskTrigger -AtStartup

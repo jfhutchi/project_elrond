@@ -6,6 +6,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from types import ModuleType
 
@@ -426,19 +427,125 @@ def test_missing_credentials_are_reported_for_protection_daemon_fallback(
     assert payload["reason"] == CREDENTIALS_MISSING
 
 
+@pytest.mark.skipif(sys.platform != "win32", reason="native Windows process supervision")
+def test_service_wrapper_terminates_its_python_process_tree(tmp_path: Path) -> None:
+    source_root = Path(__file__).resolve().parents[3]
+    wrapper = source_root / "deploy" / "omen" / "start-service.ps1"
+    helper = source_root / "deploy" / "omen" / "windows-job.ps1"
+    if not wrapper.exists() or not helper.exists():
+        pytest.fail("the Windows service wrapper and shared Job Object helper are not implemented")
+
+    repo = tmp_path / "repo"
+    operations = repo / "src" / "quantbot" / "operations"
+    operations.mkdir(parents=True)
+    (repo / "src" / "quantbot" / "__init__.py").write_text("", encoding="utf-8")
+    (operations / "__init__.py").write_text("", encoding="utf-8")
+    ready = tmp_path / "ready"
+    (operations / "service.py").write_text(
+        "import os, time\n"
+        "from pathlib import Path\n"
+        "Path(os.environ['ELROND_WRAPPER_READY']).write_text(str(os.getpid()))\n"
+        "time.sleep(60)\n",
+        encoding="utf-8",
+    )
+    (repo / "deploy" / "omen").mkdir(parents=True)
+    shutil.copy2(wrapper, repo / "deploy" / "omen" / wrapper.name)
+    shutil.copy2(helper, repo / "deploy" / "omen" / helper.name)
+    subprocess.run(
+        [
+            "powershell",
+            "-NoProfile",
+            "-Command",
+            f"New-Item -ItemType Junction -Path '{repo / '.venv'}' -Target "
+            f"'{source_root / '.venv'}' | Out-Null",
+        ],
+        check=True,
+    )
+    env_file = tmp_path / "quantbot.env"
+    database = tmp_path / "paper.db"
+    env_file.write_text("TRADING_MODE=PAPER\n", encoding="utf-8")
+    database.write_bytes(b"fixture")
+    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    process = subprocess.Popen(
+        [
+            str(powershell),
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-File",
+            str(repo / "deploy" / "omen" / wrapper.name),
+            "-Repository",
+            str(repo),
+            "-EnvironmentFile",
+            str(env_file),
+            "-Commit",
+            "a" * 40,
+            "-Database",
+            str(database),
+            "-Component",
+            "console",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        env={**os.environ, "ELROND_WRAPPER_READY": str(ready)},
+    )
+    child_id: int | None = None
+    try:
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline and not ready.exists():
+            time.sleep(0.05)
+        assert ready.exists(), "service wrapper did not launch the fixed-checkout module"
+        child_id = int(ready.read_text(encoding="utf-8"))
+
+        process.kill()
+        process.wait(timeout=10)
+        deadline = time.monotonic() + 5
+        while time.monotonic() < deadline and _windows_process_exists(child_id):
+            time.sleep(0.1)
+
+        assert not _windows_process_exists(child_id)
+    finally:
+        if process.poll() is None:
+            process.kill()
+            process.wait(timeout=10)
+        if child_id is not None and _windows_process_exists(child_id):
+            subprocess.run(
+                ["taskkill", "/PID", str(child_id), "/T", "/F"],
+                capture_output=True,
+                timeout=10,
+                check=False,
+            )
+
+
+def _windows_process_exists(process_id: int) -> bool:
+    result = subprocess.run(
+        ["tasklist", "/FI", f"PID eq {process_id}", "/FO", "CSV", "/NH"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+        check=False,
+    )
+    return result.returncode == 0 and str(process_id) in result.stdout
+
+
 @pytest.mark.skipif(sys.platform != "win32", reason="native Windows Task Scheduler installer")
 def test_windows_installer_registers_bounded_tasks_through_scheduler_doubles(
     tmp_path: Path,
 ) -> None:
     source_root = Path(__file__).resolve().parents[3]
     source_script = source_root / "deploy" / "omen" / "setup-windows.ps1"
-    if not source_script.exists():
-        pytest.fail("deploy/omen/setup-windows.ps1 is not implemented")
+    source_wrapper = source_root / "deploy" / "omen" / "start-service.ps1"
+    source_helper = source_root / "deploy" / "omen" / "windows-job.ps1"
+    if not all(path.exists() for path in (source_script, source_wrapper, source_helper)):
+        pytest.fail("Windows service deployment scripts are not implemented")
 
     repo = tmp_path / "installer-repo"
     shutil.copytree(source_root / "src", repo / "src")
     (repo / "deploy" / "omen").mkdir(parents=True)
     shutil.copy2(source_script, repo / "deploy" / "omen" / "setup-windows.ps1")
+    shutil.copy2(source_wrapper, repo / "deploy" / "omen" / "start-service.ps1")
+    shutil.copy2(source_helper, repo / "deploy" / "omen" / "windows-job.ps1")
     (repo / "config").mkdir()
     (repo / "config" / "strategy.yaml").write_text("version: test\n", encoding="utf-8")
     (repo / ".gitignore").write_text(
@@ -563,8 +670,9 @@ function Disable-ScheduledTask { param($TaskName) $global:disabled += $TaskName 
         assert item["Settings"]["MultipleInstances"] == "IgnoreNew"
         assert item["Principal"]["LogonType"] == "Interactive"
         assert item["Principal"]["RunLevel"] == "Limited"
-        assert item["Action"]["Execute"].endswith("pythonw.exe")
-        assert "quantbot.operations.service" in item["Action"]["Argument"]
+        assert item["Action"]["Execute"].endswith("powershell.exe")
+        assert "-WindowStyle Hidden" in item["Action"]["Argument"]
+        assert "start-service.ps1" in item["Action"]["Argument"]
         assert len(item["Trigger"]) == 2
     daemon = next(item for item in registrations if item["Name"] == "Elrond Daemon")
     assert daemon["Settings"]["ExecutionTimeLimit"]["TotalSeconds"] == 0
