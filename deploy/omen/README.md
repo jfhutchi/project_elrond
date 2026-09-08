@@ -11,8 +11,7 @@ installed and Docker is absent.
 ## Measured host and deployment status — 2026-09-08
 
 The target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen 7 6800H
-(8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M (8 GB VRAM
-expected from the model), approximately 781 GiB free on C: and 931 GiB free on D:. Python 3.11.16
+(8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M (disabled, device error 22; CPU execution verified), approximately 781 GiB free on C: and 931 GiB free on D:. Python 3.11.16
 and `uv` are available natively.
 
 The bounded pre-install inventory found no Elrond process, startup registration, operational ledger
@@ -33,7 +32,9 @@ state is unprobed. Do not clear the kill switch or claim forward qualification f
 Run from an ordinary PowerShell session at the reviewed checkout:
 
 ```powershell
-& .\deploy\omen\setup-windows.ps1
+& .\deploy\omen\setup-windows.ps1 `
+    -EnvironmentFile 'C:\Users\leepa\.config\quantbot\quantbot.env' `
+    -Database 'D:\Elrond\state\quantbot-paper.db' 
 ```
 
 The installer must keep `TRADING_MODE=PAPER`, `BROKER_ENVIRONMENT=PAPER`, and
@@ -41,6 +42,22 @@ The installer must keep `TRADING_MODE=PAPER`, `BROKER_ENVIRONMENT=PAPER`, and
 locks, reports and logs. It registers the current-user Interactive task that this account can
 actually create. Requiring elevation for an AtBoot or S4U task is a separate operational change,
 not something this installer may silently approximate.
+
+The checkout must be committed and clean before installation. Six separate tasks are registered:
+`Elrond Console`, `Elrond Daemon`, `Elrond Protection`, `Elrond Ingestion`, `Elrond Research`, and
+`Elrond Report`. Broker-dependent tasks remain disabled when PAPER credentials are missing.
+Start enabled tasks with `Start-ScheduledTask`; scheduled logon and retry triggers also apply.
+Before updating a running deployment, stop its tasks through Task Scheduler, verify shutdown,
+then rerun with `-UpdateManaged` to pin the new clean commit and start enabled tasks again.
+The installer refuses to update running tasks because registration alone does not replace them.
+
+The smallest broker activation step is to supply `ALPACA_PAPER_API_KEY`, `ALPACA_PAPER_API_SECRET`
+and the verified `EXPECTED_ACCOUNT_ID` in the existing restricted external environment file.
+Do not put credential values in shell commands, chat, Git or task arguments. After injection,
+measure PAPER readiness and reconcile real orders/fills/positions through the normal CLI.
+Keep the kill switch engaged until its legitimate measured-clearance path permits otherwise.
+An elevated operator may use `-Mode Boot -Credential (Get-Credential)` for password-backed startup
+registration; this account cannot complete that step. No automatic Windows login is configured.
 
 After registration, establish runtime truth with read-only inventory before commands that build a
 writable runtime:
