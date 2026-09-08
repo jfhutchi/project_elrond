@@ -59,7 +59,10 @@ from quantbot.domain import Position
 
 FiniteDecimal = Annotated[Decimal, Field(allow_inf_nan=False)]
 
-DEFAULT_CLASSIFICATION_PATH = Path("config/exposure-classification-v1.yaml")
+# Service processes work in external state directories; policy belongs to this checkout.
+DEFAULT_CLASSIFICATION_PATH = (
+    Path(__file__).resolve().parents[3] / "config/exposure-classification-v1.yaml"
+)
 
 
 class ExposureGroup(StrEnum):

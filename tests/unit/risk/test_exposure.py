@@ -101,6 +101,17 @@ def inputs(**overrides: object) -> PortfolioVetoInputs:
     return PortfolioVetoInputs(**fields)  # type: ignore[arg-type]
 
 
+def test_default_classification_loads_from_external_service_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = load_exposure_classification(REPOSITORY / "config/exposure-classification-v1.yaml")
+    monkeypatch.chdir(tmp_path)
+    assert load_exposure_classification() == expected
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config/exposure-classification-v1.yaml").write_text("invalid: policy")
+    assert load_exposure_classification() == expected
+
+
 def test_the_shipped_table_classifies_every_symbol_the_strategy_trades() -> None:
     """A universe symbol missing from the table blocks every order in it, silently in production.
 

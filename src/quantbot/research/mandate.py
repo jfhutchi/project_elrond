@@ -60,7 +60,8 @@ Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 #: Where the current objective lives. A default rather than a constant a caller must know,
 #: because a gate that silently proceeds when nobody passed a mandate is the failure this
 #: module exists to prevent.
-DEFAULT_MANDATE_PATH = Path("config/economic-objective-v1.yaml")
+# Bind default policy to the running checkout, independent of a service's working directory.
+DEFAULT_MANDATE_PATH = Path(__file__).resolve().parents[3] / "config/economic-objective-v1.yaml"
 
 
 class MandateStatus(StrEnum):

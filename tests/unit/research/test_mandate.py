@@ -39,6 +39,17 @@ def objective(**overrides: object) -> EconomicObjective:
     return EconomicObjective.model_validate(payload)
 
 
+def test_default_mandate_loads_from_external_service_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    expected = load_economic_objective(REPOSITORY / "config/economic-objective-v1.yaml")
+    monkeypatch.chdir(tmp_path)
+    assert load_economic_objective() == expected
+    (tmp_path / "config").mkdir()
+    (tmp_path / "config/economic-objective-v1.yaml").write_text("invalid: policy")
+    assert load_economic_objective() == expected
+
+
 def test_the_projects_objective_loads_and_says_what_it_is_optimising() -> None:
     """The shipped mandate is real, not an example."""
     frozen = load_economic_objective(REPOSITORY / DEFAULT_MANDATE_PATH)
