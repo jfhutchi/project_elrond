@@ -1,5 +1,45 @@
 # Omen deployment evidence — 2026-09-08
 
+## Dashboard market-data sync feedback — 18:12 UTC
+
+Commit `71d8ae03a075917282cb14db8c8882cad1cf3851` fixes a misleading console action:
+the sync callback ran, but its result was discarded before redirecting to an unchanged page.
+The page now displays actual additions, zero additions, completed-through time, stale symbols
+and failure reasons, including unhealthy returns and partial progress. During submission the
+button displays progress and disables repeat clicks. The collector and safety gates are unchanged.
+
+After deployment, an actual click in the operator's browser completed successfully and displayed
+"No new bars were added" and completed-through `2026-09-04T20:00:00+00:00`. The store already held
+6,969 daily bars across 23 symbols. Earlier checkpoint conflicts were also real sync results;
+those will now be visible instead of silently returning to the same page.
+
+All six application tasks were repinned and restarted through Task Scheduler. All six prior
+Python processes exited before replacement. At 18:13 UTC the console, daemon and protection
+were running; ingestion, research and report tasks had completed with result 0. The console
+reported PAPER/PAPER, a clear kill switch, clean reconciliation with zero differences, and
+healthy protection with zero positions. Four real market-session observations had been recorded;
+each reported `DEGRADED` / `MARKET_DATA_STALE` under the existing daily-bar wall-clock check.
+No trading run or qualification day is claimed.
+
+The 162 console tests passed, including regression coverage for new bars, no new bars, unhealthy
+results, partial progress and escaped error text. Ruff and mypy passed; independent review found
+no blocking issue. Runtime evidence is retained in
+`D:\Elrond\evidence\market-data-sync-restart.json` and
+`D:\Elrond\evidence\market-data-sync-console-state.json`.
+
+The full local CI uses the shared `scripts/local_ci.py` runner with the explicitly installed
+`D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\python.exe` interpreter (`-I -S -B`).
+The PowerShell bootstrap did not discover that external managed-Python installation. Linux
+verification remains unavailable because Docker is not installed; no hosted Actions are used.
+
+The full Windows job on `71d8ae03a075917282cb14db8c8882cad1cf3851` passed:
+**2,803 passed, 45 skipped, one warning in 570.34 seconds**. Ruff, Linux/win32 mypy, lockfile
+and checkout checks passed, and the disposable workspace cleaned up successfully. The aggregate
+command returns 1 because Linux was requested but could not run. Logs are retained at
+`D:\Elrond\evidence\market-data-sync-local-ci.log`; the machine-readable result is
+`.local-ci/20260908T181106Z-ac062b07/summary.json`. Subsequent evidence edits do not change
+application code.
+
 ## Fresh PAPER account activation — 16:59 UTC
 
 The operator supplied credentials for a newly created PAPER account. The application adapter
