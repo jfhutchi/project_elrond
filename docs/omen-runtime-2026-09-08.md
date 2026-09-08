@@ -33,7 +33,7 @@ unavailable runtime dependency without improving the existing single-writer SQLi
 The original AppData interpreter was visible inside packaged Codex but mapped to its private
 `LocalCache\Roaming` directory. That namespace was unsuitable for ordinary scheduled tasks.
 The leading quote in Python's “No Python at” diagnostic is part of CPython's error formatting,
-not proof of a malformed task argument. Moving the interpreter to explicit external storage
+not proof of a malformed task argument ([CPython launcher source](https://github.com/python/cpython/blob/3.11/PC/launcher.c)). Moving the interpreter to explicit external storage
 removes that packaged-app path dependency.
 
 ## Store provenance and controls
@@ -97,6 +97,13 @@ clean upstream code and absence of `quantbot` in the worker environment were ver
 No worker remains resident. This proves execution/repeatability only, not forecasting skill or
 market evidence. Details: `C:\Users\leepa\elrond-worker-check-20260908\qualification-report.md`.
 
+After fixing the packaged-app path dependency, the physical Kronos worker venv was rehomed to
+identical Python 3.11.16 on D: by changing only its `pyvenv.cfg` home line, preserving a backup.
+A normal Interactive Scheduled Task then ran two offline diagnostics: 33.657 / 14.445 seconds,
+peak memory 481.1 / 479.1 MB; all 240 values identical. The diagnostic task was removed and no
+worker remained. Evidence: `D:\Elrond\evidence\kronos-task-20260908T103928\qualification-report.md`.
+This separately proves execution outside Codex's process namespace.
+
 Portable Ollama 0.33.3 was downloaded from the official release and SHA-256 verified
 (`52cb36a62e7e501f61514f60212dec7117b6c098811357585e02fffe32d2fcd7`).
 `ElrondModelServer` owns the loopback-only server at `127.0.0.1:11434`. Cloud use is disabled,
@@ -124,12 +131,81 @@ Sources: [Ollama Windows deployment](https://docs.ollama.com/windows),
 [structured-output schema support](https://docs.ollama.com/capabilities/structured-outputs),
 [Windows task security contexts](https://learn.microsoft.com/en-us/windows/win32/taskschd/security-contexts-for-running-tasks).
 
+## Supervision and final application observations
+
+All seven tasks are current-user Interactive / Limited, with logon and periodic triggers.
+Task Scheduler owns the PowerShell wrapper, venv redirector and base Python process chain;
+it does not descend from the Codex shell. A shared Windows Job Object owns native descendants.
+The interpreter is physically visible outside packaged Codex, as a separate same-SID scheduled
+probe confirmed: logical AppData Python absent, physical package and external D: Python present.
+That temporary probe was removed.
+
+| Task | Observed state | Trigger / result |
+| --- | --- | --- |
+| `Elrond Console` | Running; loopback `http://127.0.0.1:8787` | Logon + 5-minute retry; home, risk and kill-switch pages HTTP 200 |
+| `Elrond Research` | Ready between completed jobs | Logon + 6-hour interval; task result 0, empty queue, no fabricated tasks |
+| `ElrondModelServer` | Running; loopback `127.0.0.1:11434` | Logon + 5-minute retry; API version 0.33.3, zero models resident after requests |
+| `Elrond Daemon` | Disabled, never activated | PAPER credential pair absent |
+| `Elrond Protection` | Disabled, never activated | PAPER credential pair absent |
+| `Elrond Ingestion` | Disabled, never activated | PAPER credential pair absent |
+| `Elrond Report` | Disabled, never activated | PAPER credential pair absent |
+
+At code commit `5b936520bee130b9067270a709874018064a5e40`, an explicit duplicate console launch
+returned exit 4 and a repeated task start kept listener PID 15364. Supervisor stop removed all
+three service processes and the listener after bounded shutdown waiting. Supervisor restart
+created listener PID 15800, returned HTTP 200, and retained PAPER mode and the engaged kill switch.
+Model stop likewise removed its wrapper and PID 2748; restart created PID 14592. These are recorded
+observations, not promises that PIDs remain fixed. Task definitions are exported outside Git.
+
+Final `config`/`status` parsing still reports PAPER/PAPER, live acknowledgement false, no live
+credentials and the engaged default kill switch. `preflight` now marks RESEARCH and CONSOLE
+configured; PAPER_TRADING and MARKET_DATA remain unready. `doctor`, `reconcile`, `sync-data` and
+`protection-daemon` refuse `PAPER_CREDENTIALS_NOT_CONFIGURED`. `ingestion-status` has zero sources.
+Research has zero tasks and zero actionable transitions. Optional generated-code execution needs
+the unavailable Linux/WSL sandbox; successful model calls are not proof of that sandbox.
+
+`deployment-status --inventory --startup-check` exits 1. It identifies the selected D: database and
+retired Pi policy but retains `GLOBAL_COORDINATOR_AUTHORITY_UNVERIFIED`,
+`OTHER_HOST_RETIREMENT_UNVERIFIED`, `KILL_SWITCH_ENGAGED` and `BROKER_RECONCILIATION_NOT_PROBED`.
+Local process exclusion and an operator's placement decision do not invent a global broker fence.
+The same store UUID and schema remain readable; final integrity check is `ok`. Counts remain zero
+for runs, fills, bars, orders, positions, reconciliation runs, ingestion runs, qualification days
+and runtime deployments, with 25 seeded research records. No broker/risk heartbeat is claimed.
+
 ## Verification
 
-Baseline `d059ff87ccd856963f10c6c42f8f8ba9765330b2`, committed snapshot local CI:
-Windows **PASS**, 2,770 passed / 45 skipped / one existing warning, 533.72 seconds. Lock check,
-lint, mypy Linux and win32 targets and checkout cleanliness passed. Linux **NOT RUN**:
-`DOCKER_NOT_FOUND`. Skips include absent WSL/generated-code sandbox, optional PostgreSQL,
-unconfigured real-model endpoints, symlink privilege and isolated-home Python bootstrap.
-No hosted GitHub Actions were dispatched. Final change verification and supervision observations
-will be recorded after installation; this baseline is not evidence that the new launcher passed.
+Final implementation snapshot: `5b936520bee130b9067270a709874018064a5e40` on
+`codex/omen-paper-runtime`. Subsequent evidence-only documentation changes do not change this
+verified implementation; managed service actions are repinned to the final clean checkout.
+
+`python scripts/local_ci.py --platform all`:
+
+- Windows **PASS**: **2,799 passed, 45 skipped, one warning**, 554.13 seconds.
+- Lockfile, Ruff, mypy Linux and win32 targets, CI-helper checks and snapshot cleanliness passed.
+- Linux **NOT RUN**, `DOCKER_NOT_FOUND`; combined command exits 1 rather than hiding the missing
+  platform. WSL is absent too. No hosted GitHub Actions were dispatched.
+- Skips cover absent WSL/generated-code sandbox, optional PostgreSQL, real-model endpoints isolated
+  out of CI, symlink privilege and isolated-home Python bootstrap. The four real-model tests were
+  separately executed successfully against the actual local endpoint (24.85 seconds).
+- Independent final review found no blocking issue. All 29 changed files were text, targeted
+  added-line credential scanning found no matches, and `git diff --check` passed.
+
+Local CI record: `.local-ci/20260908T144208Z-b4f8486a/summary.json`; a copy and the complete log are
+under `D:\Elrond\evidence`. The original checkout remains clean on main
+`adc61399e9387c1b43c6e28e1e179c1acf2097cd`; its files were not replaced. The branch began at reviewed
+`origin/main` `d059ff87ccd856963f10c6c42f8f8ba9765330b2`.
+
+## Remaining activation steps
+
+1. Supply real `ALPACA_PAPER_API_KEY`, `ALPACA_PAPER_API_SECRET` and verified `EXPECTED_ACCOUNT_ID`
+   through the restricted external environment file. Then measure actual PAPER readiness and
+   reconcile real orders/fills/positions before any autonomous order generation. Keep the kill
+   switch engaged until the legitimate measured-clearance path permits release. No older ledger
+   or missing broker history can be reconstructed by assertion.
+2. An elevated Windows operator must register protected startup tasks for operation before login;
+   this account received Access denied. Current supervision persists within a signed-in session
+   and starts at sign-in. No system reboot or automatic login was used as a substitute.
+
+The deployment is therefore partial: console, scheduled research maintenance and local compute
+are measured; continuous PAPER trading, broker reconciliation, fresh ingestion and active position
+protection remain unverified and disabled. The Pi and Alienware have no runtime dependency role.
