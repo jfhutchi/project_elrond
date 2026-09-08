@@ -25,7 +25,7 @@ def database(tmp_path):  # type: ignore[no-untyped-def]
         yield store
 
 
-def test_the_action_calls_the_injected_sync_and_returns_to_the_page(database) -> None:  # type: ignore[no-untyped-def]
+def test_the_action_calls_the_injected_sync_and_shows_the_result(database) -> None:  # type: ignore[no-untyped-def]
     calls: list[str] = []
 
     async def sync() -> Mapping[str, object]:
@@ -35,9 +35,46 @@ def test_the_action_calls_the_injected_sync_and_returns_to_the_page(database) ->
     client = TestClient(create_app(database, sync_data=sync))
     response = client.post("/operations/sync-data", follow_redirects=False)
 
-    assert response.status_code == 303
-    assert response.headers["location"] == "/market-data"
+    assert response.status_code == 200
+    assert "Market data sync completed" in response.text
+    assert "Added 23 new bars" in response.text
     assert calls == ["sync"]
+
+
+def test_an_up_to_date_sync_explains_why_the_page_has_not_changed(database) -> None:  # type: ignore[no-untyped-def]
+    async def sync() -> Mapping[str, object]:
+        return {"ok": True, "bars_stored": 0, "completed_through": "2026-09-04"}
+
+    client = TestClient(create_app(database, sync_data=sync))
+    response = client.post("/operations/sync-data")
+
+    assert "No new bars were added" in response.text
+    assert "Completed through: 2026-09-04" in response.text
+    assert "Market data sync completed" in response.text
+
+
+def test_an_unhealthy_result_shows_failure_and_any_partial_progress(database) -> None:  # type: ignore[no-untyped-def]
+    async def sync() -> Mapping[str, object]:
+        return {
+            "ok": False,
+            "bars_stored": 12,
+            "reasons": [
+                "CursorConflict: another collector moved the checkpoint",
+                "<script>bad</script>",
+            ],
+            "stale_symbols": ["SPY"],
+        }
+
+    client = TestClient(create_app(database, sync_data=sync))
+    response = client.post("/operations/sync-data")
+
+    assert "Market data sync needs attention" in response.text
+    assert "Added 12 new bars" in response.text
+    assert "CursorConflict" in response.text
+    assert "Stale symbols: SPY" in response.text
+    assert "Nothing changed" not in response.text
+    assert "&lt;script&gt;bad&lt;/script&gt;" in response.text
+    assert "Market data sync completed" not in response.text
 
 
 def test_a_console_without_credentials_says_so_rather_than_offering_a_dead_control(  # type: ignore[no-untyped-def]
