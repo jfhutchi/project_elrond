@@ -96,17 +96,24 @@ parallelism/max-loaded-models are one, context is 8192, and keep-alive is zero. 
 inference; no GPU execution is claimed. Initial Qwen3 4B timed out under the application's
 60-second bound and Gemma3 4B failed a structured-output smoke check; neither failure is a pass.
 
-Selected generator `qwen3:4b-instruct` and local critic alias
-`elrond-critic-gemma3-4b-v1` completed the repository's four real-endpoint tests in 48.51 seconds.
-The critic test explicitly allows a typed refusal: a separate production `ModelCritic` diagnostic
-returned `ModelCriticRefused`, so **a usable critic remains unproven**. No diagnostic was inserted
-into the research ledger. Model routing remains unconfigured for scheduled research pending a
-usable distinct critic; mechanical queue maintenance can still run. The parser failure exposed
-and fixed two code defects: non-JSON/schema errors now become typed critic refusals, and rejected
-reviews cannot retain provenance. Forty focused model/critic tests passed after review fixes.
+Selected generator `qwen3:4b-instruct` and distinct critic `qwen2.5:3b` completed the repository's
+four real-endpoint integration tests in **24.85 seconds**. A separate production `ModelCritic`
+diagnostic returned a valid critique with two reasons, five objections and provenance in
+**30.14 seconds**. It was explicitly hypothetical and was never inserted into the research ledger.
+This establishes the runtime contract, not the quality of trading judgments. The selected model
+digests and sizes are recorded in `D:\Elrond\evidence\selected-models.json`.
+
+Initial Gemma and Qwen2.5 requests failed strict JSON validation. The runtime requested structured
+capability but never sent the schema to the endpoint. The fix sends the supported schema request,
+records it in provenance, and retains local JSON/schema validation; plain calls are unchanged.
+Non-JSON/schema critic errors now become typed refusals, and rejected reviews cannot retain
+provenance. Fifty focused model/critic/composition tests passed, as did independent code review.
+External scheduled research configuration now uses the verified loopback generator/critic pair.
+No model or worker holds broker credentials, and no worker availability grants trading authority.
 
 Sources: [Ollama Windows deployment](https://docs.ollama.com/windows),
 [model residency controls](https://docs.ollama.com/faq),
+[structured-output schema support](https://docs.ollama.com/capabilities/structured-outputs),
 [Windows task security contexts](https://learn.microsoft.com/en-us/windows/win32/taskschd/security-contexts-for-running-tasks).
 
 ## Verification
