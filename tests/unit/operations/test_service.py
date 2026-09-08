@@ -499,14 +499,8 @@ def test_service_wrapper_terminates_its_python_process_tree(tmp_path: Path) -> N
         assert ready.exists(), "service wrapper did not launch the fixed-checkout module"
         launched = json.loads(ready.read_text(encoding="utf-8"))
         child_id = int(launched["pid"])
-        home = next(
-            line.partition("=")[2].strip()
-            for line in (source_root / ".venv" / "pyvenv.cfg")
-            .read_text(encoding="utf-8")
-            .splitlines()
-            if line.startswith("home =")
-        )
-        assert Path(launched["executable"]).resolve() == Path(home, "python.exe").resolve()
+        expected = (repo / ".venv" / "Scripts" / "python.exe").resolve()
+        assert Path(launched["executable"]).resolve() == expected
 
         process.kill()
         process.wait(timeout=10)

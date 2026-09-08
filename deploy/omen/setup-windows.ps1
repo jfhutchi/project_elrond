@@ -21,6 +21,7 @@ $Python = Join-Path $Repository '.venv\Scripts\python.exe'
 $PowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $ServiceWrapper = Join-Path $PSScriptRoot 'start-service.ps1'
 $JobHelper = Join-Path $PSScriptRoot 'windows-job.ps1'
+$VenvConfig = Join-Path $Repository '.venv\pyvenv.cfg'
 
 function Refuse([string] $Code) {
     throw "Elrond installer refused: $Code"
@@ -39,10 +40,31 @@ $Database = [System.IO.Path]::GetFullPath($Database)
 if (-not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) { Refuse 'ENV_FILE_NOT_FOUND' }
 if (-not (Test-Path -LiteralPath $Database -PathType Leaf)) { Refuse 'DATABASE_NOT_FOUND' }
 if (-not (Test-Path -LiteralPath $Python -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $VenvConfig -PathType Leaf) -or
     -not (Test-Path -LiteralPath $PowerShell -PathType Leaf) -or
     -not (Test-Path -LiteralPath $ServiceWrapper -PathType Leaf) -or
     -not (Test-Path -LiteralPath $JobHelper -PathType Leaf)) {
     Refuse 'SERVICE_RUNTIME_NOT_FOUND'
+}
+$VenvHomes = @(
+    Get-Content -LiteralPath $VenvConfig | ForEach-Object {
+        if ($_ -match '^home\s*=\s*(.+?)\s*$') { $Matches[1] }
+    }
+)
+if ($VenvHomes.Count -ne 1 -or -not [System.IO.Path]::IsPathRooted($VenvHomes[0]) -or
+    $VenvHomes[0].Contains('"')) {
+    Refuse 'VENV_HOME_INVALID'
+}
+$BasePython = Join-Path $VenvHomes[0] 'python.exe'
+if (-not (Test-Path -LiteralPath $BasePython -PathType Leaf)) {
+    Refuse 'VENV_BASE_PYTHON_NOT_FOUND'
+}
+foreach ($InvisibleRoot in @($env:APPDATA, (Join-Path $env:LOCALAPPDATA 'Packages'))) {
+    if ($VenvHomes[0].StartsWith(
+            $InvisibleRoot + [System.IO.Path]::DirectorySeparatorChar,
+            [System.StringComparison]::OrdinalIgnoreCase)) {
+        Refuse 'VENV_BASE_NOT_HOST_VISIBLE'
+    }
 }
 
 $Commit = (& git --no-optional-locks -C $Repository rev-parse --verify 'HEAD^{commit}' 2>$null)
