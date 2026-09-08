@@ -1,9 +1,9 @@
 """Which host a job may run on, decided from measured capacity (#38).
 
-The failure this prevents is specific and has a name in the issue: *no silent fallback from
-GPU/large-memory workflows to the Pi Zero W*. A 512MB single-core ARM11 host will accept a
-Kronos job and then thrash, swap onto a microSD, and take the always-on control plane down with
-it -- and the trading daemon, risk engine and reconciliation live on that control plane.
+The historical failure this prevents had a specific example: *no silent fallback from
+GPU/large-memory workflows to the Pi Zero W*. That host is now retired, but the general boundary
+still matters: an undersized worker can thrash, exhaust its storage and take colocated services
+down.
 
 So placement refuses rather than degrades. A job that no host can satisfy is not dispatched to
 the least-bad option; it raises, naming the requirement nothing met.
@@ -316,7 +316,7 @@ def _gpu_vram_mb() -> int | None:
 #: The three workloads this project actually dispatches, with the requirements measured rather
 #: than guessed. Kronos-small's peak was 660MB on the operator's machine (#36); the ceiling here
 #: is that plus room for the interpreter and the source snapshot, and it is comfortably above
-#: anything a Pi Zero W can offer.
+#: the capacity of the retired Pi Zero W, the historical failure that established this floor.
 KRONOS_INFERENCE = JobRequirements(
     name="kronos-inference",
     architectures=frozenset({"x86_64", "amd64", "aarch64", "arm64"}),
@@ -329,14 +329,12 @@ SEMANTIC_ANALYSIS = JobRequirements(
     minimum_memory_mb=1024,
     requires_local_model_endpoint=True,
 )
-#: The always-on control plane: scheduler, ledger, risk, reconciliation, broker. Deliberately
-#: modest, because this is the one thing that must keep running when every worker is offline --
-#: and still more than a Pi Zero W can offer. A nominally 512MB Zero W reports about 434MB once
-#: the VideoCore split is taken, so this floor excludes it, which is #38's conclusion rather
-#: than an accident: the control plane moves to a stronger host.
+#: The control plane: scheduler, ledger, risk, reconciliation and broker. Deliberately modest,
+#: because it must keep running when every optional worker is offline. The 512MB floor also
+#: preserves #38's historical finding that a roughly 434MB Pi Zero W could not safely carry it.
 CONTROL_PLANE = JobRequirements(name="control-plane", minimum_cores=1, minimum_memory_mb=512)
-#: What the Pi keeps. Heartbeat freshness, endpoint checks, an alert trigger -- and nothing the
-#: trading path depends on, so the Pi being off is an inconvenience rather than an outage.
+#: Lightweight monitoring requirements for an optional future worker. No current host is assigned
+#: this role, and the control plane must never depend on one.
 WATCHDOG = JobRequirements(name="watchdog", minimum_cores=1, minimum_memory_mb=128)
 
 __all__ = [

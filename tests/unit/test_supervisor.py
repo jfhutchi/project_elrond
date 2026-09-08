@@ -52,7 +52,11 @@ def test_inventory_cannot_probe_locks_log_or_restart(tmp_path, monkeypatch, caps
     for name in ("daemon_holds_lock", "restart_daemon", "inspect_durable", "_emit", "run_once"):
         monkeypatch.setattr(supervisor, name, forbidden)
     assert supervisor.main() == 1
-    assert json.loads(capsys.readouterr().out)["pi_state"] == "UNKNOWN"
+    assert json.loads(capsys.readouterr().out)["pi_retirement"] == {
+        "policy": "RETIRED",
+        "authority": "OPERATOR_DECLARED",
+        "remote_state": "NOT_PROBED",
+    }
     assert list(tmp_path.iterdir()) == []
 
 

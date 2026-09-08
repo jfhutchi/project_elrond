@@ -1,5 +1,11 @@
 # QuantBot — Agent Orientation
 
+> **Runtime correction — 2026-09-08:** the Pi is retired entirely by operator policy and must not
+> be contacted or used for any role. The native Windows Omen is the sole permitted PAPER
+> coordinator, with no Alienware dependency. A fresh kill-engaged ledger exists, but trading and
+> broker evidence remain `PARTIAL`; see [`docs/runtime-topology.md`](docs/runtime-topology.md) and
+> [`docs/omen-runtime-2026-09-08.md`](docs/omen-runtime-2026-09-08.md).
+
 ## START HERE
 
 ### ⚠ FIXED 2026-08-22: a spent data window read as fresh capacity
@@ -36,8 +42,9 @@ seeded (`quantbot.research.prior`) and loaded by `research-cycle`.
 sat checked into this repository, and the reported milestone hung on an LLM endpoint that has
 nothing to do with whether anything was ever refuted.
 
-**Not deployed:** the Pi runs an older checkout. Establish what a host is actually running with
-`quantbot deployment-status` (#190) rather than by inspecting its filesystem.
+**Historical note (superseded 2026-09-08):** the Pi was reported to run an older checkout.
+Current policy retires it without a remote probe. Establish current Omen state with
+`quantbot deployment-status` (#190) rather than by inspecting repository files.
 
 ### ⚠ SEVERITY-1 (FIX BUILT, NOT DEPLOYED): the drawdown halt is a trap
 

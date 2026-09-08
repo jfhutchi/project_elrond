@@ -1,5 +1,10 @@
 # QuantBot Project Status
 
+> Historical generated snapshot. It does not establish current broker, ledger or deployment
+> state. As of 2026-09-08, the Pi is retired by operator policy and the native Windows Omen is the
+> sole permitted PAPER coordinator. A fresh kill-engaged PAPER ledger exists, while trading and
+> broker evidence remain `PARTIAL`.
+
 Generated at: 2026-08-18T00:57:32Z
 
 | Field | Verified value |
