@@ -1,4 +1,53 @@
-# Omen deployment and readiness — 2026-09-09 00:13 UTC
+# Omen deployment and readiness — 2026-09-09
+
+## Latest observation — 12:27 UTC (08:27 Eastern)
+
+The overnight reboot occurred at 06:12:15 Eastern. The startup service hosts returned in
+session 0 approximately 13 seconds later, with Python and Ollama following at 06:12:36.
+Console, daemon, protection and model tasks were Running; scheduled ingestion, research and
+report completed with result 0. This is actual reboot evidence, superseding the earlier
+registration-only limit below. It does not establish the timing of interactive sign-in.
+
+The screenshot's stale-observation warning exposed a real scheduling defect despite those
+running processes: an overnight daemon start selected the next after-close cycle and skipped
+the coming daytime observations. The [market-hours fix](omen-market-hours-monitoring.md)
+is now deployed at clean runtime commit `f125bd5fdb028177879ed9efe50f7e098af641af`.
+The six application tasks were stopped, all their prior processes exited, and their startup
+actions were updated to that exact commit at 12:26 UTC. Local `erlond` Password logon, Limited
+privileges and AtStartup/timed triggers remain verified. Elevated process-owner inspection
+confirmed `erlond` in session 0. The model server continued running; no OpenConsole was present.
+
+The new dashboard returned HTTP 200 and displays the off-hours explanation without claiming
+the daemon is probably stopped. A real PAPER broker clock read at 12:27 UTC and the deployed
+scheduler selected `OBSERVE` at **13:30 UTC / 09:30 Eastern today**. This calculation is not a
+completed observation. The genuine last market-session observation still dates to September 8;
+no synthetic observation, trading cycle, fill or qualification day was created.
+
+Fresh config, status, doctor, preflight, ingestion-status, research-status and reconciliation
+commands returned 0 with their outputs inspected. Doctor reports ready, account verified,
+risk healthy and kill switch clear; reconciliation reports zero differences and unresolved
+intents. Ingestion succeeded at 12:26:36 UTC, with daily bars through September 8 at 20:00 UTC.
+The active database and PAPER environment are unchanged. Research remains operational M0;
+no forward-supported edge is claimed. Recovery inventory/startup reports still refuse global
+authority and standalone reading of the active WAL store, as explained below.
+
+The unresolved September 8 HTTP 403 incident and IEX single-venue volume limitation remain
+visible. The original rejection body was not retained, so its exact cause is still unproven.
+The switch was already clear; this deployment did not clear it again or resolve the incident.
+
+Full Windows local CI on exact implementation commit `f125bd5` passed **2,822 tests, 45 skipped,
+one warning in 625.62 seconds**, plus Ruff, Linux/win32 type checks, lockfile and clean-snapshot
+checks. Linux execution was **NOT RUN / DOCKER_NOT_FOUND**, so aggregate CI returned 1.
+Independent code review found no remaining actionable issue after the close-boundary and slow
+observation regressions were addressed. Later documentation commits do not alter the runtime pin.
+
+Local evidence: `D:\Elrond\evidence\reboot-20260909-verification.json`,
+`market-hours-deployment.json`, `market-hours-clock-proof.json`,
+`market-hours-runtime-audit\`, and `market-hours-local-ci-summary.json` under that evidence directory.
+These records contain operational observations; secrets and raw account identifiers are not
+included in this Git report.
+
+## Historical deployment — 00:13 UTC
 
 The tested entry-budget implementation is deployed and the legitimate measured-clearance path
 has cleared the durable kill switch. Native Windows Task Scheduler owns the active PAPER stack.

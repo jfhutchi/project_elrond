@@ -160,8 +160,9 @@ restored readiness without replaying the rejected intent or rewriting the ERROR 
 
 All seven tasks now use the local `erlond` account with Password logon, Limited privileges and
 AtStartup plus timed triggers. Services run in session 0 and a Task Scheduler console stop/start
-restored the same store and HTTP service. A physical reboot has not been performed. The active
-commit is `094fefc1538e46dfca1b48c2e0a1ca50857fc43e`. The latest verified online backup is
+restored the same store and HTTP service. Recovery after the September 9 06:12 Eastern reboot
+was observed. The subsequent market-hours fix is deployed at active clean
+commit `f125bd5fdb028177879ed9efe50f7e098af641af`. The latest verified online backup is
 `D:\Elrond\backups\quantbot-paper-entry-budget-20260909.db`, retaining the same store identity.
 The full evidence record is [the Omen runtime report](omen-runtime-2026-09-09.md).
 
