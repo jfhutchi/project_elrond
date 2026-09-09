@@ -140,9 +140,7 @@ async def test_a_failing_check_is_recorded_with_its_reason(database: Database) -
 
     assert result.outcome is ObservationOutcome.DEGRADED
     assert result.reasons == ("POSITION_LEDGER_MISMATCH",)
-    assert stored(database) == [
-        (observation_id(NOW), "DEGRADED", "POSITION_LEDGER_MISMATCH")
-    ]
+    assert stored(database) == [(observation_id(NOW), "DEGRADED", "POSITION_LEDGER_MISMATCH")]
 
 
 @pytest.mark.asyncio
@@ -214,11 +212,7 @@ def test_a_naive_timestamp_is_refused(database: Database) -> None:
     with pytest.raises(ValueError, match="timezone-aware"):
         import asyncio
 
-        asyncio.run(
-            observer(database).observe(
-                now=datetime(2026, 8, 30, 15, 0), market_open=True
-            )
-        )
+        asyncio.run(observer(database).observe(now=datetime(2026, 8, 30, 15, 0), market_open=True))
 
 
 # --- the wake schedule ---------------------------------------------------------------------
@@ -233,12 +227,12 @@ def clock(*, is_open: bool, close_in: timedelta) -> MarketClock:
     )
 
 
-def test_a_closed_market_behaves_exactly_as_before() -> None:
-    """A daemon started overnight must schedule the after-close cycle, as it always did."""
+def test_an_overnight_start_wakes_at_the_next_open_to_observe() -> None:
+    """An overnight start must not sleep through the entire next market session."""
     wake = next_wake(clock(is_open=False, close_in=timedelta(hours=20)), NOW)
 
-    assert wake.kind is WakeKind.CYCLE
-    assert wake.at == NOW + timedelta(hours=20, minutes=5)
+    assert wake.kind is WakeKind.OBSERVE
+    assert wake.at == NOW + timedelta(hours=18)
 
 
 def test_an_open_session_is_observed_on_the_interval() -> None:
@@ -249,16 +243,38 @@ def test_an_open_session_is_observed_on_the_interval() -> None:
     assert wake.at == NOW + OBSERVATION_INTERVAL
 
 
-def test_the_close_always_wins_the_comparison() -> None:
+@pytest.mark.parametrize("minutes_to_close", [5, 14, 15])
+def test_the_close_always_wins_the_comparison(minutes_to_close: int) -> None:
     """An observation can never displace the trading cycle or push it past its slot.
 
     With five minutes of session left, the next thing to do is the cycle -- not an observation
     fifteen minutes from now, which would land after the close it was supposed to precede.
     """
-    wake = next_wake(clock(is_open=True, close_in=timedelta(minutes=5)), NOW)
+    wake = next_wake(clock(is_open=True, close_in=timedelta(minutes=minutes_to_close)), NOW)
 
     assert wake.kind is WakeKind.CYCLE
-    assert wake.at == NOW + timedelta(minutes=10)
+    assert wake.at == NOW + timedelta(minutes=minutes_to_close + 5)
+
+
+def test_a_closed_clock_with_no_future_open_is_refused() -> None:
+    stale = clock(is_open=False, close_in=timedelta(hours=20)).model_copy(update={"next_open": NOW})
+    with pytest.raises(ValueError, match="future open"):
+        next_wake(stale, NOW)
+
+
+def test_a_weekend_start_uses_the_broker_reported_next_open() -> None:
+    friday = datetime(2026, 9, 4, 22, tzinfo=UTC)
+    # Labor Day is skipped by the broker's calendar; no weekday arithmetic belongs here.
+    next_open = datetime(2026, 9, 8, 13, 30, tzinfo=UTC)
+    broker_clock = MarketClock(
+        timestamp=friday,
+        is_open=False,
+        next_open=next_open,
+        next_close=datetime(2026, 9, 8, 20, tzinfo=UTC),
+    )
+    wake = next_wake(broker_clock, friday)
+    assert wake.kind is WakeKind.OBSERVE
+    assert wake.at == next_open
 
 
 def test_the_trading_cadence_is_unchanged_by_this_issue() -> None:

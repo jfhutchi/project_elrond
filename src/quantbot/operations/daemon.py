@@ -96,9 +96,9 @@ def next_wake(
 ) -> Wake:
     """The next thing to do: watch the open session, or run the after-close cycle.
 
-    While the market is closed this is exactly the old behaviour -- sleep until after the next
-    close. That is deliberate: the trading cycle's cadence does not change, and a daemon started
-    overnight behaves as it always did.
+    A daemon started outside market hours wakes to observe the broker's next open. Sleeping
+    straight to the next close would skip all monitoring after an overnight start or reboot.
+    A pending after-close trading cycle still wins when it precedes the following open.
 
     While the market is open the daemon wakes at `observation_interval` instead, unless the close
     arrives first. The close always wins the comparison, so an observation can never displace the
@@ -108,9 +108,15 @@ def next_wake(
         raise ValueError("observation_interval must be positive")
     close_target = next_cycle_at(clock, now, after_close_delay=after_close_delay)
     if not clock.is_open:
+        if clock.next_open <= now.astimezone(UTC):
+            raise ValueError("broker market clock does not provide a future open")
+        if clock.next_open < close_target:
+            return Wake(at=clock.next_open, kind=WakeKind.OBSERVE)
         return Wake(at=close_target, kind=WakeKind.CYCLE)
     observe_at = now.astimezone(UTC) + observation_interval
-    if observe_at < close_target:
+    # At the close the broker advances next_close to the following session. An observation
+    # in that boundary window would discard today's scheduled trading cycle on the next loop.
+    if observe_at < clock.next_close:
         return Wake(at=observe_at, kind=WakeKind.OBSERVE)
     return Wake(at=close_target, kind=WakeKind.CYCLE)
 
@@ -144,12 +150,24 @@ class DaemonRunner:
 
     async def run(self, stop: StopSignal, *, now: Callable[[], datetime]) -> DaemonResult:
         completed = 0
+        pending_cycle_at: datetime | None = None
         with SingleWriterLock(self._lock_path):
             while not stop.is_set():
                 clock = await self._clock_provider.get_market_clock()
                 current = now()
                 wake = next_wake(clock, current)
-                delay = Decimal(str((wake.at - current.astimezone(UTC)).total_seconds()))
+                # An observation can finish after close. Keep the already-observed trading
+                # slot instead of losing it when the broker advances next_close to tomorrow.
+                if pending_cycle_at is not None and pending_cycle_at < wake.at:
+                    wake = Wake(at=pending_cycle_at, kind=WakeKind.CYCLE)
+                if wake.kind is WakeKind.OBSERVE:
+                    pending_cycle_at = next_cycle_at(clock, current)
+                else:
+                    pending_cycle_at = None
+                delay = max(
+                    Decimal("0"),
+                    Decimal(str((wake.at - current.astimezone(UTC)).total_seconds())),
+                )
                 await self._sleeper(delay)
                 if stop.is_set():
                     break
