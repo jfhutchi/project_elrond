@@ -1,6 +1,40 @@
 # Omen deployment and readiness — 2026-09-09
 
-## Latest observation — 12:27 UTC (08:27 Eastern)
+## Latest observation — 13:46 UTC (09:46 Eastern)
+
+The deployed daemon completed actual observations at the 09:30 open and at 09:45:04 Eastern.
+The latter is HEALTHY. This supersedes the preopen scheduling calculation below with observed
+session activity; no manually fabricated heartbeat was used.
+
+At the open, protection found nine broker positions while its previous local snapshot was flat,
+so its first evaluation correctly recorded nine BLOCKED_STATE positions and a
+POSITION_STATE_UNRECONCILED incident. The concurrent fill collection initially retained eight
+fills; QQQ's stored order was still new. The single recorded reconciliation difference was account
+equity 499.98 versus 499.91 across reads, and the observation also refused the incomplete ledger.
+
+The existing reconcile command was run at 13:43 UTC. It imported all nine actual fills, updated
+the terminal order states, checked the independent fill-derived quantities against the broker,
+and returned RECONCILED with zero differences and no unresolved intents. The next scheduled
+protection cycle at 13:45:00 UTC was HEALTHY: nine matching positions with usable prices,
+zero unprotected positions and no exit required. The scheduled 13:45:04 observation also
+reconciled cleanly and was HEALTHY. Protection is evaluation on the existing 15-minute schedule;
+this evidence is not a claim of continuous broker-held stop orders.
+
+At 13:45:45 UTC the specific opening position-mismatch incident was resolved through
+StorageRepository.resolve_incident after transactionally checking the fresh healthy protection
+cycle, all nine evaluations and clean reconciliation. A separate resolved INFO audit record
+links the original incident to those measured cycle/reconciliation identifiers. The original
+incident is retained. Yesterday's HTTP 403 incident remains unresolved, and IEX volume capability
+restrictions remain unchanged. No code, task registration, risk threshold or kill-switch state
+was changed for this recovery. Market-open snapshot races can recur; this observation does not
+claim that a permanent synchronization change has been implemented.
+
+The dashboard at 13:46 UTC reports nine protected, zero unprotected, zero reconciliation
+differences, PAPER/PAPER and a clear switch. Account equity in the latest stored snapshot is
+500.20. Local evidence is under `D:\Elrond\evidence`: `position-attention-runtime-audit\`,
+`opening-position-incident-resolution.json`, and `position-attention-dashboard-after.json`.
+
+## Preopen deployment observation — 12:27 UTC (08:27 Eastern)
 
 The overnight reboot occurred at 06:12:15 Eastern. The startup service hosts returned in
 session 0 approximately 13 seconds later, with Python and Ollama following at 06:12:36.
