@@ -714,6 +714,7 @@ class AdaptiveMomentumRunner:
         anomaly_detector: AnomalyDetectorConfig | None = None,
         catalyst_sources: Sequence[CatalystSource] = (),
         counterfactual_policy: HypotheticalExecutionPolicy | None = None,
+        entry_buying_power_reserve_bps: int = 0,
         clock: Clock = _utcnow,
     ) -> None:
         self._database = database
@@ -721,6 +722,9 @@ class AdaptiveMomentumRunner:
         self._config = config
         self._identity = identity
         self._sessions = sessions
+        if not 0 <= entry_buying_power_reserve_bps < 10000:
+            raise ValueError("entry_buying_power_reserve_bps must be between 0 and 9999")
+        self._entry_buying_power_reserve_bps = entry_buying_power_reserve_bps
         self._market_data = market_data or MarketDataSettings()
         # Defaults rather than optional: an absent policy must mean the shipped limits, not no
         # limits. `PortfolioVetoPolicy` refuses to be constructed with an unimplemented veto
@@ -1643,6 +1647,7 @@ class AdaptiveMomentumRunner:
                     # Carry the stop on the durable intent if this blocks a real entry.
                     open_risk=equity * Decimal(self._config.risk_per_trade_bps) / Decimal(10000),
                     reserves_position_slot=True,
+                    buying_power_already_reserved=True,
                 )
             )
         return reserved
@@ -1682,6 +1687,7 @@ class AdaptiveMomentumRunner:
             symbol,
             position_inputs,
             reservations,
+            buying_power_reserve_bps=self._entry_buying_power_reserve_bps,
         )
         sized = size_entry(
             EntrySizingRequest(

@@ -4,6 +4,18 @@
 <h1>Market data</h1>
 <p class="sub">What the feed can actually see. Limited feed semantics are never hidden.</p>
 
+{% if sync_result is not none %}
+<div class="card" role="status">
+  <h2>{% if sync_result.ok is sameas true %}Market data sync completed{% else %}Market data sync needs attention{% endif %}</h2>
+  {% if sync_result.bars_stored is defined %}
+    <p>{% if sync_result.bars_stored == 0 %}No new bars were added.{% else %}Added {{ sync_result.bars_stored }} new bars.{% endif %}</p>
+  {% endif %}
+  {% if sync_result.completed_through %}<p>Completed through: {{ sync_result.completed_through }}</p>{% endif %}
+  {% if sync_result.stale_symbols %}<p>Stale symbols: {{ sync_result.stale_symbols | join(', ') }}</p>{% endif %}
+  {% for reason in sync_result.reasons | default([]) %}<p>{{ reason }}</p>{% endfor %}
+</div>
+{% endif %}
+
 <div class="grid">
   <div class="card">
     <div class="k">Feed</div>
@@ -61,9 +73,27 @@
     and the fix is almost always &ldquo;fetch the bars&rdquo;. An operator who can see the
     staleness should be able to address it from the same page rather than from a terminal.
   </p>
-  <form method="post" action="/operations/sync-data">
+  <form id="sync-data-form" method="post" action="/operations/sync-data">
     <button type="submit">Sync market data now</button>
+    <p id="sync-progress" role="status" hidden>Fetching completed bars. This can take a moment.</p>
   </form>
 </div>
 
+<script>
+  const syncForm = document.getElementById('sync-data-form');
+  const syncButton = syncForm.querySelector('button');
+  const syncProgress = document.getElementById('sync-progress');
+  syncForm.addEventListener('submit', () => {
+    syncButton.disabled = true;
+    syncButton.textContent = 'Syncing market data…';
+    syncForm.setAttribute('aria-busy', 'true');
+    syncProgress.hidden = false;
+  });
+  window.addEventListener('pageshow', () => {
+    syncButton.disabled = false;
+    syncButton.textContent = 'Sync market data now';
+    syncForm.removeAttribute('aria-busy');
+    syncProgress.hidden = true;
+  });
+</script>
 {% endblock %}

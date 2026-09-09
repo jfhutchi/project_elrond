@@ -1,125 +1,158 @@
-# Coordinator deployment (HP Omen, WSL2 Ubuntu)
+# Native Windows PAPER runtime on the HP Omen
 
-> Before using this installer, complete [runtime recovery](../../docs/runtime-recovery.md).
-> The WSL observations below are historical desktop observations, not facts about the current
-> `Leannes-Laptop` Omen, where WSL was not installed at the 2026-09-05 inventory. This installer
-> can activate a coordinator; a local empty store is not evidence that the Pi is retired.
+The HP Omen laptop is the sole permitted Elrond coordinator. The Raspberry Pi is retired by
+operator policy and must not be contacted or used as a coordinator, watchdog, dashboard or worker.
+The Omen runtime has no Alienware or other-computer dependency.
 
-Bringing Elrond up on the always-on coordinator described in
-[`docs/runtime-topology.md`](../../docs/runtime-topology.md) (#38).
+This directory's current entry point is `setup-windows.ps1`. The older WSL/systemd files remain as
+historical deployment artifacts and are not compatible with the measured current host: WSL is not
+installed and Docker is absent.
 
-**Nothing here has been installed.** The units and the setup script are written and reviewed;
-running them changes persistent configuration on the operator's machine and moves the durable
-ledger, and both are operator decisions. This file exists so that decision is a short command
-rather than a research project.
+## Measured host and deployment status — 2026-09-08
 
-## Why user units rather than system units
+**Latest status (2026-09-09 00:13 UTC):** All seven tasks use local standard account
+`LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
+The console, PAPER daemon, protection and model server run; ingestion, research and report have
+completed successfully. Startup registration is verified, but a physical reboot has not been
+tested. A console stop/start removed its full process tree and restored HTTP 200; all runtime
+processes were observed in noninteractive Windows session 0. The active ledger remains
+`D:\Elrond\state\quantbot-paper-fresh-20260908.db`.
+The tested entry-budget fix at `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` is deployed. The legitimate
+clearance command remeasured readiness and cleared the switch at 00:10 UTC; doctor and PAPER
+reconciliation now pass. Nine accepted orders remain unfilled, and the earlier HTTP 403 ERROR run
+and rejected DBC intent are preserved. See the
+[current evidence follow-up](../../docs/omen-runtime-2026-09-09.md) for measured details and limits.
+Older inventory below is historical evidence.
 
-The Pi runs system units under `/etc/systemd/system`, installed with sudo. These are **user
-units** under `~/.config/systemd/user`, and the difference is not cosmetic:
+The target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen 7 6800H
+(8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M (disabled, device error 22; CPU execution verified), approximately 781 GiB free on C: and 931 GiB free on D:. Python 3.11.16
+and `uv` are available natively.
 
-- They install and start without root. Elrond needs no privilege it does not already have as
-  the owning user, and a paper-trading daemon that runs as root is a blast radius nobody asked
-  for.
-- They stop when the user's last session ends — *unless lingering is enabled*, which is the one
-  step below that does require an administrator prompt. Without it, "always on" means "on while
-  a terminal is open", which is not what the topology promises.
+The historical bounded pre-install inventory found no Elrond process, startup registration, operational ledger
+or credentials. A later expanded scan found 774 old schema-12 databases under pytest temporary
+paths and classified all of them as test fixtures, not operational candidates. Task Scheduler
+registration was exercised with an Interactive logon for the current user. AtBoot and S4U
+registration initially returned Access denied under the non-administrator account. That original
+Interactive registration has since been replaced by the password-backed startup tasks above.
 
-## Prerequisites, in order
-
-**1. WSL2 systemd.** Already enabled on this machine — `/etc/wsl.conf` carries `[boot]
-systemd=true` and PID 1 is systemd. Nothing to do.
-
-**2. Lingering.** This is the step that makes the coordinator survive a reboot with no terminal
-open:
-
-```bash
-sudo loginctl enable-linger "$USER"
-```
-
-Verify with `loginctl show-user "$USER" --property=Linger` — it must print `Linger=yes`. This
-is the one command here that needs a password, which is why it is not scripted.
-
-**3. WSL memory ceiling.** WSL2 currently reports 15,847 MB against the Windows side's
-32,486 MB — a default, not a hardware limit. Placement reads what the kernel reports, so raising
-it changes which jobs are permitted. To lift it, in Windows `%USERPROFILE%\.wslconfig`:
-
-```ini
-[wsl2]
-memory=24GB
-```
-
-Then `wsl --shutdown` from Windows and reopen. Leaving it alone is a legitimate choice; it means
-heavy jobs are sized against 15 GB, which is still far above anything currently declared.
-
-**4. Credentials.** `~/.config/quantbot/quantbot.env`, mode 600, outside the repository, exactly
-as on the Pi. Set `TRADING_MODE=PAPER` and leave `LIVE_TRADING_ACKNOWLEDGED=false`; those are the
-two settings the code actually reads (`config.py`), and both already default to the safe value.
-The units read the file via `EnvironmentFile`; never put a credential in a unit file, which is
-world-readable.
-
-`setup.sh` refuses to install against a credential file that says otherwise, via
-`deploy/refuse-live-trading.sh`. Check one yourself at any time:
-
-```bash
-bash deploy/refuse-live-trading.sh ~/.config/quantbot/quantbot.env
-```
-
-> **This line named `LIVE_TRADING` until 2026-09-03, and so did `setup.sh:25`.** No such setting
-> exists — `Settings` ignores unknown variables — so the pre-flight check grepped for a name
-> nothing reads, and would have passed an env file that really did set `TRADING_MODE=LIVE` while
-> printing that it refused. The refusal in `config.py` was the boundary that held; the one here
-> was decoration. Now shared with the Pi installer, which had no check at all, and covered by
-> `tests/unit/test_deployment_live_trading_guard.py`. See `docs/node-deployment.md` under
-> *Safety*.
+Omen is the only host policy permits to hold authority, but global coordinator/store authority
+and other-host fencing remain `UNKNOWN` to the read-only recovery inventory. Installation alone
+does not establish broker readiness or forward qualification; consult the current evidence above.
 
 ## Install
 
-```bash
-./deploy/omen/setup.sh
+The runtime Python is installed at `D:\Elrond\tools\python`, outside packaged-app AppData
+virtualization. When preparing this host from packaged Codex, use an explicit external install:
+
+```powershell
+uv python install 3.11.16 --install-dir D:\Elrond\tools\python --no-bin
+uv venv --python D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\python.exe
+uv sync --locked
 ```
 
-It copies the units, reloads the user manager, enables and starts them, and prints the status of
-each. It refuses to run if lingering is off, because installing an always-on service that stops
-when you close a terminal is worse than not installing it — it looks deployed.
+Do not replace an existing environment without first stopping its tasks and preserving needed
+configuration. A Python path visible inside Codex does not prove Task Scheduler can see it.
+Run from an ordinary PowerShell session at the reviewed checkout:
 
-## What runs, and what deliberately does not
-
-| Unit | Purpose |
-|---|---|
-| `quantbot-daemon.service` | The paper-trading daemon: cycles, risk, reconciliation, kill switch |
-| `quantbot-dashboard.service` | The read-only operations page |
-
-Kronos and semantic workers are **not** units. They are dispatched per job through the worker
-interface and exit when done. A long-lived inference service would be a process competing with
-the trading daemon for the same memory, on the host whose whole job is to stay up.
-
-The Pi keeps the watchdog role and its own dashboard. Nothing here replaces it, and nothing here
-depends on it.
-
-## Migrating the durable ledger
-
-Not scripted, on purpose. The ledger holds the paper account's fills and qualification days, it
-is the evidence store the promotion ladder reads, and #16 forbids reconstructing forward
-observations. Copying it is a one-way operator action that deserves its own backup and its own
-verification:
-
-```bash
-# On the current host, with the daemon stopped:
-sqlite3 quantbot.db "PRAGMA integrity_check;"
-sqlite3 quantbot.db ".backup '/tmp/quantbot-backup.db'"
-# Then copy the backup across, and on the coordinator, before starting anything:
-sqlite3 quantbot.db "PRAGMA integrity_check;"
-quantbot doctor
+```powershell
+& .\deploy\omen\setup-windows.ps1 `
+    -EnvironmentFile 'C:\Users\leepa\.config\quantbot\quantbot.env' `
+    -Database 'D:\Elrond\state\quantbot-paper-fresh-20260908.db'
 ```
 
-`doctor` is the check that matters: it reports schema version, kill-switch state and
-reconciliation freshness. Start the daemon only after it is clean.
+The installer must keep `TRADING_MODE=PAPER`, `BROKER_ENVIRONMENT=PAPER`, and
+`LIVE_TRADING_ACKNOWLEDGED=false`; use absolute paths outside the checkout for mutable state,
+locks, reports and logs. It registers the current-user Interactive task that this account can
+actually create. Requiring elevation for an AtBoot or S4U task is a separate operational change,
+not something this installer may silently approximate.
 
-## Rollback
+The checkout must be committed and clean before installation. Six separate tasks are registered:
+`Elrond Console`, `Elrond Daemon`, `Elrond Protection`, `Elrond Ingestion`, `Elrond Research`, and
+`Elrond Report`. Broker-dependent tasks remain disabled when PAPER credentials are missing.
+Start enabled tasks with `Start-ScheduledTask`; scheduled logon and retry triggers also apply.
+Before updating a running deployment, stop its tasks through Task Scheduler, verify shutdown,
+then rerun with `-UpdateManaged` to pin the new clean commit and start enabled tasks again.
+The installer refuses to update running tasks because registration alone does not replace them.
 
-```bash
-systemctl --user disable --now quantbot-daemon.service quantbot-dashboard.service
+Scheduled actions run through a small Windows GUI executable so Windows does not allocate a
+terminal before PowerShell can hide it. `build-service-host.ps1` compiles the reviewed C# sources
+with the installed .NET Framework compiler into `service-host/<source fingerprint>/` beside the
+database, outside Git. The installer checks a cached executable's digest before reuse. The host
+owns a kill-on-close Job Object before launching PowerShell with `CreateNoWindow`; task shutdown
+therefore stops the complete descendant tree. Existing wrapper validation and nested jobs remain
+in place. Startup errors go to `launcher-logs/<component>.log` beside the database; normal
+application logs retain their configured location. Native exit codes become task results.
+
+The separately registered `ElrondModelServer` uses the same host with its existing
+`start-model-server.ps1` arguments and an absolute launcher log as the first host argument.
+Updating its action preserves its task triggers, principal and settings; stop it and verify
+descendant shutdown before replacing the action, then start it again.
+
+The smallest broker activation step is to supply `ALPACA_PAPER_API_KEY`, `ALPACA_PAPER_API_SECRET`
+and the verified `EXPECTED_ACCOUNT_ID` in the existing restricted external environment file.
+Do not put credential values in shell commands, chat, Git or task arguments. After injection,
+measure PAPER readiness and reconcile real orders/fills/positions through the normal CLI.
+Keep the kill switch engaged until its legitimate measured-clearance path permits otherwise.
+For the current unattended configuration, an elevated operator uses
+`-Mode Boot -Credential (Get-Credential)` with the local runtime account, plus `-UpdateManaged`
+when replacing stopped managed tasks. The default Interactive mode above is a sign-in-dependent
+fallback, not the current deployment mode. The model task must also retain its startup trigger.
+Before switching identities, provision batch-logon permission, read/execute access to source,
+Python and Git metadata, read access to the protected environment file, and write access to state,
+logs and reports. Check the database's own protected ACL separately from its parent directory.
+An explicitly trusted Git checkout may be needed when its owner differs from the runtime user;
+never use a wildcard `safe.directory`. Verify actual launches under the new account. No automatic
+Windows login is configured.
+
+`ENTRY_BUYING_POWER_RESERVE_BPS` defaults to 500 (5% of currently available broker buying power).
+The runtime retains this amount before sizing a batch and deducts each newly planned entry once;
+already-pending broker orders are not charged again. This operational project default reduces
+funding pressure from price differences and does not guarantee acceptance of market orders.
+See [entry budgeting](../../docs/omen-entry-buying-power.md) for provenance and limitations.
+
+After registration, establish runtime truth with read-only inventory before commands that build a
+writable runtime:
+
+```powershell
+uv run quantbot deployment-status --inventory
+uv run quantbot deployment-status --startup-check
 ```
 
-The Pi deployment is untouched by any of this and continues to run.
+Then inspect the scheduled task, process ownership, configured absolute paths and logs. Broker
+credentials, if later supplied outside the repository, permit a read-only reconciliation check;
+their absence is an honest refusal, not a reason to populate placeholders.
+
+## Required local roles
+
+The native Windows runtime supervises the coordinator, position-protection process and dashboard
+on Omen. Research and inference workers are optional local subprocesses dispatched only when
+measured capacity permits. No required heartbeat, recovery, alerting or control path may depend on
+another host.
+
+## Ledger provenance
+
+No prior operational Elrond ledger was discovered in the bounded 2026-09-08 recovery scans. The
+initial PAPER ledger at `D:\Elrond\state\quantbot-paper.db`, schema 27 / revision 0027, lineage
+`2244c782-29e9-4ab0-bff8-bced024a226b`, was created with 25 seeded historical findings and no forward
+history. It is preserved as a prior store. Its initial backup at
+`D:\Elrond\backups\quantbot-paper-initial-20260908.db` passed integrity checking and has an
+identical logical dump. It does not inherit Alienware/Pi forward history.
+
+The **active** ledger is `D:\Elrond\state\quantbot-paper-fresh-20260908.db`, UUID
+`cd2a5911-853a-484e-bbc8-d0c27b5d27aa`, schema 27 / revision 0027. It belongs to the fresh PAPER
+account supplied by the operator and was reconciled before activation. Its verified online backup
+is `D:\Elrond\backups\quantbot-paper-local-account-20260908.db`. The nine accepted and one rejected
+intents are actual September 8 events; no previous forward history was migrated into this store.
+
+Portable Ollama 0.33.3 currently runs through the `ElrondModelServer` task on CPU and listens only
+on `127.0.0.1:11434`. Two deterministic offline Kronos runs completed with 240 values and an
+observed peak near 480 MB. These checks establish local worker capability only, not trading or
+forward evidence. The detailed record is [the Omen runtime report](../../docs/omen-runtime-2026-09-08.md).
+
+## Historical WSL deployment artifacts
+
+`setup.sh` and the systemd units were previously designed for a different Omen/WSL environment.
+Earlier evidence reported WSL2 systemd, user lingering, 32 logical processors, 32,486 MB Windows
+RAM, 15,847 MB guest RAM and a 16,376 MB GPU. Those observations remain useful history, but they do
+not describe this laptop and do not prove anything is currently deployed. Do not run the WSL
+installer on the measured native Windows target.

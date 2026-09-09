@@ -4,10 +4,17 @@ How a second machine becomes an Elrond node, and what has to exist before that i
 rather than a bespoke project each time. Extends [`runtime-topology.md`](runtime-topology.md)
 and #38.
 
+> **Current policy (2026-09-08):** Elrond requires one native Windows Omen only. The Pi is retired
+> entirely and must not be contacted; the Alienware and any future worker are optional capacity,
+> never dependencies. This document preserves the earlier multi-node design as history.
+
 ## Status
 
-`quantbot.node` exists: identity, capability detection, role policy. Everything else in the
-backlog below is unbuilt. Nothing here is installed on any machine.
+`quantbot.node` exists: identity, capability detection, role policy. The Omen's local-account
+startup tasks, PAPER ledger, reconciliation and loopback model service have been exercised.
+The tested entry-budget fix is deployed; PAPER readiness and reconciliation pass and the switch
+is clear after measured clearance. See [current evidence](omen-runtime-2026-09-09.md).
+The backlog below is historical planning unless a future measured need justifies another node.
 
 ## What the repository actually assumes today
 
@@ -47,9 +54,10 @@ runs", which stopped being true when the dispatcher landed.
 spawning. That is the extension point for remote dispatch, and it should be extended rather
 than replaced.
 
-**Host-dependent pieces are already split by platform.** systemd user units in `deploy/omen/`
-and `deploy/pi/`; `scripts/setup-env.ps1`, `scripts/install-daemon-task.ps1` and
-`scripts/quantbot-watchdog.cmd` on Windows; `sandbox/wsl.py` for Linux-only sandboxing.
+**Host-dependent pieces are split by platform.** The current path is native Windows Task Scheduler
+through `deploy/omen/setup-windows.ps1`. The systemd units under `deploy/omen/` and `deploy/pi/`
+are historical; the Pi installer now refuses immediately. `sandbox/wsl.py` remains a Linux-only
+sandbox backend, but WSL is absent on the measured Omen.
 
 **Node registration does not exist in any form.** Capability *detection* did, partially, and
 now exists properly. Identity, persistence, heartbeat and a registry do not.
@@ -135,7 +143,7 @@ Dependency-ordered. Each is independently reviewable. Parent: #38. Roadmap: #2.
 | N13 | **Documentation** — architecture, install, supported platforms, roles, hardware guidance, ports, storage, upgrade, repair, uninstall, troubleshooting, `doctor`, adding and removing a node. | N6–N12 |
 | N14 | **Clean-machine acceptance test** — the Omen, from unconfigured to registered, `doctor` green, a routed test workload, a refused CUDA workload, reboot recovery, a second install proving idempotency, and an upgrade. | N10, N13 |
 
-## Networking
+## Historical networking evidence
 
 > **Corrected 2026-09-02.** This section said "Current listeners, both loopback-only by design:
 > dashboard `127.0.0.1:8080`, control surface `127.0.0.1:8081`." Neither half was true. Both bind
@@ -149,18 +157,20 @@ Dependency-ordered. Each is independently reviewable. Parent: #38. Roadmap: #2.
 | Pi control surface, port 8081 | `0.0.0.0` (`scripts/control_server.py`) | Same systemd address filter, plus a bearer token. Holds the ledger, not the broker keys |
 | Operator console, port 8787 | `127.0.0.1` (`quantbot console`) | Loopback default; `--host` widens it deliberately |
 
-So two ports are already LAN-reachable, both by design and both confined at the systemd layer
-rather than by the process. The rule going forward is unchanged and now has to be stated against
-that baseline: **N1–N8 add no new reachable port.** If N9 introduces remote dispatch, the
-node-to-node channel must be authenticated before it binds to anything other than loopback, and
-every reachable port has to be documented in N13 with the reason it is open.
+Those Pi listeners were part of the retired topology and are not current dependencies. They remain
+documented because they describe the prior attack surface. The current Omen model service binds
+only to `127.0.0.1:11434`; remote dispatch would require authentication before binding beyond
+loopback, and every reachable port must be documented with its purpose.
 
 ## Safety
 
 Live trading is untouched by all of this. Installing a node must never enable it.
 
-`deploy/refuse-live-trading.sh` is the check, and **both** installers call it before installing
-anything. Run it directly against a credential file at any time:
+The active native Windows path validates PAPER-only authority through the application parser in
+`quantbot.operations.service`, invoked by `deploy/omen/setup-windows.ps1` and the service wrapper.
+The shell guard `deploy/refuse-live-trading.sh` remains for historical shell deployment paths;
+it is not the native Windows startup boundary. The retired Pi installer exits immediately before
+reading credentials or inspecting the host. The shell guard can also be checked directly:
 
 ```bash
 bash deploy/refuse-live-trading.sh ~/.config/quantbot/quantbot.env
@@ -196,17 +206,17 @@ is *"could not look"*, kept distinct so an unreadable file cannot read as a clea
 > asserts the **named** refusal with a control for each case, and was confirmed to fail — 18 of
 > 31 cases — when the old logic was put back.
 
-`deploy/pi/setup.sh` also writes `TRADING_MODE=PAPER` and `LIVE_TRADING_ACKNOWLEDGED=false` into
-the env file it generates, which is a real default in addition to the check.
+Historically, `deploy/pi/setup.sh` also wrote `TRADING_MODE=PAPER` and
+`LIVE_TRADING_ACKNOWLEDGED=false` into the env file it generated. That implementation evidence is
+retained above; the current script creates nothing.
 
 Adding a node adds capacity, never authority. A new node cannot clear a kill switch, cannot
 ratify a mandate, and cannot become coordinator by describing itself as one.
 
 ## Open
 
-- Whether the Omen or the desktop should end up holding the ledger. #38 recorded the desktop's
-  WSL2 as the coordinator; the brief for the second machine says the always-on laptop should
-  carry infrastructure. Both are defensible, the choice is reversible, and N3 has to exist before
-  either can be executed safely. Deciding it does not block N2–N8.
+- The host choice is resolved by operator policy: the native Windows Omen laptop is the sole
+  permitted coordinator. The older desktop/WSL proposal remains historical evidence and grants no
+  current authority.
 - Whether `DEVELOPMENT` and `ALL_IN_ONE` earn their place as distinct roles once N9 makes
   dispatch real, or collapse into `WORKER` with a dispatch flag.

@@ -4,6 +4,13 @@ Continuation notes for any session picking this repository up. `PROJECT_STATUS.m
 machine-generated and overwritten by `quantbot run-once` / `quantbot doctor`; this file is
 hand-maintained and never overwritten.
 
+For the current host, begin with [the September 9 Omen evidence](omen-runtime-2026-09-09.md) and
+[native Windows deployment instructions](../deploy/omen/README.md). The Pi is retired and must
+not be contacted. The Omen runs local-account startup tasks with an external, account-specific
+PAPER ledger and verified credentials. The tested entry-budget fix is deployed and the switch
+is clear after measured readiness passed. The earlier failed cycle is retained. Older observations below do
+not supersede that measured state or establish transferable forward history.
+
 ## What the system is
 
 Adaptive Momentum V1: momentum rotation + long-term trend filter + market regime filter +
@@ -28,7 +35,7 @@ Sizing note: for this universe the `POSITION_VALUE` cap binds, not the ATR risk 
 positions are effectively equal-weight 10%. The 0.5% ATR risk cap only becomes the binding
 constraint when 2×ATR exceeds 5% of price. That is scale-invariant and by design.
 
-## Current state
+## Application verification snapshot — 2026-09-02
 
 **Re-verified against `main` on 2026-09-02.** 2,320 tests collected — 2,302 pass, 18 skip for an
 absent WSL distribution and an unconfigured model endpoint; `ruff check` clean; `mypy --strict`
@@ -239,9 +246,11 @@ outcome, not evidence of a defect.
 
 ## Known gaps / next work
 
-1. **No credentials, so zero elapsed paper observation.** This is the only thing standing
-   between the current state and starting the 30/60-day qualification window. It cannot be
-   substituted with backtests.
+1. **Omen is ready for normal PAPER operation, with forward evidence still unestablished.**
+   The tested entry-budget fix is deployed; account, ingestion, risk and reconciliation checks
+   pass, and measured kill-switch clearance succeeded. The current fresh account's ERROR run
+   and pending orders do not establish a qualification window. Preserve their lifecycle and
+   allow the normal schedule to accumulate genuine observations; never substitute backtests.
 2. **The trade stream is not held open between cycles.** `AlpacaPaperTradeStream` and its
    event handling are implemented and tested but unused by the daily cycle, which ingests
    broker-confirmed fills over REST instead. Adequate for a daily post-close strategy; wire

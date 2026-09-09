@@ -52,6 +52,9 @@ class RiskReservation(RiskModel):
     gross_exposure: PositiveDecimal
     open_risk: PositiveDecimal
     reserves_position_slot: bool
+    # Existing broker orders have already reduced the account's reported buying power.
+    # Newly planned orders have not. Both still count toward exposure and position limits.
+    buying_power_already_reserved: bool = False
 
     @field_validator("reservation_id")
     @classmethod

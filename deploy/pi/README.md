@@ -1,11 +1,12 @@
-# Running the daemon on a Raspberry Pi
+# Retired Raspberry Pi deployment
 
-> This describes an older deployment option, not the Pi's current measured role or state.
-> Complete [runtime recovery](../../docs/runtime-recovery.md) before running the installer.
-> It can start a coordinator, so using it while another host has authority risks two writers.
+> **Retired by operator policy on 2026-09-08. Do not contact the Pi and do not use it as a
+> coordinator, watchdog, dashboard or worker.** `setup.sh` exits immediately without making
+> changes. The material below is preserved as historical engineering evidence; it is not a
+> current runbook or a claim about remotely measured state.
 
-The trading daemon has to be alive at every session close. A desktop that sleeps, or reboots for
-updates, is the wrong host for that. A dedicated Pi is a better one.
+The historical deployment considered the Pi an always-on host for the trading daemon. The current
+topology assigns all required roles to the native Windows Omen instead.
 
 ## Which boards work
 
@@ -70,7 +71,10 @@ The strategy evaluates 23 symbols on daily bars and makes one decision per sessi
 `Decimal` throughout, not vectorised. There is no model training and no backtest in the daemon
 path.
 
-## Install
+## Historical install procedure (disabled)
+
+Do not run this procedure. It is retained to explain the prior deployment and its constraints;
+the installer now returns a named retirement-policy refusal before inspecting the host.
 
 ```bash
 git clone --branch main https://github.com/jfhutchi/project_elrond.git ~/quantbot

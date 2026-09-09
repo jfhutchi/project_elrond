@@ -224,6 +224,7 @@ def _default_context() -> CLIContext:
                     "reconcile",
                     "run-once",
                     "daemon",
+                    "protection-daemon",
                     "backtest",
                     "report-weekly",
                     "paper-smoke",

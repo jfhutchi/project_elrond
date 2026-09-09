@@ -528,6 +528,37 @@ def test_a_structured_call_never_reaches_a_model_that_cannot_produce_json() -> N
     assert "no-json" not in [model for model, _ in chat.calls]
 
 
+def test_structured_calls_request_schema_on_wire_and_record_it_in_provenance() -> None:
+    configured = spec("json-model")
+    requests: list[dict[str, object]] = []
+
+    def post(url: str, payload: object, *, timeout_seconds: float) -> str:
+        assert isinstance(payload, dict)
+        requests.append(payload)
+        answer = '{"verdict":"PROCEED","confidence":0.9}'
+        if "response_format" not in payload:
+            answer = "```json\n" + answer + "\n```"
+        return json.dumps({"choices": [{"message": {"content": answer}}]})
+
+    runtime = ModelRuntime(
+        RoleRouting(chains={ModelRole.GENERATOR: (configured,)}),
+        OpenAICompatibleTransport(post),
+    )
+    parsed, response = runtime.call_structured(
+        ModelRole.GENERATOR, template(), {"claim": "diagnostic"}, Verdict, now=NOW
+    )
+    assert parsed.verdict == "PROCEED"
+    assert requests[0]["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "Verdict", "schema": Verdict.model_json_schema()},
+    }
+    assert response.spec.parameters_hash != configured.parameters_hash
+    assert json.loads(response.spec.parameters["response_format"]) == requests[0]["response_format"]
+    runtime.call(ModelRole.GENERATOR, template(), {"claim": "plain text"}, now=NOW)
+    assert "response_format" not in requests[1]
+    assert configured.parameters == {"temperature": "0"}
+
+
 def test_numeric_parameters_reach_the_wire_as_numbers_not_strings() -> None:
     """The defect the first real endpoint found, and that no mock could have.
 

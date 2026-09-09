@@ -2,6 +2,13 @@
 
 An autonomous quantitative research platform that tries hard not to fool itself.
 
+> **Current runtime policy (2026-09-08):** the Raspberry Pi is retired entirely and must not be
+> contacted or used for any role. The HP Omen is the sole permitted PAPER coordinator, with no
+> Alienware or other-host dependency. Local-account startup tasks and PAPER reconciliation are
+> verified. The tested entry-budget fix is deployed; measured readiness passed and the kill
+> switch is clear. The prior failed cycle remains in the ledger. See
+> [runtime topology](docs/runtime-topology.md).
+
 Elrond discovers candidate market strategies, attacks them, and promotes only the ones that
 survive — through pre-registration, statistical power gates, protected holdouts, adversarial
 testing and multiple-testing accounting — into shadow and then **paper** trading, where it
@@ -140,9 +147,9 @@ statistical confidence.
 | [STATUS.md](STATUS.md) | Agent orientation: current state, known defects, open questions |
 | [REFUTED.md](REFUTED.md) | **Read before proposing research.** Every idea already measured and killed |
 | [docs/agent-runbook.md](docs/agent-runbook.md) | Operating the paper-trading system |
-| [deploy/pi/README.md](deploy/pi/README.md) | Deployment, dashboard, and the operator control surface |
-| [deploy/omen/README.md](deploy/omen/README.md) | Bringing the coordinator up on WSL2, and the operator steps it deliberately leaves |
-| [docs/runtime-topology.md](docs/runtime-topology.md) | Which machine runs what, measured, and why the Pi Zero W is not the coordinator |
+| [deploy/pi/README.md](deploy/pi/README.md) | Retired Pi deployment, preserved as historical evidence |
+| [deploy/omen/README.md](deploy/omen/README.md) | Native Windows PAPER runtime on the sole designated Omen host |
+| [docs/runtime-topology.md](docs/runtime-topology.md) | Current single-host policy, measured capacity, and unresolved runtime evidence |
 | [docs/node-deployment.md](docs/node-deployment.md) | What a second machine would need, and what the repository actually assumes today |
 | [docs/deployed-state.md](docs/deployed-state.md) | What is actually running, stated by the runtime instead of reconstructed later |
 | [docs/ingestion-control.md](docs/ingestion-control.md) | Collection cursors, run history and heartbeats — a stopped collector that is answerable |
@@ -194,8 +201,9 @@ consume no hosted minutes and do not publish independent GitHub status checks.
 Both runners, and its first run is why rather than a guess: `mypy src` had been reported clean
 for months and fails with seven errors on Linux, because `msvcrt.locking` and `ctypes.windll`
 sit behind `os.name` / `platform.system()` guards that mypy does not narrow. The claim was true
-on the author's machine and nowhere else. Elrond runs on Windows (the coordinator) and Linux
-(the Pi, WSL2); one runner only ever checked one half.
+on the author's machine and nowhere else. Elrond retains Windows and Linux code paths even though
+the current coordinator is native Windows and the Pi/WSL deployments are retired or historical;
+one runner only ever checked one platform family.
 
 Before pushing, check the half your machine does not:
 

@@ -466,6 +466,7 @@ def build_runtime(
             sessions=sessions,
             market_data=settings_for_data,
             veto_policy=veto_policy,
+            entry_buying_power_reserve_bps=active_settings.ENTRY_BUYING_POWER_RESERVE_BPS,
             # #56. Enrichment runs only for symbols that produced an anomaly, which is what the
             # routing gate's 98.24% search saving buys. Constructed here rather than defaulted
             # inside the runner: a source that built itself would be a second place credentials

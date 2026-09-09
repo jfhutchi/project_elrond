@@ -116,7 +116,6 @@ def inventory(
     authority = "AMBIGUOUS" if len(physical_candidates) > 1 else UNKNOWN
     reasons = [
         "GLOBAL_COORDINATOR_AUTHORITY_UNVERIFIED",
-        "PI_STATE_UNKNOWN",
         "OTHER_HOST_RETIREMENT_UNVERIFIED",
     ]
     if authority == "AMBIGUOUS":
@@ -177,7 +176,11 @@ def inventory(
         "candidate_scans": scans,
         "store_authority": authority,
         "coordinator_authority": UNKNOWN,
-        "pi_state": UNKNOWN,
+        "pi_retirement": {
+            "policy": "RETIRED",
+            "authority": "OPERATOR_DECLARED",
+            "remote_state": "NOT_PROBED",
+        },
         "locks": locks,
         "configured_mode": mode if mode in ("PAPER", "LIVE") else UNKNOWN,
         "configured_broker_environment": broker_mode

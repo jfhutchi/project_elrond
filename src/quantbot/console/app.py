@@ -192,7 +192,23 @@ def create_app(
 
     @app.get("/market-data", response_class=HTMLResponse)
     def market_data(request: Request) -> HTMLResponse:
-        return page(request, "market_data.html", "/market-data")
+        return market_data_page(request)
+
+    def market_data_page(
+        request: Request, result: Mapping[str, object] | None = None
+    ) -> HTMLResponse:
+        state = snapshot()
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="market_data.html",
+            context={
+                "state": state,
+                "navigation": NAVIGATION,
+                "active": "/market-data",
+                "attention": state.attention,
+                "sync_result": result,
+            },
+        )
 
     @app.get("/capacity", response_class=HTMLResponse)
     def capacity(request: Request) -> HTMLResponse:
@@ -354,7 +370,7 @@ def create_app(
         return RedirectResponse("/", status_code=303)
 
     @app.post("/operations/sync-data", response_model=None)
-    async def operations_sync_data(request: Request) -> RedirectResponse | HTMLResponse:
+    async def operations_sync_data(request: Request) -> HTMLResponse:
         """Fetch and durably cache completed bars, and record what that found.
 
         Safe in the same specific sense reconciliation is: it submits no order, cancels nothing
@@ -367,17 +383,23 @@ def create_app(
         address it from the same page.
         """
         if sync_data is None:
-            return page_with_notice(
+            return market_data_page(
                 request,
-                "this console cannot sync market data: it was started without market-data "
-                "credentials, and a surface that cannot reach the provider must not offer to "
-                "fetch from it",
+                {
+                    "ok": False,
+                    "reasons": [
+                        "this console cannot sync market data: it was started without "
+                        "market-data credentials"
+                    ],
+                },
             )
         try:
-            await sync_data()
+            result = await sync_data()
         except Exception as error:  # noqa: BLE001 -- reported, never silently swallowed
-            return page_with_notice(request, f"market data sync failed: {error!r}"[:400])
-        return RedirectResponse("/market-data", status_code=303)
+            result = {"ok": False, "reasons": [f"market data sync failed: {error!r}"[:400]]}
+        # Render this request's result, including unhealthy returns and partial progress.
+        # Redirecting discarded it and made success, no new bars and failure look identical.
+        return market_data_page(request, result)
 
     @app.get("/config", response_class=HTMLResponse)
     def config(request: Request) -> HTMLResponse:

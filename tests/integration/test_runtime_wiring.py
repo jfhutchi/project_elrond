@@ -312,6 +312,7 @@ def _build_cycle(
     config: StrategyConfig,
     database: Database,
     broker_transport: FakeBrokerTransport | None = None,
+    entry_buying_power_reserve_bps: int = 0,
 ) -> tuple[RunOnceCycle, AdaptiveMomentumRunner, FakeBrokerTransport]:
     settings = _ready_settings()
     identity = load_or_create_identity(database, config, now=NOW)
@@ -339,6 +340,7 @@ def _build_cycle(
         sessions=sessions,
         market_data=market_data,
         clock=lambda: NOW,
+        entry_buying_power_reserve_bps=entry_buying_power_reserve_bps,
     )
     cycle = RunOnceCycle(
         database=database,
@@ -462,6 +464,35 @@ async def test_wired_cycle_reconciles_syncs_data_and_submits_a_risk_sized_order(
     database.close()
 
 
+async def test_entry_cash_reserve_limits_the_real_cycle_submission_batch(tmp_path: Path) -> None:
+    config = load_strategy_config(_write_config(tmp_path))
+    database = Database.create(tmp_path / "quantbot.db")
+    KillSwitchController(database).clear(
+        reason="test fixture readiness", measured=measured(), updated_at=NOW,
+    )
+    cycle, strategy, broker = _build_cycle(
+        tmp_path, config, database, entry_buying_power_reserve_bps=9000,
+    )
+    strategy.bind_run("budgeted-run")
+    try:
+        result = await cycle.run("budgeted-run", started_at=NOW, trading_date=NOW.date())
+        notional = sum(
+            Decimal(str(order["qty"])) * _price(str(order["symbol"]), SESSION_COUNT - 1)
+            for order in broker.submitted
+        )
+        assert result.status == "SUCCEEDED"
+        assert Decimal("9000") < notional <= Decimal("10000")
+        # Accepted orders already bind the next account snapshot. The runner must mark them
+        # as broker-reserved, while continuing to reserve their exposure and position slots.
+        pending = strategy._pending_reservations(  # noqa: SLF001
+            await strategy._broker.get_open_orders(),  # noqa: SLF001
+            strategy._load_histories(), Decimal("100000"),  # noqa: SLF001
+        )
+        assert pending and all(item.buying_power_already_reserved for item in pending)
+    finally:
+        database.close()
+
+
 async def test_rerunning_the_same_trading_day_never_submits_a_duplicate_order(
     tmp_path: Path,
 ) -> None:
@@ -528,6 +559,7 @@ def test_build_runtime_assembles_every_operational_collaborator(
     assert runtime.identity.git_commit == "0123456789abcdef"
     assert runtime.identity.configuration_hash
     assert runtime.cycle() is not None
+    assert runtime.strategy._entry_buying_power_reserve_bps == 500  # noqa: SLF001
     runtime.database.close()
 
 

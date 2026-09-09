@@ -5,9 +5,16 @@ database command. `doctor` probes the broker and builds the runtime; constructio
 deployment/policy metadata. The ordinary supervisor can restart a daemon. Neither is a
 read-only inventory tool.
 
-For cross-host capture with no dependency installation, use the
-[Alienware/Pi evidence handoff](runtime-evidence-handoff.md). It supplies exact commands,
-offline Markdown/JSON comparison, evidence requirements and retirement prerequisites.
+Current topology policy, declared by the operator on 2026-09-08, retires the Pi entirely and
+forbids contacting it. The native Windows Omen is the sole permitted PAPER coordinator and has no
+Alienware dependency. This policy removes Pi state as a startup prerequisite; it does not prove
+global coordinator/store authority, broker state, or fencing of every other historical host.
+Global fencing remains `UNKNOWN` to recovery inventory. PAPER broker reconciliation has since
+been measured and is clean. The entry-budget fix is deployed and the switch cleared after
+measured readiness. See the current snapshot below for the selected store and verification limits.
+
+The [Alienware/Pi evidence handoff](runtime-evidence-handoff.md) is preserved as a historical
+recovery artifact. Do not execute its Pi access procedure under the current policy.
 
 ## Read-only recovery commands
 
@@ -88,13 +95,14 @@ Compare real run/reconciliation/account/config/forward lineage across **all prev
 hosts**, then preserve backups and document the measured selection before migration.
 
 The writer lock excludes concurrent cycles sharing that lock file. The daemon lock excludes
-local schedulers sharing its configured path. Neither fences a Pi or stale Windows checkout
-using another lock/store against the same broker account. Existing lock files contain a NUL
+local schedulers sharing its configured path. Neither fences a stale Windows checkout or another
+unmeasured host using a different lock/store against the same broker account. Existing lock files contain a NUL
 byte, not owner PID/start metadata. Inventory deliberately reports owner/held as `UNKNOWN`
 rather than acquiring the lock (which can create it) or claiming a PID owns it from coincidence.
 
-**This change does not solve cross-host fencing or retire old installations.** The older
-supervisor, Task Scheduler entry, and Pi units remain capable of starting old code if enabled.
+**This change does not solve cross-host fencing or mechanically retire old installations.** The
+Pi is excluded by operator policy and the repository installer refuses it, but no remote probe was
+performed. Older supervisors or Task Scheduler entries on other hosts may still start old code.
 Current recovery preflight always refuses startup authority because it cannot verify global
 retirement. It is an evidence report, not a new enforcement plane. The updated supervisor also
 refuses its own automatic restart when cwd differs from its source checkout, the checkout is
@@ -112,15 +120,52 @@ reconciliation and readiness, the kill switch's underlying condition, single-sch
 exclusion and autostart retirement before starting. Reboot recovery is a later deliberate test.
 No step here authorizes LIVE or automatically clears the kill switch.
 
-## Pi checks when access becomes available
+## Pi retirement policy
 
-`PI_STATE=UNKNOWN` until measured. Use an already verified SSH host alias/key or physical access.
-Do not guess addresses, accept an unverified key, install credentials, or run `deploy/pi/setup.sh`.
-Use the exact dependency-free commands in the [evidence handoff](runtime-evidence-handoff.md#pi-exact-commands-at-the-physical-console-or-over-already-trusted-access).
-They preserve stderr and scan coverage. If compatible Python or access is unavailable, retain
-UNKNOWN database evidence and return the OS metadata/errors; do not repair the runtime to inspect it.
+The Pi is `RETIRED` with authority `OPERATOR_DECLARED`; its remote state is `NOT_PROBED`. Do not
+contact it, guess an address, accept a host key, install credentials, or run recovery commands on
+it. `deployment-status` reports this policy separately from remote evidence and no longer emits
+`PI_STATE_UNKNOWN` as a startup blocker. [`deploy/pi/setup.sh`](../deploy/pi/setup.sh) returns a
+named refusal without making changes.
 
-## Measured Omen snapshot — 2026-09-05
+This declaration must not be generalized into proof that every historical host is fenced. Keep
+`GLOBAL_COORDINATOR_AUTHORITY_UNVERIFIED` and `OTHER_HOST_RETIREMENT_UNVERIFIED` until the remaining
+authority evidence exists.
+
+## Measured Omen snapshot — 2026-09-08
+
+The current target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen
+7 6800H (8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M
+(8 GB VRAM expected from the device model), approximately 781 GiB free on C: and 931 GiB free on
+D:. WSL is not installed and Docker is absent. The native toolchain is Python 3.11.16 with `uv`.
+
+The bounded pre-install searches found no Elrond process, startup entry, operational ledger or
+credentials. An expanded `Windows.old\Users` scan found 774 schema-12 databases, all under
+`pytest-of-leepa` paths and consistent with repository deployment fixtures; none was treated as an
+operational candidate.
+
+A fresh initial PAPER store was created at `D:\Elrond\state\quantbot-paper.db`, schema 27 / revision
+0027, lineage `2244c782-29e9-4ab0-bff8-bced024a226b`, with 25 seeded historical findings and no forward
+history. Its initial backup passed integrity checking and matched its logical dump. That store is
+preserved; it is **not the active account ledger**.
+
+The operator subsequently supplied a fresh PAPER account. Its active store is
+`D:\Elrond\state\quantbot-paper-fresh-20260908.db`, schema 27 / revision 0027, UUID
+`cd2a5911-853a-484e-bbc8-d0c27b5d27aa`. Reconciliation preceded activation; no missing forward
+history was reconstructed. The verified online backup at
+`D:\Elrond\backups\quantbot-paper-local-account-20260908.db` retains this UUID and the nine accepted
+and one rejected intents. At 23:00 UTC PAPER reconciliation reports zero differences and no
+unresolved intents. The subsequent deployment and measured clearance at 00:10 UTC September 9
+restored readiness without replaying the rejected intent or rewriting the ERROR run.
+
+All seven tasks now use the local `erlond` account with Password logon, Limited privileges and
+AtStartup plus timed triggers. Services run in session 0 and a Task Scheduler console stop/start
+restored the same store and HTTP service. A physical reboot has not been performed. The active
+commit is `094fefc1538e46dfca1b48c2e0a1ca50857fc43e`. The latest verified online backup is
+`D:\Elrond\backups\quantbot-paper-entry-budget-20260909.db`, retaining the same store identity.
+The full evidence record is [the Omen runtime report](omen-runtime-2026-09-09.md).
+
+## Historical Omen snapshot — 2026-09-05
 
 Host `Leannes-Laptop`, HP OMEN by HP Gaming Laptop 16-n0xxx, Windows 11 Home 10.0.26200,
 AMD64. WSL reports not installed. Before implementation, no Python/uv/QuantBot runtime was
@@ -150,8 +195,9 @@ The Alienware inventory previously posted on #190 records a plausible schema-12 
 with account/reconciliation records through August 20 and last run HALTED on August 19.
 That is **prior issue evidence, not a new remote measurement in this run**. It also reports a
 disabled `QuantBotDaemon` task and a historically cleared kill switch. Do not infer current
-broker readiness or clear anything from those historical rows. Global store/coordinator
-authority and Pi state remain **UNKNOWN**; #190 remains open.
+broker readiness or clear anything from those historical rows. Global store/coordinator authority
+remained **UNKNOWN** in that snapshot; #190 remained open. Current Pi retirement is a later
+operator policy, not a reinterpretation of this historical evidence.
 
 ## Local verification: 2026-09-05
 

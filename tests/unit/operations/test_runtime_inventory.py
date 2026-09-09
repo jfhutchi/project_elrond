@@ -50,9 +50,23 @@ def test_missing_store_and_parent_are_not_created(tmp_path: Path) -> None:
     assert not missing.parent.exists()
     assert result["ok"] is False
     assert result["store_authority"] == "UNKNOWN"
-    assert result["pi_state"] == "UNKNOWN"
+    assert result["pi_retirement"] == {
+        "policy": "RETIRED",
+        "authority": "OPERATOR_DECLARED",
+        "remote_state": "NOT_PROBED",
+    }
     assert result["startup_preflight"]["allowed"] is False
     assert result["workers_have_coordinator_authority"] is False
+
+
+def test_operator_retired_pi_is_not_a_remote_state_blocker(tmp_path: Path) -> None:
+    result = inventory(repo=tmp_path, environ={}, now=NOW)
+
+    blockers = result["startup_preflight"]["blockers"]
+    assert "PI_STATE_UNKNOWN" not in blockers
+    assert "GLOBAL_COORDINATOR_AUTHORITY_UNVERIFIED" in blockers
+    assert "OTHER_HOST_RETIREMENT_UNVERIFIED" in blockers
+    assert result["pi_retirement"]["remote_state"] == "NOT_PROBED"
 
 
 def test_old_schema_evidence_read_without_migration_or_kill_clear(tmp_path: Path) -> None:
