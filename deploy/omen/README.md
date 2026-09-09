@@ -10,20 +10,19 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Latest status (23:00 UTC):** All seven tasks use local standard account
+**Latest status (2026-09-09 00:13 UTC):** All seven tasks use local standard account
 `LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
 The console, PAPER daemon, protection and model server run; ingestion, research and report have
 completed successfully. Startup registration is verified, but a physical reboot has not been
 tested. A console stop/start removed its full process tree and restored HTTP 200; all runtime
 processes were observed in noninteractive Windows session 0. The active ledger remains
 `D:\Elrond\state\quantbot-paper-fresh-20260908.db`.
-Trading is halted: an earlier Alpaca HTTP 403 rejection engaged the kill switch at 20:05 UTC.
-Nine accepted PAPER orders remain unfilled; reconciliation finds zero differences. The switch
-has not been cleared during the account change. Runtime commit `55cb00072f86a69091fc5094cc2a47fe235f151b`
-remains active. The tested entry-budget fix at `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` is pushed
-but not deployed because Windows elevation was canceled. See the
-[current evidence follow-up](../../docs/omen-runtime-2026-09-08.md) for measured details and the
-deployment limitation and rejection evidence. Older inventory below is historical evidence.
+The tested entry-budget fix at `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` is deployed. The legitimate
+clearance command remeasured readiness and cleared the switch at 00:10 UTC; doctor and PAPER
+reconciliation now pass. Nine accepted orders remain unfilled, and the earlier HTTP 403 ERROR run
+and rejected DBC intent are preserved. See the
+[current evidence follow-up](../../docs/omen-runtime-2026-09-09.md) for measured details and limits.
+Older inventory below is historical evidence.
 
 The target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen 7 6800H
 (8 cores / 16 logical processors), approximately 31.2 GiB RAM, an AMD Radeon RX 6650M (disabled, device error 22; CPU execution verified), approximately 781 GiB free on C: and 931 GiB free on D:. Python 3.11.16

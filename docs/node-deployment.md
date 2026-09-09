@@ -12,8 +12,8 @@ and #38.
 
 `quantbot.node` exists: identity, capability detection, role policy. The Omen's local-account
 startup tasks, PAPER ledger, reconciliation and loopback model service have been exercised.
-New trading is halted by the kill switch after a broker rejection; the tested entry-budget fix
-awaits Windows elevation for deployment. See [current evidence](omen-runtime-2026-09-08.md).
+The tested entry-budget fix is deployed; PAPER readiness and reconciliation pass and the switch
+is clear after measured clearance. See [current evidence](omen-runtime-2026-09-09.md).
 The backlog below is historical planning unless a future measured need justifies another node.
 
 ## What the repository actually assumes today

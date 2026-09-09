@@ -1,5 +1,9 @@
 # Omen deployment evidence — 2026-09-08
 
+The successful deployment retry and measured kill-switch clearance at 00:10 UTC on September 9
+are recorded in [the current follow-up](omen-runtime-2026-09-09.md). Entries below preserve the
+earlier halted/pending state and must not be interpreted as the latest operating status.
+
 ## Tested entry-budget fix; deployment pending — 22:59 UTC
 
 Implementation commit `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` fixes a verified funding-budget

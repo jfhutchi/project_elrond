@@ -5,8 +5,8 @@ An autonomous quantitative research platform that tries hard not to fool itself.
 > **Current runtime policy (2026-09-08):** the Raspberry Pi is retired entirely and must not be
 > contacted or used for any role. The HP Omen is the sole permitted PAPER coordinator, with no
 > Alienware or other-host dependency. Local-account startup tasks and PAPER reconciliation are
-> verified. New trading is halted after a broker rejection; a tested entry-budget fix awaits
-> Windows elevation for deployment and subsequent measured readiness/clearance. See
+> verified. The tested entry-budget fix is deployed; measured readiness passed and the kill
+> switch is clear. The prior failed cycle remains in the ledger. See
 > [runtime topology](docs/runtime-topology.md).
 
 Elrond discovers candidate market strategies, attacks them, and promotes only the ones that

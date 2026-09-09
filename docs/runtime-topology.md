@@ -16,11 +16,11 @@ changing the host.
 The policy designates Omen as the only authority allowed to run, but it does not manufacture proof
 that Omen currently holds global authority. Cross-host fencing remains `UNKNOWN`; a local lock does
 not fence an unmeasured stale installation on some other host. PAPER broker reconciliation has
-been exercised and is clean. At 23:00 UTC the broker account, risk check and trade-stream check
-passed; readiness remains blocked by the durable kill switch after the 20:05 UTC order rejection.
-The tested entry-budget fix at `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` awaits deployment because
-Windows elevation was canceled. The running checkout remains `55cb00072f86a69091fc5094cc2a47fe235f151b`.
-Neither the software fix nor startup configuration alone establishes readiness to resume orders.
+been exercised and is clean. The tested entry-budget fix at
+`094fefc1538e46dfca1b48c2e0a1ca50857fc43e` is the active clean runtime commit after the successful
+deployment retry. At 00:10 UTC September 9 the legitimate clearance command remeasured readiness
+and cleared the switch. Subsequent doctor/reconciliation checks passed. The prior ERROR run is
+preserved; no rejected intent was replayed. See [current measured evidence](omen-runtime-2026-09-09.md).
 
 ## Measured Omen capacity — 2026-09-08
 

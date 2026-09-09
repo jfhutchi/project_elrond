@@ -10,8 +10,8 @@ forbids contacting it. The native Windows Omen is the sole permitted PAPER coord
 Alienware dependency. This policy removes Pi state as a startup prerequisite; it does not prove
 global coordinator/store authority, broker state, or fencing of every other historical host.
 Global fencing remains `UNKNOWN` to recovery inventory. PAPER broker reconciliation has since
-been measured and is clean; the running stack remains halted for new orders after a broker
-rejection. See the current snapshot below for the selected store and deployment limitation.
+been measured and is clean. The entry-budget fix is deployed and the switch cleared after
+measured readiness. See the current snapshot below for the selected store and verification limits.
 
 The [Alienware/Pi evidence handoff](runtime-evidence-handoff.md) is preserved as a historical
 recovery artifact. Do not execute its Pi access procedure under the current policy.
@@ -155,14 +155,15 @@ The operator subsequently supplied a fresh PAPER account. Its active store is
 history was reconstructed. The verified online backup at
 `D:\Elrond\backups\quantbot-paper-local-account-20260908.db` retains this UUID and the nine accepted
 and one rejected intents. At 23:00 UTC PAPER reconciliation reports zero differences and no
-unresolved intents. New orders remain blocked by the kill switch after the 20:05 UTC rejection.
+unresolved intents. The subsequent deployment and measured clearance at 00:10 UTC September 9
+restored readiness without replaying the rejected intent or rewriting the ERROR run.
 
 All seven tasks now use the local `erlond` account with Password logon, Limited privileges and
 AtStartup plus timed triggers. Services run in session 0 and a Task Scheduler console stop/start
 restored the same store and HTTP service. A physical reboot has not been performed. The active
-commit is `55cb00072f86a69091fc5094cc2a47fe235f151b`; the tested entry-budget fix at `094fefc` awaits
-Windows elevation for deployment. Its existence does not authorize clearing the running version's switch.
-The full evidence record is [the Omen runtime report](omen-runtime-2026-09-08.md).
+commit is `094fefc1538e46dfca1b48c2e0a1ca50857fc43e`. The latest verified online backup is
+`D:\Elrond\backups\quantbot-paper-entry-budget-20260909.db`, retaining the same store identity.
+The full evidence record is [the Omen runtime report](omen-runtime-2026-09-09.md).
 
 ## Historical Omen snapshot — 2026-09-05
 
