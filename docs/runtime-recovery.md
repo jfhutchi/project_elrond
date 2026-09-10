@@ -162,9 +162,10 @@ All seven tasks now use the local `erlond` account with Password logon, Limited 
 AtStartup plus timed triggers. Services run in session 0 and a Task Scheduler console stop/start
 restored the same store and HTTP service. Recovery after the September 9 06:12 Eastern reboot
 was observed. The subsequent market-hours fix is deployed at active clean
-commit `f125bd5fdb028177879ed9efe50f7e098af641af`. The latest verified online backup is
-`D:\Elrond\backups\quantbot-paper-entry-budget-20260909.db`, retaining the same store identity.
-The full evidence record is [the Omen runtime report](omen-runtime-2026-09-09.md).
+commit `5025b21586223d05dfeb4c37c2a514338a25a711`, including the September 10 equity-valuation fix.
+The latest verified online backup is
+`D:\Elrond\backups\quantbot-paper-equity-valuation-20260910.db`.
+The full evidence record is [the Omen runtime report](omen-runtime-2026-09-10.md).
 
 ## Historical Omen snapshot — 2026-09-05
 
