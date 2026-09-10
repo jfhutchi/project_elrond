@@ -67,6 +67,8 @@ class ReconciliationDiff(BrokerModel):
 class ReconciliationResult(BrokerModel):
     status: ReconciliationStatus
     diffs: tuple[ReconciliationDiff, ...]
+    # Informational evidence, kept separate from material ledger discrepancies.
+    valuation_changes: tuple[ReconciliationDiff, ...] = ()
 
     @model_validator(mode="after")
     def validate_status(self) -> ReconciliationResult:
@@ -173,6 +175,71 @@ def _position_payload(position: Position) -> dict[str, str]:
     return {"quantity": _decimal(position.quantity)}
 
 
+def _equity_valuation_change(
+    expected: ReconciliationSnapshot,
+    actual: ReconciliationSnapshot,
+    policy: ReconciliationPolicy,
+) -> ReconciliationDiff | None:
+    """Explain marks using both portfolios, never an enlarged account tolerance.
+
+    Account and position endpoints are separate reads. Only internally consistent
+    snapshots with a price-driven delta qualify; inconsistent reads still fail closed.
+    The caller additionally requires equity to be the sole material discrepancy.
+    """
+    if not expected.positions or expected.account.cash != actual.account.cash:
+        return None
+    if len(expected.positions) != len(actual.positions):
+        return None
+    tolerance = policy.money_tolerance
+    for before, after in zip(expected.positions, actual.positions, strict=True):
+        if (
+            before.symbol != after.symbol
+            or before.quantity != after.quantity
+            or before.average_entry_price != after.average_entry_price
+        ):
+            return None
+        for position in (before, after):
+            if (
+                position.quantity == 0
+                or position.quantity * position.market_value <= 0
+                or abs(position.market_value - position.quantity * position.market_price)
+                >= tolerance
+            ):
+                return None
+    before_value = sum((p.market_value for p in expected.positions), Decimal("0"))
+    after_value = sum((p.market_value for p in actual.positions), Decimal("0"))
+    before_residual = expected.account.equity - expected.account.cash - before_value
+    after_residual = actual.account.equity - actual.account.cash - after_value
+    value_delta = after_value - before_value
+    unexplained = actual.account.equity - expected.account.equity - value_delta
+    if (
+        value_delta == 0
+        or abs(before_residual) >= tolerance
+        or abs(after_residual) >= tolerance
+        or abs(unexplained) >= tolerance
+    ):
+        return None
+    return _stable_diff(
+        "ACCOUNT_VALUATION",
+        "equity",
+        {
+            "value": _decimal(expected.account.equity),
+            "cash": _decimal(expected.account.cash),
+            "position_market_value": _decimal(before_value),
+            "equity_residual": _decimal(before_residual),
+        },
+        {
+            "value": _decimal(actual.account.equity),
+            "cash": _decimal(actual.account.cash),
+            "position_market_value": _decimal(after_value),
+            "equity_residual": _decimal(after_residual),
+            "market_value_change": _decimal(value_delta),
+            "unexplained_delta": _decimal(unexplained),
+            "reporting_tolerance": _decimal(tolerance),
+        },
+    )
+
+
 def _order_payload(order: BrokerOrder) -> dict[str, str]:
     return {
         "broker_order_id": order.broker_order_id,
@@ -259,6 +326,12 @@ def compare_reconciliation(
             payload=_fill_payload,
         )
     )
+    valuation_changes: tuple[ReconciliationDiff, ...] = ()
+    if len(diffs) == 1 and diffs[0].category == "ACCOUNT" and diffs[0].key == "equity":
+        valuation = _equity_valuation_change(expected, actual, effective_policy)
+        if valuation is not None:
+            valuation_changes = (valuation,)
+            diffs = []
     ordered = tuple(sorted(diffs, key=lambda item: (item.category, item.key, item.diff_id)))
     account_mismatch = any(
         diff.category == "ACCOUNT" and diff.key == "account_id" for diff in ordered
@@ -269,7 +342,7 @@ def compare_reconciliation(
         status = ReconciliationStatus.RECONCILIATION_REQUIRED
     else:
         status = ReconciliationStatus.RECONCILED
-    return ReconciliationResult(status=status, diffs=ordered)
+    return ReconciliationResult(status=status, diffs=ordered, valuation_changes=valuation_changes)
 
 
 def missing_local_snapshot_result(actual: Account) -> ReconciliationResult:
@@ -298,6 +371,14 @@ def record_reconciliation(
     """Persist the complete comparison inside the caller-owned transaction."""
     if completed_at < started_at:
         raise ValueError("reconciliation cannot complete before it starts")
+    summary: dict[str, object] = {
+        "allows_new_orders": result.allows_new_orders,
+        "diff_count": len(result.diffs),
+    }
+    if result.valuation_changes:
+        summary["valuation_changes"] = [
+            change.model_dump(mode="json") for change in result.valuation_changes
+        ]
     return repository.save_reconciliation(
         reconciliation_id,
         status=result.status,
@@ -305,8 +386,5 @@ def record_reconciliation(
         completed_at=completed_at,
         diffs=[diff.model_dump(mode="python") for diff in result.diffs],
         run_id=run_id,
-        summary={
-            "allows_new_orders": result.allows_new_orders,
-            "diff_count": len(result.diffs),
-        },
+        summary=summary,
     )
