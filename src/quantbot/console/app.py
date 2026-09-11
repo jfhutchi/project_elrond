@@ -42,6 +42,8 @@ from urllib.parse import parse_qsl
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from quantbot.console.control import (
     ConfigProposal,
@@ -53,6 +55,7 @@ from quantbot.console.control import (
     validate_proposal,
 )
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
+from quantbot.console.market_status import MarketStatus, MarketStatusCache
 from quantbot.console.state import (
     ConsoleState,
     ReportsPanel,
@@ -105,6 +108,7 @@ def create_app(
     reports: ReportsPanel | None = None,
     reconcile: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
     sync_data: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
+    market_status: Callable[[], Awaitable[MarketStatus]] | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -135,10 +139,24 @@ def create_app(
         ),
     )
 
+    market_cache = MarketStatusCache(market_status)
+
+    @app.middleware("http")
+    async def refresh_market(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # Network I/O happens before the snapshot opens a transaction. Control POSTs never wait
+        # for this informational probe; failures cannot prevent an operator engaging the switch.
+        if request.method == "GET":
+            await market_cache.refresh()
+        return await call_next(request)
+
     def snapshot() -> ConsoleState:
         with database.transaction() as session:
             return read_console_state(
-                session, now=datetime.now(UTC), runtime=runtime, reports=reports
+                session,
+                now=datetime.now(UTC),
+                runtime=runtime,
+                reports=reports,
+                market=market_cache.current(),
             )
 
     def page_with_notice(request: Request, notice: str) -> HTMLResponse:
@@ -319,9 +337,7 @@ def create_app(
         form = await read_form(request)
         reason = str(form.get("reason", "")).strip()
         if not reason:
-            return kill_switch_page(
-                request, refusal="clearing the kill switch needs a reason"
-            )
+            return kill_switch_page(request, refusal="clearing the kill switch needs a reason")
         if measure is None:
             return kill_switch_page(
                 request,

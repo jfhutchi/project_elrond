@@ -438,7 +438,7 @@ def test_a_silent_loop_is_called_out(database) -> None:
     notices = [item for item in state.attention if "market-hours" in item]
     assert len(notices) == 1
     assert "240 minutes ago" in notices[0]
-    assert "pause outside market hours" in notices[0]
+    assert "market status is unavailable" in notices[0]
     assert "runtime service status" in notices[0]
     assert "probably" not in notices[0]
 

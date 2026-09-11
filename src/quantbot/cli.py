@@ -300,6 +300,13 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     reports = build_reports_panel(runtime_paths().reports, now=datetime.now(UTC))
     reconcile = _console_reconcile(database, stream)
     sync_data = _console_sync_data(database, stream)
+    from quantbot.console.market_status import paper_market_probe
+
+    try:
+        market_status = paper_market_probe()
+    except Exception:  # noqa: BLE001 -- absence is explicit; never log credential-bearing errors
+        print("market status probe unavailable", file=stream)
+        market_status = None
     try:
         print(f"operator console on http://{host}:{port} reading {path}", file=stream)
         uvicorn.run(
@@ -310,6 +317,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
                 reports=reports,
                 reconcile=reconcile,
                 sync_data=sync_data,
+                market_status=market_status,
             ),
             host=host,
             port=port,
