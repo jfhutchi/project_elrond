@@ -246,3 +246,37 @@ async def test_refresh_failure_does_not_keep_old_closed_status():
     assert (await cache.refresh()).reported_open is False
     now += timedelta(seconds=1)
     assert (await cache.refresh()).reported_open is None
+
+
+@pytest.mark.parametrize("boundary", ["2026-09-11T13:30:00Z", "2026-09-11T20:00:00Z"])
+@pytest.mark.parametrize("skew", [-0.02, 0.02])
+def test_clock_skew_cannot_carry_status_across_session_boundary(boundary, skew):
+    edge = stamp(boundary)
+    now = edge - timedelta(seconds=skew / 2)
+    broker_at = now + timedelta(seconds=skew)
+    session = XNYSSession(
+        session_date=edge.date(),
+        open_at=stamp("2026-09-11T13:30:00Z"),
+        close_at=stamp("2026-09-11T20:00:00Z"),
+    )
+    clock = MarketClock(
+        timestamp=broker_at,
+        is_open=session.open_at <= broker_at < session.close_at,
+        next_open=edge + timedelta(days=1),
+        next_close=edge + timedelta(days=1),
+    )
+    assert assess_market(clock, (session,), now=now).reported_open is None
+
+
+@pytest.mark.parametrize(
+    "boundary,opened",
+    [
+        ("2026-09-11T13:30:00Z", False),
+        ("2026-09-11T20:00:00Z", True),
+    ],
+)
+def test_cached_measurement_expires_at_exact_boundary(boundary, opened):
+    edge = stamp(boundary)
+    status = measured(edge - timedelta(seconds=1), opened=opened)
+    assert status.current(edge - timedelta(microseconds=1)).reported_open is opened
+    assert status.current(edge).reported_open is None
