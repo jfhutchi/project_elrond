@@ -9,6 +9,7 @@ from quantbot.config import Settings
 from quantbot.domain import ReconciliationStatus
 from quantbot.operations.cycle import PAPER_SMOKE_ACKNOWLEDGEMENT, authorize_paper_smoke
 from quantbot.operations.kill_switch import KillSwitchController, ReadinessEvidence
+from quantbot.sandbox import SandboxError, select_isolated_backend
 from quantbot.storage import Database, StorageRepository
 from tests.support import measured
 
@@ -562,7 +563,19 @@ def test_the_research_cycle_reports_before_it_advances_anything(tmp_path: Path) 
     reported = json.loads(dry.getvalue())
     assert reported["committed"] is False
     assert reported["runnable_now"] == ["T-CLI-1"]
-    assert reported["stages_available"] == ["PROPOSED"]
+    # The handler set grew, exactly as this test's docstring anticipated: `SCOUTING` runs the
+    # pre-registered measurement, and `cli.py` offers it only where `select_isolated_backend()`
+    # succeeds. So the expected list is a function of the host, and pinning it to one literal
+    # would pass here and fail on a runner with no OS-enforced sandbox -- or the reverse, which
+    # is worse, because a green suite would then be evidence that isolation was present when it
+    # was not. Derived from the same check the command makes.
+    try:
+        select_isolated_backend()
+    except SandboxError:
+        expected_stages = ["PROPOSED"]
+    else:
+        expected_stages = ["PROPOSED", "SCOUTING"]
+    assert reported["stages_available"] == expected_stages
 
     with database.transaction() as session:
         unmoved = ResearchDirector(session).get("T-CLI-1")
@@ -577,17 +590,31 @@ def test_the_research_cycle_reports_before_it_advances_anything(tmp_path: Path) 
     )
     advanced = json.loads(acted.getvalue())
     assert advanced["committed"] is True
-    assert advanced["advanced"] == [
-        {
-            "task_id": "T-CLI-1",
-            "moved_to": "SCOUTING",
-            "reason": "no stored record settles this question",
-        }
-    ]
+    assert advanced["advanced"][0] == {
+        "task_id": "T-CLI-1",
+        "moved_to": "SCOUTING",
+        "reason": "no stored record settles this question",
+    }
 
     with database.transaction() as session:
         moved = ResearchDirector(session).get("T-CLI-1")
-    assert moved is not None and moved.state is TaskState.SCOUTING
+    assert moved is not None
+
+    if expected_stages == ["PROPOSED"]:
+        assert len(advanced["advanced"]) == 1
+        assert moved.state is TaskState.SCOUTING
+        database.close()
+        return
+
+    # Where isolation exists the drain takes a second step, and the interesting part is what it
+    # refuses. `T-CLI-1` was opened by hand with an operator's question and no catalogue entry
+    # behind it, so there is no pre-registered measurement to run and nothing to grade against.
+    # Blocking is the only honest move: inventing a measurement for a question that never
+    # declared one would be the experiment choosing its own success criterion after the fact.
+    assert len(advanced["advanced"]) == 2
+    assert advanced["advanced"][1]["moved_to"] == "BLOCKED"
+    assert "not produced by the catalogue proposer" in advanced["advanced"][1]["reason"]
+    assert moved.state is TaskState.BLOCKED
     database.close()
 
 
