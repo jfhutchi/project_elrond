@@ -188,6 +188,11 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # grow to include stages that spend budget -- so the safe polarity is the one that
     # stays safe as more handlers arrive.
     cycle.add_argument("--commit", action="store_true")
+    propose = commands.add_parser("research-propose")
+    # Reports by default, for the same reason `research-cycle` does and one more: opening a task
+    # is the act that puts a question into the multiple-testing accounting, and a command that
+    # did that by being run is a command somebody runs to "have a look".
+    propose.add_argument("--commit", action="store_true")
     freeze = commands.add_parser("register-hypothesis")
     freeze.add_argument("--draft", required=True)
     freeze.add_argument("--critique", required=True)
@@ -1050,11 +1055,14 @@ def main(
             }
         elif args.command == "research-cycle":
             # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.autoexperiment import POLICY as EXPERIMENT_POLICY
+            from quantbot.research.autoexperiment import autoexperiment_stage
             from quantbot.research.cycle import actionable, drain
             from quantbot.research.director import ResearchDirector, TaskState
             from quantbot.research.memory import ResearchMemory
             from quantbot.research.prior import load_prior_findings
             from quantbot.research.stages import capacity_stage, novelty_stage
+            from quantbot.sandbox import SandboxError, select_isolated_backend
 
             with active.database.transaction() as session:
                 # Load what the project already knows before deciding anything. The novelty gate
@@ -1075,6 +1083,20 @@ def main(
                         session, novelty_stage(ResearchMemory(session))
                     )
                 }
+                # `SCOUTING` is offered only where an OS-enforced sandbox exists. A task sitting
+                # at `SCOUTING` with no handler is reported as not-actionable and stays visibly
+                # stuck, which is the honest state on a host that cannot isolate execution --
+                # and strictly better than measuring a generated script on the host that holds
+                # the ledger. `select_isolated_backend` is the same check `autoexperiment` makes
+                # at run time; asking it here means the stage is absent rather than failing.
+                try:
+                    select_isolated_backend(EXPERIMENT_POLICY)
+                except SandboxError:
+                    isolation = None
+                else:
+                    isolation = autoexperiment_stage(session)
+                if isolation is not None:
+                    stages[TaskState.SCOUTING] = isolation
                 runnable = actionable(director, stages)
 
                 if not args.commit:
@@ -1114,6 +1136,93 @@ def main(
                         # and reporting only the count would make them look alike.
                         "steps_requested": args.max_steps,
                     }
+        elif args.command == "research-propose":
+            # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.composition import (
+                ResearchNotConfigured,
+                build_model_runtime,
+            )
+            from quantbot.research.director import ResearchDirector, TaskState
+            from quantbot.research.memory import RecordKind, ResearchMemory
+            from quantbot.research.prior import load_prior_findings
+            from quantbot.research.proposer import (
+                ModelCandidateSelector,
+                ProposalRefused,
+                candidate_slate,
+                measure_readiness,
+                propose,
+            )
+            from quantbot.research.reproducibility import capture_git_state
+
+            now = datetime.now(UTC)
+            commit_sha, dirty = capture_git_state()
+            with active.database.transaction() as session:
+                # Same seeding the cycle does, for the same reason: a proposer that cannot see
+                # what the project already settled would offer questions it has answered.
+                load_prior_findings(ResearchMemory(session))
+                dataset_readiness = measure_readiness(session, as_of=now.astimezone(UTC).date())
+                if not args.commit:
+                    director = ResearchDirector(session)
+                    existing = frozenset(
+                        task.task_id
+                        for state in TaskState
+                        for task in director.by_state(state)
+                    )
+                    eligible, rejected = candidate_slate(
+                        dataset_readiness, existing_task_ids=existing
+                    )
+                    result = {
+                        "ok": True,
+                        "committed": False,
+                        # Deliberately no model call on a report. Selection is the only thing a
+                        # model contributes, and spending tokens to answer "what could be asked"
+                        # would make the safe command the expensive one.
+                        "readiness": [row.as_detail() for row in dataset_readiness],
+                        "eligible": [entry.as_detail() for entry in eligible],
+                        "rejected": [entry.as_detail() for entry in rejected],
+                        "note": "nothing proposed; re-run with --commit to open a task",
+                    }
+                else:
+                    settled = [
+                        record.subject
+                        for record in ResearchMemory(session).recall(
+                            "", kinds=[RecordKind.FINDING]
+                        )
+                    ]
+                    try:
+                        runtime = build_model_runtime()
+                    except ResearchNotConfigured as unconfigured:
+                        # Fail closed. No configured selector means no task, never a task
+                        # chosen by something the operator did not configure.
+                        result = {
+                            "ok": False,
+                            "committed": False,
+                            "blocked_by": str(unconfigured),
+                            "readiness": [row.as_detail() for row in dataset_readiness],
+                        }
+                    else:
+                        try:
+                            proposal_outcome = propose(
+                                session,
+                                selector=ModelCandidateSelector(runtime),
+                                now=now,
+                                code_commit=f"{commit_sha}{'-dirty' if dirty else ''}",
+                                settled_subjects=settled,
+                            )
+                        except ProposalRefused as refused:
+                            result = {
+                                "ok": False,
+                                "committed": False,
+                                "refused": str(refused),
+                                "readiness": [row.as_detail() for row in dataset_readiness],
+                            }
+                        else:
+                            result = {
+                                "ok": proposal_outcome.ok,
+                                "committed": proposal_outcome.ok,
+                                **proposal_outcome.summary(),
+                                "provenance": dict(proposal_outcome.provenance),
+                            }
         elif args.command == "verify-manifest":
             # Function-scope import for the same reason as the other research commands.
             from quantbot.research.manifest import ExperimentManifest
