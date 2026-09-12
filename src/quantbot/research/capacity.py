@@ -319,6 +319,24 @@ def _sessions_after(
     return tuple(sorted(found))
 
 
+def stored_sessions(session: Session, source: DataSource, *, as_of: date) -> tuple[date, ...]:
+    """Every session this store holds for `source`, regardless of what has been consumed.
+
+    `CapacityRow.unsearched_sessions` answers "is there anything new", which collapses two very
+    different states into zero: a range that has been fully searched, and a source with no local
+    observations at all. A proposer has to tell those apart -- the first means wait, the second
+    means this dataset cannot be studied here whatever its status says -- so the unconsumed
+    question is asked separately rather than inferred.
+
+    Public, and thin on purpose: the alternative was a second implementation of "which rows are
+    observations of this source" somewhere else, which would eventually disagree with this one,
+    and the direction it disagreed in would decide whether a question got asked.
+    """
+    return _sessions_after(
+        session, prefixes=source.observation_prefixes, after=None, until=as_of
+    )
+
+
 def _consumed_span(
     session: Session, *, aliases: Sequence[str], start: date, end: date
 ) -> tuple[date, date] | None:
@@ -468,4 +486,5 @@ __all__ = [
     "DataSource",
     "capacity_inventory",
     "capacity_row",
+    "stored_sessions",
 ]
