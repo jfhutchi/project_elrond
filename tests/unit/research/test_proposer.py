@@ -488,3 +488,57 @@ def test_one_call_opens_at_most_one_task(database: Database) -> None:
         tasks = ResearchDirector(session).by_state()
 
     assert len(tasks) == 1
+
+
+# --- the schema the server is actually asked to compile ---------------------------------------
+
+
+def test_the_emitted_schema_carries_no_string_length_constraints() -> None:
+    """A grammar the model server cannot compile makes every selection call fail.
+
+    `call_structured` sends `model_json_schema()` to the endpoint to constrain decoding. Ollama's
+    grammar compiler rejects `minLength`/`maxLength` on a string property with
+    `HTTP 400 Failed to initialize samplers: failed to parse grammar`, and the proposer then
+    reports a refusal indistinguishable from the model being down -- which is exactly what
+    happened on 2026-09-12 until the constraints were moved into a validator.
+
+    So this asserts the shape of the request, not the behaviour of the parser. Re-adding
+    `min_length=` to either field turns it red.
+    """
+    from quantbot.research.proposer import CandidateChoice
+
+    schema = CandidateChoice.model_json_schema()
+    for name, spec in schema["properties"].items():
+        assert set(spec) <= {"title", "type"}, (
+            f"{name} carries {sorted(set(spec) - {'title', 'type'})}, which the grammar "
+            "compiler may refuse; bounds belong in validate_choice"
+        )
+
+
+def test_the_length_bounds_are_still_enforced_after_parsing() -> None:
+    """Moving them out of the schema must not mean dropping them."""
+    import pydantic
+
+    from quantbot.research.proposer import CandidateChoice
+
+    assert CandidateChoice(template_id="a", reason="b").template_id == "a"
+    with pytest.raises(pydantic.ValidationError):
+        CandidateChoice(template_id="a" * 129, reason="b")
+    with pytest.raises(pydantic.ValidationError):
+        CandidateChoice(template_id="a", reason="b" * 2001)
+    with pytest.raises(pydantic.ValidationError):
+        CandidateChoice(template_id="   ", reason="b")
+    with pytest.raises(pydantic.ValidationError):
+        CandidateChoice(template_id="a", reason="   ")
+
+
+def test_an_answer_with_extra_fields_is_refused() -> None:
+    """`extra="forbid"`, so a model that volunteers a verdict field does not get one read."""
+    import pydantic
+
+    from quantbot.research.proposer import CandidateChoice
+
+    with pytest.raises(pydantic.ValidationError):
+        CandidateChoice.model_validate(
+            {"template_id": "a", "reason": "b", "verdict": "SURVIVED"}
+        )

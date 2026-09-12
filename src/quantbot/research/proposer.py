@@ -45,9 +45,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Protocol, Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy.orm import Session
 
 from quantbot.research.capacity import (
@@ -386,13 +386,49 @@ def candidate_slate(
 # --- selection ----------------------------------------------------------------------------------
 
 
+#: Longest answer a selecting model may give, per field. Enforced after parsing rather than in
+#: the schema -- see `CandidateChoice`.
+_MAX_TEMPLATE_ID = 128
+_MAX_REASON = 2000
+
+
+# The length bounds on `CandidateChoice` are enforced in a validator rather than declared as
+# `min_length` / `max_length` on the fields, and that is not a style choice. `call_structured`
+# sends `model_json_schema()` to the server as a grammar to constrain decoding, and Ollama's
+# grammar compiler rejects `minLength`/`maxLength` on a string property outright:
+#
+#     HTTP 400  Failed to initialize samplers: failed to parse grammar
+#
+# Isolated against the live endpoint on 2026-09-12 by adding one schema feature at a time: plain
+# strings, `additionalProperties: false`, titles and descriptions all compile; the two length
+# keywords are the ones that do not. Declaring them made every selection call fail, which the
+# proposer correctly reported as a refusal and which looked exactly like a model outage.
+#
+# Validating after parsing is also the stronger control. A server that accepted the constraint
+# and ignored it would return an oversized answer either way, so the bound has to be checked here
+# to mean anything.
+#
+# The docstring is one line for a related reason: pydantic puts it in the schema's `description`,
+# and the schema is sent to the model on every call.
 class CandidateChoice(BaseModel):
     """The only shape a model may answer in. Anything else produces no task."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    template_id: str = Field(min_length=1, max_length=128)
-    reason: str = Field(min_length=1, max_length=2000)
+    template_id: str
+    reason: str
+
+    @model_validator(mode="after")
+    def validate_choice(self) -> Self:
+        if not self.template_id.strip():
+            raise ValueError("template_id must name an option, not empty space")
+        if len(self.template_id) > _MAX_TEMPLATE_ID:
+            raise ValueError(f"template_id exceeds {_MAX_TEMPLATE_ID} characters")
+        if not self.reason.strip():
+            raise ValueError("a selection without a reason is a vote, and votes are not evidence")
+        if len(self.reason) > _MAX_REASON:
+            raise ValueError(f"reason exceeds {_MAX_REASON} characters")
+        return self
 
 
 SELECTION_PROMPT = PromptTemplate(
