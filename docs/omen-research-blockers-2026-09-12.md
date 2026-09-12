@@ -58,7 +58,10 @@ The file that dirtied the tree is the one a run wrote, seconds before the refusa
   the whole of `tasks: 0` and `actionable_now: 0`.
 * `Elrond Daemon`, `Elrond Console` and `Elrond Protection` are running only because they started
   before the tree went dirty. A restart would be refused identically, so **the paper coordinator
-  could not have come back from a reboot.**
+  could not have come back from a reboot.** This is latent rather than visible: the market is shut
+  today, so nothing has yet needed to restart.
+* Ingestion, which polls around the clock, stopped at 14:45:37Z — one interval before the first
+  refusal — and has been locked out ever since.
 
 ## Blocker 2 — no execution sandbox (separate, and also real)
 
@@ -149,6 +152,34 @@ regress against would add surface without adding evidence.
    different facts in two different tables; collapsing them would lose strategy provenance every
    time the runtime was patched.
 
+## Is the coordinator healthy, or just alive?
+
+Worth separating, because "the task says Running" is the kind of evidence this project does not
+accept. Measured from the store, in rows per UTC day:
+
+| Day | Protection cycles | Ingestion runs | Reading |
+|---|---|---|---|
+| 2026-09-08 (Tue) | 16, 16:54→19:52 | 43, 16:54→23:53 | deployment day, partial |
+| 2026-09-09 (Wed) | 26, 13:30→19:45 | 86, 00:07→23:57 | full trading day |
+| 2026-09-10 (Thu) | 26, 13:30→19:45 | 75, 00:27→23:45 | full trading day |
+| 2026-09-11 (Fri) | 24, 13:30→19:50 | 72, 00:15→23:45 | full trading day |
+| 2026-09-12 (**Sat**) | **0** | 30, 00:15→**14:45** | see below |
+
+**The absence of trading activity today is a closed market, not a fault.** 2026-09-12 is a
+Saturday. Protection cycles begin at 13:30Z — the opening bell — on trading days only, so zero of
+them today is correct, as is the absence of new bars, equity snapshots and cycle runs. Reading
+that as an outage would be the mirror image of the error CLAUDE.md warns about: inventing forward
+evidence from elapsed calendar time, in reverse.
+
+**The one genuine anomaly today is ingestion.** It is a round-the-clock poller — on every previous
+day it ran until ~23:45Z — and today it stops dead at 14:45:37Z. The first `CHECKOUT_NOT_CLEAN`
+refusal is at 15:15:36Z, one polling interval later. So ingestion did not wind down for the
+weekend; it was locked out, and every 30-minute attempt since has been refused.
+
+The last successful ingestion run itself was healthy: `status: SUCCEEDED`, 6969 records seen, 0
+inserted, 6969 duplicate — expected for a daily-bar source polling mid-session, since the day's
+daily bar does not exist until the close.
+
 ## Safety boundary — verified unchanged
 
 Checked after all sandbox work on this host:
@@ -158,8 +189,8 @@ Checked after all sandbox work on this host:
 * `kill_switch_state`: `engaged = 0`, `updated_at` 2026-09-10T21:15:23Z — untouched by this work.
 * Latest reconciliation `RECONCILED`, `diff_count: 0`, `allows_new_orders: true`.
 * Account identity unchanged: `ddd5231b-5c1e-4a64-9ea1-74f21775466b`.
-* Equity $497.18 at 2026-09-11T20:05:00Z, cash $2.04 — the last durable observation; today's
-  20:05Z cycle had not yet run when this was recorded.
+* Equity $497.18 at 2026-09-11T20:05:00Z, cash $2.04 — the last durable observation, from the
+  most recent trading day. There is no 2026-09-12 observation because 2026-09-12 is a Saturday.
 * Coordinator, console and protection tasks still `Running`, with process start times of
   2026-09-10 and 2026-09-11 — all predating this session.
 
