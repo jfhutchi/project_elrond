@@ -53,9 +53,8 @@ The file that dirtied the tree is the one a run wrote, seconds before the refusa
 
 **Consequences, both larger than a missing report.**
 
-* `Elrond Research` runs `research-cycle --max-steps 1 --commit`. It is the only thing that creates
-  research tasks, it has never completed against this store, and `research_tasks` is empty. That is
-  the whole of `tasks: 0` and `actionable_now: 0`.
+* `Elrond Research` runs `research-cycle --max-steps 1 --commit` and has never completed against
+  this store. It is not, however, the whole story for `tasks: 0` — see blocker 3.
 * `Elrond Daemon`, `Elrond Console` and `Elrond Protection` are running only because they started
   before the tree went dirty. A restart would be refused identically, so **the paper coordinator
   could not have come back from a reboot.** This is latent rather than visible: the market is shut
@@ -75,6 +74,64 @@ Fixed on `claude/windows-sandbox-backend`; proven on this host in
 
 **These are independent.** Fixing the sandbox alone would not have produced a single research task,
 and fixing the deadlock alone would have produced tasks that could not execute.
+
+## Blocker 3 — nothing creates the first research task
+
+**Not fixed. This is the remaining blocker, and it is not the sandbox.**
+
+Established by running the real commands against a *copy* of the deployed store, with the
+deployment's own environment file loaded, so the result reflects the deployed configuration rather
+than an ad-hoc one:
+
+```
+research-status
+  blocked_by         : None
+  models             : generator qwen3:4b-instruct, critic qwen2.5:3b,
+                       endpoint http://127.0.0.1:11434/v1, api_key_configured False
+  actionable_now     : 0
+  tasks              : {"by_state": {}, "total": 0}
+  milestone          : M0_RESEARCH_PLATFORM_OPERATIONAL  (reached, 21 refutations recorded)
+  clean_confirmatory : ["crypto-daily", "us-macro-monthly", "sec-edgar-filings"]
+
+research-cycle --max-steps 1            -> runnable_now [], stages_available ["PROPOSED"]
+research-cycle --max-steps 1 --commit   -> {"advanced": [], "committed": true, "ok": true}
+```
+
+`blocked_by: None`. The local model server is running and reachable — `ElrondModelServer` is a
+live scheduled task and `http://127.0.0.1:11434/api/tags` answers with the configured models. So
+research is **fully configured and unblocked**, on a clean checkout, and still advances nothing.
+
+The reason is in `cli.py`, where `research-cycle` injects exactly one stage handler:
+
+```python
+stages = {TaskState.PROPOSED: capacity_stage(session, novelty_stage(ResearchMemory(session)))}
+```
+
+That handler *advances* a task already in `PROPOSED` through the capacity and novelty gates. It
+does not create one, and **no code in `src/` constructs a `ResearchTask` at all** — the only
+reference to the class is its own definition in `research/director.py`. `run_cycle` is a consumer
+with no producer, and `advanced: []` is it correctly reporting an empty queue rather than failing.
+
+So the honest ordering is: the deadlock and the sandbox were both real and both blocked research,
+and behind them sits an architectural gap — there is no implemented proposer. Issue #13, the
+discovery engine that would generate hypotheses from evidence and anomalies, is marked CLOSED on
+GitHub, but `cycle.py`'s own docstring still states that "#13's discovery engine does not" exist,
+and the deployed wiring agrees with the docstring.
+
+**Where the next legitimate experiment should go.** Not at US equities 2016–2026: `REFUTED.md`
+records that cycles 2–10 consumed every out-of-sample window there, and mining an exhausted range
+produces candidates that can never be confirmatory. `research-status` names the three datasets that
+still hold untouched confirmatory capacity — `crypto-daily`, `us-macro-monthly` and
+`sec-edgar-filings` — and those are where a proposer should look first.
+
+No task was created, on the deployed store or anywhere else. Manufacturing one to make this number
+move would be exactly the fabrication this project exists to be resistant to.
+
+### What was run against a copy, and why
+
+Every command above ran against `cycle-probe.db`, a byte copy of the live store taken with its
+`-wal` and `-shm`. The `--commit` run therefore charged its budget to a throwaway file that was
+then discarded. The live store's mtimes were unchanged by the whole exercise.
 
 ## Research-memory state
 
@@ -124,8 +181,16 @@ regress against would add surface without adding evidence.
 
 ## Lower-priority findings, with measured status
 
-1. **`paper-smoke` consumes environment-derived health flags.** Not re-examined this session.
-   Unchanged.
+1. **`paper-smoke` consumes environment-derived health flags.** Confirmed at the deployment level:
+   `C:\Users\leepa\.config\quantbot\quantbot.env` defines `BROKER_HEALTHY`,
+   `MARKET_DATA_HEALTHY`, `RISK_ENGINE_HEALTHY`, `RECONCILIATION_SUCCESSFUL` and `KILL_SWITCH`
+   alongside the real settings. These are assertions about health sitting in a file, not
+   measurements of it, and a smoke check that reads them can report a healthy broker because
+   somebody typed so. The measured equivalents already exist — `reconciliation_runs.status`,
+   `kill_switch_state.engaged`, broker health from an actual `health_check()` — so the fix is to
+   read those rather than the environment. Not changed here; it needs its own branch, and
+   altering the deployment's environment file mid-session is exactly the kind of operator-state
+   edit this work avoided.
 2. **`deployment-status` mischaracterises the live store.** Confirmed. Run without arguments it
    resolves `quantbot.db` relative to the working directory, finds nothing, and reports
    `store_authority: UNKNOWN`, `state: ABSENT`, `ok: false` with seven blockers — while the real
