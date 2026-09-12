@@ -135,6 +135,47 @@ whose size nobody knows. It refuses.
 Every run above reports `"workspaces_left_behind": []` and `"cleanup": "clean"`, including the
 terminated one and the one refused before execution.
 
+## Test-suite verification
+
+```
+commit       17ac5c4ef17773e8e82d536adeda261119d5a2b3  (claude/windows-sandbox-backend)
+command      .venv/Scripts/python.exe -m pytest
+started      2026-09-12T16:47:59Z
+finished     2026-09-12T16:57:22Z
+duration     553.03s
+result       2851 passed, 46 skipped, 0 failed, 1 warning
+exit code    0
+```
+
+No pipeline between pytest and the recorded exit code, so a non-zero status could not have been
+swallowed.
+
+### The interpreter the venv is built on is load-bearing
+
+A first attempt reported three failures — `test_service_wrapper_terminates_its_python_process_tree`,
+`test_windows_installer_registers_bounded_tasks_through_scheduler_doubles`, and
+`test_killed_writer_rolls_back_bars_and_restart_replays_without_loss`. None was caused by this
+work, and the cause is worth recording because it will catch the next person.
+
+`deploy/omen/setup-windows.ps1` refuses with `VENV_BASE_NOT_HOST_VISIBLE` when the virtualenv's
+*base* interpreter lives under `%APPDATA%` or `%LOCALAPPDATA%\Packages`. A venv created by `uv`
+with its default managed Python lands at
+`C:\Users\leepa\AppData\Roaming\uv\python\cpython-3.11.16-...`, which is exactly that, so the
+installer correctly refuses and the tests that exercise it fail.
+
+The deployed runtime's venv is built on `D:\Elrond\tools\python\cpython-3.11.16-...` instead —
+deliberately outside the profile, which is why the same suite reports clean there. Rebuilding the
+worktree venv on that same base interpreter makes all three pass:
+
+```
+uv venv --python D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\python.exe
+uv sync --frozen
+-> tests/unit/operations/test_service.py + tests/integration/test_ingestion_recovery.py
+   37 passed
+```
+
+So the figure above is comparable to the deployed suite rather than an artifact of a worktree.
+
 ## What this does not prove
 
 * Nothing here is a market finding, and no research capacity was consumed.
