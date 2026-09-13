@@ -10,14 +10,15 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Latest status (2026-09-09 00:13 UTC):** All seven tasks use local standard account
+**Latest status (2026-09-09 12:27 UTC):** All seven tasks use local standard account
 `LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
 The console, PAPER daemon, protection and model server run; ingestion, research and report have
-completed successfully. Startup registration is verified, but a physical reboot has not been
-tested. A console stop/start removed its full process tree and restored HTTP 200; all runtime
+completed successfully. Recovery after the 06:12 Eastern reboot was observed. A console
+stop/start removed its full process tree and restored HTTP 200; all runtime
 processes were observed in noninteractive Windows session 0. The active ledger remains
 `D:\Elrond\state\quantbot-paper-fresh-20260908.db`.
-The tested entry-budget fix at `094fefc1538e46dfca1b48c2e0a1ca50857fc43e` is deployed. The legitimate
+The entry-budget and market-hours fixes are deployed at `f125bd5fdb028177879ed9efe50f7e098af641af`.
+The six application startup tasks are pinned to this tested commit. The legitimate
 clearance command remeasured readiness and cleared the switch at 00:10 UTC; doctor and PAPER
 reconciliation now pass. Nine accepted orders remain unfilled, and the earlier HTTP 403 ERROR run
 and rejected DBC intent are preserved. See the

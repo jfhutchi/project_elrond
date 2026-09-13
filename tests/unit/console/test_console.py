@@ -435,7 +435,12 @@ def test_a_silent_loop_is_called_out(database) -> None:
         state = read_console_state(session, now=now)
 
     assert state.health.minutes_since_last_observation == 240
-    assert any("probably" in item and "not running" in item for item in state.attention)
+    notices = [item for item in state.attention if "market-hours" in item]
+    assert len(notices) == 1
+    assert "240 minutes ago" in notices[0]
+    assert "pause outside market hours" in notices[0]
+    assert "runtime service status" in notices[0]
+    assert "probably" not in notices[0]
 
 
 def test_a_store_that_has_never_observed_raises_no_daemon_notice(database) -> None:

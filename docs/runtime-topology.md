@@ -16,9 +16,10 @@ changing the host.
 The policy designates Omen as the only authority allowed to run, but it does not manufacture proof
 that Omen currently holds global authority. Cross-host fencing remains `UNKNOWN`; a local lock does
 not fence an unmeasured stale installation on some other host. PAPER broker reconciliation has
-been exercised and is clean. The tested entry-budget fix at
-`094fefc1538e46dfca1b48c2e0a1ca50857fc43e` is the active clean runtime commit after the successful
-deployment retry. At 00:10 UTC September 9 the legitimate clearance command remeasured readiness
+been exercised and is clean. The entry-budget and market-hours fixes are deployed at
+`f125bd5fdb028177879ed9efe50f7e098af641af`, the active clean runtime commit after the September 9
+12:26 UTC update. Recovery after the 06:12 Eastern reboot was observed. At 00:10 UTC September 9
+the legitimate clearance command remeasured readiness
 and cleared the switch. Subsequent doctor/reconciliation checks passed. The prior ERROR run is
 preserved; no rejected intent was replayed. See [current measured evidence](omen-runtime-2026-09-09.md).
 

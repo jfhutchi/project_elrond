@@ -57,7 +57,7 @@ class FrozenModel(BaseModel):
 #: later: a false notice costs a glance, and a missed one costs every downstream measurement.
 STALE_RUN_DAYS = 4
 
-#: Minutes without a market-hours observation before the console calls the loop stopped. A
+#: Minutes without a market-hours observation before the console calls attention to the gap. A
 #: `PROJECT_DEFAULT` (#72), derived rather than picked: `OBSERVATION_INTERVAL` is 15 minutes, so
 #: three missed passes is the smallest gap that cannot be one slow broker call or a single
 #: restart. Anything tighter reports a healthy daemon as stopped, which teaches an operator to
@@ -433,15 +433,15 @@ class ConsoleState(FrozenModel):
                 f"the last operational cycle was {self.health.days_since_last_run} days ago; "
                 "no forward evidence is accumulating while it is stopped"
             )
-        # Separate from the line above, and answering a different question: is the process alive
-        # at all. A stale cycle with a fresh observation is a daemon between sessions; a stale
-        # cycle with no observation is a daemon that is not running. Eleven days of the second
-        # looked exactly like the first, because nothing recorded the difference (#143).
+        # A stale observation is worth surfacing, but this read-only panel has no current broker
+        # clock or process-liveness measurement. Overnight silence must not be called a dead
+        # daemon. Keep the timestamp visible without inventing either failure or health.
         gap = self.health.minutes_since_last_observation
         if gap is not None and gap >= STALE_OBSERVATION_MINUTES:
             items.append(
-                f"the market-hours loop last looked {gap} minutes ago; the daemon is probably "
-                "not running"
+                f"the market-hours loop last looked {gap} minutes ago; observations pause outside "
+                "market hours. Check runtime service status if observations are missing during "
+                "an open session"
             )
         protection_gap = self.health.minutes_since_last_protection
         if self.health.open_positions and self.health.last_protection_at is None:
