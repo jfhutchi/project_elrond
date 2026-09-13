@@ -10,12 +10,13 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Update (2026-09-13 13:16 UTC):** `main` is `92c49d4`, fully verified, but not yet deployed: the
-tasks are still pinned to `5025b21`, and re-pinning them needs an elevated run with the `erlond`
-password. The `PROJECT_STATUS.md` self-lock on the deployed checkout was cleared and ingestion
-recovered on `5025b21`. The live store is still at schema 27; migration 0028 was rehearsed on a copy.
-See [the 2026-09-13 deployment record](../../docs/omen-deployment-2026-09-13.md) for evidence and the
-elevated deployment step.
+**Update (2026-09-13 22:22 UTC):** `92c49d4` is deployed. An elevated operator run backed up the
+live store, migrated it to schema 28 and re-pinned the six application tasks to `92c49d4`, which
+Task Scheduler started at 22:21:51–52. Ingestion and report succeeded on the new code, and the
+research task proposed its first question autonomously. Re-registration moves each task's
+repetition phase to one minute after registration. See
+[the 2026-09-13 deployment record](../../docs/omen-deployment-2026-09-13.md) for the run, the
+acceptance evidence and what was still pending when it was written.
 
 **Earlier status (2026-09-10 21:16 UTC):** All seven tasks use local standard account
 `LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
