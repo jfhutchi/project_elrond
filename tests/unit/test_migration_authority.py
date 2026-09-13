@@ -279,10 +279,25 @@ def test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes(
             ),
         )
     database.close()
-    before = fingerprint(path)
 
     engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
     config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+    # Bring the store down to exactly 0027 first, in its own committed step. This test was written
+    # while 0027 was head, and the property it guards is 0027's refusal. With revisions above it,
+    # a single `downgrade 0026` would apply theirs before reaching the refusal -- and because the
+    # `pytest.raises` below sits inside `engine.begin()`, those steps would commit and the
+    # fingerprint would move for a reason unrelated to 0027. Descending first keeps the assertion
+    # about the revision it names.
+    try:
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.downgrade(config, "0027")
+    finally:
+        engine.dispose()
+    assert marker(path) == (27, "0027")
+    before = fingerprint(path)
+
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
     try:
         with engine.begin() as connection:
             config.attributes["connection"] = connection
@@ -292,7 +307,7 @@ def test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes(
         engine.dispose()
 
     assert fingerprint(path) == before, "a refused downgrade must not change the store"
-    assert marker(path) == (SCHEMA_VERSION, "0027")
+    assert marker(path) == (27, "0027")
     raw = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     try:
         schema_columns = {str(row[1]) for row in raw.execute("PRAGMA table_info(schema_version)")}
@@ -310,11 +325,50 @@ def test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes(
     assert "database_fingerprint" not in deployment_columns
     assert deployment_identities == [(identity,)]
 
-    reopened = Database(path)
+    # Back to head explicitly: an ordinary open of a store behind head is refused (#66).
+    reopened = Database.migrate(path)
     try:
         assert reopened.store_identity == identity
     finally:
         reopened.close()
+
+
+def test_a_rolled_back_chained_downgrade_through_0028_leaves_the_proposal_table_intact(
+    tmp_path: Path,
+) -> None:
+    """0028's downgrade must join the caller's transaction, not commit its drop on its own.
+
+    pysqlite begins a transaction only on DML, so a `DROP TABLE` issued before any write runs in
+    autocommit. Measured: with the drop first, a `downgrade 0026` that 0027 refuses -- and whose
+    caller rolls back -- leaves a store claiming revision 28 with `research_proposals` gone. That is
+    a store lying about its own shape, which is worse than either revision. Reordering the drop
+    after the version write makes this test fail, which is the point of it.
+    """
+    path = tmp_path / "chained.db"
+    Database.create(path).close()
+    before = fingerprint(path)
+
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+    try:
+        with pytest.raises(RuntimeError, match="unsafe.*pre-0027 backup"):
+            with engine.begin() as connection:
+                config.attributes["connection"] = connection
+                command.downgrade(config, "0026")
+    finally:
+        engine.dispose()
+
+    raw = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        tables = {
+            str(row[0])
+            for row in raw.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+    finally:
+        raw.close()
+    assert "research_proposals" in tables, "the rollback left the store without the 0028 table"
+    assert marker(path) == (SCHEMA_VERSION, "0028")
+    assert fingerprint(path) == before
 
 
 def test_a_store_ahead_of_this_build_stays_fail_closed_and_untouched(tmp_path: Path) -> None:
