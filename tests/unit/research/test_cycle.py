@@ -377,3 +377,95 @@ def test_the_bound_is_counted_before_the_step_not_after(database: Database) -> N
 
     assert len([o for o in outcomes if o.task is not None]) == 1
     assert remaining == 1, "the second task was never touched"
+
+
+# --- scoped handlers and deferred evidence -------------------------------------------------------
+
+
+class _Scoped:
+    """A handler that owns only some tasks in its state, the way the experiment stage does."""
+
+    def __init__(self, owned: set[str]) -> None:
+        self.owned = owned
+        self.called: list[str] = []
+
+    def applies_to(self, item: ResearchTask) -> bool:
+        return item.task_id in self.owned
+
+    def __call__(self, item: ResearchTask) -> StageResult:
+        self.called.append(item.task_id)
+        return StageResult(TaskState.REGISTERED, "measured")
+
+
+def test_a_handler_that_declines_a_task_leaves_it_where_it_was(database: Database) -> None:
+    """Not BLOCKED, not moved, not even offered to the handler. Visibly stuck, as before.
+
+    Deleting the `applies_to` check in `actionable` hands `T-HAND` to a handler that never
+    understood it, and the assertions on both the handler's calls and the task's state fail.
+    """
+    scoped = _Scoped({"T-OWNED"})
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        _open(director, task("T-HAND", TaskState.CRITIQUE), task("T-OWNED", TaskState.CRITIQUE))
+
+        ready = [item.task_id for item, _ in actionable(director, {TaskState.CRITIQUE: scoped})]
+        outcomes = drain(
+            director, {TaskState.CRITIQUE: scoped}, actor="claude", now=NOW, max_steps=5
+        )
+        hand = director.get("T-HAND")
+
+    assert ready == ["T-OWNED"]
+    assert scoped.called == ["T-OWNED"]
+    assert [item.task.task_id for item in outcomes if not item.idle] == ["T-OWNED"]
+    assert hand is not None and hand.state is TaskState.CRITIQUE
+
+
+def test_a_stage_evidence_is_written_after_the_move_is_accepted(database: Database) -> None:
+    order: list[str] = []
+
+    def persist() -> None:
+        order.append("persist")
+
+    def stage(item: ResearchTask) -> StageResult:
+        order.append("handler")
+        return StageResult(TaskState.REGISTERED, "ok", persist=persist)
+
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        _open(director, task("T-1", TaskState.CRITIQUE))
+        outcome = run_cycle(director, {TaskState.CRITIQUE: stage}, actor="claude", now=NOW)
+
+    assert order == ["handler", "persist"]
+    assert outcome.moved_to is TaskState.REGISTERED
+
+
+def test_evidence_that_cannot_be_written_takes_the_move_down_with_it(database: Database) -> None:
+    """A verdict with no evidence behind it must not commit, and must not decay into BLOCKED.
+
+    `run_cycle` turns a *handler* exception into a committed BLOCKED. Routing a persist failure
+    through that same path would commit a move whose evidence is missing; this asserts the whole
+    step is refused instead, and that the caller's rollback leaves the task where it started.
+    """
+
+    def persist() -> None:
+        raise RuntimeError("disk full")
+
+    def stage(item: ResearchTask) -> StageResult:
+        return StageResult(TaskState.REGISTERED, "ok", persist=persist)
+
+    with database.transaction() as session:
+        _open(ResearchDirector(session), task("T-1", TaskState.CRITIQUE))
+
+    with pytest.raises(CycleRefused, match="evidence could not be recorded"):
+        with database.transaction() as session:
+            run_cycle(
+                ResearchDirector(session), {TaskState.CRITIQUE: stage}, actor="claude", now=NOW
+            )
+
+    with database.transaction() as session:
+        director = ResearchDirector(session)
+        unmoved = director.get("T-1")
+        history = director.history("T-1")
+
+    assert unmoved is not None and unmoved.state is TaskState.CRITIQUE
+    assert [event.to_state for event in history] == [TaskState.PROPOSED, TaskState.CRITIQUE]

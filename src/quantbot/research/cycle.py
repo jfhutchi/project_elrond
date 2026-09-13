@@ -59,10 +59,36 @@ class StageResult:
     next_state: TaskState
     reason: str
     detail: Mapping[str, str] | None = None
+    #: Durable evidence the stage produced, written by `run_cycle` only after the director has
+    #: accepted the transition, inside the same transaction.
+    #:
+    #: A handler cannot write its evidence itself and stay atomic. `run_cycle` turns any exception
+    #: a handler raises into a committed `BLOCKED`, so a handler that wrote a search record and
+    #: then failed on its finding would commit the half it managed. Savepoints do not rescue it on
+    #: this engine: pysqlite begins a transaction only on DML, and a savepoint opened before any
+    #: write commits on release, outside the caller's rollback (measured 2026-09-12). Deferring the
+    #: write to here makes the move and its evidence one unit: a failure raises `CycleRefused`, and
+    #: the caller's transaction discards both.
+    persist: Callable[[], None] | None = None
 
 
 #: A stage handler: given the task, decide where it goes next. Pure with respect to the director.
 StageHandler = Callable[[ResearchTask], StageResult]
+
+
+def handles(handler: StageHandler, task: ResearchTask) -> bool:
+    """Whether a handler claims this task, for handlers that only own some tasks in a state.
+
+    A handler may expose `applies_to(task) -> bool`. One that does not claims every task in its
+    state, which is every handler written before this existed. The experiment stage is the reason
+    it exists: it can measure only questions the catalogue pre-registered, and a hand-opened task
+    in the same state is not its to decide. Declining keeps that task where it was -- in its
+    state, not actionable, visibly stuck -- which is the honest representation `actionable`
+    already uses for a state with no handler at all. The alternative was to move it to `BLOCKED`
+    on the say-so of a stage that never understood it.
+    """
+    applies_to = getattr(handler, "applies_to", None)
+    return True if applies_to is None else bool(applies_to(task))
 
 #: What running a task is worth. Injected rather than computed here, because
 #: `expected_information_gain` needs a power assessment, a novelty overlap and the remaining
@@ -137,7 +163,10 @@ def actionable(
     """
     ready: list[tuple[ResearchTask, Decimal]] = []
     for task in director.by_state(*ACTIVE):
-        if task.state not in stages or not director.dependencies_met(task):
+        handler = stages.get(task.state)
+        if handler is None or not handles(handler, task):
+            continue
+        if not director.dependencies_met(task):
             continue
         ready.append((task, score(task)))
     return ready
@@ -205,6 +234,19 @@ def run_cycle(
             f"the {task.state.value} stage asked to move {task.task_id} to "
             f"{decision.next_state.value}, which the lifecycle forbids"
         ) from error
+
+    if decision.persist is not None:
+        try:
+            decision.persist()
+        except Exception as error:  # noqa: BLE001 -- surfaced, never downgraded to BLOCKED
+            # Not BLOCKED, for the reason the handler path above is BLOCKED: that records a stage
+            # that failed. This is a stage that succeeded and could not write its evidence, and
+            # committing the move without it would leave a verdict nothing supports. Raising lets
+            # the caller's transaction discard the move and the partial evidence together.
+            raise CycleRefused(
+                f"{task.task_id} moved to {moved.state.value} but its evidence could not be "
+                f"recorded ({type(error).__name__}: {error}); nothing from this step is kept"
+            ) from error
 
     return CycleOutcome(task=moved, moved_to=moved.state, reason=decision.reason)
 
@@ -274,5 +316,6 @@ __all__ = [
     "budget_aware",
     "drain",
     "equal_priority",
+    "handles",
     "run_cycle",
 ]
