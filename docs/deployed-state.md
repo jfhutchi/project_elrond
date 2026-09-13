@@ -2,10 +2,10 @@
 
 **Issue:** #190 · **Schema:** 27 · **Command:** `quantbot deployment-status`
 
-Current Omen observations are in [the September 9 runtime record](omen-runtime-2026-09-09.md).
-Local-account application startup tasks run from commit `f125bd5fdb028177879ed9efe50f7e098af641af` against
+Current Omen observations are in [the September 10 runtime record](omen-runtime-2026-09-10.md).
+Local-account application startup tasks run from commit `5025b21586223d05dfeb4c37c2a514338a25a711` against
 `D:\Elrond\state\quantbot-paper-fresh-20260908.db`. PAPER reconciliation and readiness pass, and
-the durable kill switch is clear after the tested entry-budget update and measured clearance.
+the durable kill switch is clear after the tested equity-valuation update and measured clearance.
 This document describes the evidence mechanism; its historical inventory below
 must not be read as the current host's state.
 

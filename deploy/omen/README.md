@@ -10,19 +10,20 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Latest status (2026-09-09 12:27 UTC):** All seven tasks use local standard account
+**Latest status (2026-09-10 21:16 UTC):** All seven tasks use local standard account
 `LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
 The console, PAPER daemon, protection and model server run; ingestion, research and report have
-completed successfully. Recovery after the 06:12 Eastern reboot was observed. A console
+completed successfully. Recovery after the September 9 06:12 Eastern reboot was observed. A console
 stop/start removed its full process tree and restored HTTP 200; all runtime
 processes were observed in noninteractive Windows session 0. The active ledger remains
 `D:\Elrond\state\quantbot-paper-fresh-20260908.db`.
-The entry-budget and market-hours fixes are deployed at `f125bd5fdb028177879ed9efe50f7e098af641af`.
+The entry-budget, market-hours and equity-valuation fixes are deployed at
+`5025b21586223d05dfeb4c37c2a514338a25a711`.
 The six application startup tasks are pinned to this tested commit. The legitimate
-clearance command remeasured readiness and cleared the switch at 00:10 UTC; doctor and PAPER
-reconciliation now pass. Nine accepted orders remain unfilled, and the earlier HTTP 403 ERROR run
-and rejected DBC intent are preserved. See the
-[current evidence follow-up](../../docs/omen-runtime-2026-09-09.md) for measured details and limits.
+clearance command remeasured readiness and cleared the switch at 21:15 UTC; doctor and PAPER
+reconciliation now pass. Ten positions are open. Earlier ERROR/HALTED runs and rejected intents
+are preserved. See the
+[current evidence follow-up](../../docs/omen-runtime-2026-09-10.md) for measured details and limits.
 Older inventory below is historical evidence.
 
 The target is an HP OMEN by HP Gaming Laptop 16-n0xxx running Windows 11, with an AMD Ryzen 7 6800H
