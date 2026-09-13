@@ -10,7 +10,14 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Latest status (2026-09-10 21:16 UTC):** All seven tasks use local standard account
+**Update (2026-09-13 13:16 UTC):** `main` is `92c49d4`, fully verified, but not yet deployed: the
+tasks are still pinned to `5025b21`, and re-pinning them needs an elevated run with the `erlond`
+password. The `PROJECT_STATUS.md` self-lock on the deployed checkout was cleared and ingestion
+recovered on `5025b21`. The live store is still at schema 27; migration 0028 was rehearsed on a copy.
+See [the 2026-09-13 deployment record](../../docs/omen-deployment-2026-09-13.md) for evidence and the
+elevated deployment step.
+
+**Earlier status (2026-09-10 21:16 UTC):** All seven tasks use local standard account
 `LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
 The console, PAPER daemon, protection and model server run; ingestion, research and report have
 completed successfully. Recovery after the September 9 06:12 Eastern reboot was observed. A console
