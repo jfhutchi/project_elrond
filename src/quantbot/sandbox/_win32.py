@@ -27,9 +27,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-_WINDOWS = sys.platform == "win32"
-
-if _WINDOWS:
+# Every platform branch below tests `sys.platform` directly rather than through an alias. mypy
+# narrows only the literal check, so `if _WINDOWS:` made it analyse the Windows bindings on the
+# Linux CI target -- `ctypes.WinDLL` and `ctypes.WinError` do not exist there -- and failed
+# `mypy --platform linux src` with 15 errors the Windows-only check never saw.
+if sys.platform == "win32":
     from ctypes import wintypes
 else:  # pragma: no cover - exercised by every non-Windows collection of the test suite
     # `ctypes.wintypes` refuses to import off Windows, which would make this module -- and so
@@ -38,7 +40,7 @@ else:  # pragma: no cover - exercised by every non-Windows collection of the tes
     # importable and leaves only the actual syscalls unavailable. Tests then skip on a measured
     # `windows_backend_available()` rather than on an import error, which is the difference
     # between a suite that reports the backend absent and one that never mentions it.
-    wintypes = types.SimpleNamespace(  # type: ignore[assignment]
+    wintypes = types.SimpleNamespace(
         BOOL=ctypes.c_int,
         DWORD=ctypes.c_uint32,
         HANDLE=ctypes.c_void_p,
@@ -65,14 +67,14 @@ class _Unavailable:
         raise OSError(f"{self._name}.{attribute} is not available on {sys.platform}")
 
 
-if _WINDOWS:
+if sys.platform == "win32":
     _kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     _advapi32 = ctypes.WinDLL("advapi32", use_last_error=True)
     _userenv = ctypes.WinDLL("userenv", use_last_error=True)
 else:  # pragma: no cover - see above
-    _kernel32 = _Unavailable("kernel32")  # type: ignore[assignment]
-    _advapi32 = _Unavailable("advapi32")  # type: ignore[assignment]
-    _userenv = _Unavailable("userenv")  # type: ignore[assignment]
+    _kernel32 = _Unavailable("kernel32")
+    _advapi32 = _Unavailable("advapi32")
+    _userenv = _Unavailable("userenv")
 
 # --- process creation -------------------------------------------------------------------------
 
@@ -212,7 +214,7 @@ class JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
 # Prototypes, declared only where the DLLs exist. `ctypes` defaults every argument to int-
 # sized and every return to `int`, which silently truncates a 64-bit HANDLE; declaring them
 # is correctness on this platform rather than documentation.
-if _WINDOWS:  # pragma: no branch - the alternative is covered by the stub above
+if sys.platform == "win32":  # pragma: no branch - the alternative is covered by the stub above
     _kernel32.CreateProcessW.argtypes = [
         wintypes.LPCWSTR,
         wintypes.LPWSTR,
@@ -272,7 +274,10 @@ if _WINDOWS:  # pragma: no branch - the alternative is covered by the stub above
 
 
 def _raise(operation: str) -> None:
-    raise ctypes.WinError(ctypes.get_last_error(), f"{operation} failed")
+    if sys.platform == "win32":
+        raise ctypes.WinError(ctypes.get_last_error(), f"{operation} failed")
+    else:  # pragma: no cover - every binding raises before reaching here off Windows
+        raise OSError(f"{operation} failed: not available on {sys.platform}")
 
 
 @dataclass(frozen=True, slots=True)

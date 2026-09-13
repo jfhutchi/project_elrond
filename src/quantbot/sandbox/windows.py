@@ -179,13 +179,14 @@ def windows_backend_available() -> bool:
     this fails on a machine where `sys.platform` still says `win32`. Deliberately stops short of
     staging the interpreter, which costs an 80MB copy the first time and belongs to the run.
     """
-    if sys.platform != "win32":
-        return False
-    try:
-        _win32.app_container()
-        with _win32.JobObject(memory_bytes=64 * 1024 * 1024, active_process_limit=4):
-            return True
-    except OSError:
+    if sys.platform == "win32":
+        try:
+            _win32.app_container()
+            with _win32.JobObject(memory_bytes=64 * 1024 * 1024, active_process_limit=4):
+                return True
+        except OSError:
+            return False
+    else:
         return False
 
 
@@ -227,6 +228,8 @@ class WindowsSandbox:
     #: a backend cannot become OS-enforced by configuration.
     os_enforced = True
 
+    _container: _win32.AppContainer
+
     def __init__(
         self,
         policy: SandboxPolicy | None = None,
@@ -249,12 +252,18 @@ class WindowsSandbox:
                 "grants all egress rather than an allowlist, and enabling it would give a weaker "
                 "guarantee under a stronger name"
             )
-        if sys.platform != "win32":
+        # A direct platform branch, and `_container` annotated on the class, for the reason
+        # `_win32.py` gives: with an early `!= "win32"` raise, mypy's Linux target treated the
+        # assignment as unreachable and could not type any later use of `_container`.
+        if sys.platform == "win32":
+            try:
+                self._container = _win32.app_container(container_name)
+            except OSError as error:
+                raise WindowsUnavailable(
+                    f"could not establish an AppContainer: {error}"
+                ) from error
+        else:
             raise WindowsUnavailable("the Windows backend requires Windows")
-        try:
-            self._container = _win32.app_container(container_name)
-        except OSError as error:
-            raise WindowsUnavailable(f"could not establish an AppContainer: {error}") from error
 
     @property
     def policy(self) -> SandboxPolicy:
