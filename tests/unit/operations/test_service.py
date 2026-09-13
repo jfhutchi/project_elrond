@@ -370,7 +370,9 @@ def test_research_dispatch_uses_fixed_command_external_cwd_and_no_broker_secrets
 
     assert result == 0
     assert seen == {
-        "argv": ["research-cycle", "--max-steps", "1", "--commit"],
+        # `--propose-when-idle` is new and deliberate: without it the scheduled component only
+        # drains a queue that nothing in production ever fills.
+        "argv": ["research-cycle", "--max-steps", "1", "--commit", "--propose-when-idle"],
         "cwd": state,
         "key": None,
         "secret": None,
