@@ -112,22 +112,24 @@ is built on `D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none` (see th
 | `claude/status-file-deadlock` | `4f4c28b` | 00:25:58 | 00:34:40 | 522 | 2818 | 45 | 0 | 0 |
 | `claude/windows-sandbox-backend` | `88d2f6a` | 02:35:17 | 02:44:38 | 561 | 2851 | 46 | 0 | 0 |
 | `claude/research-proposer` | `ac546f3` | 02:59:16 | 03:08:47 | 571 | 2916 | 46 | 0 | 0 |
-| all of the above merged | see below | | | | | | | |
+| `claude/integration-verify-2026-09-13` (all of the above merged) | `cd57f7b` | 03:09:31 | 03:19:24 | 593 | 2950 | 46 | 0 | 0 |
 
 All times 2026-09-13. PR #230's 2846/45 matches the deployed runtime's reported figure. The one
 extra skip on the sandbox-bearing heads, found by diffing the skip lists, is
 `tests/unit/sandbox/test_backend_selection.py:118` — *the refusal under test is the non-Windows one*.
 
-A skip worth knowing about, present on every head including `main`:
+A skip worth knowing about, present on every head tested:
 `tests/integration/test_generated_experiment.py` (2 tests) is pinned to `WslSandbox`, so the
 model-generated-code path (#8) is never exercised under the Windows backend on this host even though
 `codegen.py` accepts any OS-enforced backend. The autonomous proposer does not use that path; it is
 a coverage gap, not a defect shown to exist.
 
-`claude/integration-verify-2026-09-13` is `origin/main` with `--no-ff` merges of
-`codex/equity-reconciliation`, `claude/status-file-deadlock` and `claude/research-proposer`, in that
-order, with no conflicts. It is pushed as verification evidence only — integrate through the
-individual PRs.
+`claude/integration-verify-2026-09-13` @ `cd57f7b` is `origin/main` (`7dc26dd`) with `--no-ff`
+merges of `codex/equity-reconciliation` (`9b44885`), `claude/status-file-deadlock` (`4f4c28b`) and
+`claude/research-proposer` (`163409a`), in that order, with no conflicts. It is pushed as verification
+evidence only — integrate through the individual PRs. `163409a` differs from the suite-tested
+`ac546f3` only under `docs/` and `README.md` (`git diff --stat ac546f3 163409a -- src tests` is empty),
+and this table was filled in by a later docs-only commit.
 
 ## 7. Merge order
 
