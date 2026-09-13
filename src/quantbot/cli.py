@@ -12,7 +12,7 @@ from collections.abc import Awaitable, Callable, Coroutine, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Any, TextIO
+from typing import TYPE_CHECKING, Any, TextIO
 
 from quantbot.config import Settings
 from quantbot.console.state import RuntimePanel, build_reports_panel
@@ -24,6 +24,12 @@ from quantbot.operations import (
     authorize_paper_smoke,
 )
 from quantbot.storage import Database, StorageRepository
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from quantbot.research.cycle import StageHandler
+    from quantbot.research.director import TaskState
 
 CommandHandler = Callable[[argparse.Namespace], Mapping[str, object]]
 
@@ -54,6 +60,134 @@ class CLIContext:
     #: without a broker, in which case clearing is refused rather than falling back to a
     #: declared evidence object -- which is the defect `readiness.py` was written to remove.
     measure: Callable[[], Coroutine[Any, Any, MeasuredReadiness]] | None = None
+
+
+
+def _research_commit() -> str:
+    """The commit of the source tree actually running, for research provenance.
+
+    Resolved against the installed package, never the working directory: the scheduled service
+    runs with its working directory set to the state directory, where `git` finds no repository
+    and the proposer would record `unknown`. A dirty tree is recorded as dirty rather than hidden,
+    and a tree with no repository falls back to the service's verified `QUANTBOT_GIT_COMMIT` pin.
+    """
+    from quantbot.research.reproducibility import capture_git_state
+
+    root = Path(__file__).resolve().parents[2]
+    if (root / ".git").exists():
+        sha, dirty = capture_git_state(root)
+        return f"{sha}-dirty" if dirty and sha != "unknown" else sha
+    return os.environ.get("QUANTBOT_GIT_COMMIT", "").strip().lower() or "unknown"
+
+
+def _research_stages(session: Session, *, code_commit: str) -> dict[TaskState, StageHandler]:
+    """The stage handlers this host can honestly run, built inside one caller-owned session."""
+    from quantbot.research.autoexperiment import POLICY as EXPERIMENT_POLICY
+    from quantbot.research.autoexperiment import autoexperiment_stage
+    from quantbot.research.director import TaskState
+    from quantbot.research.memory import ResearchMemory
+    from quantbot.research.stages import capacity_stage, novelty_stage
+    from quantbot.sandbox import SandboxError, select_isolated_backend
+
+    # The stages that can be decided mechanically. Critique and registration need a model's
+    # review; `actionable()` treats a state with no handler as not-actionable rather than as an
+    # error, so those tasks stay visibly stuck instead of being advanced by something that did
+    # not run them. Capacity first, then novelty: both are cheap and both can stop a question
+    # before anything expensive runs, but a question nothing could confirm should not consume a
+    # memory query either (#50).
+    stages: dict[TaskState, StageHandler] = {
+        TaskState.PROPOSED: capacity_stage(session, novelty_stage(ResearchMemory(session)))
+    }
+    # `SCOUTING` is offered only where an OS-enforced sandbox exists, and only claims tasks the
+    # proposer opened (`applies_to`). On a host that cannot isolate execution the stage is absent
+    # and such a task stays visibly stuck -- strictly better than measuring a generated script on
+    # the host that holds the ledger. `select_isolated_backend` is the same check `autoexperiment`
+    # makes at run time; asking it here means the stage is absent rather than failing.
+    try:
+        select_isolated_backend(EXPERIMENT_POLICY)
+    except SandboxError:
+        return stages
+    stages[TaskState.SCOUTING] = autoexperiment_stage(session, code_commit=code_commit)
+    return stages
+
+
+def _autonomous_proposal(database: Database, *, code_commit: str) -> dict[str, object]:
+    """Ask for at most one research question, in short transactions around one model call.
+
+    Selection happens with no transaction open. The model can take a minute, and this store is
+    one SQLite file shared with the trading daemon: a write transaction held across the call
+    would stall the daemon's writes past its busy timeout. So memory is seeded and the state
+    surveyed in short transactions, the model chooses between them, and `commit_proposal`
+    re-surveys before writing -- anything that changed in the meantime is recorded as a refusal,
+    and a concurrent proposer that won the race surfaces as a uniqueness violation, recorded the
+    same way.
+
+    Every path records an attempt, including the ones that open nothing.
+    """
+    from sqlalchemy.exc import IntegrityError
+
+    from quantbot.research.composition import ResearchNotConfigured, build_model_runtime
+    from quantbot.research.memory import ResearchMemory
+    from quantbot.research.prior import load_prior_findings
+    from quantbot.research.proposer import (
+        NO_ELIGIBLE_REASON,
+        ModelCandidateSelector,
+        ProposalRefused,
+        commit_proposal,
+        record_no_task,
+        select_candidate,
+        survey,
+    )
+
+    now = datetime.now(UTC)
+    with database.transaction() as session:
+        load_prior_findings(ResearchMemory(session))
+    with database.transaction() as session:
+        state = survey(session, now=now)
+
+    if not state.eligible:
+        with database.transaction() as session:
+            outcome = record_no_task(
+                session, state, now=now, code_commit=code_commit, reason=NO_ELIGIBLE_REASON
+            )
+        return outcome.summary()
+
+    try:
+        selection = select_candidate(state, ModelCandidateSelector(build_model_runtime()))
+    except (ResearchNotConfigured, ProposalRefused) as refused:
+        # Fail closed. No configured or usable selector means no task, never a task chosen by
+        # something the operator did not configure.
+        with database.transaction() as session:
+            outcome = record_no_task(
+                session,
+                state,
+                now=now,
+                code_commit=code_commit,
+                reason=f"{type(refused).__name__}: {refused}",
+            )
+        return outcome.summary()
+
+    try:
+        with database.transaction() as session:
+            outcome = commit_proposal(session, selection, now=now, code_commit=code_commit)
+            summary = outcome.summary()
+            if outcome.created is not None:
+                summary["provenance"] = dict(outcome.provenance)
+    except IntegrityError as collision:
+        with database.transaction() as session:
+            outcome = record_no_task(
+                session,
+                survey(session, now=now),
+                now=now,
+                code_commit=code_commit,
+                reason=(
+                    "a concurrent proposal claimed this question or its dataset first "
+                    f"({type(collision.orig).__name__}); this attempt wrote nothing else"
+                ),
+                selection=selection,
+            )
+        return outcome.summary()
+    return summary
 
 
 def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
@@ -188,6 +322,16 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # grow to include stages that spend budget -- so the safe polarity is the one that
     # stays safe as more handlers arrive.
     cycle.add_argument("--commit", action="store_true")
+    # Opt-in, and what the scheduled research component passes. When nothing is actionable the
+    # cycle asks the proposer for at most one question before draining, so an unattended host
+    # has work without a person seeding it. Never when something is actionable: a producer that
+    # added work while work was waiting would be a queue that grows on its own.
+    cycle.add_argument("--propose-when-idle", dest="propose_when_idle", action="store_true")
+    propose = commands.add_parser("research-propose")
+    # Reports by default, for the same reason `research-cycle` does and one more: opening a task
+    # is the act that puts a question into the multiple-testing accounting, and a command that
+    # did that by being run is a command somebody runs to "have a look".
+    propose.add_argument("--commit", action="store_true")
     freeze = commands.add_parser("register-hypothesis")
     freeze.add_argument("--draft", required=True)
     freeze.add_argument("--critique", required=True)
@@ -1051,69 +1195,102 @@ def main(
         elif args.command == "research-cycle":
             # Function-scope import for the same reason as the other research commands.
             from quantbot.research.cycle import actionable, drain
-            from quantbot.research.director import ResearchDirector, TaskState
+            from quantbot.research.director import ResearchDirector
             from quantbot.research.memory import ResearchMemory
             from quantbot.research.prior import load_prior_findings
-            from quantbot.research.stages import capacity_stage, novelty_stage
 
+            commit = _research_commit()
             with active.database.transaction() as session:
                 # Load what the project already knows before deciding anything. The novelty gate
                 # reads memory, and on 2026-08-22 the live store was empty while REFUTED.md held
                 # twenty-four settled findings -- so the gate passed questions this project had
                 # already answered. Idempotent, so running it every cycle costs one query.
                 seeded = load_prior_findings(ResearchMemory(session))
-                director = ResearchDirector(session)
-                # The stages that can be decided mechanically. Scouting, critique and experiment
-                # design need a model or a measurement; `actionable()` treats a state with no
-                # handler as not-actionable rather than as an error, so those tasks stay
-                # visibly stuck instead of being advanced by something that did not run them.
-                # Capacity first, then novelty. Both are cheap and both can stop a question
-                # before anything expensive runs, but a question nothing could confirm should
-                # not consume a memory query either (#50).
-                stages = {
-                    TaskState.PROPOSED: capacity_stage(
-                        session, novelty_stage(ResearchMemory(session))
-                    )
-                }
-                runnable = actionable(director, stages)
+                stages = _research_stages(session, code_commit=commit)
+                runnable = actionable(ResearchDirector(session), stages)
+                available = sorted(state.value for state in stages)
 
-                if not args.commit:
-                    result = {
-                        "ok": True,
-                        "committed": False,
-                        "prior_findings_loaded": seeded,
-                        "runnable_now": [task.task_id for task, _ in runnable],
-                        "stages_available": sorted(state.value for state in stages),
-                        "note": "nothing advanced; re-run with --commit to act",
-                    }
-                else:
+            idle = not runnable
+            if not args.commit:
+                result = {
+                    "ok": True,
+                    "committed": False,
+                    "prior_findings_loaded": seeded,
+                    "runnable_now": [task.task_id for task, _ in runnable],
+                    "stages_available": available,
+                    "idle": idle,
+                    "would_propose": bool(args.propose_when_idle and idle),
+                    "note": "nothing advanced; re-run with --commit to act",
+                }
+            else:
+                proposal: dict[str, object] | None = None
+                if args.propose_when_idle and idle:
+                    # Its own transactions, before the drain's: see `_autonomous_proposal`.
+                    proposal = _autonomous_proposal(active.database, code_commit=commit)
+                with active.database.transaction() as session:
+                    stages = _research_stages(session, code_commit=commit)
                     outcomes = drain(
-                        director,
+                        ResearchDirector(session),
                         stages,
                         actor="research-cycle",
                         now=datetime.now(UTC),
                         max_steps=args.max_steps,
                     )
-                    result = {
-                        "ok": True,
-                        "committed": True,
-                        "advanced": [
-                            {
-                                "task_id": None if outcome.task is None else outcome.task.task_id,
-                                "moved_to": (
-                                    None if outcome.moved_to is None else outcome.moved_to.value
-                                ),
-                                "reason": outcome.reason,
-                            }
-                            # An idle outcome carries no task and is dropped: "the queue had
-                            # nothing to do" is reported by the empty list, not by a row.
-                            for outcome in outcomes
-                            if not outcome.idle
-                        ],
-                        # A drain that stopped early is not the same as one with nothing left,
-                        # and reporting only the count would make them look alike.
-                        "steps_requested": args.max_steps,
-                    }
+                cycle_result: dict[str, object] = {
+                    # A proposal the selector could not make is the one outcome here a person
+                    # may need to look at -- a model that is down never proposes anything, and
+                    # quietly -- so it is the one that makes the run not ok.
+                    "ok": proposal is None or proposal.get("outcome") != "REFUSED",
+                    "committed": True,
+                    "advanced": [
+                        {
+                            "task_id": None if outcome.task is None else outcome.task.task_id,
+                            "moved_to": (
+                                None if outcome.moved_to is None else outcome.moved_to.value
+                            ),
+                            "reason": outcome.reason,
+                        }
+                        # An idle outcome carries no task and is dropped: "the queue had
+                        # nothing to do" is reported by the empty list, not by a row.
+                        for outcome in outcomes
+                        if not outcome.idle
+                    ],
+                    # A drain that stopped early is not the same as one with nothing left,
+                    # and reporting only the count would make them look alike.
+                    "steps_requested": args.max_steps,
+                    "stages_available": available,
+                }
+                if proposal is not None:
+                    cycle_result["proposal"] = proposal
+                result = cycle_result
+        elif args.command == "research-propose":
+            # Function-scope import for the same reason as the other research commands.
+            from quantbot.research.memory import ResearchMemory
+            from quantbot.research.prior import load_prior_findings
+            from quantbot.research.proposer import survey
+
+            if not args.commit:
+                with active.database.transaction() as session:
+                    # Same seeding the cycle does, for the same reason: a proposer that cannot
+                    # see what the project already settled would offer questions it has answered.
+                    load_prior_findings(ResearchMemory(session))
+                    surveyed = survey(session, now=datetime.now(UTC))
+                result = {
+                    "ok": True,
+                    "committed": False,
+                    # Deliberately no model call on a report. Selection is the only thing a
+                    # model contributes, and spending tokens to answer "what could be asked"
+                    # would make the safe command the expensive one.
+                    **surveyed.evidence(),
+                    "note": "nothing proposed; re-run with --commit to open a task",
+                }
+            else:
+                attempt = _autonomous_proposal(active.database, code_commit=_research_commit())
+                result = {
+                    "ok": attempt.get("outcome") != "REFUSED",
+                    "committed": attempt.get("outcome") == "CREATED",
+                    **attempt,
+                }
         elif args.command == "verify-manifest":
             # Function-scope import for the same reason as the other research commands.
             from quantbot.research.manifest import ExperimentManifest

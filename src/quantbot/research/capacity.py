@@ -319,6 +319,47 @@ def _sessions_after(
     return tuple(sorted(found))
 
 
+def stored_sessions(session: Session, source: DataSource, *, as_of: date) -> tuple[date, ...]:
+    """Every session this store holds for `source`, regardless of what has been consumed.
+
+    `CapacityRow.unsearched_sessions` answers "is there anything new", which collapses two very
+    different states into zero: a range that has been fully searched, and a source with no local
+    observations at all. A proposer has to tell those apart -- the first means wait, the second
+    means this dataset cannot be studied here whatever its status says -- so the unconsumed
+    question is asked separately rather than inferred.
+
+    Public, and thin on purpose: the alternative was a second implementation of "which rows are
+    observations of this source" somewhere else, which would eventually disagree with this one,
+    and the direction it disagreed in would decide whether a question got asked.
+    """
+    return _sessions_after(
+        session, prefixes=source.observation_prefixes, after=None, until=as_of
+    )
+
+
+def consumed_through(session: Session, source: DataSource, *, as_of: date) -> date | None:
+    """The last session date any search has consumed on this source, or `None` if none has.
+
+    The boundary between the two halves of a rolling source. Everything on or before it has been
+    searched and can only ever support exploratory work; everything after it is what
+    `CapacityRow.unsearched_sessions` counts as clean. A measurement that is allowed to look at
+    the exploratory half has to know where that half ends, and reading it from `unsearched_sessions`
+    would not do: when nothing new has arrived that tuple is empty and the boundary is still real.
+
+    Same computation `capacity_row` uses, exposed rather than repeated, so the gate that counts
+    clean sessions and the measurement that must not read them cannot draw the line in different
+    places.
+    """
+    end = source.latest if source.latest is not None else as_of
+    span = _consumed_span(
+        session,
+        aliases=equivalent_datasets(source.dataset),
+        start=source.earliest,
+        end=end,
+    )
+    return None if span is None else min(span[1], as_of)
+
+
 def _consumed_span(
     session: Session, *, aliases: Sequence[str], start: date, end: date
 ) -> tuple[date, date] | None:
@@ -468,4 +509,6 @@ __all__ = [
     "DataSource",
     "capacity_inventory",
     "capacity_row",
+    "consumed_through",
+    "stored_sessions",
 ]

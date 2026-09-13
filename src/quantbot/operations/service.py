@@ -34,7 +34,9 @@ COMPONENT_COMMANDS: Mapping[str, list[str]] = {
     "daemon": ["daemon"],
     "protection": ["protection-daemon"],
     "ingestion": ["sync-data"],
-    "research": ["research-cycle", "--max-steps", "1", "--commit"],
+    # `--propose-when-idle`: with nothing actionable, ask the proposer for at most one question
+    # before the one step. Without it this component could only ever drain a queue nothing fills.
+    "research": ["research-cycle", "--max-steps", "1", "--commit", "--propose-when-idle"],
     "report": ["report-weekly"],
 }
 

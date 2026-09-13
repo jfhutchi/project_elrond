@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 27
+SCHEMA_VERSION = 28
 
 metadata = MetaData(
     naming_convention={
@@ -625,6 +625,57 @@ research_task_events = Table(
     Column("detail_json", Text, nullable=False, server_default=text("'{}'")),
 )
 Index("ix_research_task_events_task_id", research_task_events.c.task_id)
+
+# Every autonomous proposal attempt, including the ones that opened nothing (0028).
+#
+# The opening task event says why a task exists. It cannot say why no task exists, and "the
+# producer looked, found nothing eligible, and here is the slate" is exactly the answer an
+# unattended loop has to be auditable on. `evidence_json` holds the measured state, the slate with
+# a reason for every rejection, and the selection's model provenance.
+#
+# Append-only, and idempotent by construction: `proposal_id` is a content address of the attempt,
+# so re-running against unchanged state writes nothing new. The two uniqueness rules are the
+# restart and race guarantees -- one proposal per task, one per (dataset, sequence) -- enforced by
+# the database rather than by a read a second process could race.
+research_proposals = Table(
+    "research_proposals",
+    metadata,
+    Column("proposal_id", String(64), primary_key=True),
+    Column("outcome", String(16), nullable=False),
+    Column("task_id", String(128), ForeignKey("research_tasks.task_id")),
+    Column("template_id", String(128)),
+    Column("template_version", Integer),
+    Column("catalogue_hash", String(64)),
+    Column("dataset_identity", String(128)),
+    Column("dataset_sequence", Integer),
+    Column("proposer_version", Integer, nullable=False),
+    Column("code_commit", String(64), nullable=False),
+    Column("attempted_at", String(40), nullable=False),
+    Column("evidence_json", Text, nullable=False),
+    CheckConstraint(
+        "outcome IN ('CREATED', 'NO_ELIGIBLE', 'REFUSED')", name="proposal_outcome_is_known"
+    ),
+    CheckConstraint(
+        "(outcome = 'CREATED') = (task_id IS NOT NULL)",
+        name="only_a_created_proposal_names_a_task",
+    ),
+    CheckConstraint(
+        "(task_id IS NULL) = (dataset_sequence IS NULL)",
+        name="a_dataset_sequence_belongs_to_a_task",
+    ),
+    CheckConstraint(
+        "task_id IS NULL OR (template_id IS NOT NULL AND template_version IS NOT NULL "
+        "AND catalogue_hash IS NOT NULL AND dataset_identity IS NOT NULL)",
+        name="a_created_proposal_names_its_template_and_dataset",
+    ),
+    CheckConstraint(
+        "dataset_sequence IS NULL OR dataset_sequence >= 1",
+        name="dataset_sequence_is_positive",
+    ),
+    UniqueConstraint("task_id"),
+    UniqueConstraint("dataset_identity", "dataset_sequence"),
+)
+Index("ix_research_proposals_attempted_at", research_proposals.c.attempted_at)
 
 
 # --- Promotion ladder (#16) ------------------------------------------------------------------

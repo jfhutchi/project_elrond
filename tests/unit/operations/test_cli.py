@@ -9,6 +9,7 @@ from quantbot.config import Settings
 from quantbot.domain import ReconciliationStatus
 from quantbot.operations.cycle import PAPER_SMOKE_ACKNOWLEDGEMENT, authorize_paper_smoke
 from quantbot.operations.kill_switch import KillSwitchController, ReadinessEvidence
+from quantbot.sandbox import SandboxError, select_isolated_backend
 from quantbot.storage import Database, StorageRepository
 from tests.support import measured
 
@@ -562,7 +563,19 @@ def test_the_research_cycle_reports_before_it_advances_anything(tmp_path: Path) 
     reported = json.loads(dry.getvalue())
     assert reported["committed"] is False
     assert reported["runnable_now"] == ["T-CLI-1"]
-    assert reported["stages_available"] == ["PROPOSED"]
+    # The handler set grew, exactly as this test's docstring anticipated: `SCOUTING` runs the
+    # pre-registered measurement, and `cli.py` offers it only where `select_isolated_backend()`
+    # succeeds. So the expected list is a function of the host, and pinning it to one literal
+    # would pass here and fail on a runner with no OS-enforced sandbox -- or the reverse, which
+    # is worse, because a green suite would then be evidence that isolation was present when it
+    # was not. Derived from the same check the command makes.
+    try:
+        select_isolated_backend()
+    except SandboxError:
+        expected_stages = ["PROPOSED"]
+    else:
+        expected_stages = ["PROPOSED", "SCOUTING"]
+    assert reported["stages_available"] == expected_stages
 
     with database.transaction() as session:
         unmoved = ResearchDirector(session).get("T-CLI-1")
@@ -577,6 +590,10 @@ def test_the_research_cycle_reports_before_it_advances_anything(tmp_path: Path) 
     )
     advanced = json.loads(acted.getvalue())
     assert advanced["committed"] is True
+    # Restored to the expectation this test had on main. The proposer branch briefly changed it
+    # so a host with isolation moved `T-CLI-1` on to BLOCKED; the experiment stage now declines
+    # tasks it did not open (`applies_to`), so an operator's task stops at SCOUTING on every
+    # host, exactly as it did before the stage existed.
     assert advanced["advanced"] == [
         {
             "task_id": "T-CLI-1",

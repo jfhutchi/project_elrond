@@ -234,7 +234,26 @@ class ResearchDirector:
     def __init__(self, session: Session) -> None:
         self._session = session
 
-    def open_task(self, task: ResearchTask, *, actor: str, reason: str) -> ResearchTask:
+    def open_task(
+        self,
+        task: ResearchTask,
+        *,
+        actor: str,
+        reason: str,
+        detail: Mapping[str, str] | None = None,
+    ) -> ResearchTask:
+        """Create a task in `PROPOSED`, recording why it exists.
+
+        `detail` carries the provenance of the decision that produced the task, and is stored on
+        the opening `TaskEvent` exactly as every later transition stores its own. Optional so no
+        existing caller changes, but it is the answer to "why does this task exist at all", which
+        until there was a producer nothing had to answer: an operator typed the task, so the
+        reason string was the whole story.
+
+        An autonomous producer has a longer story -- which dataset state made it eligible, what
+        memory was consulted, which model chose it from which alternatives -- and that belongs in
+        the audit trail beside the task rather than in a log file somebody may not have kept.
+        """
         if task.state is not TaskState.PROPOSED:
             raise InvalidTaskTransition(task.task_id, TaskState.PROPOSED, task.state)
         if self.get(task.task_id) is not None:
@@ -248,6 +267,7 @@ class ResearchDirector:
                 actor=actor,
                 reason=reason,
                 occurred_at=task.created_at,
+                detail=dict(detail or {}),
             )
         )
         return task

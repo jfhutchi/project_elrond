@@ -79,7 +79,8 @@ uv run quantbot doctor
 | `quantbot deployment-status` | What is actually running, without filesystem archaeology |
 | `quantbot ingestion-status` | Collection cursors, run history, incidents, heartbeats |
 | `quantbot research-capacity` | What statistical capacity is left, without spending any |
-| `quantbot research-cycle` | Advance the research loop |
+| `quantbot research-cycle` | Advance the research loop; `--propose-when-idle` (what the scheduled component runs) asks for one question when nothing is actionable |
+| `quantbot research-propose` | Report the proposal slate; `--commit` opens at most one catalogue question, recording every attempt in `research_proposals` |
 | `quantbot integrity-sweep` | Demote strategies with unresolved incidents |
 | `quantbot verify-manifest` | Check an experiment bundle's invariants |
 | `quantbot reproduce-experiment` | Re-run the bundle a manifest names |
