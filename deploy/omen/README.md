@@ -42,7 +42,8 @@ The historical bounded pre-install inventory found no Elrond process, startup re
 or credentials. A later expanded scan found 774 old schema-12 databases under pytest temporary
 paths and classified all of them as test fixtures, not operational candidates. Task Scheduler
 registration was exercised with an Interactive logon for the current user. AtBoot and S4U
-registration initially returned Access denied under the non-administrator account. That original
+registration initially returned Access denied under the current user's non-elevated token (the
+account is a local Administrators member, but runs UAC-limited unless explicitly elevated). That original
 Interactive registration has since been replaced by the password-backed startup tasks above.
 
 Omen is the only host policy permits to hold authority, but global coordinator/store authority

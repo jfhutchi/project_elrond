@@ -16,7 +16,7 @@ including the one step that needed the operator. All times UTC. Evidence files a
 | Migration 0028 on the live store | **Done** 22:15:32–34: schema 27 → 28, integrity ok, every existing row preserved |
 | Autonomous research | First scheduled run on `92c49d4` (22:21:52) proposed `auto-benchmark-move-size-persists-v1-us-equities-daily` by itself and moved it to `SCOUTING`. Nothing was seeded |
 | PAPER boundary | Intact: no order, fill, position, account, reconciliation, runtime-deployment or kill-switch row changed |
-| Deployment script | **Terminated early**, after re-registration and before its own start/verify steps, by a sharing violation on its step log that the watching session caused (below). Every skipped step was either performed by Task Scheduler or measured independently |
+| Deployment script | **Deployment succeeded; the deployment script terminated before its final verification stage.** It completed backup, migration and task re-registration; its next append to `steps.txt` failed because a separate log-watching process held that file open (below). Task Scheduler then started all six tasks through their normal triggers, and every skipped verification was measured independently |
 
 ## Why deployment needed an operator
 
@@ -27,12 +27,16 @@ differs from that pin (`CHECKOUT_PIN_MISMATCH`), so activating `92c49d4` require
 The repository's supported way to change it is `deploy\omen\setup-windows.ps1 -Mode Boot -Credential
 … -UpdateManaged`. The installer refuses Boot mode without elevation (`BOOT_MODE_REQUIRES_ELEVATION`)
 and without the runtime account's password (`BOOT_MODE_REQUIRES_CREDENTIAL`), and a Password-logon
-task cannot be re-registered without that password in any case. This session ran as
-`LEANNES-LAPTOP\leepa` with a UAC-filtered token. **Correction:** an earlier version of this record
-said `leepa` is not a member of Administrators. It is; `whoami /groups` shows `BUILTIN\Administrators`
-as *Group used for deny only*, which is why the session could not elevate but the operator, as the
-same account, could. The session never used the `erlond` password; the operator typed it into the
-deployment script's `Get-Credential` prompt, which passed it only to the installer.
+task cannot be re-registered without that password in any case.
+
+`LEANNES-LAPTOP\leepa` is a member of the local Administrators group but normally runs with a
+UAC-limited token, and therefore requires explicit elevation for administrative operations.
+`whoami /groups` in this session shows `BUILTIN\Administrators` as *Group used for deny only*: the
+membership is present and filtered out of the non-elevated token. This session ran with that limited
+token and did not elevate; the operator, as the same account, launched the deployment from an
+explicitly elevated window. **Correction:** an earlier version of this record said `leepa` is not an
+administrator, which was wrong. The session never used the `erlond` password; the operator typed it
+into the deployment script's `Get-Credential` prompt, which passed it only to the installer.
 
 Everything else in the deployment is within `leepa`'s rights (file ACLs grant Modify on the store and
 Full on the checkout; the task ACL grants `leepa` full control). It was deliberately **not** started:
@@ -230,13 +234,16 @@ database-before.json, database-after.json]:
 | checkout | 22:15:32.197 | `git switch --detach` exit 0, HEAD `92c49d4`, no dirty path |
 | migration | 22:15:32.202–34.182 | `migrate-database --confirm` exit 0, `migrated: true`; schema 27 → 28, alembic 0027 → 0028, integrity ok, every pre-existing table's row count unchanged, all eight named constraints and `ix_research_proposals_attempted_at` present |
 | installer | 22:15:34.363 → ~22:20:52 | credential prompt answered by the operator; `Registered password-backed startup tasks at Limited run level.`; all six tasks `Ready`, enabled, pinned `92c49d4` |
-| **script terminated** | ~22:20:52 | `Add-Content` on `steps.txt` failed with *file is being used by another process* while recording the task list; under `ErrorActionPreference=Stop` the script ended there |
+| **script terminated before final verification** | ~22:20:52 | `Add-Content` on `steps.txt` failed with *file is being used by another process* while recording the task list; under `ErrorActionPreference=Stop` the script ended there. The deployment itself had already succeeded through task registration |
 
-**Why it terminated, and whose fault it was.** The session watching the deployment polled
-`steps.txt` every 2 s from Git Bash (`wc -l` and `tail`) to report progress. Those opens and PowerShell's
-`Add-Content` are not share-compatible. Reproduced afterwards in a scratch directory with the same
-polling: 1,114 of 3,000 appends failed, and the polling reads failed too. The script was correct; the
-observer broke it. Lesson recorded: never poll a file a running script appends to.
+**Deployment succeeded; the deployment script terminated before its final verification stage.** This
+was an operational logging failure, not a failed deployment. A separate log-watching process — the
+observing session's monitor, which polled `steps.txt` every 2 s from Git Bash (`wc -l` and `tail`) to
+report progress — held the live step log open, and the script's next append failed. Those Git Bash
+opens and PowerShell's `Add-Content` are not share-compatible. Reproduced afterwards in a scratch
+directory with the same polling: 1,114 of 3,000 appends failed, and the polling reads failed too. The
+script was correct; the observer broke its logging. Lesson recorded: never poll a file a running script
+appends to.
 
 **What did not run, and what replaced it.** The pin check, `Start-ScheduledTask` for the six tasks,
 the post-start process and launcher-log records, the final HEAD record and `Stop-Transcript`. The
