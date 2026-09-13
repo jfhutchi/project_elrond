@@ -494,7 +494,28 @@ def _run_id(prefix: str, moment: datetime) -> str:
 
 
 def write_project_status(runtime: Runtime, *, next_priority: str) -> Path:
-    """Refresh PROJECT_STATUS.md from durable evidence only."""
+    """Refresh PROJECT_STATUS.md from durable evidence only, outside the checkout.
+
+    It used to write `Path("PROJECT_STATUS.md")` -- a bare relative path, resolved against the
+    process working directory, which for a deployed service is the repository. `PROJECT_STATUS.md`
+    is tracked, so every successful cycle modified a version-controlled file inside the checkout.
+
+    `operations/service.py` then refuses to start any component when
+    `git status --porcelain --untracked-files=all` is non-empty. The two controls are mutually
+    exclusive, and the deadlock is self-sustaining: once a cycle has written the file, nothing can
+    make the tree clean again, so every later start is refused.
+
+    That is not hypothetical. On the Omen, `Elrond Research` and `Elrond Ingestion` have been
+    refused with `CHECKOUT_NOT_CLEAN` since 2026-09-12T15:15Z, which is why `research_tasks` is
+    empty and no research cycle has ever run against the deployed store. The long-running daemon,
+    console and protection services survive only because they started before the tree went dirty
+    -- a restart would refuse them too, so the coordinator could not have come back from a reboot.
+
+    The fix follows the rule the preflight already states as `EXTERNAL_STATE_REQUIRED`: generated
+    state belongs outside the repository. `runtime.paths.reports` is already configured that way
+    for exactly this class of artifact, and nothing reads this file programmatically, so moving it
+    changes no other behaviour.
+    """
     account_id = runtime.settings.EXPECTED_ACCOUNT_ID or "UNVERIFIED_ACCOUNT"
     status = build_project_status(
         runtime.database,
@@ -518,7 +539,8 @@ def write_project_status(runtime: Runtime, *, next_priority: str) -> Path:
             generated_at=datetime.now(UTC),
         ),
     )
-    target = Path("PROJECT_STATUS.md")
+    target = runtime.paths.reports / "PROJECT_STATUS.md"
+    target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(status.render_markdown(), encoding="utf-8")
     return target
 
