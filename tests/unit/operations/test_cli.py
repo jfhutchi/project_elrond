@@ -590,31 +590,21 @@ def test_the_research_cycle_reports_before_it_advances_anything(tmp_path: Path) 
     )
     advanced = json.loads(acted.getvalue())
     assert advanced["committed"] is True
-    assert advanced["advanced"][0] == {
-        "task_id": "T-CLI-1",
-        "moved_to": "SCOUTING",
-        "reason": "no stored record settles this question",
-    }
+    # Restored to the expectation this test had on main. The proposer branch briefly changed it
+    # so a host with isolation moved `T-CLI-1` on to BLOCKED; the experiment stage now declines
+    # tasks it did not open (`applies_to`), so an operator's task stops at SCOUTING on every
+    # host, exactly as it did before the stage existed.
+    assert advanced["advanced"] == [
+        {
+            "task_id": "T-CLI-1",
+            "moved_to": "SCOUTING",
+            "reason": "no stored record settles this question",
+        }
+    ]
 
     with database.transaction() as session:
         moved = ResearchDirector(session).get("T-CLI-1")
-    assert moved is not None
-
-    if expected_stages == ["PROPOSED"]:
-        assert len(advanced["advanced"]) == 1
-        assert moved.state is TaskState.SCOUTING
-        database.close()
-        return
-
-    # Where isolation exists the drain takes a second step, and the interesting part is what it
-    # refuses. `T-CLI-1` was opened by hand with an operator's question and no catalogue entry
-    # behind it, so there is no pre-registered measurement to run and nothing to grade against.
-    # Blocking is the only honest move: inventing a measurement for a question that never
-    # declared one would be the experiment choosing its own success criterion after the fact.
-    assert len(advanced["advanced"]) == 2
-    assert advanced["advanced"][1]["moved_to"] == "BLOCKED"
-    assert "not produced by the catalogue proposer" in advanced["advanced"][1]["reason"]
-    assert moved.state is TaskState.BLOCKED
+    assert moved is not None and moved.state is TaskState.SCOUTING
     database.close()
 
 

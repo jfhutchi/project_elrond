@@ -1,47 +1,49 @@
 """Run a proposed question's pre-registered measurement under kernel isolation, and grade it.
 
 `proposer.py` produces a `ResearchTask`; `cli.py` wires a `PROPOSED` handler that advances it to
-`SCOUTING` once capacity and novelty agree. Nothing then ran the experiment, so the task stopped
-there -- "visibly stuck", as `cli.py` puts it, which was the honest thing to do while no execution
-backend existed. One does now, so this module is the `SCOUTING` handler.
+`SCOUTING` once capacity and novelty agree. This module is the `SCOUTING` handler for the tasks the
+proposer opened, and only those: `applies_to` declines anything without a proposal record, so a
+hand-opened task in `SCOUTING` stays where it is.
 
-**Three separations, and each one is the difference between evidence and a story.**
+**Four separations, and each one is the difference between evidence and a story.**
 
-*The measurement is catalogue code, not model code.* The model chose which question to ask;
-the arithmetic that answers it was written in advance and is content-addressed. A model that
-writes its own measurement writes its own success criterion with it.
+*The measurement reads only the exploratory range.* The first version of this module loaded every
+stored session, including the ones the capacity gate had just counted as the clean confirmatory
+sessions, while its docstring said it ran "on the exploratory range". The panel now ends at
+`ProposalTemplate.exploratory_through`: the last session any search consumed, or the last one this
+question has already seen, whichever is later. A session after that boundary is never loaded, so
+it cannot reach the sandbox, and a question with no exploratory range is not measured at all.
 
-*It still runs in the sandbox.* The script is machine-assembled per run and nobody reviews the
-particular one that executes, which is exactly the case `mine_for_anomalies` and `codegen` refuse
-an unenforced backend for. `select_isolated_backend()` is used rather than a directly constructed
-runner, so a host with no OS-enforced isolation gets a refusal and not a quieter sandbox.
+*The measurement is catalogue code, not model code.* The model chose which question to ask; the
+arithmetic that answers it was written in advance and is content-addressed. A model that writes its
+own measurement writes its own success criterion with it.
 
-*Grading happens out here, deterministically.* The sandbox returns a statistic and nothing else.
-Whether that statistic clears the bar, and whether the bar can be cleared at all with the
-observations available, is computed from `power.luck_threshold` and `power.observations_required`
-against the effect the template pre-registered. The child cannot influence its own verdict beyond
-the number it reports, and a script that lies about its statistic is still judged against a
-threshold it never saw.
+*It still runs in the sandbox.* The script is machine-assembled per run, data included, and nobody
+reviews the particular one that executes, which is the case `mine_for_anomalies` and `codegen`
+refuse an unenforced backend for. `select_isolated_backend()` is used rather than a directly
+constructed runner, so a host with no OS-enforced isolation gets a refusal and not a quieter
+sandbox.
 
-**Why the honest terminal state here is usually `UNDERPOWERED`.** The only dataset on this host
-with both capacity and observations is `us-equities-daily`, and cycles 2-10 spent 68 trials on it.
-The luck bar at 68 trials is 2.90, and the clean confirmatory capacity is the handful of sessions
-that have happened since the searching stopped. The measurement therefore runs on the *exploratory*
-range -- legitimate, and the only thing that range can still support -- while confirmation needs
-observations that do not exist yet.
+*Grading happens out here, and the exploratory statistic does not decide it.* The verdict is the
+power gate: whether the clean confirmatory observations could let the pre-registered effect clear
+`luck_threshold` at the project's cumulative trial count. That is computable without the
+measurement, and the reason text says so. The exploratory statistic is recorded -- as a
+`search_runs` row, so a later registration built on it has a measured search to cite, and as an
+`EXPLORATORY_ONLY` finding, so memory can answer what this range showed -- and it is never read
+as confirmation or as refutation.
 
-That is a real scientific conclusion and not a failure to produce one. `UNDERPOWERED` is
-deliberately terminal and deliberately not `REFUTED`: an exploratory statistic from an exhausted
-range cannot refute a mechanism, and recording one as though it had would teach a later agent that
-something was tested and failed when it was never tested. The state machine forbids the laundering
-and so does this module.
+**Why the honest terminal state here is usually `UNDERPOWERED`.** The only dataset on this host with
+both capacity and observations is `us-equities-daily`, which cycles 2-10 spent 68 trials on. The
+bar at that burden is 2.91, and the clean confirmatory sessions are the handful that have happened
+since the searching stopped. `UNDERPOWERED` is deliberately terminal and deliberately not
+`REFUTED`: a question the data could not resolve was never tested.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from decimal import Decimal
@@ -50,25 +52,46 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from quantbot.market_data.calendar import XNYS_TIMEZONE
-from quantbot.research.capacity import DATA_SOURCES, DataSource, capacity_row
-from quantbot.research.cycle import StageHandler, StageResult
+from quantbot.research.capacity import DATA_SOURCES, DataSource
+from quantbot.research.cycle import StageResult
 from quantbot.research.director import ResearchTask, TaskState
+from quantbot.research.memory import (
+    RecordKind,
+    Relation,
+    ResearchMemory,
+    ResearchRecord,
+    Verdict,
+)
 from quantbot.research.mining import IsolatedSandbox
 from quantbot.research.power import (
     ComparisonStructure,
     DependenceAssumptions,
     EffectSpecification,
     luck_threshold,
+    minimum_detectable_effect,
     observations_required,
 )
-from quantbot.research.proposer import ProposalTemplate, template_by_id
+from quantbot.research.proposer import (
+    DatasetReadiness,
+    ProposalTemplate,
+    measure_readiness,
+    proposal_for_task,
+    template_by_id,
+)
+from quantbot.research.registry import DataRole, HypothesisRegistry
 from quantbot.sandbox import SandboxPolicy, SandboxResult, select_isolated_backend
-from quantbot.storage.database import decode_utc
-from quantbot.storage.schema import bars
+from quantbot.storage.database import decode_utc, encode_utc
+from quantbot.storage.schema import bars, search_runs
 
-#: Bumped when the measurement scripts or the grading rule change. Recorded on every result,
-#: because a statistic is only comparable with another produced the same way.
-EXPERIMENT_VERSION = 1
+#: Bumped when the measurement scripts, the panel boundary or the grading rule change. Recorded on
+#: every result, because a statistic is only comparable with another produced the same way.
+#:
+#: 2: the panel ends at the exploratory boundary; grading uses the project-wide trial count; the
+#: exploratory statistic is persisted and no longer described as sizing anything.
+EXPERIMENT_VERSION = 2
+
+#: How this stage appears in `search_runs.actor` and on the records it writes.
+ACTOR = "autoexperiment"
 
 #: The series every measurement here is asked about. Declared rather than inferred so a panel
 #: missing it fails closed instead of silently benchmarking against whatever sorted first.
@@ -78,6 +101,14 @@ BENCHMARK_SYMBOL = "SPY"
 #: enough that a runaway is stopped in under a second. The wall clock is generous by comparison
 #: so that a memory breach is reported as a memory breach.
 POLICY = SandboxPolicy(wall_clock_seconds=90.0, memory_mb=256)
+
+#: Observations a lead-lag measurement loses inside a range of sessions: one to differencing
+#: closes into returns, one to shifting the target forward a session.
+LEAD_LAG_LOSS = 2
+
+#: How much of the child's output is kept with the search record. The report is one JSON line; the
+#: cap exists so a misbehaving script cannot write megabytes into the ledger.
+_OUTPUT_CAP = 4000
 
 
 class ExperimentRefused(RuntimeError):
@@ -121,8 +152,12 @@ class Panel:
         )
 
 
-def load_panel(session: Session, source: DataSource, *, as_of: date) -> Panel:
-    """Assemble the complete-session panel for one source, oldest first.
+def load_panel(session: Session, source: DataSource, *, through: date) -> Panel:
+    """Assemble the complete-session panel for one source, oldest first, ending at `through`.
+
+    `through` is inclusive and has no default. It is the boundary between what may be measured and
+    what is being kept for confirmation, and a default would be a place for that decision to be
+    made by accident -- which is how the first version read the clean sessions it was meant to keep.
 
     Sessions missing any symbol are dropped rather than padded. A cross-sectional statistic over
     a varying universe is a different statistic each day, and filling the gap with a stale close
@@ -140,12 +175,12 @@ def load_panel(session: Session, source: DataSource, *, as_of: date) -> Panel:
     by_date: dict[date, dict[str, float]] = {}
     for symbol, timestamp, close in rows:
         day = decode_utc(str(timestamp)).astimezone(XNYS_TIMEZONE).date()
-        if day > as_of:
+        if day > through:
             continue
         by_date.setdefault(day, {})[str(symbol)] = float(close)
 
     if not by_date:
-        raise ExperimentRefused(f"{source.dataset} has no observations on or before {as_of}")
+        raise ExperimentRefused(f"{source.dataset} has no observations on or before {through}")
 
     # The universe is the set of symbols present on every session considered, so the
     # cross-section is the same width throughout.
@@ -163,8 +198,8 @@ def load_panel(session: Session, source: DataSource, *, as_of: date) -> Panel:
 
 # --- the measurements ----------------------------------------------------------------------------
 
-#: Shared arithmetic, injected ahead of the per-measurement tail. Written once so three
-#: measurements cannot disagree about what a return is.
+#: Shared arithmetic, injected ahead of the per-measurement tail. Written once so every
+#: measurement agrees about what a return is.
 _PREFIX = '''import json, math, statistics
 
 PANEL = json.loads(PAYLOAD)
@@ -215,6 +250,8 @@ def emit(measurement_id, signal, target):
     report["measurement_id"] = measurement_id
     report["sessions"] = len(DATES)
     report["universe"] = len(SYMBOLS)
+    report["first_session"] = DATES[0]
+    report["last_session"] = DATES[-1]
     print(json.dumps(report, sort_keys=True))
 '''
 
@@ -233,6 +270,12 @@ _TAILS: Mapping[str, str] = {
     # Dispersion today against the signed benchmark return tomorrow.
     "dispersion_forward_signed_return": (
         'emit("dispersion_forward_signed_return", DISPERSION[:-1], BENCHMARK_RETURNS[1:])\n'
+    ),
+    # The size of today's benchmark move against the size of tomorrow's.
+    "benchmark_absolute_move_persistence": (
+        'emit("benchmark_absolute_move_persistence",\n'
+        "     [abs(value) for value in BENCHMARK_RETURNS[:-1]],\n"
+        "     [abs(value) for value in BENCHMARK_RETURNS[1:]])\n"
     ),
 }
 
@@ -265,6 +308,8 @@ class MeasurementResult:
     degenerate: bool
     sessions: int
     universe: int
+    first_session: date
+    last_session: date
     panel_digest: str
     script_sha256: str
     backend: str
@@ -281,6 +326,8 @@ class MeasurementResult:
             "t_statistic": str(self.t_statistic),
             "sessions": str(self.sessions),
             "universe": str(self.universe),
+            "first_session": self.first_session.isoformat(),
+            "last_session": self.last_session.isoformat(),
             "panel_sha256": self.panel_digest,
             "script_sha256": self.script_sha256,
             "sandbox_backend": self.backend,
@@ -349,10 +396,20 @@ def run_measurement(
         degenerate = bool(report["degenerate"])
         sessions = int(report["sessions"])  # type: ignore[call-overload]
         universe = int(report["universe"])  # type: ignore[call-overload]
+        first_session = date.fromisoformat(str(report["first_session"]))
+        last_session = date.fromisoformat(str(report["last_session"]))
     except (KeyError, TypeError, ValueError, ArithmeticError) as error:
         raise ExperimentRefused(
             f"the measurement report is missing or malformed: {error}"
         ) from error
+    reported = (first_session, last_session, sessions)
+    if reported != (panel.dates[0], panel.dates[-1], len(panel.dates)):
+        # The child reports the range it read. A report that disagrees with the panel it was given
+        # describes some other data, and grading it would attach a statistic to the wrong sessions.
+        raise ExperimentRefused(
+            f"the measurement reported sessions {first_session}..{last_session} ({sessions}) but "
+            f"was given {panel.dates[0]}..{panel.dates[-1]} ({len(panel.dates)})"
+        )
 
     return MeasurementResult(
         measurement_id=template.measurement_id,
@@ -362,6 +419,8 @@ def run_measurement(
         degenerate=degenerate,
         sessions=sessions,
         universe=universe,
+        first_session=first_session,
+        last_session=last_session,
         panel_digest=panel.digest,
         script_sha256=result.script_sha256,
         backend=type(backend).__name__,
@@ -382,6 +441,9 @@ class Grade:
     luck_bar: Decimal
     observations_required_for_confirmation: int
     confirmatory_observations_available: int
+    #: Smallest effect the clean confirmatory observations could separate from zero at this bar.
+    #: `None` when there are too few for the question to have an answer.
+    minimum_detectable_effect: Decimal | None
 
     def as_detail(self) -> dict[str, str]:
         return {
@@ -389,6 +451,10 @@ class Grade:
             "luck_threshold_t": str(self.luck_bar),
             "observations_required": str(self.observations_required_for_confirmation),
             "confirmatory_observations_available": str(self.confirmatory_observations_available),
+            "minimum_detectable_effect": "undefined"
+            if self.minimum_detectable_effect is None
+            else str(self.minimum_detectable_effect),
+            "verdict_basis": "power gate on clean confirmatory observations",
         }
 
 
@@ -403,70 +469,238 @@ def _specification(template: ProposalTemplate) -> EffectSpecification:
     )
 
 
+def confirmatory_observations(clean_sessions: int) -> int:
+    """Lead-lag observations that fit entirely inside the clean sessions.
+
+    Conservative on purpose. The first clean session's return could be taken against the last
+    exploratory close, which would add one; not doing so means confirmation never borrows a
+    session from the side of the boundary that has already been seen.
+    """
+    return max(0, clean_sessions - LEAD_LAG_LOSS)
+
+
 def grade(
     template: ProposalTemplate,
-    result: MeasurementResult,
+    exploratory: MeasurementResult | None,
     *,
     cumulative_trials: int,
     confirmatory_observations: int,
 ) -> Grade:
     """Decide the task's fate from the pre-registered rule and the measured state.
 
-    The bar is `luck_threshold(cumulative_trials)`: 68 trials on this project's equity range puts
-    it at 2.90, not at 1.96, because the forty-first question asked of a range is not judged as
-    though it were the first.
+    The bar is `luck_threshold(cumulative_trials)`, and the caller passes the project's burden
+    *including* the trial a confirmation would add: the sixty-ninth question asked of a range is
+    not judged as though it were the first.
 
     The sample needed is sized on the **pre-registered** effect, never on the observed one. Sizing
-    on what was measured would move the bar to wherever the result landed, which is the whole
-    failure mode the registration exists to prevent.
+    on what was measured would move the bar to wherever the result landed, which is the failure
+    the registration exists to prevent -- and it is why the exploratory statistic, when there is
+    one, is reported beside the verdict and never consulted by it.
     """
+    specification = _specification(template)
     bar = luck_threshold(cumulative_trials)
-    required = observations_required(_specification(template), bar)
+    required = observations_required(specification, bar)
+    try:
+        detectable: Decimal | None = minimum_detectable_effect(
+            specification, confirmatory_observations, bar
+        )
+    except ValueError:
+        detectable = None
 
-    if result.degenerate:
+    def verdict(state: TaskState, reason: str) -> Grade:
         return Grade(
-            next_state=TaskState.BLOCKED,
-            reason=(
-                "the measurement produced a degenerate statistic (a constant series or too few "
-                "observations), so there is nothing to judge"
-            ),
+            next_state=state,
+            reason=reason,
             cumulative_trials=cumulative_trials,
             luck_bar=bar,
             observations_required_for_confirmation=required,
             confirmatory_observations_available=confirmatory_observations,
+            minimum_detectable_effect=detectable,
+        )
+
+    if exploratory is not None and exploratory.degenerate:
+        return verdict(
+            TaskState.BLOCKED,
+            "the exploratory measurement produced a degenerate statistic (a constant series or "
+            "too few observations), so the instrument, not the question, needs looking at",
+        )
+
+    if exploratory is None:
+        measured = (
+            "No exploratory range exists for this question, so nothing was measured and no "
+            "data was read."
+        )
+    else:
+        measured = (
+            f"The exploratory measurement over {exploratory.first_session}.."
+            f"{exploratory.last_session} ({exploratory.observations} observations, none after "
+            f"the exploratory boundary) returned {exploratory.measurement_id}="
+            f"{exploratory.statistic} (t={exploratory.t_statistic}). It is recorded as "
+            "exploratory evidence only: it did not decide this verdict, it cannot be cited as "
+            "confirmation, and it is not a refutation."
         )
 
     if confirmatory_observations < required:
-        return Grade(
-            next_state=TaskState.UNDERPOWERED,
-            reason=(
-                f"confirmation needs {required} observations for the pre-registered effect of "
-                f"{template.expected_effect} to clear a {bar} luck bar at {cumulative_trials} "
-                f"cumulative trials, and {confirmatory_observations} unsearched session(s) exist. "
-                f"The exploratory measurement over {result.observations} observations returned "
-                f"{result.measurement_id}={result.statistic} (t={result.t_statistic}); that is "
-                "recorded as evidence for sizing a future confirmation and is emphatically not a "
-                "refutation, because an exhausted range cannot refute"
-            ),
-            cumulative_trials=cumulative_trials,
-            luck_bar=bar,
-            observations_required_for_confirmation=required,
-            confirmatory_observations_available=confirmatory_observations,
+        return verdict(
+            TaskState.UNDERPOWERED,
+            f"confirmation needs {required} observations for the pre-registered effect of "
+            f"{template.expected_effect} to clear a {bar} luck bar at {cumulative_trials} "
+            f"cumulative trials, and {confirmatory_observations} clean confirmatory "
+            f"observation(s) exist. {measured}",
         )
 
-    return Grade(
-        next_state=TaskState.CRITIQUE,
-        reason=(
-            f"{confirmatory_observations} clean confirmatory observation(s) meet the {required} "
-            f"the pre-registered effect needs at a {bar} bar; the exploratory measurement "
-            f"returned {result.statistic} (t={result.t_statistic}) and the claim is worth "
-            "critiquing before it is frozen"
-        ),
-        cumulative_trials=cumulative_trials,
-        luck_bar=bar,
-        observations_required_for_confirmation=required,
-        confirmatory_observations_available=confirmatory_observations,
+    return verdict(
+        TaskState.CRITIQUE,
+        f"{confirmatory_observations} clean confirmatory observation(s) meet the {required} the "
+        f"pre-registered effect needs at a {bar} bar, so the claim goes to critique and "
+        f"registration before any confirmatory data is read. {measured}",
     )
+
+
+# --- the stage -----------------------------------------------------------------------------------
+
+
+def _blocked(reason: str, **detail: str) -> StageResult:
+    return StageResult(
+        next_state=TaskState.BLOCKED,
+        reason=reason,
+        detail={"experiment_version": str(EXPERIMENT_VERSION), **detail},
+    )
+
+
+class AutoExperimentStage:
+    """The `SCOUTING` handler for proposer-opened tasks. See the module docstring."""
+
+    def __init__(
+        self,
+        session: Session,
+        *,
+        sandbox: IsolatedSandbox | None = None,
+        now: datetime | None = None,
+        code_commit: str = "unknown",
+    ) -> None:
+        self._session = session
+        self._sandbox = sandbox
+        self._now = now
+        self._code_commit = code_commit
+
+    def applies_to(self, task: ResearchTask) -> bool:
+        """Only a task opened by the proposer has a pre-registered measurement to run."""
+        return proposal_for_task(self._session, task.task_id) is not None
+
+    def __call__(self, task: ResearchTask) -> StageResult:
+        moment = self._now or datetime.now(UTC)
+        as_of = moment.astimezone(UTC).date()
+        record = proposal_for_task(self._session, task.task_id)
+        if record is None:
+            return _blocked(
+                "this task was not produced by the catalogue proposer, so there is no "
+                "pre-registered measurement to run for it",
+                task_id=task.task_id,
+            )
+        template = template_by_id(record.template_id)
+        if (
+            template is None
+            or template.version != record.template_version
+            or template.catalogue_hash != record.catalogue_hash
+        ):
+            return _blocked(
+                f"the catalogue entry {record.template_id} v{record.template_version} this task "
+                "was proposed under has been changed or removed since; measuring it now would run "
+                "a question the task was not opened for",
+                recorded_catalogue_hash=record.catalogue_hash,
+                current_catalogue_hash="none" if template is None else template.catalogue_hash,
+            )
+        source = next(
+            (
+                entry
+                for entry in DATA_SOURCES
+                if entry.observation_identity == record.dataset_identity
+                and entry.dataset in task.required_datasets
+            ),
+            None,
+        )
+        if source is None:
+            return _blocked(
+                "the task declares no dataset this project can load observations for",
+                required_datasets=", ".join(task.required_datasets),
+            )
+        readiness = next(
+            row
+            for row in measure_readiness(self._session, as_of=as_of)
+            if row.identity == source.observation_identity
+        )
+        clean = template.clean_sessions(readiness)
+        boundary = template.exploratory_through(readiness)
+        available = confirmatory_observations(len(clean))
+        cumulative = HypothesisRegistry(self._session).cumulative_trials() + 1
+
+        exploratory: MeasurementResult | None = None
+        started = finished = moment
+        if boundary is not None:
+            try:
+                panel = load_panel(self._session, source, through=boundary)
+                if clean and panel.dates[-1] >= clean[0]:  # pragma: no cover - by construction
+                    raise ExperimentRefused(
+                        f"the panel reaches {panel.dates[-1]}, past the first clean session "
+                        f"{clean[0]}; refusing rather than reading confirmatory data"
+                    )
+                started = datetime.now(UTC)
+                exploratory = run_measurement(template, panel, sandbox=self._sandbox)
+                finished = datetime.now(UTC)
+            except ExperimentRefused as error:
+                return _blocked(str(error), template_id=template.template_id)
+
+        verdict = grade(
+            template,
+            exploratory,
+            cumulative_trials=cumulative,
+            confirmatory_observations=available,
+        )
+        ids = _evidence_ids(task.task_id)
+        detail: dict[str, str] = {
+            "experiment_version": str(EXPERIMENT_VERSION),
+            "code_commit": self._code_commit,
+            "proposal_id": record.proposal_id,
+            "template_id": template.template_id,
+            "template_version": str(template.version),
+            "catalogue_hash": template.catalogue_hash,
+            "measured_at": moment.astimezone(UTC).isoformat(timespec="seconds"),
+            "dataset_identity": readiness.identity,
+            "consumed_through": _iso(readiness.consumed_through),
+            "exposed_through": _iso(template.exposed_through),
+            "exploratory_through": _iso(boundary),
+            "clean_confirmatory_sessions": str(len(clean)),
+            "first_clean_session": _iso(clean[0] if clean else None),
+            **verdict.as_detail(),
+        }
+        if exploratory is not None:
+            detail.update(exploratory.as_detail())
+            detail["search_id"] = ids["search"]
+            detail["exploratory_record_id"] = ids["exploratory"]
+        if verdict.next_state is TaskState.UNDERPOWERED:
+            detail["underpowered_record_id"] = ids["underpowered"]
+
+        evidence = _Evidence(
+            session=self._session,
+            task=task,
+            template=template,
+            readiness=readiness,
+            record_proposal_id=record.proposal_id,
+            exploratory=exploratory,
+            verdict=verdict,
+            detail=detail,
+            ids=ids,
+            moment=moment,
+            started=started,
+            finished=finished,
+        )
+        return StageResult(
+            next_state=verdict.next_state,
+            reason=verdict.reason,
+            detail=detail,
+            persist=evidence.write,
+        )
 
 
 def autoexperiment_stage(
@@ -474,102 +708,150 @@ def autoexperiment_stage(
     *,
     sandbox: IsolatedSandbox | None = None,
     now: datetime | None = None,
-) -> StageHandler:
-    """Build a `SCOUTING` handler that measures a proposed question and grades the result.
+    code_commit: str = "unknown",
+) -> AutoExperimentStage:
+    """Build the `SCOUTING` handler. Kept as a function so `cli.py` reads like the other stages."""
+    return AutoExperimentStage(session, sandbox=sandbox, now=now, code_commit=code_commit)
 
-    Returns a `StageResult` for every outcome including the refusals, because a task that could
-    not be measured has to say so in its own audit trail rather than raising through the drain and
-    leaving the queue looking merely quiet.
-    """
 
-    def handle(task: ResearchTask) -> StageResult:
-        moment = now or datetime.now(UTC)
-        as_of = moment.astimezone(UTC).date()
-        template = next(
-            (
-                entry
-                for entry in (template_by_id(name) for name in _template_names(task))
-                if entry is not None
-            ),
-            None,
-        )
-        if template is None:
-            return StageResult(
-                next_state=TaskState.BLOCKED,
-                reason=(
-                    "this task was not produced by the catalogue proposer, so there is no "
-                    "pre-registered measurement to run for it"
+def _evidence_ids(task_id: str) -> dict[str, str]:
+    suffix = f"{task_id}:e{EXPERIMENT_VERSION}"
+    return {
+        "search": f"auto-exploratory:{suffix}",
+        "exploratory": f"exploratory:{suffix}",
+        "underpowered": f"underpowered:{suffix}",
+    }
+
+
+@dataclass(frozen=True, slots=True)
+class _Evidence:
+    """Everything one measurement leaves behind, written only after its move is accepted."""
+
+    session: Session
+    task: ResearchTask
+    template: ProposalTemplate
+    readiness: DatasetReadiness
+    record_proposal_id: str
+    exploratory: MeasurementResult | None
+    verdict: Grade
+    detail: Mapping[str, str]
+    ids: Mapping[str, str]
+    moment: datetime
+    started: datetime
+    finished: datetime
+
+    def write(self) -> None:
+        memory = ResearchMemory(self.session)
+        # Built before anything is written, so a record that fails validation fails with nothing
+        # on disk rather than after the search row.
+        records: list[ResearchRecord] = []
+        if self.exploratory is not None and not self.exploratory.degenerate:
+            records.append(
+                ResearchRecord(
+                    record_id=self.ids["exploratory"],
+                    kind=RecordKind.FINDING,
+                    verdict=Verdict.EXPLORATORY_ONLY,
+                    subject=self.template.question,
+                    statement=(
+                        f"Exploratory only, from sessions already searched or already seen by "
+                        f"this question ({self.exploratory.first_session}.."
+                        f"{self.exploratory.last_session}): {self.exploratory.measurement_id}="
+                        f"{self.exploratory.statistic} (t={self.exploratory.t_statistic}) over "
+                        f"{self.exploratory.observations} observations. Not confirmation and not "
+                        "a refutation; a registration that builds on it must cite its search."
+                    ),
+                    source=f"{ACTOR}/e{EXPERIMENT_VERSION} {self.task.task_id}",
+                    recorded_at=self.moment,
+                    detail=dict(self.detail),
+                )
+            )
+        if self.verdict.next_state is TaskState.UNDERPOWERED:
+            records.append(
+                ResearchRecord(
+                    record_id=self.ids["underpowered"],
+                    kind=RecordKind.FINDING,
+                    verdict=Verdict.UNDERPOWERED,
+                    subject=self.template.question,
+                    statement=self.verdict.reason,
+                    source=f"{ACTOR}/e{EXPERIMENT_VERSION} {self.task.task_id}",
+                    recorded_at=self.moment,
+                    detail=dict(self.detail),
+                )
+            )
+
+        if self.exploratory is not None:
+            self._record_search()
+        for entry in records:
+            memory.record(entry)
+            memory.relate(
+                entry.record_id,
+                Relation.USES_DATASET,
+                self.readiness.identity,
+                now=self.moment,
+                note=f"task {self.task.task_id}",
+            )
+
+    def _record_search(self) -> None:
+        """The exploratory look, in the search ledger, with the count it actually spent."""
+        if self.exploratory is None:  # pragma: no cover - `write` only calls this with a result
+            return
+        search_id = self.ids["search"]
+        existing = self.session.execute(
+            select(search_runs.c.search_id).where(search_runs.c.search_id == search_id)
+        ).one_or_none()
+        if existing is not None:
+            # Append-only, like `worker_adapter.record_search_run`: a second write under the same
+            # id could revise a count downward. Raising takes the move with it (`run_cycle`).
+            raise ExperimentRefused(f"search run {search_id} is already recorded")
+        result = self.exploratory
+        self.session.execute(
+            search_runs.insert().values(
+                search_id=search_id,
+                actor=ACTOR,
+                actor_version=str(EXPERIMENT_VERSION),
+                # One pre-registered statistic, computed once. Not the three templates that share
+                # the panel: each is its own row when, and if, its own task measures it.
+                candidates_evaluated=1,
+                dataset=self.readiness.dataset,
+                start_date=result.first_session.isoformat(),
+                end_date=result.last_session.isoformat(),
+                data_role=DataRole.DISCOVERY.value,
+                started_at=encode_utc(self.started),
+                finished_at=encode_utc(self.finished),
+                configuration_hash=result.script_sha256,
+                detail_json=json.dumps(
+                    {
+                        **self.detail,
+                        "task_id": self.task.task_id,
+                        "proposal_id": self.record_proposal_id,
+                        "stdout": result.stdout[-_OUTPUT_CAP:],
+                        "stderr": result.stderr[-_OUTPUT_CAP:],
+                    },
+                    sort_keys=True,
                 ),
-                detail={"task_id": task.task_id},
             )
-        source = next(
-            (entry for entry in DATA_SOURCES if entry.dataset in task.required_datasets), None
         )
-        if source is None:
-            return StageResult(
-                next_state=TaskState.BLOCKED,
-                reason="the task declares no dataset this project can load observations for",
-                detail={"required_datasets": ", ".join(task.required_datasets)},
-            )
-
-        row = capacity_row(session, source, as_of=as_of)
-        try:
-            panel = load_panel(session, source, as_of=as_of)
-            result = run_measurement(template, panel, sandbox=sandbox)
-        except ExperimentRefused as error:
-            return StageResult(
-                next_state=TaskState.BLOCKED,
-                reason=str(error),
-                detail={"experiment_version": str(EXPERIMENT_VERSION)},
-            )
-
-        verdict = grade(
-            template,
-            result,
-            cumulative_trials=row.trials,
-            confirmatory_observations=len(row.unsearched_sessions),
-        )
-        detail = {
-            "experiment_version": str(EXPERIMENT_VERSION),
-            "template_id": template.template_id,
-            "measured_at": moment.astimezone(UTC).isoformat(timespec="seconds"),
-            **result.as_detail(),
-            **verdict.as_detail(),
-        }
-        return StageResult(next_state=verdict.next_state, reason=verdict.reason, detail=detail)
-
-    return handle
 
 
-def _template_names(task: ResearchTask) -> Sequence[str]:
-    """Recover the catalogue template from a proposer-minted task id.
-
-    The id is `auto-<template_id>-v<version>-<identity>` by construction, so the template is
-    recoverable without a second column. Returns candidates rather than one name because the
-    template id itself may contain hyphens, and guessing the split point would occasionally pick
-    a template that exists and is the wrong one.
-    """
-    if not task.task_id.startswith("auto-"):
-        return ()
-    body = task.task_id[len("auto-") :]
-    parts = body.split("-")
-    return tuple(
-        "-".join(parts[:index])
-        for index in range(len(parts), 0, -1)
-    )
+def _iso(value: date | None) -> str:
+    return "none" if value is None else value.isoformat()
 
 
 __all__ = [
+    "ACTOR",
     "BENCHMARK_SYMBOL",
     "EXPERIMENT_VERSION",
+    "LEAD_LAG_LOSS",
     "MEASUREMENTS",
     "POLICY",
+    "AutoExperimentStage",
     "ExperimentRefused",
     "Grade",
     "MeasurementResult",
     "Panel",
     "autoexperiment_stage",
     "build_script",
+    "confirmatory_observations",
     "grade",
     "load_panel",
     "run_measurement",
