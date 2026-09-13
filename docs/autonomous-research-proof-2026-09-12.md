@@ -1,5 +1,21 @@
 # Autonomous research cycle proven on the Omen — 2026-09-12
 
+> **Correction, 2026-09-13 — superseded by
+> [autonomous-research-proof-2026-09-13.md](autonomous-research-proof-2026-09-13.md).** Kept as
+> the record of what ran, not as a description of sound behaviour. An audit before integration found:
+>
+> * **The measurement read the confirmatory holdout.** "It ran on the exploratory range" below is
+>   false: the panel held all 307 stored sessions, including the 14 unsearched ones from 2026-08-24
+>   that the capacity gate counted as clean. Every measurement statistic quoted here includes them.
+>   Because they were published, those sessions are now spent for the three questions measured, and
+>   the catalogue records `exposed_through=2026-09-11` for each.
+> * **"Its statistic is what makes the verdict quantitative ... it names how many observations a
+>   future confirmation would need" is false.** The required sample came only from the pre-registered
+>   effect; the statistic never entered the verdict.
+> * **It was not autonomous in production.** The scheduled research component could not propose;
+>   `research-propose` was run by hand. It ran from a dirty tree, and fixes landed after it.
+> * The only evidence written was the task event; there was no search record or finding.
+
 With no human-created research task, Elrond inspected its own measured state, chose a question,
 opened the task, executed the measurement under kernel-enforced isolation, graded it, and reached
 a terminal scientific verdict.
