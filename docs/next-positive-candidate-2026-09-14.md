@@ -73,6 +73,16 @@ deliver the required stock universe within a bounded page budget; whether delist
 membership dates are available; and whether the current paper account can obtain live data for the
 chosen names at both decision and exit times.
 
+The read-only probe completed after this memo was drafted. The paper asset endpoint returned 14,259
+active US-equity assets. Historical SIP 1-minute bars returned full-day samples for AAPL, MSFT,
+NVDA, TSLA, AMC and SPY (391 rows including the boundary convention); corresponding IEX samples
+were shorter for several symbols. The current multi-symbol SIP latest-bars request returned HTTP
+403, while the IEX request returned all six symbols. This supports broad historical collection,
+but not real-time consolidated SIP execution. The active-asset count is not a survivorship-free
+historical universe: delisted names and membership dates still require a separate source or audit.
+Evidence: `D:/Elrond/evidence/eod-reversal-data-feasibility-20260914.json`. No return experiment or
+trial charge was made by this probe.
+
 The proposed research is therefore **LITERATURE_SUPPORTED / DATA_FEASIBILITY_REQUIRED**, not
 POWERED, SURVIVED or DEPLOYABLE. It should be rejected rather than simplified into ten ETFs if those
 data requirements cannot be met. A smaller universe would be a new hypothesis and must be registered
