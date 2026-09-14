@@ -15,7 +15,8 @@ including the one step that needed the operator. All times UTC. Evidence files a
 | Live-store backup | Fresh backup 22:15:30–31 immediately before migration, verified independently |
 | Migration 0028 on the live store | **Done** 22:15:32–34: schema 27 → 28, integrity ok, every existing row preserved |
 | Autonomous research | First scheduled run on `92c49d4` (22:21:52) proposed `auto-benchmark-move-size-persists-v1-us-equities-daily` by itself and moved it to `SCOUTING`. The next (04:21:53) measured it under `WindowsSandbox` as `erlond` over the 293 exploratory sessions only, and graded it `UNDERPOWERED`. Nothing was seeded, rerun or tuned |
-| PAPER boundary | Intact: no order, fill, position, account, reconciliation, runtime-deployment or kill-switch row changed |
+| PAPER boundary | Intact. Through Sunday no order, fill, position, account, reconciliation, runtime-deployment or kill-switch row changed. Monday's first session on `92c49d4` (to 16:24) added only observations, protection cycles, snapshots and reconciliations: no order, no fill, no incident, kill switch disengaged, protection `HEALTHY`. One reconcile at 13:41:52 was run out-of-band by an **UNKNOWN** invoker |
+| Out-of-band writes | Codex `codex/intraday-paper-research` wrote 2 `search_runs` and 4 `research_records` on Monday. Research tables only, windows ending 2026-08-21 (Phase 16) |
 | Deployment script | **Deployment succeeded; the deployment script terminated before its final verification stage.** It completed backup, migration and task re-registration; its next append to `steps.txt` failed because a separate log-watching process held that file open (below). Task Scheduler then started all six tasks through their normal triggers, and every skipped verification was measured independently |
 
 ## Why deployment needed an operator
@@ -259,7 +260,12 @@ side effect is that the schedule's phase moved: ingestion now fires at :21:51 an
 
 All measured from the host by the session as `leepa` (non-elevated); the live store was never opened
 — every store fact is from a byte copy taken with db/wal/shm size and mtime identical before and
-after the copy [acceptance/]. One such copy, the 04:24 store, was later overwritten with the 10:24
+after the copy [acceptance/]. The db/wal/shm SHA-256 values in each `copy.meta` were recorded at copy
+time. Until 2026-09-14 10:28 the analyses opened those copies directly, and SQLite checkpoints a WAL
+copy into its `.db` and deletes the side files when the last connection closes. Those directories
+therefore now hold the same committed state, checkpointed by the first read, not the bytes the hashes
+name. Later copies are kept read-only and analysed through a duplicate in `work\` (point raised by
+session project-elrond-75, which found the same on its own copies). One such copy, the 04:24 store, was later overwritten with the 10:24
 copy by a stray line in this session's own verification command. It was renamed
 `store-research-0421-OVERWRITTEN\` with a note. Everything cited from 04:24
 (`snapshot-research-0421.json`, `db-accept-research-0421.txt`, `phase10-holdout-boundary.txt`) had
@@ -430,7 +436,18 @@ result 0, no launcher refusal, checkout clean):
   acceptance/scheduled/r1021/ by session project-elrond-75, which also recorded task instance
   `{4BBC91D3-…}` and the process chain].
 
-**PENDING (research 16:21:52):** the repeat on unchanged state, which should write no row at all.
+**Repeat on unchanged proposer state, research run 16:21:53 (task result 0).** Prediction first again:
+at 16:14:19, on a copy of the 16:14:17 store, which already contained the out-of-band rows below, a new
+process derived `NO_ELIGIBLE` `prop-b2aa140ce3ec65d337375566` with `recorded: false` [acceptance/phase12-predict-1621.txt].
+Production then logged exactly that: `advanced: []`, `NO_ELIGIBLE`, `prop-b2aa140ce3ec65d337375566`,
+no model call, and `research_proposals` stayed at 2 rows. Across 10:24 → 16:24 no research task, event,
+relationship, hypothesis or data window changed. The only research-table changes are the out-of-band
+writes in Phase 16, and they do not enter the proposal's identity [acceptance/monday-1624.txt; independently,
+acceptance/scheduled/r1621/].
+
+So unchanged state produces one attempt row and then nothing. That was derived identically by four
+separate processes: the 13:01 rehearsal, the 04:26 and 16:14 copies, and production at 10:21 and 16:21.
+The database refuses duplicate tasks and dataset sequences outright.
 
 ### Phase 13 — containment against the deployed code
 Deployed checkout's `src` and venv, 22:26:20: `select_isolated_backend` → `WindowsSandbox`,
@@ -455,6 +472,38 @@ identity: one distinct account, SHA-256 prefix `e09a79ca34d782e3` (expected). `o
 on the Sunday. The research component removes every broker secret from its environment before running
 (`operations/service.py`), and generated code sees neither secrets nor the store (Phase 13); the
 research service process itself does open the store, because the research tables live there.
+
+**Monday 2026-09-14, first session on `92c49d4`** (copy 16:24:37, measured from Sunday 22:00):
+
+* 0 new `order_intents`, `broker_orders` or `fills`; 0 incidents; kill switch still disengaged.
+  Nothing was bought or sold.
+* Market-hours observations every 15 min from 13:30:00: 12 `session_observations`, all `DEGRADED`
+  with `MARKET_DATA_STALE`. `QUANTBOT_MAX_DATA_AGE_SECONDS=86400` against data completed Friday
+  20:00 gives 235,800 s at the open. The first observation also carried `RECONCILIATION_REQUIRED`.
+  This is a pre-existing threshold (the 2026-09-08 post-holiday session recorded the same), not a
+  deployment defect. It records; it does not halt.
+* 12 protection cycles, all `HEALTHY` (120 evaluations); 25 account/equity snapshots, each with
+  10 position rows (+250 `positions`).
+* 13 reconciliations. **13:30:00 `RECONCILIATION_REQUIRED`**: one `ACCOUNT` equity diff, 493.47
+  expected vs 493.62, which the price-explained rule did not explain. The inputs explain why: the
+  broker's own read was internally inconsistent. Equity − cash − Σ position market value was
+  −0.046755 on the observation's read and +0.016687 on protection's read 0.46 s later, against a
+  0.01 tolerance. The observation's opening read failed that consistency test at every market open
+  on record: 2026-09-10 +0.015797, 2026-09-11 −0.063456 (both pre-fix code), 2026-09-14 −0.046755.
+  Later reads stay small: Friday 17:05–19:52, 23 reads, max 0.004953; Monday 13:31–16:24, 23 reads,
+  max 0.005341. So it is a recurring artifact of the broker read at 13:30:00, not a `92c49d4`
+  regression (09-10 data point from session project-elrond-75, recomputed here). Every later observation — 13:45:04, 14:00:07, and each 15 min to 16:15:34 — is
+  `RECONCILED`, several with `ACCOUNT_VALUATION` explained (unexplained delta 0.0023–0.0086), each
+  on its own fresh broker snapshot [acceptance/monday-equity-residuals.txt; independently,
+  acceptance/scheduled/m1338-open/, m1412-session/].
+* **Out-of-band: `reconcile-20260914T134152Z:reconciliation` at 13:41:52.57**, `RECONCILED`, with
+  its own account snapshot and 10 position rows. That id format is produced only by the CLI
+  `reconcile` command (`runtime._reconcile`), not by the daemon (`observation-…`) or the console
+  (`console-reconcile-…`). It submitted no order. All five Claude sessions on the host said they did
+  not run it, and no PowerShell engine start was logged 13:40–13:43. The invoker is **UNKNOWN**: the
+  remaining candidates are the operator and a Codex process running with the paper credentials that
+  morning. The 13:45 recovery does not depend on it, because each observation ingests its own
+  snapshot before comparing.
 
 ### Phase 16 — ledger comparison
 Per-table row count and a SHA-256 over every row, pre-deployment copy (16:38) versus post-deployment
@@ -481,15 +530,43 @@ Second comparison, post-deployment copy (22:23) versus the copy after the first 
 | `ingestion_cursors` | content only | advanced by those runs |
 | `research_tasks` | content only | `SCOUTING` → `UNDERPOWERED` |
 | `research_task_events` | 2 → 3 | `SCOUTING → UNDERPOWERED` |
-| `search_runs` | 0 → 1 | the exploratory search, charged once |
+| `search_runs` | 0 → 1 | the exploratory search, recorded once (not added to the global burden; Phase 10) |
 | `research_records` | 25 → 27 | `EXPLORATORY_ONLY` and `UNDERPOWERED` findings |
 | `research_relationships` | 0 → 2 | links for those findings |
 
 Every trading table — orders, intents, fills, positions, account and equity snapshots, kill switch,
 reconciliations, runtime deployments, protection cycles and evaluations — is identical in content.
 
+Third comparison, the 10:24 copy versus the 16:24:37 copy (Monday session, integrity ok, foreign keys
+clean). Changed:
+
+| table | change | explanation |
+|---|---|---|
+| `ingestion_runs`, `ingestion_cursors` | 350 → 374 | scheduled ingestion every 30 min |
+| `session_observations` | 84 → 96 | 12 market-hours observations (Phase 14) |
+| `reconciliation_runs` | 101 → 114 | those 12, plus the out-of-band CLI reconcile at 13:41:52 |
+| `reconciliation_diffs` | 12 → 13 | the 13:30:00 equity diff |
+| `account_snapshots`, `equity_snapshots` | 192 → 217 | 12 observation + 12 protection reads + the 13:41 reconcile |
+| `positions` | 1505 → 1755 | 10 rows per snapshot |
+| `position_protection_cycles` / `_evaluations` | 92 → 104 / 733 → 853 | 12 `HEALTHY` cycles |
+| `search_runs` | 1 → 3 | **out-of-band, not the research service:** `intraday:34ca3a3d…` (15:01:28, 2026-03-02..2026-08-21) and `intraday:f858d644…` (16:11:52, 2016-01-04..2026-08-21), actor `intraday-research` v1, `DISCOVERY` |
+| `research_records` | 27 → 31 | **out-of-band:** `intraday:34ca3a3d…:result` (`EXPLORATORY_ONLY`, 15:01:30), `intraday-late-day-literature-20260914-v1` (`LITERATURE_SUPPORTED`) and `intraday-late-day-feasibility-20260914-v1` (`UNDERPOWERED`, both 15:57:28), `intraday:f858d644…:result` (`EXPLORATORY_ONLY`, 16:11:52) |
+
+Unchanged: `order_intents`, `broker_orders`, `fills`, `kill_switch_state`, `incidents`,
+`runtime_deployments`, `research_proposals` (after 10:21), `research_tasks`, `research_task_events`,
+`research_relationships`, `hypotheses`, `hypothesis_data_windows`.
+
+The out-of-band research rows were written by the Codex branch `codex/intraday-paper-research`
+(worktree `C:\Users\leepa\elrond-intraday`, commits `1347355` … `f928dc9`), matched by content and
+commit time. Its own record says the operator requested intraday paper research, that it placed no
+orders, and that it collected historical bars with the paper credentials. None came from `92c49d4`.
+Every search ends on or before 2026-08-21, so no clean confirmatory session is inside them. None is a
+refuting verdict. They changed neither the proposer's state nor its identity (Phase 12). Attribution
+was established by session project-elrond-75 and checked against this session's copy.
+
 `runtime_deployments` has no `92c49d4` row yet. Every existing row is a `COORDINATOR` observation at
-20:05 on a trading day, so the first one on `92c49d4` cannot occur before Monday 2026-09-14 20:05.
+20:05 on a trading day. **PENDING:** the first, Monday 2026-09-14 20:05, and the scheduled report at
+22:21:52.
 
 ## Follow-ups, not part of this objective
 
