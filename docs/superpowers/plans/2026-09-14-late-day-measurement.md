@@ -35,15 +35,18 @@ the 2,674 broker-calendar dates; validate this against an independent exchange c
 
 ## Tasks
 
-- [ ] Write synthetic tests for signal timing, negative/zero signal, costs, fractional allocation,
+- [x] Write synthetic tests for signal timing, negative/zero signal, costs, fractional allocation,
   settlement, benchmark accounting, early-close/missing/dividend exclusions and malformed inputs.
-- [ ] Implement deterministic simulation in scripts/late_day_research.py; run those tests and
+- [x] Implement deterministic simulation in scripts/late_day_research.py; run those tests and
   static checks. Freeze script identity before measurement.
-- [ ] Collect historical inputs with page limits, retain only required minute observations,
+- [x] Collect historical inputs with page limits, retain only required minute observations,
   verify hashes and count eligible sessions. No data after 2026-08-21 is accessed.
-- [ ] Persist one attempt and immutable manifest before invoking simulation; preserve both
+- [x] Persist one attempt and immutable manifest before invoking simulation; preserve both
   fixed cost outcomes, paired daily benchmark differences and sampled drawdown.
-- [ ] Independently reconcile resulting arithmetic, record memory/report and update draft PR.
+- [x] Independently reconcile resulting arithmetic, record memory/report and update draft PR.
+
+Outcome: 1,444 trades across 2,611 eligible sessions lost 12.49% at 5bps per side and 23.14%
+at 10bps. See docs/late-day-result-2026-09-14.md. No strategy deployment follows.
 
 Report the strategy's account return, normalized fully-invested-per-trade sleeve compound return,
 trade count, win rate, gross break-even cost, benchmark return, paired mean daily difference and

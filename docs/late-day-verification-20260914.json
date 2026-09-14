@@ -1,0 +1,501 @@
+{
+  "research_code_commit": "f928dc9",
+  "search_id": "intraday:f858d6446d6b3acd2b23070df3b356c9313eb5ae94a33ba34e2d6d9fc7fc6a08",
+  "input_hash": "8516ce7ec781feedb8036d0cf5941310230f402e1b21ffc998e0f53449c19436",
+  "checks": {
+    "baseline": {
+      "trade_count": 1444,
+      "wins": 340,
+      "win_rate": 0.23545706371191136,
+      "net_return": -0.1249337745417092,
+      "ending_equity": "437.53311272914540",
+      "gross_arithmetic_matches": true
+    },
+    "stress": {
+      "trade_count": 1444,
+      "wins": 152,
+      "win_rate": 0.10526315789473684,
+      "net_return": -0.2314383519733486,
+      "ending_equity": "384.2808240133257",
+      "gross_arithmetic_matches": true
+    }
+  },
+  "gross_mean_trade_bps": -0.2708345291638734,
+  "gross_compounded_trade_return": -0.04296465828012206,
+  "quote_audit": {
+    "selection": "First full session each calendar month in 2025, first SIP quote within one second after 15:31 and 15:59 NY; selection before return measurement.",
+    "measured_at": "2026-09-14T16:06:31.652597+00:00",
+    "observations": [
+      {
+        "session": "2025-01-02",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 584.18,
+          "as": 9,
+          "ax": "L",
+          "bp": 584.16,
+          "bs": 3,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-01-02T20:31:00.007543808Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.1711830460309654
+      },
+      {
+        "session": "2025-01-02",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 584.29,
+          "as": 12,
+          "ax": "L",
+          "bp": 584.26,
+          "bs": 10,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-01-02T20:59:00.001942784Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.25672842411512314
+      },
+      {
+        "session": "2025-02-03",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 598.37,
+          "as": 1,
+          "ax": "T",
+          "bp": 598.35,
+          "bs": 2,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-02-03T20:31:00.006358272Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.16712347082009
+      },
+      {
+        "session": "2025-02-03",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 598,
+          "as": 1,
+          "ax": "T",
+          "bp": 597.99,
+          "bs": 1,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-02-03T20:59:00.002277888Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.0836127392368741
+      },
+      {
+        "session": "2025-03-03",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 581.86,
+          "as": 18,
+          "ax": "T",
+          "bp": 581.85,
+          "bs": 4,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-03-03T20:31:00.007933184Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08593206211161633
+      },
+      {
+        "session": "2025-03-03",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 583.58,
+          "as": 2,
+          "ax": "P",
+          "bp": 583.57,
+          "bs": 2,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-03-03T20:59:00.000484864Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08567879021540423
+      },
+      {
+        "session": "2025-04-01",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 558.44,
+          "as": 2,
+          "ax": "T",
+          "bp": 558.42,
+          "bs": 5,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-04-01T19:31:00.000341504Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.17907347384717417
+      },
+      {
+        "session": "2025-04-01",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 561.08,
+          "as": 3,
+          "ax": "K",
+          "bp": 561.07,
+          "bs": 1,
+          "bx": "H",
+          "c": [
+            "R"
+          ],
+          "t": "2025-04-01T19:59:00.002894848Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08911464599198773
+      },
+      {
+        "session": "2025-05-01",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 561.95,
+          "as": 35,
+          "ax": "P",
+          "bp": 561.94,
+          "bs": 15,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-05-01T19:31:00.004707328Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.0889766792122975
+      },
+      {
+        "session": "2025-05-01",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 558.53,
+          "as": 1,
+          "ax": "P",
+          "bp": 558.52,
+          "bs": 2,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-05-01T19:59:00.002115584Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.0895215075421056
+      },
+      {
+        "session": "2025-06-02",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 592.13,
+          "as": 12,
+          "ax": "P",
+          "bp": 592.12,
+          "bs": 4,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-06-02T19:31:00.009892849Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08444162972337686
+      },
+      {
+        "session": "2025-06-02",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 592.36,
+          "as": 21,
+          "ax": "P",
+          "bp": 592.35,
+          "bs": 15,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-06-02T19:59:00.001099519Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08440884267028138
+      },
+      {
+        "session": "2025-07-01",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 618.29,
+          "as": 6,
+          "ax": "P",
+          "bp": 618.27,
+          "bs": 14,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-07-01T19:31:00.010335564Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.16173901792053608
+      },
+      {
+        "session": "2025-07-01",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 617.65,
+          "as": 17,
+          "ax": "P",
+          "bp": 617.64,
+          "bs": 3,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-07-01T19:59:00.001402242Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08095265079447665
+      },
+      {
+        "session": "2025-08-01",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 621.73,
+          "as": 1,
+          "ax": "P",
+          "bp": 621.72,
+          "bs": 10,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-08-01T19:31:00.004820488Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08042140817878407
+      },
+      {
+        "session": "2025-08-01",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 621.97,
+          "as": 10,
+          "ax": "T",
+          "bp": 621.96,
+          "bs": 2,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-08-01T19:59:00.000963957Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.08039037566415236
+      },
+      {
+        "session": "2025-09-02",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 639.23,
+          "as": 10,
+          "ax": "P",
+          "bp": 639.22,
+          "bs": 2,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-09-02T19:31:00.009839595Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.07821971919113696
+      },
+      {
+        "session": "2025-09-02",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 640.34,
+          "as": 1,
+          "ax": "V",
+          "bp": 640.33,
+          "bs": 8,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-09-02T19:59:00.001257418Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.07808412783926308
+      },
+      {
+        "session": "2025-10-01",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 669,
+          "as": 7,
+          "ax": "P",
+          "bp": 668.99,
+          "bs": 8,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-10-01T19:31:00.01080714Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.07473897413277308
+      },
+      {
+        "session": "2025-10-01",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 668.88,
+          "as": 21,
+          "ax": "P",
+          "bp": 668.87,
+          "bs": 4,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-10-01T19:59:00.001095195Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.0747523827321316
+      },
+      {
+        "session": "2025-11-03",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 682.99,
+          "as": 240,
+          "ax": "K",
+          "bp": 682.98,
+          "bs": 320,
+          "bx": "P",
+          "c": [
+            "R"
+          ],
+          "t": "2025-11-03T20:31:00.009980589Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.07320804995710671
+      },
+      {
+        "session": "2025-11-03",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 683,
+          "as": 1120,
+          "ax": "P",
+          "bp": 682.99,
+          "bs": 360,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-11-03T20:59:00.001480665Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.07320697808908487
+      },
+      {
+        "session": "2025-12-01",
+        "time_ny": "15:31",
+        "quote": {
+          "ap": 680.64,
+          "as": 640,
+          "ax": "T",
+          "bp": 680.62,
+          "bs": 600,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-12-01T20:31:00.010000474Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.14692270396531015
+      },
+      {
+        "session": "2025-12-01",
+        "time_ny": "15:59",
+        "quote": {
+          "ap": 679.61,
+          "as": 1320,
+          "ax": "K",
+          "bp": 679.6,
+          "bs": 2640,
+          "bx": "T",
+          "c": [
+            "R"
+          ],
+          "t": "2025-12-01T20:59:00.001918946Z",
+          "z": "B"
+        },
+        "valid": true,
+        "half_spread_bps": 0.07357214852738653
+      }
+    ],
+    "valid_count": 24,
+    "median_half_spread_bps": 0.08442523619682912,
+    "max_half_spread_bps": 0.25672842411512314,
+    "limitation": "Quoted half-spread only; no real fills, latency, market impact, fractional execution quality or proof of live SIP entitlement."
+  },
+  "calendar_audit": {
+    "library": "exchange_calendars",
+    "version": "4.13.2",
+    "input_hash": "8516ce7ec781feedb8036d0cf5941310230f402e1b21ffc998e0f53449c19436",
+    "expected_sessions": 2674,
+    "actual_sessions": 2674,
+    "differences": {}
+  },
+  "results_file_sha256": "b66360df3f2862cdf10494cfdb1f9bad9c82b76091060e4485cd34f0e4bd0b5f",
+  "cumulative_trials_after": 70
+}

@@ -3,6 +3,10 @@
 Research date: 2026-09-14. Status: literature-supported mechanism, locally unvalidated.
 No new strategy returns were measured, no orders were submitted, and no trading settings changed.
 
+Subsequent update: the user authorized a longer historical test and the adaptation lost money.
+See [the measured outcome](late-day-result-2026-09-14.md). The review below preserves what was
+known before that experiment; it is not a claim that the adaptation is ready to trade.
+
 ## Recommendation and evidence
 
 Prioritize a SPY late-day momentum study. This is a research priority based on the evidence and
