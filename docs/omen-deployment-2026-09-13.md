@@ -14,7 +14,7 @@ including the one step that needed the operator. All times UTC. Evidence files a
 | Deployment of `92c49d4` | **Done.** Elevated run `run-20260913T221513Z`, operator-started 22:15:13. Tasks re-pinned 22:20:52; services started by their own triggers 22:21:51–52 |
 | Live-store backup | Fresh backup 22:15:30–31 immediately before migration, verified independently |
 | Migration 0028 on the live store | **Done** 22:15:32–34: schema 27 → 28, integrity ok, every existing row preserved |
-| Autonomous research | First scheduled run on `92c49d4` (22:21:52) proposed `auto-benchmark-move-size-persists-v1-us-equities-daily` by itself and moved it to `SCOUTING`. Nothing was seeded |
+| Autonomous research | First scheduled run on `92c49d4` (22:21:52) proposed `auto-benchmark-move-size-persists-v1-us-equities-daily` by itself and moved it to `SCOUTING`. The next (04:21:53) measured it under `WindowsSandbox` as `erlond` over the 293 exploratory sessions only, and graded it `UNDERPOWERED`. Nothing was seeded, rerun or tuned |
 | PAPER boundary | Intact: no order, fill, position, account, reconciliation, runtime-deployment or kill-switch row changed |
 | Deployment script | **Deployment succeeded; the deployment script terminated before its final verification stage.** It completed backup, migration and task re-registration; its next append to `steps.txt` failed because a separate log-watching process held that file open (below). Task Scheduler then started all six tasks through their normal triggers, and every skipped verification was measured independently |
 
@@ -353,11 +353,43 @@ The proposal fixes `exploratory_through = 2026-08-21`, equal to `dataset_consume
 from `PRIOR_WINDOW_CONSUMPTION` (`sip-us-equities-daily` 2016-01-04..2026-08-21, 68 trials; the store has
 no `hypothesis_data_windows` or `search_runs` rows). `first_clean_session = 2026-08-24`, 14 clean
 sessions. So the SCOUTING measurement may read sessions through 2026-08-21 and none of the 14.
-**PENDING (research 04:21:52):** the measurement's recorded window and its `search_runs` row.
 
-### Phase 11 — sandboxed measurement
-**PENDING (research 04:21:52):** backend, `os_enforced`, runtime, peak memory, observations,
-statistic, t-statistic, verdict — the first sandbox run under `erlond` rather than `leepa`.
+What the measurement recorded (store copy 2026-09-14 04:24:30): `search_runs` row
+`auto-exploratory:auto-benchmark-move-size-persists-v1-us-equities-daily:e2`, actor `autoexperiment` v2,
+dataset `sip-us-equities-daily`, `data_role DISCOVERY`, `start_date 2025-06-24`, `end_date 2026-08-21`,
+one candidate; its detail and the task event agree: `sessions 293`, `first_session 2025-06-24`,
+`last_session 2026-08-21`, `exploratory_through 2026-08-21`, `first_clean_session 2026-08-24`, panel
+SHA-256 `60bfd916…`. The store's own session calendar — dates only, from `bars.timestamp`, no price
+or volume column read — holds exactly **293** sessions on or before 2026-08-21 (2025-06-24 first) and
+**14** after it (2026-08-24 … 2026-09-11). The panel's 293 sessions are therefore all of the exploratory
+sessions and none of the clean ones; one more session of either kind would have changed the count or
+the last date. The code also refuses before measuring if a panel reaches the first clean session
+(`autoexperiment.py`, `ExperimentRefused`). The ledger now holds one consumed search on this dataset
+(cumulative trials 69); no `hypothesis_data_windows` row was created, because nothing was registered
+[acceptance/phase10-holdout-boundary.txt, db-accept-research-0421.txt]. The clean confirmatory sessions
+were not opened to verify this.
+
+### Phase 11 — sandboxed measurement (research 2026-09-14 04:21:53, task result 0)
+The scheduled research run found the `SCOUTING` task actionable and advanced it one step (the proposer
+was not called: something was actionable). `stages_available` `PROPOSED, SCOUTING` — the stage is only
+offered when `select_isolated_backend` succeeds, and it did under `erlond`.
+
+| | |
+|---|---|
+| backend | `WindowsSandbox` (recorded `sandbox_backend`); the class declares `os_enforced = True`, and `run_measurement` refuses any backend that does not |
+| policy | 256 MB memory, 90 s wall clock, network disabled |
+| child runtime | 0.282 s; peak memory 7.32 MB (Job Object accounting) |
+| measurement wall time | 42.0 s (`search_runs` 04:21:56.119 → 04:22:38.131). That covers backend construction, interpreter staging and the 0.282 s child. First-time staging of the interpreter into `erlond`'s profile is the likely cost, from the code; this session cannot read that profile, so it is inferred, not measured |
+| script | SHA-256 `9c317a09…41f6c3b2` (also the search's `configuration_hash`); stderr empty |
+| observations | 291 lead-lag observations from 293 sessions, 23 symbols |
+| statistic | `benchmark_absolute_move_persistence` = 0.02593945802823299, t = 0.4411192161936907 |
+| verdict | **`UNDERPOWERED`** (04:21:56.06): confirming the pre-registered effect 0.20 against a luck bar of t = 2.910019 at 69 cumulative trials needs 210 observations, and 12 clean confirmatory observations exist (minimum detectable effect 0.748707). The exploratory statistic is recorded as exploratory evidence only; it did not decide the verdict and is not a refutation |
+| memory written | `research_records` `exploratory:…:e2` (`EXPLORATORY_ONLY`) and `underpowered:…:e2` (`UNDERPOWERED`), two `research_relationships`, one `search_runs` row |
+
+The statistic matches the 2026-09-12 proof's independently checked value on the same 293-session panel
+(IC 0.026). It was not rerun or tuned. The weak result and the `UNDERPOWERED` verdict are the honest
+outcome the design predicted for this dataset: 14 new sessions cannot confirm a 0.20 effect at this
+multiple-testing burden.
 
 ### Phase 12 — proposer idempotency
 On a byte copy of the production store as it stood after the proposal (22:29), a new process running
@@ -409,6 +441,22 @@ copy (22:23). 49 tables are byte-for-byte identical in content, including `order
 | `research_task_events` | 0 → 2 | PROPOSED, PROPOSED → SCOUTING |
 | `ingestion_runs` | 314 → 326 | eleven scheduled runs on `5025b21` (16:45–21:45) and one on `92c49d4` (22:21) |
 | `ingestion_cursors` | content only | cursor timestamps advanced by those runs |
+
+Second comparison, post-deployment copy (22:23) versus the copy after the first measurement
+(2026-09-14 04:24:30). Integrity ok, foreign keys clean, schema 28. Changed:
+
+| table | change | explanation |
+|---|---|---|
+| `ingestion_runs` | 326 → 338 | twelve scheduled runs, 22:51 through 04:21 |
+| `ingestion_cursors` | content only | advanced by those runs |
+| `research_tasks` | content only | `SCOUTING` → `UNDERPOWERED` |
+| `research_task_events` | 2 → 3 | `SCOUTING → UNDERPOWERED` |
+| `search_runs` | 0 → 1 | the exploratory search, charged once |
+| `research_records` | 25 → 27 | `EXPLORATORY_ONLY` and `UNDERPOWERED` findings |
+| `research_relationships` | 0 → 2 | links for those findings |
+
+Every trading table — orders, intents, fills, positions, account and equity snapshots, kill switch,
+reconciliations, runtime deployments, protection cycles and evaluations — is identical in content.
 
 `runtime_deployments` has no `92c49d4` row yet. Every existing row is a `COORDINATOR` observation at
 20:05 on a trading day, so the first one on `92c49d4` cannot occur before Monday 2026-09-14 20:05.
