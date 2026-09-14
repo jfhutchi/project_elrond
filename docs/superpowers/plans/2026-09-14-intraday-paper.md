@@ -31,16 +31,20 @@ only, raw prices (no retroactive adjusted price leakage). Sessions are the sampl
 
 ## Tasks
 
-- [ ] Implement/test deterministic intraday research simulation: completed-bar information,
+- [x] Implement/test deterministic intraday research simulation: completed-bar information,
   next-open fills, gap stops, holding limit, exchange early-close handling, costs, incomplete data,
   sizing and capital constraints. Trusted static code only; no generated executable strategy.
-- [ ] Fetch bounded historical intraday data; persist exact input hashes and pre-measurement
+- [x] Fetch bounded historical intraday data; persist exact input hashes and pre-measurement
   candidate/trial identity. Run the frozen candidate and stress case, preserving all outcomes.
-- [ ] Review evidence. If unsupported, retain the current deployed strategy and report precisely
+- [x] Review evidence. If unsupported, retain the current deployed strategy and report precisely
   why this candidate cannot support the requested automation. No automatic exploration/promotion.
 - [ ] If supported, design/test the broker-connected intraday path using the existing paper
   identity, order-intent ledger, reconciliation, risk/protection, duplicate prevention and close
   deadline. Do not change the running strategy until this path and deployment are verified.
+
+The conditional deployment step was not reached: this frozen candidate lost 4.21% at modeled
+5bps costs per side and 9.50% under the predefined 10bps stress. See
+`docs/intraday-research-2026-09-14.md`. No intraday execution mode is deployed.
 
 ## Initial facts
 
