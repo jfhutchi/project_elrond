@@ -216,6 +216,8 @@ processes and logs. Its read-only preflight was rehearsed as `leepa` at 12:49:32
 
 An operator claim at ~14:50 that it had been run was checked and found false: no run directory,
 backup, PowerShell launch event or pin change existed [postdeploy-verification-20260913T1451Z.txt].
+**That file and this PR's 15:18 comment ("the elevated deployment did not run") are pre-deployment
+snapshots.** Both were true when written, and both were superseded at 22:15 by `run-20260913T221513Z`.
 
 ## The deployment run — `run-20260913T221513Z`
 
@@ -257,7 +259,11 @@ side effect is that the schedule's phase moved: ingestion now fires at :21:51 an
 
 All measured from the host by the session as `leepa` (non-elevated); the live store was never opened
 — every store fact is from a byte copy taken with db/wal/shm size and mtime identical before and
-after the copy [acceptance/].
+after the copy [acceptance/]. One such copy, the 04:24 store, was later overwritten with the 10:24
+copy by a stray line in this session's own verification command. It was renamed
+`store-research-0421-OVERWRITTEN\` with a note. Everything cited from 04:24
+(`snapshot-research-0421.json`, `db-accept-research-0421.txt`, `phase10-holdout-boundary.txt`) had
+been extracted before the overwrite.
 
 ### Git
 `git ls-remote` `refs/heads/main` = `92c49d4c5b674438ca0ebf32ccccd12c63086dd8`. Deployed checkout HEAD
@@ -364,10 +370,16 @@ or volume column read — holds exactly **293** sessions on or before 2026-08-21
 **14** after it (2026-08-24 … 2026-09-11). The panel's 293 sessions are therefore all of the exploratory
 sessions and none of the clean ones; one more session of either kind would have changed the count or
 the last date. The code also refuses before measuring if a panel reaches the first clean session
-(`autoexperiment.py`, `ExperimentRefused`). The ledger now holds one consumed search on this dataset
-(cumulative trials 69); no `hypothesis_data_windows` row was created, because nothing was registered
-[acceptance/phase10-holdout-boundary.txt, db-accept-research-0421.txt]. The clean confirmatory sessions
-were not opened to verify this.
+(`autoexperiment.py`, `ExperimentRefused`). `search_runs` now records one exploratory search on this
+dataset. The global multiple-testing burden is unchanged at 68: on a copy of the 10:24 store the
+deployed `HypothesisRegistry.cumulative_trials()` returns 68 and `campaign_trials_spent()` 0. The 69
+in the grade is `cumulative_trials() + 1`, the confirmation trial being judged (`autoexperiment.py`),
+not a post-search total. An `auto-exploratory:` search row is not summed into `cumulative_trials()`:
+by design a look is charged when a registration cites it, and a terminal `UNDERPOWERED` task never
+registers. That is recorded here as a review observation, not changed. No `hypothesis_data_windows`
+row was created, because nothing was registered [acceptance/phase10-holdout-boundary.txt,
+db-accept-research-0421.txt, phase12-research-1021.txt; precision point raised by session
+project-elrond-75]. The clean confirmatory sessions were not opened to verify any of this.
 
 ### Phase 11 — sandboxed measurement (research 2026-09-14 04:21:53, task result 0)
 The scheduled research run found the `SCOUTING` task actionable and advanced it one step (the proposer
@@ -383,7 +395,7 @@ offered when `select_isolated_backend` succeeds, and it did under `erlond`.
 | script | SHA-256 `9c317a09…41f6c3b2` (also the search's `configuration_hash`); stderr empty |
 | observations | 291 lead-lag observations from 293 sessions, 23 symbols |
 | statistic | `benchmark_absolute_move_persistence` = 0.02593945802823299, t = 0.4411192161936907 |
-| verdict | **`UNDERPOWERED`** (04:21:56.06): confirming the pre-registered effect 0.20 against a luck bar of t = 2.910019 at 69 cumulative trials needs 210 observations, and 12 clean confirmatory observations exist (minimum detectable effect 0.748707). The exploratory statistic is recorded as exploratory evidence only; it did not decide the verdict and is not a refutation |
+| verdict | **`UNDERPOWERED`** (04:21:56.06): confirming the pre-registered effect 0.20 against a luck bar of t = 2.910019 — judged as trial 69, i.e. the existing burden of 68 plus this confirmation — needs 210 observations, and 12 clean confirmatory observations exist (minimum detectable effect 0.748707). The exploratory statistic is recorded as exploratory evidence only; it did not decide the verdict and is not a refutation |
 | memory written | `research_records` `exploratory:…:e2` (`EXPLORATORY_ONLY`) and `underpowered:…:e2` (`UNDERPOWERED`), two `research_relationships`, one `search_runs` row |
 
 The statistic matches the 2026-09-12 proof's independently checked value on the same 293-session panel
@@ -399,8 +411,26 @@ written anywhere. That id equals the one the 13:01 rehearsal derived on its own 
 inside a rolled-back transaction, the database refused a second `CREATED` row for the same task
 (`UNIQUE constraint failed: research_proposals.task_id`) and one for the same dataset sequence under a
 different task (`UNIQUE … dataset_identity, dataset_sequence`) [acceptance/phase12-idempotency-copy.txt].
-**PENDING (research 10:21:52 and 16:21:52):** the same property on the live store through the
-scheduled task.
+**On the live store, through the scheduled task.** Prediction first: at 04:26:48, after the measurement
+and before the next research run, a new process on a byte copy of the 04:24 store derived
+`NO_ELIGIBLE` `prop-b2aa140ce3ec65d337375566` (recorded), then the same id with `recorded: false`
+[acceptance/phase12-predict-1021.txt]. Then production, research run 2026-09-14 10:21:53 (task
+result 0, no launcher refusal, checkout clean):
+
+* The task was `UNDERPOWERED`, a state with no handler, so the cycle was idle and called the proposer.
+  Nothing was eligible, so no model call was made. Log: `advanced: []`, outcome `NO_ELIGIBLE`,
+  `proposal_id prop-b2aa140ce3ec65d337375566`.
+* The live store gained exactly one `research_proposals` row: that id, `NO_ELIGIBLE`, no task,
+  `code_commit 92c49d4…`, attempted 10:21:55.515497. **It is the id predicted six hours earlier.**
+* Table digests, 04:24 copy against the 10:24 copy: only `research_proposals` (1 → 2),
+  `ingestion_runs` (+12) and the ingestion cursor changed. `research_tasks`, `research_task_events`,
+  `search_runs`, `research_records`, `research_relationships`, `hypotheses`,
+  `hypothesis_data_windows` and every trading table are identical: no second task, no second search
+  charge, no duplicate finding [acceptance/phase12-research-1021.txt; independently,
+  acceptance/scheduled/r1021/ by session project-elrond-75, which also recorded task instance
+  `{4BBC91D3-…}` and the process chain].
+
+**PENDING (research 16:21:52):** the repeat on unchanged state, which should write no row at all.
 
 ### Phase 13 — containment against the deployed code
 Deployed checkout's `src` and venv, 22:26:20: `select_isolated_backend` → `WindowsSandbox`,
