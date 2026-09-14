@@ -16,7 +16,8 @@ including the one step that needed the operator. All times UTC. Evidence files a
 | Migration 0028 on the live store | **Done** 22:15:32–34: schema 27 → 28, integrity ok, every existing row preserved |
 | Autonomous research | First scheduled run on `92c49d4` (22:21:52) proposed `auto-benchmark-move-size-persists-v1-us-equities-daily` by itself and moved it to `SCOUTING`. The next (04:21:53) measured it under `WindowsSandbox` as `erlond` over the 293 exploratory sessions only, and graded it `UNDERPOWERED`. Nothing was seeded, rerun or tuned |
 | PAPER boundary | Intact. Through Sunday no order, fill, position, account, reconciliation, runtime-deployment or kill-switch row changed. Monday's first session on `92c49d4` (to 16:24) added only observations, protection cycles, snapshots and reconciliations: no order, no fill, no incident, kill switch disengaged, protection `HEALTHY`. One reconcile at 13:41:52 was run out-of-band by an **UNKNOWN** invoker |
-| Out-of-band writes | Codex `codex/intraday-paper-research` wrote 2 `search_runs` and 4 `research_records` on Monday. Research tables only, windows ending 2026-08-21 (Phase 16) |
+| Out-of-band writes | Codex `codex/intraday-paper-research` wrote 3 `search_runs` and 6 `research_records` on Monday. Research tables only, windows ending 2026-08-21 (Phase 16) |
+| **Open incident** | **Since 2026-09-14 20:21:53 every new service start fails** with `PermissionError` reading the deployed `.venv`, after a Codex sandbox read-ACL grant on the runtime directory at 20:00:58.945 left 3,695 site-packages files without an `erlond` read ACE. Ingestion (20:21–22:21), research (22:21) and report (22:21) exit 1. The long-running console, daemon and protection started 2026-09-13 22:21 are unaffected so far. **Repair awaits the operator**; see *Incident* below |
 | Deployment script | **Deployment succeeded; the deployment script terminated before its final verification stage.** It completed backup, migration and task re-registration; its next append to `steps.txt` failed because a separate log-watching process held that file open (below). Task Scheduler then started all six tasks through their normal triggers, and every skipped verification was measured independently |
 
 ## Why deployment needed an operator
@@ -298,7 +299,13 @@ establish it is mechanical: each task's action pins `92c49d4`; `quantbot.operati
 `CHECKOUT_PIN_MISMATCH` or `CHECKOUT_NOT_CLEAN` before running any component; the checkout is
 `92c49d4` and clean; and no launcher log has been written since the deployment, so no refusal
 occurred. The research run independently recorded `code_commit 92c49d4…` from the running package's
-own Git state. **Not measured:** the elevated command lines of the three long-running processes.
+own Git state. The elevated command lines of the three long-running processes were not measured.
+**The daemon's commit was then recorded by the daemon itself:** at its first trading-day cycle,
+Monday 20:05:00, it wrote `runtime_deployments` row
+`Leannes-Laptop:pid-18760:2026-09-13T22:21:54.129343Z:COORDINATOR:2026-09-14T20:05:00Z` — `git_commit
+92c49d4c5b674438ca0ebf32ccccd12c63086dd8`, `schema_version 28`, `trading_mode PAPER`, strategy
+`adaptive-momentum-v1-309894d8d8a5296e`. PID 18760 is the daemon interpreter in the tree started by
+Task Scheduler at 22:21:52 (host 11060 → powershell 12060 → python 9928 → python 18760).
 
 ### Store (copy 22:23:09)
 Schema 28, alembic 0028, `integrity_check ok`, `foreign_key_check` 0 rows. `research_proposals`: 12
@@ -320,6 +327,13 @@ a readiness result, not a failure of the property under test. Both wrote
 kept its mtime (12:33:45) and hash; no file anywhere under the checkout, ignored files included, was
 written after 22:25:21; `git status` empty after each. The next scheduled service run (ingestion
 22:51:52) started without refusal and left the checkout clean [acceptance/phase6-doctor-regression.txt].
+
+The other writer, the daemon's daily `run-once`, exercised the same code in production at its first
+trading-day cycle. `D:\Elrond\reports\PROJECT_STATUS.md` was rewritten at 2026-09-14 20:05:05.05
+("Last successful run: run-20260914T200500Z"), as `erlond`, over the file the regression run had
+created as `leepa` (its ACL inherits Authenticated Users: Modify). The checkout's tracked
+`PROJECT_STATUS.md` kept its 2026-09-13 12:33:45 mtime, and `git status` stayed empty
+[acceptance/close-2009.txt].
 
 ### Phase 7 — ingestion on `92c49d4`
 | run | task result | ledger | component log | checkout |
@@ -504,6 +518,11 @@ research service process itself does open the store, because the research tables
   remaining candidates are the operator and a Codex process running with the paper credentials that
   morning. The 13:45 recovery does not depend on it, because each observation ingests its own
   snapshot before comparing.
+* **Close, 20:05:00:** `run-20260914T200500Z` `SUCCEEDED` (23 bars, 23 signals, one order). One PAPER
+  exit, XLI `SELL` `MARKET` `DAY` 0.286664, the whole position, `accepted` at 20:05:04.88 and unfilled
+  at 20:09. The run's reconciliation is `RECONCILED` with 0 diffs, the 14 afternoon observations all
+  reconciled, and 14 more protection cycles were `HEALTHY`. This is the ordinary daily decision of the
+  deployed strategy, not an unexpected order.
 
 ### Phase 16 — ledger comparison
 Per-table row count and a SHA-256 over every row, pre-deployment copy (16:38) versus post-deployment
@@ -564,9 +583,75 @@ Every search ends on or before 2026-08-21, so no clean confirmatory session is i
 refuting verdict. They changed neither the proposer's state nor its identity (Phase 12). Attribution
 was established by session project-elrond-75 and checked against this session's copy.
 
-`runtime_deployments` has no `92c49d4` row yet. Every existing row is a `COORDINATOR` observation at
-20:05 on a trading day. **PENDING:** the first, Monday 2026-09-14 20:05, and the scheduled report at
-22:21:52.
+Fourth comparison, the 16:24:37 copy versus the 20:09:49 copy (through the Monday close cycle;
+integrity ok, foreign keys clean). Changed:
+
+| table | change | explanation |
+|---|---|---|
+| `bars` | 7061 → 7084 | the Monday session, 23 symbols, stored by the 20:05 run (308 sessions) |
+| `runs`, `qualification_days` | 4 → 5, 3 → 4 | `run-20260914T200500Z` `SUCCEEDED`; 2026-09-14 qualified |
+| `signals` | 69 → 92 | 23 signals evaluated |
+| `order_intents`, `broker_orders` | 11 → 12, 10 → 11 | one PAPER exit: XLI `SELL` `MARKET` `DAY` 0.286664 (the whole position), submitted 20:05:04.88, `accepted`, 0 filled |
+| `runtime_deployments` | 4 → 5 | the first `COORDINATOR` observation on `92c49d4` (above) |
+| `capacity_assessments`, `market_regime_snapshots` | +1 each | the daily cycle |
+| `reconciliation_runs` | 114 → 129 | 14 observations and `run-20260914T200500Z`, all `RECONCILED`, 0 diffs |
+| `session_observations` | 96 → 110 | 14, all `DEGRADED` `MARKET_DATA_STALE` (before the 20:05 bar landed) |
+| `account_snapshots`, `equity_snapshots`, `positions` | +29, +29, +290 | observation, protection and run reads |
+| `position_protection_cycles` / `_evaluations` | +14 / +140 | all `HEALTHY` |
+| `ingestion_runs`, `ingestion_cursors` | 374 → 396 | scheduled ingestion |
+| `search_runs`, `research_records` | 3 → 4, 31 → 33 | **out-of-band Codex:** `intraday:90aeb3f1…` (16:41:25, 2016-01-04..2026-08-21) with its `EXPLORATORY_ONLY` result, and `intraday-eod-reversal-literature-20260914-v1` (`LITERATURE_SUPPORTED`, 16:45:06) |
+
+No fill, no incident; kill switch disengaged; `research_proposals`, `research_tasks`, events,
+relationships, hypotheses and data windows unchanged. The order is the deployed strategy's ordinary
+close-of-day decision, the same path that submitted on 2026-09-09. It is PAPER, and the reconciliation
+immediately after it is clean.
+
+### Research and report at 2026-09-14 22:21 — did not run
+The prediction recorded at 20:10:29 (a copy of the 20:09 store, which includes the Monday bar) was:
+`CREATED` `prop-9b49cdc424a6a6bdd534e483`, opening `auto-dispersion-precedes-volatility-v1-us-equities-daily`.
+The Monday session is one clean session none of the three exposed questions has seen, so all three
+were eligible [acceptance/phase12-predict-2221.txt]. It could not be compared: the scheduled research
+and report starts at 22:21:53 both failed at import (*Incident*). The live store is unchanged since the
+20:09 copy (table digests identical at 22:24:54), so no proposal, task, search or report was written.
+
+## Incident — 2026-09-14 20:21, service starts fail on `.venv` permissions (OPEN)
+
+**Symptom.** `Elrond Ingestion` at 20:21:53, 20:51:53, 21:21:53, 21:51:53 and 22:21:53, and `Elrond
+Research` and `Elrond Report` at 22:21:53–54, all end with task result `0x1`. Each launcher log records a
+traceback ending in `PermissionError: [Errno 13] Permission denied:
+'…\elrond-omen-runtime\.venv\Lib\site-packages\sqlalchemy\util\_py_collections.py'`. The failure is
+during import (alembic → sqlalchemy), before any application code runs. The last successful start was
+ingestion at 19:51:52. The console, daemon and protection processes started 2026-09-13 22:21:52 had
+already imported what they needed and keep running. The daemon's 20:05 cycle succeeded after the
+cause. Any restart of those three would fail the same way.
+
+**Cause, measured.** Codex's sandbox log `%USERPROFILE%\.codex\.sandbox\sandbox.2026-09-14.log`:
+`[2026-09-14T20:00:58.945168Z] granting read ACE to C:\Users\leepa\elrond-omen-runtime for sandbox users`,
+in a read-ACL run by `codex-command-runner` 0.153.4. The same run granted `C:\Users\leepa\elrond-intraday`
+at 20:00:58.616. The runtime directory now has explicit `CodexSandboxUsers:(OI)(CI)(RX)` and
+`erlond:(OI)(CI)(RX)`, and every directory below it still inherits `erlond`. But of the 5,057 files under
+`.venv\Lib\site-packages`, **3,695 carry no ACE that lets `erlond` read them, and every one of those
+carries the `CodexSandboxUsers` ACE**. The 1,362 that are still readable include 924 `__pycache__` files,
+the newest created 2026-09-11. Unaffected: `src`, `config`, `deploy`, the base interpreter (4,200
+files), `pyvenv.cfg`, the dotenv (explicit `erlond:(R)`), and the checkout's and clone's Git metadata.
+`.venv\Scripts` has one affected file (`ruff.exe`). No file inside `.venv` has an explicit ACE or
+disabled inheritance, so the lost entries were inherited ones [acceptance/acl-scan-2230.txt]. The exact
+mechanism inside Codex's ACL writer is not known. The timing, the log line and the one-to-one
+`CodexSandboxUsers` signature are what establish it.
+
+**Repair, not yet performed.** It changes file permissions on operator state, so it waits for the
+operator. First save the `.venv` ACLs
+(`icacls "C:\Users\leepa\elrond-omen-runtime\.venv" /save <file> /T /C /Q`), then re-propagate inheritance
+(`icacls "C:\Users\leepa\elrond-omen-runtime\.venv" /reset /T /C /Q`). That restores `erlond` read and keeps
+`CodexSandboxUsers`, and it removes nothing else, because nothing inside `.venv` is explicit.
+Rollback: `icacls "C:\Users\leepa\elrond-omen-runtime" /restore <file> /C`. Proof: a re-scan with 0
+unreadable files, then a scheduled ingestion start with result `0x0` and no launcher-log write. No
+service restart is needed for the scheduled components. The operator also has to decide whether Codex's
+sandbox may keep the deployed runtime as a readable root, since another grant could repeat this.
+
+**Deadline.** The running daemon and protection next do intraday work at the 2026-09-15 13:30 open.
+That is the first point at which they could import something now unreadable. A reboot or crash before
+the repair would leave protection down with ten positions open, including the pending XLI sell.
 
 ## Follow-ups, not part of this objective
 
@@ -574,3 +659,19 @@ was established by session project-elrond-75 and checked against this session's 
 2. `research-status` lists empty `AVAILABLE` datasets as clean confirmatory capacity.
 3. Deployment evidence scripts live outside Git; if a repeatable deployment runner is wanted, it
    should be reviewed into `deploy/omen/` rather than copied from here.
+4. **Power before the look.** The proposer can open a question whose clean sessions give zero
+   confirmatory observations; one session gives `max(0, 1 − 2) = 0`. The SCOUTING stage then reads
+   exploratory data in the sandbox before grading `UNDERPOWERED`, a verdict that could not have
+   differed. CLAUDE.md prefers the cheap failed power analysis first (raised by session
+   project-elrond-75).
+5. **Search ledger vs capacity.** `consumed_through` counts `PRIOR_WINDOW_CONSUMPTION` and
+   `hypothesis_data_windows`, not `search_runs`. An exploratory `auto-exploratory:` row, or another
+   actor's `intraday:` row, therefore changes neither the dataset's clean-session count nor
+   `cumulative_trials()`. Whether one question's look should count against another question's holdout
+   on the same dataset is a statistical-policy decision to record (raised by session project-elrond-75).
+6. **Opening broker read.** The first market-hours observation at 13:30:00 has returned
+   `RECONCILIATION_REQUIRED` at every open on record, because the broker's opening read is internally
+   inconsistent beyond the 0.01 tolerance. It resolves at the next observation.
+7. **Shared host.** Another agent (Codex) can write to the live store's research tables, and its
+   sandbox can alter permissions on the deployed runtime. The unattributed CLI reconcile at 13:41:52
+   and the 20:00:58 ACL grant show the runtime has no boundary against agents on the same account.
