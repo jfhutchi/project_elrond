@@ -6,9 +6,10 @@ from quantbot.learner import service
 from quantbot.learner.data import build_dataset
 from quantbot.learner.models import EvaluationClass
 from quantbot.learner.repository import LearnerRepository
-from quantbot.research.registry import DataRole
+from quantbot.research.registry import DataRole, HypothesisRegistry
 from quantbot.storage import Database
 from tests.unit.learner.test_data import inputs_for, session_sequence, window
+from tests.unit.research.test_registry import AFTER_LAPSE, NOW, cleared, make_draft
 
 
 def dataset_fixture():
@@ -195,5 +196,36 @@ def test_resolution_rechecks_protection_added_after_prediction(tmp_path):
             model.model_id,
             inputs_for(sessions, through=99),
             source_id="fixture-v1",
+        )
+    database.close()
+
+
+def test_guard_range_uses_registry_reservation_expiry(tmp_path, monkeypatch):
+    database = Database.create(tmp_path / "learner.db")
+    draft = make_draft()
+    protected = draft.windows_for(DataRole.PROTECTED_EVALUATION)[0]
+    with database.transaction() as session:
+        HypothesisRegistry(session).register(
+            draft,
+            now=NOW,
+            critique=cleared(draft.hypothesis_id, draft.version),
+        )
+
+    monkeypatch.setattr(service, "_utcnow", lambda: NOW)
+    with database.transaction() as session, pytest.raises(ValueError, match="ExperimentRunner"):
+        service.guard_range(
+            session,
+            "alpaca-us-equities-daily",
+            protected.start,
+            protected.end,
+        )
+
+    monkeypatch.setattr(service, "_utcnow", lambda: AFTER_LAPSE)
+    with database.transaction() as session:
+        service.guard_range(
+            session,
+            "alpaca-us-equities-daily",
+            protected.start,
+            protected.end,
         )
     database.close()

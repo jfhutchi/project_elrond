@@ -69,7 +69,7 @@ from quantbot.research.artifact_testing import (
     ArtifactTestRegistration,
 )
 from quantbot.research.critic import Critique
-from quantbot.research.datasets import equivalent_datasets
+from quantbot.research.datasets import equivalent_datasets, observation_identity
 from quantbot.research.hypothesis_graph import (
     GraphArtifactKind,
     HypothesisGraph,
@@ -2017,6 +2017,33 @@ class HypothesisRegistry:
             + self.campaign_trials_spent()
             + self.learner_trials_spent()
             + search_cardinality
+        )
+
+    def blocking_protected_windows(
+        self, dataset: str, start: date, end: date, *, now: date
+    ) -> tuple[RowMapping, ...]:
+        """Live or consumed protected claims over an observation range, across known aliases.
+
+        This is the public authority for consumers that must refuse protected reads without
+        duplicating the registry's lifecycle predicate. Expired reservations and released rows
+        are absent; consumed rows and reservations without an expiry remain blocking.
+        """
+        aliases = {*equivalent_datasets(dataset), observation_identity(dataset)}
+        rows = (
+            row
+            for alias in aliases
+            for row in self._blocking(alias, start, end, now=now)
+            if row["role"] == DataRole.PROTECTED_EVALUATION.value
+        )
+        return tuple(
+            sorted(
+                rows,
+                key=lambda row: (
+                    str(row["hypothesis_id"]),
+                    int(row["version"]),
+                    str(row["dataset"]),
+                ),
+            )
         )
 
     def _blocking(self, dataset: str, start: date, end: date, *, now: date) -> list[RowMapping]:

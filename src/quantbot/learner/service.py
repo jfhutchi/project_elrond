@@ -18,13 +18,13 @@ from quantbot.learner.estimators import fit_estimator, predict
 from quantbot.learner.metrics import ScoredRow, evaluate_predictions
 from quantbot.learner.models import Evaluation, EvaluationClass, ModelVersion, Outcome, Prediction
 from quantbot.learner.repository import LearnerRepository
-from quantbot.research.datasets import equivalent_datasets, observation_identity
+from quantbot.research.datasets import observation_identity
 from quantbot.research.manifest import canonical_result_json, content_id
-from quantbot.research.registry import DataRole
+from quantbot.research.registry import DataRole, HypothesisRegistry
 from quantbot.research.reproducibility import capture_environment, capture_git_state
 from quantbot.storage import Database, RecordNotFoundError
 from quantbot.storage.database import encode_utc
-from quantbot.storage.schema import hypothesis_data_windows, learner_datasets, search_runs
+from quantbot.storage.schema import learner_datasets, search_runs
 
 
 def _utcnow() -> datetime:
@@ -37,17 +37,9 @@ def guard_range(session: Session, dataset: str, start: date, end: date) -> None:
     Learner declarations also prevent later repartitioning from recycling their holdout. They
     grant no access or fresh-evidence claim; protected measurement still needs ExperimentRunner.
     """
-    table = hypothesis_data_windows
-    blocked = session.execute(
-        select(table.c.hypothesis_id).where(
-                table.c.dataset.in_((*equivalent_datasets(dataset), observation_identity(dataset))),
-            table.c.role == DataRole.PROTECTED_EVALUATION.value,
-            table.c.start_date <= end.isoformat(),
-            table.c.end_date >= start.isoformat(),
-            table.c.state != "RELEASED",
-        )
-    ).first()
-    if blocked is not None:
+    if HypothesisRegistry(session).blocking_protected_windows(
+        dataset, start, end, now=_utcnow().date()
+    ):
         raise ValueError("protected range requires the existing ExperimentRunner access path")
     # Intentionally stronger than an expiring reservation: no ordinary learner command unseals
     # a declared holdout or consumes it for debugging. These are manifests, not a second issuer.
