@@ -63,6 +63,10 @@ statistical capacity or establish that a window was untouched. The CLI accepts l
 there is **no protected-safe production market-store loader yet**. Do not export protected
 prices into a bundle: reading a file has already exposed its contents before validation can act.
 
+Registered windows use the existing registry's lifecycle: live reservations and consumed windows
+block; expired reservations lapse. Learner holdout manifests remain protected. Resolution rechecks
+current protection before using target prices, even when protection was added after prediction.
+
 ## Commands
 
 Every learner command requires an explicit existing database and bypasses trading-runtime
@@ -111,3 +115,6 @@ performance, genuine forward shadow/PAPER result or positive expectancy is estab
 Production point-in-time universe/provider ingestion, authoritative outcome sourcing, walk-forward
 retraining policies, protected challenger qualification, portfolio economics and strategy
 integration remain outstanding. Validation comparison never promotes a model.
+
+The [implementation and verification report](elrond-learner-issue-242-update.md) records the
+committed demonstration, exact test results and the Linux CI prerequisite limitation.

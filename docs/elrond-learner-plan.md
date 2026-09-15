@@ -42,7 +42,10 @@ introduced until independent evidence justifies one.
 - [x] CLI workflow, synthetic local-data demonstration and status documentation.
 - [ ] Publish prepared #242 implementation note (external posting requires approval after automatic
   approval review rejected the attempted architecture comment).
-- [ ] Required pytest, lint, both mypy targets, local CI contract, clean committed tree.
+- [x] Focused tests, required pytest, lint, both mypy targets and native Windows local CI.
+  Final source `09ba047`: 91 learner tests passed; full CI 3,048 passed, 47 skipped.
+- [ ] Linux runtime CI: requested, but NOT RUN because Docker is unavailable. Both platform
+  mypy targets passed on Windows; this does not establish Linux runtime parity.
 
 ## Initial evidence
 
@@ -51,3 +54,12 @@ introduced until independent evidence justifies one.
 - Baseline focused data-snapshot, forecasting and storage tests: 72 passed, 2 platform skips.
 - Existing historical US-equity windows have accumulated search burden. Renaming a dataset
   or fitting a model cannot make them untouched confirmation.
+
+## Completed scope and remaining evidence
+
+The core local research loop is committed and demonstrated on synthetic data. All sources remain
+LOCAL_DECLARED; replay never becomes genuine forward evidence. No market edge, protected result,
+walk-forward qualification, portfolio economics or PAPER performance is established.
+
+See [the prepared #242 update](elrond-learner-issue-242-update.md) for exact commits, test results,
+the unfavorable ridge-versus-mean validation result and remaining production ingestion work.
