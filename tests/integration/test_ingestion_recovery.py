@@ -61,6 +61,7 @@ class Source:
         self.provider = "alpaca"
         self.block = False
         self.omit_at: datetime | None = None
+        self.revise_at: datetime | None = None
         self.entered = asyncio.Event()
         self.release = asyncio.Event()
 
@@ -69,27 +70,37 @@ class Source:
         self.entered.set()
         if self.block:
             await self.release.wait()
-        bars = tuple(
-            Bar(
-                symbol=symbol,
-                timestamp=session.close_at,
-                open=Decimal(100),
-                high=Decimal(101),
-                low=Decimal(99),
-                close=Decimal(100),
-                volume=Decimal(1000),
-                adjustment=Decimal(1),
-            )
-            for session in self.calendar.values
-            if query.start <= session.close_at <= query.end and session.close_at != self.omit_at
-            for symbol in query.symbols
-            if not self.empty and symbol != self.omit_symbol
-        )
+        bars: list[Bar] = []
+        for session in self.calendar.values:
+            if not query.start <= session.close_at <= query.end or session.close_at == self.omit_at:
+                continue
+            for symbol in query.symbols:
+                if self.empty or symbol == self.omit_symbol:
+                    continue
+                bar = Bar(
+                    symbol=symbol,
+                    timestamp=session.close_at,
+                    open=Decimal(100),
+                    high=Decimal(101),
+                    low=Decimal(99),
+                    close=Decimal(100),
+                    volume=Decimal(1000),
+                    adjustment=Decimal(1),
+                )
+                bars.append(bar)
+        bars = tuple(bars)
         if self.duplicate and bars:
             extra = bars[-1]
             if self.conflict:
                 extra = extra.model_copy(update={"volume": Decimal(999)})
             bars = (*bars, extra)
+        if self.revise_at is not None:
+            bars = tuple(
+                bar.model_copy(update={"close": bar.close + Decimal(1)})
+                if bar.symbol == "SPY" and bar.timestamp == self.revise_at
+                else bar
+                for bar in bars
+            )
         return MarketDataBatch(
             provider=self.provider,
             feed=query.feed,
@@ -183,6 +194,29 @@ async def test_restart_recovers_gap_older_than_warmup_and_tags_backfill(h: Harne
         plane = IngestionControlPlane(session)
         assert plane.latest_run(sync.source_id).mode is RunMode.LIVE
         assert plane.cursor(sync.source_id, "universe").last_success_at == h.now
+
+
+async def test_current_cursor_does_not_replay_revised_historical_bars(h: Harness):
+    """A provider revision in old history must not stop a live collection attempt.
+
+    The cursor already proves that the older sessions were durably collected. Re-requesting the
+    full warmup window made a later provider revision of one of those bars raise from immutable
+    storage before the market-hours heartbeat could be recorded.
+    """
+    sync = h.collector()
+    await sync.sync()
+    h.source.revise_at = h.calendar.values[10].close_at
+    h.now = h.calendar.values[61].close_at + timedelta(minutes=5)
+
+    result = await h.collector().sync()
+
+    assert result.healthy
+    assert h.source.queries[-1].start > h.source.revise_at
+    with h.database.transaction() as session:
+        run = IngestionControlPlane(session).latest_run(sync.source_id)
+        assert run is not None
+        assert run.status is RunStatus.SUCCEEDED
+        assert run.counts.inserted == len(_config_payload()["universe"])
 
 
 async def test_restart_without_cursor_uses_existing_observations(h: Harness):

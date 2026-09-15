@@ -581,6 +581,14 @@ class MarketDataSync:
                 )
             window = tuple(item for item in history if item.session_date >= resume_from.date())
             mode = RunMode.BACKFILL
+        elif resume_from is not None:
+            # A live cursor already proves that every earlier session was durably collected.
+            # Fetching the whole indicator warmup on every pass needlessly replays immutable
+            # history, so a provider revision in an old bar can stop today's collection. Keep the
+            # warmup in the cache for consumers, but request only the cursor session and anything
+            # newer from the provider. Including the cursor session makes the inclusive provider
+            # boundary explicit and remains idempotent when its values are unchanged.
+            window = tuple(item for item in history if item.close_at >= resume_from)
         query = BarQuery(
             symbols=self._config.universe,
             start=datetime.combine(window[0].session_date, time.min, tzinfo=UTC),

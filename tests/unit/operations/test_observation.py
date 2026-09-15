@@ -28,7 +28,7 @@ from quantbot.operations.observation import (
     SessionObserver,
     observation_id,
 )
-from quantbot.storage import Database
+from quantbot.storage import Database, StateConflictError
 from quantbot.storage.schema import SCHEMA_VERSION, session_observations
 
 NOW = datetime(2026, 8, 30, 15, 0, tzinfo=UTC)
@@ -78,6 +78,24 @@ class FakeDataSync:
             stale_symbols=self.stale_symbols,
             reasons=self.reasons,
         )
+
+
+@dataclass
+class FailingDataSync:
+    calls: int = 0
+
+    async def sync(self) -> DataSyncResult:
+        self.calls += 1
+        raise StateConflictError("historical market-data conflict")
+
+
+@dataclass
+class FailingRecovery:
+    calls: int = 0
+
+    async def recover(self, reconciliation_id: str, *, started_at: datetime, run_id=None):  # type: ignore[no-untyped-def]
+        self.calls += 1
+        raise RuntimeError("broker reconciliation unavailable")
 
 
 @dataclass
@@ -174,6 +192,43 @@ async def test_stale_market_data_is_a_reason(database: Database) -> None:
     assert result.outcome is ObservationOutcome.DEGRADED
     assert "MARKET_DATA_STALE" in result.reasons
     assert result.market_data_age_seconds == Decimal("259200.0")
+
+
+@pytest.mark.asyncio
+async def test_data_sync_failure_still_records_a_degraded_heartbeat(database: Database) -> None:
+    """A failed fetch must not turn the market-hours monitor into a dead process."""
+    data_sync = FailingDataSync()
+    watcher = observer(database, data_sync=data_sync)
+
+    first = await watcher.observe(now=NOW, market_open=True)
+    second = await watcher.observe(now=NOW + timedelta(minutes=15), market_open=True)
+
+    assert first.outcome is ObservationOutcome.DEGRADED
+    assert first.reasons == ("MARKET_DATA_SYNC_FAILED",)
+    assert second.outcome is ObservationOutcome.DEGRADED
+    assert second.reasons == ("MARKET_DATA_SYNC_FAILED",)
+    assert data_sync.calls == 2
+    assert stored(database) == [
+        (observation_id(NOW), "DEGRADED", "MARKET_DATA_SYNC_FAILED"),
+        (
+            observation_id(NOW + timedelta(minutes=15)),
+            "DEGRADED",
+            "MARKET_DATA_SYNC_FAILED",
+        ),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_recovery_failure_still_records_a_degraded_heartbeat(database: Database) -> None:
+    watcher = observer(database, recovery=FailingRecovery())
+
+    result = await watcher.observe(now=NOW, market_open=True)
+
+    assert result.outcome is ObservationOutcome.DEGRADED
+    assert result.reasons == ("RECONCILIATION_CHECK_FAILED",)
+    assert stored(database) == [
+        (observation_id(NOW), "DEGRADED", "RECONCILIATION_CHECK_FAILED")
+    ]
 
 
 @pytest.mark.asyncio
