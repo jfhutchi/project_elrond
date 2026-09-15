@@ -194,6 +194,9 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     _ = output
     parser = argparse.ArgumentParser(prog="quantbot")
     commands = parser.add_subparsers(dest="command", required=True)
+    from quantbot.learner.cli import configure_parser as configure_learner_parser
+
+    configure_learner_parser(commands.add_parser("learner"))
     for name in (
         "status",
         "doctor",
@@ -943,6 +946,11 @@ def main(
     _configure_logging()
     parser = build_parser(output=stream)
     args = parser.parse_args(argv)
+
+    if args.command == "learner":
+        from quantbot.learner.cli import run as run_learner
+
+        return run_learner(args, stream)
 
     if args.command == "deployment-status" and (
         context is None or args.inventory or args.startup_check or args.candidate or args.scan_root
