@@ -13,7 +13,7 @@ import math
 import statistics
 from collections.abc import Iterable, Sequence
 from datetime import UTC, datetime
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -175,6 +175,7 @@ class Dataset(FrozenModel):
     feature_names: tuple[str, ...] = FEATURE_NAMES
     universe_id: Text
     source_id: Text
+    source_evidence: Literal["LOCAL_DECLARED"] = "LOCAL_DECLARED"
     symbols: tuple[str, ...] = Field(min_length=1)
 
     @field_validator("rows")
@@ -243,6 +244,7 @@ class Dataset(FrozenModel):
                 "holdout_window": self.holdout_window.model_dump(mode="json"),
                 "rows": [row.identity for row in self.rows],
                 "source_id": self.source_id,
+                "source_evidence": self.source_evidence,
                 "symbols": self.symbols,
                 "train_window": self.train_window.model_dump(mode="json"),
                 "universe_id": self.universe_id,
