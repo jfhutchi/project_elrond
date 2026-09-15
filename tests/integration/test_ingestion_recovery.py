@@ -152,6 +152,7 @@ async def test_incomplete_attempt_is_failed_and_preserves_checkpoint(h: Harness,
         before = IngestionControlPlane(session).cursor(sync.source_id, "universe")
     h.source.empty = empty
     h.source.omit_symbol = "SPY"
+    h.now = h.calendar.values[61].close_at + timedelta(minutes=5)
     result = await sync.sync()
     assert not result.healthy
     with h.database.transaction() as session:
@@ -169,7 +170,8 @@ async def test_incomplete_attempt_is_failed_and_preserves_checkpoint(h: Harness,
     with h.database.transaction() as session:
         plane = IngestionControlPlane(session)
         assert not plane.open_incidents(sync.source_id)
-        assert plane.latest_run(sync.source_id).counts.inserted == 0
+        expected_inserted = 1 if not empty else len(_config_payload()["universe"])
+        assert plane.latest_run(sync.source_id).counts.inserted == expected_inserted
 
 
 async def test_restart_recovers_gap_older_than_warmup_and_tags_backfill(h: Harness):
@@ -219,6 +221,24 @@ async def test_current_cursor_does_not_replay_revised_historical_bars(h: Harness
         assert run.counts.inserted == len(_config_payload()["universe"])
 
 
+async def test_live_sync_skips_the_cursor_when_no_session_is_new(h: Harness):
+    """A repeated intraday check must not refetch or rewrite the latest closed session."""
+    sync = h.collector()
+    await sync.sync()
+    h.source.revise_at = h.calendar.values[60].close_at
+    requested = len(h.source.queries)
+
+    result = await sync.sync()
+
+    assert result.healthy
+    assert len(h.source.queries) == requested
+    with h.database.transaction() as session:
+        run = IngestionControlPlane(session).latest_run(sync.source_id)
+        assert run is not None
+        assert run.status is RunStatus.SUCCEEDED
+        assert run.counts == run.counts.model_copy(update={"seen": 0})
+
+
 async def test_restart_without_cursor_uses_existing_observations(h: Harness):
     sync = h.collector()
     await sync.sync()
@@ -263,6 +283,7 @@ async def test_exact_provider_duplicates_are_idempotent_but_conflicts_fail(h: Ha
         assert run.counts.duplicate == 1
         before = plane.cursor(sync.source_id, "universe")
     h.source.conflict = True
+    h.now = h.calendar.values[61].close_at + timedelta(minutes=5)
     with pytest.raises(MarketDataProtocolError, match="conflicting duplicate"):
         await sync.sync()
     with h.database.transaction() as session:
@@ -297,6 +318,7 @@ async def test_reset_and_recreated_cursor_cannot_be_overwritten_by_old_fetch(h: 
     h.now = h.calendar.values[60].close_at - timedelta(seconds=30)
     sync = h.collector()
     await sync.sync()
+    h.now = h.calendar.values[61].close_at + timedelta(minutes=5)
     h.source.entered.clear()
     h.source.block = True
     pending = asyncio.create_task(sync.sync())
