@@ -88,6 +88,11 @@ uv run quantbot doctor
 `quantbot-kronos` is a second entry point for the shadow forecasting worker
 ([docs/kronos-shadow.md](docs/kronos-shadow.md)); it has no order path.
 
+`quantbot learner --database PATH` exposes supervised dataset, train, predict, resolve, evaluate,
+compare and status commands. The initial loop uses explicitly local-declared data, immutable
+models and separately committed predictions/outcomes. It establishes software capability, not
+profitability or forward market evidence. See [Elrond Learner](docs/elrond-learner.md).
+
 **The console is not read-only.** It was, through #82 slice 2; slice 3 added a control plane.
 It can engage and clear the kill switch, trigger `reconcile` and `sync-data`, and propose,
 apply and roll back portfolio-veto policy versions. What it cannot do is bounded by

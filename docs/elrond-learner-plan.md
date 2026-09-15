@@ -17,8 +17,9 @@ Existing protected-window and observation-identity accounting remain authoritati
 
 Fit a no-skill baseline and a regularized linear model before considering nonlinear extension.
 Every training run creates a new immutable identity with data, feature, code, environment and
-artifact hashes. Durable predictions distinguish historical replay from genuine prospective
-shadow observations; a caller-supplied backdated clock must not manufacture forward evidence.
+artifact hashes. Durable predictions distinguish historical replay from prospective local
+receipts; unverified local sources cannot create genuine shadow observations. A caller-supplied
+backdated clock must not manufacture forward evidence.
 Outcome resolution appends evidence to a previously committed prediction. Evaluation reports
 cross-sectional rank IC and spreads with explicit insufficient-evidence handling.
 
@@ -28,16 +29,19 @@ introduced until independent evidence justifies one.
 
 ## Ordered checkpoints
 
-- [ ] 1–2: Dataset, feature/label separation, calendar horizon, provenance, chronological purge,
-  protected read refusal; focused adversarial tests and commit.
-- [ ] 3–4: Trainable baseline/ridge, immutable artifacts and lineage; migration round trip,
+- [x] 1–2: Local-declared dataset, feature/label separation, calendar horizon, provenance,
+  chronological purge and protected-window refusal; focused adversarial tests and commit.
+- [x] 3–4: Trainable mean/ridge/quadratic ridge, immutable artifacts and lineage; migration round trip,
   deterministic fitting/reload tests and commit.
-- [ ] 5–6: Durable predictions and delayed outcome resolution, replay/forward separation;
+- [x] 5–6: Durable predictions and delayed outcome resolution, replay/local-receipt separation;
   timestamp and identity tests and commit.
-- [ ] 7: IC, quantile spreads, sample/coverage diagnostics, no training fallback; known-result
+- [x] 7: IC, quantile spreads, sample/coverage diagnostics, no training fallback; known-result
   fixtures and commit.
-- [ ] 8 onward: Walk-forward challengers and comparison only after the core loop passes.
-- [ ] CLI workflow, local-data demonstration, status documentation and #242 implementation note.
+- [ ] 8 onward: Walk-forward and qualified challengers. Descriptive matched-validation comparison
+  and immutable parent/successor lineage are available; they do not qualify a challenger.
+- [x] CLI workflow, synthetic local-data demonstration and status documentation.
+- [ ] Publish prepared #242 implementation note (external posting requires approval after automatic
+  approval review rejected the attempted architecture comment).
 - [ ] Required pytest, lint, both mypy targets, local CI contract, clean committed tree.
 
 ## Initial evidence

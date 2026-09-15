@@ -102,6 +102,12 @@ Two supporting rules, learned the hard way:
 
 ## Data roles
 
+The supervised [Elrond Learner](elrond-learner.md) maps TRAIN to DISCOVERY and uses the existing
+protected role. Its ordinary commands cannot consume protected evidence or promote models.
+Reserved `learner:` search attempts contribute to global trial burden, including discarded fits.
+Historical validation replay, local prospective receipt and genuine forward evidence remain
+distinct; local-declared sources cannot create genuine SHADOW evidence.
+
 Four roles, and the distinction between them is the point.
 
 | Role | May be searched | Notes |

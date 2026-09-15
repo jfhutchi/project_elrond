@@ -9,6 +9,14 @@
 
 ## START HERE
 
+### Learner #242 — initial supervised loop
+
+The `codex/elrond-learner` implementation adds leakage-tested five-session excess-return datasets,
+mean/ridge/quadratic models, immutable lineage, durable predictions and resolution, and descriptive
+cross-sectional evaluation. Local-declared input remains exploratory; prospective local receipt
+is distinct from genuine SHADOW/PAPER evidence. No profitability or protected confirmation is
+established. See [scope, commands and outstanding work](docs/elrond-learner.md).
+
 ### ⚠ FIXED 2026-08-22: a spent data window read as fresh capacity
 
 **Corrected claim.** An earlier version of this block said the v0.2 luck bar was too low. **That
