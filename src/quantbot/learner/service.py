@@ -299,14 +299,24 @@ def resolve(
     result: list[Outcome] = []
     with database.transaction() as session:
         repository = LearnerRepository(session)
+        dataset = repository.get_dataset(repository.get_model(model_id).dataset_id)
         predictions = repository.list_predictions(model_id)
+        unresolved: list[Prediction] = []
         for prediction in predictions:
             feature = prediction.features
             if source_id != feature.source_id:
                 raise ValueError("outcome source identity differs from prediction")
-            prior = repository.get_outcome(prediction.prediction_id)
-            if prior is not None:
-                continue
+            if repository.get_outcome(prediction.prediction_id) is None:
+                unresolved.append(prediction)
+        for target_date in sorted({p.features.target_at.date() for p in unresolved}):
+            guard_range(
+                session,
+                dataset.train_window.dataset,
+                target_date,
+                target_date,
+            )
+        for prediction in unresolved:
+            feature = prediction.features
             target = indexed.get((feature.symbol, feature.target_at))
             benchmark = indexed.get((feature.benchmark_symbol, feature.target_at))
             if target is None or benchmark is None:

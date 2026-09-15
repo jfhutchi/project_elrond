@@ -167,3 +167,33 @@ def test_new_vendor_name_cannot_recycle_a_declared_holdout(tmp_path):
     with pytest.raises(ValueError, match="protected learner holdout"):
         service.register_dataset(database, recycled)
     database.close()
+
+
+def test_resolution_rechecks_protection_added_after_prediction(tmp_path):
+    database = Database.create(tmp_path / "learner.db")
+    original = dataset_fixture()
+    service.register_dataset(database, original)
+    model = service.train(database, original.identity)
+    assert service.replay(database, model.model_id)
+
+    sessions = session_sequence(120)
+    later_protection = build_dataset(
+        inputs_for(sessions, through=79),
+        sessions,
+        symbols=("AAPL", "MSFT"),
+        universe_id="later-protection",
+        source_id="fixture-v1",
+        train_window=window(DataRole.DISCOVERY, sessions, 60, 69),
+        validation_window=window(DataRole.VALIDATION, sessions, 70, 79),
+        holdout_window=window(DataRole.PROTECTED_EVALUATION, sessions, 80, 99),
+    )
+    service.register_dataset(database, later_protection)
+
+    with pytest.raises(ValueError, match="protected learner holdout"):
+        service.resolve(
+            database,
+            model.model_id,
+            inputs_for(sessions, through=99),
+            source_id="fixture-v1",
+        )
+    database.close()
