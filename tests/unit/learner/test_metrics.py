@@ -50,3 +50,37 @@ def test_metrics_refuse_empty_and_duplicate_or_nonfinite_observations():
         evaluate_predictions((), expected_count=0)
     with pytest.raises(ValueError, match="finite"):
         spearman((1, float("nan")), (1, 2))
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    row = ScoredRow("id", "cohort", "A", start, start + timedelta(days=5), 1, 0.1, 0, 0.1)
+    with pytest.raises(ValueError, match="duplicate prediction identity"):
+        evaluate_predictions((row, row), expected_count=2)
+
+
+@pytest.mark.parametrize("period_count, nonoverlapping", [(30, 6), (95, 19), (100, 20)])
+def test_ic_t_stat_requires_twenty_nonoverlapping_periods(period_count, nonoverlapping):
+    start = datetime(2020, 1, 1, tzinfo=UTC)
+    rows = tuple(
+        ScoredRow(
+            prediction_id=f"{period}-{symbol}",
+            cohort_id=str(period),
+            symbol=str(symbol),
+            as_of=start + timedelta(days=period),
+            target_at=start + timedelta(days=period + 5),
+            score=float(symbol),
+            raw_return=(-1) ** period * symbol / 100 + 0.001,
+            benchmark_return=0.001,
+            excess_return=(-1) ** period * symbol / 100,
+        )
+        for period in range(period_count)
+        for symbol in range(5)
+    )
+    result = evaluate_predictions(rows, expected_count=len(rows))
+    assert result["valid_ic_periods"] == period_count
+    assert result["nonoverlapping_periods"] == nonoverlapping
+    if nonoverlapping < 20:
+        assert result["ic_t_stat"] is None
+        assert result["evidence_status"] == "INSUFFICIENT_EVIDENCE"
+    else:
+        assert result["ic_t_stat"] == pytest.approx(0)
+        assert result["evidence_status"] == "DESCRIPTIVE_ONLY"
+    assert result["positive_expectancy_justified"] is False
