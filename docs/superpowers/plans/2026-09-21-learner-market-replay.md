@@ -18,11 +18,11 @@ explicit replay assumption, never authenticated point-in-time evidence. No promo
 - [x] Add failing tests for next-open entries, predetermined fifth-close exits, nonoverlap,
   full coverage, costs on both sides, matched SPY/all-universe baselines and drawdown.
   Implement a fixed top-quintile portfolio report with immutable output and input hashes.
-- [ ] Exercise mean/ridge and one immutable ridge successor on one predeclared market split;
+- [x] Exercise mean/ridge and one immutable ridge successor on one predeclared market split;
   retain negative results, record every fit in the copied registry's cumulative trial burden.
-- [ ] Run learner/protection regressions, Ruff, Linux and Windows mypy targets and applicable
+- [x] Run learner/protection regressions, Ruff, Linux and Windows mypy targets and applicable
   native Windows suite. Linux execution stays NOT RUN when its runtime is unavailable.
-- [ ] Commit implementation and a measured handoff. Do not deploy, merge, change tasks or
+- [x] Commit implementation and a measured handoff. Do not deploy, merge, change tasks or
   clear controls. Record the highest-value remaining prerequisite.
 
 ## Fixed economic contract
@@ -61,3 +61,15 @@ every input interval contains the same decision cutoff; the union preserves all 
 The interrupted research run retains 572 committed forecasts and its one mean-model fit attempt.
 Resume that model through the idempotent CLI, then train the two remaining versions; do not
 restart the experiment in a fresh store. Post-change learner tests: 105 passed.
+
+Completed the preserved run: one dataset, three immutable models, 3,696 historical forecasts
+and outcomes; all seven prior search records retained plus exactly three fit attempts. Four
+report hashes verified. Ridge and successor match across 1,232 observations; neither has
+promotion authority. Ridge after-cost return -3.4606%, all-universe -0.1304%, matched SPY
+-6.0158%; ridge mean rank IC -0.1643. No positive-expectancy conclusion.
+
+Native Windows CI on 8a78dc3: PASS, 3,062 passed / 47 skipped / one deprecation warning.
+Combined local-CI exit 1 reflects Linux NOT RUN (Docker absent), not a Windows failure.
+The subsequent 419f545 protection-check optimization passed 105 targeted tests, both full
+mypy targets and Ruff, with independent review. Full suite was not repeated for this later
+commit. See docs/learner-recovery-2026-09-21.md for the measured handoff and evidence limits.

@@ -108,9 +108,7 @@ calendar, exercises the normal CLI, fits all three models, records/resolves repl
 evaluates them, and creates a separate challenger. Its report is evidence of software behavior.
 It is not a market experiment and its returns must not enter research confirmation or promotion.
 
-## Not yet proven or implemented
-
-### Stored market replay and portfolio economics (September 21 extension)
+## Stored market replay and portfolio economics (September 21 extension)
 
 `dataset-from-store --spec spec.json` reads the existing `alpaca:iex:all:1day` bar cache.
 Use an explicit **dedicated research copy** of the operational store, preserving its protection
@@ -133,9 +131,9 @@ evidence. All inputs remain LOCAL_DECLARED. Later holdout dates are a manifest, 
 that previously explored dates have become untouched. No genuine SHADOW evidence is issued.
 
 ```powershell
-.\.venv\Scripts\python.exe -m quantbot learner --database RESEARCH_COPY.db dataset-from-store --spec spec.json
-.\.venv\Scripts\python.exe -m quantbot learner --database RESEARCH_COPY.db resolve-from-store MODEL_ID --calendar calendar.json
-.\.venv\Scripts\python.exe -m quantbot learner --database RESEARCH_COPY.db economics MODEL_ID --calendar calendar.json --output economics.json
+.\.venv\Scripts\quantbot.exe learner --database RESEARCH_COPY.db dataset-from-store --spec spec.json
+.\.venv\Scripts\quantbot.exe learner --database RESEARCH_COPY.db resolve-from-store MODEL_ID --calendar calendar.json
+.\.venv\Scripts\quantbot.exe learner --database RESEARCH_COPY.db economics MODEL_ID --calendar calendar.json --output economics.json
 .\.venv\Scripts\python.exe scripts/learner_market_replay.py --database RESEARCH_COPY.db --spec spec.json --output-dir NEW_RUN_DIRECTORY
 ```
 
@@ -160,6 +158,11 @@ Reports are content-hashed and exclusively created; an older file cannot be over
 are descriptive simulations, not calibrated spread/impact/capacity estimates. Daily marks miss
 intraday drawdowns. The SPY baseline uses matched holding windows, not continuous buy-and-hold
 through cash gaps. No statistical qualification or promotion path is granted by these results.
+
+The [September 21 recovery handoff](learner-recovery-2026-09-21.md) records actual market replay
+results, runtime state, preserved attempts, implementation commits and verification scope.
+
+## Not yet proven or implemented
 
 No predictive edge on verified market data, protected holdout result, after-cost portfolio
 performance qualifying a model, genuine forward shadow/PAPER result or positive expectancy is established.
