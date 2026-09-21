@@ -2020,7 +2020,8 @@ class HypothesisRegistry:
         )
 
     def blocking_protected_windows(
-        self, dataset: str, start: date, end: date, *, now: date
+        self, dataset: str, start: date, end: date, *, now: date,
+        include_forward_paper: bool = False,
     ) -> tuple[RowMapping, ...]:
         """Live or consumed protected claims over an observation range, across known aliases.
 
@@ -2033,7 +2034,10 @@ class HypothesisRegistry:
             row
             for alias in aliases
             for row in self._blocking(alias, start, end, now=now)
-            if row["role"] == DataRole.PROTECTED_EVALUATION.value
+            if row["role"] in (
+                {DataRole.PROTECTED_EVALUATION.value, DataRole.FORWARD_PAPER.value}
+                if include_forward_paper else {DataRole.PROTECTED_EVALUATION.value}
+            )
         )
         return tuple(
             sorted(

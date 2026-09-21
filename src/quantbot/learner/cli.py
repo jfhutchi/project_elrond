@@ -36,6 +36,15 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--database", required=True, help="existing research store")
     commands = parser.add_subparsers(dest="learner_command", required=True)
     commands.add_parser("status")
+    stored = commands.add_parser("dataset-from-store")
+    stored.add_argument("--spec", required=True, type=Path)
+    stored_resolution = commands.add_parser("resolve-from-store")
+    stored_resolution.add_argument("model_id")
+    stored_resolution.add_argument("--calendar", required=True, type=Path)
+    economics = commands.add_parser("economics")
+    economics.add_argument("model_id")
+    economics.add_argument("--calendar", required=True, type=Path)
+    economics.add_argument("--output", required=True, type=Path)
     dataset = commands.add_parser("dataset")
     dataset.add_argument("--input", required=True, type=Path)
     for split in ("train", "validation", "holdout"):
@@ -87,6 +96,28 @@ def _run(args: argparse.Namespace, database: Database) -> dict[str, object]:
     action = args.learner_command
     if action == "status":
         return service.status(database)
+    if action == "dataset-from-store":
+        from quantbot.learner.store import LIMITATIONS, StoreReplaySpec, build_from_store
+
+        spec = StoreReplaySpec.model_validate_json(args.spec.read_text(encoding="utf-8-sig"))
+        stored = build_from_store(database, spec)
+        return {"ok": True, "dataset_id": stored.identity, "rows": len(stored.rows),
+                "source_evidence": "LOCAL_DECLARED_HISTORICAL_STORE_REPLAY",
+                "limitations": LIMITATIONS}
+    if action in ("resolve-from-store", "economics"):
+        from quantbot.learner.economics import evaluate_store, write_report
+        from quantbot.learner.store import resolve_from_store
+
+        calendar = XNYSSessionSequence.model_validate_json(
+            args.calendar.read_text(encoding="utf-8-sig"))
+        if action == "resolve-from-store":
+            return {"ok": True, "resolved": resolve_from_store(database, args.model_id, calendar)}
+        if args.output.exists():
+            raise FileExistsError("economic report output already exists")
+        report = evaluate_store(database, args.model_id, calendar)
+        write_report(args.output, report)
+        return {"ok": True, "output": str(args.output), "model_id": args.model_id,
+                "period_count": report["period_count"], "promotion": "NONE"}
     if action == "dataset":
         bundle = _bundle(args.input)
         windows = [

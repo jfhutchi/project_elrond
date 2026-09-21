@@ -38,9 +38,11 @@ def guard_range(session: Session, dataset: str, start: date, end: date) -> None:
     grant no access or fresh-evidence claim; protected measurement still needs ExperimentRunner.
     """
     if HypothesisRegistry(session).blocking_protected_windows(
-        dataset, start, end, now=_utcnow().date()
+        dataset, start, end, now=_utcnow().date(), include_forward_paper=True
     ):
-        raise ValueError("protected range requires the existing ExperimentRunner access path")
+        raise ValueError(
+            "protected or forward-paper range requires the existing ExperimentRunner access path"
+        )
     # Intentionally stronger than an expiring reservation: no ordinary learner command unseals
     # a declared holdout or consumes it for debugging. These are manifests, not a second issuer.
     for identity in session.execute(select(learner_datasets.c.dataset_id)).scalars():

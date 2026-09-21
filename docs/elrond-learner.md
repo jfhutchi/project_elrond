@@ -110,10 +110,61 @@ It is not a market experiment and its returns must not enter research confirmati
 
 ## Not yet proven or implemented
 
+### Stored market replay and portfolio economics (September 21 extension)
+
+`dataset-from-store --spec spec.json` reads the existing `alpaca:iex:all:1day` bar cache.
+Use an explicit **dedicated research copy** of the operational store, preserving its protection
+registry and trial history, then migrate only that copy. Never migrate the active runtime for a
+learner experiment. Keep the original consistent backup untouched.
+
+`StoreReplaySpec` defines the complete XNYS `sessions`, sorted `symbols`, and six exact-session
+split dates (`train_start`, `train_end`, `validation_start`, `validation_end`, `holdout_start`,
+`holdout_end`). Obtain the calendar through the existing Alpaca PAPER calendar provider; do not
+infer exchange sessions from missing prices. The first training date needs 60 prior sessions.
+The SQL reader checks protected and reserved/consumed forward-paper windows, including source
+aliases, before reading prices. Its bounded query excludes holdout dates. Missing panels,
+conflicting provenance and calendar mismatches fail closed. Source hashes bind the entire
+eligible panel, roster, calendar and splits; resolution/economics recheck that original vintage.
+
+These bars lack historical receipt timestamps and membership vintages. Their close-time
+availability is a **historical replay assumption**. The fixed ETF roster, IEX single-venue data
+and current all-adjusted vintage do not establish survivorship-free or authenticated point-in-time
+evidence. All inputs remain LOCAL_DECLARED. Later holdout dates are a manifest, not a declaration
+that previously explored dates have become untouched. No genuine SHADOW evidence is issued.
+
+```powershell
+.\.venv\Scripts\python.exe -m quantbot learner --database RESEARCH_COPY.db dataset-from-store --spec spec.json
+.\.venv\Scripts\python.exe -m quantbot learner --database RESEARCH_COPY.db resolve-from-store MODEL_ID --calendar calendar.json
+.\.venv\Scripts\python.exe -m quantbot learner --database RESEARCH_COPY.db economics MODEL_ID --calendar calendar.json --output economics.json
+.\.venv\Scripts\python.exe scripts/learner_market_replay.py --database RESEARCH_COPY.db --spec spec.json --output-dir NEW_RUN_DIRECTORY
+```
+
+The orchestration script fits exactly mean, ridge (alpha=1, seed=0), and one identical-config
+immutable ridge successor. Each fit is durably counted before fitting. A successor that has the
+same coefficients establishes reproducibility, not improvement. Failed runs retain their output
+directory, per-step log and attempts; retry individual CLI steps instead of discarding evidence.
+Retain this research store and its trial records when continuing work; an isolated copy is not
+automatic synchronization of research accounting into another store.
+
+Economics uses a fixed long-only equal-weight top quintile with all cutoff ties included. Constant
+scores select the entire roster. Starting with the first validation cohort, it uses a deterministic
+nonoverlapping subset: entry at the next session open, predetermined exit at the fifth session
+close, full liquidation between holdings, fractional units, no leverage and zero cash interest.
+The existing research baseline of 5 bps adverse slippage on **each side** and zero commission is
+applied equally to the learner, all-universe and SPY portfolios on matching dates. All declared
+validation predictions and outcomes must exist; interrupted replay cannot report full coverage.
+
+Reports include predictive rank IC, net and SPY-excess return, daily-close drawdown, traded
+notional relative to initial capital, cost, exposure, daily equity and exact execution-price inputs.
+Reports are content-hashed and exclusively created; an older file cannot be overwritten. Returns
+are descriptive simulations, not calibrated spread/impact/capacity estimates. Daily marks miss
+intraday drawdowns. The SPY baseline uses matched holding windows, not continuous buy-and-hold
+through cash gaps. No statistical qualification or promotion path is granted by these results.
+
 No predictive edge on verified market data, protected holdout result, after-cost portfolio
-performance, genuine forward shadow/PAPER result or positive expectancy is established.
+performance qualifying a model, genuine forward shadow/PAPER result or positive expectancy is established.
 Production point-in-time universe/provider ingestion, authoritative outcome sourcing, walk-forward
-retraining policies, protected challenger qualification, portfolio economics and strategy
+retraining policies, protected challenger qualification, calibrated portfolio economics and strategy
 integration remain outstanding. Validation comparison never promotes a model.
 
 The [implementation and verification report](elrond-learner-issue-242-update.md) records the
