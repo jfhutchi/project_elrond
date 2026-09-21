@@ -12,11 +12,12 @@ from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from quantbot.research.manifest import content_id, looks_like_credential
 
 Hash = Annotated[str, StringConstraints(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
+Count = Annotated[int, Field(strict=True, ge=0)]
 
 
 def _timestamp(value: str) -> str:
@@ -72,6 +73,36 @@ class PerformanceRow(PanelModel):
     _valid_times = field_validator("start", "end")(_timestamp)
 
 
+class IntradayPerformance(PanelModel):
+    model_id: Hash
+    matched_periods: Count
+    simulated_net_return: float | None
+    simulated_max_drawdown: float | None
+    rank_ic: float | None
+    mse: float | None
+
+
+class IntradayPanel(PanelModel):
+    mode: Literal['INTRADAY_30_MINUTE']
+    captured_at: str
+    captured_bars: Count
+    observations_this_run: Count
+    predictions_this_run: Count
+    outcomes_this_run: Count
+    trained_this_run: Count
+    observation_cohorts: Count
+    resolved_cohorts: Count
+    prediction_cohorts: Count
+    model_count: Count
+    training_status: Literal[
+        'TRAINING_DATA_WARMUP', 'PROTECTED_TRAINING_WINDOW', 'WAITING_FOR_NEW_TRAINING_OUTCOMES',
+        'TRAINING_ATTEMPT_REQUIRES_REVIEW', 'CHALLENGER_TRAINED_NOT_PROMOTED',
+    ]
+    performance: tuple[IntradayPerformance, ...] = ()
+
+    _capture_time = field_validator('captured_at')(_timestamp)
+
+
 class LearnerPanel(PanelModel):
     status: str = "NOT_CONFIGURED"
     reason: str = "The console has no learner results directory configured."
@@ -94,6 +125,7 @@ class LearnerPanel(PanelModel):
     interval_minutes: int | None = None
     resolved_this_run: int | None = None
     worker_blockers: tuple[str, ...] = ()
+    intraday: IntradayPanel | None = None
 
     @field_validator("holdout_start", "holdout_end")
     @classmethod
@@ -148,8 +180,17 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             raise ValueError('invalid worker receipt')
         labels = {
             'FORWARD_PRODUCER_MISSING': 'New-market forecast producer is not implemented.',
-            'PAPER_PROMOTION_REQUIRED': 'The learner has not qualified for PAPER trading.',
+            'PAPER_PROMOTION_REQUIRED': (
+                'This learner model has no approved PAPER observation deployment.'),
+            'PAPER_EXECUTION_NOT_CONFIGURED': (
+                'The learner PAPER execution adapter is not deployed.'),
             'OUTCOME_PROCESSING_FAILED': 'Outcome processing failed; inspect the worker.',
+            'PROTECTED_FEATURE_WINDOW': (
+                'The feature or target window overlaps protected research dates.'),
+            'OUTSIDE_FORECAST_SESSION': (
+                'Waiting for a market session with time to finish the 30-minute horizon.'),
+            'INCOMPLETE_OR_STALE_MINUTE_DATA': (
+                'Fresh, complete minute bars are not available for the full roster.'),
         }
         blockers = tuple(labels[key] for key in receipt['blockers'])
         timestamp = _timestamp(receipt['finished_at'])
@@ -164,7 +205,15 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             'SCHEDULED_BLOCKED': 'Scheduled every 10 minutes. The latest outcome check completed; '
                                  'new forecasts and learner trading remain blocked.',
         }
-        return dict(status=status, reason=reasons[status], last_worker_at=timestamp,
+        intraday = None
+        if 'intraday' in receipt:
+            intraday = IntradayPanel(**{k: receipt['intraday'][k]
+                                       for k in IntradayPanel.model_fields})
+        return dict(status=status, reason=(
+                    'The intraday worker completed its latest data and learning pass. '
+                    'See the current forecast and PAPER entry blockers below.'
+                    if intraday is not None and status == 'SCHEDULED_BLOCKED' else reasons[status]),
+                    intraday=intraday, last_worker_at=timestamp,
                     interval_minutes=10, resolved_this_run=receipt['resolved_this_run'],
                     worker_blockers=blockers)
     except (OSError, ValueError, KeyError, TypeError):

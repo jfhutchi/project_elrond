@@ -16,6 +16,39 @@
   <p class="quiet">No trading authority or model promotion is granted by this page.</p>
 </div>
 
+{% if learner.intraday %}
+{% set intraday = learner.intraday %}
+<h2>Intraday learning</h2>
+<p class="sub">Fresh one-minute IEX bars · forecast pass every 10 minutes · 30-minute target.
+  Intraday results are separate from the daily model below.</p>
+<div class="grid">
+  {% for label, value in [('Bars in latest capture', intraday.captured_bars),
+      ('Recorded observation cohorts', intraday.observation_cohorts),
+      ('Model forecast cohorts', intraday.prediction_cohorts),
+      ('Matured observation cohorts', intraday.resolved_cohorts),
+      ('Saved intraday models', intraday.model_count)] %}
+  <div class="card"><div class="k">{{ label }}</div><div class="v">{{ value }}</div></div>
+  {% endfor %}
+</div>
+<p class="quiet">Data received (UTC): {{ intraday.captured_at }} · This pass:
+  {{ intraday.predictions_this_run }} predictions, {{ intraday.outcomes_this_run }} resolved outcomes,
+  {{ intraday.trained_this_run }} fitted models.</p>
+<p>{{ intraday.training_status.replace('_', ' ').capitalize() }}</p>
+<p class="quiet">Observations collected before a model exists are training examples, not forecasts.
+  Retraining requires at least 20 training sessions and 5 validation sessions, new matured outcomes,
+  and a four-hour cooldown. New models remain challengers; they inherit no trading qualification.</p>
+{% if intraday.performance %}
+<div class="scroll"><table><tr><th>Model</th><th>Matched periods</th><th>Simulated net return</th><th>Rank IC</th></tr>
+{% for row in intraday.performance %}<tr><td class="mono">{{ row.model_id[:12] }}</td>
+<td>{{ row.matched_periods }}</td><td>{{ '%+.2f%%'|format(row.simulated_net_return * 100) if row.simulated_net_return is not none else 'Pending' }}</td>
+<td>{{ '%.3f'|format(row.rank_ic) if row.rank_ic is not none else 'Not defined' }}</td></tr>{% endfor %}
+</table></div>
+<p class="quiet">Local prospective forecasts; simulated next-minute entry after recording,
+  30-minute target close, 5 bps slippage each side, zero commissions. Matched nonoverlapping
+  windows only. These are not paper fills or proof of profitability.</p>
+{% else %}<p class="absent">No scored intraday model forecasts yet. Performance is unknown.</p>{% endif %}
+{% endif %}
+
 <h2>Forecast evidence</h2>
 <div class="grid">
 {% for label, value, note in [
@@ -86,8 +119,10 @@ does not establish profitability. An identical successor demonstrates reproducib
 {% if learner.report_errors %}<ul class="attention">{% for error in learner.report_errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
 
 <h2>What still blocks forward measurement</h2>
-<p class="quiet">The continuous forward-data loop is not implemented. Provider receipt times and universe membership
+{% if not learner.intraday %}<p class="quiet">The continuous forward-data loop is not configured. Provider receipt times and universe membership
 need reliable provenance. Historical inputs currently carry local declarations, not authenticated point-in-time evidence.</p>
+{% else %}<p class="quiet">Intraday capture records actual provider receipt times. The fixed present-day ETF roster and IEX coverage
+  remain limitations; local prospective predictions do not automatically become qualified shadow evidence.</p>{% endif %}
 {% if learner.holdout_start and learner.holdout_end %}
 <p class="quiet">Preserved holdout: {{ learner.holdout_start }} through {{ learner.holdout_end }}.
 The 60-session feature lookback must also avoid protected dates; expiry alone does not make them usable.</p>

@@ -214,3 +214,34 @@ def test_other_execution_contract_is_not_presented_as_next_open(tmp_path):
     payload['report_hash'] = content_id(payload['report'])
     path.write_text(json.dumps(payload))
     assert not read_learner_panel(root).performance
+
+
+def test_intraday_worker_dashboard_and_invalid_counters(tmp_path):
+    root = fixture_store(tmp_path/'learner')
+    deployment = json.loads((root/'deployment.json').read_text())
+    deployment.update(scheduled=True, interval_minutes=10)
+    (root/'deployment.json').write_text(json.dumps(deployment))
+    intraday = dict(mode='INTRADAY_30_MINUTE', captured_at=datetime.now(UTC).isoformat(),
+                    captured_bars=999, observations_this_run=2, predictions_this_run=4,
+                    outcomes_this_run=2, trained_this_run=0, observation_cohorts=12,
+                    resolved_cohorts=9, prediction_cohorts=24, model_count=2,
+                    training_status='WAITING_FOR_NEW_TRAINING_OUTCOMES', performance=[
+                        dict(model_id='b'*64, matched_periods=1, simulated_net_return=-.001,
+                             simulated_max_drawdown=.001, rank_ic=None, mse=.0001)])
+    receipt = dict(code_commit='a'*40, status='BLOCKED', finished_at=datetime.now(UTC).isoformat(),
+                   resolved_this_run=0, trading_enabled=False, promotion='NONE',
+                   blockers=['PAPER_EXECUTION_NOT_CONFIGURED'], intraday=intraday)
+    def save():
+        (root/'worker.json').write_text(json.dumps(receipt))
+        return read_learner_panel(root)
+    assert save().intraday.predictions_this_run == 4
+    with Database.create(tmp_path/'operator.db') as database:
+        with TestClient(create_app(database, learner_directory=root)) as client:
+            page = client.get('/learner')
+            assert page.status_code == 200
+            assert '999' in page.text
+            assert 'not paper fills' in page.text.lower()
+    for value in (-1, True, 'sk-SYNTHETICabcdefghijklmnop'):
+        intraday['captured_bars'] = value
+        assert save().status == 'WORKER_UNVERIFIED'
+        assert 'SYNTHETIC' not in save().model_dump_json()
