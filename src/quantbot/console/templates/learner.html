@@ -49,7 +49,7 @@
 {% else %}<p class="absent">No scored intraday model forecasts yet. Performance is unknown.</p>{% endif %}
 {% endif %}
 
-<h2>Forecast evidence</h2>
+<h2>Daily learner forecast evidence</h2>
 <div class="grid">
 {% for label, value, note in [
   ('Historical replay', learner.historical_predictions, 'Recorded after these market outcomes were available'),
@@ -125,13 +125,14 @@ need reliable provenance. Historical inputs currently carry local declarations, 
   remain limitations; local prospective predictions do not automatically become qualified shadow evidence.</p>{% endif %}
 {% if learner.holdout_start and learner.holdout_end %}
 <p class="quiet">Preserved holdout: {{ learner.holdout_start }} through {{ learner.holdout_end }}.
-The 60-session feature lookback must also avoid protected dates; expiry alone does not make them usable.</p>
+The daily learner's 60-session lookback must also avoid protected dates. The intraday learner uses
+31 completed minutes from the same session; both preserve this holdout.</p>
 {% endif %}
 <p class="quiet">These reports use a fixed ETF roster and adjusted IEX data, next-open entry, fifth-close exit,
 full liquidation and fractional units. Costs are assumptions; daily marks miss intraday drawdowns.
 Correlated securities and overlapping forecast labels are not independent evidence.</p>
 
-<h2>Saved model versions</h2>
+<h2>Saved daily model versions</h2>
 {% if learner.models %}<div class="scroll"><table>
   <tr><th>Family / version</th><th>Model ID</th><th>Created (UTC)</th><th>Training commit</th></tr>
   {% for model in learner.models %}<tr><td>{{ model.family }} / {{ model.version }}</td>
