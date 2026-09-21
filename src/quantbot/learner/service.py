@@ -210,12 +210,15 @@ def _issue(
                     raise ValueError("shadow target is in the past; use historical replay")
                 if now > feature.as_of + timedelta(minutes=5):
                     raise ValueError("prospective issuance deadline is five minutes after cutoff")
-            guard_range(
-                session,
-                dataset.train_window.dataset,
-                feature.input_start_at.date(),
-                feature.target_at.date(),
-            )
+        # Every interval contains the same decision cutoff, so their union is this exact
+        # range. Check it once, preserving all exclusions without decoding every dataset
+        # again for every instrument in a broad cross-section.
+        guard_range(
+            session,
+            dataset.train_window.dataset,
+            min(feature.input_start_at.date() for feature in checked),
+            max(feature.target_at.date() for feature in checked),
+        )
         ordered = tuple(sorted(checked, key=lambda f: f.symbol))
         scores = predict(model.artifact, tuple(f.values for f in ordered))
         cohort = content_id(

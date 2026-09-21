@@ -54,3 +54,10 @@ verification is deliberately more conservative than checking target closes alone
 Before the first implementation commit: 197 focused learner, registry, configuration and failure
 tests passed; Ruff and Linux/win32 mypy targets passed across 244 source/helper files.
 The reviewer did not access the operational database or any external service.
+
+The first real 22-ETF replay exposed repeated full-dataset decoding in `_issue`: identical
+protected-range checks ran once per symbol. Ruling: check the union once per cohort, because
+every input interval contains the same decision cutoff; the union preserves all exclusions.
+The interrupted research run retains 572 committed forecasts and its one mean-model fit attempt.
+Resume that model through the idempotent CLI, then train the two remaining versions; do not
+restart the experiment in a fresh store. Post-change learner tests: 105 passed.
