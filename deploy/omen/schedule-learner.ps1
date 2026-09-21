@@ -4,6 +4,7 @@ param(
     [Parameter(Mandatory = $true)][string] $Directory,
     [Parameter(Mandatory = $true)][string] $Commit,
     [Parameter(Mandatory = $true)][string] $ServiceHost,
+    [string] $EnvironmentFile,
     [string] $TaskUser = $env:USERNAME
 )
 $ErrorActionPreference = 'Stop'
@@ -25,6 +26,13 @@ $Log = Join-Path $Directory 'logs\learner-launcher.log'
 $Arguments = '"' + $Log + '" -NoProfile -NonInteractive -WindowStyle Hidden ' +
     '-ExecutionPolicy Bypass -File "' + $Wrapper + '" -Repository "' + $Repository +
     '" -Directory "' + $Directory + '" -Database "' + $Database + '" -Commit ' + $Commit
+if ($EnvironmentFile) {
+    if (-not [IO.Path]::IsPathRooted($EnvironmentFile) -or $EnvironmentFile.Contains('"') -or
+        -not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
+        throw 'LEARNER_ENVIRONMENT_FILE_INVALID'
+    }
+    $Arguments += ' -EnvironmentFile "' + $EnvironmentFile + '"'
+}
 $Action = New-ScheduledTaskAction -Execute $ServiceHost -Argument $Arguments -WorkingDirectory $Directory
 $Trigger = New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(10)) `
     -RepetitionInterval ([TimeSpan]::FromMinutes(10))
@@ -36,5 +44,5 @@ $Principal = New-ScheduledTaskPrincipal -UserId $TaskUser -LogonType Interactive
 Register-ScheduledTask -TaskName 'Elrond Learner' -Action $Action -Trigger @($Trigger, $Logon) `
     -Settings $Settings -Principal $Principal -Description (
         'Managed by project_elrond deploy/omen/schedule-learner.ps1. ' +
-        'Historical outcome check every 10 minutes; no forecast or trading authority. Commit=' + $Commit
+        'Data, forecasts and outcome learning every 10 minutes; PAPER entry remains gated. Commit=' + $Commit
     ) | Out-Null

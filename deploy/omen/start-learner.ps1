@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory = $true)][string] $Repository,
     [Parameter(Mandatory = $true)][string] $Directory,
     [Parameter(Mandatory = $true)][string] $Commit,
-    [Parameter(Mandatory = $true)][string] $Database
+    [Parameter(Mandatory = $true)][string] $Database,
+    [string] $EnvironmentFile
 )
 
 $ErrorActionPreference = 'Stop'
@@ -71,6 +72,14 @@ $ServiceJob = New-ElrondProcessJob
 # wraps native stderr as error records under Stop, even when the child is behaving correctly.
 $ErrorActionPreference = 'Continue'
 $global:LASTEXITCODE = $null
-& $Python -m quantbot.learner.worker --directory $Directory --commit $Commit
+$WorkerArguments = @('-m', 'quantbot.learner.worker', '--directory', $Directory, '--commit', $Commit)
+if ($EnvironmentFile) {
+    if (-not [System.IO.Path]::IsPathRooted($EnvironmentFile) -or
+        -not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {
+        throw 'LEARNER_ENVIRONMENT_FILE_INVALID'
+    }
+    $WorkerArguments += @('--env-file', $EnvironmentFile)
+}
+& $Python @WorkerArguments
 if ($null -eq $LASTEXITCODE) { throw 'SERVICE_WRAPPER_NO_EXIT_CODE' }
 exit $LASTEXITCODE

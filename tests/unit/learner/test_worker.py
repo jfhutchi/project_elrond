@@ -116,3 +116,20 @@ def test_worker_checks_evaluation_integrity_without_reauditing_inputs(tmp_path, 
         session.execute(update(learner_evaluations).values(document_hash='f'*64))
     assert run_cycle(root, code_commit='a'*40)['status'] == 'ERROR'
     database.close()
+
+
+def test_configured_worker_runs_forward_cycle_and_reports_its_blockers(tmp_path, monkeypatch):
+    from quantbot.config import Settings
+    root, database = worker_store(tmp_path)
+    (root/'forward.json').write_text('{}')
+    seen = []
+    async def forward_cycle(directory, database, settings, *, code_commit):
+        seen.append((directory, code_commit))
+        return dict(blockers=['PAPER_PROMOTION_REQUIRED'], captured_bars=99)
+    monkeypatch.setattr('quantbot.learner.forward.run_forward_cycle', forward_cycle)
+    result = run_cycle(root, code_commit='a'*40, settings=Settings())
+    assert seen == [(root.resolve(), 'a'*40)]
+    assert result['intraday']['captured_bars'] == 99
+    assert 'FORWARD_PRODUCER_MISSING' not in result['blockers']
+    assert result['trading_enabled'] is False
+    database.close()

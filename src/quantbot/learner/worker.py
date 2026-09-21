@@ -1,7 +1,8 @@
-"""Bounded scheduled outcome processing; no forecast, fit, broker or promotion authority."""
+"""Ten-minute data, forecast, outcome and bounded challenger worker; no promotion authority."""
 from __future__ import annotations
 
 import argparse
+import asyncio
 import hashlib
 import json
 import os
@@ -13,6 +14,7 @@ from uuid import uuid4
 
 from sqlalchemy import select
 
+from quantbot.config import Settings
 from quantbot.learner import service
 from quantbot.learner.models import Evaluation, EvaluationClass
 from quantbot.learner.store import resolve_from_store
@@ -32,7 +34,9 @@ def _publish(root: Path, receipt: dict[str, Any], *, final: bool) -> None:
             output.write(document + '\n')
 
 
-def run_cycle(directory: Path, *, code_commit: str) -> dict[str, Any]:
+def run_cycle(
+    directory: Path, *, code_commit: str, settings: Settings | None = None,
+) -> dict[str, Any]:
     root = directory.resolve()
     path = root / 'state' / 'learner.db'
     if not path.is_file():
@@ -98,6 +102,13 @@ def run_cycle(directory: Path, *, code_commit: str) -> dict[str, Any]:
                            for e in evaluations):
                     service.evaluate(database, model_id, EvaluationClass.HISTORICAL_REPLAY)
                     receipt['evaluated_this_run'] += 1
+            if (root/'forward.json').is_file():
+                from quantbot.learner.forward import run_forward_cycle
+                if settings is None:
+                    raise ValueError('forward data capture requires explicit PAPER settings')
+                receipt['intraday'] = asyncio.run(run_forward_cycle(
+                    root, database, settings, code_commit=code_commit))
+                receipt['blockers'] = receipt['intraday']['blockers']
             receipt['status'] = 'BLOCKED'
         except Exception:
             # Provider or validation exceptions may include secrets; only publish a fixed code.
@@ -115,6 +126,9 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--directory', required=True, type=Path)
     parser.add_argument('--commit', required=True)
+    parser.add_argument('--env-file', type=Path)
+    parser.add_argument('--bootstrap-start', type=lambda s: datetime.fromisoformat(s).date())
+    parser.add_argument('--bootstrap-end', type=lambda s: datetime.fromisoformat(s).date())
     args = parser.parse_args()
     repository = Path(__file__).resolve().parents[3]
     try:
@@ -124,7 +138,23 @@ def main() -> int:
                                         text=True, timeout=30).strip()
         if commit != args.commit or dirty:
             raise ValueError('runtime checkout does not match clean pin')
-        result = run_cycle(args.directory, code_commit=commit)
+        if args.env_file is None:
+            result = run_cycle(args.directory, code_commit=commit)
+        else:
+            from quantbot.operations.service import isolated_application_environment
+            with isolated_application_environment(args.env_file):
+                settings = Settings()
+                if args.bootstrap_start or args.bootstrap_end:
+                    from quantbot.learner.forward import bootstrap_history
+                    if not args.bootstrap_start or not args.bootstrap_end:
+                        raise ValueError('both bootstrap bounds required')
+                    with SingleWriterLock(args.directory/'state'/'learner-worker.lock'):
+                        with Database(args.directory/'state'/'learner.db') as database:
+                            result = asyncio.run(bootstrap_history(
+                                args.directory, database, settings, code_commit=commit,
+                                start=args.bootstrap_start, end=args.bootstrap_end))
+                else:
+                    result = run_cycle(args.directory, code_commit=commit, settings=settings)
     except Exception:
         print('LEARNER_WORKER_START_FAILED')
         return 1
