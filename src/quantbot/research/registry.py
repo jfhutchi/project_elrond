@@ -76,6 +76,7 @@ from quantbot.research.hypothesis_graph import (
     HypothesisLineage,
     validate_lineage,
 )
+from quantbot.research.intraday_accounting import verified_intraday_attempt_ids
 from quantbot.research.manifest import canonical_result_json
 from quantbot.research.power import (
     EffectSpecification,
@@ -1997,7 +1998,7 @@ class HypothesisRegistry:
     def _cumulative_trials(self, search_cardinality: int) -> int:
         """Everything this project has ever spent, plus what the incoming draft spends.
 
-        A later registration may cite one learner row again through ``search_cardinality``. That
+        A later registration may cite a learner or intraday row through ``search_cardinality``. That
         deliberately overcounts the selected candidate rather than discounting or deduplicating a
         real attempt from the permanent learner ledger; no caller may lower historical burden.
         """
@@ -2016,6 +2017,7 @@ class HypothesisRegistry:
             + int(artifact_spend)
             + self.campaign_trials_spent()
             + self.learner_trials_spent()
+            + len(verified_intraday_attempt_ids(self._session))
             + search_cardinality
         )
 
