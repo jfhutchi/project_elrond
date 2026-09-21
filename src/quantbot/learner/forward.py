@@ -551,6 +551,7 @@ async def _collect_and_process(
     ]
     start = max(min(pending_days, default=now.date()), now.date() - timedelta(days=7))
     recovered = 0
+    recovery_fits = 0
     if pending_days and min(pending_days) < start:
         # One oldest day per pass bounds outage recovery without losing genuine forecasts.
         oldest = min(pending_days)
@@ -566,10 +567,14 @@ async def _collect_and_process(
             issue_forecasts=False,
         )
         recovered = recovery["outcomes_this_run"]
+        recovery_fits = recovery["trained_this_run"]
     snapshot = await collect_snapshot(
         directory, config.symbols, start, now.date(), settings, timeframe="1Min"
     )
     result = process_snapshot(directory, database, snapshot, code_commit=code_commit, config=config)
     result["outcomes_this_run"] += recovered
+    result["trained_this_run"] += recovery_fits
+    if recovery_fits and result["training_status"] == "WAITING_FOR_NEW_TRAINING_OUTCOMES":
+        result["training_status"] = "CHALLENGER_TRAINED_NOT_PROMOTED"
     result["recovered_outcomes"] = recovered
     return result

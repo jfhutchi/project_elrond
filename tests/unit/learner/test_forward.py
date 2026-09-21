@@ -217,7 +217,11 @@ async def test_long_outage_fetches_oldest_pending_day_without_gap_predictions(
 
         def process(*args, issue_forecasts=True, **kwargs):
             forecast_permissions.append(issue_forecasts)
-            return dict(outcomes_this_run=1)
+            return dict(
+                outcomes_this_run=1,
+                trained_this_run=0 if issue_forecasts else 2,
+                training_status="WAITING_FOR_NEW_TRAINING_OUTCOMES",
+            )
 
         monkeypatch.setattr(forward, "collect_snapshot", collect)
         monkeypatch.setattr(forward, "process_snapshot", process)
@@ -232,3 +236,5 @@ async def test_long_outage_fetches_oldest_pending_day_without_gap_predictions(
         assert requests[1] == ((now - timedelta(days=7)).date(), now.date())
         assert forecast_permissions == [False, True]
         assert result["outcomes_this_run"] == 2
+        assert result["trained_this_run"] == 2
+        assert result["training_status"] == "CHALLENGER_TRAINED_NOT_PROMOTED"
