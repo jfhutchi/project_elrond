@@ -3,13 +3,18 @@ import json
 from datetime import UTC, datetime
 
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from quantbot.learner import service
 from quantbot.learner.store import StoreReplaySpec, build_from_store
 from quantbot.learner.worker import run_cycle
 from quantbot.storage import AlreadyLockedError, SingleWriterLock
-from quantbot.storage.schema import learner_outcomes, learner_predictions, search_runs
+from quantbot.storage.schema import (
+    learner_evaluations,
+    learner_outcomes,
+    learner_predictions,
+    search_runs,
+)
 from tests.unit.learner.test_store import stored
 
 
@@ -96,4 +101,18 @@ def test_worker_retries_evaluation_after_resolution_commits(tmp_path, monkeypatc
     assert second['resolved_this_run'] == 0
     assert second['evaluated_this_run'] == 1
     assert run_cycle(root, code_commit='a'*40)['evaluated_this_run'] == 0
+    database.close()
+
+
+def test_worker_checks_evaluation_integrity_without_reauditing_inputs(tmp_path, monkeypatch):
+    root, database = worker_store(tmp_path)
+    assert run_cycle(root, code_commit='a'*40)['status'] == 'BLOCKED'
+    from quantbot.learner.repository import LearnerRepository
+    def fail(*args, **kwargs):
+        raise AssertionError('no full input audit for already evaluated IDs')
+    monkeypatch.setattr(LearnerRepository, '_require_evaluation_inputs', fail)
+    assert run_cycle(root, code_commit='a'*40)['status'] == 'BLOCKED'
+    with database.transaction() as session:
+        session.execute(update(learner_evaluations).values(document_hash='f'*64))
+    assert run_cycle(root, code_commit='a'*40)['status'] == 'ERROR'
     database.close()

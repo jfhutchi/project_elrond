@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import subprocess
@@ -13,11 +14,10 @@ from uuid import uuid4
 from sqlalchemy import select
 
 from quantbot.learner import service
-from quantbot.learner.models import EvaluationClass
-from quantbot.learner.repository import LearnerRepository
+from quantbot.learner.models import Evaluation, EvaluationClass
 from quantbot.learner.store import resolve_from_store
 from quantbot.storage import Database, SingleWriterLock
-from quantbot.storage.schema import learner_outcomes, learner_predictions
+from quantbot.storage.schema import learner_evaluations, learner_outcomes, learner_predictions
 from quantbot.strategy import XNYSSessionSequence
 
 
@@ -64,7 +64,21 @@ def run_cycle(directory: Path, *, code_commit: str) -> dict[str, Any]:
             # Resolve and evaluate have separate transactions. Reconcile exact evidence sets
             # every tick so a crash after resolution cannot permanently skip evaluation.
             with database.transaction() as session:
-                evaluations = LearnerRepository(session).list_evaluations()
+                evaluations = []
+                # This is queue reconciliation, not an audit or a performance claim. Verify
+                # persisted receipt integrity without replaying all its raw inputs each tick.
+                # New evaluations still use service.evaluate and its full input validation.
+                for row in session.execute(select(learner_evaluations)).mappings():
+                    document = row['document_json']
+                    if hashlib.sha256(document.encode('utf-8')).hexdigest() != row['document_hash']:
+                        raise ValueError('evaluation receipt integrity failure')
+                    evaluation = Evaluation.model_validate_json(document)
+                    if (evaluation.evaluation_id != row['evaluation_id']
+                            or evaluation.model_id != row['model_id']
+                            or evaluation.evaluation_class.value != row['evaluation_class']
+                            or evaluation.created_at != datetime.fromisoformat(row['created_at'])):
+                        raise ValueError('evaluation receipt identity failure')
+                    evaluations.append(evaluation)
                 rows = session.execute(select(
                     learner_predictions.c.model_id, learner_predictions.c.prediction_id,
                     learner_outcomes.c.prediction_id.label('resolved_id'),
