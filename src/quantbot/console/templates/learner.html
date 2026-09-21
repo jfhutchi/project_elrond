@@ -7,6 +7,12 @@
 <div class="card" style="border-left:3px solid var(--warn)">
   <span class="pill pill--warn">{{ learner.status.replace('_', ' ').capitalize() }}</span>
   <p>{{ learner.reason }}</p>
+  {% if learner.last_worker_at %}
+  <p class="quiet">Last completed check (UTC): {{ learner.last_worker_at }} ·
+    Schedule: every {{ learner.interval_minutes }} minutes ·
+    Outcomes resolved in that check: {{ learner.resolved_this_run }}</p>
+  <ul>{% for blocker in learner.worker_blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
+  {% endif %}
   <p class="quiet">No trading authority or model promotion is granted by this page.</p>
 </div>
 

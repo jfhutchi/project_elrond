@@ -8,7 +8,7 @@ from __future__ import annotations
 import hashlib
 import json
 import sqlite3
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
@@ -90,6 +90,10 @@ class LearnerPanel(PanelModel):
     performance: tuple[PerformanceRow, ...] = ()
     report_errors: tuple[str, ...] = ()
     promotion: str = "NONE"
+    last_worker_at: str | None = None
+    interval_minutes: int | None = None
+    resolved_this_run: int | None = None
+    worker_blockers: tuple[str, ...] = ()
 
     @field_validator("holdout_start", "holdout_end")
     @classmethod
@@ -127,6 +131,44 @@ def _json(path: Path) -> dict[str, Any]:
     if not isinstance(result, dict):
         raise ValueError("expected an object")
     return result
+
+
+def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
+    """A fresh completed receipt proves a check ran, never continuous trading."""
+    if deployment.get('scheduled') is not True:
+        return {}
+    try:
+        receipt = _json(root / 'worker.json')
+        if (receipt['code_commit'] != deployment['learner_commit']
+                or receipt['trading_enabled'] is not False or receipt['promotion'] != 'NONE'
+                or deployment['interval_minutes'] != 10
+                or receipt['status'] not in ('BLOCKED', 'ERROR')
+                or type(receipt['resolved_this_run']) is not int
+                or receipt['resolved_this_run'] < 0):
+            raise ValueError('invalid worker receipt')
+        labels = {
+            'FORWARD_PRODUCER_MISSING': 'New-market forecast producer is not implemented.',
+            'PAPER_PROMOTION_REQUIRED': 'The learner has not qualified for PAPER trading.',
+            'OUTCOME_PROCESSING_FAILED': 'Outcome processing failed; inspect the worker.',
+        }
+        blockers = tuple(labels[key] for key in receipt['blockers'])
+        timestamp = _timestamp(receipt['finished_at'])
+        age = (datetime.now(UTC) - datetime.fromisoformat(timestamp)).total_seconds()
+        if age < 0:
+            raise ValueError('future worker receipt')
+        status = 'STALE_WORKER' if age > 900 else (
+            'WORKER_ERROR' if receipt['status'] == 'ERROR' else 'SCHEDULED_BLOCKED')
+        reasons = {
+            'STALE_WORKER': 'No completed worker check in the last 15 minutes.',
+            'WORKER_ERROR': 'The latest outcome-processing check failed. Trading is disabled.',
+            'SCHEDULED_BLOCKED': 'Scheduled every 10 minutes. The latest outcome check completed; '
+                                 'new forecasts and learner trading remain blocked.',
+        }
+        return dict(status=status, reason=reasons[status], last_worker_at=timestamp,
+                    interval_minutes=10, resolved_this_run=receipt['resolved_this_run'],
+                    worker_blockers=blockers)
+    except (OSError, ValueError, KeyError, TypeError):
+        return {}
 
 
 def _performance(root: Path, models: dict[str, dict[str, Any]]) -> tuple[
@@ -244,12 +286,14 @@ def read_learner_panel(directory: Path | None) -> LearnerPanel:
                   if status == "NOT_SCHEDULED" else
                   "No verified learner worker heartbeat is available. Saved results do not prove "
                   "that a process is running.")
+        worker = _worker(directory, deployment)
         performance, errors = _performance(directory, models)
         holdout = deployment.get("holdout", {})
         if not isinstance(holdout, dict):
             raise ValueError("invalid holdout declaration")
         return LearnerPanel(
-            status=status, reason=reason, historical_predictions=counts.get("HISTORICAL_REPLAY", 0),
+            **(worker or dict(status=status, reason=reason)),
+            historical_predictions=counts.get("HISTORICAL_REPLAY", 0),
             prospective_predictions=counts.get("PROSPECTIVE_LOCAL", 0),
             shadow_predictions=counts.get("SHADOW", 0), resolved_predictions=resolved,
             pending_predictions=sum(counts.values()) - resolved, fit_attempts=fits,

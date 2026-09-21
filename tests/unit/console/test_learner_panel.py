@@ -2,6 +2,7 @@
 import hashlib
 import json
 import sqlite3
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -10,6 +11,32 @@ from quantbot.console.app import create_app
 from quantbot.console.learner import read_learner_panel
 from quantbot.research.manifest import content_id
 from quantbot.storage import Database
+
+
+def test_worker_receipt_fresh_stale_and_wrong_pin(tmp_path):
+    root = fixture_store(tmp_path / 'learner')
+    deployment = json.loads((root / 'deployment.json').read_text())
+    deployment.update(scheduled=True, interval_minutes=10)
+    (root / 'deployment.json').write_text(json.dumps(deployment))
+    receipt = dict(code_commit='a'*40, status='BLOCKED',
+                   finished_at=datetime.now(UTC).isoformat(), resolved_this_run=0,
+                   trading_enabled=False, promotion='NONE',
+                   blockers=['FORWARD_PRODUCER_MISSING', 'PAPER_PROMOTION_REQUIRED'])
+    def save():
+        (root / 'worker.json').write_text(json.dumps(receipt))
+        return read_learner_panel(root)
+    assert save().status == 'SCHEDULED_BLOCKED'
+    receipt['finished_at'] = (datetime.now(UTC)-timedelta(minutes=16)).isoformat()
+    assert save().status == 'STALE_WORKER'
+    receipt['code_commit'] = 'b'*40
+    assert save().status == 'WORKER_UNVERIFIED'
+    receipt['code_commit'] = 'a'*40
+    receipt['finished_at'] = datetime.now(UTC).isoformat()
+    receipt['status'] = 'ERROR'
+    assert save().status == 'WORKER_ERROR'
+    receipt['blockers'] = ['sk-SYNTHETICabcdefghijklmnop']
+    assert save().status == 'WORKER_UNVERIFIED'
+    assert 'SYNTHETIC' not in save().model_dump_json()
 
 
 def fixture_store(root: Path) -> Path:
