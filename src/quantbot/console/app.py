@@ -53,6 +53,7 @@ from quantbot.console.control import (
     validate_proposal,
 )
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
+from quantbot.console.learner import LearnerPanel, read_learner_panel
 from quantbot.console.state import (
     ConsoleState,
     ReportsPanel,
@@ -85,6 +86,7 @@ NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/session", "Market session"),
     ("/risk", "Risk"),
     ("/research", "Research"),
+    ("/learner", "Learner"),
     ("/market-data", "Market data"),
     ("/capacity", "Capacity"),
     ("/discovery", "Discovery"),
@@ -105,6 +107,7 @@ def create_app(
     reports: ReportsPanel | None = None,
     reconcile: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
     sync_data: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
+    learner_directory: Path | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -137,9 +140,10 @@ def create_app(
 
     def snapshot() -> ConsoleState:
         with database.transaction() as session:
-            return read_console_state(
+            state = read_console_state(
                 session, now=datetime.now(UTC), runtime=runtime, reports=reports
             )
+        return state.model_copy(update={"learner": read_learner_panel(learner_directory)})
 
     def page_with_notice(request: Request, notice: str) -> HTMLResponse:
         """Operations, with something the operator has to read.
@@ -189,6 +193,14 @@ def create_app(
     @app.get("/research", response_class=HTMLResponse)
     def research(request: Request) -> HTMLResponse:
         return page(request, "research.html", "/research")
+
+    @app.get("/learner", response_class=HTMLResponse)
+    def learner(request: Request) -> HTMLResponse:
+        return page(request, "learner.html", "/learner")
+
+    @app.get("/api/learner")
+    def api_learner() -> LearnerPanel:
+        return read_learner_panel(learner_directory)
 
     @app.get("/market-data", response_class=HTMLResponse)
     def market_data(request: Request) -> HTMLResponse:

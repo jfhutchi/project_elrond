@@ -457,6 +457,8 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
                 reports=reports,
                 reconcile=reconcile,
                 sync_data=sync_data,
+                learner_directory=Path(os.environ["QUANTBOT_LEARNER_DIRECTORY"])
+                if os.environ.get("QUANTBOT_LEARNER_DIRECTORY") else None,
             ),
             host=host,
             port=port,

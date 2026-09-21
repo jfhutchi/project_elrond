@@ -24,6 +24,12 @@
 <h2>State</h2>
 <div class="grid">
   <div class="card">
+    <div class="k"><a href="/learner">Learner</a></div>
+    <div class="v" style="font-size:1rem">{{ state.learner.status.replace('_', ' ').capitalize() }}</div>
+    <div class="n">{{ state.learner.reason }}</div>
+    <div class="n"><a href="/learner">View forecasts and performance →</a></div>
+  </div>
+  <div class="card">
     <div class="k">Account equity</div>
     {% if state.health.account_equity %}
       <div class="v">${{ state.health.account_equity }}</div>

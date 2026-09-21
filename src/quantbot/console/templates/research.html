@@ -3,6 +3,11 @@
 {% block body %}
 <h1>Research</h1>
 <p class="sub">Where each strategy sits, and what its evidence actually supports.</p>
+<div class="card">
+  <div class="k"><a href="/learner">Supervised learner</a></div>
+  <p>{{ state.learner.reason }}</p>
+  <a href="/learner">Model versions, saved forecasts and after-cost comparison →</a>
+</div>
 
 {% if state.strategies %}
 <div class="scroll"><table>

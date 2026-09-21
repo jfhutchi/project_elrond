@@ -31,6 +31,7 @@ from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from quantbot.console.learner import LearnerPanel
 from quantbot.operations.registry import ConfigSetting, config_registry
 from quantbot.research.promotion import Stage
 from quantbot.storage import StorageRepository
@@ -371,6 +372,7 @@ class ConsoleState(FrozenModel):
     """Everything the read-only console renders, assembled in one pass."""
 
     generated_at: datetime
+    learner: LearnerPanel = LearnerPanel()
     health: HealthPanel
     strategies: tuple[StrategyRow, ...]
     risk: RiskPanel
