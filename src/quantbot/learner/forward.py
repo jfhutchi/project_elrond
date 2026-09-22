@@ -36,6 +36,7 @@ from quantbot.learner.intraday import (
     resolve_label,
 )
 from quantbot.learner.intraday import build_features as intraday_features
+from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.research.intraday_accounting import record_intraday_attempt
 from quantbot.research.manifest import content_id
 from quantbot.research.registry import HypothesisRegistry
@@ -544,12 +545,13 @@ async def _collect_and_process(
     with _registry_session() as session:
         session.execute(select(search_runs.c.search_id).limit(1))
     now = _now()
+    session_date = now.astimezone(XNYS_TIMEZONE).date()
     pending_days = [
         date.fromisoformat(path.parent.name)
         for path in _eligible_files(database, directory / "intraday", "observations")
         if not (directory / "intraday" / "outcomes" / path.parent.name / path.name).exists()
     ]
-    start = max(min(pending_days, default=now.date()), now.date() - timedelta(days=7))
+    start = max(min(pending_days, default=session_date), session_date - timedelta(days=7))
     recovered = 0
     recovery_fits = 0
     if pending_days and min(pending_days) < start:
@@ -569,7 +571,7 @@ async def _collect_and_process(
         recovered = recovery["outcomes_this_run"]
         recovery_fits = recovery["trained_this_run"]
     snapshot = await collect_snapshot(
-        directory, config.symbols, start, now.date(), settings, timeframe="1Min"
+        directory, config.symbols, start, session_date, settings, timeframe="1Min"
     )
     result = process_snapshot(directory, database, snapshot, code_commit=code_commit, config=config)
     result["outcomes_this_run"] += recovered

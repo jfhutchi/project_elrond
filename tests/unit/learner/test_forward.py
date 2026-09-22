@@ -1,6 +1,6 @@
 """Offline lifecycle tests; no broker, provider or runtime environment access."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import cast
 
@@ -238,3 +238,32 @@ async def test_long_outage_fetches_oldest_pending_day_without_gap_predictions(
         assert result["outcomes_this_run"] == 2
         assert result["trained_this_run"] == 2
         assert result["training_status"] == "CHALLENGER_TRAINED_NOT_PROMOTED"
+
+
+@pytest.mark.asyncio
+async def test_forward_fetch_uses_eastern_session_date_after_utc_midnight(tmp_path, monkeypatch):
+    from quantbot.config import Settings
+
+    now = datetime(2026, 9, 22, 0, 9, tzinfo=UTC)  # September 21 at 8:09 PM Eastern.
+    monkeypatch.setattr(forward, "_now", lambda: now)
+    requests = []
+
+    async def collect(directory, symbols, start, end, settings, **kwargs):
+        requests.append((start, end))
+        return snapshot(31)
+
+    def process(*args, **kwargs):
+        return dict(outcomes_this_run=0, trained_this_run=0, training_status="WARMUP")
+
+    monkeypatch.setattr(forward, "collect_snapshot", collect)
+    monkeypatch.setattr(forward, "process_snapshot", process)
+    with Database.create(tmp_path / "learner.db") as db:
+        token = forward._REGISTRY.set(db.path.resolve())
+        try:
+            await forward._collect_and_process(
+                tmp_path, db, Settings(), "b" * 40, forward.ForwardConfig(symbols=("AAPL",))
+            )
+        finally:
+            forward._REGISTRY.reset(token)
+
+    assert requests == [(OPEN.date(), OPEN.date())]
