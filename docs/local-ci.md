@@ -14,9 +14,28 @@ NOT RUN status does not claim that commit was tested; failed jobs also retain th
 
 ## Setup is an explicit operator step
 
-Required on Windows: Git for Windows, uv on PATH, and a managed Python 3.11 installed with
-`uv python install 3.11`. The entry point only locates that interpreter; it does not install tools.
+Required on Windows: Git for Windows, uv on PATH, and an existing host-visible Python 3.11+.
+By default the entry point locates managed Python 3.11 installed with `uv python install 3.11`.
+Use `-PythonPath` to select another installation explicitly. The entry point does not install tools.
 Start from a trusted checkout. No account tokens are needed.
+
+Windows verification rejects base interpreters under roaming AppData or LocalAppData/Packages,
+matching the service wrappers' host-visibility restriction. Packaged development applications can
+virtualize these locations. Both prerequisite-only and full runs report `PYTHON_NOT_HOST_VISIBLE`
+and Windows NOT RUN before exporting a snapshot; an isolated job's temporary AppData must not
+hide this incompatibility. No interpreter files, permissions, or service settings are changed.
+
+For an existing installation outside those roots (replace the example path with your own):
+
+```powershell
+.\scripts\local-ci.ps1 -Platform windows -CheckPrerequisites -PythonPath 'C:\Python313\python.exe'
+.\scripts\local-ci.ps1 -Platform windows -PythonPath 'C:\Python313\python.exe'
+```
+
+If you need a new uv-managed installation, explicitly choose a host-visible install directory
+outside those roots when running `uv python install`, then pass its interpreter with `-PythonPath`.
+The selected base interpreter is recorded in the Windows log. Ambient `UV_PYTHON`, uv config files,
+and dotenv settings are not used to select or configure the job.
 
 For Linux verification on Windows, the operator must install/enable WSL2 and Docker Desktop with
 the Linux container engine, including any required reboot and license acceptance. This script
