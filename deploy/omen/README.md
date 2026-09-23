@@ -10,7 +10,15 @@ installed and Docker is absent.
 
 ## Measured host and deployment status — 2026-09-08
 
-**Latest status (2026-09-10 21:16 UTC):** All seven tasks use local standard account
+**Update (2026-09-13 22:22 UTC):** `92c49d4` is deployed. An elevated operator run backed up the
+live store, migrated it to schema 28 and re-pinned the six application tasks to `92c49d4`, which
+Task Scheduler started at 22:21:51–52. Ingestion and report succeeded on the new code, and the
+research task proposed its first question autonomously. Re-registration moves each task's
+repetition phase to one minute after registration. See
+[the 2026-09-13 deployment record](../../docs/omen-deployment-2026-09-13.md) for the run, the
+acceptance evidence and what was still pending when it was written.
+
+**Earlier status (2026-09-10 21:16 UTC):** All seven tasks use local standard account
 `LEANNES-LAPTOP\erlond`, Password logon, Limited run level and AtStartup plus timed triggers.
 The console, PAPER daemon, protection and model server run; ingestion, research and report have
 completed successfully. Recovery after the September 9 06:12 Eastern reboot was observed. A console
@@ -34,7 +42,8 @@ The historical bounded pre-install inventory found no Elrond process, startup re
 or credentials. A later expanded scan found 774 old schema-12 databases under pytest temporary
 paths and classified all of them as test fixtures, not operational candidates. Task Scheduler
 registration was exercised with an Interactive logon for the current user. AtBoot and S4U
-registration initially returned Access denied under the non-administrator account. That original
+registration initially returned Access denied under the current user's non-elevated token (the
+account is a local Administrators member, but runs UAC-limited unless explicitly elevated). That original
 Interactive registration has since been replaced by the password-backed startup tasks above.
 
 Omen is the only host policy permits to hold authority, but global coordinator/store authority
