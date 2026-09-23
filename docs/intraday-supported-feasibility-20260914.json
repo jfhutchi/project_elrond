@@ -1,0 +1,49 @@
+{
+  "as_of": "2026-09-14T15:55:04.984515+00:00",
+  "existing_trials": 69,
+  "prospective_trials": 70,
+  "window_consumption": {
+    "dataset": "us-equities-daily",
+    "status": "EXHAUSTED",
+    "trials": 68,
+    "consumers": [
+      "cycles 2-10 (pre-v0.2, see REFUTED.md)"
+    ],
+    "by_family": {}
+  },
+  "no_return_measurement": true,
+  "project_screen": {
+    "hypothesis_id": "intraday-spy-late-day-feasibility",
+    "version": 1,
+    "stage": "LITERATURE_FEASIBILITY",
+    "assessed_at": "2026-09-14T15:55:04.984515Z",
+    "verdict": "UNDERPOWERED",
+    "estimand": "INFORMATION_COEFFICIENT",
+    "cumulative_trials": 70,
+    "luck_threshold_z": "2.914960",
+    "observations_required": 848,
+    "observations_available": 121,
+    "independent_observations": "121.000000",
+    "variance_inflation": "1.000000",
+    "minimum_detectable_effect": "0.262083",
+    "expected_effect": "0.10",
+    "minimum_practical_effect": "0.05",
+    "annual_cost_drag_bps": null,
+    "minimum_practical_return_bps": null,
+    "dependence": {
+      "lag_one_autocorrelation": "0",
+      "cluster_size": 1,
+      "intra_cluster_correlation": "0",
+      "sampling": "NON_OVERLAPPING",
+      "horizon_observations": 1,
+      "feature_lookback_observations": null,
+      "observations_per_year": 252
+    },
+    "override": null
+  },
+  "separate_80pct_power_one_sided_bonferroni": {
+    "assumed_correlation": 0.1,
+    "independent_sessions_required": 1617,
+    "assumptions": "Gaussian Fisher approximation; independent sessions; alpha .05 family-wise divided by prospective trials. Serial dependence increases requirement."
+  }
+}
