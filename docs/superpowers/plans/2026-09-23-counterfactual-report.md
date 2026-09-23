@@ -28,10 +28,12 @@ Files: create `src/quantbot/risk/counterfactual_report.py` and
 Files: modify `README.md`; update this execution ledger.
 
 - [x] Document both command forms, policy selection and observational limitations.
-- [ ] Run Ruff and strict mypy, then the full pytest suite. Review failures before claiming success.
-- [ ] Commit implementation; obtain independent whole-branch review, fix material findings
-  with regression tests, create/attach PR and merge after successful verification.
-- [ ] Update #57 with the completed slice and retain broader uncompleted acceptance criteria.
+- [x] Run Ruff and strict mypy, then the full pytest suite. Review failures before claiming success.
+- [x] Commit implementation; obtain independent whole-branch review, fix material findings
+  with regression tests, and create/attach PR #247.
+
+Integration is tracked by PR #247's merge state and issue #57's reporting checklist.
+The broader uncompleted acceptance criteria remain open on #57.
 
 ## Execution ledger
 
@@ -60,3 +62,9 @@ economic validation. No deferred minor review findings.
 Initial full suite: 3084 passed, 34 skipped, one existing dependency warning. This run began
 before review fixes; a clean committed-snapshot CI run will validate the final implementation.
 Ruff and strict mypy passed for all application sources and CI helpers on both platform targets.
+
+Task 2: complete. Final committed-snapshot Windows CI on `1a38798` passed: 3091 tests,
+35 skips and one existing Starlette/httpx deprecation warning (524.64 seconds).
+Lock/frozen dependency checks, Ruff, Linux/Windows-target mypy and clean-checkout checks
+all passed. Native Linux execution was not requested in this run. Final documentation
+only records these results; application and test trees are unchanged from the tested SHA.
