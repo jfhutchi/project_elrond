@@ -338,3 +338,85 @@ def test_powershell_bootstrap_does_not_inherit_uv_config(
     )
     assert result.returncode == 0, result.stderr
     assert "ISOLATED_BOOTSTRAP_REACHED" in result.stdout
+
+
+@pytest.mark.parametrize("check_only", [True, False])
+@pytest.mark.parametrize("installation", ["missing", "roaming", "packages"])
+def test_windows_rejects_unusable_python_before_export_or_checks(
+    repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    installation: str, check_only: bool,
+) -> None:
+    runner = module("local_ci")
+    roaming = tmp_path / "AppData" / "Roaming"
+    local = tmp_path / "AppData" / "Local"
+    base = {"missing": tmp_path / "absent", "roaming": roaming / "uv" / "python",
+            "packages": local / "Packages" / "Python"}[installation]
+    if installation != "missing":
+        base.mkdir(parents=True)
+        (base / "python.exe").touch()
+    monkeypatch.setenv("APPDATA", str(roaming))
+    monkeypatch.setenv("LOCALAPPDATA", str(local))
+    monkeypatch.setattr(runner.sys, "base_prefix", str(base))
+    monkeypatch.setattr(runner.sys, "platform", "win32")
+    monkeypatch.setattr(runner.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(runner.shutil, "which", lambda name: "uv")
+    monkeypatch.setattr(runner, "__file__", str(repository / "scripts/local_ci.py"))
+    calls: list[str] = []
+    monkeypatch.setattr(runner, "export_snapshot", lambda *args: calls.append("export"))
+    monkeypatch.setattr(runner, "run_command", lambda *args: calls.append("check"))
+    arguments = ["--platform", "windows"]
+    if check_only:
+        arguments.append("--check-prerequisites")
+    assert runner.main(arguments) == 1
+    report = json.loads(next((repository / ".local-ci").glob("*/summary.json")).read_text())
+    windows = report["jobs"]["windows"]
+    assert windows["status"] == "NOT RUN"
+    expected = "PYTHON_NOT_FOUND" if installation == "missing" else "PYTHON_NOT_HOST_VISIBLE"
+    assert expected in windows["reason"]
+    assert "-PythonPath" in windows["reason"]
+    assert calls == []
+
+
+def test_powershell_bootstrap_accepts_explicit_python_without_uv_config(
+    repository: Path, tmp_path: Path,
+) -> None:
+    shell = shutil.which("pwsh") or shutil.which("powershell")
+    if sys.platform != "win32" or not shell or not shutil.which("uv"):
+        pytest.skip("requires native Windows PowerShell and uv")
+    scripts = repository / "scripts"
+    scripts.mkdir()
+    shutil.copyfile(ROOT / "scripts/local-ci.ps1", scripts / "local-ci.ps1")
+    (scripts / "local_ci.py").write_text(
+        "import json, sys\nprint(json.dumps(sys.argv[1:]))\nraise SystemExit(17)\n"
+    )
+    env = dict(os.environ)
+    env["UV_CONFIG_FILE"] = str(tmp_path / "absent-config.toml")
+    env["UV_ENV_FILE"] = str(tmp_path / "absent-operator.env")
+    result = subprocess.run(
+        [shell, "-NoProfile", "-File", str(scripts / "local-ci.ps1"),
+         "-PythonPath", sys.executable, "-Platform", "windows", "-CheckPrerequisites"],
+        env=env, capture_output=True, text=True, check=False, timeout=40,
+    )
+    assert result.returncode == 17, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip()) == ["--platform", "windows", "--check-prerequisites"]
+
+
+@pytest.mark.parametrize("installation", ["host-python", "Roaming-other", "Packages-other"])
+def test_windows_prerequisites_accept_host_visible_python(
+    repository: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, installation: str,
+) -> None:
+    runner = module("local_ci")
+    base = tmp_path / installation
+    base.mkdir()
+    (base / "python.exe").touch()
+    monkeypatch.setenv("APPDATA", str(tmp_path / "Roaming"))
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path))
+    monkeypatch.setattr(runner.sys, "base_prefix", str(base))
+    monkeypatch.setattr(runner.platform, "system", lambda: "Windows")
+    monkeypatch.setattr(runner.shutil, "which", lambda name: "uv")
+    monkeypatch.setattr(runner, "__file__", str(repository / "scripts/local_ci.py"))
+    assert runner.main(["--platform", "windows", "--check-prerequisites"]) == 0
+    report_path = next((repository / ".local-ci").glob("*/summary.json"))
+    report = json.loads(report_path.read_text())
+    assert report["jobs"]["windows"] == {"status": "NOT RUN", "reason": "prerequisites ready"}
+    assert str(base / "python.exe") in (report_path.parent / "windows.log").read_text()
