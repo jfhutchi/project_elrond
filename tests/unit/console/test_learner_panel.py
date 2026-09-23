@@ -25,7 +25,10 @@ def test_worker_receipt_fresh_stale_and_wrong_pin(tmp_path):
     def save():
         (root / 'worker.json').write_text(json.dumps(receipt))
         return read_learner_panel(root)
-    assert save().status == 'SCHEDULED_BLOCKED'
+    panel = save()
+    assert panel.status == 'SCHEDULED_BLOCKED'
+    assert any('PAPER entry' in blocker for blocker in panel.worker_blockers)
+    assert all('observation deployment' not in blocker for blocker in panel.worker_blockers)
     receipt['finished_at'] = (datetime.now(UTC)-timedelta(minutes=16)).isoformat()
     assert save().status == 'STALE_WORKER'
     receipt['code_commit'] = 'b'*40

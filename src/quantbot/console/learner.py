@@ -181,7 +181,7 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
         labels = {
             'FORWARD_PRODUCER_MISSING': 'New-market forecast producer is not implemented.',
             'PAPER_PROMOTION_REQUIRED': (
-                'This learner model has no approved PAPER observation deployment.'),
+                'This learner model is not approved for PAPER entry.'),
             'PAPER_EXECUTION_NOT_CONFIGURED': (
                 'The learner PAPER execution adapter is not deployed.'),
             'OUTCOME_PROCESSING_FAILED': 'Outcome processing failed; inspect the worker.',

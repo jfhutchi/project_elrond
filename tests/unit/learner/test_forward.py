@@ -228,6 +228,129 @@ def test_current_registry_is_consulted_without_schema_migration(tmp_path, monkey
         forward._REGISTRY.reset(token)
 
 
+def test_october_boundary_can_forecast_before_retraining_or_paper_promotion(
+    tmp_path, monkeypatch
+):
+    """A synthetic protected September window must not make October forecasting circular."""
+    from datetime import date
+
+    from quantbot.learner.intraday import (
+        IntradayFeatureRow,
+        build_historical_labels,
+        fit_intraday_model,
+        resolve_label,
+    )
+    from quantbot.strategy import XNYSSession, XNYSSessionSequence
+
+    labels = build_historical_labels(
+        bars(180), calendar(), decision_times=[OPEN + timedelta(minutes=m) for m in (31, 60, 120)],
+        symbols=("AAPL",), source_snapshot_hash="a" * 64,
+        observed_at=OPEN + timedelta(minutes=180),
+    )
+    model = fit_intraday_model(
+        labels, validation_start=OPEN + timedelta(minutes=100),
+        created_at=OPEN + timedelta(minutes=181), code_commit="b" * 40, family="mean",
+    )
+    root = tmp_path / "intraday"
+    forward._save(root / "models" / (model.model_id + ".json"), model.model_dump(mode="json"))
+    forward._save(root / "fits" / ("c" * 64 + ".json"),
+                  dict(model_ids=[model.model_id], search_ids=[]))
+
+    protected_end = date(2026, 9, 30)
+    calls = []
+
+    def protected(self, dataset, start, end, **kwargs):
+        calls.append((dataset, start, end))
+        return ["protected"] if start <= protected_end else []
+
+    monkeypatch.setattr(forward.HypothesisRegistry, "blocking_protected_windows", protected)
+
+    def day_open(day):
+        return OPEN + (datetime.combine(day, datetime.min.time(), UTC)
+                       - datetime.combine(OPEN.date(), datetime.min.time(), UTC))
+
+    def on_day(day, minute, *, missing=False):
+        opening = day_open(day)
+        shift = opening - OPEN
+        source_bars = [bar.model_copy(update={"timestamp": bar.timestamp + shift})
+                       for bar in bars(minute)]
+        if missing:
+            source_bars = [bar for bar in source_bars
+                           if not (bar.symbol == "SPY" and bar.timestamp
+                                   == opening + timedelta(minutes=15))]
+        received = opening + timedelta(minutes=minute, seconds=1)
+        return cast(Snapshot, SimpleNamespace(
+            received_at=received, identity="a" * 64,
+            sessions=XNYSSessionSequence(calendar="XNYS", sessions=tuple(
+                XNYSSession(
+                    session_date=session_day,
+                    open_at=day_open(session_day),
+                    close_at=day_open(session_day) + timedelta(minutes=390),
+                )
+                for session_day in (date(2026, 9, 30), date(2026, 10, 1))
+            )),
+            inputs=tuple(DailyInput(bar=bar, available_at=received) for bar in source_bars),
+        ))
+
+    registry_path = (tmp_path / "registry.db").resolve()
+    with Database.create(registry_path):
+        pass
+    with Database.create(tmp_path / "learner.db") as db:
+        token = forward._REGISTRY.set(registry_path)
+        try:
+            config = forward.ForwardConfig(symbols=("AAPL",), registry_database=registry_path)
+            def process(day, minute, **kwargs):
+                source = on_day(day, minute, **kwargs)
+                monkeypatch.setattr(forward, "_now", lambda: source.received_at)
+                return forward.process_snapshot(
+                    tmp_path, db, source, code_commit="b" * 40, config=config
+                )
+
+            september = process(protected_end, 31)
+            october = date(2026, 10, 1)
+            incomplete = process(october, 31, missing=True)
+            first = process(october, 31)
+            repeat = process(october, 31)
+            features = IntradayFeatureRow.model_validate(
+                forward._read(next((root / "observations").glob("*/*.json")))["features"][0]
+            )
+            missing_target = on_day(october, 60)
+            assert resolve_label(
+                features, [item.bar for item in missing_target.inputs],
+                resolved_at=day_open(october) + timedelta(minutes=61),
+                receipt_at=day_open(october) + timedelta(minutes=61),
+                source_snapshot_hash="a" * 64,
+            ) is None
+            complete_target = on_day(october, 61)
+            assert resolve_label(
+                features, [item.bar for item in complete_target.inputs],
+                resolved_at=day_open(october) + timedelta(minutes=61),
+                receipt_at=day_open(october) + timedelta(minutes=61),
+                source_snapshot_hash="a" * 64,
+            ) is not None
+            duplicate = on_day(october, 31)
+            with pytest.raises(ValueError, match="duplicate"):
+                forward.intraday_features(
+                    [item.bar for item in duplicate.inputs] + [duplicate.inputs[0].bar],
+                    duplicate.sessions, decision_at=duplicate.received_at,
+                    symbols=("AAPL",), source_snapshot_hash=duplicate.identity,
+                    receipt_at=duplicate.received_at,
+                )
+        finally:
+            forward._REGISTRY.reset(token)
+
+    assert "PROTECTED_FEATURE_WINDOW" in september["blockers"]
+    assert september["observations_this_run"] == september["predictions_this_run"] == 0
+    assert "INCOMPLETE_OR_STALE_MINUTE_DATA" in incomplete["blockers"]
+    assert incomplete["observations_this_run"] == 0
+    assert first["observations_this_run"] == first["predictions_this_run"] == 1
+    assert first["training_status"] == "TRAINING_DATA_WARMUP"
+    assert first["trading_enabled"] is False
+    assert "PAPER_PROMOTION_REQUIRED" in first["blockers"]
+    assert repeat["observations_this_run"] == repeat["predictions_this_run"] == 0
+    assert calls and all(dataset == "us-equities-daily" for dataset, _, _ in calls)
+
+
 @pytest.mark.asyncio
 async def test_long_outage_fetches_oldest_pending_day_without_gap_predictions(
     tmp_path, monkeypatch
