@@ -178,6 +178,11 @@ class ActionBroker:
     async def get_positions(self) -> tuple[Position, ...]:
         return self.positions
 
+    async def get_open_orders(self) -> tuple[BrokerOrder, ...]:
+        if self.order_status in {"filled", "rejected", "canceled", "cancelled", "expired"}:
+            return ()
+        return tuple(self._order(intent) for intent in self.submitted)
+
     async def submit_order(self, intent: OrderIntent) -> BrokerOrder:
         with self.database.transaction() as session:
             stored = StorageRepository(session).get_order_intent(intent.intent_id)

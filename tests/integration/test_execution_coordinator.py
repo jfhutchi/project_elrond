@@ -139,6 +139,9 @@ class AcceptingBroker:
             return self.position_snapshots.pop(0)
         return self.positions
 
+    async def get_open_orders(self) -> tuple[BrokerOrder, ...]:
+        return tuple(_accepted(intent) for intent in self.submitted)
+
     async def submit_order(self, intent: OrderIntent) -> BrokerOrder:
         with self.database.transaction() as session:
             stored = StorageRepository(session).get_order_intent(intent.intent_id)
@@ -620,3 +623,142 @@ async def test_an_accepted_durable_order_reconciles_a_later_fill_without_resubmi
     assert stored_intent.state is IntentState.FILLED
     assert stored_order == broker.found
     database.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["broker", "durable"])
+@pytest.mark.parametrize("check_number", [1, 2])
+async def test_exit_arbitration_rechecks_broker_and_durable_orders(
+    tmp_path: Path, source: str, check_number: int
+) -> None:
+    database = Database.create(tmp_path / "exit-arbitration.db")
+    _mark_ready(database)
+    other = _intent(side=OrderSide.SELL).model_copy(
+        update={"intent_id": "other-exit", "client_order_id": "other-exit"}
+    )
+
+    class CompetingExitBroker(AcceptingBroker):
+        checks = 0
+
+        async def get_open_orders(self) -> tuple[BrokerOrder, ...]:
+            self.checks += 1
+            if self.checks != check_number:
+                return ()
+            if source == "broker":
+                return (_accepted(other),)
+            with database.transaction() as session:
+                repository = StorageRepository(session)
+                repository.create_order_intent(other)
+                repository.transition_order_intent(
+                    other.intent_id,
+                    IntentState.ORDER_CREATED,
+                    expected_current=IntentState.RISK_APPROVED,
+                )
+            return ()
+
+    broker = CompetingExitBroker(database)
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+    with pytest.raises(OrderSubmissionBlocked) as blocked:
+        await coordinator.submit(
+            _intent(side=OrderSide.SELL),
+            purpose=OrderPurpose.STRATEGY_EXIT,
+            market_eligible=True,
+            drawdown=None,
+            risk_approved=None,
+        )
+    assert "EXIT_REDUCING_ORDER_PENDING" in blocked.value.decision.reasons
+    assert broker.submitted == []
+    assert broker.checks == check_number
+    database.close()
+
+
+@pytest.mark.asyncio
+async def test_two_prepared_exits_have_one_deterministic_submission_owner(tmp_path: Path) -> None:
+    database = Database.create(tmp_path / "prepared-exits.db")
+    _mark_ready(database)
+    winner = _intent(side=OrderSide.SELL).model_copy(
+        update={"intent_id": "a-exit", "client_order_id": "a-exit"}
+    )
+    loser = winner.model_copy(update={"intent_id": "b-exit", "client_order_id": "b-exit"})
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.create_order_intent(loser)
+        repository.create_order_intent(winner)
+    broker = AcceptingBroker(database)
+    coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
+
+    async def submit(order: OrderIntent) -> object:
+        return await coordinator.submit_durable(
+            order,
+            purpose=OrderPurpose.STRATEGY_EXIT,
+            market_eligible=True,
+            drawdown=None,
+            risk_approved=None,
+        )
+
+    with pytest.raises(OrderSubmissionBlocked, match="EXIT_REDUCING_ORDER_PENDING"):
+        await submit(loser)
+    await submit(winner)
+    with pytest.raises(OrderSubmissionBlocked, match="EXIT_REDUCING_ORDER_PENDING"):
+        await submit(loser)
+    await submit(winner)
+    assert broker.submitted == [winner]
+    database.close()
+
+
+def test_concurrent_prepared_exits_across_database_handles_have_one_owner(tmp_path: Path) -> None:
+    import asyncio
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    with Database.create(tmp_path / "concurrent-exits.db") as database:
+        _mark_ready(database)
+        orders = tuple(
+            _intent(side=OrderSide.SELL).model_copy(
+                update={"intent_id": key, "client_order_id": key}
+            )
+            for key in ("a-exit", "b-exit")
+        )
+        with database.transaction() as session:
+            for order in orders:
+                StorageRepository(session).create_order_intent(order)
+        barrier = Barrier(2)
+
+        def run(item: tuple[OrderIntent, Database]) -> tuple[bool, list[OrderIntent]]:
+            order, connection = item
+
+            class ConcurrentBroker(AcceptingBroker):
+                checks = 0
+
+                async def get_open_orders(self) -> tuple[BrokerOrder, ...]:
+                    self.checks += 1
+                    if self.checks == 1:
+                        barrier.wait(timeout=10)
+                    return await super().get_open_orders()
+
+            broker = ConcurrentBroker(connection)
+            coordinator = ExecutionCoordinator(
+                connection, cast(BrokerAdapter, broker), _settings()
+            )
+            try:
+                asyncio.run(
+                    coordinator.submit_durable(
+                        order,
+                        purpose=OrderPurpose.STRATEGY_EXIT,
+                        market_eligible=True,
+                        drawdown=None,
+                        risk_approved=None,
+                    )
+                )
+            except OrderSubmissionBlocked as blocked:
+                assert "EXIT_REDUCING_ORDER_PENDING" in blocked.decision.reasons
+                return False, broker.submitted
+            return True, broker.submitted
+
+        # Alembic's module-level proxy is not thread-safe during Database opening.
+        # Open both handles first so this test races only the coordinator's exit claim.
+        with Database(database.path) as first, Database(database.path) as second:
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(run, zip(orders, (first, second), strict=True)))
+        assert [allowed for allowed, _ in results] == [True, False]
+        assert [order for _, submitted in results for order in submitted] == [orders[0]]

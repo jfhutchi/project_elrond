@@ -84,6 +84,11 @@ class ScriptedAmbiguousBroker:
         self.submitted_client_ids: list[str] = []
         self.lookup_client_ids: list[str] = []
 
+    async def get_open_orders(self) -> tuple[BrokerOrder, ...]:
+        # Every scenario begins flat of working orders, before its ambiguous submit.
+        assert not self.submitted_client_ids
+        return ()
+
     async def get_account(self) -> BrokerAccountSnapshot:
         return BrokerAccountSnapshot(
             account=Account(
