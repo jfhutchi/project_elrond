@@ -78,6 +78,7 @@ uv run quantbot doctor
 | `quantbot research-status` | Research queue and model configuration |
 | `quantbot deployment-status` | What is actually running, without filesystem archaeology |
 | `quantbot ingestion-status` | Collection cursors, run history, incidents, heartbeats |
+| `quantbot counterfactual-report` | [Read-only gate-value report](docs/counterfactual-report.md) for rejected candidates |
 | `quantbot research-capacity` | What statistical capacity is left, without spending any |
 | `quantbot research-cycle` | Advance the research loop; `--propose-when-idle` (what the scheduled component runs) asks for one question when nothing is actionable |
 | `quantbot research-propose` | Report the proposal slate; `--commit` opens at most one catalogue question, recording every attempt in `research_proposals` |
