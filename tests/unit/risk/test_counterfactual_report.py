@@ -291,3 +291,92 @@ def test_cli_missing_store_fails_without_creating_it(tmp_path, monkeypatch):
     assert main(["counterfactual-report"], output=output) != 0
     assert json.loads(output.getvalue())["ok"] is False
     assert not path.parent.exists()
+
+
+def test_cli_does_not_repair_rows_or_change_journal_mode(database, monkeypatch):
+    seed(database)
+    database.close()
+    with sqlite3.connect(database.path) as connection:
+        connection.execute("DELETE FROM kill_switch_state")
+        connection.commit()
+        assert connection.execute("PRAGMA journal_mode=DELETE").fetchone() == ("delete",)
+    before = dump(database)
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(database.path))
+    monkeypatch.delenv("QUANTBOT_DATABASE_URL", raising=False)
+    output = StringIO()
+    assert main(["counterfactual-report"], output=output) == 0
+    assert dump(database) == before
+    with sqlite3.connect(database.path) as connection:
+        assert connection.execute("PRAGMA journal_mode").fetchone() == ("delete",)
+
+
+def test_duplicate_unavailable_explanations_are_not_silently_dropped(database):
+    seed(database, "one", candidate="same", state=CounterfactualState.UNAVAILABLE)
+    seed(database, "two", candidate="same", state=CounterfactualState.UNAVAILABLE)
+    with sqlite3.connect(database.path) as connection:
+        connection.execute(
+            "UPDATE counterfactual_outcomes SET detail='different unavailable reason' "
+            "WHERE observation_id='two'"
+        )
+    with pytest.raises(ValueError, match="conflicting.*candidate"):
+        report(database)
+
+
+def test_corrupt_store_returns_json_failure(tmp_path, monkeypatch):
+    path = tmp_path / "corrupt.db"
+    path.write_bytes(b"this is not a database")
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(path))
+    monkeypatch.delenv("QUANTBOT_DATABASE_URL", raising=False)
+    output = StringIO()
+    assert main(["counterfactual-report"], output=output) == 2
+    assert json.loads(output.getvalue())["ok"] is False
+    assert path.read_bytes() == b"this is not a database"
+
+
+def test_read_only_session_enforces_no_writes(database):
+    from sqlalchemy import text
+    from sqlalchemy.exc import OperationalError
+
+    with Database.read_only(database.path) as session:
+        with pytest.raises(OperationalError, match="readonly"):
+            session.execute(text("DELETE FROM kill_switch_state"))
+
+
+def test_read_only_session_keeps_one_snapshot_while_writer_appends(database):
+    with Database.read_only(database.path) as session:
+        repo = StorageRepository(session)
+        assert repo.list_rejected_candidates() == []
+        seed(database, state=CounterfactualState.EVALUATED)
+        assert repo.list_counterfactual_outcomes() == []
+        assert repo.list_rejected_candidates() == []
+    with Database.read_only(database.path) as session:
+        assert len(StorageRepository(session).list_counterfactual_outcomes()) == 1
+
+
+@pytest.mark.parametrize("version_offset", [-1, 1])
+def test_cli_rejects_other_schema_versions_without_rewriting(database, monkeypatch, version_offset):
+    from quantbot.storage.schema import SCHEMA_VERSION
+
+    with sqlite3.connect(database.path) as connection:
+        connection.execute(
+            "UPDATE schema_version SET version=?", (SCHEMA_VERSION + version_offset,)
+        )
+    before = dump(database)
+    monkeypatch.setenv("QUANTBOT_DB_PATH", str(database.path))
+    monkeypatch.delenv("QUANTBOT_DATABASE_URL", raising=False)
+    output = StringIO()
+    assert main(["counterfactual-report"], output=output) == 2
+    assert json.loads(output.getvalue())["ok"] is False
+    assert dump(database) == before
+
+
+def test_read_only_session_does_not_stamp_alembic_and_escapes_paths(tmp_path):
+    path = tmp_path / "store #1.db"
+    with Database.create(path) as db:
+        db.close()
+        with sqlite3.connect(path) as connection:
+            connection.execute("DELETE FROM alembic_version")
+        before = dump(db)
+        with Database.read_only(path) as session:
+            assert counterfactual_report(StorageRepository(session))["distinct_candidates"] == 0
+        assert dump(db) == before

@@ -16,18 +16,18 @@ Spec: `docs/superpowers/specs/2026-09-23-counterfactual-report-design.md`.
 Files: create `src/quantbot/risk/counterfactual_report.py` and
 `tests/unit/risk/test_counterfactual_report.py`; modify `src/quantbot/cli.py`.
 
-- [ ] Add temporary-database tests for empty data, policy/version/config separation,
+- [x] Add temporary-database tests for empty data, policy/version/config separation,
   one candidate with multiple gates, missing/terminal outcomes, and suppressed means.
-- [ ] Run `.venv/Scripts/python.exe -m pytest tests/unit/risk/test_counterfactual_report.py -q`;
+- [x] Run `.venv/Scripts/python.exe -m pytest tests/unit/risk/test_counterfactual_report.py -q`;
   expect missing report module/command, then implement the adapter and CLI.
-- [ ] Add regime and immutable-history CLI tests; run the same command to green.
-- [ ] Run existing counterfactual, gate-value, operations-pass and CLI tests.
+- [x] Add regime and immutable-history CLI tests; run the same command to green.
+- [x] Run existing counterfactual, gate-value, operations-pass and CLI tests.
 
 ## Task 2: Documentation, verification and integration
 
 Files: modify `README.md`; update this execution ledger.
 
-- [ ] Document both command forms, policy selection and observational limitations.
+- [x] Document both command forms, policy selection and observational limitations.
 - [ ] Run Ruff and strict mypy, then the full pytest suite. Review failures before claiming success.
 - [ ] Commit implementation; obtain independent whole-branch review, fix material findings
   with regression tests, create/attach PR and merge after successful verification.
@@ -40,3 +40,23 @@ Ruling: use existing isolated worktree and execute inline under the user's appro
 Ruling: missing outcomes do not establish a pending horizon; report their absence explicitly.
 Ruling: no dependence cluster is recoverable from the refusal's snapshot identifier alone;
 preserve the existing session estimator and disclose the missing cluster context.
+
+Task 1: complete. Initial missing-module test failed as expected, then 13 report tests
+passed and the focused counterfactual/operations suite passed (87 tests).
+
+Independent branch review identified three material findings: ordinary Database startup
+can repair state/change journal mode; duplicate unavailable explanations could be lost;
+corrupt files escaped the JSON error response. Regression tests reproduced each failure.
+Added `Database.read_only` with SQLite mode=ro, existing metadata validation, no initializer,
+and one explicit read transaction. Compared unavailable detail and handled SQLAlchemy
+errors specifically. All 21 report tests and 55 report/storage tests passed after fixes.
+
+Review rulings: inherited effective-size and zero-mean verdict semantics stay unchanged;
+missing rows do not imply pending horizons; historical policies require explicit selection;
+no new snapshot-age threshold is invented; broader uncertainty and economic breakdowns
+remain open in #57. These exclusions preserve the bounded adapter scope without claiming
+economic validation. No deferred minor review findings.
+
+Initial full suite: 3084 passed, 34 skipped, one existing dependency warning. This run began
+before review fixes; a clean committed-snapshot CI run will validate the final implementation.
+Ruff and strict mypy passed for all application sources and CI helpers on both platform targets.

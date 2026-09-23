@@ -214,6 +214,37 @@ class Database:
             )
 
     @classmethod
+    @contextmanager
+    def read_only(cls, path: str | Path | DatabaseTarget) -> Iterator[Session]:
+        """Read a current store without initialization, repair, stamping or journal changes.
+
+        SQLite enforces the read-only capability, including on callers' SQL. An explicit
+        transaction gives all report queries the same snapshot while a writer is active.
+        """
+        target = coerce_target(path)
+        target.require_enabled()
+        location = target.path.resolve()
+        if not location.is_file() or location.stat().st_size == 0:
+            raise DatabaseNotFoundError(location)
+        engine = create_engine(
+            "sqlite://",
+            creator=lambda: sqlite3.connect(location.as_uri() + "?mode=ro", uri=True),
+        )
+        try:
+            with engine.connect() as connection:
+                connection.exec_driver_sql("BEGIN")
+                actual = connection.execute(select(schema_version.c.version)).scalar_one()
+                if actual < SCHEMA_VERSION:
+                    raise MigrationRequiredError(location, actual)
+                if actual != SCHEMA_VERSION:
+                    raise UnsupportedSchemaVersionError(actual)
+                cls._compare_against_metadata(connection)
+                with Session(bind=connection) as session:
+                    yield session
+        finally:
+            engine.dispose()
+
+    @classmethod
     def create(
         cls, path: str | Path | DatabaseTarget, *, busy_timeout_ms: int = 5000
     ) -> Database:

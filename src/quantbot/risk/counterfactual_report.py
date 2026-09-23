@@ -75,6 +75,7 @@ def _answer(outcome: CounterfactualOutcome | None) -> tuple[object, ...]:
         outcome.gross_return_bps,
         outcome.benchmark_return_bps,
         outcome.unevaluable_reason,
+        outcome.detail if outcome.state is CounterfactualState.UNAVAILABLE else None,
     )
 
 

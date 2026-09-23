@@ -952,25 +952,26 @@ def _configure_logging() -> None:
 def _counterfactual_report(
     args: argparse.Namespace, stream: TextIO, context: CLIContext | None,
 ) -> int:
+    from sqlalchemy.exc import SQLAlchemyError
+
     from quantbot.risk.counterfactual_report import counterfactual_report
     from quantbot.storage import MigrationRequiredError, UnsupportedSchemaVersionError
 
-    database = None
     try:
-        database = context.database if context is not None else Database(_configured_database())
-        with database.transaction() as session:
+        path = context.database.path if context is not None else _configured_database()
+        with Database.read_only(path) as session:
             result = counterfactual_report(
                 StorageRepository(session), policy_identity=args.policy_identity,
                 by_regime=args.by_regime,
             )
         stream.write(json.dumps(result, ensure_ascii=True, sort_keys=True) + "\n")
         return 0
-    except (OSError, ValueError, MigrationRequiredError, UnsupportedSchemaVersionError) as error:
+    except (
+        OSError, ValueError, SQLAlchemyError,
+        MigrationRequiredError, UnsupportedSchemaVersionError,
+    ) as error:
         stream.write(json.dumps({"ok": False, "reason": str(error)}) + "\n")
         return 2
-    finally:
-        if database is not None and context is None:
-            database.close()
 
 
 def main(
