@@ -453,54 +453,51 @@ def process_snapshot(
         if report is not None:
             _save(score_path, report)
 
+    session = next(
+        (s for s in snapshot.sessions.sessions if s.open_at <= now <= s.close_at), None
+    )
     if not issue_forecasts:
         pass  # Recovery resolves old, authentic cohorts without creating gap forecasts.
+    elif session is None or now + timedelta(minutes=30) >= session.close_at:
+        result["blockers"].append("OUTSIDE_FORECAST_SESSION")
     elif not _guard(database, now - timedelta(minutes=32), now + timedelta(minutes=30)):
         result["blockers"].append("PROTECTED_FEATURE_WINDOW")
     else:
-        session = next(
-            (s for s in snapshot.sessions.sessions if s.open_at <= now <= s.close_at), None
-        )
-        if session is None or now + timedelta(minutes=30) >= session.close_at:
-            result["blockers"].append("OUTSIDE_FORECAST_SESSION")
-        else:
-            slot = now.replace(minute=now.minute // 10 * 10, second=0, microsecond=0)
-            path = (
-                root / "observations" / slot.date().isoformat() / (slot.strftime("%H%M") + ".json")
-            )
-            if not path.exists():
-                try:
-                    features = intraday_features(
-                        [item.bar for item in snapshot.inputs],
-                        snapshot.sessions,
-                        decision_at=now,
-                        symbols=config.symbols,
-                        source_snapshot_hash=snapshot.identity,
-                        receipt_at=snapshot.received_at,
+        slot = now.replace(minute=now.minute // 10 * 10, second=0, microsecond=0)
+        path = root / "observations" / slot.date().isoformat() / (slot.strftime("%H%M") + ".json")
+        if not path.exists():
+            try:
+                features = intraday_features(
+                    [item.bar for item in snapshot.inputs],
+                    snapshot.sessions,
+                    decision_at=now,
+                    symbols=config.symbols,
+                    source_snapshot_hash=snapshot.identity,
+                    receipt_at=snapshot.received_at,
+                )
+                if not features:
+                    raise ValueError("no complete minute cohort")
+            except ValueError:
+                result["blockers"].append("INCOMPLETE_OR_STALE_MINUTE_DATA")
+            else:
+                _save(path, dict(features=[f.model_dump(mode="json") for f in features]))
+                result["observations_this_run"] = len(features)
+                for model in _forecast_models(root):
+                    issued = predict_intraday(model, features, recorded_at=_now())
+                    target = (
+                        root
+                        / "predictions"
+                        / slot.date().isoformat()
+                        / (slot.strftime("%H%M") + "-" + model.model_id + ".json")
                     )
-                    if not features:
-                        raise ValueError("no complete minute cohort")
-                except ValueError:
-                    result["blockers"].append("INCOMPLETE_OR_STALE_MINUTE_DATA")
-                else:
-                    _save(path, dict(features=[f.model_dump(mode="json") for f in features]))
-                    result["observations_this_run"] = len(features)
-                    for model in _forecast_models(root):
-                        issued = predict_intraday(model, features, recorded_at=_now())
-                        target = (
-                            root
-                            / "predictions"
-                            / slot.date().isoformat()
-                            / (slot.strftime("%H%M") + "-" + model.model_id + ".json")
-                        )
-                        _save(
-                            target,
-                            dict(
-                                model_id=model.model_id,
-                                predictions=[p.model_dump(mode="json") for p in issued],
-                            ),
-                        )
-                        result["predictions_this_run"] += len(issued)
+                    _save(
+                        target,
+                        dict(
+                            model_id=model.model_id,
+                            predictions=[p.model_dump(mode="json") for p in issued],
+                        ),
+                    )
+                    result["predictions_this_run"] += len(issued)
     result["trained_this_run"], training_status = _train_challengers(
         root, database, config, code_commit
     )

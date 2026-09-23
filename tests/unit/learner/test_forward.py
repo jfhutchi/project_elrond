@@ -71,6 +71,35 @@ def test_protected_capture_is_never_analyzed(tmp_path, monkeypatch):
         assert "PROTECTED_FEATURE_WINDOW" in result["blockers"]
 
 
+def test_closed_session_reports_no_forecast_due_before_protected_guard(tmp_path, monkeypatch):
+    now = OPEN - timedelta(minutes=31)
+    source = cast(
+        Snapshot,
+        SimpleNamespace(
+            received_at=now,
+            identity="a" * 64,
+            sessions=calendar(),
+            inputs=(),
+        ),
+    )
+    monkeypatch.setattr(forward, "_now", lambda: now)
+
+    def protected(*args, **kwargs):
+        raise ValueError("protected")
+
+    monkeypatch.setattr(forward.service, "guard_range", protected)
+    with Database.create(tmp_path / "learner.db") as db:
+        result = forward.process_snapshot(
+            tmp_path, db, source,
+            code_commit="b" * 40,
+            config=forward.ForwardConfig(symbols=("AAPL",)),
+        )
+
+    assert "OUTSIDE_FORECAST_SESSION" in result["blockers"]
+    assert "PROTECTED_FEATURE_WINDOW" not in result["blockers"]
+    assert result["observations_this_run"] == 0
+
+
 def test_failed_fit_stays_charged_and_cannot_automatically_repeat(tmp_path, monkeypatch):
     with Database.create(tmp_path / "learner.db") as db:
         run(tmp_path, db, 31, monkeypatch)
