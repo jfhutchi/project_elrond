@@ -95,7 +95,7 @@ async def execute_paper_tick(
     cohort = load_cohort(directory, config.model_id, now=now)
     if cohort is None:
         return {"status": "WAITING", "trading_enabled": False,
-                "blockers": ["PAPER_CURRENT_COHORT_UNAVAILABLE"]}
+                "blockers": ["PAPER_CURRENT_COHORT_UNAVAILABLE"], "cleared_gate_codes": []}
     model, predictions = cohort
     token = _REGISTRY.set(config.operational_database)
     try:
@@ -132,16 +132,21 @@ async def execute_paper_tick(
         )
         if not eligibility.allowed:
             return {"status": "BLOCKED", "trading_enabled": False,
-                    "promotion": eligibility.stage, "blockers": list(eligibility.reasons)}
+                    "gate_stage": eligibility.stage, "blockers": list(eligibility.reasons)}
         # Do not refresh the heartbeat here: entry cannot prove independent exits.
         run_id = "learner-paper-" + str(uuid4())
         services.runner.bind_run(run_id)
         result = await services.cycle.run(
             run_id, started_at=now, trading_date=now.astimezone(XNYS_TIMEZONE).date()
         )
-        return {"status": result.status, "trading_enabled": result.status == "SUCCEEDED",
+        return {"status": result.status,
+                "trading_enabled": result.status == "SUCCEEDED" and result.orders_submitted > 0,
                 "orders_submitted": result.orders_submitted, "run_id": run_id,
                 "promotion": eligibility.stage,
+                "mode": "PAPER", "binding": services.runner.binding.model_dump(mode="json"),
+                "identity": services.runner._identity.model_dump(mode="json"),
+                "cleared_gate_codes": ["PAPER_PROMOTION_REQUIRED",
+                                       "PAPER_EXECUTION_NOT_CONFIGURED"],
                 "blockers": list(dict.fromkeys((*result.reasons, *services.runner.last_reasons)))}
     finally:
         await runtime.aclose()
@@ -174,6 +179,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Independent PAPER deadline supervisor")
     parser.add_argument("--commit", required=True)
     parser.add_argument("--env-file", required=True, type=Path)
+    parser.add_argument("--database", required=True, type=Path)
+    parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     repository = Path(__file__).resolve().parents[3]
     try:
@@ -187,7 +194,19 @@ def main() -> int:
             raise ValueError("independent deadline checkout must match clean pin")
         from quantbot.operations.service import isolated_application_environment
         with isolated_application_environment(args.env_file):
-            asyncio.run(serve_deadlines(Settings()))
+            from quantbot.runtime import runtime_paths
+
+            settings = Settings()
+            if (not args.database.is_absolute() or not args.database.is_file()
+                    or runtime_paths().database.resolve() != args.database.resolve()
+                    or settings.TRADING_MODE is not TradingMode.PAPER
+                    or settings.BROKER_ENVIRONMENT is not BrokerEnvironment.PAPER
+                    or not settings.EXPECTED_ACCOUNT_ID):
+                raise ValueError('independent deadline PAPER/database binding mismatch')
+            if args.check:
+                print('PAPER_DEADLINE_LAUNCH_CHECK_OK')
+            else:
+                asyncio.run(serve_deadlines(settings))
     except KeyboardInterrupt:
         return 0
     except Exception:

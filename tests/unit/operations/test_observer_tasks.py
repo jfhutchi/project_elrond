@@ -290,6 +290,43 @@ def test_monitor_wrapper_uses_owned_interpreter_and_check_arguments(tmp_path):
                                 '--env-file', str(environment), '--check']
 
 
+def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_python(tmp_path):
+    repo = tmp_path / 'wrapper-repo'
+    scripts = repo / 'deploy/omen'
+    scripts.mkdir(parents=True)
+    for filename in ('start-learner.ps1', 'windows-job.ps1', 'process-job.cs'):
+        shutil.copy2(ROOT / 'deploy/omen' / filename, scripts / filename)
+    module = repo / 'src/quantbot/learner'
+    module.mkdir(parents=True)
+    (module.parent / '__init__.py').write_text('')
+    (module / '__init__.py').write_text('')
+    (module / 'execution_worker.py').write_text(
+        'import json,sys\nprint(json.dumps({"argv":sys.argv[1:],"python":sys.executable}))\n')
+    subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                    f"New-Item -ItemType Junction -Path '{repo / '.venv'}' "
+                    f"-Target '{Path(sys.prefix).resolve()}' | Out-Null"], check=True, timeout=15)
+    directory = tmp_path / 'learner'
+    (directory / 'state').mkdir(parents=True)
+    learner_database = directory / 'state/learner.db'
+    learner_database.write_bytes(b'not opened')
+    operations = tmp_path / 'paper.db'
+    operations.write_bytes(b'not opened')
+    environment = tmp_path / 'fixture.env'
+    environment.write_text('TRADING_MODE=PAPER\n')
+    result = subprocess.run([
+        'powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+        str(scripts / 'start-learner.ps1'), '-Repository', str(repo), '-Directory', str(directory),
+        '-Database', str(learner_database), '-EnvironmentFile', str(environment),
+        '-Commit', 'b' * 40, '-DeadlineSupervisor',
+        '-OperationsDatabase', str(operations), '-Check',
+    ], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    observed = json.loads(result.stdout.strip())
+    assert Path(observed['python']).resolve() == (repo / '.venv/Scripts/python.exe').resolve()
+    assert observed['argv'] == ['--commit', 'b' * 40, '--database', str(operations),
+                                '--check', '--env-file', str(environment)]
+
+
 def test_dispatch_wrapper_checks_both_readonly_sources_with_owned_python(tmp_path):
     repo = tmp_path / 'wrapper-repo'
     scripts = repo / 'deploy/omen'

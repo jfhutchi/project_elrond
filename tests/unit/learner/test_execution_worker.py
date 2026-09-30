@@ -49,9 +49,42 @@ def test_no_live_or_extra_configuration_route():
         PaperWorkerConfig.model_validate(payload | {"ignore_kill_switch": True})
 
 
+@pytest.mark.parametrize('mode,match,expected', [('PAPER', True, 0), ('LIVE', True, 1),
+                                               ('PAPER', False, 1)])
+def test_deadline_launch_check_is_readonly_and_refuses_live_or_wrong_store(
+    tmp_path, monkeypatch, mode, match, expected,
+):
+    from types import SimpleNamespace
+
+    import quantbot.runtime
+    from quantbot.domain import BrokerEnvironment, TradingMode
+    from quantbot.learner import execution_worker
+
+    database = tmp_path / 'paper.db'
+    database.write_bytes(b'check must never open or mutate this')
+    environment = tmp_path / 'fixture.env'
+    environment.write_text('TRADING_MODE=PAPER\n')
+    monkeypatch.setattr('sys.argv', ['deadline', '--commit', 'd' * 40, '--database',
+                                    str(database), '--env-file', str(environment), '--check'])
+    monkeypatch.setattr(execution_worker.subprocess, 'check_output',
+                        lambda argv, **kwargs: 'd' * 40 if argv[1] == 'rev-parse' else '')
+    monkeypatch.setattr(execution_worker, 'Settings', lambda: SimpleNamespace(
+        TRADING_MODE=TradingMode(mode), BROKER_ENVIRONMENT=BrokerEnvironment.PAPER,
+        EXPECTED_ACCOUNT_ID='synthetic-paper-account'))
+    monkeypatch.setattr(quantbot.runtime, 'runtime_paths', lambda: SimpleNamespace(
+        database=database if match else tmp_path / 'wrong.db'))
+    def forbidden(*args, **kwargs):
+        raise AssertionError('check cannot construct broker or open store')
+    monkeypatch.setattr(quantbot.runtime, 'build_runtime', forbidden)
+    before = database.read_bytes()
+    assert execution_worker.main() == expected
+    assert database.read_bytes() == before
+
+
 @pytest.mark.asyncio
+@pytest.mark.parametrize('supervisor_alive', [False, True])
 async def test_worker_consumes_forecast_submits_paper_and_preserves_independent_exits(
-    context, tmp_path, monkeypatch,
+    context, tmp_path, monkeypatch, supervisor_alive,
 ):
     import json
     from datetime import datetime
@@ -128,9 +161,35 @@ async def test_worker_consumes_forecast_submits_paper_and_preserves_independent_
 
     monkeypatch.setattr(execution_worker, "datetime", Clock)
     # Only the independently invoked supervisor can refresh entry permission.
-    await supervisor.run_once()
+    if supervisor_alive:
+        await supervisor.run_once()
     receipt = await execution_worker.execute_paper_tick(
         tmp_path, database, _settings(), code_commit="d" * 40)
+    from quantbot.console import learner as console_learner
+    from quantbot.learner.receipts import valid_worker_authority
+    from quantbot.operations.monitor import _samples
+
+    worker = dict(paper=receipt, promotion=receipt['promotion'],
+                  trading_enabled=receipt['trading_enabled'], code_commit='d' * 40,
+                  run_id='d59d7164-688b-4d39-bd3c-471944f30121',
+                  status='BLOCKED', started_at=broker.now.isoformat(),
+                  finished_at=broker.now.isoformat(), resolved_this_run=0,
+                  blockers=receipt['blockers'])
+    assert valid_worker_authority(tmp_path, worker)
+    (tmp_path / 'worker.json').write_text(json.dumps(worker))
+    deployment = dict(learner_commit='d' * 40, scheduled=True, interval_minutes=10)
+    (tmp_path / 'deployment.json').write_text(json.dumps(deployment))
+    monkeypatch.setattr(console_learner, 'datetime', Clock)
+    assert _samples(tmp_path, database.path)['LEARNER']['phase'] == 'COMPLETED'
+    assert console_learner._worker(tmp_path, deployment)['last_worker_at'] == broker.now.isoformat()
+    tampered = worker | {'paper': receipt | {'mode': 'LIVE'}}
+    assert not valid_worker_authority(tmp_path, tampered)
+    assert not valid_worker_authority(tmp_path, worker | {'code_commit': 'e' * 40})
+    if not supervisor_alive:
+        assert receipt['orders_submitted'] == 0
+        assert receipt['trading_enabled'] is False
+        assert broker.submitted == []
+        return
     assert receipt["orders_submitted"] == 1, receipt
     assert len(guards) == 2  # Both model lineage and genuine cohort range checked.
     entry = broker.submitted[0]

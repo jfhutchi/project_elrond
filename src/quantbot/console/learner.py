@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import sqlite3
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from quantbot.learner.receipts import valid_worker_authority
 from quantbot.research.manifest import content_id, looks_like_credential
 
 Hash = Annotated[str, StringConstraints(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
@@ -238,7 +240,7 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
     try:
         receipt = _json(root / 'worker.json')
         if (receipt['code_commit'] != deployment['learner_commit']
-                or receipt['trading_enabled'] is not False or receipt['promotion'] != 'NONE'
+                or not valid_worker_authority(root, receipt)
                 or deployment['interval_minutes'] != 10
                 or receipt['status'] not in ('BLOCKED', 'ERROR')
                 or type(receipt['resolved_this_run']) is not int
@@ -247,9 +249,9 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
         labels = {
             'FORWARD_PRODUCER_MISSING': 'New-market forecast producer is not implemented.',
             'PAPER_PROMOTION_REQUIRED': (
-                'This learner model is not approved for PAPER entry.'),
+                'The exact model deployment and PAPER entry gate have not been verified.'),
             'PAPER_EXECUTION_NOT_CONFIGURED': (
-                'The learner PAPER execution adapter is not deployed.'),
+                'The learner PAPER execution configuration has not been verified.'),
             'OUTCOME_PROCESSING_FAILED': 'Outcome processing failed; inspect the worker.',
             'PROTECTED_FEATURE_WINDOW': (
                 'The feature or target window overlaps protected research dates.'),
@@ -260,7 +262,13 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             'FORECAST_LOOKBACK_WARMUP': 'Waiting for 31 completed regular-session minutes.',
             'ALERT_STATE_FAILED': 'Alert persistence failed; inspect the alert store and policy.',
         }
-        blockers = tuple(labels[key] for key in receipt['blockers'])
+        if not isinstance(receipt['blockers'], list) or any(
+            not isinstance(key, str) or re.fullmatch(r'[A-Z][A-Z0-9_]{0,100}', key) is None
+            for key in receipt['blockers']
+        ):
+            raise ValueError('invalid blocker code')
+        blockers = tuple(labels.get(key, 'The PAPER cycle reports an additional readiness gate.')
+                         for key in receipt['blockers'])
         timestamp = _timestamp(receipt['finished_at'])
         age = (datetime.now(UTC) - datetime.fromisoformat(timestamp)).total_seconds()
         if age < 0:

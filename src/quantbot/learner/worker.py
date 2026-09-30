@@ -119,7 +119,7 @@ def run_cycle(
                     receipt['trading_enabled'] = receipt['paper']['trading_enabled']
                     receipt['promotion'] = receipt['paper'].get('promotion') or 'NONE'
                     receipt['blockers'] = [code for code in receipt['blockers'] if code not in
-                        ('PAPER_PROMOTION_REQUIRED', 'PAPER_EXECUTION_NOT_CONFIGURED')]
+                        receipt['paper'].get('cleared_gate_codes', [])]
                     receipt['blockers'].extend(receipt['paper']['blockers'])
             receipt['status'] = 'BLOCKED'
         except Exception:
