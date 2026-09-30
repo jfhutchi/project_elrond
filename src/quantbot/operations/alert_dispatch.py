@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
@@ -13,6 +14,7 @@ from typing import Any, Protocol, Self
 from uuid import UUID, uuid4
 
 from quantbot.operations.alert_delivery import accept_comment, encode_event, parse_comment
+from quantbot.operations.service import ServiceRefusal, _git
 
 REPOSITORY = "jfhutchi/project_elrond"
 PR = 255
@@ -149,6 +151,45 @@ class DeliveryQueue:
                     status = "ENVELOPE_REFUSED"
                 self.connection.execute("INSERT INTO ingested VALUES (?, ?)", (event_id, status))
 
+    def initialize_source(self, path: Path, *, now: datetime) -> None:
+        """Commission current active conditions once; preserve the source history.
+
+        Historical recovered alerts must not masquerade as a current outage on
+        first delivery. Future source events retain their normal durable cursor.
+        """
+        if not self.confirmed() or not path.is_absolute() or not path.is_file():
+            raise ValueError("ALERT_SOURCE_COMMISSION_REFUSED")
+        own_path = Path(self.connection.execute("PRAGMA database_list").fetchone()[2]).resolve()
+        if path.resolve() == own_path or path.samefile(own_path):
+            raise ValueError("ALERT_QUEUE_SOURCE_ALIAS_REFUSED")
+        with sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=5) as source:
+            source.execute("BEGIN")
+            cursor = source.execute("SELECT COALESCE(MAX(id),0) FROM events").fetchone()[0]
+            documents = source.execute("SELECT document FROM alerts LIMIT 21").fetchall()
+        if len(documents) > 20:
+            raise ValueError("ALERT_BASELINE_LIMIT_EXCEEDED")
+        with self.connection:
+            self.connection.execute("BEGIN IMMEDIATE")
+            if self.connection.execute("SELECT 1 FROM state WHERE key='source'").fetchone():
+                raise ValueError("ALERT_SOURCE_ALREADY_COMMISSIONED")
+            for (document,) in documents:
+                event = json.loads(document)
+                if (event.get("resolved_at") is not None
+                        or event.get("acknowledged_at") is not None
+                        or event.get("severity") not in ("WARNING", "CRITICAL")):
+                    continue
+                event["event"] = "OPENED"
+                wire = encode_event(event, delivery_id=uuid4(), emitted_at=now)
+                identifier = parse_comment(wire)["delivery_id"]
+                self.connection.execute(
+                    "INSERT INTO deliveries VALUES (?, ?, NULL)", (identifier, wire)
+                )
+            self.connection.execute(
+                "INSERT INTO state VALUES ('source', ?)", (str(path.resolve()),)
+            )
+            if cursor:
+                self.connection.execute("INSERT INTO ingested VALUES (?, 'BASELINE')", (cursor,))
+
 
 def dispatch_one(queue: DeliveryQueue, transport: Transport) -> str:
     try:
@@ -196,7 +237,34 @@ class GitHubTransport:
         if body is not None:
             command.extend(["--method", "POST", "--input", "-"])
         result = subprocess.run(
-            command, input=body, text=True, capture_output=True, timeout=5, check=False
+            command,
+            input=body,
+            text=True,
+            capture_output=True,
+            timeout=5,
+            check=False,
+            env={
+                key: value
+                for key, value in os.environ.items()
+                if key.upper()
+                in {
+                    "PATH",
+                    "PATHEXT",
+                    "SYSTEMROOT",
+                    "WINDIR",
+                    "COMSPEC",
+                    "USERPROFILE",
+                    "HOMEDRIVE",
+                    "HOMEPATH",
+                    "APPDATA",
+                    "LOCALAPPDATA",
+                    "TEMP",
+                    "TMP",
+                    "GH_CONFIG_DIR",
+                    "GH_TOKEN",
+                    "GITHUB_TOKEN",
+                }
+            },
         )
         if result.returncode:
             raise OSError("GITHUB_REQUEST_FAILED")
@@ -256,7 +324,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stage-canary", action="store_true")
     parser.add_argument("--confirm-canary")
     parser.add_argument("--events-database", type=Path)
+    parser.add_argument("--initialize-source", action="store_true")
     parser.add_argument("--send", action="store_true")
+    parser.add_argument("--commit")
+    parser.add_argument("--check", action="store_true")
     args = parser.parse_args(argv)
     if not args.queue.is_absolute():
         print("DELIVERY_QUEUE_REFUSED")
@@ -272,6 +343,20 @@ def main(argv: list[str] | None = None) -> int:
         print("ALERT_QUEUE_SOURCE_ALIAS_REFUSED")
         return 1
     try:
+        if args.commit is not None:
+            repository = Path(__file__).resolve().parents[3]
+            if (
+                len(args.commit) != 40
+                or any(c not in "0123456789abcdef" for c in args.commit)
+                or _git(repository, "rev-parse", "HEAD") != args.commit
+                or _git(repository, "status", "--porcelain")
+            ):
+                raise ValueError("DISPATCH_CHECKOUT_REFUSED")
+        if args.check:
+            if args.commit is None:
+                raise ValueError("DISPATCH_PIN_REQUIRED")
+            print("DISPATCH_LAUNCH_CHECK_OK")
+            return 0
         with DeliveryQueue(args.queue) as queue:
             if args.stage_canary:
                 now = datetime.now(UTC)
@@ -288,11 +373,21 @@ def main(argv: list[str] | None = None) -> int:
             if args.confirm_canary:
                 queue.confirm_canary(args.confirm_canary)
             if args.events_database:
-                queue.ingest(args.events_database, now=datetime.now(UTC))
+                if args.initialize_source:
+                    queue.initialize_source(args.events_database, now=datetime.now(UTC))
+                else:
+                    queue.ingest(args.events_database, now=datetime.now(UTC))
             if args.send:
-                print(dispatch_one(queue, GitHubTransport()))
+                status = (
+                    dispatch_one(queue, GitHubTransport()) if queue.pending()
+                    else "NO_PENDING_DELIVERY"
+                )
+                print(status)
+                if status in ("RETRY_PENDING", "DISPATCH_BUSY"):
+                    return 1
         return 0
-    except (OSError, ValueError, KeyError, TypeError, sqlite3.Error, subprocess.SubprocessError):
+    except (OSError, ValueError, KeyError, TypeError, sqlite3.Error,
+            subprocess.SubprocessError, ServiceRefusal):
         print("DELIVERY_REFUSED_OR_UNAVAILABLE")
         return 1
 

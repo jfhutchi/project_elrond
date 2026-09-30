@@ -8,6 +8,37 @@ from quantbot.operations.alert_dispatch import DeliveryQueue, GitHubTransport, d
 NOW = datetime(2026, 10, 1, 14, tzinfo=UTC)
 
 
+def test_initial_delivery_baselines_history_and_sends_current_only(tmp_path):
+    import json
+    import sqlite3
+
+    from quantbot.operations.alert_delivery import parse_comment
+
+    source_path = tmp_path / "alerts.db"
+    active = dict(code="LEARNER_NO_PROGRESS", severity="CRITICAL",
+                  first_seen=NOW.isoformat(), resolved_at=None, acknowledged_at=None)
+    recovered = active | {"code": "LEARNER_HEARTBEAT_STALE", "resolved_at": NOW.isoformat()}
+    with sqlite3.connect(source_path) as source_db:
+        source_db.execute("CREATE TABLE alerts(code TEXT, document TEXT)")
+        source_db.execute("CREATE TABLE events(id INTEGER, document TEXT)")
+        for event in (active, recovered):
+            source_db.execute("INSERT INTO alerts VALUES (?,?)", (event['code'], json.dumps(event)))
+        source_db.execute("INSERT INTO events VALUES (100,?)", (json.dumps(recovered),))
+    original = source_path.read_bytes()
+    with DeliveryQueue(tmp_path / "queue.db") as queue:
+        identifier = uuid4()
+        queue.enqueue(source(), now=NOW, identifier=identifier)
+        dispatch_one(queue, Transport())
+        queue.confirm_canary(str(identifier))
+        queue.initialize_source(source_path, now=NOW)
+        assert parse_comment(queue.pending()[1])["code"] == "LEARNER_NO_PROGRESS"
+        queue.ingest(source_path, now=NOW)
+        assert queue.connection.execute("SELECT COUNT(*) FROM deliveries").fetchone()[0] == 2
+        with pytest.raises(ValueError, match="ALREADY_COMMISSIONED"):
+            queue.initialize_source(source_path, now=NOW)
+    assert source_path.read_bytes() == original
+
+
 def source():
     return dict(code="DELIVERY_CANARY", event="CANARY", severity="INFO", first_seen=NOW.isoformat())
 
@@ -134,10 +165,12 @@ def test_github_host_is_pinned_despite_ambient_enterprise_host(monkeypatch):
     from types import SimpleNamespace
 
     monkeypatch.setenv("GH_HOST", "unapproved.example")
+    monkeypatch.setenv("ALPACA_PAPER_API_SECRET", "must-not-reach-transport")
     calls = []
 
     def run(command, **kwargs):
         calls.append(command)
+        assert "ALPACA_PAPER_API_SECRET" not in kwargs["env"]
         return SimpleNamespace(returncode=0, stdout="{}")
 
     monkeypatch.setattr("quantbot.operations.alert_dispatch.subprocess.run", run)
@@ -145,6 +178,15 @@ def test_github_host_is_pinned_despite_ambient_enterprise_host(monkeypatch):
     transport.executable = "gh"
     transport._api("user")
     assert calls[0][1:4] == ["api", "--hostname", "github.com"]
+
+
+def test_scheduled_checkout_check_refuses_wrong_pin_without_queue_write(tmp_path, monkeypatch):
+    from quantbot.operations.alert_dispatch import main
+
+    monkeypatch.setattr("quantbot.operations.alert_dispatch._git", lambda *args: "a" * 40)
+    path = tmp_path / "queue.db"
+    assert main(["--queue", str(path), "--commit", "b" * 40, "--check"]) == 1
+    assert not path.exists()
 
 
 def test_source_database_cannot_be_initialized_as_queue(tmp_path):
