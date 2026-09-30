@@ -65,3 +65,28 @@ an authoritative current equity mapping artifact where applicable, query-symbol
 attribution, configured SEC contact if used, freshness/coverage receipts from real
 position ticks, outcome linkage and a shadow comparison against the frozen
 forecast-only baseline. This slice is not connected to execution or deployed.
+
+## Observational deployment
+
+The pinned `position_research_launch` module and Windows wrapper run independently
+with a separate shadow database and lock, outside the learner evidence directory.
+Initialization is explicit; ordinary startup cannot create/migrate the store.
+The shadow catalog retains official issuer/provider instrument provenance and
+dated aliases. It never registers guessed company/constituent CIKs for ETFs.
+
+Only fixed GET requests obtain current PAPER-position membership and bounded news.
+No account values, quantities or credentials are recorded. Advice may use only
+today's integrity-checked cohort from the exact frozen model and a completed,
+eligible producer receipt; stale/future data is rejected. Missing forecasts have
+null IDs/edges and produce WAIT, never invented zero returns. No semantic news
+signal modifies the frozen forecast. News remains observed context until a separate
+prospective experiment validates an interpretation. Existing protection owns all
+risk/exit authority, and the original trading services/pins remain unchanged.
+
+Rollout uses existing Limited/Interactive task identity and credentials, a clean
+native release and frozen dependencies. No operational database migration or
+planned protection pause is needed. Rollback disables only the new research task
+and preserves its audit store; it does not rewind trading/learner state. Real
+provider receipts are acceptance evidence, not profitability or complete public
+coverage. SEC company filings still require an explicitly approved contact sent
+in HTTP User-Agent requests to SEC EDGAR; no contact is inferred or transmitted.

@@ -23,9 +23,9 @@ class ResearchDecision(LearnerModel):
     symbol: str
     at: datetime
     thesis: str
-    forecast_id: str
-    held: bool
-    edge_bps: Decimal
+    forecast_id: str | None
+    held: bool | None
+    edge_bps: Decimal | None
     cost_bps: Decimal
     action: Literal['BUY', 'HOLD', 'SELL', 'WAIT']
     reason: str
@@ -59,8 +59,8 @@ def news_evidence(result: SourceResult) -> tuple[tuple[Source, ...], tuple[str, 
     return tuple(sources), tuple(sorted(set(gaps)))
 
 
-def decision(*, symbol: str, at: datetime, thesis: str, forecast_id: str, held: bool,
-             edge_bps: Decimal, cost_bps: Decimal, hard_loss: bool,
+def decision(*, symbol: str, at: datetime, thesis: str, forecast_id: str | None, held: bool | None,
+             edge_bps: Decimal | None, cost_bps: Decimal, hard_loss: bool,
              sources: tuple[Source, ...], source_gaps: tuple[str, ...],
              max_age: timedelta) -> ResearchDecision:
     """Log edge after costs and evidence availability; hard loss always takes priority.
@@ -69,8 +69,10 @@ No mark-profit input exists: a positive mark alone is not a sell thesis. Advice
 is never a veto override, a position handoff, or a model-promotion decision.
 """
     if (at.tzinfo is None or at.utcoffset() is None or max_age <= timedelta(0)
-            or not edge_bps.is_finite() or not cost_bps.is_finite() or cost_bps < 0
-            or not symbol.strip() or not thesis.strip() or not forecast_id.strip()):
+            or (edge_bps is not None and not edge_bps.is_finite())
+            or not cost_bps.is_finite() or cost_bps < 0
+            or not symbol.strip() or not thesis.strip()
+            or (forecast_id is not None and not forecast_id.strip())):
         raise ValueError('invalid research decision inputs')
     accepted = []
     gaps = list(source_gaps)
@@ -88,6 +90,10 @@ is never a veto override, a position handoff, or a model-promotion decision.
     action: Literal['BUY', 'HOLD', 'SELL', 'WAIT']
     if held and hard_loss:
         action, reason = 'SELL', 'HARD_RISK_LIMIT'
+    elif held is None:
+        action, reason = 'WAIT', 'POSITION_STATE_UNAVAILABLE'
+    elif edge_bps is None or forecast_id is None:
+        action, reason = 'WAIT', 'FORECAST_UNAVAILABLE'
     elif gaps or not accepted:
         action, reason = 'WAIT', 'RESEARCH_COVERAGE_INCOMPLETE'
     elif edge_bps > cost_bps:

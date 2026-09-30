@@ -215,9 +215,9 @@ class PositionSources:
             sources=tuple(sources),gaps=tuple(sorted(set(gaps))),coverage=tuple(coverage))
 
 
-def shadow_decision(snapshot: PositionResearchSnapshot, *, at: datetime, held: bool,
-                    edge_bps: Decimal, cost_bps: Decimal, hard_loss: bool,
-                    thesis: str, forecast_id: str) -> ResearchDecision:
+def shadow_decision(snapshot: PositionResearchSnapshot, *, at: datetime, held: bool | None,
+                    edge_bps: Decimal | None, cost_bps: Decimal, hard_loss: bool,
+                    thesis: str, forecast_id: str | None) -> ResearchDecision:
     _aware(at)
     if at < snapshot.collected_at:
         raise ValueError('decision cannot precede actual provider retrieval')
