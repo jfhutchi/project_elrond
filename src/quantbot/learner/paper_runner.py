@@ -100,7 +100,8 @@ def paper_model_binding(
         {
             name: hashlib.sha256((root / name).read_bytes()).hexdigest()
             for name in (
-                "intraday.py", "paper.py", "paper_runner.py", "paper_deadlines.py", "inherited.py"
+                "intraday.py", "paper.py", "paper_runner.py", "paper_deadlines.py", "inherited.py",
+                "execution_worker.py"
             )
         }
     )

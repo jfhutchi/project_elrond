@@ -25,6 +25,7 @@ from quantbot.learner.paper_runner import (
     PaperExecutionNotConfigured,
     PaperExecutionPolicy,
     build_intraday_paper_services,
+    paper_model_binding,
 )
 from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.storage import Database
@@ -94,8 +95,8 @@ async def execute_paper_tick(
     now = datetime.now(UTC)
     cohort = load_cohort(directory, config.model_id, now=now)
     if cohort is None:
-        return {"status": "WAITING", "trading_enabled": False,
-                "blockers": ["PAPER_CURRENT_COHORT_UNAVAILABLE"], "cleared_gate_codes": []}
+        return await _waiting_setup(directory, learner_database, settings, config,
+                                    code_commit=code_commit)
     model, predictions = cohort
     token = _REGISTRY.set(config.operational_database)
     try:
@@ -148,6 +149,67 @@ async def execute_paper_tick(
                 "cleared_gate_codes": ["PAPER_PROMOTION_REQUIRED",
                                        "PAPER_EXECUTION_NOT_CONFIGURED"],
                 "blockers": list(dict.fromkeys((*result.reasons, *services.runner.last_reasons)))}
+    finally:
+        await runtime.aclose()
+        runtime.database.close()
+
+
+async def _waiting_setup(
+    directory: Path, learner: Database, settings: Settings, config: PaperWorkerConfig,
+    *, code_commit: str,
+) -> dict[str, Any]:
+    """Read real commissioning independently of session/cohort availability; no orders."""
+    from quantbot.risk.policy_versions import recorded_policy_version
+    from quantbot.runtime import build_runtime
+    from quantbot.storage import StorageRepository
+
+    if not settings.EXPECTED_ACCOUNT_ID:
+        return dict(status='BLOCKED', trading_enabled=False,
+                    blockers=['PAPER_DEPLOYMENT_OR_CONFIG_REQUIRED'])
+    model = next((m for m in _models(directory / 'intraday') if m.model_id == config.model_id),
+                 None)
+    if model is None:
+        return dict(status='BLOCKED', trading_enabled=False, blockers=['PAPER_MODEL_UNAVAILABLE'])
+    token = _REGISTRY.set(config.operational_database)
+    try:
+        if not _guard(learner, model.training_start, model.validation_end):
+            return dict(status='BLOCKED', trading_enabled=False,
+                        blockers=['PROTECTED_FEATURE_WINDOW'])
+    finally:
+        _REGISTRY.reset(token)
+    runtime = build_runtime(settings)
+    try:
+        if runtime.running_git_commit != code_commit:
+            raise ValueError('PAPER waiting checkout identity mismatch')
+        if config.policy.buying_power_reserve_bps != settings.ENTRY_BUYING_POWER_RESERVE_BPS:
+            raise ValueError('PAPER waiting reserve mismatch')
+        runtime.config = runtime.config.model_copy(update={
+            'risk_per_trade_bps': min(config.risk_per_trade_bps, runtime.config.risk_per_trade_bps),
+            'max_position_value_bps': min(config.max_position_value_bps,
+                                        runtime.config.max_position_value_bps)})
+        with runtime.database.transaction() as session:
+            repository = StorageRepository(session)
+            version = recorded_policy_version(repository)
+            if version is None:
+                return dict(status='BLOCKED', trading_enabled=False,
+                            blockers=['PAPER_DEPLOYMENT_OR_CONFIG_REQUIRED'])
+            binding = paper_model_binding(model, config=runtime.config, policy=config.policy,
+                veto_policy=version.policy(), market_data=runtime.market_data_config)
+            provisional = binding.strategy_identity(git_commit=code_commit,
+                                                     deployed_at=model.created_at)
+            identity = repository.get_strategy_deployment(provisional.strategy_id,
+                                                          provisional.version)
+        if identity is None or identity.git_commit != code_commit:
+            return dict(status='BLOCKED', trading_enabled=False,
+                        blockers=['PAPER_DEPLOYMENT_OR_CONFIG_REQUIRED'])
+        eligibility = assess_paper_entry(runtime.database.path, binding=binding, identity=identity)
+        if not eligibility.allowed:
+            return dict(status='BLOCKED', trading_enabled=False, blockers=list(eligibility.reasons))
+        return dict(status='WAITING', trading_enabled=False, orders_submitted=0, mode='PAPER',
+                    promotion=eligibility.stage, binding=binding.model_dump(mode='json'),
+                    identity=identity.model_dump(mode='json'),
+                    blockers=['PAPER_CURRENT_COHORT_UNAVAILABLE'],
+                    cleared_gate_codes=['PAPER_PROMOTION_REQUIRED','PAPER_EXECUTION_NOT_CONFIGURED'])
     finally:
         await runtime.aclose()
         runtime.database.close()

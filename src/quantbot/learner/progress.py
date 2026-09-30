@@ -153,6 +153,8 @@ def monitor_progress(
             if "PAPER_PROMOTION_REQUIRED" in codes
             else "MISSING_COMPONENT"
             if "PAPER_EXECUTION_NOT_CONFIGURED" in codes
+            else "WAITING_FOR_FORWARD_FORECAST"
+            if "PAPER_CURRENT_COHORT_UNAVAILABLE" in codes
             else "UNVERIFIED"
         ),
         training_status=(

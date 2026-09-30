@@ -35,7 +35,7 @@ def valid_worker_authority(root: Path, receipt: dict[str, Any]) -> bool:
         code_hash = content_id({
             name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
             for name in ('intraday.py', 'paper.py', 'paper_runner.py', 'paper_deadlines.py',
-                         'inherited.py')
+                         'inherited.py', 'execution_worker.py')
         })
         expected_enabled = (paper['status'] == 'SUCCEEDED'
                             and type(submitted) is int and submitted > 0)
