@@ -1,0 +1,57 @@
+{
+  "DELIVERY_CANARY": {
+    "subsystem": "delivery",
+    "category": "SYNTHETIC_TEST",
+    "action": "Confirm this synthetic alert arrived once in the approved Elrond chat."
+  },
+  "PAPER_PROMOTION_REQUIRED": {
+    "subsystem": "paper_entry",
+    "category": "OPERATOR_ACTION_REQUIRED",
+    "action": "Prepare an empirically eligible frozen PAPER evidence package, then request approval for the exact deployment. Local forecasts may continue. Approval cannot replace evidence or establish profitability."
+  },
+  "PAPER_EXECUTION_NOT_CONFIGURED": {
+    "subsystem": "paper_entry",
+    "category": "MISSING_COMPONENT",
+    "action": "Implement and test the PAPER adapter and protection handoff; request deployment approval. Local forecasts may continue."
+  },
+  "FORWARD_PRODUCER_MISSING": {
+    "subsystem": "forecast",
+    "category": "MISSING_COMPONENT",
+    "action": "Implement and test a guarded forward producer; request deployment approval."
+  },
+  "OUTCOME_PROCESSING_FAILED": {
+    "subsystem": "learner",
+    "category": "OPERATOR_ACTION_REQUIRED",
+    "action": "Inspect the safe worker failure code and reproduce on an isolated store. Preserve protected windows and risk controls."
+  },
+  "TRAINING_ATTEMPT_REQUIRES_REVIEW": {
+    "subsystem": "training",
+    "category": "OPERATOR_ACTION_REQUIRED",
+    "action": "Reconcile charged trials with immutable fit receipts before resuming training. Preserve failed attempts and cumulative search burden."
+  },
+  "LEARNER_NO_PROGRESS": {
+    "subsystem": "forecast",
+    "category": "UNEXPLAINED_STALL",
+    "action": "Inspect data freshness, worker receipts, pending targets and scheduler health. Preserve protected dates and risk controls."
+  },
+  "LEARNER_HEARTBEAT_STALE": {
+    "subsystem": "learner",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
+  },
+  "PROTECTION_HEARTBEAT_STALE": {
+    "subsystem": "protection",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
+  },
+  "RECONCILIATION_HEARTBEAT_STALE": {
+    "subsystem": "reconciliation",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
+  },
+  "INGESTION_HEARTBEAT_STALE": {
+    "subsystem": "ingestion",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
+  }
+}

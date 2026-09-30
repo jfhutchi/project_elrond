@@ -27,6 +27,7 @@ FIELDS = {
     "action",
 }
 EVENTS = {
+    "CANARY": "CANARY",
     "OPENED": "NEW",
     "SEVERITY_CHANGED": "NEW",
     "REMINDER": "REMINDER",
@@ -34,6 +35,11 @@ EVENTS = {
     "ACKNOWLEDGED": "ACKNOWLEDGED",
 }
 CATALOG = {
+    "DELIVERY_CANARY": (
+        "delivery",
+        "SYNTHETIC_TEST",
+        "Confirm this synthetic alert arrived once in the approved Elrond chat.",
+    ),
     "PAPER_PROMOTION_REQUIRED": (
         "paper_entry",
         "OPERATOR_ACTION_REQUIRED",
@@ -103,6 +109,10 @@ def _validate(document: dict[str, Any]) -> None:
     if not isinstance(code, str) or code not in CATALOG:
         raise _refuse()
     subsystem, category, action = CATALOG[code]
+    if (code == "DELIVERY_CANARY") != (document["event"] == "CANARY"):
+        raise _refuse()
+    if code == "DELIVERY_CANARY" and document["severity"] != "INFO":
+        raise _refuse()
     if (
         document["subsystem"] != subsystem
         or document["category"] != category
