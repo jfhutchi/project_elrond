@@ -196,3 +196,17 @@ def test_timestamp_overflow_refused_by_encoder_and_parser():
     document["first_seen"] = raw["first_seen"]
     with pytest.raises(ValueError, match="^ALERT_ENVELOPE_REFUSED$"):
         parse_comment(prefix + "\n" + json.dumps(document))
+
+
+def test_synthetic_canary_has_exact_contract_and_cannot_claim_runtime_health():
+    raw = dict(code="DELIVERY_CANARY", event="CANARY", severity="INFO", first_seen=NOW.isoformat())
+    parsed = parse_comment(encode_event(raw, delivery_id=uuid4(), emitted_at=NOW))
+    assert (parsed["event"], parsed["subsystem"], parsed["category"], parsed["action"]) == (
+        "CANARY",
+        "delivery",
+        "SYNTHETIC_TEST",
+        "Confirm this synthetic alert arrived once in the approved Elrond chat.",
+    )
+    for changes in [{"severity": "CRITICAL"}, {"event": "OPENED"}, {"code": "LEARNER_NO_PROGRESS"}]:
+        with pytest.raises(ValueError, match="^ALERT_ENVELOPE_REFUSED$"):
+            encode_event(raw | changes, delivery_id=uuid4(), emitted_at=NOW)

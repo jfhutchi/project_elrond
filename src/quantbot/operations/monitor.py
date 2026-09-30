@@ -19,6 +19,7 @@ from typing import Any
 from uuid import UUID
 
 from quantbot.console.market_status import MarketStatus, paper_market_probe
+from quantbot.learner.receipts import valid_worker_authority
 from quantbot.operations.alerts import AlertStore, Condition
 
 
@@ -61,7 +62,7 @@ def _samples(learner: Path, database: Path) -> dict[str, object]:
                 or any(c not in '0123456789abcdef' for c in pin)
                 or pin != deployment['learner_commit']
                 or doc['status'] not in ('STARTED', 'BLOCKED', 'ERROR')
-                or doc['trading_enabled'] is not False or doc['promotion'] != 'NONE'):
+                or not valid_worker_authority(learner, doc)):
             raise ValueError('invalid completed worker receipt')
         started = datetime.fromisoformat(doc['started_at'])
         if started.tzinfo is None:

@@ -4,7 +4,10 @@ param(
     [Parameter(Mandatory = $true)][string] $Directory,
     [Parameter(Mandatory = $true)][string] $Commit,
     [Parameter(Mandatory = $true)][string] $Database,
-    [string] $EnvironmentFile
+    [string] $EnvironmentFile,
+    [switch] $DeadlineSupervisor,
+    [string] $OperationsDatabase,
+    [switch] $Check
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,6 +76,15 @@ $ServiceJob = New-ElrondProcessJob
 $ErrorActionPreference = 'Continue'
 $global:LASTEXITCODE = $null
 $WorkerArguments = @('-m', 'quantbot.learner.worker', '--directory', $Directory, '--commit', $Commit)
+if ($DeadlineSupervisor) {
+    if (-not $EnvironmentFile -or -not [System.IO.Path]::IsPathRooted($OperationsDatabase) -or
+        -not (Test-Path -LiteralPath $OperationsDatabase -PathType Leaf)) {
+        throw 'PAPER_DEADLINE_INPUT_INVALID'
+    }
+    $WorkerArguments = @('-m', 'quantbot.learner.execution_worker', '--commit', $Commit,
+        '--database', $OperationsDatabase)
+    if ($Check) { $WorkerArguments += '--check' }
+} elseif ($OperationsDatabase -or $Check) { throw 'PAPER_DEADLINE_MODE_REQUIRED' }
 if ($EnvironmentFile) {
     if (-not [System.IO.Path]::IsPathRooted($EnvironmentFile) -or
         -not (Test-Path -LiteralPath $EnvironmentFile -PathType Leaf)) {

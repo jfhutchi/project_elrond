@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set title = "P&L calendar" %}
+{% block body %}
+<style>
+.performance-layout { display:grid; grid-template-columns:minmax(0,1fr) 250px; gap:1rem; }
+.performance-calendar { table-layout:fixed; }
+.performance-calendar td { height:100px; vertical-align:top; padding:.4rem; }
+.performance-calendar .amount { font-weight:600; font-variant-numeric:tabular-nums; }
+.performance-positive { color:var(--ok); } .performance-negative { color:var(--crit); }
+.performance-neutral { color:var(--ink-dim); }
+.performance-calendar .day-status { font-size:.7rem; color:var(--ink-faint); }
+.month-navigation { display:flex; justify-content:space-between; margin:1rem 0; }
+@media(max-width:850px) { .performance-layout { grid-template-columns:1fr; } }
+</style>
+<h1>P&L calendar</h1>
+<p class="sub">Recorded daily net P&L. Finalized observations only; cumulative totals include all observed months.</p>
+{% if not performance.available %}<p class="absent">Performance unavailable: {{ performance.reason }}</p>{% endif %}
+{% if not performance.calendar_known %}<p class="quiet">Exchange calendar unavailable. Non-trading days are not inferred.</p>{% endif %}
+<div class="month-navigation">
+{% if performance.previous_month %}<a href="/calendar?month={{ performance.previous_month }}" aria-label="Previous month">&larr; {{ performance.previous_month }}</a>{% endif %}
+<strong>{{ performance.title }}</strong>
+{% if performance.next_month %}<a href="/calendar?month={{ performance.next_month }}" aria-label="Next month">{{ performance.next_month }} &rarr;</a>{% endif %}
+</div>
+<div class="performance-layout">
+<div class="scroll"><table class="performance-calendar" aria-label="Daily net P&L for {{ performance.title }}">
+<thead><tr>{% for day in ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}<th scope="col">{{ day }}</th>{% endfor %}</tr></thead>
+<tbody>{% for week in performance.weeks %}<tr>{% for cell in week %}
+<td{% if cell.session_date %} data-date="{{ cell.session_date }}"{% endif %}>
+{% if cell.day %}<div>{{ cell.day }}</div>
+{% if cell.amount %}<div class="amount performance-{{ cell.tone }}">{{ cell.amount }}</div>{% endif %}
+<div class="day-status">{{ cell.status.capitalize() }}</div>
+{% if cell.reason %}<div class="day-status">{{ cell.reason }}</div>{% endif %}
+{% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
+</table></div>
+<aside aria-label="Cumulative performance">{% include "_performance_summary.html" %}</aside>
+</div>
+{% endblock %}

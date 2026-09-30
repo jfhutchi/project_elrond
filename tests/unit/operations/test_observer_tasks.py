@@ -69,6 +69,7 @@ def invoke(tmp_path, script, body):
     scripts = repo / 'deploy' / 'omen'
     scripts.mkdir(parents=True)
     (scripts / 'start-monitor.ps1').write_text('exit 0')
+    (scripts / 'start-alert-dispatch.ps1').write_text('exit 0')
     (scripts / 'start-learner.ps1').write_text('throw "must not launch learner"')
     (directory / 'state').mkdir()
     (directory / 'state' / 'learner.db').write_bytes(b'untouched fixture')
@@ -103,6 +104,20 @@ def test_monitor_registration_is_independent_and_bounded(tmp_path):
     assert task['Settings']['Limit']['TotalSeconds'] == 60
     assert task['Settings']['MultipleInstances'] == 'IgnoreNew'
     assert task['Triggers'][0]['Interval']['TotalSeconds'] == 120
+    assert task['Principal']['LogonType'] == 'Interactive'
+    assert task['Principal']['RunLevel'] == 'Limited'
+
+
+def test_dispatch_registration_reuses_existing_principal_and_is_bounded(tmp_path):
+    result = invoke(tmp_path, 'schedule-alert-dispatch.ps1', r'''
+& $args[0] -Repository $env:ELROND_TEST_ROOT -Directory $args[1] -ServiceHost $args[2] `
+ -Commit ('b'*40) -QueueDatabase $args[2] -OperationsDatabase $args[2] -Apply
+@{Changes=$global:changes} | ConvertTo-Json -Depth 8 -Compress
+''')
+    task, = result['Changes']
+    assert task['Name'] == 'Elrond Alert Dispatcher'
+    assert task['Settings']['Limit']['TotalSeconds'] == 60
+    assert task['Settings']['MultipleInstances'] == 'IgnoreNew'
     assert task['Principal']['LogonType'] == 'Interactive'
     assert task['Principal']['RunLevel'] == 'Limited'
 
@@ -273,3 +288,93 @@ def test_monitor_wrapper_uses_owned_interpreter_and_check_arguments(tmp_path):
     assert observed['argv'] == ['--learner-directory', str(tmp_path),
                                 '--operations-database', str(database), '--commit', 'b' * 40,
                                 '--env-file', str(environment), '--check']
+
+
+def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_python(tmp_path):
+    repo = tmp_path / 'wrapper-repo'
+    scripts = repo / 'deploy/omen'
+    scripts.mkdir(parents=True)
+    for filename in ('start-learner.ps1', 'windows-job.ps1', 'process-job.cs'):
+        shutil.copy2(ROOT / 'deploy/omen' / filename, scripts / filename)
+    module = repo / 'src/quantbot/learner'
+    module.mkdir(parents=True)
+    (module.parent / '__init__.py').write_text('')
+    (module / '__init__.py').write_text('')
+    (module / 'execution_worker.py').write_text(
+        'import json,sys\nprint(json.dumps({"argv":sys.argv[1:],"python":sys.executable}))\n')
+    subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                    f"New-Item -ItemType Junction -Path '{repo / '.venv'}' "
+                    f"-Target '{Path(sys.prefix).resolve()}' | Out-Null"], check=True, timeout=15)
+    directory = tmp_path / 'learner'
+    (directory / 'state').mkdir(parents=True)
+    learner_database = directory / 'state/learner.db'
+    learner_database.write_bytes(b'not opened')
+    operations = tmp_path / 'paper.db'
+    operations.write_bytes(b'not opened')
+    environment = tmp_path / 'fixture.env'
+    environment.write_text('TRADING_MODE=PAPER\n')
+    result = subprocess.run([
+        'powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+        str(scripts / 'start-learner.ps1'), '-Repository', str(repo), '-Directory', str(directory),
+        '-Database', str(learner_database), '-EnvironmentFile', str(environment),
+        '-Commit', 'b' * 40, '-DeadlineSupervisor',
+        '-OperationsDatabase', str(operations), '-Check',
+    ], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    observed = json.loads(result.stdout.strip())
+    assert Path(observed['python']).resolve() == (repo / '.venv/Scripts/python.exe').resolve()
+    assert observed['argv'] == ['--commit', 'b' * 40, '--database', str(operations),
+                                '--check', '--env-file', str(environment)]
+
+
+def test_dispatch_wrapper_checks_both_readonly_sources_with_owned_python(tmp_path):
+    repo = tmp_path / 'wrapper-repo'
+    scripts = repo / 'deploy/omen'
+    scripts.mkdir(parents=True)
+    for filename in ('start-alert-dispatch.ps1', 'windows-job.ps1', 'process-job.cs'):
+        shutil.copy2(ROOT / 'deploy/omen' / filename, scripts / filename)
+    module = repo / 'src/quantbot/operations'
+    module.mkdir(parents=True)
+    (module.parent / '__init__.py').write_text('')
+    (module / '__init__.py').write_text('')
+    (module / 'alert_dispatch.py').write_text(
+        'import json,sys\nprint(json.dumps({"argv":sys.argv[1:],"python":sys.executable}))\n')
+    subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+                    f"New-Item -ItemType Junction -Path '{repo / '.venv'}' "
+                    f"-Target '{Path(sys.prefix).resolve()}' | Out-Null"], check=True, timeout=15)
+    database = tmp_path / 'alerts.db'
+    database.write_bytes(b'fixture: never opened')
+    observer = tmp_path / 'observer.db'
+    observer.write_bytes(b'fixture: never opened')
+    queues = (tmp_path / 'queue.db', tmp_path / 'observer-queue.db')
+    result = subprocess.run([
+        'powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+        str(scripts / 'start-alert-dispatch.ps1'), '-Repository', str(repo),
+        '-Directory', str(tmp_path), '-Database', str(database), '-QueueDatabase', str(queues[0]),
+        '-ObserverDatabase', str(observer), '-ObserverQueueDatabase', str(queues[1]),
+        '-Commit', 'b' * 40, '-Check',
+    ], capture_output=True, text=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    observed = [json.loads(line) for line in result.stdout.strip().splitlines()]
+    assert len(observed) == 2
+    for item, queue in zip(observed, queues, strict=True):
+        assert Path(item['python']).resolve() == (repo / '.venv/Scripts/python.exe').resolve()
+        assert item['argv'] == ['--queue', str(queue), '--commit', 'b' * 40, '--check']
+    assert all(not queue.exists() for queue in queues)
+
+
+def test_dispatch_legacy_principal_needs_exact_description(tmp_path):
+    result = invoke(tmp_path, 'schedule-alert-dispatch.ps1', r'''
+$global:learner.Description='approved legacy description'
+$refused=$false
+try { & $args[0] -Repository $env:ELROND_TEST_ROOT -Directory $args[1] -ServiceHost $args[2] `
+ -Commit ('b'*40) -QueueDatabase $args[2] -OperationsDatabase $args[2] `
+ -ExpectedLearnerDescription 'wrong description' -Apply } catch {$refused=$true}
+& $args[0] -Repository $env:ELROND_TEST_ROOT -Directory $args[1] -ServiceHost $args[2] `
+ -Commit ('b'*40) -QueueDatabase $args[2] -OperationsDatabase $args[2] `
+ -ExpectedLearnerDescription 'approved legacy description' -Apply
+@{Refused=$refused;Changes=$global:changes} | ConvertTo-Json -Depth 8 -Compress
+''')
+    assert result['Refused']
+    assert len(result['Changes']) == 1
+    assert result['Changes'][0]['Name'] == 'Elrond Alert Dispatcher'

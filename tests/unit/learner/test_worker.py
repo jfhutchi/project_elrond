@@ -160,3 +160,23 @@ def test_invalid_alert_policy_fails_loudly_without_publishing_raw_text(tmp_path)
     assert 'ALERT_STATE_FAILED' in result['blockers']
     assert 'SYNTHETIC' not in (root/'worker.json').read_text()
     database.close()
+
+
+def test_config_file_alone_cannot_recover_unmeasured_paper_gates(tmp_path, monkeypatch):
+    from quantbot.config import Settings
+
+    root, database = worker_store(tmp_path)
+    (root / 'forward.json').write_text('{}')
+    (root / 'paper-execution.json').write_text('{}')
+    async def forward(*args, **kwargs):
+        return dict(blockers=['PAPER_PROMOTION_REQUIRED', 'PAPER_EXECUTION_NOT_CONFIGURED'])
+    async def paper(*args, **kwargs):
+        return dict(status='WAITING', trading_enabled=False,
+                    blockers=['PAPER_CURRENT_COHORT_UNAVAILABLE'], cleared_gate_codes=[])
+    monkeypatch.setattr('quantbot.learner.forward.run_forward_cycle', forward)
+    monkeypatch.setattr('quantbot.learner.execution_worker.execute_paper_tick', paper)
+    result = run_cycle(root, code_commit='a' * 40, settings=Settings())
+    assert result['status'] == 'BLOCKED'
+    assert {'PAPER_PROMOTION_REQUIRED', 'PAPER_EXECUTION_NOT_CONFIGURED',
+            'PAPER_CURRENT_COHORT_UNAVAILABLE'} <= set(result['blockers'])
+    database.close()
