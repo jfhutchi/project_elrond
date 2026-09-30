@@ -252,6 +252,8 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         positions = tuple(
             position for position in await self._broker.get_positions() if position.quantity
         )
+        if any(position.symbol in self.model.training_symbols for position in positions):
+            return self._no_entry("PAPER_MODEL_POSITION_LIMIT", "PAPER_SYMBOL_ALREADY_HELD")
         pending = tuple(await self._broker.get_open_orders())
         with self._database.transaction() as session:
             repository = StorageRepository(session)

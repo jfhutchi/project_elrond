@@ -112,6 +112,15 @@ def run_cycle(
                 receipt['intraday'] = asyncio.run(run_forward_cycle(
                     root, database, settings, code_commit=code_commit))
                 receipt['blockers'] = receipt['intraday']['blockers']
+                if (root/'paper-execution.json').is_file():
+                    from quantbot.learner.execution_worker import execute_paper_tick
+                    receipt['paper'] = asyncio.run(execute_paper_tick(
+                        root, database, settings, code_commit=code_commit))
+                    receipt['trading_enabled'] = receipt['paper']['trading_enabled']
+                    receipt['promotion'] = receipt['paper'].get('promotion') or 'NONE'
+                    receipt['blockers'] = [code for code in receipt['blockers'] if code not in
+                        ('PAPER_PROMOTION_REQUIRED', 'PAPER_EXECUTION_NOT_CONFIGURED')]
+                    receipt['blockers'].extend(receipt['paper']['blockers'])
             receipt['status'] = 'BLOCKED'
         except Exception:
             # Provider or validation exceptions may include secrets; only publish a fixed code.
