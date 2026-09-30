@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 
 from pydantic import Field
+from sqlalchemy import text
 
 from quantbot.brokers import (
     BrokerAccountSnapshot,
@@ -141,6 +142,24 @@ def _risk_reducing_exit_reasons(
     return tuple(reasons)
 
 
+def _competing_exit(pending: OrderIntent, intent: OrderIntent) -> bool:
+    if (
+        pending.symbol != intent.symbol
+        or pending.side is not intent.side
+        or pending.intent_id == intent.intent_id
+    ):
+        return False
+    if pending.state is IntentState.RISK_APPROVED:
+        # A claimed order has precedence over every merely prepared request.
+        # Before claiming, deterministic priority lets one of two prepared exits
+        # proceed without deleting the other authority's durable evidence.
+        return intent.state is IntentState.RISK_APPROVED and (
+            pending.created_at,
+            pending.intent_id,
+        ) < (intent.created_at, intent.intent_id)
+    return True
+
+
 class ExecutionCoordinator:
     """Persist before network I/O and never replace a client order identity."""
 
@@ -167,11 +186,19 @@ class ExecutionCoordinator:
         drawdown: DrawdownState | None,
         risk_approved: bool | None,
         vetoes: PortfolioVetoDecision | None,
+        open_orders: tuple[BrokerOrder, ...],
     ) -> OrderGateDecision:
         with self._database.transaction() as session:
             repository = StorageRepository(session)
             durable_kill = repository.get_kill_switch_state().engaged
             latest_reconciliation = repository.get_latest_reconciliation()
+            competing_exit = purpose in {
+                OrderPurpose.STRATEGY_EXIT,
+                OrderPurpose.DRAWDOWN_LIQUIDATION,
+            } and any(
+                _competing_exit(pending, intent)
+                for pending in repository.list_unresolved_order_intents()
+            )
         durable_reconciled = (
             latest_reconciliation is not None
             and latest_reconciliation.status is ReconciliationStatus.RECONCILED
@@ -200,6 +227,13 @@ class ExecutionCoordinator:
             OrderPurpose.DRAWDOWN_LIQUIDATION,
         }:
             reasons.extend(_risk_reducing_exit_reasons(intent, positions))
+            if competing_exit or any(
+                order.symbol == intent.symbol
+                and order.side is intent.side
+                and order.client_order_id != intent.client_order_id
+                for order in open_orders
+            ):
+                reasons.append("EXIT_REDUCING_ORDER_PENDING")
         if not account_snapshot.order_entry_allowed:
             reasons.append("BROKER_ORDER_ENTRY_DISABLED")
         if account_snapshot.restrictions:
@@ -207,6 +241,45 @@ class ExecutionCoordinator:
         return decision.model_copy(
             update={"allowed": not reasons, "reasons": tuple(dict.fromkeys(reasons))}
         )
+
+    async def _open_exit_orders(self, purpose: OrderPurpose) -> tuple[BrokerOrder, ...]:
+        if purpose in {OrderPurpose.STRATEGY_EXIT, OrderPurpose.DRAWDOWN_LIQUIDATION}:
+            return tuple(await self._broker.get_open_orders())
+        return ()
+
+    def _claim_exit(self, intent: OrderIntent, decision: OrderGateDecision) -> OrderIntent:
+        """Atomically reserve the reducing side using the existing durable intent state."""
+        if self._database.engine.dialect.name != "sqlite":
+            raise OrderSubmissionBlocked(
+                decision.model_copy(
+                    update={"allowed": False, "reasons": ("EXIT_ATOMIC_CLAIM_UNSUPPORTED",)}
+                )
+            )
+        with self._database.transaction() as session:
+            # Both protection daemons may have different process locks. Reserve the
+            # SQLite writer before inspecting contenders, then commit ORDER_CREATED
+            # in the same transaction; no broker I/O happens while holding this lock.
+            session.execute(text("BEGIN IMMEDIATE"))
+            repository = StorageRepository(session)
+            if any(
+                _competing_exit(pending, intent)
+                for pending in repository.list_unresolved_order_intents()
+            ):
+                raise OrderSubmissionBlocked(
+                    decision.model_copy(
+                        update={"allowed": False, "reasons": ("EXIT_REDUCING_ORDER_PENDING",)}
+                    )
+                )
+            existing = repository.get_order_intent(intent.intent_id)
+            if existing is None:
+                repository.create_order_intent(intent)
+            elif existing != intent:
+                raise StateConflictError("exit claim conflicts with its durable intent")
+            return repository.transition_order_intent(
+                intent.intent_id,
+                IntentState.ORDER_CREATED,
+                expected_current=IntentState.RISK_APPROVED,
+            )
 
     def _transition(
         self,
@@ -336,14 +409,18 @@ class ExecutionCoordinator:
                 drawdown,
                 risk_approved,
                 vetoes,
+                await self._open_exit_orders(purpose),
             )
             if not initial_gate.allowed:
                 raise OrderSubmissionBlocked(initial_gate)
-            stored = self._transition(
-                stored.intent_id,
-                IntentState.ORDER_CREATED,
-                IntentState.RISK_APPROVED,
-            )
+            if purpose in {OrderPurpose.STRATEGY_EXIT, OrderPurpose.DRAWDOWN_LIQUIDATION}:
+                stored = self._claim_exit(stored, initial_gate)
+            else:
+                stored = self._transition(
+                    stored.intent_id,
+                    IntentState.ORDER_CREATED,
+                    IntentState.RISK_APPROVED,
+                )
         return await self._submit_order_created(
             stored,
             purpose=purpose,
@@ -433,18 +510,22 @@ class ExecutionCoordinator:
             drawdown,
             risk_approved,
             vetoes,
+            await self._open_exit_orders(purpose),
         )
         if not initial_gate.allowed:
             raise OrderSubmissionBlocked(initial_gate)
 
-        with self._database.transaction() as session:
-            repository = StorageRepository(session)
-            repository.create_order_intent(intent)
-            repository.transition_order_intent(
-                intent.intent_id,
-                IntentState.ORDER_CREATED,
-                expected_current=IntentState.RISK_APPROVED,
-            )
+        if purpose in {OrderPurpose.STRATEGY_EXIT, OrderPurpose.DRAWDOWN_LIQUIDATION}:
+            self._claim_exit(intent, initial_gate)
+        else:
+            with self._database.transaction() as session:
+                repository = StorageRepository(session)
+                repository.create_order_intent(intent)
+                repository.transition_order_intent(
+                    intent.intent_id,
+                    IntentState.ORDER_CREATED,
+                    expected_current=IntentState.RISK_APPROVED,
+                )
 
         return await self._submit_order_created(
             intent.model_copy(update={"state": IntentState.ORDER_CREATED}),
@@ -480,6 +561,7 @@ class ExecutionCoordinator:
             drawdown,
             risk_approved,
             vetoes,
+            await self._open_exit_orders(purpose),
         )
         if not fresh_gate.allowed:
             self._transition(intent.intent_id, IntentState.ERROR, IntentState.ORDER_CREATED)

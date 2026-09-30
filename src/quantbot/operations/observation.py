@@ -139,13 +139,29 @@ class SessionObserver:
             )
 
         reasons: list[str] = []
-        recovery = await self.recovery.recover(
-            f"{identifier}:reconciliation", started_at=moment, run_id=None
-        )
-        if not recovery.ready:
-            reasons.extend(recovery.reasons)
+        try:
+            recovery = await self.recovery.recover(
+                f"{identifier}:reconciliation", started_at=moment, run_id=None
+            )
+        except Exception:  # noqa: BLE001 -- a monitor failure must remain a durable observation
+            reasons.append("RECONCILIATION_CHECK_FAILED")
+        else:
+            if not recovery.ready:
+                reasons.extend(recovery.reasons)
 
-        data = await self.data_sync.sync()
+        try:
+            data = await self.data_sync.sync()
+        except Exception:  # noqa: BLE001 -- preserve the heartbeat when an upstream check fails
+            reasons.append("MARKET_DATA_SYNC_FAILED")
+            return self._record(
+                SessionObservation(
+                    observation_id=identifier,
+                    observed_at=moment,
+                    market_open=market_open,
+                    outcome=ObservationOutcome.DEGRADED,
+                    reasons=tuple(dict.fromkeys(reasons)),
+                )
+            )
         age = Decimal(str((moment - data.completed_through).total_seconds()))
         if age < 0:
             reasons.append("MARKET_DATA_FROM_FUTURE")

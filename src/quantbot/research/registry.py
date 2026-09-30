@@ -69,7 +69,7 @@ from quantbot.research.artifact_testing import (
     ArtifactTestRegistration,
 )
 from quantbot.research.critic import Critique
-from quantbot.research.datasets import equivalent_datasets
+from quantbot.research.datasets import equivalent_datasets, observation_identity
 from quantbot.research.hypothesis_graph import (
     GraphArtifactKind,
     HypothesisGraph,
@@ -158,6 +158,11 @@ VALIDATION_CAMPAIGN_ACTOR_VERSION = "1"
 #: `actor` is an ordinary column that can be made to disagree with it -- and a row that stopped
 #: being counted because a column changed would take real selection freedom off the luck bar.
 VALIDATION_SEARCH_NAMESPACE = "validation:"
+
+#: Every supervised learner fit reserves this namespace before fitting. Selection burden is
+#: discovered from the identity rather than the mutable actor label, for the same reason as
+#: validation campaigns: renaming an actor must not erase a model attempt that already happened.
+LEARNER_SEARCH_NAMESPACE = "learner:"
 
 #: Which role a campaign's ledger row is attributed to when its scenarios span several. The most
 #: protected role wins, because the burden that matters is the one spent on the data that cannot
@@ -1159,6 +1164,79 @@ class HypothesisRegistry:
             total += int(row["candidates_evaluated"])
         return total
 
+    def learner_trials_spent(self) -> int:
+        """Every supervised learner candidate attempted, including discarded fits.
+
+        The learner writes its row before fitting, so a failed fit and a model rejected during
+        comparison both consumed selection freedom. Rows are found by the reserved ``learner:``
+        search-id namespace rather than by actor: actor names are descriptive metadata and may be
+        renamed without making past work disappear from the project's luck bar.
+
+        Malformed reserved rows fail closed. Counting a guessed value would trust a ledger entry
+        whose attribution or chronology is already incoherent; skipping it would silently lower
+        the burden.
+        """
+        total = 0
+        rows = (
+            self._session.execute(
+                select(search_runs).where(
+                    search_runs.c.search_id.like(f"{LEARNER_SEARCH_NAMESPACE}%")
+                )
+            )
+            .mappings()
+            .all()
+        )
+        for row in rows:
+            search_id = str(row["search_id"])
+            errors: list[str] = []
+            identity = search_id.removeprefix(LEARNER_SEARCH_NAMESPACE)
+            if not identity or identity != identity.strip():
+                errors.append("search_id has no canonical learner identity")
+
+            candidates = row["candidates_evaluated"]
+            if not isinstance(candidates, int) or isinstance(candidates, bool) or candidates < 1:
+                errors.append("candidates_evaluated must be a positive integer")
+
+            dataset = str(row["dataset"])
+            if not dataset or dataset != dataset.strip():
+                errors.append("dataset must be a non-empty canonical source identity")
+
+            raw_start, raw_end = str(row["start_date"]), str(row["end_date"])
+            try:
+                start, end = date.fromisoformat(raw_start), date.fromisoformat(raw_end)
+                if raw_start != start.isoformat() or raw_end != end.isoformat() or end < start:
+                    errors.append("search dates must be canonical and ordered")
+            except ValueError:
+                errors.append("search dates must be readable ISO dates")
+
+            if str(row["data_role"]) not in {
+                DataRole.DISCOVERY.value,
+                DataRole.VALIDATION.value,
+            }:
+                errors.append("data_role must be DISCOVERY or VALIDATION")
+
+            try:
+                started = decode_utc(str(row["started_at"]))
+                finished = decode_utc(str(row["finished_at"]))
+                if finished < started:
+                    errors.append("search timestamps must be ordered")
+            except ValueError:
+                errors.append("search timestamps must be readable and timezone-aware")
+
+            configuration_hash = str(row["configuration_hash"])
+            if len(configuration_hash) != 64 or any(
+                character not in "0123456789abcdef" for character in configuration_hash
+            ):
+                errors.append("configuration_hash must be a lowercase SHA-256 content hash")
+
+            if errors:
+                raise RegistrationRefused(
+                    RefusalReason.TAMPERED,
+                    f"learner search run {search_id!r} is malformed: " + "; ".join(errors),
+                )
+            total += int(candidates)
+        return total
+
     def _verify_campaign_frozen(self, draft: HypothesisDraft) -> None:
         """A registration carrying a campaign must name one the ledger already recorded.
 
@@ -1964,8 +2042,40 @@ class HypothesisRegistry:
             + int(hypothesis_spend)
             + int(artifact_spend)
             + self.campaign_trials_spent()
+            + self.learner_trials_spent()
             + intraday_spend
             + search_cardinality
+        )
+
+    def blocking_protected_windows(
+        self, dataset: str, start: date, end: date, *, now: date,
+        include_forward_paper: bool = False,
+    ) -> tuple[RowMapping, ...]:
+        """Live or consumed protected claims over an observation range, across known aliases.
+
+        This is the public authority for consumers that must refuse protected reads without
+        duplicating the registry's lifecycle predicate. Expired reservations and released rows
+        are absent; consumed rows and reservations without an expiry remain blocking.
+        """
+        aliases = {*equivalent_datasets(dataset), observation_identity(dataset)}
+        rows = (
+            row
+            for alias in aliases
+            for row in self._blocking(alias, start, end, now=now)
+            if row["role"] in (
+                {DataRole.PROTECTED_EVALUATION.value, DataRole.FORWARD_PAPER.value}
+                if include_forward_paper else {DataRole.PROTECTED_EVALUATION.value}
+            )
+        )
+        return tuple(
+            sorted(
+                rows,
+                key=lambda row: (
+                    str(row["hypothesis_id"]),
+                    int(row["version"]),
+                    str(row["dataset"]),
+                ),
+            )
         )
 
     def _blocking(self, dataset: str, start: date, end: date, *, now: date) -> list[RowMapping]:

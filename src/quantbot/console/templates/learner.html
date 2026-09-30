@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+{% set title = "Learner" %}
+{% block body %}
+{% set learner = state.learner %}
+<h1>Learner</h1>
+{% if request.query_params.get('alert_acknowledged') == '1' %}
+<p role="status">Acknowledgement saved. The condition remains active until measured recovery.
+  Saved worker and monitor receipts refresh on their next completed check.</p>
+{% endif %}
+<p class="sub">Saved forecasts, model versions and performance. Read from the separate learner store.</p>
+{% if learner.progress %}
+<div class="card" style="border-left:3px solid var(--warn)">
+  <h2>Progress and required actions</h2>
+  <p>Local forecasts: <strong>{{ learner.progress.forecast_status.replace('_', ' ').capitalize() }}</strong>.
+    PAPER entry: <strong>{{ learner.progress.paper_status.replace('_', ' ').capitalize() }}</strong>.
+    Training: {{ learner.progress.training_status.replace('_', ' ').capitalize() }}.</p>
+  <p class="quiet">Last productive progress (UTC): {{ learner.progress.last_progress_at or 'Not yet observed' }}.
+    Expected active-session idle time: {{ learner.progress.expected_idle_seconds | int }} seconds.</p>
+  {% for alert in learner.progress.active_alerts %}
+  <div class="card">
+    <strong>{{ alert.severity }} — {{ alert.subsystem }} — {{ alert.code }}</strong>
+    <p>{{ alert.category.replace('_', ' ').capitalize() }} · Owner: {{ alert.owner }}</p>
+    <p>{{ alert.action }}</p>
+    <p class="quiet">Blocked since (UTC): {{ alert.first_seen }} · Duration at last check:
+      {{ alert.duration_seconds | int }} seconds · Escalation: {{ alert.escalation }}.</p>
+    {% if alert.acknowledged_at %}<p>Acknowledged; condition remains active.</p>{% else %}
+    <form method="post" action="/learner/alerts/learner/{{ alert.code }}/acknowledge">
+      <button type="submit">Acknowledge this alert</button>
+    </form>{% endif %}
+  </div>
+  {% endfor %}
+  {% if learner.progress.wait_reasons %}<p>Expected wait: {{ learner.progress.wait_reasons | join(', ') }}.</p>{% endif %}
+  <p class="quiet">Notifications are recorded locally in the console and scheduler output.
+    External delivery is not configured. Acknowledgement does not resolve a gate.</p>
+</div>
+{% endif %}
+<div class="card">
+  <h2>Independent component monitor</h2>
+  <p>Monitor receipt: {{ learner.monitor.status.replace('_', ' ').capitalize() }}.
+    Last measured (UTC): {{ learner.monitor.measured_at or 'Not recorded' }}.</p>
+  <p class="quiet">A stale or missing monitor cannot establish current component health.
+    Automatic external delivery is not configured.</p>
+  {% for alert in learner.monitor.active_alerts %}
+  <div class="card">
+    <strong>{{ alert.severity }} - {{ alert.code }}</strong>
+    <p>Owner: {{ alert.owner }}. {{ alert.action }}</p>
+    <p>First seen (UTC): {{ alert.first_seen }}. Escalation: {{ alert.escalation }}.</p>
+    {% if alert.acknowledged_at %}<p>Acknowledged; condition remains active.</p>{% else %}
+    <form method="post" action="/learner/alerts/monitor/{{ alert.code }}/acknowledge">
+      <button type="submit">Acknowledge this alert</button>
+    </form>{% endif %}
+  </div>
+  {% endfor %}
+</div>
+<div class="card" style="border-left:3px solid var(--warn)">
+  <span class="pill pill--warn">{{ learner.status.replace('_', ' ').capitalize() }}</span>
+  <p>{{ learner.reason }}</p>
+  {% if learner.last_worker_at %}
+  <p class="quiet">Last completed check (UTC): {{ learner.last_worker_at }} ·
+    Schedule: every {{ learner.interval_minutes }} minutes ·
+    Outcomes resolved in that check: {{ learner.resolved_this_run }}</p>
+  <ul>{% for blocker in learner.worker_blockers %}<li>{{ blocker }}</li>{% endfor %}</ul>
+  {% endif %}
+  <p class="quiet">No trading authority or model promotion is granted by this page.</p>
+</div>
+
+{% if learner.intraday %}
+{% set intraday = learner.intraday %}
+<h2>Intraday learning</h2>
+<p class="sub">Fresh one-minute IEX bars · forecast pass every 10 minutes · 30-minute target.
+  Intraday results are separate from the daily model below.</p>
+<div class="grid">
+  {% for label, value in [('Bars in latest capture', intraday.captured_bars),
+      ('Recorded observation cohorts', intraday.observation_cohorts),
+      ('Model forecast cohorts', intraday.prediction_cohorts),
+      ('Matured observation cohorts', intraday.resolved_cohorts),
+      ('Saved intraday models', intraday.model_count)] %}
+  <div class="card"><div class="k">{{ label }}</div><div class="v">{{ value }}</div></div>
+  {% endfor %}
+</div>
+<p class="quiet">Data received (UTC): {{ intraday.captured_at }} · This pass:
+  {{ intraday.predictions_this_run }} predictions, {{ intraday.outcomes_this_run }} resolved outcomes,
+  {{ intraday.trained_this_run }} fitted models.</p>
+<p>{{ intraday.training_status.replace('_', ' ').capitalize() }}</p>
+<p class="quiet">Observations collected before a model exists are training examples, not forecasts.
+  Retraining requires at least 20 training sessions and 5 validation sessions, new matured outcomes,
+  and a four-hour cooldown. New models remain challengers; they inherit no trading qualification.</p>
+{% if intraday.performance %}
+<div class="scroll"><table><tr><th>Model</th><th>Matched periods</th><th>Simulated net return</th><th>Rank IC</th></tr>
+{% for row in intraday.performance %}<tr><td class="mono">{{ row.model_id[:12] }}</td>
+<td>{{ row.matched_periods }}</td><td>{{ '%+.2f%%'|format(row.simulated_net_return * 100) if row.simulated_net_return is not none else 'Pending' }}</td>
+<td>{{ '%.3f'|format(row.rank_ic) if row.rank_ic is not none else 'Not defined' }}</td></tr>{% endfor %}
+</table></div>
+<p class="quiet">Local prospective forecasts; simulated next-minute entry after recording,
+  30-minute target close, 5 bps slippage each side, zero commissions. Matched nonoverlapping
+  windows only. These are not paper fills or proof of profitability.</p>
+{% else %}<p class="absent">No scored intraday model forecasts yet. Performance is unknown.</p>{% endif %}
+{% endif %}
+
+<h2>Daily learner forecast evidence</h2>
+<div class="grid">
+{% for label, value, note in [
+  ('Historical replay', learner.historical_predictions, 'Recorded after these market outcomes were available'),
+  ('Prospective local', learner.prospective_predictions, 'Locally declared inputs; not authenticated shadow evidence'),
+  ('Verified shadow', learner.shadow_predictions, 'Separate evidence class; never inferred from a backtest'),
+  ('Unresolved forecasts', learner.pending_predictions, 'Pending outcomes are not wins or losses')
+] %}
+  <div class="card"><div class="k">{{ label }}</div>
+    <div class="v {% if value is none %}absent{% endif %}">{{ value if value is not none else 'Unknown' }}</div>
+    <div class="n">{{ note }}</div></div>
+{% endfor %}
+</div>
+<p class="quiet">Resolved: {{ learner.resolved_predictions if learner.resolved_predictions is not none else 'Unknown' }} ·
+  Recorded fit attempts: {{ learner.fit_attempts if learner.fit_attempts is not none else 'Unknown' }} ·
+  Last evaluation (UTC): {{ learner.last_evaluation_at or 'Not recorded' }}</p>
+<details><summary class="quiet">Forecast and resolution timestamps</summary>
+  <p class="quiet">Last forecast recorded: {{ learner.last_prediction_at or 'Not recorded' }}<br>
+  Last outcome resolved: {{ learner.last_resolution_at or 'Not recorded' }}<br>
+  These are evidence timestamps, not worker heartbeats.</p>
+</details>
+
+<h2>Historical performance after costs</h2>
+<p class="sub">Exploratory historical replay. Future shadow performance and learner paper execution are not established.</p>
+{% if learner.performance %}
+{% set first = learner.performance[0] %}
+<p class="quiet">Matched holding windows: {{ first.start[:10] }} to {{ first.end[:10] }} ·
+  {{ first.periods }} nonoverlapping periods · 5 bps slippage each side · zero commissions.</p>
+{% set chart = learner.chart %}
+{% set colors = ['#62a0ff', '#e3a24a', '#ce91ff', '#60c8b4', '#e47e8b'] %}
+<div class="card">
+  <div class="k">Value of $100 in the saved simulation</div>
+  <svg viewBox="0 0 780 270" role="img" aria-label="Historical portfolio equity, normalized to 100 dollars" style="width:100%;max-height:310px">
+    <line x1="50" y1="20" x2="750" y2="20" stroke="#2a323d"/>
+    <line x1="50" y1="240" x2="750" y2="240" stroke="#2a323d"/>
+    <text x="0" y="25" fill="#9aa7b4" font-size="12">{{ '%.1f'|format(chart.high) }}</text>
+    <text x="0" y="240" fill="#9aa7b4" font-size="12">{{ '%.1f'|format(chart.low) }}</text>
+    {% for curve in chart.curves %}
+    <polyline points="{{ curve.points }}" fill="none" stroke="{{ colors[loop.index0] }}" stroke-width="2.4" {% if loop.index0 == 2 %}stroke-dasharray="6 4"{% endif %}><title>{{ curve.name }}</title></polyline>
+    {% endfor %}
+    <text x="50" y="264" fill="#9aa7b4" font-size="12">{{ first.start[:10] }}</text>
+    <text x="675" y="264" fill="#9aa7b4" font-size="12">{{ first.end[:10] }}</text>
+  </svg>
+  <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:.8rem">
+    {% for row in learner.performance %}<span style="color:{{ colors[loop.index0] }}">● {{ row.name }}</span>{% endfor %}
+  </div>
+</div>
+<div class="scroll" style="margin-top:1rem"><table>
+  <tr><th>Portfolio</th><th>Net return</th><th>Excess vs SPY</th><th>Max drawdown</th><th>Rank IC</th></tr>
+  {% for row in learner.performance %}<tr>
+    <td>{{ row.name }}</td>
+    <td>{{ '%+.2f%%'|format(row.net_return * 100) }}</td>
+    <td>{{ '%+.2f pp'|format(row.excess_return_vs_spy * 100) }}</td>
+    <td>{{ '%.2f%%'|format(row.max_drawdown * 100) }}</td>
+    <td>{{ '%.3f'|format(row.rank_ic) if row.rank_ic is not none else 'Not defined / not applicable' }}</td>
+  </tr>{% endfor %}
+</table></div>
+<p class="quiet">Compare the learner with the simple baseline as well as SPY. Outperforming a falling benchmark
+does not establish profitability. An identical successor demonstrates reproducibility, not improvement.</p>
+<details><summary>Costs, turnover and exposure</summary><div class="scroll"><table>
+  <tr><th>Portfolio</th><th>Cost / initial capital</th><th>Traded notional / initial capital</th><th>Mean gross exposure</th></tr>
+  {% for row in learner.performance %}<tr><td>{{ row.name }}</td>
+    <td>{{ '%.2f%%'|format(row.cost_over_initial * 100) }}</td>
+    <td>{{ '%.2fx'|format(row.traded_notional_over_initial) }}</td>
+    <td>{{ '%.2fx'|format(row.mean_daily_gross_exposure) }}</td></tr>{% endfor %}
+</table></div></details>
+{% else %}<p class="absent">No verified saved portfolio report is available. Performance is unknown, not zero.</p>{% endif %}
+{% if learner.report_errors %}<ul class="attention">{% for error in learner.report_errors %}<li>{{ error }}</li>{% endfor %}</ul>{% endif %}
+
+<h2>What still blocks forward measurement</h2>
+{% if not learner.intraday %}<p class="quiet">The continuous forward-data loop is not configured. Provider receipt times and universe membership
+need reliable provenance. Historical inputs currently carry local declarations, not authenticated point-in-time evidence.</p>
+{% else %}<p class="quiet">Intraday capture records actual provider receipt times. The fixed present-day ETF roster and IEX coverage
+  remain limitations; local prospective predictions do not automatically become qualified shadow evidence.</p>{% endif %}
+{% if learner.holdout_start and learner.holdout_end %}
+<p class="quiet">Preserved holdout: {{ learner.holdout_start }} through {{ learner.holdout_end }}.
+The daily learner's 60-session lookback must also avoid protected dates. The intraday learner uses
+31 completed minutes from the same session; both preserve this holdout.</p>
+{% endif %}
+<p class="quiet">These reports use a fixed ETF roster and adjusted IEX data, next-open entry, fifth-close exit,
+full liquidation and fractional units. Costs are assumptions; daily marks miss intraday drawdowns.
+Correlated securities and overlapping forecast labels are not independent evidence.</p>
+
+<h2>Saved daily model versions</h2>
+{% if learner.models %}<div class="scroll"><table>
+  <tr><th>Family / version</th><th>Model ID</th><th>Created (UTC)</th><th>Training commit</th></tr>
+  {% for model in learner.models %}<tr><td>{{ model.family }} / {{ model.version }}</td>
+    <td class="mono">{{ model.model_id }}</td><td>{{ model.created_at }}</td>
+    <td class="mono">{{ model.code_commit[:8] }}</td></tr>{% endfor %}
+</table></div>{% else %}<p class="absent">No model versions can be displayed.</p>{% endif %}
+<p class="quiet">Refresh to read the latest saved records. <a href="/api/learner">Learner data as JSON</a>.</p>
+{% endblock %}

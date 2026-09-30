@@ -146,6 +146,7 @@ def test_the_console_still_has_no_route_that_submits_an_order(database) -> None:
         "/kill-switch/clear",
         "/operations/reconcile",
         "/operations/sync-data",
+        "/learner/alerts/{source}/{code}/acknowledge",
         "/config/policy/preview",
         "/config/policy/apply",
         "/config/policy/rollback",

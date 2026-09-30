@@ -44,3 +44,4 @@ research/stocks.db
 
 # Local CI logs and summaries, never deployment state.
 .local-ci/
+.test-temp/

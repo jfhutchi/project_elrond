@@ -581,6 +581,61 @@ class MarketDataSync:
                 )
             window = tuple(item for item in history if item.session_date >= resume_from.date())
             mode = RunMode.BACKFILL
+        elif resume_from is not None:
+            # A live cursor already proves that every earlier session was durably collected.
+            # Fetching the whole indicator warmup on every pass needlessly replays immutable
+            # history, so a provider revision in an old bar can stop today's collection. Keep the
+            # warmup in the cache for consumers, but request only sessions after the cursor.
+            window = tuple(item for item in history if item.close_at > resume_from)
+            if not window:
+                finished_at = self._clock().astimezone(UTC)
+                with self._database.transaction() as session:
+                    plane = IngestionControlPlane(session)
+                    current_source = plane.get_source(self.source_id)
+                    if current_source is None or not current_source.enabled:
+                        raise IngestionError("source was disabled during collection")
+                    if current_source != source:
+                        raise CursorConflict("source configuration changed during collection")
+                    current = plane.cursor(self.source_id, UNIVERSE_STREAM)
+                    if current != existing:
+                        raise CursorConflict(
+                            "another collector moved the checkpoint during the fetch"
+                        )
+                    plane.plan_run(
+                        run_id,
+                        requested_start=completed.close_at,
+                        requested_end=completed.close_at,
+                        mode=RunMode.LIVE,
+                    )
+                    plane.complete_run(
+                        run_id,
+                        counts=RecordCounts(),
+                        now=finished_at,
+                        cursor=CursorAdvance(
+                            stream_key=UNIVERSE_STREAM,
+                            cursor_value=completed.close_at.isoformat(),
+                            last_observation_at=resume_from,
+                            expected_version=None if existing is None else existing.version,
+                        ),
+                        detail={
+                            "completed_through": completed.close_at.isoformat(),
+                            "ineligible_symbols": [],
+                            "gap_count": 0,
+                            "no_new_sessions": True,
+                        },
+                    )
+                    plane.resolve_incidents(
+                        self.source_id, now=finished_at, detail="complete live collection recovered"
+                    )
+                return DataSyncResult(
+                    healthy=True,
+                    completed_through=completed.close_at,
+                    bars_stored=0,
+                    stale_symbols=(),
+                    reasons=(),
+                    stream_connected=True,
+                    risk_healthy=True,
+                )
         query = BarQuery(
             symbols=self._config.universe,
             start=datetime.combine(window[0].session_date, time.min, tzinfo=UTC),

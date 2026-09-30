@@ -12,6 +12,7 @@ from typing import Protocol
 
 from pydantic import Field
 
+from quantbot.brokers.base import BrokerRequestError
 from quantbot.config import SafetyValidation, Settings, validate_trading_safety
 from quantbot.domain import BrokerEnvironment, OrderIntent, StrategyIdentity, TradingMode
 from quantbot.execution import StartupRecoveryResult, SubmissionResult
@@ -424,8 +425,12 @@ def _exception_detail(error: BaseException) -> dict[str, object]:
     What is added instead is the origin frame, which is derived from *code* rather than from
     data. `cycle.py:299` cannot contain a credential no matter what the exception was carrying,
     and it points at the exact line, which is most of what the message would have told you.
+    A broker HTTP status is a bounded numeric field supplied by the adapter and preserves the
+    failure class without storing the broker's response body or exception message.
     """
     detail: dict[str, object] = {"exception_type": type(error).__name__}
+    if isinstance(error, BrokerRequestError) and error.status_code is not None:
+        detail["status_code"] = error.status_code
     frame = _origin(error)
     if frame is not None:
         detail["origin"] = frame

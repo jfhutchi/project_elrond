@@ -29,7 +29,7 @@ from quantbot.storage import (
     MigrationRequiredError,
     UnsupportedSchemaVersionError,
 )
-from quantbot.storage.database import encode_utc
+from quantbot.storage.database import REVISION_FOR_SCHEMA_VERSION, encode_utc
 from quantbot.storage.schema import SCHEMA_VERSION, kill_switch_state
 from tests.unit.test_storage import NOW
 
@@ -367,7 +367,8 @@ def test_a_rolled_back_chained_downgrade_through_0028_leaves_the_proposal_table_
     finally:
         raw.close()
     assert "research_proposals" in tables, "the rollback left the store without the 0028 table"
-    assert marker(path) == (SCHEMA_VERSION, "0028")
+    assert "learner_predictions" in tables, "rollback lost the learner prediction ledger"
+    assert marker(path) == (SCHEMA_VERSION, REVISION_FOR_SCHEMA_VERSION[SCHEMA_VERSION])
     assert fingerprint(path) == before
 
 

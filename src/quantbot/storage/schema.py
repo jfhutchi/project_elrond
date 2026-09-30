@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 28
+SCHEMA_VERSION = 29
 
 metadata = MetaData(
     naming_convention={
@@ -676,6 +676,117 @@ research_proposals = Table(
     UniqueConstraint("dataset_identity", "dataset_sequence"),
 )
 Index("ix_research_proposals_attempted_at", research_proposals.c.attempted_at)
+
+
+# --- Supervised learner evidence (#242) ---------------------------------------------------
+#
+# The whole canonical model document is authoritative. Promoted columns exist only for joins
+# and operational queries. Every table is append-only; a repeated identity must carry the exact
+# same document hash and body or the learner repository rejects it as a state conflict.
+
+learner_datasets = Table(
+    "learner_datasets",
+    metadata,
+    Column("dataset_id", String(64), primary_key=True),
+    Column("document_hash", String(64), nullable=False, unique=True),
+    Column("document_json", Text, nullable=False),
+)
+
+learner_model_versions = Table(
+    "learner_model_versions",
+    metadata,
+    Column("model_id", String(64), primary_key=True),
+    Column(
+        "dataset_id",
+        String(64),
+        ForeignKey("learner_datasets.dataset_id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("family", String(64), nullable=False),
+    Column("created_at", String(40), nullable=False),
+    Column("artifact_hash", String(64), nullable=False),
+    Column("document_hash", String(64), nullable=False, unique=True),
+    Column("document_json", Text, nullable=False),
+)
+Index(
+    "ix_learner_model_versions_family_created",
+    learner_model_versions.c.family,
+    learner_model_versions.c.created_at,
+)
+
+learner_predictions = Table(
+    "learner_predictions",
+    metadata,
+    Column("prediction_id", String(64), primary_key=True),
+    Column(
+        "model_id",
+        String(64),
+        ForeignKey("learner_model_versions.model_id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("evaluation_class", String(32), nullable=False),
+    Column("created_at", String(40), nullable=False),
+    # Storage-owned wall time. Unlike Prediction.created_at, callers cannot backdate this proof.
+    Column("recorded_at", String(40), nullable=False),
+    Column("cohort_id", String(128), nullable=False),
+    Column("document_hash", String(64), nullable=False, unique=True),
+    Column("document_json", Text, nullable=False),
+    CheckConstraint(
+        "evaluation_class IN ('HISTORICAL_REPLAY', 'SHADOW', 'PROSPECTIVE_LOCAL')",
+        name="evaluation_class_is_known",
+    ),
+)
+Index(
+    "ix_learner_predictions_model_created",
+    learner_predictions.c.model_id,
+    learner_predictions.c.created_at,
+)
+Index(
+    "ix_learner_predictions_cohort",
+    learner_predictions.c.cohort_id,
+    learner_predictions.c.prediction_id,
+)
+
+learner_outcomes = Table(
+    "learner_outcomes",
+    metadata,
+    Column(
+        "prediction_id",
+        String(64),
+        ForeignKey("learner_predictions.prediction_id", ondelete="RESTRICT"),
+        primary_key=True,
+    ),
+    Column("resolved_at", String(40), nullable=False),
+    Column("source_hash", String(64), nullable=False),
+    Column("document_hash", String(64), nullable=False, unique=True),
+    Column("document_json", Text, nullable=False),
+)
+Index("ix_learner_outcomes_resolved_at", learner_outcomes.c.resolved_at)
+
+learner_evaluations = Table(
+    "learner_evaluations",
+    metadata,
+    Column("evaluation_id", String(64), primary_key=True),
+    Column(
+        "model_id",
+        String(64),
+        ForeignKey("learner_model_versions.model_id", ondelete="RESTRICT"),
+        nullable=False,
+    ),
+    Column("evaluation_class", String(32), nullable=False),
+    Column("created_at", String(40), nullable=False),
+    Column("document_hash", String(64), nullable=False, unique=True),
+    Column("document_json", Text, nullable=False),
+    CheckConstraint(
+        "evaluation_class IN ('HISTORICAL_REPLAY', 'SHADOW', 'PROSPECTIVE_LOCAL')",
+        name="evaluation_class_is_known",
+    ),
+)
+Index(
+    "ix_learner_evaluations_model_created",
+    learner_evaluations.c.model_id,
+    learner_evaluations.c.created_at,
+)
 
 
 # --- Promotion ladder (#16) ------------------------------------------------------------------

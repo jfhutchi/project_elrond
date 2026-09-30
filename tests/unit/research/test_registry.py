@@ -426,6 +426,78 @@ def test_a_consumed_window_still_blocks_long_after_a_reservation_would_have_laps
     assert "RESERVED until" not in error.value.detail
 
 
+def test_public_protected_claim_query_uses_aliases_and_reservation_lifecycle(
+    database: Database,
+) -> None:
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+
+        live = registry.blocking_protected_windows(
+            "alpaca-us-equities-daily",
+            date(2016, 1, 4),
+            date(2026, 8, 18),
+            now=LAPSES,
+        )
+        expired = registry.blocking_protected_windows(
+            "alpaca-us-equities-daily",
+            date(2016, 1, 4),
+            date(2026, 8, 18),
+            now=AFTER_LAPSE.date(),
+        )
+        assert len(live) == 1
+        assert expired == ()
+
+        session.execute(
+            hypothesis_data_windows.update()
+            .where(hypothesis_data_windows.c.hypothesis_id == "H-2026-001")
+            .values(reserved_until=None)
+        )
+        assert registry.blocking_protected_windows(
+            SIP,
+            date(2016, 1, 4),
+            date(2026, 8, 18),
+            now=AFTER_LAPSE.date(),
+        )
+        registry.release(
+            "H-2026-001", 1, dataset=SIP, role=DataRole.PROTECTED_EVALUATION
+        )
+        assert (
+            registry.blocking_protected_windows(
+                SIP,
+                date(2016, 1, 4),
+                date(2026, 8, 18),
+                now=NOW.date(),
+            )
+            == ()
+        )
+
+
+def test_public_protected_claim_query_keeps_consumed_windows_permanent(
+    database: Database,
+) -> None:
+    with database.transaction() as session:
+        registry = HypothesisRegistry(session)
+        register(registry, make_draft(), now=NOW)
+        registry.consume(
+            "H-2026-001",
+            1,
+            dataset=SIP,
+            role=DataRole.PROTECTED_EVALUATION,
+            now=NOW,
+        )
+
+        claims = registry.blocking_protected_windows(
+            "alpaca-us-equities-daily",
+            date(2016, 1, 4),
+            date(2026, 8, 18),
+            now=(AFTER_LAPSE + timedelta(days=3650)).date(),
+        )
+
+    assert len(claims) == 1
+    assert claims[0]["state"] == WindowState.CONSUMED.value
+
+
 def test_a_crash_after_the_handoff_still_spends_the_window(database: Database) -> None:
     """Recording consumption on success would make failing a way to read protected data free.
 
