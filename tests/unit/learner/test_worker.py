@@ -132,4 +132,31 @@ def test_configured_worker_runs_forward_cycle_and_reports_its_blockers(tmp_path,
     assert result['intraday']['captured_bars'] == 99
     assert 'FORWARD_PRODUCER_MISSING' not in result['blockers']
     assert result['trading_enabled'] is False
+    assert result['progress']['paper_status'] == 'OPERATOR_ACTION_REQUIRED'
+    assert result['progress']['active_alerts'][0]['category'] == 'OPERATOR_ACTION_REQUIRED'
+    assert (root/'state'/'alerts.db').is_file()
+    database.close()
+
+
+def test_configured_worker_provider_error_does_not_claim_producer_is_missing(tmp_path, monkeypatch):
+    from quantbot.config import Settings
+    root, database = worker_store(tmp_path)
+    (root/'forward.json').write_text('{}')
+    async def fail(*args, **kwargs):
+        raise ValueError('sk-SYNTHETICabcdefghijklmnop')
+    monkeypatch.setattr('quantbot.learner.forward.run_forward_cycle', fail)
+    result = run_cycle(root, code_commit='a'*40, settings=Settings())
+    assert result['status'] == 'ERROR'
+    assert 'FORWARD_PRODUCER_MISSING' not in result['blockers']
+    assert 'SYNTHETIC' not in (root/'worker.json').read_text()
+    database.close()
+
+
+def test_invalid_alert_policy_fails_loudly_without_publishing_raw_text(tmp_path):
+    root, database = worker_store(tmp_path)
+    (root/'alert-policy.json').write_text('{sk-SYNTHETICabcdefghijklmnop')
+    result = run_cycle(root, code_commit='a'*40)
+    assert result['status'] == 'ERROR'
+    assert 'ALERT_STATE_FAILED' in result['blockers']
+    assert 'SYNTHETIC' not in (root/'worker.json').read_text()
     database.close()

@@ -248,3 +248,30 @@ def test_intraday_worker_dashboard_and_invalid_counters(tmp_path):
         intraday['captured_bars'] = value
         assert save().status == 'WORKER_UNVERIFIED'
         assert 'SYNTHETIC' not in save().model_dump_json()
+
+
+def test_progress_alerts_display_owner_action_and_ack_without_resolving(tmp_path):
+    from quantbot.learner.progress import monitor_progress
+    from quantbot.operations.alerts import AlertStore
+
+    root = fixture_store(tmp_path / 'learner')
+    now = datetime.now(UTC)
+    (root / 'deployment.json').write_text(json.dumps(dict(
+        scheduled=True, interval_minutes=10, learner_commit='a' * 40)))
+    receipt = dict(code_commit='a' * 40, status='BLOCKED', finished_at=now.isoformat(),
+                   resolved_this_run=0, trading_enabled=False, promotion='NONE',
+                   blockers=['PAPER_PROMOTION_REQUIRED'])
+    with AlertStore(root / 'state' / 'alerts.db') as alerts:
+        monitor_progress(alerts, receipt, now=now)
+        alerts.acknowledge('PAPER_PROMOTION_REQUIRED', now=now)
+        receipt['progress'] = monitor_progress(alerts, receipt, now=now)
+    (root / 'worker.json').write_text(json.dumps(receipt))
+    assert read_learner_panel(root).progress.paper_status == 'OPERATOR_ACTION_REQUIRED'
+    with Database.create(tmp_path / 'operator.db') as database:
+        with TestClient(create_app(database, learner_directory=root)) as client:
+            page = client.get('/learner').text
+            assert 'Operator action required' in page
+            assert 'Operator' in page
+            assert 'exact PAPER model deployment' in page
+            assert 'Acknowledged; condition remains active' in page
+            assert 'External delivery is not configured' in page

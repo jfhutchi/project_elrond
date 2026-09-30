@@ -4,6 +4,29 @@
 {% set learner = state.learner %}
 <h1>Learner</h1>
 <p class="sub">Saved forecasts, model versions and performance. Read from the separate learner store.</p>
+{% if learner.progress %}
+<div class="card" style="border-left:3px solid var(--warn)">
+  <h2>Progress and required actions</h2>
+  <p>Local forecasts: <strong>{{ learner.progress.forecast_status.replace('_', ' ').capitalize() }}</strong>.
+    PAPER entry: <strong>{{ learner.progress.paper_status.replace('_', ' ').capitalize() }}</strong>.
+    Training: {{ learner.progress.training_status.replace('_', ' ').capitalize() }}.</p>
+  <p class="quiet">Last productive progress (UTC): {{ learner.progress.last_progress_at or 'Not yet observed' }}.
+    Expected active-session idle time: {{ learner.progress.expected_idle_seconds | int }} seconds.</p>
+  {% for alert in learner.progress.active_alerts %}
+  <div class="card">
+    <strong>{{ alert.severity }} — {{ alert.subsystem }} — {{ alert.code }}</strong>
+    <p>{{ alert.category.replace('_', ' ').capitalize() }} · Owner: {{ alert.owner }}</p>
+    <p>{{ alert.action }}</p>
+    <p class="quiet">Blocked since (UTC): {{ alert.first_seen }} · Duration at last check:
+      {{ alert.duration_seconds | int }} seconds · Escalation: {{ alert.escalation }}.</p>
+    {% if alert.acknowledged_at %}<p>Acknowledged; condition remains active.</p>{% endif %}
+  </div>
+  {% endfor %}
+  {% if learner.progress.wait_reasons %}<p>Expected wait: {{ learner.progress.wait_reasons | join(', ') }}.</p>{% endif %}
+  <p class="quiet">Notifications are recorded locally in the console and scheduler output.
+    External delivery is not configured. Acknowledgement does not resolve a gate.</p>
+</div>
+{% endif %}
 <div class="card" style="border-left:3px solid var(--warn)">
   <span class="pill pill--warn">{{ learner.status.replace('_', ' ').capitalize() }}</span>
   <p>{{ learner.reason }}</p>

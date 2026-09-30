@@ -103,6 +103,44 @@ class IntradayPanel(PanelModel):
     _capture_time = field_validator('captured_at')(_timestamp)
 
 
+class ActiveAlert(PanelModel):
+    code: str
+    subsystem: str
+    severity: Literal['INFO', 'WARNING', 'CRITICAL']
+    category: str
+    owner: str
+    action: str
+    first_seen: str
+    last_seen: str
+    acknowledged_at: str | None
+    resolved_at: None
+    last_notified_at: str | None
+    escalation: Count
+    duration_seconds: Annotated[float, Field(ge=0)]
+
+    _times = field_validator('first_seen', 'last_seen')(_timestamp)
+
+    @field_validator('acknowledged_at', 'last_notified_at')
+    @classmethod
+    def optional_time(cls, value: str | None) -> str | None:
+        return _timestamp(value) if value is not None else None
+
+
+class ProgressPanel(PanelModel):
+    forecast_status: str
+    paper_status: str
+    training_status: str
+    last_progress_at: str | None
+    expected_idle_seconds: Annotated[float, Field(ge=0)]
+    wait_reasons: tuple[str, ...]
+    active_alerts: tuple[ActiveAlert, ...]
+
+    @field_validator('last_progress_at')
+    @classmethod
+    def optional_time(cls, value: str | None) -> str | None:
+        return _timestamp(value) if value is not None else None
+
+
 class LearnerPanel(PanelModel):
     status: str = "NOT_CONFIGURED"
     reason: str = "The console has no learner results directory configured."
@@ -126,6 +164,7 @@ class LearnerPanel(PanelModel):
     resolved_this_run: int | None = None
     worker_blockers: tuple[str, ...] = ()
     intraday: IntradayPanel | None = None
+    progress: ProgressPanel | None = None
 
     @field_validator("holdout_start", "holdout_end")
     @classmethod
@@ -191,6 +230,8 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
                 'Waiting for a market session with time to finish the 30-minute horizon.'),
             'INCOMPLETE_OR_STALE_MINUTE_DATA': (
                 'Fresh, complete minute bars are not available for the full roster.'),
+            'FORECAST_LOOKBACK_WARMUP': 'Waiting for 31 completed regular-session minutes.',
+            'ALERT_STATE_FAILED': 'Alert persistence failed; inspect the alert store and policy.',
         }
         blockers = tuple(labels[key] for key in receipt['blockers'])
         timestamp = _timestamp(receipt['finished_at'])
@@ -209,11 +250,15 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
         if 'intraday' in receipt:
             intraday = IntradayPanel(**{k: receipt['intraday'][k]
                                        for k in IntradayPanel.model_fields})
+        progress = None
+        if 'progress' in receipt:
+            progress = ProgressPanel(
+                **{k: receipt['progress'][k] for k in ProgressPanel.model_fields})
         return dict(status=status, reason=(
                     'The intraday worker completed its latest data and learning pass. '
                     'See the current forecast and PAPER entry blockers below.'
                     if intraday is not None and status == 'SCHEDULED_BLOCKED' else reasons[status]),
-                    intraday=intraday, last_worker_at=timestamp,
+                    intraday=intraday, progress=progress, last_worker_at=timestamp,
                     interval_minutes=10, resolved_this_run=receipt['resolved_this_run'],
                     worker_blockers=blockers)
     except (OSError, ValueError, KeyError, TypeError):

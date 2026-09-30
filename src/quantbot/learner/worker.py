@@ -17,7 +17,9 @@ from sqlalchemy import select
 from quantbot.config import Settings
 from quantbot.learner import service
 from quantbot.learner.models import Evaluation, EvaluationClass
+from quantbot.learner.progress import monitor_progress
 from quantbot.learner.store import resolve_from_store
+from quantbot.operations.alerts import AlertPolicy, AlertStore
 from quantbot.storage import Database, SingleWriterLock
 from quantbot.storage.schema import learner_evaluations, learner_outcomes, learner_predictions
 from quantbot.strategy import XNYSSessionSequence
@@ -104,6 +106,7 @@ def run_cycle(
                     receipt['evaluated_this_run'] += 1
             if (root/'forward.json').is_file():
                 from quantbot.learner.forward import run_forward_cycle
+                receipt['blockers'].remove('FORWARD_PRODUCER_MISSING')
                 if settings is None:
                     raise ValueError('forward data capture requires explicit PAPER settings')
                 receipt['intraday'] = asyncio.run(run_forward_cycle(
@@ -118,6 +121,16 @@ def run_cycle(
             if database is not None:
                 database.close()
             receipt['finished_at'] = datetime.now(UTC).isoformat()
+            try:
+                policy_path = root / 'alert-policy.json'
+                policy = AlertPolicy(**json.loads(policy_path.read_text(encoding='utf-8'))) \
+                    if policy_path.is_file() else AlertPolicy()
+                with AlertStore(root / 'state' / 'alerts.db', policy=policy) as alerts:
+                    receipt['progress'] = monitor_progress(
+                        alerts, receipt, now=datetime.fromisoformat(receipt['finished_at']))
+            except Exception:
+                receipt['status'] = 'ERROR'
+                receipt['blockers'].append('ALERT_STATE_FAILED')
             _publish(root, receipt, final=True)
         return receipt
 

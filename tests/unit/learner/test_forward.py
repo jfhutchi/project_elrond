@@ -69,6 +69,7 @@ def test_protected_capture_is_never_analyzed(tmp_path, monkeypatch):
         result = run(tmp_path, db, 31, monkeypatch)
         assert result["observations_this_run"] == 0
         assert "PROTECTED_FEATURE_WINDOW" in result["blockers"]
+        assert result['progress_expected'] is False
 
 
 def test_closed_session_reports_no_forecast_due_before_protected_guard(tmp_path, monkeypatch):
@@ -96,6 +97,7 @@ def test_closed_session_reports_no_forecast_due_before_protected_guard(tmp_path,
         )
 
     assert "OUTSIDE_FORECAST_SESSION" in result["blockers"]
+    assert result['progress_expected'] is False
     assert "PROTECTED_FEATURE_WINDOW" not in result["blockers"]
     assert result["observations_this_run"] == 0
 
@@ -341,9 +343,12 @@ def test_october_boundary_can_forecast_before_retraining_or_paper_promotion(
 
     assert "PROTECTED_FEATURE_WINDOW" in september["blockers"]
     assert september["observations_this_run"] == september["predictions_this_run"] == 0
+    assert september['progress_expected'] is False
     assert "INCOMPLETE_OR_STALE_MINUTE_DATA" in incomplete["blockers"]
     assert incomplete["observations_this_run"] == 0
     assert first["observations_this_run"] == first["predictions_this_run"] == 1
+    assert first['progress_expected'] is True
+    assert first['progress_session'] == '2026-10-01'
     assert first["training_status"] == "TRAINING_DATA_WARMUP"
     assert first["trading_enabled"] is False
     assert "PAPER_PROMOTION_REQUIRED" in first["blockers"]

@@ -391,6 +391,8 @@ def process_snapshot(
         outcomes_this_run=0,
         trained_this_run=0,
         trading_enabled=False,
+        progress_expected=False,
+        progress_session=None,
         blockers=["PAPER_PROMOTION_REQUIRED", "PAPER_EXECUTION_NOT_CONFIGURED"],
     )
     # Every pending observation was durably recorded before its outcome. No gap forecasts.
@@ -462,7 +464,11 @@ def process_snapshot(
         result["blockers"].append("OUTSIDE_FORECAST_SESSION")
     elif not _guard(database, now - timedelta(minutes=32), now + timedelta(minutes=30)):
         result["blockers"].append("PROTECTED_FEATURE_WINDOW")
+    elif now < session.open_at + timedelta(minutes=31):
+        result["blockers"].append("FORECAST_LOOKBACK_WARMUP")
     else:
+        result['progress_expected'] = True
+        result['progress_session'] = session.session_date.isoformat()
         slot = now.replace(minute=now.minute // 10 * 10, second=0, microsecond=0)
         path = root / "observations" / slot.date().isoformat() / (slot.strftime("%H%M") + ".json")
         if not path.exists():
