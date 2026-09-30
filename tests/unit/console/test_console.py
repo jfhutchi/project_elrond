@@ -77,6 +77,8 @@ MUTATING_ROUTES = {
     # Added deliberately, which is what this list is for: the whole-suite run caught it and this
     # edit is the review moment.
     ("/operations/sync-data", "POST"),
+    # Dedicated alert acknowledgement cannot reach broker execution or risk policy.
+    ("/learner/alerts/{source}/{code}/acknowledge", "POST"),
 }
 
 

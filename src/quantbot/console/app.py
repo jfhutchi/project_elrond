@@ -10,6 +10,8 @@ sentence claiming there was "no mutation endpoint to find" outlived it. The endp
 change something are: `POST /kill-switch/engage` and `/kill-switch/clear`,
 `POST /operations/reconcile` and `/operations/sync-data`, and `POST /config/policy/preview`,
 `/apply` and `/rollback`.
+Dedicated alert acknowledgement also has a local same-origin POST route. It changes only
+acknowledgement state and has no broker or policy authority.
 
 What bounds them is construction rather than convention. The route table is an allowlist and
 order submission is not on it. Clearing the kill switch calls `measure`, which probes the world,
@@ -34,12 +36,14 @@ never rendered and never serialised.
 from __future__ import annotations
 
 import json
+import re
+import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qsl
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
@@ -53,13 +57,14 @@ from quantbot.console.control import (
     validate_proposal,
 )
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
-from quantbot.console.learner import LearnerPanel, read_learner_panel
+from quantbot.console.learner import LearnerPanel, read_learner_panel, read_monitor_panel
 from quantbot.console.state import (
     ConsoleState,
     ReportsPanel,
     RuntimePanel,
     read_console_state,
 )
+from quantbot.operations.alerts import AlertStore
 from quantbot.operations.kill_switch import (
     KillSwitchClearBlocked,
     KillSwitchController,
@@ -133,7 +138,7 @@ def create_app(
         title="Elrond operator console",
         version="0.2",
         description=(
-            "Read-only. Renders authoritative state and changes nothing. Paper trading only; "
+            "Renders authoritative state with bounded operator controls. Paper trading only; "
             "no surface here can enable live trading."
         ),
     )
@@ -143,7 +148,9 @@ def create_app(
             state = read_console_state(
                 session, now=datetime.now(UTC), runtime=runtime, reports=reports
             )
-        return state.model_copy(update={"learner": read_learner_panel(learner_directory)})
+        panel = read_learner_panel(learner_directory).model_copy(
+            update={'monitor': read_monitor_panel(learner_directory)})
+        return state.model_copy(update={"learner": panel})
 
     def page_with_notice(request: Request, notice: str) -> HTMLResponse:
         """Operations, with something the operator has to read.
@@ -200,7 +207,30 @@ def create_app(
 
     @app.get("/api/learner")
     def api_learner() -> LearnerPanel:
-        return read_learner_panel(learner_directory)
+        return read_learner_panel(learner_directory).model_copy(
+            update={'monitor': read_monitor_panel(learner_directory)})
+
+    @app.post('/learner/alerts/{source}/{code}/acknowledge')
+    def acknowledge_alert(request: Request, source: str, code: str) -> RedirectResponse:
+        # Acknowledgement changes only the dedicated alert store. Require a local,
+        # same-origin browser request; never let an external page silently acknowledge it.
+        if (request.client is None or request.client.host not in ('127.0.0.1', '::1')
+                or request.url.hostname not in ('127.0.0.1', 'localhost', '::1')
+                or request.headers.get('origin') != str(request.base_url).rstrip('/')):
+            raise HTTPException(403, 'Local same-origin acknowledgement required')
+        if (learner_directory is None or source not in ('learner', 'monitor')
+                or re.fullmatch(r'[A-Z][A-Z0-9_]{0,79}', code) is None):
+            raise HTTPException(404, 'Alert store or code unavailable')
+        folder = 'state' if source == 'learner' else 'monitor'
+        path = learner_directory / folder / 'alerts.db'
+        if not path.is_file():
+            raise HTTPException(404, 'Existing alert store required')
+        try:
+            with AlertStore(path) as store:
+                store.acknowledge(code, now=datetime.now(UTC))
+        except (OSError, ValueError, sqlite3.Error) as error:
+            raise HTTPException(409, 'Active alert could not be acknowledged') from error
+        return RedirectResponse('/learner?alert_acknowledged=1', status_code=303)
 
     @app.get("/market-data", response_class=HTMLResponse)
     def market_data(request: Request) -> HTMLResponse:

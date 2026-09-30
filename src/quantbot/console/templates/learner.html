@@ -3,6 +3,10 @@
 {% block body %}
 {% set learner = state.learner %}
 <h1>Learner</h1>
+{% if request.query_params.get('alert_acknowledged') == '1' %}
+<p role="status">Acknowledgement saved. The condition remains active until measured recovery.
+  Saved worker and monitor receipts refresh on their next completed check.</p>
+{% endif %}
 <p class="sub">Saved forecasts, model versions and performance. Read from the separate learner store.</p>
 {% if learner.progress %}
 <div class="card" style="border-left:3px solid var(--warn)">
@@ -19,7 +23,10 @@
     <p>{{ alert.action }}</p>
     <p class="quiet">Blocked since (UTC): {{ alert.first_seen }} · Duration at last check:
       {{ alert.duration_seconds | int }} seconds · Escalation: {{ alert.escalation }}.</p>
-    {% if alert.acknowledged_at %}<p>Acknowledged; condition remains active.</p>{% endif %}
+    {% if alert.acknowledged_at %}<p>Acknowledged; condition remains active.</p>{% else %}
+    <form method="post" action="/learner/alerts/learner/{{ alert.code }}/acknowledge">
+      <button type="submit">Acknowledge this alert</button>
+    </form>{% endif %}
   </div>
   {% endfor %}
   {% if learner.progress.wait_reasons %}<p>Expected wait: {{ learner.progress.wait_reasons | join(', ') }}.</p>{% endif %}
@@ -27,6 +34,24 @@
     External delivery is not configured. Acknowledgement does not resolve a gate.</p>
 </div>
 {% endif %}
+<div class="card">
+  <h2>Independent component monitor</h2>
+  <p>Monitor receipt: {{ learner.monitor.status.replace('_', ' ').capitalize() }}.
+    Last measured (UTC): {{ learner.monitor.measured_at or 'Not recorded' }}.</p>
+  <p class="quiet">A stale or missing monitor cannot establish current component health.
+    Automatic external delivery is not configured.</p>
+  {% for alert in learner.monitor.active_alerts %}
+  <div class="card">
+    <strong>{{ alert.severity }} - {{ alert.code }}</strong>
+    <p>Owner: {{ alert.owner }}. {{ alert.action }}</p>
+    <p>First seen (UTC): {{ alert.first_seen }}. Escalation: {{ alert.escalation }}.</p>
+    {% if alert.acknowledged_at %}<p>Acknowledged; condition remains active.</p>{% else %}
+    <form method="post" action="/learner/alerts/monitor/{{ alert.code }}/acknowledge">
+      <button type="submit">Acknowledge this alert</button>
+    </form>{% endif %}
+  </div>
+  {% endfor %}
+</div>
 <div class="card" style="border-left:3px solid var(--warn)">
   <span class="pill pill--warn">{{ learner.status.replace('_', ' ').capitalize() }}</span>
   <p>{{ learner.reason }}</p>

@@ -141,6 +141,32 @@ class ProgressPanel(PanelModel):
         return _timestamp(value) if value is not None else None
 
 
+class MonitorPanel(PanelModel):
+    status: Literal['NOT_CONFIGURED', 'FRESH', 'STALE', 'UNVERIFIED'] = 'NOT_CONFIGURED'
+    measured_at: str | None = None
+    active_alerts: tuple[ActiveAlert, ...] = ()
+
+    @field_validator('measured_at')
+    @classmethod
+    def optional_time(cls, value: str | None) -> str | None:
+        return _timestamp(value) if value is not None else None
+
+
+def read_monitor_panel(root: Path | None) -> MonitorPanel:
+    if root is None or not (root / 'monitor' / 'receipt.json').is_file():
+        return MonitorPanel()
+    try:
+        doc = _json(root / 'monitor' / 'receipt.json')
+        at = _timestamp(doc['measured_at'])
+        age = (datetime.now(UTC) - datetime.fromisoformat(at)).total_seconds()
+        if age < 0:
+            raise ValueError('future monitor receipt')
+        return MonitorPanel(status='STALE' if age > 300 else 'FRESH', measured_at=at,
+                            active_alerts=tuple(ActiveAlert(**a) for a in doc['active_alerts']))
+    except (OSError, ValueError, KeyError, TypeError):
+        return MonitorPanel(status='UNVERIFIED')
+
+
 class LearnerPanel(PanelModel):
     status: str = "NOT_CONFIGURED"
     reason: str = "The console has no learner results directory configured."
@@ -165,6 +191,7 @@ class LearnerPanel(PanelModel):
     worker_blockers: tuple[str, ...] = ()
     intraday: IntradayPanel | None = None
     progress: ProgressPanel | None = None
+    monitor: MonitorPanel = Field(default_factory=MonitorPanel)
 
     @field_validator("holdout_start", "holdout_end")
     @classmethod
