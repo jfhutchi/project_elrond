@@ -39,7 +39,7 @@ import json
 import re
 import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from pathlib import Path
 from urllib.parse import parse_qsl
 
@@ -49,6 +49,7 @@ from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import RequestResponseEndpoint
 from starlette.responses import Response
 
+from quantbot.console.calendar import CalendarPanel, PerformanceData, build_calendar
 from quantbot.console.control import (
     ConfigProposal,
     ProposalRefused,
@@ -91,6 +92,7 @@ DEFAULT_PORT = 8787
 #: cannot disagree about what exists.
 NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/", "Operations"),
+    ("/calendar", "P&L calendar"),
     ("/session", "Market session"),
     ("/risk", "Risk"),
     ("/research", "Research"),
@@ -117,6 +119,7 @@ def create_app(
     sync_data: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
     learner_directory: Path | None = None,
     market_status: Callable[[], Awaitable[MarketStatus]] | None = None,
+    daily_performance: Callable[[], PerformanceData] | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -137,6 +140,8 @@ def create_app(
     route used it, and "nothing calls it" is a far weaker guarantee than "this process cannot".
 
     So the console receives one function that does one thing, exactly as `measure` does.
+    `daily_performance` is another narrow, read-only reader: it supplies recorded rows and
+    explicit calendar coverage, without any execution capability. Absence is unavailable.
     """
     app = FastAPI(
         title="Elrond operator console",
@@ -170,6 +175,25 @@ def create_app(
             update={'monitor': read_monitor_panel(learner_directory)})
         return state.model_copy(update={"learner": panel})
 
+    def performance_panel(month: str | None = None) -> CalendarPanel:
+        if month is None:
+            current = date.today()
+        else:
+            if not re.fullmatch(r"[0-9]{4}-[0-9]{2}", month):
+                raise HTTPException(status_code=422, detail="month must be YYYY-MM")
+            try:
+                current = date.fromisoformat(month + "-01")
+            except ValueError as exc:
+                raise HTTPException(status_code=422, detail="Invalid calendar month") from exc
+        data = (
+            daily_performance()
+            if daily_performance is not None
+            else PerformanceData(
+                available=False, reason="No authoritative daily performance reader configured"
+            )
+        )
+        return build_calendar(current.year, current.month, data)
+
     def page_with_notice(request: Request, notice: str) -> HTMLResponse:
         """Operations, with something the operator has to read.
 
@@ -186,6 +210,7 @@ def create_app(
                 "active": "/",
                 "attention": state.attention,
                 "notice": notice,
+                "performance": performance_panel(),
             },
         )
 
@@ -198,6 +223,7 @@ def create_app(
                 "state": state,
                 "navigation": NAVIGATION,
                 "active": active,
+                "performance": performance_panel() if active == "/" else None,
                 "attention": state.attention,
             },
         )
@@ -210,6 +236,25 @@ def create_app(
     @app.get("/", response_class=HTMLResponse)
     def operations(request: Request) -> HTMLResponse:
         return page(request, "operations.html", "/")
+
+    @app.get("/api/calendar")
+    def api_calendar(month: str | None = None) -> CalendarPanel:
+        return performance_panel(month)
+
+    @app.get("/calendar", response_class=HTMLResponse)
+    def calendar_page(request: Request, month: str | None = None) -> HTMLResponse:
+        state = snapshot()
+        return TEMPLATES.TemplateResponse(
+            request=request,
+            name="calendar.html",
+            context={
+                "state": state,
+                "navigation": NAVIGATION,
+                "active": "/calendar",
+                "attention": state.attention,
+                "performance": performance_panel(month),
+            },
+        )
 
     @app.get("/risk", response_class=HTMLResponse)
     def risk(request: Request) -> HTMLResponse:
