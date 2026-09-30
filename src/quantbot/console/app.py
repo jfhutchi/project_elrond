@@ -46,6 +46,8 @@ from urllib.parse import parse_qsl
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.responses import Response
 
 from quantbot.console.control import (
     ConfigProposal,
@@ -58,6 +60,7 @@ from quantbot.console.control import (
 )
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
 from quantbot.console.learner import LearnerPanel, read_learner_panel, read_monitor_panel
+from quantbot.console.market_status import MarketStatus, MarketStatusCache
 from quantbot.console.state import (
     ConsoleState,
     ReportsPanel,
@@ -113,6 +116,7 @@ def create_app(
     reconcile: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
     sync_data: Callable[[], Awaitable[Mapping[str, object]]] | None = None,
     learner_directory: Path | None = None,
+    market_status: Callable[[], Awaitable[MarketStatus]] | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -143,10 +147,24 @@ def create_app(
         ),
     )
 
+    market_cache = MarketStatusCache(market_status)
+
+    @app.middleware("http")
+    async def refresh_market(request: Request, call_next: RequestResponseEndpoint) -> Response:
+        # Network I/O happens before the snapshot opens a transaction. Control POSTs never wait
+        # for this informational probe; failures cannot prevent an operator engaging the switch.
+        if request.method == "GET":
+            await market_cache.refresh()
+        return await call_next(request)
+
     def snapshot() -> ConsoleState:
         with database.transaction() as session:
             state = read_console_state(
-                session, now=datetime.now(UTC), runtime=runtime, reports=reports
+                session,
+                now=datetime.now(UTC),
+                runtime=runtime,
+                reports=reports,
+                market=market_cache.current(),
             )
         panel = read_learner_panel(learner_directory).model_copy(
             update={'monitor': read_monitor_panel(learner_directory)})
@@ -361,9 +379,7 @@ def create_app(
         form = await read_form(request)
         reason = str(form.get("reason", "")).strip()
         if not reason:
-            return kill_switch_page(
-                request, refusal="clearing the kill switch needs a reason"
-            )
+            return kill_switch_page(request, refusal="clearing the kill switch needs a reason")
         if measure is None:
             return kill_switch_page(
                 request,

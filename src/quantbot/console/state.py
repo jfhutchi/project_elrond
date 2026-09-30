@@ -32,6 +32,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from quantbot.console.learner import LearnerPanel
+from quantbot.console.market_status import MarketStatus
 from quantbot.operations.registry import ConfigSetting, config_registry
 from quantbot.research.promotion import Stage
 from quantbot.storage import StorageRepository
@@ -373,6 +374,7 @@ class ConsoleState(FrozenModel):
 
     generated_at: datetime
     learner: LearnerPanel = LearnerPanel()
+    market: MarketStatus = MarketStatus()
     health: HealthPanel
     strategies: tuple[StrategyRow, ...]
     risk: RiskPanel
@@ -435,15 +437,33 @@ class ConsoleState(FrozenModel):
                 f"the last operational cycle was {self.health.days_since_last_run} days ago; "
                 "no forward evidence is accumulating while it is stopped"
             )
-        # A stale observation is worth surfacing, but this read-only panel has no current broker
-        # clock or process-liveness measurement. Overnight silence must not be called a dead
-        # daemon. Keep the timestamp visible without inventing either failure or health.
-        gap = self.health.minutes_since_last_observation
-        if gap is not None and gap >= STALE_OBSERVATION_MINUTES:
+        market = self.market.current(self.generated_at)
+        if market.warning:
+            items.append(market.warning)
+        if (
+            market.expected_open
+            and market.session_open is not None
+            and self.health.last_observation_at is not None
+            and self.health.last_observation_at >= market.session_open
+            and self.session.market_open_at_last_heartbeat is False
+        ):
             items.append(
-                f"the market-hours loop last looked {gap} minutes ago; observations pause outside "
-                "market hours. Check runtime service status if observations are missing during "
-                "an open session"
+                "the market-hours loop recorded the market closed during a scheduled session"
+            )
+        gap = self.health.minutes_since_last_observation
+        if market.loop_overdue(
+            self.health.last_observation_at, self.generated_at, STALE_OBSERVATION_MINUTES
+        ):
+            age = (
+                f"last looked {gap} minutes ago"
+                if gap is not None
+                else "has never recorded a check"
+            )
+            items.append(
+                f"the market-hours loop {age}; scheduled observations are overdue"
+                if market.expected_open
+                else f"the market-hours loop {age}; market status is unavailable, so check runtime "
+                "service status"
             )
         protection_gap = self.health.minutes_since_last_protection
         if self.health.open_positions and self.health.last_protection_at is None:
@@ -451,10 +471,8 @@ class ConsoleState(FrozenModel):
                 f"{self.health.open_positions} open position(s) have never received a durable "
                 "protection evaluation"
             )
-        elif (
-            self.health.open_positions
-            and protection_gap is not None
-            and protection_gap >= STALE_PROTECTION_MINUTES
+        elif self.health.open_positions and market.loop_overdue(
+            self.health.last_protection_at, self.generated_at, STALE_PROTECTION_MINUTES
         ):
             items.append(
                 f"the position-protection loop last ran {protection_gap} minutes ago while "
@@ -1040,6 +1058,7 @@ def read_console_state(
     now: datetime,
     runtime: RuntimePanel | None = None,
     reports: ReportsPanel | None = None,
+    market: MarketStatus | None = None,
 ) -> ConsoleState:
     """Assemble everything the console renders, from authoritative state alone.
 
@@ -1050,6 +1069,7 @@ def read_console_state(
     strategies = _strategies(session)
     return ConsoleState(
         generated_at=now,
+        market=(market or MarketStatus()).current(now),
         health=_health(session, settings, now=now),
         strategies=strategies,
         risk=_risk(session),

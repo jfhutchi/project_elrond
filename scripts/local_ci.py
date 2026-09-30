@@ -187,18 +187,40 @@ def linux_job(source: Path, workspace: Path, env: dict[str, str], log: TextIO) -
     return sha
 
 
-def windows_job(source: Path, workspace: Path, env: dict[str, str], log: TextIO) -> str:
+def windows_prerequisite(log: TextIO) -> tuple[str, Path]:
     if platform.system() != "Windows":
         raise PrerequisiteError("WINDOWS_UNAVAILABLE: native Windows NOT RUN on this OS")
     uv = shutil.which("uv")
     if not uv:
         raise PrerequisiteError("UV_NOT_FOUND: install uv and put it on PATH (docs/local-ci.md)")
+    python = (Path(sys.base_prefix) / "python.exe").resolve()
+    if not python.is_file():
+        raise PrerequisiteError(
+            "PYTHON_NOT_FOUND: select an existing host-visible Python 3.11+ with "
+            "-PythonPath (docs/local-ci.md)"
+        )
+    # Check the original host roots: clean_environment deliberately replaces both of these.
+    # Service-wrapper tests must not gain apparent compatibility from those substituted roots.
+    roots: list[Path] = []
+    if roaming := os.environ.get("APPDATA"):
+        roots.append(Path(roaming).resolve())
+    if local := os.environ.get("LOCALAPPDATA"):
+        roots.append((Path(local) / "Packages").resolve())
+    if any(python.is_relative_to(root) for root in roots):
+        raise PrerequisiteError(
+            "PYTHON_NOT_HOST_VISIBLE: Windows NOT RUN. Select an existing Python 3.11+ "
+            "outside roaming AppData and LocalAppData/Packages with -PythonPath "
+            "(docs/local-ci.md). No installation or ACL change was attempted."
+        )
+    log.write(f"Windows base Python: {python}\n")
+    return uv, python
+
+
+def windows_job(source: Path, workspace: Path, env: dict[str, str], log: TextIO) -> str:
+    uv, python = windows_prerequisite(log)
     job = workspace / "windows"
     sha = export_snapshot(source, job, env)
     # Reuse only the interpreter executable, never the operator's project environment/config.
-    python = Path(sys.base_prefix) / "python.exe"
-    if not python.is_file():
-        raise PrerequisiteError("PYTHON_NOT_FOUND: install a managed Python 3.11 with uv")
     env["UV_PYTHON"] = str(python)
     run_command([uv, "--version"], job, env, log)
     run_command(
@@ -239,10 +261,8 @@ def main(argv: Sequence[str] | None = None) -> int:
                         if args.check_prerequisites:
                             if target == "linux":
                                 linux_prerequisite(source, env, log)
-                            elif sys.platform != "win32" or not shutil.which("uv"):
-                                raise PrerequisiteError(
-                                    "WINDOWS_PREREQUISITES_MISSING: requires Windows and uv"
-                                )
+                            else:
+                                windows_prerequisite(log)
                             statuses[target] = {
                                 "status": "NOT RUN", "reason": "prerequisites ready"
                             }

@@ -30,6 +30,17 @@
     <div class="n"><a href="/learner">View forecasts and performance →</a></div>
   </div>
   <div class="card">
+    <div class="k">US stock market</div>
+    <div class="v"><span class="pill {% if state.market.warning %}pill--warn{% elif state.market.reported_open %}pill--ok{% endif %}">{{ state.market.label }}</span></div>
+    {% if state.market.checked_eastern %}
+    <div class="n quiet">Checked {{ state.market.checked_eastern }}</div>
+    {% endif %}
+    {% if state.market.expected_open == false and state.market.reported_open == false %}
+    <div class="n">Closed as scheduled. Market-hours checks resume when the market opens.</div>
+    {% endif %}
+    <div class="n quiet">Clock checked against the exchange calendar. Reload this page for an updated check.</div>
+  </div>
+  <div class="card">
     <div class="k">Account equity</div>
     {% if state.health.account_equity %}
       <div class="v">${{ state.health.account_equity }}</div>

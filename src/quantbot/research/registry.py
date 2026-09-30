@@ -660,7 +660,7 @@ class HypothesisRegistry:
 
         self._verify_measured_search(draft)
         self._verify_campaign_frozen(draft)
-        trials = self._cumulative_trials(draft.search_cardinality)
+        trials = self._cumulative_trials(draft.search_cardinality, incoming=draft)
 
         # #35, resolved: a verified count is *accepted* here and not *required*.
         #
@@ -1995,19 +1995,45 @@ class HypothesisRegistry:
         """
         return self._cumulative_trials(0)
 
-    def _cumulative_trials(self, search_cardinality: int) -> int:
-        """Everything this project has ever spent, plus what the incoming draft spends.
-
-        A later registration may cite a learner or intraday row through ``search_cardinality``. That
-        deliberately overcounts the selected candidate rather than discounting or deduplicating a
-        real attempt from the permanent learner ledger; no caller may lower historical burden.
-        """
+    def _cumulative_trials(
+        self, search_cardinality: int, *, incoming: HypothesisDraft | None = None
+    ) -> int:
+        """Everything this project has ever spent, plus what the incoming draft spends."""
         hypothesis_spend = self._session.execute(
             select(func.coalesce(func.sum(hypotheses.c.search_cardinality), 0))
         ).scalar_one()
         artifact_spend = self._session.execute(
             select(func.coalesce(func.sum(artifact_test_registrations.c.trial_charge), 0))
         ).scalar_one()
+        try:
+            prepaid = verified_intraday_attempt_ids(self._session)
+            linked: set[str] = set()
+            if prepaid:
+                for row in self._session.execute(
+                    select(hypotheses).where(
+                        hypotheses.c.search_origin == SearchOrigin.MEASURED.value
+                    )
+                ).mappings():
+                    registration = Registration.model_validate_json(str(row["document_json"]))
+                    draft = registration.draft
+                    if (
+                        registration.content_hash != row["content_hash"]
+                        or draft.search_origin.value != row["search_origin"]
+                        or draft.search_cardinality != row["search_cardinality"]
+                    ):
+                        raise ValueError("measured hypothesis contradicts its frozen document")
+                    if draft.search_run_id in prepaid:
+                        linked.add(draft.search_run_id)
+            # Each journal row prepays at most one hypothesis charge. Reusing its id for a
+            # second material hypothesis still raises the burden by that hypothesis's charge.
+            incoming_credit = int(
+                incoming is not None
+                and incoming.search_origin is SearchOrigin.MEASURED
+                and incoming.search_run_id in prepaid - linked
+            )
+            intraday_spend = len(prepaid) - len(linked) - incoming_credit
+        except ValueError as error:
+            raise RegistrationRefused(RefusalReason.TAMPERED, str(error)) from error
         # Campaign selection freedom, counted from the append-only ledger rather than from a
         # column anyone can edit or a number a caller supplies (#159). A redraw is visible here
         # as a second row, so the bar rises for everything registered afterwards.
@@ -2017,7 +2043,7 @@ class HypothesisRegistry:
             + int(artifact_spend)
             + self.campaign_trials_spent()
             + self.learner_trials_spent()
-            + len(verified_intraday_attempt_ids(self._session))
+            + intraday_spend
             + search_cardinality
         )
 

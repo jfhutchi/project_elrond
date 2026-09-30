@@ -257,6 +257,14 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     # #198. Read-only by construction: it opens no run, moves no cursor and records no
     # incident. A status command that wrote history would be the worst thing to run while
     # trying to work out what happened to collection.
+    counterfactual = commands.add_parser("counterfactual-report")
+    counterfactual.add_argument(
+        "--policy-identity",
+        help="execution policy to report; defaults to the current frozen policy",
+    )
+    counterfactual.add_argument(
+        "--by-regime", action="store_true", help="group by stored regime definitions and axes"
+    )
     ingestion = commands.add_parser("ingestion-status")
     ingestion.add_argument(
         "--stale-after-hours",
@@ -447,6 +455,13 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     reports = build_reports_panel(runtime_paths().reports, now=datetime.now(UTC))
     reconcile = _console_reconcile(database, stream)
     sync_data = _console_sync_data(database, stream)
+    from quantbot.console.market_status import paper_market_probe
+
+    try:
+        market_status = paper_market_probe()
+    except Exception:  # noqa: BLE001 -- absence is explicit; never log credential-bearing errors
+        print("market status probe unavailable", file=stream)
+        market_status = None
     try:
         print(f"operator console on http://{host}:{port} reading {path}", file=stream)
         uvicorn.run(
@@ -459,6 +474,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
                 sync_data=sync_data,
                 learner_directory=Path(os.environ["QUANTBOT_LEARNER_DIRECTORY"])
                 if os.environ.get("QUANTBOT_LEARNER_DIRECTORY") else None,
+                market_status=market_status,
             ),
             host=host,
             port=port,
@@ -938,6 +954,31 @@ def _configure_logging() -> None:
     configure_logging(stream=sys.stderr, registered_secrets=tuple(secrets))
 
 
+def _counterfactual_report(
+    args: argparse.Namespace, stream: TextIO, context: CLIContext | None,
+) -> int:
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from quantbot.risk.counterfactual_report import counterfactual_report
+    from quantbot.storage import MigrationRequiredError, UnsupportedSchemaVersionError
+
+    try:
+        path = context.database.path if context is not None else _configured_database()
+        with Database.read_only(path) as session:
+            result = counterfactual_report(
+                StorageRepository(session), policy_identity=args.policy_identity,
+                by_regime=args.by_regime,
+            )
+        stream.write(json.dumps(result, ensure_ascii=True, sort_keys=True) + "\n")
+        return 0
+    except (
+        OSError, ValueError, SQLAlchemyError,
+        MigrationRequiredError, UnsupportedSchemaVersionError,
+    ) as error:
+        stream.write(json.dumps({"ok": False, "reason": str(error)}) + "\n")
+        return 2
+
+
 def main(
     argv: Sequence[str] | None = None,
     *,
@@ -967,6 +1008,9 @@ def main(
         print(json.dumps(recovery_report, indent=2, sort_keys=True), file=stream)
         return 0 if recovery_report["ok"] else 1
 
+    if args.command == "counterfactual-report":
+        # Runtime composition can append deployment/policy metadata. Reporting must not.
+        return _counterfactual_report(args, stream, context)
     if args.command == "migrate-database":
         # Handled before a context exists, because building one opens a database -- and the store
         # this command is for is precisely the one that cannot be opened. A migration command

@@ -1,12 +1,14 @@
 """Independent receipt monitor: read-only operational inputs, dedicated alert output.
 
 Run separately from the learner. Neither scheduler installation nor external delivery is
-implied by an invocation. This module cannot construct a broker or migrate a source store.
+implied by an invocation. An optional bounded PAPER GET probe establishes market hours;
+source stores are never migrated or written.
 """
 
 from __future__ import annotations
 
 import argparse
+import asyncio
 import json
 import sqlite3
 from contextlib import closing
@@ -16,6 +18,7 @@ from pathlib import Path
 from typing import Any
 from uuid import UUID
 
+from quantbot.console.market_status import MarketStatus, paper_market_probe
 from quantbot.operations.alerts import AlertStore, Condition
 
 
@@ -71,7 +74,12 @@ def _samples(learner: Path, database: Path) -> dict[str, object]:
         finished = datetime.fromisoformat(doc['finished_at'])
         if started.tzinfo is None or finished.tzinfo is None or started > finished:
             raise ValueError('invalid receipt interval')
-        samples['LEARNER'] = dict(phase='COMPLETED', pin=pin, at=doc['finished_at'])
+        blockers = doc.get('blockers')
+        samples['LEARNER'] = dict(
+            phase='COMPLETED', pin=pin, at=doc['finished_at'],
+            protected_wait=(doc['status'] == 'BLOCKED' and isinstance(blockers, list)
+                            and 'PROTECTED_FEATURE_WINDOW' in blockers),
+        )
     except (OSError, ValueError, KeyError, TypeError):
         pass
     return _operational_samples(samples, database)
@@ -100,6 +108,7 @@ def _operational_samples(samples: dict[str, object], database: Path) -> dict[str
 def run_monitor(
     learner: Path, database: Path, output: Path, *, now: datetime,
     policy: MonitorPolicy | None = None,
+    market: MarketStatus | None = None,
 ) -> dict[str, Any]:
     policy = policy or MonitorPolicy()
     if now.tzinfo is None:
@@ -110,12 +119,26 @@ def run_monitor(
                   RECONCILIATION=policy.reconciliation_seconds, INGESTION=policy.ingestion_seconds)
     conditions = []
     measurements = {}
+    retained = []
+    current_market = (market or MarketStatus()).current(now)
+    verified = current_market.reported_open is not None and current_market.warning is None
+    forecast_wait = 'UNVERIFIED_SESSION'
+    if verified:
+        forecast_wait = 'EXPECTED_CLOSED_SESSION'
+        if current_market.reported_open:
+            forecast_wait = ('EXPECTED_FORECAST_WARMUP' if current_market.session_open
+                             and (now - current_market.session_open).total_seconds() < 1860
+                             else 'ELIGIBLE_SESSION')
     samples = _samples(learner, database)
     with AlertStore(output / 'alerts.db') as store:
         with store.connection:
             store._time(now)
         sample = samples['LEARNER']
         if isinstance(sample, dict):
+            if (sample.get('protected_wait') is True and isinstance(sample.get('at'), str)
+                    and 0 <= (now - datetime.fromisoformat(sample['at'])).total_seconds()
+                    <= policy.learner_seconds):
+                forecast_wait = 'PROTECTED_FEATURE_WINDOW'
             if sample['phase'] == 'STARTED':
                 previous = store.state('completed_learner')
                 existing = any(a['code'] == 'LEARNER_HEARTBEAT_STALE' for a in store.active())
@@ -137,7 +160,19 @@ def run_monitor(
                 pass
         valid = age is not None and age >= 0
         stale = not valid or (age is not None and age > limits[subsystem])
-        measurements[subsystem] = dict(status='STALE' if stale else 'FRESH',
+        status = 'STALE' if stale else 'FRESH'
+        if stale and valid and verified and subsystem in ('PROTECTION', 'RECONCILIATION'):
+            if current_market.reported_open is False:
+                status = 'EXPECTED_WAIT'
+            elif (current_market.session_open is not None
+                  and isinstance(value, str)
+                  and datetime.fromisoformat(value) < current_market.session_open
+                  and 0 <= (now - current_market.session_open).total_seconds() < limits[subsystem]):
+                status = 'SESSION_STARTUP_GRACE'
+            if status != 'STALE':
+                retained.append(subsystem + '_HEARTBEAT_STALE')
+                stale = False
+        measurements[subsystem] = dict(status=status,
                                        age_seconds=age if valid else None)
         if stale:
             conditions.append(Condition(
@@ -149,7 +184,7 @@ def run_monitor(
                 'current health. Preserve PAPER limits, kill switch and protection controls.',
             ))
     with AlertStore(output / 'alerts.db') as store:
-        events = store.update(conditions, now=now)
+        events = store.update(conditions, now=now, retain_codes=tuple(retained))
         digest = None
         last_digest_at = store.state('digest').get('at')
         if (not last_digest_at or
@@ -163,6 +198,7 @@ def run_monitor(
                                          (json.dumps(dict(digest, event='DIGEST')),))
             store.save_state('digest', {'at': now.isoformat()})
         receipt = dict(measured_at=now.isoformat(), measurements=measurements,
+                       forecast_wait=forecast_wait,
                        active_alerts=store.active(), notifications=events, digest=digest,
                        external_delivery='NOT_CONFIGURED')
     temporary = output / 'receipt.json.tmp'
@@ -176,10 +212,24 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--learner-directory', required=True, type=Path)
     parser.add_argument('--operations-database', required=True, type=Path)
     parser.add_argument('--output-directory', required=True, type=Path)
+    parser.add_argument('--probe-paper-market', action='store_true',
+                        help='Use existing PAPER GET clock/calendar (five second limit).')
     args = parser.parse_args(argv)
     try:
+        market = MarketStatus()
+        if args.probe_paper_market:
+            try:
+                probe = paper_market_probe()
+
+                async def bounded_probe() -> MarketStatus:
+                    return await asyncio.wait_for(probe(), timeout=5)
+
+                market = asyncio.run(bounded_probe())
+            except Exception:
+                # An unavailable probe must never turn an unknown session into a closure.
+                market = MarketStatus()
         receipt = run_monitor(args.learner_directory, args.operations_database,
-                              args.output_directory, now=datetime.now(UTC))
+                              args.output_directory, now=datetime.now(UTC), market=market)
         print(json.dumps(receipt))
         return 1 if receipt['active_alerts'] else 0
     except (OSError, sqlite3.Error, ValueError):
