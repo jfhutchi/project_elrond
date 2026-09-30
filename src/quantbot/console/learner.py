@@ -293,7 +293,8 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
                     'The intraday worker completed its latest data and learning pass. '
                     'See the current forecast and PAPER entry blockers below.'
                     if intraday is not None and status == 'SCHEDULED_BLOCKED' else reasons[status]),
-                    intraday=intraday, progress=progress, last_worker_at=timestamp,
+                    intraday=intraday, progress=progress, promotion=receipt['promotion'],
+                    last_worker_at=timestamp,
                     interval_minutes=10, resolved_this_run=receipt['resolved_this_run'],
                     worker_blockers=blockers)
     except (OSError, ValueError, KeyError, TypeError):

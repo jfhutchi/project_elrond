@@ -182,6 +182,7 @@ async def test_worker_consumes_forecast_submits_paper_and_preserves_independent_
     monkeypatch.setattr(console_learner, 'datetime', Clock)
     assert _samples(tmp_path, database.path)['LEARNER']['phase'] == 'COMPLETED'
     assert console_learner._worker(tmp_path, deployment)['last_worker_at'] == broker.now.isoformat()
+    assert console_learner._worker(tmp_path, deployment)['promotion'] == receipt['promotion']
     tampered = worker | {'paper': receipt | {'mode': 'LIVE'}}
     assert not valid_worker_authority(tmp_path, tampered)
     assert not valid_worker_authority(tmp_path, worker | {'code_commit': 'e' * 40})
