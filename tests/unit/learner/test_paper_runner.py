@@ -24,7 +24,7 @@ from tests.unit.learner.test_paper_deadlines import Broker
 
 
 @pytest.fixture
-def context(tmp_path):
+def context(tmp_path, request):
     database = Database.create(tmp_path / "paper.db")
     now = OPEN + timedelta(minutes=160)
     labels = tuple(
@@ -51,7 +51,17 @@ def context(tmp_path):
     data_settings = MarketDataSettings()
     with database.transaction() as session:
         version, _ = active_policy_version(StorageRepository(session), now=now)
-    policy = PaperExecutionPolicy()
+    if getattr(request, 'param', None) == 'inherited':
+        from quantbot.learner.inherited import InheritedBaseline
+        from quantbot.learner.paper_deadlines import PaperDeadline
+
+        policy = PaperExecutionPolicy(inherited=InheritedBaseline(
+            account_id_hash=PaperDeadline.account_hash('paper-1'),
+            captured_at=now - timedelta(minutes=1),
+            positions=tuple(dict(symbol=symbol,quantity=Decimal('1'),
+                                 average_entry_price=Decimal('450')) for symbol in ('QQQ','TLT'))))
+    else:
+        policy = PaperExecutionPolicy()
     binding = paper_model_binding(
         model, config=config, policy=policy, veto_policy=version.policy(), market_data=data_settings
     )
@@ -163,6 +173,21 @@ async def test_real_sizing_and_all_vetoes_produce_one_handed_off_entry(context):
 
 
 @pytest.mark.asyncio
+async def test_entry_clock_is_measured_after_broker_response(context):
+    _, broker, runner, supervisor = context
+    await supervisor.run_once()
+    original = broker.get_market_clock
+
+    async def delayed_clock():
+        broker.now += timedelta(seconds=2)
+        return await original()
+
+    broker.get_market_clock = delayed_clock
+    result = await runner.evaluate()
+    assert len(result.submissions) == 1, runner.last_reasons
+
+
+@pytest.mark.asyncio
 async def test_missing_supervisor_and_stale_minute_price_refuse_entries(context):
     _, broker, runner, supervisor = context
     assert (await runner.evaluate()).submissions == ()
@@ -187,6 +212,25 @@ async def test_existing_position_and_pending_buy_cannot_be_double_reserved(conte
     broker.orders[order.client_order_id] = order
     assert (await runner.evaluate()).submissions == ()
     assert "PAPER_PENDING_BUY_RISK" in runner.last_reasons
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('context',['inherited'],indirect=True)
+async def test_grandfathered_roster_is_monitored_without_duplicate_entry_or_adoption(context):
+    db, broker, runner, supervisor = context
+    await supervisor.run_once()
+    broker.positions = tuple(_long_position(Decimal('1')).model_copy(update={'symbol':symbol})
+                             for symbol in ('QQQ','TLT'))
+    result = await runner.evaluate()
+    assert result.submissions == ()
+    assert 'PAPER_MODEL_POSITION_LIMIT' not in runner.last_reasons
+    assert 'PAPER_SYMBOL_ALREADY_HELD' in runner.last_reasons
+    with db.transaction() as session:
+        rows = StorageRepository(session).list_signals()
+        assert len([r for r in rows if r.payload.get('kind') ==
+                    'LEARNER_INHERITED_MONITOR_V1']) == 2
+        assert not any(r.payload.get('kind') == 'LEARNER_PAPER_DEADLINE_V1' for r in rows)
+        assert not StorageRepository(session).list_unresolved_order_intents()
 
 
 @pytest.mark.asyncio

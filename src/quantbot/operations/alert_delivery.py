@@ -35,6 +35,12 @@ EVENTS = {
     "ACKNOWLEDGED": "ACKNOWLEDGED",
 }
 CATALOG = {
+    "CLOCK_SYNC_REQUIRED": (
+        "clock", "OPERATOR_ACTION_REQUIRED",
+        "Inspect Windows Time status and the configured time source. Request explicit "
+        "operator approval for a one-time clock resynchronization; honor canceled elevation. "
+        "Do not change entry clock tolerances, time servers, services, security or task settings.",
+    ),
     "DELIVERY_CANARY": (
         "delivery",
         "SYNTHETIC_TEST",
@@ -43,15 +49,16 @@ CATALOG = {
     "PAPER_PROMOTION_REQUIRED": (
         "paper_entry",
         "OPERATOR_ACTION_REQUIRED",
-        "Prepare an empirically eligible frozen PAPER evidence package, then request "
-        "approval for the exact deployment. Local forecasts may continue. Approval "
-        "cannot replace evidence or establish profitability.",
+        "Paper trading setup incomplete. Engineering must verify the frozen strategy "
+        "deployment, clock health and risk controls. Check recorded operator consent before "
+        "requesting any missing authorization. This is not a ChatGPT model selection.",
     ),
     "PAPER_EXECUTION_NOT_CONFIGURED": (
         "paper_entry",
         "MISSING_COMPONENT",
-        "Implement and test the PAPER adapter and protection handoff; request deployment "
-        "approval. Local forecasts may continue.",
+        "Paper trading setup incomplete. Engineering must configure and verify the PAPER "
+        "adapter and protection handoff using recorded deployment consent. Local forecasts "
+        "may continue; configuration does not grant trading authority.",
     ),
     "FORWARD_PRODUCER_MISSING": (
         "forecast",

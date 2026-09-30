@@ -249,7 +249,8 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
         labels = {
             'FORWARD_PRODUCER_MISSING': 'New-market forecast producer is not implemented.',
             'PAPER_PROMOTION_REQUIRED': (
-                'The exact model deployment and PAPER entry gate have not been verified.'),
+                'Paper trading setup incomplete: the trading strategy deployment and entry '
+                'controls have not been verified. This is not a ChatGPT model selection.'),
             'PAPER_EXECUTION_NOT_CONFIGURED': (
                 'The learner PAPER execution configuration has not been verified.'),
             'OUTCOME_PROCESSING_FAILED': 'Outcome processing failed; inspect the worker.',

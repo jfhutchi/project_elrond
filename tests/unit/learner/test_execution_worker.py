@@ -8,8 +8,8 @@ from tests.unit.learner.test_paper_runner import context as _paper_context
 
 
 @pytest.fixture(name="context")
-def execution_context(tmp_path):
-    yield from _paper_context.__wrapped__(tmp_path)
+def execution_context(tmp_path, request):
+    yield from _paper_context.__wrapped__(tmp_path, request)
 
 
 def publish(root, runner):

@@ -1,12 +1,12 @@
-<div class="card">
+<div class="card performance-summary">
 <div class="k"><a href="/calendar">Cumulative daily performance</a></div>
 {% if performance.summary.sample_size %}
-<div class="v" style="color:{% if performance.summary.tone == 'positive' %}var(--ok){% elif performance.summary.tone == 'negative' %}var(--crit){% else %}var(--ink-dim){% endif %}">{{ performance.summary.total }}</div>
+<div class="v performance-{{ performance.summary.tone }}">{{ performance.summary.total }}</div>
 <div class="n">Profitable days: {{ performance.summary.profitable_percent }}</div>
 <div class="n">{{ performance.summary.profitable }} profitable / {{ performance.summary.sample_size }} valid finalized days</div>
 <div class="n">{{ performance.summary.losing }} losing; {{ performance.summary.flat }} flat</div>
 <div class="n">Observed period: {{ performance.summary.period }}</div>
-{% else %}<div class="v absent" style="font-size:1rem">No valid finalized days</div>
+{% else %}<div class="v absent performance-empty">No valid finalized days</div>
 <div class="n">Net P&L and profitable percentage unavailable; sample size 0.</div>{% endif %}
 {% if not performance.available %}<div class="n absent">Performance unavailable: {{ performance.reason }}</div>{% endif %}
 <div class="n">All valid observed days. Flat days count in the denominator. Paper trading only.</div>

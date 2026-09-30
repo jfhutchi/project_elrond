@@ -290,17 +290,20 @@ def test_monitor_wrapper_uses_owned_interpreter_and_check_arguments(tmp_path):
                                 '--env-file', str(environment), '--check']
 
 
-def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_python(tmp_path):
+@pytest.mark.parametrize('mode', ['deadline', 'close', 'initialize'])
+def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_python(
+    tmp_path, mode,
+):
     repo = tmp_path / 'wrapper-repo'
     scripts = repo / 'deploy/omen'
     scripts.mkdir(parents=True)
     for filename in ('start-learner.ps1', 'windows-job.ps1', 'process-job.cs'):
         shutil.copy2(ROOT / 'deploy/omen' / filename, scripts / filename)
-    module = repo / 'src/quantbot/learner'
+    module = repo / 'src/quantbot' / ('learner' if mode == 'deadline' else 'operations')
     module.mkdir(parents=True)
     (module.parent / '__init__.py').write_text('')
     (module / '__init__.py').write_text('')
-    (module / 'execution_worker.py').write_text(
+    (module / ('execution_worker.py' if mode == 'deadline' else 'close_capture.py')).write_text(
         'import json,sys\nprint(json.dumps({"argv":sys.argv[1:],"python":sys.executable}))\n')
     subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
                     f"New-Item -ItemType Junction -Path '{repo / '.venv'}' "
@@ -317,14 +320,21 @@ def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_p
         'powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
         str(scripts / 'start-learner.ps1'), '-Repository', str(repo), '-Directory', str(directory),
         '-Database', str(learner_database), '-EnvironmentFile', str(environment),
-        '-Commit', 'b' * 40, '-DeadlineSupervisor',
-        '-OperationsDatabase', str(operations), '-Check',
+        '-Commit', 'b' * 40,
+        '-DeadlineSupervisor' if mode == 'deadline' else '-CloseCapture',
+        '-OperationsDatabase', str(operations),
+        *(['-Check'] if mode == 'deadline' else ['-InitializeCapture'] if mode == 'initialize'
+          else []),
     ], capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, result.stderr
     observed = json.loads(result.stdout.strip())
     assert Path(observed['python']).resolve() == (repo / '.venv/Scripts/python.exe').resolve()
-    assert observed['argv'] == ['--commit', 'b' * 40, '--database', str(operations),
-                                '--check', '--env-file', str(environment)]
+    expected = ['--commit', 'b' * 40, '--database', str(operations)]
+    expected += ['--check'] if mode == 'deadline' else [
+        '--directory', str(directory / 'performance')]
+    if mode == 'initialize':
+        expected += ['--initialize']
+    assert observed['argv'] == expected + ['--env-file', str(environment)]
 
 
 def test_dispatch_wrapper_checks_both_readonly_sources_with_owned_python(tmp_path):

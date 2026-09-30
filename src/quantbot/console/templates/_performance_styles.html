@@ -1,0 +1,68 @@
+<style>
+  :root {
+    --performance-canvas: #0E171B;
+    --performance-card: #152329;
+    --performance-text: #EDF4F1;
+    --performance-secondary: #A0B2AE;
+    --performance-profit: #90E4AF;
+    --performance-profit-bg: #17392B;
+    --performance-loss: #FFA298;
+    --performance-loss-bg: #402729;
+    --performance-flat: #243239;
+    --performance-summary: #112E29;
+    --performance-lime: #C2EF8D;
+    --performance-ui: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --performance-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
+  }
+  .performance-layout {
+    display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 1.25rem;
+    align-items: start; font-family: var(--performance-ui);
+  }
+  .performance-calendar { table-layout: fixed; border-collapse: separate; border-spacing: 6px; }
+  .performance-calendar th { color: var(--performance-secondary); border: 0; padding: .5rem; }
+  .performance-calendar td { padding: 0; vertical-align: top; border: 0; }
+  .performance-day {
+    min-height: 120px; padding: .65rem; border-radius: 8px;
+    border: 1px solid var(--performance-flat); background: var(--performance-card);
+    color: var(--performance-text);
+  }
+  .performance-day--positive { background: var(--performance-profit-bg); }
+  .performance-day--negative { background: var(--performance-loss-bg); }
+  .performance-day--neutral { background: var(--performance-flat); }
+  .performance-day--unknown { border-style: dashed; }
+  .performance-day--closed { background: transparent; }
+  .performance-calendar .amount {
+    margin: .65rem 0 .2rem; font: 600 .9rem/1.4 var(--performance-mono);
+    font-variant-numeric: tabular-nums; overflow-wrap: anywhere;
+  }
+  .performance-positive { color: var(--performance-profit); }
+  .performance-negative { color: var(--performance-loss); }
+  .performance-neutral { color: var(--performance-text); }
+  .performance-calendar .day-status {
+    font-size: .72rem; line-height: 1.4; color: var(--performance-secondary);
+    overflow-wrap: anywhere;
+  }
+  .month-navigation {
+    display: flex; justify-content: space-between; align-items: center; gap: 1rem;
+    margin: 1.25rem 0; font-family: var(--performance-ui);
+  }
+  .month-navigation a {
+    color: var(--performance-lime); background: var(--performance-card);
+    padding: .45rem .7rem; border: 1px solid var(--performance-flat); border-radius: 6px;
+  }
+  .month-navigation a:focus-visible { outline: 2px solid var(--performance-lime); outline-offset: 3px; }
+  .performance-summary {
+    background: var(--performance-summary); border-color: var(--performance-flat);
+    color: var(--performance-text); font-family: var(--performance-ui);
+  }
+  .performance-summary .k, .performance-summary .n { color: var(--performance-secondary); }
+  .performance-summary a { color: var(--performance-lime); }
+  .performance-summary .v { font-family: var(--performance-mono); font-variant-numeric: tabular-nums; }
+  .performance-summary .absent { color: var(--performance-secondary); }
+  .performance-summary .performance-empty { font: 1rem/1.5 var(--performance-ui); }
+  @media (max-width: 850px) { .performance-layout { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) {
+    .performance-calendar { min-width: 560px; }
+    .month-navigation { flex-wrap: wrap; }
+  }
+</style>

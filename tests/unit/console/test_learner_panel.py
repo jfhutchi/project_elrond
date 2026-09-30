@@ -27,7 +27,7 @@ def test_worker_receipt_fresh_stale_and_wrong_pin(tmp_path):
         return read_learner_panel(root)
     panel = save()
     assert panel.status == 'SCHEDULED_BLOCKED'
-    assert any('PAPER entry' in blocker for blocker in panel.worker_blockers)
+    assert any('Paper trading setup incomplete' in blocker for blocker in panel.worker_blockers)
     assert all('observation deployment' not in blocker for blocker in panel.worker_blockers)
     receipt['finished_at'] = (datetime.now(UTC)-timedelta(minutes=16)).isoformat()
     assert save().status == 'STALE_WORKER'
@@ -272,6 +272,7 @@ def test_progress_alerts_display_owner_action_and_ack_without_resolving(tmp_path
             page = client.get('/learner').text
             assert 'Operator action required' in page
             assert 'Operator' in page
-            assert 'exact PAPER model deployment' in page
+            assert 'Paper trading setup incomplete' in page
+            assert 'ChatGPT model selection' in page
             assert 'Acknowledged; condition remains active' in page
             assert 'External delivery is not configured' in page

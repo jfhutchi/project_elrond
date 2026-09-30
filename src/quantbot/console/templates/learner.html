@@ -12,8 +12,11 @@
 <div class="card" style="border-left:3px solid var(--warn)">
   <h2>Progress and required actions</h2>
   <p>Local forecasts: <strong>{{ learner.progress.forecast_status.replace('_', ' ').capitalize() }}</strong>.
-    PAPER entry: <strong>{{ learner.progress.paper_status.replace('_', ' ').capitalize() }}</strong>.
-    Training: {{ learner.progress.training_status.replace('_', ' ').capitalize() }}.</p>
+    PAPER entry: <strong>{% if learner.progress.paper_status == 'SETUP_INCOMPLETE_CONSENT_RECORDED' %}Paper trading setup incomplete{% else %}{{ learner.progress.paper_status.replace('_', ' ').capitalize() }}{% endif %}</strong>.
+      Training: {{ learner.progress.training_status.replace('_', ' ').capitalize() }}.</p>
+    {% if learner.progress.paper_status == 'SETUP_INCOMPLETE_CONSENT_RECORDED' %}
+    <p>Your PAPER pilot approval is recorded. Engineering owns the remaining clock and commissioning checks; no AI model choice is needed.</p>
+    {% endif %}
   <p class="quiet">Last productive progress (UTC): {{ learner.progress.last_progress_at or 'Not yet observed' }}.
     Expected active-session idle time: {{ learner.progress.expected_idle_seconds | int }} seconds.</p>
   {% for alert in learner.progress.active_alerts %}

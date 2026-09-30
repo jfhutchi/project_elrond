@@ -130,6 +130,10 @@ def run_cycle(
             if database is not None:
                 database.close()
             receipt['finished_at'] = datetime.now(UTC).isoformat()
+            from quantbot.learner.consent import consent_recorded
+            receipt['operator_consent'] = (
+                'RECORDED' if consent_recorded(
+                    root, now=datetime.fromisoformat(receipt['finished_at'])) else 'NOT_VERIFIED')
             try:
                 policy_path = root / 'alert-policy.json'
                 policy = AlertPolicy(**json.loads(policy_path.read_text(encoding='utf-8'))) \

@@ -22,6 +22,12 @@ from quantbot.console.market_status import MarketStatus, paper_market_probe
 from quantbot.learner.receipts import valid_worker_authority
 from quantbot.operations.alerts import AlertStore, Condition
 
+CLOCK_ACTION = (
+    'Inspect Windows Time status and the configured time source. Request explicit operator '
+    'approval for a one-time clock resynchronization; honor canceled elevation. '
+    'Do not change entry clock tolerances, time servers, services, security or task settings.'
+)
+
 
 @dataclass(frozen=True)
 class MonitorPolicy:
@@ -123,8 +129,19 @@ def run_monitor(
     retained = []
     current_market = (market or MarketStatus()).current(now)
     verified = current_market.reported_open is not None and current_market.warning is None
+    closed_wait = current_market.closed_session_consistent
+    if current_market.clock_status == 'CLOCK_SYNC_REQUIRED':
+        conditions.append(Condition(
+            'CLOCK_SYNC_REQUIRED', 'clock', 'CRITICAL', 'OPERATOR_ACTION_REQUIRED',
+            'Operator', CLOCK_ACTION,
+        ))
+    elif current_market.clock_status != 'HEALTHY':
+        # Absence/expiry/stale provider data cannot establish clock recovery.
+        retained.append('CLOCK_SYNC_REQUIRED')
     forecast_wait = 'UNVERIFIED_SESSION'
-    if verified:
+    if closed_wait:
+        forecast_wait = 'EXPECTED_CLOSED_SESSION'
+    elif verified:
         forecast_wait = 'EXPECTED_CLOSED_SESSION'
         if current_market.reported_open:
             forecast_wait = ('EXPECTED_FORECAST_WARMUP' if current_market.session_open
@@ -162,8 +179,9 @@ def run_monitor(
         valid = age is not None and age >= 0
         stale = not valid or (age is not None and age > limits[subsystem])
         status = 'STALE' if stale else 'FRESH'
-        if stale and valid and verified and subsystem in ('PROTECTION', 'RECONCILIATION'):
-            if current_market.reported_open is False:
+        if (stale and valid and (verified or closed_wait)
+                and subsystem in ('PROTECTION', 'RECONCILIATION')):
+            if closed_wait or current_market.reported_open is False:
                 status = 'EXPECTED_WAIT'
             elif (current_market.session_open is not None
                   and isinstance(value, str)
@@ -199,6 +217,8 @@ def run_monitor(
                                          (json.dumps(dict(digest, event='DIGEST')),))
             store.save_state('digest', {'at': now.isoformat()})
         receipt = dict(measured_at=now.isoformat(), measurements=measurements,
+                       clock_status=current_market.clock_status,
+                       clock_offset_seconds=current_market.clock_offset_seconds,
                        forecast_wait=forecast_wait,
                        active_alerts=store.active(), notifications=events, digest=digest,
                        external_delivery='NOT_CONFIGURED')

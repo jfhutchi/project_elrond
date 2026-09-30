@@ -27,6 +27,7 @@ from quantbot.domain import (
     StrategyIdentity,
     TimeInForce,
 )
+from quantbot.learner.inherited import InheritedBaseline, observe_inherited
 from quantbot.learner.intraday import IntradayModel, IntradayPrediction, predict_intraday
 from quantbot.learner.models import LearnerModel
 from quantbot.learner.paper import PaperModelBinding, assess_paper_entry, build_learner_paper_cycle
@@ -78,6 +79,7 @@ def _now() -> datetime:
 
 
 class PaperExecutionPolicy(LearnerModel):
+    inherited: InheritedBaseline | None = None
     round_trip_cost_bps: int = Field(default=10, ge=10)
     stop_loss_bps: int = Field(default=100, ge=10, le=200)
     max_reference_age_seconds: int = Field(default=120, gt=0, le=120)
@@ -97,7 +99,9 @@ def paper_model_binding(
     code_hash = content_id(
         {
             name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-            for name in ("intraday.py", "paper.py", "paper_runner.py", "paper_deadlines.py")
+            for name in (
+                "intraday.py", "paper.py", "paper_runner.py", "paper_deadlines.py", "inherited.py"
+            )
         }
     )
     return PaperModelBinding.from_config(
@@ -237,6 +241,19 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         if any(item.features.target_at > session_exit for item in self.predictions):
             return self._no_entry("PAPER_HORIZON_EXCEEDS_SESSION")
         market = await self._broker.get_market_clock()
+        measured_at = self._clock()
+        if measured_at < now:
+            return self._no_entry("PAPER_LOCAL_CLOCK_REVERSED")
+        now = measured_at
+        if not active.open_at <= now < active.close_at:
+            return self._no_entry("PAPER_MARKET_CLOSED")
+        if any(
+            not item.recorded_at <= now < item.features.target_at
+            or not 0 <= (now - item.features.feature_at).total_seconds()
+            <= self.policy.max_reference_age_seconds
+            for item in self.predictions
+        ):
+            return self._no_entry("PAPER_PREDICTION_STALE")
         if (
             not market.is_open
             or not 0
@@ -252,7 +269,15 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         positions = tuple(
             position for position in await self._broker.get_positions() if position.quantity
         )
-        if any(position.symbol in self.model.training_symbols for position in positions):
+        inherited = set()
+        if self.policy.inherited is not None:
+            inherited = observe_inherited(
+                self._database, baseline=self.policy.inherited, positions=positions,
+                account_id=self.account_id, identity=self._identity, run_id=self._run_id,
+                now=now, predictions=self.predictions, cost_bps=self.policy.round_trip_cost_bps,
+            )
+        if any(position.symbol in self.model.training_symbols and position.symbol not in inherited
+               for position in positions):
             return self._no_entry("PAPER_MODEL_POSITION_LIMIT", "PAPER_SYMBOL_ALREADY_HELD")
         pending = tuple(await self._broker.get_open_orders())
         with self._database.transaction() as session:

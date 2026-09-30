@@ -312,11 +312,15 @@ class PaperDeadlineSupervisor:
             try:
                 account = await self.broker.get_account()
                 market = await self.broker.get_market_clock()
-                if account.account.account_id != self.account_id:
+                measured_at = self.clock()
+                if measured_at < now:
+                    reasons.append("DEADLINE_LOCAL_CLOCK_REVERSED")
+                elif account.account.account_id != self.account_id:
                     reasons.append("DEADLINE_ACCOUNT_MISMATCH")
-                elif not 0 <= (now - market.timestamp).total_seconds() <= 120:
+                elif not 0 <= (measured_at - market.timestamp).total_seconds() <= 120:
                     reasons.append("DEADLINE_BROKER_CLOCK_STALE")
                 else:
+                    now = measured_at
                     for row in records:
                         try:
                             record = _read_record(row)

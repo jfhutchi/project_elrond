@@ -57,6 +57,19 @@ class BrokerAccountSnapshot(BrokerModel):
     restrictions: tuple[str, ...]
 
 
+class PaperPerformanceAccount(BrokerModel):
+    account: Account
+    created_at: datetime
+    previous_close_equity: Decimal
+
+    @field_validator('previous_close_equity')
+    @classmethod
+    def finite_equity(cls, value: Decimal) -> Decimal:
+        if not value.is_finite():
+            raise ValueError('non-finite close equity')
+        return value
+
+
 class BrokerHealth(BrokerModel):
     healthy: bool
     provider: str

@@ -14,9 +14,9 @@ GATES = {
         "CRITICAL",
         "OPERATOR_ACTION_REQUIRED",
         "Engineering / Operator",
-        "Prepare an empirically eligible, frozen evidence package for the exact PAPER model "
-        "deployment; then request operator approval. This gate does not prevent local forecasts. "
-        "Approval cannot replace empirical evidence or establish profitability.",
+        "Paper trading setup incomplete. Engineering must verify the frozen strategy "
+        "deployment, clock health and risk controls. Check recorded operator consent before "
+        "requesting any missing authorization. This is not a ChatGPT model selection.",
     ),
     "PAPER_EXECUTION_NOT_CONFIGURED": Condition(
         "PAPER_EXECUTION_NOT_CONFIGURED",
@@ -24,8 +24,9 @@ GATES = {
         "CRITICAL",
         "MISSING_COMPONENT",
         "Engineering",
-        "Prepare and test the PAPER execution adapter and protection handoff; "
-        "request explicit deployment approval. Local forecasts may continue.",
+        "Paper trading setup incomplete. Engineering must configure and verify the PAPER "
+        "adapter and protection handoff using recorded deployment consent. Local forecasts "
+        "may continue; configuration does not grant trading authority.",
     ),
     "FORWARD_PRODUCER_MISSING": Condition(
         "FORWARD_PRODUCER_MISSING",
@@ -146,7 +147,9 @@ def monitor_progress(
         last_progress_at=last,
         expected_idle_seconds=seconds,
         paper_status=(
-            "OPERATOR_ACTION_REQUIRED"
+            "SETUP_INCOMPLETE_CONSENT_RECORDED"
+            if "PAPER_PROMOTION_REQUIRED" in codes and receipt.get("operator_consent") == "RECORDED"
+            else "OPERATOR_ACTION_REQUIRED"
             if "PAPER_PROMOTION_REQUIRED" in codes
             else "MISSING_COMPONENT"
             if "PAPER_EXECUTION_NOT_CONFIGURED" in codes
