@@ -440,6 +440,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
     import uvicorn
 
     from quantbot.console.app import DEFAULT_HOST, DEFAULT_PORT, create_app
+    from quantbot.console.performance_reader import read_configured_performance
     from quantbot.storage import Database
 
     path = _configured_database()
@@ -475,6 +476,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
                 learner_directory=Path(os.environ["QUANTBOT_LEARNER_DIRECTORY"])
                 if os.environ.get("QUANTBOT_LEARNER_DIRECTORY") else None,
                 market_status=market_status,
+                daily_performance=read_configured_performance,
             ),
             host=host,
             port=port,

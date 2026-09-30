@@ -62,6 +62,7 @@ from quantbot.console.control import (
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
 from quantbot.console.learner import LearnerPanel, read_learner_panel, read_monitor_panel
 from quantbot.console.market_status import MarketStatus, MarketStatusCache
+from quantbot.console.performance_reader import exchange_today
 from quantbot.console.state import (
     ConsoleState,
     ReportsPanel,
@@ -177,7 +178,7 @@ def create_app(
 
     def performance_panel(month: str | None = None) -> CalendarPanel:
         if month is None:
-            current = date.today()
+            current = exchange_today()
         else:
             if not re.fullmatch(r"[0-9]{4}-[0-9]{2}", month):
                 raise HTTPException(status_code=422, detail="month must be YYYY-MM")
