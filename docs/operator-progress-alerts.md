@@ -60,3 +60,21 @@ Merge and deployment remain operator decisions. This branch is stacked on the un
 branch; deployment requires the exact reviewed code pin and corresponding console update.
 It does not authorize a model deployment, broker adapter commissioning, task-principal change,
 database migration, maintenance outage, or reboot/sign-out recovery experiment.
+
+## Verification evidence
+
+The final focused alert, progress, worker, forward, console and sandbox-selection unit run
+passed 54 tests with one platform-specific skip. Sandbox selection now simulates construction
+as well as availability: it cannot provision a host AppContainer during routing unit tests.
+This proves selection/refusal behavior, not native containment.
+
+Ruff and both Linux/Windows mypy source targets passed. Separately, 20 service tests, 14
+external-worker/windowless-host checks, 37 native-shell deployment-guard/model-launch checks,
+and the two bounded memory checks passed in the appropriate isolated test environment.
+
+The initial full run was not green: 3,109 passed, 73 skipped, 37 failed and 5 errors.
+Targeted reruns addressed checkout-contained test paths, restricted-token native-shell/CIM
+access and unintended OS provisioning in the selection fixture. The final full suite has not
+been rerun. Actual native AppContainer qualification remains unverified; it requires approved
+host profile/staging permissions. No runtime deployment or automatic external delivery was
+tested by these code checks.

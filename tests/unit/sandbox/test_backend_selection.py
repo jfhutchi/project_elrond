@@ -22,6 +22,7 @@ from quantbot.sandbox import (
     WindowsUnavailable,
     WslSandbox,
     WslUnavailable,
+    _win32,
     select_isolated_backend,
 )
 
@@ -33,6 +34,13 @@ def availability(monkeypatch: pytest.MonkeyPatch):
     def _set(*, wsl: bool, windows: bool) -> None:
         monkeypatch.setattr(sandbox, "wsl_backend_available", lambda: wsl)
         monkeypatch.setattr(sandbox, "windows_backend_available", lambda: windows)
+        # Availability is simulated, so construction must not provision a real host
+        # identity either. These tests prove routing/refusal, never native containment;
+        # tests/integration/test_sandbox_windows.py owns the actual OS guarantees.
+        monkeypatch.setattr(
+            _win32, "app_container",
+            lambda *a, **k: _win32.AppContainer("unit-only", "NOT_A_REAL_SID", 0),
+        )
 
     return _set
 
