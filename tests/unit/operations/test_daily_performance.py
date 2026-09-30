@@ -18,6 +18,8 @@ def evidence(*, end="1010", flow="0", known=True, reset=False, captured=None):
         close_at=datetime(2026, 11, 27, 18, tzinfo=UTC),
         captured_at=captured or datetime(2026, 11, 27, 18, 1, tzinfo=UTC),
         previous_close_equity=Decimal("1000"), close_equity=Decimal(end),
+        previous_session_date=date(2026, 11, 25),
+        expected_previous_session_date=date(2026, 11, 25),
         net_external_flow=Decimal(flow), flows_verified=known,
         same_account_epoch=not reset, reconciled=True,
     )
@@ -59,6 +61,12 @@ def test_percentage_includes_flat_and_excludes_invalid():
 
 def test_empty_sample_has_no_percentage():
     assert summarize([]).profitable_day_percent is None
+
+
+def test_missing_intermediate_session_not_counted_as_daily_profit():
+    from dataclasses import replace
+    old_baseline = replace(evidence(), previous_session_date=date(2026, 11, 24))
+    assert evaluate_day(old_baseline).status == "MISSING"
 
 
 def test_immutable_durable_close_and_retry(tmp_path: Path):

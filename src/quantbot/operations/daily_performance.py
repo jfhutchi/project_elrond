@@ -26,6 +26,8 @@ class CloseEvidence:
     close_at: datetime
     captured_at: datetime
     previous_close_equity: Decimal | None
+    previous_session_date: date | None
+    expected_previous_session_date: date
     close_equity: Decimal
     net_external_flow: Decimal
     flows_verified: bool
@@ -105,7 +107,12 @@ class CloseLedger:
         days = []
         for (document,) in rows:
             payload = json.loads(document)
-            payload["session_date"] = date.fromisoformat(payload["session_date"])
+            for field in ("session_date", "expected_previous_session_date"):
+                payload[field] = date.fromisoformat(payload[field])
+            payload["previous_session_date"] = (
+                date.fromisoformat(payload["previous_session_date"])
+                if payload["previous_session_date"] is not None else None
+            )
             for field in ("close_at", "captured_at"):
                 payload[field] = datetime.fromisoformat(payload[field])
             for field in ("previous_close_equity", "close_equity", "net_external_flow"):
@@ -135,6 +142,10 @@ def evaluate_day(evidence: CloseEvidence) -> DailyPerformance:
         return result("INVALID", "No timely exchange-close snapshot.")
     if evidence.previous_close_equity is None:
         return result("MISSING", "Previous close baseline is unavailable.")
+    if evidence.expected_previous_session_date >= evidence.session_date:
+        raise ValueError("previous exchange session must precede the observed session")
+    if evidence.previous_session_date != evidence.expected_previous_session_date:
+        return result("MISSING", "Immediately preceding exchange-close baseline is unavailable.")
     values = (evidence.previous_close_equity, evidence.close_equity, evidence.net_external_flow)
     if not all(value.is_finite() for value in values):
         return result("INVALID", "Non-finite accounting evidence.")
