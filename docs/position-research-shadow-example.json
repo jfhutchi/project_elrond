@@ -1,0 +1,255 @@
+{
+  "synthetic": true,
+  "mode": "SOURCE_ONLY_SHADOW",
+  "actual_provider_requests": 0,
+  "broker_calls": 0,
+  "orders_submitted": 0,
+  "pilot_universe_changed": false,
+  "examples": [
+    {
+      "inputs": {
+        "instrument": {
+          "instrument_id": "SYNTHETIC-QQQ",
+          "symbol": "QQQ",
+          "venue": "NASDAQ",
+          "asset_class": "ETF",
+          "quote_currency": "USD",
+          "exposure_currency": "USD",
+          "exposure_market": "US equity",
+          "calendar": "XNYS",
+          "listed_on": "2000-01-01",
+          "delisted_on": null
+        },
+        "company": null,
+        "query_end": "2026-10-01T14:00:00Z",
+        "collected_at": "2026-10-01T14:00:00Z",
+        "news_max_age": "P2D",
+        "filing_max_age": "P1Y",
+        "sources": [
+          {
+            "source_id": "c474b74059e8d7dabe896ada0ec51c47f019d0e2b616b9dcdcc0ed22f6d9f1ae",
+            "kind": "NEWS",
+            "uri": "urn:news:4bdbeed75ab5aa87759c1578438710821a788997b01d66a334a07c33d85a90e0",
+            "title": "SYNTHETIC QQQ announcement",
+            "publisher": "synthetic-provider",
+            "author": "",
+            "published_at": "2026-10-01T13:55:00Z",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "content_hash": "d30d5afdd44628a7363f0866cc2761070ef5b998d47a9273b93e1c2f04436563",
+            "license": "unrecorded",
+            "parser_version": "1",
+            "excerpt": "",
+            "health": "OK",
+            "derived": false,
+            "derived_from": null
+          }
+        ],
+        "gaps": [],
+        "coverage": [
+          {
+            "provider": "alpaca-news",
+            "query": "QQQ",
+            "scope": "EXACT_INSTRUMENT_NEWS_QUERY",
+            "status": "HEALTHY",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "returned_count": 1,
+            "usable_count": 1,
+            "complete_public_coverage": false
+          },
+          {
+            "provider": "sec-edgar",
+            "query": "QQQ",
+            "scope": "ETF_COMPANY_FILINGS_NOT_INFERRED",
+            "status": "NOT_APPLICABLE",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "returned_count": 0,
+            "usable_count": 0,
+            "complete_public_coverage": false
+          }
+        ]
+      },
+      "advice": {
+        "symbol": "QQQ",
+        "at": "2026-10-01T14:00:00Z",
+        "thesis": "SYNTHETIC frozen forecast thesis",
+        "forecast_id": "SYNTHETIC-forecast-QQQ",
+        "held": true,
+        "edge_bps": "20",
+        "cost_bps": "10",
+        "action": "HOLD",
+        "reason": "FROZEN_FORECAST_EDGE_AFTER_COSTS",
+        "evidence": [
+          {
+            "source_id": "c474b74059e8d7dabe896ada0ec51c47f019d0e2b616b9dcdcc0ed22f6d9f1ae",
+            "kind": "NEWS",
+            "uri": "urn:news:4bdbeed75ab5aa87759c1578438710821a788997b01d66a334a07c33d85a90e0",
+            "title": "SYNTHETIC QQQ announcement",
+            "publisher": "synthetic-provider",
+            "author": "",
+            "published_at": "2026-10-01T13:55:00Z",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "content_hash": "d30d5afdd44628a7363f0866cc2761070ef5b998d47a9273b93e1c2f04436563",
+            "license": "unrecorded",
+            "parser_version": "1",
+            "excerpt": "",
+            "health": "OK",
+            "derived": false,
+            "derived_from": null
+          }
+        ],
+        "source_gaps": [],
+        "order_authority": false
+      }
+    },
+    {
+      "inputs": {
+        "instrument": {
+          "instrument_id": "SYNTHETIC-AAPL",
+          "symbol": "AAPL",
+          "venue": "NASDAQ",
+          "asset_class": "EQUITY",
+          "quote_currency": "USD",
+          "exposure_currency": "USD",
+          "exposure_market": "US equity",
+          "calendar": "XNYS",
+          "listed_on": "2000-01-01",
+          "delisted_on": null
+        },
+        "company": {
+          "instrument_id": "SYNTHETIC-AAPL",
+          "symbol": "AAPL",
+          "cik": "0000320193",
+          "provenance": {
+            "source_id": "SYNTHETIC-mapping",
+            "kind": "MARKET_DATA",
+            "uri": "https://www.sec.gov/files/company_tickers.json",
+            "title": "SYNTHETIC mapping",
+            "publisher": "SYNTHETIC",
+            "author": "",
+            "published_at": "2026-09-30T14:00:00Z",
+            "retrieved_at": "2026-10-01T13:00:00Z",
+            "content_hash": "9b1b1770bb6368a6111b79f6e00b31256237bea43d0525d8ef20cfc26061d149",
+            "license": "unrecorded",
+            "parser_version": "synthetic-fixture-1",
+            "excerpt": "",
+            "health": "OK",
+            "derived": false,
+            "derived_from": null
+          }
+        },
+        "query_end": "2026-10-01T14:00:00Z",
+        "collected_at": "2026-10-01T14:00:00Z",
+        "news_max_age": "P2D",
+        "filing_max_age": "P1Y",
+        "sources": [
+          {
+            "source_id": "d65c38b5c41822393ca1b891c19fce15455656eabb544111f3ef207ab35385f2",
+            "kind": "NEWS",
+            "uri": "urn:news:3c5c5e28a29c8834093d12480cb1c801045ff0ec5d749a47cc9443bb9779e088",
+            "title": "SYNTHETIC AAPL announcement",
+            "publisher": "synthetic-provider",
+            "author": "",
+            "published_at": "2026-10-01T13:55:00Z",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "content_hash": "2bec73c32232506f1d3ef9ce41ef17842495f0d57ef588a62fb7e997970a5d24",
+            "license": "unrecorded",
+            "parser_version": "1",
+            "excerpt": "",
+            "health": "OK",
+            "derived": false,
+            "derived_from": null
+          },
+          {
+            "source_id": "sec:SYNTHETIC",
+            "kind": "SEC_FILING",
+            "uri": "https://www.sec.gov/Archives/SYNTHETIC",
+            "title": "10-K",
+            "publisher": "SEC EDGAR (CIK 0000320193)",
+            "author": "",
+            "published_at": "2026-09-30T00:00:00Z",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "content_hash": "207c5f9aeb940424eca1c578dec2d64348746b97e68987b6d52e76326c3fe246",
+            "license": "unrecorded",
+            "parser_version": "edgar-atom-v1",
+            "excerpt": "",
+            "health": "OK",
+            "derived": false,
+            "derived_from": null
+          }
+        ],
+        "gaps": [],
+        "coverage": [
+          {
+            "provider": "alpaca-news",
+            "query": "AAPL",
+            "scope": "EXACT_INSTRUMENT_NEWS_QUERY",
+            "status": "HEALTHY",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "returned_count": 1,
+            "usable_count": 1,
+            "complete_public_coverage": false
+          },
+          {
+            "provider": "sec-edgar",
+            "query": "0000320193:10-K",
+            "scope": "VERIFIED_COMPANY_CIK_ONE_FORM",
+            "status": "HEALTHY",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "returned_count": 1,
+            "usable_count": 1,
+            "complete_public_coverage": false
+          }
+        ]
+      },
+      "advice": {
+        "symbol": "AAPL",
+        "at": "2026-10-01T14:00:00Z",
+        "thesis": "SYNTHETIC frozen forecast thesis",
+        "forecast_id": "SYNTHETIC-forecast-AAPL",
+        "held": true,
+        "edge_bps": "20",
+        "cost_bps": "10",
+        "action": "HOLD",
+        "reason": "FROZEN_FORECAST_EDGE_AFTER_COSTS",
+        "evidence": [
+          {
+            "source_id": "d65c38b5c41822393ca1b891c19fce15455656eabb544111f3ef207ab35385f2",
+            "kind": "NEWS",
+            "uri": "urn:news:3c5c5e28a29c8834093d12480cb1c801045ff0ec5d749a47cc9443bb9779e088",
+            "title": "SYNTHETIC AAPL announcement",
+            "publisher": "synthetic-provider",
+            "author": "",
+            "published_at": "2026-10-01T13:55:00Z",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "content_hash": "2bec73c32232506f1d3ef9ce41ef17842495f0d57ef588a62fb7e997970a5d24",
+            "license": "unrecorded",
+            "parser_version": "1",
+            "excerpt": "",
+            "health": "OK",
+            "derived": false,
+            "derived_from": null
+          },
+          {
+            "source_id": "sec:SYNTHETIC",
+            "kind": "SEC_FILING",
+            "uri": "https://www.sec.gov/Archives/SYNTHETIC",
+            "title": "10-K",
+            "publisher": "SEC EDGAR (CIK 0000320193)",
+            "author": "",
+            "published_at": "2026-09-30T00:00:00Z",
+            "retrieved_at": "2026-10-01T14:00:00Z",
+            "content_hash": "207c5f9aeb940424eca1c578dec2d64348746b97e68987b6d52e76326c3fe246",
+            "license": "unrecorded",
+            "parser_version": "edgar-atom-v1",
+            "excerpt": "",
+            "health": "OK",
+            "derived": false,
+            "derived_from": null
+          }
+        ],
+        "source_gaps": [],
+        "order_authority": false
+      }
+    }
+  ]
+}

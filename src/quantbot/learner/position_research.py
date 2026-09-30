@@ -100,15 +100,17 @@ is never a veto override, a position handoff, or a model-promotion decision.
 
 
 def record_decision(database: Database, *, run_id: str, identity: StrategyIdentity,
-                    record: ResearchDecision) -> str:
+                    record: ResearchDecision,
+                    research_inputs: dict[str, object] | None = None) -> str:
     """Append idempotently to the existing durable signal ledger; no schema change."""
     event_id = 'paper-research-' + content_id({'run':run_id,'strategy':identity.strategy_id,
-                                             'version':identity.version,'decision':record})
+        'version':identity.version,'decision':record,'research_inputs':research_inputs})
     with database.transaction() as session:
         repo = StorageRepository(session)
         if event_id not in {s.signal_id for s in repo.list_signals()}:
             repo.record_signal(event_id, run_id=run_id, strategy_id=identity.strategy_id,
                 symbol=record.symbol, occurred_at=record.at,
                 payload={'kind':'PAPER_RESEARCH_DECISION_V1',
-                         'decision':record.model_dump(mode='json')})
+                         'decision':record.model_dump(mode='json'),
+                         'research_inputs':research_inputs})
     return event_id
