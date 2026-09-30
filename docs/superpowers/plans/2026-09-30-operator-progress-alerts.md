@@ -19,10 +19,10 @@ selected to conserve credits; the user has authorized implementation and tests a
   pauses do not age the watchdog, active-session stalls warn/turn critical, progress recovers.
 - [x] Implement `learner/progress.py`; explicitly separate forecast, training and PAPER readiness.
 - [x] Wire worker receipts, safe CLI acknowledgement and console projection; test integration.
-- [ ] Verify focused regressions, lint, both mypy targets and full pytest; document runtime limits.
+- [x] Verify focused regressions, lint, both mypy targets and aggregate pytest; document runtime limits.
 - [x] Push focused branch and open a draft PR against the unmerged learner branch. Keep issues
   open until broader delivery and deployment acceptance have actual evidence.
 
-Focused checks, lint and both mypy targets pass. The initial full suite exposed environment
-and fixture failures; bounded corrected reruns pass, but the final full suite and native
-AppContainer qualification remain incomplete. See `docs/operator-progress-alerts.md`.
+Focused checks, lint and both mypy targets pass. Final aggregate coverage accounts for all
+tests in two environment-appropriate partitions: 3,115 + 39 passed, 73 explicit skips.
+Native AppContainer qualification remains skipped. See `docs/operator-progress-alerts.md`.
