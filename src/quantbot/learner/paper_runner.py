@@ -96,6 +96,9 @@ def paper_model_binding(
     market_data: MarketDataSettings,
 ) -> PaperModelBinding:
     root = Path(__file__).parent
+    veto_document = veto_policy.model_dump(mode='json')
+    # Enabled rules are a set: identical controls must bind identically in each process.
+    veto_document['enabled'] = sorted(veto_document['enabled'])
     code_hash = content_id(
         {
             name: hashlib.sha256((root / name).read_bytes()).hexdigest()
@@ -112,7 +115,7 @@ def paper_model_binding(
         execution_config={
             "strategy_risk": config.model_dump(mode="json"),
             "execution": policy.model_dump(mode="json"),
-            "veto": veto_policy.model_dump(mode="json"),
+            "veto": veto_document,
             "risk_market_data": asdict(market_data),
             "selection": "positive-cost-adjusted-top-quintile-one-entry-per-cycle",
         },
