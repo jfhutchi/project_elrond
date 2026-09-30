@@ -73,8 +73,14 @@ external-worker/windowless-host checks, 37 native-shell deployment-guard/model-l
 and the two bounded memory checks passed in the appropriate isolated test environment.
 
 The initial full run was not green: 3,109 passed, 73 skipped, 37 failed and 5 errors.
-Targeted reruns addressed checkout-contained test paths, restricted-token native-shell/CIM
-access and unintended OS provisioning in the selection fixture. The final full suite has not
-been rerun. Actual native AppContainer qualification remains unverified; it requires approved
-host profile/staging permissions. No runtime deployment or automatic external delivery was
-tested by these code checks.
+Final aggregate coverage on `d8a667c` used two environment-appropriate partitions: 3,115 passed
+and 73 explicit skips in the restricted-token group; all 39 native-shell/CIM checks passed in
+the native group. The first group excludes the two shell/launcher files and deselects two
+memory checks, all covered in the second group. Checkout-contained test paths, restricted-token
+native access and unintended OS provisioning in the selection fixture caused the original
+failures; those groups now pass. All collected tests are accounted for, with no failing tests.
+The offline lock check and shared CI-helper lint/both-platform mypy checks also passed.
+
+Actual native AppContainer qualification remains skipped and unverified; it requires approved
+host profile/staging permissions. Remote CI has no status at this head because the workflow is
+manual-only. No runtime deployment or automatic external delivery was tested by these checks.
