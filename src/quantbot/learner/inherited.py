@@ -14,6 +14,7 @@ from typing import Self
 from pydantic import Field, model_validator
 
 from quantbot.domain import Position, StrategyIdentity
+from quantbot.learner.five_minute_forward import FiveMinutePrediction
 from quantbot.learner.intraday import IntradayPrediction
 from quantbot.learner.models import LearnerModel
 from quantbot.research.manifest import content_id
@@ -51,7 +52,7 @@ class InheritedBaseline(LearnerModel):
 def observe_inherited(
     database: Database, *, baseline: InheritedBaseline, positions: Sequence[Position],
     account_id: str, identity: StrategyIdentity, run_id: str, now: datetime,
-    predictions: Sequence[IntradayPrediction], cost_bps: int,
+    predictions: Sequence[IntradayPrediction | FiveMinutePrediction], cost_bps: int,
 ) -> set[str]:
     """Record immutable provenance and current thesis; never adopt/order a legacy position."""
     if content_id({'paper_account': account_id}) != baseline.account_id_hash:

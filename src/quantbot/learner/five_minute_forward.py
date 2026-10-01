@@ -37,6 +37,11 @@ class FiveMinutePrediction(LearnerModel):
     cost_status: Literal["ABOVE_FIXED_COST_FLOOR", "BELOW_FIXED_COST_FLOOR"]
     order_authority: Literal[False] = False
 
+    @property
+    def prediction_id(self) -> str:
+        """Original observation identity; adding an adapter does not rewrite evidence."""
+        return content_id(self)
+
     @model_validator(mode="after")
     def verify_forward_record(self) -> Self:
         recorded = _aware(self.recorded_at)

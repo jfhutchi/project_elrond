@@ -265,6 +265,7 @@ def operational_objections(
     *,
     account_id: str,
     now: datetime,
+    position_count: int | None = None,
 ) -> tuple[str, ...]:
     """Read real recovery/protection/deadline gates. No readiness defaults or writes.
 
@@ -286,7 +287,7 @@ def operational_objections(
         elif not 0 <= (now - datetime.fromisoformat(recon["completed_at"])).total_seconds() <= 120:
             reasons.append("PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT")
         protection = connection.execute(
-            "SELECT completed_at,outcome,unprotected_count, "
+            "SELECT completed_at,outcome,unprotected_count,position_count,evaluated_count, "
             "exit_required_count FROM position_protection_cycles WHERE account_id=? "
             "ORDER BY completed_at DESC LIMIT 1",
             (account_id,),
@@ -297,6 +298,11 @@ def operational_objections(
             or (protection["unprotected_count"] or protection["exit_required_count"])
         ):
             reasons.append("PAPER_POSITION_PROTECTION_UNVERIFIED")
+        elif position_count is not None and (
+            protection["position_count"] != position_count
+            or protection["evaluated_count"] != position_count
+        ):
+            reasons.append("PAPER_PROTECTION_POSITION_COUNT_MISMATCH")
         elif (
             not 0
             <= (now - datetime.fromisoformat(protection["completed_at"])).total_seconds()
