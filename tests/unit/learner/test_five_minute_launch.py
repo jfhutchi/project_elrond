@@ -238,3 +238,32 @@ async def test_duplicate_tick_cannot_enter_capture(package, monkeypatch):
     with SingleWriterLock(cfg.root / "observer.lock"):
         with pytest.raises(AlreadyLockedError):
             await launcher.run_once(cfg, Settings(), launcher.bound_models(cfg))
+
+
+def test_native_action_reports_missing_interpreter_as_failure(tmp_path):
+    import os
+    import subprocess
+    from xml.etree import ElementTree as ET
+
+    if os.name != "nt":
+        pytest.skip("native Windows command acceptance")
+    launcher = module()
+    xml = launcher.task_xml(
+        repository=str(tmp_path / "absent-release"),
+        config=str(tmp_path / "config.json"),
+        env_file=str(tmp_path / "profile.env"),
+        host=str(tmp_path / "host.exe"),
+        log=str(tmp_path / "host.log"),
+        user_id="fixture",
+        commit="a" * 40,
+    )
+    ns = {"t": "http://schemas.microsoft.com/windows/2004/02/mit/task"}
+    arguments = ET.fromstring(xml).find(".//t:Arguments", ns).text
+    command = arguments.split('-Command "', 1)[1][:-1]
+    result = subprocess.run(
+        ["powershell.exe", "-NoProfile", "-NonInteractive", "-Command", command],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    assert result.returncode != 0, "missing interpreter incorrectly reported a successful tick"

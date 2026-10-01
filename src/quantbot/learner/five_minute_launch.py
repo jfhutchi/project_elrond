@@ -295,11 +295,13 @@ def task_xml(
     source = str(PureWindowsPath(repository) / "src")
     python = str(PureWindowsPath(repository) / ".venv" / "Scripts" / "python.exe")
     command = (
+        "$ErrorActionPreference='Stop'; $global:LASTEXITCODE=$null; "
         f"$env:PYTHONPATH='{source}'; $env:PYTHONNOUSERSITE='1'; "
         "Remove-Item Env:PYTHONHOME,Env:PYTHONEXECUTABLE,Env:__PYVENV_LAUNCHER__ "
         "-ErrorAction SilentlyContinue; "
         f"& '{python}' -m quantbot.learner.five_minute_launch "
-        f"--config '{config}' --env-file '{env_file}'; exit $LASTEXITCODE"
+        f"--config '{config}' --env-file '{env_file}'; "
+        "if ($null -eq $LASTEXITCODE) { exit 2 }; exit $LASTEXITCODE"
     )
     node(
         action,
