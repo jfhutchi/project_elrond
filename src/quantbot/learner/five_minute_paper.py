@@ -74,6 +74,33 @@ def dia_exposure_classification() -> ExposureClassification:
     )
 
 
+def five_minute_code_hash() -> str:
+    root = Path(__file__).parent
+    return content_id(
+        {
+            name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+            for name in (
+                "five_minute.py",
+                "five_minute_forward.py",
+                "five_minute_dry_run.py",
+                "five_minute_paper.py",
+                "five_minute_launch.py",
+                "forward_source.py",
+                "estimators.py",
+                "paper.py",
+                "paper_runner.py",
+                "paper_deadlines.py",
+                "inherited.py",
+                "execution_worker.py",
+                "five_minute_entry.py",
+                "worker.py",
+                "consent.py",
+                "receipts.py",
+            )
+        }
+    )
+
+
 def five_minute_paper_binding(
     model: dict[str, Any],
     *,
@@ -89,30 +116,12 @@ def five_minute_paper_binding(
         or model.get("training_symbols") != ["DIA"]
     ):
         raise ValueError("separately frozen five-minute DIA contract required")
-    root = Path(__file__).parent
     veto = veto_policy.model_dump(mode="json")
     veto["enabled"] = sorted(veto["enabled"])
     return PaperModelBinding.from_config(
         model_id=content_id(model),
         artifact_hash=content_id(model["artifact"]),
-        code_hash=content_id(
-            {
-                name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-                for name in (
-                    "five_minute.py",
-                    "five_minute_forward.py",
-                    "five_minute_dry_run.py",
-                    "five_minute_paper.py",
-                    "five_minute_launch.py",
-                    "forward_source.py",
-                    "estimators.py",
-                    "paper.py",
-                    "paper_runner.py",
-                    "paper_deadlines.py",
-                    "inherited.py",
-                )
-            }
-        ),
+        code_hash=five_minute_code_hash(),
         execution_config={
             "contract": CONTRACT,
             "interval_seconds": 300,

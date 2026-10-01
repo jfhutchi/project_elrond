@@ -33,6 +33,20 @@ they are not new research fits or real trading results.
 6. `build_five_minute_paper_services` composes this path into an already configured
    PAPER runtime. It never opens, migrates, deploys, promotes or starts that runtime.
    It does not start another deadline supervisor or stop position protection.
+7. `PaperWorkerConfig.contract` explicitly dispatches one-minute versus five-minute
+   entry. The default remains one-minute; five-minute requires the observer config's
+   exact SHA256, an explicit frozen model and full expected execution-binding hash.
+   The separate entry state cannot overlap observation, frozen, clock or canonical
+   stores. Exact model consent, canonical lineage/feature holdouts, clock health and
+   recorded deployment/PAPER gate are required before entering the existing cycle.
+   Waiting for a cohort cannot create or claim a missing deployment or permission.
+8. `quantbot.learner.five_minute_entry` is the native entry launcher. The ordinary
+   worker's five-minute branch consumes existing observations directly and never
+   invokes one-minute capture, challenger training or automatic model choice. It
+   retains the existing worker lock, receipts, progress alerts and ownership audit.
+   Receipt validation binds the original artifact, code, consent, config and current
+   durable gate. `--check` constructs no broker or runtime and performs no writes;
+   its message explicitly says runtime eligibility was not checked.
 
 `dia_exposure_classification` retains every original mandate/factor assignment and
 adds only DIA's issuer-backed US_EQUITY mandate. This separately hashed definition
@@ -49,11 +63,24 @@ claim a technology/constituent mapping. Source: [State Street DIA fund objective
   old one-minute learner's entry permission. Exclusive entry rejects two active
   learner contracts. This is an execution-contract/model replacement, not a claim
   of economic qualification or approval to trade live.
-- Configure an entry worker to call the frozen loader and factory with the existing
-  PAPER profile, verified-clock callback and canonical protected-window guard.
-  Native launcher/config integration is still required: the current deployed
-  `execution_worker` recognizes one-minute model/cohort files. This library is not
-  automatically consumed by that task. Do not deploy it as though it were.
+- Configure the implemented native entry launcher with the existing PAPER profile
+  and a separate existing `state/learner.db`; it creates no guard store or migration.
+  `paper-execution.json` must include `contract: five-minute-price-alpha-v1`, the
+  existing observer-config absolute path and exact SHA256, the explicitly chosen
+  frozen `model_id`, actual operational database, inherited baseline/exclusive-entry
+  policy and `expected_binding_hash = content_id(five_minute_paper_binding(...))`.
+  Compute that binding from actual preserved base risk settings, recorded veto policy,
+  actual market-data config and prospective DIA classification, never from assumed
+  defaults. Set no model, consent, promotion or deployment record automatically.
+- The test-only native command is `python -m quantbot.learner.five_minute_entry
+  --directory <entry-root> --env-file <existing-paper-profile> --commit <exact-pin>
+  --check`. Only omit `--check` after the separate commissioning approval and all
+  required readiness checks. `task_xml` returns a plan only: existing interactive
+  user, least privilege, hidden host, no wake, every ten minutes at 09:31:35 Eastern.
+  This is 30 seconds after the observer's scheduled start, keeping the nominal
+  five-minute cutoff within the independent 120-second entry limit. A slow/missing
+  capture waits or rejects; catch-up never manufactures a timely entry. No task was
+  registered or existing scheduler changed by this source work.
 - Preserve the existing inherited baseline and all tighter controls: one new learner
   position, maximum 5% value, 0.25% entry risk, at most 1% stop and 30-minute horizon.
   No legacy sales/reset, paid feed, new credentials, new access or protection outage
@@ -66,14 +93,27 @@ claim a technology/constituent mapping. Source: [State Street DIA fund objective
   prospective entry, broker fill, protective/horizon exit and durable account outcome.
   A rejection is recorded honestly; never force a trade to satisfy acceptance.
 
-The latest previously verified real diagnostic (2026-10-01 19:21 UTC) found 18
-forecasts, all below the unchanged cost floor, and no eligible intent. Commissioning
-does not turn those observations into orders. Forecast labels are instrument-return
+Read-only end-of-session acceptance at 2026-10-01 20:15 UTC verified 20 original
+forecasts and 20 resolved labels, no pending labels, ten distinct resolved windows
+and four nonoverlapping windows (not a statistical independence claim). These totals
+include the two seed forecasts/labels; 18 additional forecasts/labels accumulated in
+the existing observational installation. All 20 forecasts remain below the fixed
+cost floor. The last natural tick at 20:11 reported OUTSIDE_FORECAST_SESSION with
+zero orders/fits/authority. All prior evidence bytes and original charges verified.
+At 20:23 UTC the dashboard reader verified one Oct 1 close baseline (captured 20:01
+UTC), zero finalized account-P&L days, and today's honest BASELINE_MISSING status.
+No previous close or profit was invented. Forecast labels are instrument-return
 evidence, not daily account P&L or profitability proof.
 
-Validation: 131 focused tests across the adapter, five-minute observation/launch,
-dry-run, shared one-minute runner, deadline, inherited ownership and existing worker
-tests passed; Ruff and mypy passed. The mock cycle includes synthetic buy/sell fills,
-independent exit after entry demotion, and a durable closed event without duplicate
-exit. Full-project and hosted CI checks were not run; no branch protections are waived.
-No GitHub publication or runtime activation occurred.
+Validation receipts are task-local. The final relevant aggregate passed 735 tests
+in 139.65 seconds across all learner/risk unit tests, execution coordinator/runtime
+integration, monitor/session and learner-panel tests. Ruff and mypy passed (six
+changed source files). Native dispatch tests add mock entry, repeated-tick dedupe, missing consent/clock,
+protected windows, exact config/binding refusal, native read-only preflight and
+unchanged one-minute worker behavior. The mock cycle includes synthetic buy/sell
+fills, independent exit after entry demotion, and a durable closed event without
+duplicate exit. A date-boundary regression verifies March 31 lineage does not
+include April 1, while lineage actually ending April 1 remains protected.
+Full-project/hosted CI remain unrun;
+no branch protections are waived. No GitHub publication, runtime activation, real
+broker submission, model swap or refit occurred.
