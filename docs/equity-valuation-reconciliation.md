@@ -33,6 +33,14 @@ Account and position endpoints are not an atomic snapshot. If the observations a
 inconsistent, this conservative rule can still refuse reconciliation. It does not label every
 small difference harmless or increase the precision allowance to hide timing uncertainty.
 
+Failed equity-only comparisons also retain both observed cash amounts, position market-value
+totals, equity residuals, position counts and inconsistent-mark counts inside the existing
+material `ACCOUNT/equity` difference. These are diagnostic evidence, not an exemption or a
+substitute portfolio. The original scalar equity values remain recorded. The status stays
+`RECONCILIATION_REQUIRED` and new orders stay blocked. No schema change is required.
+This permits later diagnosis without guessing from a scalar equity difference after the second
+portfolio has gone out of scope. Existing older receipts are not rewritten or backfilled.
+
 Regression tests exercise a real recovery and operational cycle: an explained one-cent mark
 completes without engaging the switch, while a one-cent cash discrepancy or unexplained equity
 change still halts and engages it. Other cases cover positive/negative marks, shorts, missing

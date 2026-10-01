@@ -1,9 +1,15 @@
+from datetime import UTC, datetime
 from decimal import Decimal
 
 import pytest
 
 from quantbot.domain import Account, Position, ReconciliationStatus
-from quantbot.execution.reconciliation import ReconciliationSnapshot, compare_reconciliation
+from quantbot.execution.reconciliation import (
+    ReconciliationSnapshot,
+    compare_reconciliation,
+    record_reconciliation,
+)
+from quantbot.storage import Database, StorageRepository
 from tests.unit.execution.test_reconciliation import _fill, _order
 
 
@@ -156,3 +162,51 @@ def test_explained_equity_does_not_hide_missing_orders_or_fills(
     assert result.valuation_changes == ()
     category = "FILL" if field == "fills" else "OPEN_ORDER"
     assert any(diff.category == category for diff in result.diffs)
+
+
+def test_failed_equity_comparison_retains_both_portfolio_residuals() -> None:
+    local = _snapshot()
+    actual = _snapshot("494.19", "492.133166")
+    result = compare_reconciliation(local, actual)
+    assert not result.allows_new_orders
+    assert result.valuation_changes == ()
+    diff = next(d for d in result.diffs if d.category == "ACCOUNT" and d.key == "equity")
+    assert Decimal(diff.expected["value"]) == Decimal("494.18")
+    assert Decimal(diff.actual["value"]) == Decimal("494.19")
+    assert Decimal(diff.expected["position_market_value"]) == Decimal("492.133166")
+    assert Decimal(diff.actual["position_market_value"]) == Decimal("492.133166")
+    assert Decimal(diff.expected["equity_residual"]) == Decimal("-0.003166")
+    assert Decimal(diff.actual["equity_residual"]) == Decimal("0.006834")
+    assert diff.actual["position_count"] == "1"
+    assert diff.actual["inconsistent_mark_count"] == "0"
+
+
+def test_failed_equity_comparison_retains_inconsistent_mark_count() -> None:
+    local = _snapshot()
+    actual = _snapshot("494.19", "492.143166")
+    actual = actual.model_copy(update={"positions": (
+        actual.positions[0].model_copy(update={"market_price": Decimal("1")}),
+    )})
+    result = compare_reconciliation(local, actual)
+    assert not result.allows_new_orders
+    diff = next(d for d in result.diffs if d.key == "equity")
+    assert diff.actual["inconsistent_mark_count"] == "1"
+
+
+def test_failed_equity_diagnostics_survive_durable_storage(tmp_path) -> None:
+    result = compare_reconciliation(_snapshot(), _snapshot("494.19", "492.133166"))
+    now = datetime(2026, 10, 1, 17, tzinfo=UTC)
+    database = Database.create(tmp_path / "isolated.db")
+    try:
+        with database.transaction() as session:
+            record_reconciliation(StorageRepository(session), "diagnostic-fixture", result,
+                                  started_at=now, completed_at=now)
+        with database.transaction() as session:
+            restored = StorageRepository(session).get_reconciliation("diagnostic-fixture")
+            assert restored is not None
+            assert restored.status is ReconciliationStatus.RECONCILIATION_REQUIRED
+            assert restored.summary["allows_new_orders"] is False
+            assert restored.diffs[0].expected == result.diffs[0].expected
+            assert restored.diffs[0].actual == result.diffs[0].actual
+    finally:
+        database.close()
