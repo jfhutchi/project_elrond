@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import hashlib
+import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,6 +20,21 @@ def valid_worker_authority(root: Path, receipt: dict[str, Any]) -> bool:
     running code pin and both durable operational records. No broker calls/writes.
     Ordinary observation-only receipts retain their existing contract.
     """
+    if receipt.get('promotion') == 'SHADOW':
+        try:
+            from quantbot.learner.standby import standby_status
+            verified = standby_status(root, now=datetime.now(UTC))
+            paper = receipt['paper']
+            return (receipt.get('trading_enabled') is False
+                    and paper.get('status') == 'STANDBY'
+                    and paper.get('promotion') == 'SHADOW'
+                    and paper.get('trading_enabled') is False
+                    and type(paper.get('orders_submitted')) is int
+                    and paper['orders_submitted'] == 0
+                    and paper.get('active_strategy_id') == verified['active_strategy_id']
+                    and paper.get('active_root') == verified['active_root'])
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
+            return False
     if receipt.get('trading_enabled') is False and receipt.get('promotion') == 'NONE':
         return True
     try:

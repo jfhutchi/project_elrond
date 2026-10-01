@@ -150,3 +150,35 @@ def test_worker_standby_preserves_forecasts_and_never_calls_entry(tmp_path,monke
                 result['progress']['active_alerts'])
     finally:
         database.close()
+
+
+@pytest.mark.parametrize('change',[None,'trading','orders','target','status','promotion'])
+def test_receipt_reader_accepts_only_verified_no_order_standby(case,change):
+    from quantbot.learner.receipts import valid_worker_authority
+    original,_,_,now,*_=case
+    # Use a fixed clock through the helper to test receipt shape independently of wall time.
+    verified=standby.standby_status(original,now=now)
+    from unittest.mock import patch
+    receipt=dict(promotion='SHADOW',trading_enabled=False,paper=verified.copy())
+    if change=='trading':
+        receipt['trading_enabled']=True
+    elif change=='orders':
+        receipt['paper']['orders_submitted']=1
+    elif change=='target':
+        receipt['paper']['active_strategy_id']='learner-'+'0'*64
+    elif change=='status':
+        receipt['paper']['status']='SUCCEEDED'
+    elif change=='promotion':
+        receipt['paper']['promotion']='PAPER_OBSERVATION'
+    with patch.object(standby,'standby_status',return_value=verified):
+        assert valid_worker_authority(original,receipt) is (change is None)
+
+
+def test_receipt_reader_rejects_unverified_standby(case,monkeypatch):
+    from quantbot.learner.receipts import valid_worker_authority
+    original,_,_,now,*_=case
+    receipt=dict(promotion='SHADOW',trading_enabled=False,
+        paper=standby.standby_status(original,now=now))
+    def invalid(*_args,**_kwargs): raise ValueError('lost standby proof')
+    monkeypatch.setattr(standby,'standby_status',invalid)
+    assert not valid_worker_authority(original,receipt)
