@@ -164,3 +164,40 @@ def test_minute_feature_object_cannot_be_used_as_five_minute_label():
             receipt_at=row.target_at,
             source_snapshot_hash="wrong-contract",
         )
+
+
+def test_historical_labels_keep_actual_receipt_and_separate_evidence():
+    observed = OPEN + timedelta(days=2)
+    labels = engine.build_historical_labels(
+        bars(),
+        calendar(),
+        decision_times=(OPEN + timedelta(minutes=35),),
+        symbols=("DIA",),
+        source_snapshot_hash="synthetic-history",
+        observed_at=observed,
+    )
+    assert len(labels) == 1
+    assert labels[0].evaluation_class == "EXPLORATORY_HISTORICAL"
+    assert labels[0].features.receipt_at == observed
+    assert labels[0].available_at == observed
+    with pytest.raises(ValueError, match="duplicate"):
+        engine.build_historical_labels(
+            bars(),
+            calendar(),
+            decision_times=(OPEN + timedelta(minutes=35),) * 2,
+            symbols=("DIA",),
+            source_snapshot_hash="synthetic-history",
+            observed_at=observed,
+        )
+
+
+def test_historical_decision_not_yet_observed_rejects():
+    with pytest.raises(ValueError, match="observed"):
+        engine.build_historical_labels(
+            bars(),
+            calendar(),
+            decision_times=(OPEN + timedelta(days=3),),
+            symbols=("DIA",),
+            source_snapshot_hash="synthetic-history",
+            observed_at=OPEN + timedelta(days=2),
+        )

@@ -121,7 +121,7 @@ def _values(asset: Sequence[Bar], market: Sequence[Bar]) -> tuple[float, ...]:
     )
 
 
-def build_features(
+def _build_features(
     bars: Sequence[Bar],
     calendar: XNYSSessionSequence,
     *,
@@ -129,9 +129,10 @@ def build_features(
     symbols: tuple[str, ...],
     source_snapshot_hash: str,
     receipt_at: datetime,
+    evaluation_class: EvidenceClass,
 ) -> tuple[FiveMinuteFeatureRow, ...]:
     decision_at, receipt_at = _aware(decision_at), _aware(receipt_at)
-    if receipt_at > decision_at:
+    if evaluation_class == "PROSPECTIVE_LOCAL" and receipt_at > decision_at:
         raise ValueError("receipt cannot follow prospective decision")
     if (
         not symbols
@@ -173,9 +174,75 @@ def build_features(
             benchmark_close=float(benchmark[-1].close),
             source_snapshot_hash=source_snapshot_hash,
             receipt_at=receipt_at,
+            evaluation_class=evaluation_class,
         )
         for s in sorted(symbols)
     )
+
+
+def build_features(
+    bars: Sequence[Bar],
+    calendar: XNYSSessionSequence,
+    *,
+    decision_at: datetime,
+    symbols: tuple[str, ...],
+    source_snapshot_hash: str,
+    receipt_at: datetime,
+) -> tuple[FiveMinuteFeatureRow, ...]:
+    return _build_features(
+        bars,
+        calendar,
+        decision_at=decision_at,
+        symbols=symbols,
+        source_snapshot_hash=source_snapshot_hash,
+        receipt_at=receipt_at,
+        evaluation_class="PROSPECTIVE_LOCAL",
+    )
+
+
+def build_historical_labels(
+    bars: Sequence[Bar],
+    calendar: XNYSSessionSequence,
+    *,
+    decision_times: Sequence[datetime],
+    symbols: tuple[str, ...],
+    source_snapshot_hash: str,
+    observed_at: datetime,
+) -> tuple[FiveMinuteLabel, ...]:
+    """Exploratory reconstruction retaining today's true availability, not forecasts."""
+    observed_at = _aware(observed_at)
+    times = tuple(_aware(t) for t in decision_times)
+    if len(set(times)) != len(times):
+        raise ValueError("duplicate historical decision time")
+    _index(bars)  # Reject malformed/duplicate source even outside requested windows.
+    by_date: dict[object, list[Bar]] = {}
+    for bar in bars:
+        by_date.setdefault(_aware(bar.timestamp).date(), []).append(bar)
+    result = []
+    for decision in sorted(times):
+        if decision > observed_at:
+            raise ValueError("historical decisions must already be observed")
+        panel = by_date.get(decision.date(), [])
+        rows = _build_features(
+            panel,
+            calendar,
+            decision_at=decision,
+            symbols=symbols,
+            source_snapshot_hash=source_snapshot_hash,
+            receipt_at=observed_at,
+            evaluation_class="EXPLORATORY_HISTORICAL",
+        )
+        for row in rows:
+            label = resolve_label(
+                row,
+                panel,
+                resolved_at=observed_at,
+                receipt_at=observed_at,
+                source_snapshot_hash=source_snapshot_hash,
+            )
+            if label is not None:
+                result.append(label)
+    return tuple(result)
 
 
 def resolve_label(
