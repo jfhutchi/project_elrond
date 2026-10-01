@@ -34,7 +34,8 @@
   {% endfor %}
   {% if learner.progress.wait_reasons %}<p>Expected wait: {{ learner.progress.wait_reasons | join(', ') }}.</p>{% endif %}
   <p class="quiet">Notifications are recorded locally in the console and scheduler output.
-    External delivery is not configured. Acknowledgement does not resolve a gate.</p>
+    External alerts use a separate dispatcher when commissioned; this local receipt does not
+    verify delivery to chat. Acknowledgement does not resolve a gate.</p>
 </div>
 {% endif %}
 <div class="card">
@@ -42,7 +43,8 @@
   <p>Monitor receipt: {{ learner.monitor.status.replace('_', ' ').capitalize() }}.
     Last measured (UTC): {{ learner.monitor.measured_at or 'Not recorded' }}.</p>
   <p class="quiet">A stale or missing monitor cannot establish current component health.
-    Automatic external delivery is not configured.</p>
+    The separate external-alert dispatcher owns delivery; monitor receipts establish local
+    component measurements, not chat-delivery success.</p>
   {% for alert in learner.monitor.active_alerts %}
   <div class="card">
     <strong>{{ alert.severity }} - {{ alert.code }}</strong>
@@ -85,6 +87,10 @@
   {{ intraday.predictions_this_run }} predictions, {{ intraday.outcomes_this_run }} resolved outcomes,
   {{ intraday.trained_this_run }} fitted models.</p>
 <p>{{ intraday.training_status.replace('_', ' ').capitalize() }}</p>
+{% if intraday.resolved_cohorts == 0 %}
+<p class="quiet">No prospective outcomes have matured yet. Before the first eligible session
+  and 30-minute target, zero outcomes are an expected wait, not a request for model approval.</p>
+{% endif %}
 <p class="quiet">Observations collected before a model exists are training examples, not forecasts.
   Retraining requires at least 20 training sessions and 5 validation sessions, new matured outcomes,
   and a four-hour cooldown. New models remain challengers; they inherit no trading qualification.</p>

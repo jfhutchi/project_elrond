@@ -261,6 +261,16 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             'INCOMPLETE_OR_STALE_MINUTE_DATA': (
                 'Fresh, complete minute bars are not available for the full roster.'),
             'FORECAST_LOOKBACK_WARMUP': 'Waiting for 31 completed regular-session minutes.',
+            'PAPER_CURRENT_COHORT_UNAVAILABLE': (
+                'The commissioned PAPER strategy is waiting for a fresh forward forecast. '
+                'The scheduled learner owns this step after market-session warmup; '
+                'no additional operator approval is requested.'),
+            'PAPER_SYMBOL_ALREADY_HELD': (
+                'The forecast instrument is already held. The learner cannot add to or '
+                'sell inherited holdings under its current order authority.'),
+            'PAPER_SCORE_BELOW_COST_FLOOR': (
+                'The forecast edge does not exceed modeled round-trip costs; '
+                'no entry is justified.'),
             'ALERT_STATE_FAILED': 'Alert persistence failed; inspect the alert store and policy.',
         }
         if not isinstance(receipt['blockers'], list) or any(
@@ -268,7 +278,9 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             for key in receipt['blockers']
         ):
             raise ValueError('invalid blocker code')
-        blockers = tuple(labels.get(key, 'The PAPER cycle reports an additional readiness gate.')
+        blockers = tuple(f'{key}: ' + labels.get(
+                             key, 'Engineering must inspect this exact PAPER cycle gate; '
+                             'this message does not request new operator approval.')
                          for key in receipt['blockers'])
         timestamp = _timestamp(receipt['finished_at'])
         age = (datetime.now(UTC) - datetime.fromisoformat(timestamp)).total_seconds()

@@ -42,6 +42,24 @@ def test_worker_receipt_fresh_stale_and_wrong_pin(tmp_path):
     assert 'SYNTHETIC' not in save().model_dump_json()
 
 
+def test_commissioned_forecast_wait_and_unknown_gate_preserve_exact_codes(tmp_path):
+    root = fixture_store(tmp_path / 'learner')
+    deployment = json.loads((root / 'deployment.json').read_text())
+    deployment.update(scheduled=True, interval_minutes=10)
+    (root / 'deployment.json').write_text(json.dumps(deployment))
+    receipt = dict(code_commit='a'*40, status='BLOCKED',
+                   finished_at=datetime.now(UTC).isoformat(), resolved_this_run=0,
+                   trading_enabled=False, promotion='NONE',
+                   blockers=['PAPER_CURRENT_COHORT_UNAVAILABLE', 'PAPER_TEST_UNKNOWN_GATE'])
+    (root / 'worker.json').write_text(json.dumps(receipt))
+    panel = read_learner_panel(root)
+    assert 'PAPER_CURRENT_COHORT_UNAVAILABLE' in panel.worker_blockers[0]
+    assert 'no additional operator approval' in panel.worker_blockers[0]
+    assert 'PAPER_TEST_UNKNOWN_GATE' in panel.worker_blockers[1]
+    assert 'Engineering' in panel.worker_blockers[1]
+    assert all('additional readiness gate' not in b for b in panel.worker_blockers)
+
+
 def fixture_store(root: Path) -> Path:
     (root / 'state').mkdir(parents=True)
     (root / 'evidence').mkdir()
@@ -275,4 +293,5 @@ def test_progress_alerts_display_owner_action_and_ack_without_resolving(tmp_path
             assert 'Paper trading setup incomplete' in page
             assert 'ChatGPT model selection' in page
             assert 'Acknowledged; condition remains active' in page
-            assert 'External delivery is not configured' in page
+            assert 'this local receipt does not' in page
+            assert 'External delivery is not configured' not in page
