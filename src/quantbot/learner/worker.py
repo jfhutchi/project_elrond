@@ -113,9 +113,22 @@ def run_cycle(
                     root, database, settings, code_commit=code_commit))
                 receipt['blockers'] = receipt['intraday']['blockers']
                 if (root/'paper-execution.json').is_file():
-                    from quantbot.learner.execution_worker import execute_paper_tick
-                    receipt['paper'] = asyncio.run(execute_paper_tick(
-                        root, database, settings, code_commit=code_commit))
+                    if (root/'entry-standby.json').is_file():
+                        from quantbot.learner.standby import standby_status
+                        try:
+                            receipt['paper'] = standby_status(root, now=datetime.now(UTC))
+                        except Exception:
+                            # Explicit standby never falls back to another entry route.
+                            receipt['paper'] = dict(
+                                status='STANDBY_UNVERIFIED', trading_enabled=False,
+                                blockers=['OUTCOME_PROCESSING_FAILED'],
+                                cleared_gate_codes=['PAPER_PROMOTION_REQUIRED',
+                                    'PAPER_EXECUTION_NOT_CONFIGURED',
+                                    'PAPER_OBSERVATION_NOT_EARNED'])
+                    else:
+                        from quantbot.learner.execution_worker import execute_paper_tick
+                        receipt['paper'] = asyncio.run(execute_paper_tick(
+                            root, database, settings, code_commit=code_commit))
                     receipt['trading_enabled'] = receipt['paper']['trading_enabled']
                     receipt['promotion'] = receipt['paper'].get('promotion') or 'NONE'
                     receipt['blockers'] = [code for code in receipt['blockers'] if code not in

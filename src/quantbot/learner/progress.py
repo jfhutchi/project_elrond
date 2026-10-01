@@ -147,6 +147,10 @@ def monitor_progress(
         last_progress_at=last,
         expected_idle_seconds=seconds,
         paper_status=(
+            "STANDBY_FORECASTS_ACTIVE"
+            if receipt.get("paper", {}).get("status") == "STANDBY"
+            and not codes & {"PAPER_PROMOTION_REQUIRED", "PAPER_EXECUTION_NOT_CONFIGURED"}
+            else
             "SETUP_INCOMPLETE_CONSENT_RECORDED"
             if "PAPER_PROMOTION_REQUIRED" in codes and receipt.get("operator_consent") == "RECORDED"
             else "OPERATOR_ACTION_REQUIRED"
