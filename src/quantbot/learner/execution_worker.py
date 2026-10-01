@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from quantbot.config import Settings
 from quantbot.domain import BrokerEnvironment, TradingMode
-from quantbot.learner.forward import _REGISTRY, ForwardConfig, _guard, _models, _read
+from quantbot.learner.forward import _DECLARATIONS, _REGISTRY, ForwardConfig, _guard, _models, _read
 from quantbot.learner.intraday import IntradayModel, IntradayPrediction
 from quantbot.learner.paper import assess_paper_entry
 from quantbot.learner.paper_runner import (
@@ -29,6 +29,7 @@ from quantbot.learner.paper_runner import (
 )
 from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.storage import Database
+from quantbot.strategy import StrategyConfig
 
 
 class PaperWorkerConfig(BaseModel):
@@ -39,6 +40,26 @@ class PaperWorkerConfig(BaseModel):
     risk_per_trade_bps: int = Field(default=25, gt=0, le=25)
     max_position_value_bps: int = Field(default=500, gt=0, le=500)
     policy: PaperExecutionPolicy = Field(default_factory=PaperExecutionPolicy)
+    experimental_symbol: Literal['DIA'] | None = None
+
+
+def worker_risk_config(
+    base: StrategyConfig, config: PaperWorkerConfig, model: IntradayModel,
+) -> StrategyConfig:
+    """An isolated DIA roster; all other risk controls remain the base runtime's."""
+    updates: dict[str, Any] = {
+        'risk_per_trade_bps': min(config.risk_per_trade_bps, base.risk_per_trade_bps),
+        'max_position_value_bps': min(config.max_position_value_bps, base.max_position_value_bps),
+    }
+    if config.experimental_symbol is not None:
+        if (model.model_id != config.model_id
+                or model.training_symbols != (config.experimental_symbol,)
+                or not config.policy.exclusive_learner_entry
+                or config.policy.inherited is None):
+            raise ValueError('isolated DIA pilot requires exact roster, baseline and exclusivity')
+        updates.update(universe=('DIA', 'SPY'), roster_size=1)
+    planned = base.model_copy(update=updates)
+    return type(base).model_validate(planned.model_dump())
 
 
 def load_cohort(
@@ -85,6 +106,14 @@ async def execute_paper_tick(
     forward = ForwardConfig.model_validate_json(
         (directory / "forward.json").read_text(encoding="utf-8-sig")
     )
+    if config.experimental_symbol is not None and (
+        forward.symbols != (config.experimental_symbol,) or forward.experiment_id is None
+        or forward.declaration_database is None
+        or not forward.declaration_database.is_absolute()
+        or not forward.declaration_database.is_file()
+        or forward.declaration_database.resolve() == learner_database.path.resolve()
+    ):
+        raise ValueError('isolated DIA requires an existing declaration store and trial scope')
     from quantbot.runtime import build_runtime, runtime_paths
 
     paths = runtime_paths()
@@ -99,6 +128,7 @@ async def execute_paper_tick(
                                     code_commit=code_commit)
     model, predictions = cohort
     token = _REGISTRY.set(config.operational_database)
+    declared = _DECLARATIONS.set(forward.declaration_database)
     try:
         if not _guard(learner_database, model.training_start, model.validation_end) or not _guard(
             learner_database,
@@ -109,16 +139,12 @@ async def execute_paper_tick(
                     "blockers": ["PROTECTED_FEATURE_WINDOW"]}
     finally:
         _REGISTRY.reset(token)
+        _DECLARATIONS.reset(declared)
     runtime = build_runtime(settings)
     try:
         if runtime.running_git_commit != code_commit:
             raise ValueError("PAPER worker checkout identity mismatch")
-        runtime.config = runtime.config.model_copy(update={
-            "risk_per_trade_bps": min(config.risk_per_trade_bps, runtime.config.risk_per_trade_bps),
-            "max_position_value_bps": min(
-                config.max_position_value_bps, runtime.config.max_position_value_bps
-            ),
-        })
+        runtime.config = worker_risk_config(runtime.config, config, model)
         try:
             services = build_intraday_paper_services(
                 runtime, model=model, predictions=predictions, policy=config.policy,
@@ -170,23 +196,23 @@ async def _waiting_setup(
                  None)
     if model is None:
         return dict(status='BLOCKED', trading_enabled=False, blockers=['PAPER_MODEL_UNAVAILABLE'])
+    forward = ForwardConfig.model_validate_json((directory/'forward.json').read_text())
     token = _REGISTRY.set(config.operational_database)
+    declared = _DECLARATIONS.set(forward.declaration_database)
     try:
         if not _guard(learner, model.training_start, model.validation_end):
             return dict(status='BLOCKED', trading_enabled=False,
                         blockers=['PROTECTED_FEATURE_WINDOW'])
     finally:
         _REGISTRY.reset(token)
+        _DECLARATIONS.reset(declared)
     runtime = build_runtime(settings)
     try:
         if runtime.running_git_commit != code_commit:
             raise ValueError('PAPER waiting checkout identity mismatch')
         if config.policy.buying_power_reserve_bps != settings.ENTRY_BUYING_POWER_RESERVE_BPS:
             raise ValueError('PAPER waiting reserve mismatch')
-        runtime.config = runtime.config.model_copy(update={
-            'risk_per_trade_bps': min(config.risk_per_trade_bps, runtime.config.risk_per_trade_bps),
-            'max_position_value_bps': min(config.max_position_value_bps,
-                                        runtime.config.max_position_value_bps)})
+        runtime.config = worker_risk_config(runtime.config, config, model)
         with runtime.database.transaction() as session:
             repository = StorageRepository(session)
             version = recorded_policy_version(repository)

@@ -52,6 +52,8 @@ class ForwardConfig(BaseModel):
     retrain_after_cohorts: int = Field(default=24, ge=24)
     retrain_cooldown_hours: int = Field(default=4, ge=4)
     registry_database: Path | None = None
+    declaration_database: Path | None = None
+    experiment_id: str | None = Field(default=None, pattern=r'^[A-Za-z0-9][A-Za-z0-9_-]{0,31}$')
 
 
 def _ensure_contract(root: Path, config: ForwardConfig) -> None:
@@ -60,6 +62,7 @@ def _ensure_contract(root: Path, config: ForwardConfig) -> None:
 
 
 _REGISTRY: ContextVar[Path | None] = ContextVar("intraday_registry", default=None)
+_DECLARATIONS: ContextVar[Path | None] = ContextVar('intraday_declarations', default=None)
 
 
 @contextmanager
@@ -119,6 +122,19 @@ def _guard(database: Database, start: datetime, end: datetime) -> bool:
                 include_forward_paper=True,
             ):
                 return False
+    declarations = _DECLARATIONS.get()
+    if declarations is not None:
+        if not declarations.is_absolute() or not declarations.is_file():
+            return False
+        uri = declarations.resolve().as_uri() + '?mode=ro'
+        engine = create_engine('sqlite+pysqlite://', creator=lambda: sqlite3.connect(uri, uri=True))
+        try:
+            with Session(engine) as session, session.begin():
+                service.guard_range(session, 'us-equities-daily', start.date(), end.date())
+        except ValueError:
+            return False
+        finally:
+            engine.dispose()
     with database.transaction() as session:
         try:
             service.guard_range(session, "us-equities-daily", start.date(), end.date())
@@ -172,6 +188,8 @@ def _train_challengers(
     code_commit: str,
 ) -> tuple[int, str]:
     _ensure_contract(root, config)
+    prefix = ('intraday:pilot-' + config.experiment_id + '-' if config.experiment_id
+              else 'intraday:learner-')
     completed = {
         identity
         for path in (root / "fits").glob("*.json")
@@ -181,7 +199,7 @@ def _train_challengers(
         attempts = set(
             session.scalars(
                 select(search_runs.c.search_id).where(
-                    search_runs.c.search_id.like("intraday:learner-%")
+                    search_runs.c.search_id.startswith(prefix, autoescape=True)
                 )
             )
         )
@@ -190,7 +208,7 @@ def _train_challengers(
             attempts.update(
                 session.scalars(
                     select(search_runs.c.search_id).where(
-                        search_runs.c.search_id.like("intraday:learner-%")
+                        search_runs.c.search_id.startswith(prefix, autoescape=True)
                     )
                 )
             )
@@ -251,7 +269,7 @@ def _train_challengers(
     )
     count = 0
     search_ids = [
-        "intraday:learner-" + content_id([frozen, family]) for family in ("mean", "ridge")
+        prefix + content_id([frozen, family]) for family in ("mean", "ridge")
     ]
     if _REGISTRY.get() is not None:
         # The active research registry receives the permanent budget charge first.
@@ -317,6 +335,7 @@ async def bootstrap_history(
     if config.registry_database is None:
         raise ValueError("current research registry required")
     token = _REGISTRY.set(config.registry_database)
+    declared = _DECLARATIONS.set(config.declaration_database)
     try:
         _ensure_contract(directory / "intraday", config)
         if not _guard(
@@ -367,6 +386,7 @@ async def bootstrap_history(
         )
     finally:
         _REGISTRY.reset(token)
+        _DECLARATIONS.reset(declared)
 
 
 def process_snapshot(
@@ -531,10 +551,12 @@ async def run_forward_cycle(
     if config.registry_database is None:
         raise ValueError("forward worker requires the current operational research registry")
     token = _REGISTRY.set(config.registry_database)
+    declared = _DECLARATIONS.set(config.declaration_database)
     try:
         return await _collect_and_process(directory, database, settings, code_commit, config)
     finally:
         _REGISTRY.reset(token)
+        _DECLARATIONS.reset(declared)
 
 
 async def _collect_and_process(
