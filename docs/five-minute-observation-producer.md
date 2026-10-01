@@ -45,3 +45,44 @@ up nonsecret config/task definitions; rollback disables only this new task and
 preserves all observations. Real acceptance includes an on-time forward forecast,
 subsequent provider-backed outcome and repeat/deduplication check. Synthetic
 integration tests are not a substitute for those receipts.
+
+## Prepared native launcher
+
+`python -m quantbot.learner.five_minute_launch --config <absolute-json>
+--env-file <existing-profile> --check` validates the clean source commit,
+content-addressed frozen specification/data/models, fixed mean/ridge identities,
+original canonical PRE_ENGINE charges and PAPER configuration. The check makes
+no provider request and creates no output. It does not claim a healthy clock,
+fresh provider panel or successful scheduled run.
+
+The ordinary invocation also takes an exclusive observation-root lock, binds
+the original canonical registry and immutable learner declarations, and uses the
+existing clock monitor (HEALTHY, not future-dated, at most 300 seconds old).
+Protected-date and clock gates remain before and after each actual capture.
+Both families remain frozen; model fitting and order execution are absent.
+Provider failures/timeouts create explicit safe failure receipts and exit 2;
+expected calendar/data/clock waits remain explicit waits. The latest receipt and
+immutable receipt history live only under the isolated observation directory.
+
+`task_xml()` produces a task definition, not registration. The proposed task is
+`Elrond Five Minute Observations`, using the existing InteractiveToken / Limited
+principal and existing hidden service host. It starts weekdays at 09:31:05
+Eastern, repeats every ten minutes for six hours forty minutes (through 16:11:05),
+and has a two-minute task limit / ninety-second capture limit. The native timezone
+must already be `Eastern Standard Time`; installation must refuse another zone,
+not change it. No wake/sleep, login, credential or execution-policy setting is
+changed. Holidays, early closes, incomplete panels, stale bars and horizon waits
+still use the actual exchange calendar. A missed run never fabricates forecasts
+for elapsed decisions. Pending exact targets can be resolved by subsequent real
+captures; missing targets remain pending.
+
+Native install requires a new observation-only scheduling decision. Existing
+learner/observer consent is not treated as changed trading-artifact consent.
+Use a separate pinned release, frozen-model directory, config and observation
+root; seed the original two predictions/outcomes and their capture provenance
+without rewriting them. Preserve the task-local original archive as well.
+Back up task definitions/nonsecret configuration before registration, inspect
+Limited/Interactive settings after registration, and verify one naturally
+scheduled forward forecast and its later actual outcome. Rollback disables only
+this task and retains all evidence; the original paper workers, protection,
+operational database, models, thresholds and holdings are untouched.
