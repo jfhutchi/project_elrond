@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -52,19 +51,9 @@ def valid_worker_authority(root: Path, receipt: dict[str, Any]) -> bool:
         else:
             model = next(m for m in _models(root / "intraday") if m.model_id == config.model_id)
             artifact_hash = content_id(model.artifact)
-            code_hash = content_id(
-                {
-                    name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
-                    for name in (
-                        "intraday.py",
-                        "paper.py",
-                        "paper_runner.py",
-                        "paper_deadlines.py",
-                        "inherited.py",
-                        "execution_worker.py",
-                    )
-                }
-            )
+            from quantbot.learner.paper_runner import one_minute_code_hash
+
+            code_hash = one_minute_code_hash()
         submitted = paper["orders_submitted"]
         expected_enabled = (
             paper["status"] == "SUCCEEDED" and type(submitted) is int and submitted > 0

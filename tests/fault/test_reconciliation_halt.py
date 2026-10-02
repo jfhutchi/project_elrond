@@ -176,7 +176,9 @@ async def test_restart_adopts_partial_fill_without_resubmitting(tmp_path: Path) 
         market_value=Decimal("1000"),
         average_entry_price=Decimal("500"),
     )
-    database = _prepare_database(tmp_path, _account(), (position,))
+    # A $1,000 filled position belongs in total equity, not in cash as well.
+    coherent_account = _account(cash="9000")
+    database = _prepare_database(tmp_path, coherent_account, (position,))
     intent = OrderIntent(
         intent_id="intent-1",
         client_order_id="client-1",
@@ -216,7 +218,7 @@ async def test_restart_adopts_partial_fill_without_resubmitting(tmp_path: Path) 
             expected_current=IntentState.ORDER_CREATED,
         )
     broker = RecoveryBroker(
-        account=_account(),
+        account=coherent_account,
         positions=(position,),
         open_orders=(partial,),
         lookup=partial,

@@ -15,6 +15,7 @@ from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from time import monotonic
 from typing import Protocol
 
 from sqlalchemy.orm import Session
@@ -43,6 +44,12 @@ from quantbot.domain import (
 from quantbot.domain.ids import build_client_order_id
 from quantbot.execution import StartupRecovery, StartupRecoveryResult
 from quantbot.execution.recovery import is_open_order
+from quantbot.execution.snapshot_capture import (
+    CAPTURE_BUDGET_SECONDS,
+    Capture,
+    capture_account_positions,
+    validate_capture_freshness,
+)
 from quantbot.ingestion import (
     CursorAdvance,
     CursorConflict,
@@ -308,16 +315,73 @@ class LedgerSyncingRecovery:
         database: Database,
         broker: BrokerAdapter,
         recovery: StartupRecovery,
+        *,
+        clock: Clock | None = None,
     ) -> None:
         self._database = database
         self._broker = broker
         self._recovery = recovery
+        self._clock = clock or _utcnow
 
-    async def _ingest(self, *, captured_at: datetime, run_id: str | None) -> tuple[str, ...]:
+    async def prepare_snapshots(self) -> tuple[Capture, ...]:
+        """Two independent samples; one shared budget, no writer lock or ledger writes."""
+        deadline = monotonic() + CAPTURE_BUDGET_SECONDS
+        captures: list[Capture] = []
+        for _ in range(2):
+            remaining = deadline - monotonic()
+            capture = (
+                await capture_account_positions(
+                    self._broker,
+                    clock=self._clock,
+                    clock_healthy=lambda at: at.tzinfo is not None and at.utcoffset() is not None,
+                    total_timeout_seconds=min(5, remaining),
+                )
+                if remaining > 0
+                else Capture("ACQUISITION_TIMEOUT", None, None, ())
+            )
+            captures.append(capture)
+            if capture.status != "ACQUIRED":
+                break
+        return tuple(captures)
+
+    async def _ingest(
+        self,
+        *,
+        captured_at: datetime,
+        run_id: str | None,
+        captures: list[Capture] | None = None,
+        capture_deadline: float | None = None,
+        prepared_capture: Capture | None = None,
+    ) -> tuple[str, ...]:
+        remaining = capture_deadline - monotonic() if capture_deadline is not None else 5
+        capture = (
+            prepared_capture
+            if prepared_capture is not None
+            else (
+                await capture_account_positions(
+                    self._broker,
+                    clock=self._clock,
+                    clock_healthy=lambda at: at.tzinfo is not None and at.utcoffset() is not None,
+                    total_timeout_seconds=min(5, remaining),
+                )
+                if remaining > 0
+                else Capture("ACQUISITION_TIMEOUT", None, None, ())
+            )
+        )
+        if captures is not None:
+            captures.append(capture)
+        if capture.snapshot is None or capture.received_at is None:
+            return ("SNAPSHOT_" + capture.status,)
+        freshness = validate_capture_freshness(capture, now=self._clock(), clock_healthy=True)
+        if freshness:
+            return ("SNAPSHOT_" + freshness,)
         fills = tuple(await self._broker.get_fills())
         orders = tuple(await self._broker.get_open_orders())
-        account_snapshot = await self._broker.get_account()
-        positions = tuple(await self._broker.get_positions())
+        account_snapshot = capture.attempts[-1].after
+        assert account_snapshot is not None
+        positions = capture.snapshot.positions
+        # Availability of the final accepted response, never the earlier cycle start.
+        captured_at = capture.received_at
 
         with self._database.transaction() as session:
             repository = StorageRepository(session)
@@ -356,6 +420,10 @@ class LedgerSyncingRecovery:
         if derived != reported:
             return ("POSITION_LEDGER_MISMATCH",)
 
+        freshness = validate_capture_freshness(capture, now=self._clock(), clock_healthy=True)
+        if freshness:
+            return ("SNAPSHOT_" + freshness,)
+
         # A snapshot is a point-in-time record, so its identity must include the capture
         # time. A fixed id per run label meant a second manual reconcile conflicted with the
         # first the moment account state had legitimately moved.
@@ -377,12 +445,25 @@ class LedgerSyncingRecovery:
         *,
         started_at: datetime,
         run_id: str | None = None,
+        _prepared_captures: tuple[Capture, ...] | None = None,
     ) -> StartupRecoveryResult:
-        ingest_reasons = await self._ingest(captured_at=started_at, run_id=run_id)
+        deadline = monotonic() + CAPTURE_BUDGET_SECONDS
+        captures: list[Capture] = []
+        ingest_reasons = await self._ingest(
+            captured_at=started_at,
+            run_id=run_id,
+            captures=captures,
+            capture_deadline=deadline,
+            prepared_capture=(_prepared_captures[0] if _prepared_captures else None),
+        )
         result = await self._recovery.recover(
             reconciliation_id,
             started_at=started_at,
             run_id=run_id,
+            _capture_deadline=deadline,
+            _prior_captures=tuple(captures),
+            _prior_failure_reasons=ingest_reasons,
+            _prepared_captures=(_prepared_captures[1:] if _prepared_captures is not None else None),
         )
         if not ingest_reasons:
             return result

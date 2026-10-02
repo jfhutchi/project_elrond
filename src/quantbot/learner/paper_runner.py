@@ -95,19 +95,10 @@ class PaperExecutionPolicy(LearnerModel):
     buying_power_reserve_bps: int = Field(default=500, ge=0, lt=10000)
 
 
-def paper_model_binding(
-    model: IntradayModel,
-    *,
-    config: StrategyConfig,
-    policy: PaperExecutionPolicy,
-    veto_policy: PortfolioVetoPolicy,
-    market_data: MarketDataSettings,
-) -> PaperModelBinding:
+def one_minute_code_hash() -> str:
+    """Bind the shared recovery implementation as well as the learner entry code."""
     root = Path(__file__).parent
-    veto_document = veto_policy.model_dump(mode="json")
-    # Enabled rules are a set: identical controls must bind identically in each process.
-    veto_document["enabled"] = sorted(veto_document["enabled"])
-    code_hash = content_id(
+    return content_id(
         {
             name: hashlib.sha256((root / name).read_bytes()).hexdigest()
             for name in (
@@ -117,9 +108,28 @@ def paper_model_binding(
                 "paper_deadlines.py",
                 "inherited.py",
                 "execution_worker.py",
+                "../execution/snapshot_capture.py",
+                "../operations/cycle.py",
+                "../execution/recovery.py",
+                "../execution/reconciliation.py",
+                "../operations/runners.py",
             )
         }
     )
+
+
+def paper_model_binding(
+    model: IntradayModel,
+    *,
+    config: StrategyConfig,
+    policy: PaperExecutionPolicy,
+    veto_policy: PortfolioVetoPolicy,
+    market_data: MarketDataSettings,
+) -> PaperModelBinding:
+    veto_document = veto_policy.model_dump(mode="json")
+    # Enabled rules are a set: identical controls must bind identically in each process.
+    veto_document["enabled"] = sorted(veto_document["enabled"])
+    code_hash = one_minute_code_hash()
     return PaperModelBinding.from_config(
         model_id=model.model_id,
         artifact_hash=content_id(model.artifact),
@@ -241,7 +251,9 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         )
 
     def _pre_handoff_objections(
-        self, now: datetime, positions: Sequence[Position],
+        self,
+        now: datetime,
+        positions: Sequence[Position],
     ) -> tuple[str, ...]:
         return ()
 

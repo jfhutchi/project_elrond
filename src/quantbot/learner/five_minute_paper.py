@@ -96,6 +96,11 @@ def five_minute_code_hash() -> str:
                 "worker.py",
                 "consent.py",
                 "receipts.py",
+                "../execution/snapshot_capture.py",
+                "../operations/cycle.py",
+                "../execution/recovery.py",
+                "../execution/reconciliation.py",
+                "../operations/runners.py",
             )
         }
     )

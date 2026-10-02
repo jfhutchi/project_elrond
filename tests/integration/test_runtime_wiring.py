@@ -349,7 +349,8 @@ def _build_cycle(
         recovery=LedgerSyncingRecovery(
             database,
             broker,
-            StartupRecovery(database, broker, settings),
+            StartupRecovery(database, broker, settings, clock=lambda: NOW),
+            clock=lambda: NOW,
         ),
         data_sync=MarketDataSync(
             database=database,
@@ -468,10 +469,15 @@ async def test_entry_cash_reserve_limits_the_real_cycle_submission_batch(tmp_pat
     config = load_strategy_config(_write_config(tmp_path))
     database = Database.create(tmp_path / "quantbot.db")
     KillSwitchController(database).clear(
-        reason="test fixture readiness", measured=measured(), updated_at=NOW,
+        reason="test fixture readiness",
+        measured=measured(),
+        updated_at=NOW,
     )
     cycle, strategy, broker = _build_cycle(
-        tmp_path, config, database, entry_buying_power_reserve_bps=9000,
+        tmp_path,
+        config,
+        database,
+        entry_buying_power_reserve_bps=9000,
     )
     strategy.bind_run("budgeted-run")
     try:
@@ -486,7 +492,8 @@ async def test_entry_cash_reserve_limits_the_real_cycle_submission_batch(tmp_pat
         # as broker-reserved, while continuing to reserve their exposure and position slots.
         pending = strategy._pending_reservations(  # noqa: SLF001
             await strategy._broker.get_open_orders(),  # noqa: SLF001
-            strategy._load_histories(), Decimal("100000"),  # noqa: SLF001
+            strategy._load_histories(),
+            Decimal("100000"),  # noqa: SLF001
         )
         assert pending and all(item.buying_power_already_reserved for item in pending)
     finally:
@@ -788,9 +795,7 @@ async def test_a_collection_that_fails_leaves_a_durable_failure_rather_than_sile
         assert plane.cursor(sync.source_id, "universe") is None, (
             "a failure must not check point past data it never fetched"
         )
-        status = plane.status(
-            sync.source_id, stream_key="universe", expected_success_after=None
-        )
+        status = plane.status(sync.source_id, stream_key="universe", expected_success_after=None)
         assert status.health is SourceHealth.FAILED
         assert [event.event_kind.value for event in plane.open_incidents(sync.source_id)] == [
             "PROVIDER_FAILURE"
