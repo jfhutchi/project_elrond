@@ -57,6 +57,33 @@ GATES = {
 }
 WAITS = {"OUTSIDE_FORECAST_SESSION", "PROTECTED_FEATURE_WINDOW", "FORECAST_LOOKBACK_WARMUP"}
 
+STANDBY_ACTIONS = {
+    "STANDBY_CONFIGURATION_MISMATCH": (
+        "Verify standby metadata against the selected PAPER pilot configuration. Preserve "
+        "frozen model limits, recorded consent and entry pause."
+    ),
+    "STANDBY_BINDING_MISMATCH": (
+        "Verify the selected PAPER pilot binding and durable deployment records. Preserve "
+        "entry pause, kill switch and historical evidence."
+    ),
+    "STANDBY_CONSENT_UNVERIFIED": (
+        "Verify existing consent and the frozen PAPER model contract. Do not fabricate "
+        "consent or grant entry authority."
+    ),
+    "STANDBY_ENTRY_HEARTBEAT_STALE": (
+        "The selected PAPER entry receipt is stale. Verify the approved pause, task state "
+        "and recovery blocker. Preserve kill switch, protection and observation workers."
+    ),
+    "STANDBY_VERIFICATION_FAILED": (
+        "Inspect the safe standby failure code and reproduce in isolation. Preserve "
+        "entry pause and all PAPER controls; do not treat this as an outcome failure."
+    ),
+}
+for _code, _action in STANDBY_ACTIONS.items():
+    GATES[_code] = Condition(
+        _code, "paper_entry", "CRITICAL", "UNVERIFIED_COMPONENT_HEALTH", "Engineering", _action
+    )
+
 
 def monitor_progress(
     store: AlertStore, receipt: dict[str, Any], *, now: datetime
@@ -147,7 +174,15 @@ def monitor_progress(
         last_progress_at=last,
         expected_idle_seconds=seconds,
         paper_status=(
-            "SETUP_INCOMPLETE_CONSENT_RECORDED"
+            "STANDBY_VERIFICATION_BLOCKED"
+            if codes & STANDBY_ACTIONS.keys()
+            else "STANDBY_SELECTED_ENTRY_HALTED"
+            if receipt.get("paper", {}).get("status") == "STANDBY"
+            and receipt.get("paper", {}).get("active_pilot_status") == "HALTED"
+            else "STANDBY_FORECASTS_ACTIVE"
+            if receipt.get("paper", {}).get("status") == "STANDBY"
+            and not codes & {"PAPER_PROMOTION_REQUIRED", "PAPER_EXECUTION_NOT_CONFIGURED"}
+            else "SETUP_INCOMPLETE_CONSENT_RECORDED"
             if "PAPER_PROMOTION_REQUIRED" in codes and receipt.get("operator_consent") == "RECORDED"
             else "OPERATOR_ACTION_REQUIRED"
             if "PAPER_PROMOTION_REQUIRED" in codes

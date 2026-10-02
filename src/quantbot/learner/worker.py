@@ -74,6 +74,7 @@ def run_cycle(
                 if (
                     isinstance(paper_document, dict)
                     and paper_document.get("contract") == "five-minute-price-alpha-v1"
+                    and not (root / "entry-standby.json").exists()
                 ):
                     PaperWorkerConfig.model_validate(paper_document)
                     if settings is None:
@@ -167,9 +168,36 @@ def run_cycle(
                 if (root / "paper-execution.json").is_file():
                     from quantbot.learner.execution_worker import execute_paper_tick
 
-                    receipt["paper"] = asyncio.run(
-                        execute_paper_tick(root, database, settings, code_commit=code_commit)
-                    )
+                    if (root / "entry-standby.json").exists():
+                        from quantbot.learner.standby import (
+                            StandbyVerificationError,
+                            standby_status,
+                        )
+
+                        try:
+                            receipt["paper"] = standby_status(root, now=datetime.now(UTC))
+                        except Exception as error:
+                            code = (
+                                error.code
+                                if isinstance(error, StandbyVerificationError)
+                                else "STANDBY_VERIFICATION_FAILED"
+                            )
+                            receipt["safe_failure_code"] = code
+                            receipt["failure_phase"] = "STANDBY_VERIFICATION"
+                            receipt["paper"] = dict(
+                                status="STANDBY_UNVERIFIED",
+                                trading_enabled=False,
+                                blockers=[code],
+                                cleared_gate_codes=[
+                                    "PAPER_PROMOTION_REQUIRED",
+                                    "PAPER_EXECUTION_NOT_CONFIGURED",
+                                    "PAPER_OBSERVATION_NOT_EARNED",
+                                ],
+                            )
+                    else:
+                        receipt["paper"] = asyncio.run(
+                            execute_paper_tick(root, database, settings, code_commit=code_commit)
+                        )
                     receipt["trading_enabled"] = receipt["paper"]["trading_enabled"]
                     receipt["promotion"] = receipt["paper"].get("promotion") or "NONE"
                     receipt["blockers"] = [

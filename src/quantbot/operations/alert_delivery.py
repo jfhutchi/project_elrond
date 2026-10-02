@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from quantbot.learner.progress import STANDBY_ACTIONS
+
 PREFIX = "ELROND_ALERT_V1\n"
 FIELDS = {
     "schema",
@@ -36,7 +38,8 @@ EVENTS = {
 }
 CATALOG = {
     "CLOCK_SYNC_REQUIRED": (
-        "clock", "OPERATOR_ACTION_REQUIRED",
+        "clock",
+        "OPERATOR_ACTION_REQUIRED",
         "Inspect Windows Time status and the configured time source. Request explicit "
         "operator approval for a one-time clock resynchronization; honor canceled elevation. "
         "Do not change entry clock tolerances, time servers, services, security or task settings.",
@@ -91,6 +94,9 @@ for _component in ("LEARNER", "PROTECTION", "RECONCILIATION", "INGESTION"):
         "Inspect component receipts and scheduler health; current health is unverified. "
         "Preserve PAPER limits, kill switch and protection controls.",
     )
+
+for _standby_code, _standby_action in STANDBY_ACTIONS.items():
+    CATALOG[_standby_code] = ("paper_entry", "UNVERIFIED_COMPONENT_HEALTH", _standby_action)
 
 
 def _refuse() -> ValueError:

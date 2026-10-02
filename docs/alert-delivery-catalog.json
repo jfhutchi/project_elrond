@@ -9,40 +9,40 @@
     "category": "SYNTHETIC_TEST",
     "action": "Confirm this synthetic alert arrived once in the approved Elrond chat."
   },
-  "PAPER_PROMOTION_REQUIRED": {
-    "subsystem": "paper_entry",
-    "category": "OPERATOR_ACTION_REQUIRED",
-    "action": "Paper trading setup incomplete. Engineering must verify the frozen strategy deployment, clock health and risk controls. Check recorded operator consent before requesting any missing authorization. This is not a ChatGPT model selection."
-  },
-  "PAPER_EXECUTION_NOT_CONFIGURED": {
-    "subsystem": "paper_entry",
-    "category": "MISSING_COMPONENT",
-    "action": "Paper trading setup incomplete. Engineering must configure and verify the PAPER adapter and protection handoff using recorded deployment consent. Local forecasts may continue; configuration does not grant trading authority."
-  },
   "FORWARD_PRODUCER_MISSING": {
     "subsystem": "forecast",
     "category": "MISSING_COMPONENT",
     "action": "Implement and test a guarded forward producer; request deployment approval."
   },
-  "OUTCOME_PROCESSING_FAILED": {
-    "subsystem": "learner",
-    "category": "OPERATOR_ACTION_REQUIRED",
-    "action": "Inspect the safe worker failure code and reproduce on an isolated store. Preserve protected windows and risk controls."
+  "INGESTION_HEARTBEAT_STALE": {
+    "subsystem": "ingestion",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
   },
-  "TRAINING_ATTEMPT_REQUIRES_REVIEW": {
-    "subsystem": "training",
-    "category": "OPERATOR_ACTION_REQUIRED",
-    "action": "Reconcile charged trials with immutable fit receipts before resuming training. Preserve failed attempts and cumulative search burden."
+  "LEARNER_HEARTBEAT_STALE": {
+    "subsystem": "learner",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
   },
   "LEARNER_NO_PROGRESS": {
     "subsystem": "forecast",
     "category": "UNEXPLAINED_STALL",
     "action": "Inspect data freshness, worker receipts, pending targets and scheduler health. Preserve protected dates and risk controls."
   },
-  "LEARNER_HEARTBEAT_STALE": {
+  "OUTCOME_PROCESSING_FAILED": {
     "subsystem": "learner",
-    "category": "UNVERIFIED_COMPONENT_HEALTH",
-    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
+    "category": "OPERATOR_ACTION_REQUIRED",
+    "action": "Inspect the safe worker failure code and reproduce on an isolated store. Preserve protected windows and risk controls."
+  },
+  "PAPER_EXECUTION_NOT_CONFIGURED": {
+    "subsystem": "paper_entry",
+    "category": "MISSING_COMPONENT",
+    "action": "Paper trading setup incomplete. Engineering must configure and verify the PAPER adapter and protection handoff using recorded deployment consent. Local forecasts may continue; configuration does not grant trading authority."
+  },
+  "PAPER_PROMOTION_REQUIRED": {
+    "subsystem": "paper_entry",
+    "category": "OPERATOR_ACTION_REQUIRED",
+    "action": "Paper trading setup incomplete. Engineering must verify the frozen strategy deployment, clock health and risk controls. Check recorded operator consent before requesting any missing authorization. This is not a ChatGPT model selection."
   },
   "PROTECTION_HEARTBEAT_STALE": {
     "subsystem": "protection",
@@ -54,9 +54,34 @@
     "category": "UNVERIFIED_COMPONENT_HEALTH",
     "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
   },
-  "INGESTION_HEARTBEAT_STALE": {
-    "subsystem": "ingestion",
+  "STANDBY_BINDING_MISMATCH": {
+    "subsystem": "paper_entry",
     "category": "UNVERIFIED_COMPONENT_HEALTH",
-    "action": "Inspect component receipts and scheduler health; current health is unverified. Preserve PAPER limits, kill switch and protection controls."
+    "action": "Verify the selected PAPER pilot binding and durable deployment records. Preserve entry pause, kill switch and historical evidence."
+  },
+  "STANDBY_CONFIGURATION_MISMATCH": {
+    "subsystem": "paper_entry",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Verify standby metadata against the selected PAPER pilot configuration. Preserve frozen model limits, recorded consent and entry pause."
+  },
+  "STANDBY_CONSENT_UNVERIFIED": {
+    "subsystem": "paper_entry",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Verify existing consent and the frozen PAPER model contract. Do not fabricate consent or grant entry authority."
+  },
+  "STANDBY_ENTRY_HEARTBEAT_STALE": {
+    "subsystem": "paper_entry",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "The selected PAPER entry receipt is stale. Verify the approved pause, task state and recovery blocker. Preserve kill switch, protection and observation workers."
+  },
+  "STANDBY_VERIFICATION_FAILED": {
+    "subsystem": "paper_entry",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect the safe standby failure code and reproduce in isolation. Preserve entry pause and all PAPER controls; do not treat this as an outcome failure."
+  },
+  "TRAINING_ATTEMPT_REQUIRES_REVIEW": {
+    "subsystem": "training",
+    "category": "OPERATOR_ACTION_REQUIRED",
+    "action": "Reconcile charged trials with immutable fit receipts before resuming training. Preserve failed attempts and cumulative search burden."
   }
 }

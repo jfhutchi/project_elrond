@@ -254,6 +254,12 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             'PAPER_EXECUTION_NOT_CONFIGURED': (
                 'The learner PAPER execution configuration has not been verified.'),
             'OUTCOME_PROCESSING_FAILED': 'Outcome processing failed; inspect the worker.',
+            'STANDBY_CONFIGURATION_MISMATCH': 'Selected paper pilot configuration needs verification.',
+            'STANDBY_BINDING_MISMATCH': 'Selected paper pilot deployment needs verification.',
+            'STANDBY_CONSENT_UNVERIFIED': 'Existing paper pilot consent could not be verified.',
+            'STANDBY_ENTRY_HEARTBEAT_STALE': (
+                'Selected paper entry is paused or stale; forecasts and outcomes are separate.'),
+            'STANDBY_VERIFICATION_FAILED': 'Paper standby verification failed; inspect the safe code.',
             'PROTECTED_FEATURE_WINDOW': (
                 'The feature or target window overlaps protected research dates.'),
             'OUTSIDE_FORECAST_SESSION': (
