@@ -163,7 +163,7 @@ def create_app(
             await market_cache.refresh()
         return await call_next(request)
 
-    def snapshot() -> ConsoleState:
+    def snapshot(history_range: str = 'ALL') -> ConsoleState:
         with database.transaction() as session:
             state = read_console_state(
                 session,
@@ -172,7 +172,7 @@ def create_app(
                 reports=reports,
                 market=market_cache.current(),
             )
-        panel = read_learner_panel(learner_directory).model_copy(
+        panel = read_learner_panel(learner_directory,history_range=history_range).model_copy(
             update={'monitor': read_monitor_panel(learner_directory)})
         return state.model_copy(update={"learner": panel})
 
@@ -216,7 +216,10 @@ def create_app(
         )
 
     def page(request: Request, template: str, active: str) -> HTMLResponse:
-        state = snapshot()
+        selected=request.query_params.get('history_range','ALL') if active=='/learner' else 'ALL'
+        if selected!='ALL' and re.fullmatch(r'20[0-9]{2}-(0[1-9]|1[0-2])',selected) is None:
+            raise HTTPException(status_code=422,detail='Invalid historical range')
+        state = snapshot(selected)
         return TEMPLATES.TemplateResponse(
             request=request,
             name=template,
@@ -270,8 +273,8 @@ def create_app(
         return page(request, "learner.html", "/learner")
 
     @app.get("/api/learner")
-    def api_learner() -> LearnerPanel:
-        return read_learner_panel(learner_directory).model_copy(
+    def api_learner(history_range: str = 'ALL') -> LearnerPanel:
+        return read_learner_panel(learner_directory,history_range=history_range).model_copy(
             update={'monitor': read_monitor_panel(learner_directory)})
 
     @app.post('/learner/alerts/{source}/{code}/acknowledge')

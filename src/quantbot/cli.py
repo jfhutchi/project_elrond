@@ -717,7 +717,9 @@ def _console_readiness_probe(
     from quantbot.brokers import AlpacaPaperBrokerAdapter
     from quantbot.brokers.transports import HttpxBrokerTransport
     from quantbot.operations.readiness import measure_readiness
-    from quantbot.runtime import paper_credentials
+    from quantbot.runtime import paper_credentials, runtime_paths
+    from quantbot.storage.target import DatabaseTargetError
+    from quantbot.strategy import load_strategy_config
 
     try:
         settings = Settings()
@@ -731,14 +733,22 @@ def _console_readiness_probe(
     )
 
     async def probe() -> MeasuredReadiness:
+        risk_caps_valid = False
+        try:
+            paths = runtime_paths()
+            if paths.database.resolve() == database.path.resolve():
+                load_strategy_config(paths.config)
+                risk_caps_valid = True
+        except (OSError, ValueError, DatabaseTargetError):
+            # Unknown or inconsistent policy remains a refusal; never trust an environment
+            # declaration of risk health. Read anew for each clearance request.
+            pass
         return await measure_readiness(
             database,
             broker,
             paper_mode=settings.TRADING_MODE.value == "PAPER",
             expected_account_id=settings.EXPECTED_ACCOUNT_ID,
-            # The console does not load a strategy config, so it cannot establish that the sizing
-            # caps parsed. Declared False rather than True: an unestablished condition must block.
-            risk_caps_valid=False,
+            risk_caps_valid=risk_caps_valid,
             now=datetime.now(UTC),
         )
 

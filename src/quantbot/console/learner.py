@@ -15,6 +15,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
+from quantbot.console.history import HistoryPanel, read_history
 from quantbot.learner.receipts import valid_worker_authority
 from quantbot.research.manifest import content_id, looks_like_credential
 
@@ -194,6 +195,7 @@ class LearnerPanel(PanelModel):
     intraday: IntradayPanel | None = None
     progress: ProgressPanel | None = None
     monitor: MonitorPanel = Field(default_factory=MonitorPanel)
+    history: HistoryPanel = Field(default_factory=HistoryPanel)
 
     @field_validator("holdout_start", "holdout_end")
     @classmethod
@@ -267,6 +269,16 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             'INCOMPLETE_OR_STALE_MINUTE_DATA': (
                 'Fresh, complete minute bars are not available for the full roster.'),
             'FORECAST_LOOKBACK_WARMUP': 'Waiting for 31 completed regular-session minutes.',
+            'PAPER_CURRENT_COHORT_UNAVAILABLE': (
+                'The commissioned PAPER strategy is waiting for a fresh forward forecast. '
+                'The scheduled learner owns this step after market-session warmup; '
+                'no additional operator approval is requested.'),
+            'PAPER_SYMBOL_ALREADY_HELD': (
+                'The forecast instrument is already held. The learner cannot add to or '
+                'sell inherited holdings under its current order authority.'),
+            'PAPER_SCORE_BELOW_COST_FLOOR': (
+                'The forecast edge does not exceed modeled round-trip costs; '
+                'no entry is justified.'),
             'ALERT_STATE_FAILED': 'Alert persistence failed; inspect the alert store and policy.',
         }
         if not isinstance(receipt['blockers'], list) or any(
@@ -274,7 +286,9 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             for key in receipt['blockers']
         ):
             raise ValueError('invalid blocker code')
-        blockers = tuple(labels.get(key, 'The PAPER cycle reports an additional readiness gate.')
+        blockers = tuple(f'{key}: ' + labels.get(
+                             key, 'Engineering must inspect this exact PAPER cycle gate; '
+                             'this message does not request new operator approval.')
                          for key in receipt['blockers'])
         timestamp = _timestamp(receipt['finished_at'])
         age = (datetime.now(UTC) - datetime.fromisoformat(timestamp)).total_seconds()
@@ -374,7 +388,7 @@ def _performance(root: Path, models: dict[str, dict[str, Any]]) -> tuple[
     return tuple(rows), tuple(errors)
 
 
-def read_learner_panel(directory: Path | None) -> LearnerPanel:
+def read_learner_panel(directory: Path | None, *, history_range: str = 'ALL') -> LearnerPanel:
     if directory is None:
         return LearnerPanel()
     try:
@@ -437,6 +451,7 @@ def read_learner_panel(directory: Path | None) -> LearnerPanel:
             last_prediction_at=latest_prediction, last_resolution_at=latest_resolution,
             last_evaluation_at=latest_evaluation, holdout_start=holdout.get("start"),
             holdout_end=holdout.get("end"), performance=performance, report_errors=errors,
+            history=read_history(directory,models,history_range),
             models=tuple(ModelRow(**{k: m[k] for k in ModelRow.model_fields})
                          for m in sorted(models.values(), key=lambda m: m["created_at"])))
     except (OSError, sqlite3.Error, ValueError, KeyError, TypeError):
