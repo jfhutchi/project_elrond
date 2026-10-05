@@ -52,6 +52,32 @@ QUERIES = {
 }
 
 
+def valid_learner_liveness(learner: Path, doc: dict[str, Any]) -> bool:
+    """Read-only completion proof; never grants entry authority or entry freshness.
+
+    A selected entry worker expiring cannot invalidate a separate completed SHADOW
+    research run. Its immutable selection/consent/deployment still must agree.
+    """
+    if valid_worker_authority(learner, doc):
+        return True
+    try:
+        from quantbot.learner.standby import EntryStandby, _read, _validated_selection
+
+        paper = doc['paper']
+        if (doc.get('promotion') != 'SHADOW' or doc.get('trading_enabled') is not False
+                or paper.get('status') != 'STANDBY' or paper.get('promotion') != 'SHADOW'
+                or paper.get('trading_enabled') is not False
+                or type(paper.get('orders_submitted')) is not int
+                or paper['orders_submitted'] != 0):
+            return False
+        selection = EntryStandby.model_validate(_read(learner/'entry-standby.json', 4096))
+        verified, _ = _validated_selection(learner, selection, now=datetime.now(UTC))
+        return bool(paper.get('active_strategy_id') == verified['active_strategy_id']
+                    and paper.get('active_root') == verified['active_root'])
+    except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
+        return False
+
+
 def _samples(learner: Path, database: Path) -> dict[str, object]:
     samples: dict[str, object] = dict.fromkeys(('LEARNER', *QUERIES))
     try:
@@ -68,7 +94,7 @@ def _samples(learner: Path, database: Path) -> dict[str, object]:
                 or any(c not in '0123456789abcdef' for c in pin)
                 or pin != deployment['learner_commit']
                 or doc['status'] not in ('STARTED', 'BLOCKED', 'ERROR')
-                or not valid_worker_authority(learner, doc)):
+                or not valid_learner_liveness(learner, doc)):
             raise ValueError('invalid completed worker receipt')
         started = datetime.fromisoformat(doc['started_at'])
         if started.tzinfo is None:
@@ -202,6 +228,36 @@ def run_monitor(
                 'A missing, invalid or overdue successful measurement cannot establish '
                 'current health. Preserve PAPER limits, kill switch and protection controls.',
             ))
+    # Entry freshness is its own component, not research-worker liveness. Preserve the
+    # strict entry verifier and only recognize waits proved by the bounded market probe.
+    if (learner/'entry-standby.json').exists():
+        from quantbot.learner.standby import StandbyVerificationError, standby_status
+        from quantbot.operations.alert_delivery import CATALOG
+
+        entry_code = None
+        try:
+            standby_status(learner, now=now)
+            entry_status = 'FRESH'
+        except StandbyVerificationError as error:
+            entry_code = error.code
+            entry_status = 'UNVERIFIED'
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
+            entry_code = 'STANDBY_VERIFICATION_FAILED'
+            entry_status = 'UNVERIFIED'
+        if entry_code == 'STANDBY_ENTRY_HEARTBEAT_STALE' and verified:
+            if closed_wait:
+                entry_status = 'EXPECTED_WAIT'
+            elif (current_market.session_open is not None
+                  and 0 <= (now-current_market.session_open).total_seconds()
+                  < policy.learner_seconds):
+                entry_status = 'SESSION_STARTUP_GRACE'
+            if entry_status != 'UNVERIFIED':
+                retained.append(entry_code)
+        if entry_code and entry_status == 'UNVERIFIED':
+            subsystem, category, action = CATALOG[entry_code]
+            conditions.append(Condition(entry_code, subsystem, 'CRITICAL', category,
+                                        'Engineering / Operator', action))
+        measurements['PAPER_ENTRY'] = dict(status=entry_status, code=entry_code)
     with AlertStore(output / 'alerts.db') as store:
         events = store.update(conditions, now=now, retain_codes=tuple(retained))
         digest = None

@@ -16,7 +16,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 
 from quantbot.console.history import HistoryPanel, read_history
-from quantbot.learner.receipts import valid_worker_authority
+from quantbot.operations.monitor import valid_learner_liveness
 from quantbot.research.manifest import content_id, looks_like_credential
 
 Hash = Annotated[str, StringConstraints(pattern=r"^(?:[0-9a-f]{40}|[0-9a-f]{64})$")]
@@ -242,7 +242,7 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
     try:
         receipt = _json(root / 'worker.json')
         if (receipt['code_commit'] != deployment['learner_commit']
-                or not valid_worker_authority(root, receipt)
+                or not valid_learner_liveness(root, receipt)
                 or deployment['interval_minutes'] != 10
                 or receipt['status'] not in ('BLOCKED', 'ERROR')
                 or type(receipt['resolved_this_run']) is not int
@@ -256,12 +256,14 @@ def _worker(root: Path, deployment: dict[str, Any]) -> dict[str, Any]:
             'PAPER_EXECUTION_NOT_CONFIGURED': (
                 'The learner PAPER execution configuration has not been verified.'),
             'OUTCOME_PROCESSING_FAILED': 'Outcome processing failed; inspect the worker.',
-            'STANDBY_CONFIGURATION_MISMATCH': 'Selected paper pilot configuration needs verification.',
+            'STANDBY_CONFIGURATION_MISMATCH': (
+                'Selected paper pilot configuration needs verification.'),
             'STANDBY_BINDING_MISMATCH': 'Selected paper pilot deployment needs verification.',
             'STANDBY_CONSENT_UNVERIFIED': 'Existing paper pilot consent could not be verified.',
             'STANDBY_ENTRY_HEARTBEAT_STALE': (
                 'Selected paper entry is paused or stale; forecasts and outcomes are separate.'),
-            'STANDBY_VERIFICATION_FAILED': 'Paper standby verification failed; inspect the safe code.',
+            'STANDBY_VERIFICATION_FAILED': (
+                'Paper standby verification failed; inspect the safe code.'),
             'PROTECTED_FEATURE_WINDOW': (
                 'The feature or target window overlaps protected research dates.'),
             'OUTSIDE_FORECAST_SESSION': (
