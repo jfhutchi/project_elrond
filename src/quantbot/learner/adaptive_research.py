@@ -11,7 +11,7 @@ from collections.abc import Callable, Sequence
 from datetime import datetime, timedelta
 from pathlib import Path
 from statistics import fmean
-from typing import Any
+from typing import Any, Literal
 
 from quantbot.learner.estimators import fit_estimator, predict
 from quantbot.learner.five_minute import FEATURE_NAMES, FiveMinuteLabel
@@ -61,6 +61,7 @@ def fit_shadow_challengers(
     now: datetime,
     guard: Callable[[datetime, datetime], bool],
     charge: Callable[[str], None],
+    target: Literal["excess_return", "raw_return"] = "excess_return",
 ) -> dict[str, Any]:
     """Caller supplies canonical guards and permanent pre-engine accounting.
 
@@ -68,6 +69,13 @@ def fit_shadow_challengers(
     final refit is performed; two families means exactly two engine calls.
     """
     now, cutoff = _aware(now), _aware(cutoff)
+    if target not in {"excess_return", "raw_return"}:
+        raise ValueError("prespecified target required")
+    target_contract = (
+        "five-minute-raw-dia-return-shadow-v1"
+        if target == "raw_return"
+        else "five-minute-price-alpha-shadow-v1"
+    )
     if root.exists():
         raise FileExistsError("EXPERIMENT_EXISTS_NO_REPEAT_OR_REFIT")
     if not training or not validation or cutoff >= now:
@@ -88,6 +96,8 @@ def fit_shadow_challengers(
     ):
         raise ValueError("chronological train/validation separation required")
     spec = {
+        "model_target": target,
+        "target_contract": target_contract,
         "kind": "TWO_CHALLENGER_SHADOW_V1",
         "families": FAMILIES,
         "alpha": 1.0,
@@ -119,7 +129,7 @@ def fit_shadow_challengers(
     for family, trial_id in zip(FAMILIES, trial_ids, strict=True):
         artifact = fit_estimator(
             tuple(r.features.values for r in training),
-            tuple(r.excess_return for r in training),
+            tuple(getattr(r, target) for r in training),
             FEATURE_NAMES,
             family=family,
             alpha=1.0,
@@ -141,6 +151,8 @@ def fit_shadow_challengers(
                 }
             )
         candidate = {
+            "model_target": target,
+            "target_contract": target_contract,
             "family": family,
             "artifact": artifact.model_dump(mode="json"),
             "trial_id": trial_id,
@@ -150,7 +162,8 @@ def fit_shadow_challengers(
             "training_hash": spec["training_hash"],
             "validation_hash": spec["validation_hash"],
             "validation_mse": fmean(
-                (s - r.excess_return) ** 2 for s, r in zip(scores, ordered_validation, strict=True)
+                (s - getattr(r, target)) ** 2
+                for s, r in zip(scores, ordered_validation, strict=True)
             ),
             "cost_qualified_nonoverlapping_windows": len(opportunities),
             "counterfactual_windows": opportunities,

@@ -45,3 +45,26 @@ lineage, late evidence, partial fills, equal-time ambiguity, permanent failed-fi
 charges, chronological separation, and delayed historical retrieval regressions.
 The final learner unit group passed 391 tests; Ruff and strict mypy passed for
 both new modules. Synthetic test outcomes are not prospective learner evidence.
+# Scheduled attribution and raw-return shadow evaluation
+
+`quantbot.learner.tracking_launch` runs independently of entry and protection.
+Its immutable config binds the existing observer deployment envelope, complete
+executable Python tree hash, release revision, selected strategy and exactly two
+frozen raw-return artifacts. It reads operational SQLite in query-only mode and
+writes only its isolated journals and local guard database. No broker credentials,
+order constructor, fitting or promotion API is loaded by the launcher.
+
+Market training labels include forecasts rejected by execution gates. Logical
+feature/target identities count once; alternate resolution receipts remain
+provenance records, and conflicting economic labels fail closed. Broker-fill
+episodes remain a separate selection-biased execution diagnostic with actual
+fees, partial-fill uncertainty and exact ownership. They do not replace market
+labels. No automatic refitting or active-model replacement is enabled.
+
+Raw-return shadows share the existing ten-feature DIA contract and thirty-minute
+horizon. Each forecast checks model creation, producer receipt, actual recording
+time, existing clock verification and unchanged ten-basis-point floor. Late
+cohorts are skipped, not backfilled. The observational schedule may collect only
+a subset of producer cohorts; missing outcomes remain unknown. Shadow costs are
+five-basis-point-per-side reference-mark assumptions, not calibrated broker fills.
+True broker outcomes require eligible orders and complete owned fill receipts.

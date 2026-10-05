@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -48,6 +48,8 @@ class TradeEpisode:
     forecast_score: float
     entry_notional: Decimal
     exit_notional: Decimal
+    feature_identity: str
+    entry_reference_close: float
 
 
 def _fills(
@@ -218,10 +220,18 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
         prediction.score,
         sum((Decimal(r["price"]) * Decimal(r["quantity"]) for r in entries), Decimal(0)),
         sum((Decimal(r["price"]) * Decimal(r["quantity"]) for r in exits), Decimal(0)),
+        content_id(prediction.features),
+        prediction.features.reference_close,
     )
 
 
-def read_trade_episodes(path: Path, *, now: datetime) -> tuple[TradeEpisode, ...]:
+def read_trade_episodes(
+    path: Path,
+    *,
+    now: datetime,
+    strategy_id: str | None = None,
+    guard: Callable[[datetime, datetime], bool] | None = None,
+) -> tuple[TradeEpisode, ...]:
     """Snapshot-consistent read; absent store never created, future events excluded."""
     now = _time(now.isoformat())
     if not path.is_file():
@@ -230,11 +240,16 @@ def read_trade_episodes(path: Path, *, now: datetime) -> tuple[TradeEpisode, ...
         connection.row_factory = sqlite3.Row
         connection.execute("PRAGMA query_only=ON")
         connection.execute("BEGIN")
-        signals = connection.execute("SELECT * FROM signals ORDER BY occurred_at,signal_id")
+        signals = connection.execute(
+            "SELECT * FROM signals WHERE (? IS NULL OR strategy_id=?) "
+            "ORDER BY occurred_at,signal_id",
+            (strategy_id, strategy_id),
+        )
         records = [
             r
             for r in signals
-            if json.loads(r["payload_json"]).get("kind") == HANDOFF
+            if (guard is None or guard(_time(r["occurred_at"]), _time(r["occurred_at"])))
+            and json.loads(r["payload_json"]).get("kind") == HANDOFF
             and _time(r["occurred_at"]) <= now
         ]
         return tuple(_episode(connection, record, now) for record in records)
