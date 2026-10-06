@@ -50,6 +50,8 @@ def prepare_shadow_rollout(
     )
     if config.environment_file is not None:
         sources += (config.environment_file,)
+    if config.position_research_database is not None:
+        sources += (config.position_research_database,)
     if any(
         target == p.resolve() or target in p.resolve().parents or p.resolve() in target.parents
         for p in sources

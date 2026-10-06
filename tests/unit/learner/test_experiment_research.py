@@ -525,6 +525,93 @@ def test_real_canonical_charge_is_committed_before_synthetic_engine(context, tmp
         _REGISTRY.reset(token)
 
 
+def test_recreated_store_cannot_reinvoke_permanently_charged_canonical_trial(context, tmp_path):
+    from quantbot.learner.forward import _REGISTRY
+    from quantbot.storage import Database
+
+    registry_path = tmp_path / "canonical.db"
+    Database.create(registry_path).close()
+    token = _REGISTRY.set(registry_path)
+    calls = []
+    try:
+        prepared = request()
+        charger = module().CanonicalTrialCharger(prepared, clock=lambda: manifest().registered_at)
+        for name in ("original", "recreated"):
+            store = ExperimentStore(tmp_path / name / "experiment.db", create=True)
+            store.append(manifest(), idempotency_key="manifest")
+            result = module().run_registered_fit(
+                store,
+                manifest(),
+                prepared,
+                guard=Guard(),
+                charger=charger,
+                now=manifest().registered_at,
+                synthetic_engine=lambda row: calls.append(row.request_id) or fake_artifact(row),
+            )
+        assert len(calls) == 1
+        assert result.status == "STARTED_UNRESOLVED" and result.charged is True
+        assert charger.used_calls(manifest().experiment_id) == 1
+    finally:
+        _REGISTRY.reset(token)
+
+
+def test_two_independent_roots_cannot_race_a_seventh_canonical_charge(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+
+    from quantbot.learner.forward import _REGISTRY, _registry_session
+    from quantbot.research.intraday_accounting import record_intraday_attempt
+    from quantbot.storage import Database
+
+    registry_path = tmp_path / "canonical.db"
+    Database.create(registry_path).close()
+    token = _REGISTRY.set(registry_path)
+    frozen = manifest()
+    try:
+        with _registry_session(write=True) as session:
+            for index in range(5):
+                record_intraday_attempt(
+                    session,
+                    search_id=module()._trial_prefix(frozen.experiment_id) + str(index),
+                    configuration_hash="a" * 64,
+                    start=frozen.training_start.date(),
+                    end=frozen.validation_end.date(),
+                    now=frozen.registered_at,
+                )
+    finally:
+        _REGISTRY.reset(token)
+    barrier, calls = Barrier(2), []
+
+    class RacingCharger(module().CanonicalTrialCharger):
+        def used_calls(self, experiment_id):
+            result = super().used_calls(experiment_id)
+            barrier.wait(timeout=5)
+            return result
+
+    def attempt(family):
+        token = _REGISTRY.set(registry_path)
+        try:
+            prepared = request(family=family)
+            store = ExperimentStore(tmp_path / family / "experiment.db", create=True)
+            store.append(frozen, idempotency_key="manifest")
+            return module().run_registered_fit(
+                store,
+                frozen,
+                prepared,
+                guard=Guard(),
+                charger=RacingCharger(prepared, clock=lambda: frozen.registered_at),
+                now=frozen.registered_at,
+                synthetic_engine=lambda row: calls.append(row.request_id) or fake_artifact(row),
+            )
+        finally:
+            _REGISTRY.reset(token)
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = tuple(executor.map(attempt, ("constant", "ridge")))
+    assert len(calls) == 1
+    assert {result.status for result in results} == {"SUCCEEDED", "CHARGE_REFUSED"}
+
+
 def test_request_queue_never_fits_and_initial_pair_is_frozen(context):
     store, (training, validation) = context
     queued = module().schedule_initial_fits(

@@ -81,7 +81,7 @@ independent deadline supervisor and protection services retain their own pins.
   claim. Correlated symbols and overlapping windows are not independent sample
   counts. At 30 verified completed scheduled sessions, stop new experiment fits
   and entries; continue protection and evidence reconciliation. Missing calendar
-  coverage blocks new fits/entries instead of inventing weekdays. Five sessions
+  coverage blocks new fits/entries instead of inventing weekdays. Five coverage-valid completed research sessions
   without a measured entry declaration require development review.
 - News is observational and point-in-time. Publication, actual first seen,
   retrieval, scope and coverage remain explicit. Fund news is not constituent
@@ -111,3 +111,26 @@ fees/flat reconciliation, owned outcome, fresh registered successor and later
 authorized active decision. A veto is reported as a veto; no order, outcome or
 profit is fabricated to complete an issue. The 70-80% profitable-day target is
 aspirational and never enables live trading automatically.
+
+## Observational provider journal connection
+
+The optional `position_research_database` and `position_research_commit` must be
+configured together. The coordinator opens that existing separate research
+journal query-only, verifies each content-addressed signal against its run and
+pinned producer version, and imports only exact roster identities. It does not
+configure a new provider, infer ETF constituents or send a SEC contact address.
+A missing/uncovered/failing producer remains UNAVAILABLE; a receipt older than
+ten minutes is STALE. Original publication, retrieval and source-journal
+availability are retained. News arriving after the feature decision time cannot
+inform that decision, even if the experiment journal is written later.
+Each scored decision gets a thesis record with observational authority only.
+The existing strategy's forecast, hard risk and exit authority remain unchanged.
+
+Crash recovery reads at most the two oldest unresolved prior target sessions on
+each wake. Canonical date protection covers the actual UTC price-query bounds
+before retrieval or archive writes. Recovered labels become available at actual
+retrieval, never at the historical target timestamp. The shared canonical trial
+transaction serializes the six-fit budget across independent experiment roots;
+a previously reserved request cannot invoke another engine after local-store
+loss. A terminal broker acknowledgement can finish a claimed experiment journal
+only when its identity and terminal state are verified, without resubmission.

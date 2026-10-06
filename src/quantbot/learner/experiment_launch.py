@@ -7,8 +7,9 @@ import asyncio
 import hashlib
 import json
 import os
+from collections.abc import Callable
 from contextlib import nullcontext
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
 from typing import Literal, Self
 
@@ -17,6 +18,7 @@ from pydantic import Field, model_validator
 from quantbot.config import Settings
 from quantbot.learner.experiment_contract import ExperimentManifest, InstrumentIdentity
 from quantbot.learner.experiment_coordinator import collect_observations, coordinator_tick
+from quantbot.learner.experiment_news import read_position_journal
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.five_minute_launch import clock_healthy
 from quantbot.learner.forward import _DECLARATIONS, _REGISTRY, _guard
@@ -49,22 +51,34 @@ class ExperimentLaunchConfig(LearnerModel):
     trading_enabled: Literal[False] = False
     maximum_workers: Literal[2] = 2
     research_sources: ResearchSources | None = None
+    position_research_database: Path | None = None
+    position_research_commit: str | None = Field(default=None, pattern=r"^[a-f0-9]{40}$")
 
     @model_validator(mode="after")
     def isolated(self) -> Self:
+        if (self.position_research_database is None) != (self.position_research_commit is None):
+            raise ValueError("RESEARCH_SOURCE_PATH_AND_COMMIT_REQUIRED_TOGETHER")
         paths = (
-            self.root,
-            self.store,
-            self.manifest_path,
-            self.operations_database,
-            self.declaration_database,
-            self.clock_receipt,
-        ) + (
-            ()
-            if self.research_sources is None
-            else (
-                self.research_sources.training_path,
-                self.research_sources.validation_path,
+            (
+                self.root,
+                self.store,
+                self.manifest_path,
+                self.operations_database,
+                self.declaration_database,
+                self.clock_receipt,
+            )
+            + (
+                ()
+                if self.position_research_database is None
+                else (self.position_research_database,)
+            )
+            + (
+                ()
+                if self.research_sources is None
+                else (
+                    self.research_sources.training_path,
+                    self.research_sources.validation_path,
+                )
             )
         )
         if any(not path.is_absolute() or path.is_symlink() for path in paths):
@@ -114,6 +128,56 @@ def verify_checkout(config: ExperimentLaunchConfig) -> None:
             raise ValueError("AUTHORITATIVE_SOURCE_MISSING")
 
 
+async def _collect_guarded_day(
+    guard: Database,
+    root: Path,
+    symbols: tuple[str, ...],
+    day: date,
+    settings: Settings,
+    *,
+    clock: Callable[[], datetime],
+) -> Snapshot:
+    actual = clock()
+    # Match collect_snapshot's UTC price-query bounds, rather than a rolling
+    # window which can belong to a different date than the exchange session.
+    start = datetime.combine(day, time.min, UTC)
+    end = max(
+        start,
+        min(
+            datetime.combine(day, time.max, UTC),
+            actual.replace(second=0, microsecond=0) - timedelta(minutes=1),
+        ),
+    )
+    if not _guard(guard, start, end):
+        raise ValueError("PROTECTED_OBSERVATION_WINDOW")
+    return await collect_snapshot(root, symbols, day, day, settings, clock=clock, timeframe="5Min")
+
+
+def _pending_label_days(
+    store: ExperimentStore, manifest: ExperimentManifest, *, now: datetime
+) -> tuple[date, ...]:
+    from quantbot.learner.experiment_coordinator import ResolvedMarketLabel, feature_key
+    from quantbot.learner.experiment_observation import ObservationBatch
+
+    events = store.read_as_of(manifest.experiment_id, now)
+    labeled = {
+        feature_key(event.decode(ResolvedMarketLabel).label.features)
+        for event in events
+        if event.kind == "ResolvedMarketLabel"
+    }
+    today = now.astimezone(XNYS_TIMEZONE).date()
+    days = {
+        row.target_at.astimezone(XNYS_TIMEZONE).date()
+        for event in events
+        if event.kind == "ObservationBatch"
+        for row in event.decode(ObservationBatch).features
+        if row.target_at <= now
+        and feature_key(row) not in labeled
+        and row.target_at.astimezone(XNYS_TIMEZONE).date() < today
+    }
+    return tuple(sorted(days)[:2])
+
+
 async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[str, object]:
     manifest = load_manifest(config)
     verify_checkout(config)
@@ -142,19 +206,14 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
 
                 async def provider(identity: InstrumentIdentity) -> Snapshot:
                     actual = clock()
-                    if not _guard(
-                        guard, actual - timedelta(minutes=35), actual + timedelta(minutes=30)
-                    ):
-                        raise ValueError("PROTECTED_OBSERVATION_WINDOW")
                     day = actual.astimezone(XNYS_TIMEZONE).date()
-                    captured = await collect_snapshot(
+                    captured = await _collect_guarded_day(
+                        guard,
                         config.root / "market" / content_id({"asset_id": identity.asset_id}),
                         (identity.symbol,),
                         day,
-                        day,
                         settings,
                         clock=clock,
-                        timeframe="5Min",
                     )
                     captures.append(captured)
                     return captured
@@ -165,6 +224,24 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
                     ),
                     timeout=90,
                 )
+                # Recovery reads only the two oldest unresolved target sessions;
+                # actual retrieval time remains the label's availability time.
+                for day in _pending_label_days(store, manifest, now=clock()):
+                    if not healthy(clock()):
+                        break
+                    captures.append(
+                        await asyncio.wait_for(
+                            _collect_guarded_day(
+                                guard,
+                                config.root / "market" / "pending" / day.isoformat(),
+                                tuple(identity.symbol for identity in manifest.roster),
+                                day,
+                                settings,
+                                clock=clock,
+                            ),
+                            timeout=30,
+                        )
+                    )
             finally:
                 _REGISTRY.reset(registry_token)
                 _DECLARATIONS.reset(declaration_token)
@@ -187,6 +264,12 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
             owner=f"coordinator:{os.getpid()}",
             label_snapshots=tuple(captures),
             operational_path=config.operations_database,
+            news_evidence=read_position_journal(
+                config.position_research_database,
+                manifest,
+                now=now,
+                expected_commit=config.position_research_commit,
+            ),
         )
         document = receipt.model_dump(mode="json")
         document.update(

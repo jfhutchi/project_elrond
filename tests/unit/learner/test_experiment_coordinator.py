@@ -200,6 +200,18 @@ async def test_pooled_shadow_scores_eligible_members_without_granting_orders(con
     ]
     assert len(decisions) == 6
     assert all(row.score == 0.02 and row.synthetic and not row.paper_eligible for row in decisions)
+    from quantbot.learner.experiment_news import NewsEvidence, ThesisRecord
+
+    events = store.read_as_of(manifest().experiment_id, observation.recorded_at)
+    theses = [event.decode(ThesisRecord) for event in events if event.kind == "ThesisRecord"]
+    news = [event.decode(NewsEvidence) for event in events if event.kind == "NewsEvidence"]
+    assert len(theses) == 6
+    assert all(
+        not row.order_authority and row.reason == "RESEARCH_COVERAGE_INCOMPLETE_SHADOW"
+        for row in theses
+    )
+    assert len(news) == 6
+    assert all(row.status == "UNAVAILABLE" for row in news)
     later = observation.recorded_at + timedelta(seconds=30)
     second = await module().coordinator_tick(
         store,
@@ -322,3 +334,39 @@ async def test_active_cycle_context_cannot_commission_unapproved_experiment(cont
             clock_verified=True,
         )
     assert not store.pending_intents(manifest().experiment_id)
+
+
+async def test_overnight_target_label_uses_actual_retrieval_availability(context):
+    store, observation = context
+    await module().coordinator_tick(
+        store,
+        manifest(),
+        now=observation.recorded_at,
+        observation=observation,
+        execution=None,
+        clock_verified=True,
+    )
+    now = OPEN + timedelta(days=1)
+    original = snapshot(65)
+    target = original.model_copy(update={
+        "received_at": now,
+        "receipts": tuple(row.model_copy(update={"received_at": now}) for row in original.receipts),
+        "inputs": tuple(row.model_copy(update={"available_at": now}) for row in original.inputs),
+    })
+    result = await module().coordinator_tick(
+        store,
+        manifest(),
+        now=now,
+        observation=None,
+        execution=None,
+        clock_verified=True,
+        label_snapshots=(target,),
+    )
+    assert result.labels_recorded == 6
+    labels = [
+        event.decode(module().ResolvedMarketLabel)
+        for event in store.read_as_of(manifest().experiment_id, now)
+        if event.kind == "ResolvedMarketLabel"
+    ]
+    assert all(row.label.available_at == now for row in labels)
+    assert all(row.recorded_at == now for row in labels)

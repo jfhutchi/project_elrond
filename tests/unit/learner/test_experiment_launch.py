@@ -179,3 +179,51 @@ def test_task_config_change_is_refused_before_any_runtime_or_manifest_access(tmp
     path.write_text("{}")
     with pytest.raises(ValueError, match="PINNED_LAUNCH_CONFIGURATION_CHANGED"):
         launch.run_experiment(path, check=True, config_hash="a" * 64)
+
+
+async def test_guard_covers_actual_exchange_day_query_before_provider(tmp_path, monkeypatch):
+    from datetime import UTC, datetime
+
+    launch = module()
+    actual = datetime(2026, 10, 7, 2, tzinfo=UTC)
+    guarded = []
+    calls = []
+
+    def guard(database, start, end):
+        guarded.append((start, end))
+        return start.date() != datetime(2026, 10, 6).date()
+
+    async def collect(*args, **kwargs):
+        calls.append(args)
+        raise AssertionError("protected query reached provider")
+
+    monkeypatch.setattr(launch, "_guard", guard)
+    monkeypatch.setattr(launch, "collect_snapshot", collect)
+    with pytest.raises(ValueError, match="PROTECTED_OBSERVATION_WINDOW"):
+        await launch._collect_guarded_day(
+            object(),
+            tmp_path,
+            ("DIA",),
+            actual.astimezone(launch.XNYS_TIMEZONE).date(),
+            object(),
+            clock=lambda: actual,
+        )
+    assert guarded[0][0] == datetime(2026, 10, 6, tzinfo=UTC)
+    assert guarded[0][1].date() == guarded[0][0].date()
+    assert not calls
+
+
+def test_pending_target_days_survive_overnight_restart(tmp_path):
+    from datetime import timedelta
+
+    from quantbot.learner.experiment_observation import build_observation_batch
+    from quantbot.learner.experiment_store import ExperimentStore
+    from tests.fixtures.adaptive_paper import OPEN, snapshot
+
+    store = ExperimentStore(tmp_path / "pending.db", create=True)
+    store.append(manifest(), idempotency_key="manifest")
+    source = snapshot()
+    batch = build_observation_batch(manifest(), source, now=source.received_at)
+    store.append(batch, idempotency_key="observation")
+    now = OPEN + timedelta(days=1)
+    assert module()._pending_label_days(store, manifest(), now=now) == (OPEN.date(),)

@@ -415,3 +415,48 @@ def test_wiring_cannot_mix_execution_and_operational_service_graphs(context):
             simulation=True,
         )
     assert not broker.submitted
+
+
+@pytest.mark.parametrize(
+    "state,status",
+    [
+        ("FILLED", "filled"),
+        ("REJECTED", "rejected"),
+        ("CANCELLED", "canceled"),
+        ("EXPIRED", "expired"),
+    ],
+)
+async def test_terminal_durable_ack_recovers_without_send(context, state, status):
+    from quantbot.domain import IntentState
+    from quantbot.storage import StorageRepository
+    from tests.integration.test_execution_coordinator import _accepted
+
+    manifest, decision, store, services, _, broker = context
+    intent = await module().prepare_entry(
+        manifest, decision, store=store, services=services, simulation=True
+    )
+    store.claim_intent(intent.intent_id, owner="test", now=broker.now)
+    order = _accepted(intent).model_copy(update={"status": status})
+    if state == "FILLED":
+        order = order.model_copy(update={"filled_quantity": intent.quantity})
+    with services.runner._database.transaction() as session:
+        repo = StorageRepository(session)
+        repo.create_order_intent(intent)
+        repo.transition_order_intent(
+            intent.intent_id, IntentState.ORDER_CREATED, expected_current=IntentState.RISK_APPROVED
+        )
+        durable = repo.transition_order_intent(
+            intent.intent_id, IntentState.SUBMITTING, expected_current=IntentState.ORDER_CREATED
+        )
+        durable = module().persist_broker_acknowledgement(repo, durable, order)
+        assert durable.state == IntentState[state]
+    await module().dispatch_pending(store, services=services, now=broker.now)
+    assert store.get_intent(intent.intent_id).state == "ACKNOWLEDGED"
+    assert not broker.submitted
+    receipts = [
+        event.decode(module().ExecutionReceipt)
+        for event in store.read_as_of(manifest.experiment_id, broker.now)
+        if event.kind == "ExecutionReceipt"
+    ]
+    assert len(receipts) == 1
+    assert receipts[0].result.intent.state == IntentState[state]

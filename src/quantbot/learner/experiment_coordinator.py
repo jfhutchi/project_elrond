@@ -19,6 +19,7 @@ from quantbot.learner.experiment_contract import (
     ExperimentManifest,
     InstrumentIdentity,
 )
+from quantbot.learner.experiment_news import NewsEvidence, journal_thesis, unavailable_evidence
 from quantbot.learner.experiment_observation import (
     CoverageReport,
     ObservationBatch,
@@ -200,6 +201,7 @@ async def coordinator_tick(
     label_snapshots: Sequence[Snapshot] = (),
     operational_path: Path | None = None,
     active_cycle: ActiveCycleContext | None = None,
+    news_evidence: Sequence[NewsEvidence] = (),
 ) -> TickReceipt:
     manifest = ExperimentManifest.model_validate(manifest.model_dump())
     state = store.state(manifest.experiment_id)
@@ -225,6 +227,7 @@ async def coordinator_tick(
             "observation": observation,
             "label_sources": label_snapshots,
             "clock_verified": clock_verified,
+            "news_evidence": news_evidence,
             "activation_id": activation.activation_id if activation is not None else None,
         }
     )
@@ -338,9 +341,11 @@ async def coordinator_tick(
     )
     if exhausted:
         pending_fits = ()
-    candidates = [
-        event.decode(CandidateArtifact) for event in events if event.kind == "CandidateArtifact"
-    ] if not exhausted else []
+    candidates = (
+        [event.decode(CandidateArtifact) for event in events if event.kind == "CandidateArtifact"]
+        if not exhausted
+        else []
+    )
     decision_keys = {
         (row.model_id, feature_key(row.features))
         for event in events
@@ -394,6 +399,19 @@ async def coordinator_tick(
                 decision,
                 idempotency_key="shadow-decision:" + candidate.model_id + ":" + feature_key(row),
             )
+            identity = next(item for item in manifest.roster if item.symbol == row.symbol)
+            research = tuple(item for item in news_evidence if item.symbol == row.symbol)
+            thesis = journal_thesis(
+                store,
+                decision,
+                research
+                or (
+                    unavailable_evidence(
+                        manifest, identity, now=now, reason="POSITION_RESEARCH_NOT_CONFIGURED"
+                    ),
+                ),
+            )
+            event_ids.append(content_id(thesis))
             decision_keys.add((candidate.model_id, feature_key(row)))
             decisions_recorded += 1
             event_ids.append(decision.decision_id)
@@ -433,7 +451,9 @@ async def coordinator_tick(
         status, reason, next_event = "FAULTED", state.reason, "OPERATOR_REVIEW_REQUIRED"
     elif exhausted:
         status, reason, next_event = (
-            "NORMAL_WAIT", "EVALUATION_WINDOW_COMPLETE", "FINAL_EVIDENCE_REVIEW"
+            "NORMAL_WAIT",
+            "EVALUATION_WINDOW_COMPLETE",
+            "FINAL_EVIDENCE_REVIEW",
         )
     elif "CLOSED_SESSION" in statuses:
         status, reason, next_event = "NORMAL_WAIT", "MARKET_CLOSED", "NEXT_EXCHANGE_SESSION"

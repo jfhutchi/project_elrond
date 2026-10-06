@@ -14,7 +14,11 @@ from zoneinfo import ZoneInfo
 
 from quantbot.domain import BrokerEnvironment, IntentState, OrderIntent, TradingMode
 from quantbot.execution import SubmissionResult
-from quantbot.execution.coordinator import persist_broker_acknowledgement
+from quantbot.execution.coordinator import (
+    _ack_terminal_target,
+    _assert_ack_matches_intent,
+    persist_broker_acknowledgement,
+)
 from quantbot.execution.snapshot_capture import capture_account_positions
 from quantbot.learner.experiment_contract import DecisionRecord, Digest, ExperimentManifest
 from quantbot.learner.experiment_lots import LotEvent, record_lot_event
@@ -350,6 +354,28 @@ async def _recover_without_send(
     services: IntradayPaperServices, durable: OrderIntent
 ) -> SubmissionResult:
     _paper_only(services)
+    if durable.state in {
+        IntentState.FILLED,
+        IntentState.REJECTED,
+        IntentState.CANCELLED,
+        IntentState.EXPIRED,
+    }:
+        # A crash may follow the committed broker acknowledgement but precede
+        # the separate experiment journal. Adopt only matching terminal evidence.
+        with services.runner._database.transaction() as session:
+            found = StorageRepository(session).get_broker_order_by_client_order_id(
+                durable.client_order_id
+            )
+        if found is None:
+            found = await services.runner._broker.get_order_by_client_id(
+                durable.client_order_id, expected=durable
+            )
+        if found is None:
+            raise ValueError("CLAIMED_SEND_REQUIRES_RECOVERY")
+        _assert_ack_matches_intent(durable, found)
+        if _ack_terminal_target(found) != durable.state:
+            raise ValueError("TERMINAL_ACK_STATE_UNVERIFIED")
+        return SubmissionResult(intent=durable, broker_order=found, recovered_after_ambiguity=True)
     if durable.state in {IntentState.BROKER_ACCEPTED, IntentState.PARTIALLY_FILLED}:
         return await services.deadlines.coordinator.reconcile_durable(durable)
     if durable.state not in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:

@@ -155,7 +155,7 @@ def run_monitor(
     limits = dict(LEARNER=policy.learner_seconds, PROTECTION=policy.protection_seconds,
                   RECONCILIATION=policy.reconciliation_seconds, INGESTION=policy.ingestion_seconds)
     conditions = []
-    measurements = {}
+    measurements: dict[str, dict[str, object]] = {}
     retained = []
     current_market = (market or MarketStatus()).current(now)
     verified = current_market.reported_open is not None and current_market.warning is None

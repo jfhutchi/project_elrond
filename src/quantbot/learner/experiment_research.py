@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
+from sqlalchemy import text
 
 from quantbot.learner.estimators import FittedEstimator, fit_estimator, predict
 from quantbot.learner.experiment_contract import (
@@ -65,6 +66,10 @@ class FitRequest(LearnerModel):
         return self
 
 
+class CanonicalTrialAlreadyReserved(ValueError):
+    """Permanent registry evidence forbids an engine retry even after local state loss."""
+
+
 class CanonicalTrialCharger:
     """Use the existing permanent registry burden, not a parallel luck ledger."""
 
@@ -86,12 +91,29 @@ class CanonicalTrialCharger:
 
     def charge(self, trial_id: str, manifest_hash: str) -> None:
         from quantbot.learner.forward import _registry_session
-        from quantbot.research.intraday_accounting import record_intraday_attempt
+        from quantbot.research.intraday_accounting import (
+            record_intraday_attempt,
+            verified_intraday_attempt_ids,
+        )
 
         if trial_id != self.request.trial_id or manifest_hash != self.request.manifest_hash:
             raise ValueError("EXACT_TRIAL_INPUTS_REQUIRED")
         rows = (*self.request.training, *self.request.validation)
         with _registry_session(write=True) as session:
+            # The canonical registry is SQLite. Its write transaction serializes roots,
+            # so check-and-reserve is atomic even when their local fit locks differ.
+            session.execute(text("BEGIN IMMEDIATE"))
+            used = verified_intraday_attempt_ids(session)
+            if trial_id in used:
+                raise CanonicalTrialAlreadyReserved("CANONICAL_TRIAL_ALREADY_RESERVED")
+            if (
+                sum(
+                    identity.startswith(_trial_prefix(self.request.experiment_id))
+                    for identity in used
+                )
+                >= 6
+            ):
+                raise ValueError("CANONICAL_SIX_CALL_FIT_BUDGET_EXHAUSTED")
             record_intraday_attempt(
                 session,
                 search_id=trial_id,
@@ -516,16 +538,20 @@ def run_registered_fit(
         )
         try:
             charger.charge(request.trial_id, request.manifest_hash)
-        except Exception:
+        except Exception as error:
             completed = clock()
             if completed < now:
                 raise ValueError("FIT_COMPLETION_CLOCK_REVERSED") from None
             base["recorded_at"] = completed
             receipt = FitReceipt(
                 **base,
-                status="CHARGE_REFUSED",
-                charged=None,
-                reason="CANONICAL_CHARGE_REFUSED_NO_ENGINE_CALL",
+                status="STARTED_UNRESOLVED"
+                if isinstance(error, CanonicalTrialAlreadyReserved)
+                else "CHARGE_REFUSED",
+                charged=True if isinstance(error, CanonicalTrialAlreadyReserved) else None,
+                reason="CANONICAL_TRIAL_ALREADY_RESERVED_NO_ENGINE_CALL"
+                if isinstance(error, CanonicalTrialAlreadyReserved)
+                else "CANONICAL_CHARGE_REFUSED_NO_ENGINE_CALL",
             )
         else:
             try:

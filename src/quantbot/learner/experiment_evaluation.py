@@ -42,14 +42,19 @@ def calendar_evidence(manifest: ExperimentManifest, source: Snapshot) -> Evaluat
     """Calendar request bounds from retained collect_snapshot's exact contract."""
     from datetime import timedelta
 
-    if not any(receipt.url == "https://paper-api.alpaca.markets/v2/calendar"
-               and receipt.status_code == 200 for receipt in source.receipts):
+    if not any(
+        receipt.url == "https://paper-api.alpaca.markets/v2/calendar" and receipt.status_code == 200
+        for receipt in source.receipts
+    ):
         raise ValueError("AUTHORITATIVE_CALENDAR_RECEIPT_REQUIRED")
     return EvaluationCalendarEvidence(
-        experiment_id=manifest.experiment_id, recorded_at=source.received_at,
+        experiment_id=manifest.experiment_id,
+        recorded_at=source.received_at,
         coverage_start=source.query.start.date(),
         coverage_end=source.query.end.date() + timedelta(days=14),
-        sessions=source.sessions, source_hash=source.identity, synthetic=manifest.synthetic,
+        sessions=source.sessions,
+        source_hash=source.identity,
+        synthetic=manifest.synthetic,
     )
 
 
@@ -58,11 +63,15 @@ def _stored_calendar(
 ) -> tuple[XNYSSessionSequence | None, tuple[date, date] | None]:
     from datetime import timedelta
 
-    rows = [event.decode(EvaluationCalendarEvidence)
-            for event in store.read_as_of(manifest.experiment_id, now)
-            if event.kind == "EvaluationCalendarEvidence"]
-    rows = sorted((row for row in rows if row.synthetic == manifest.synthetic),
-                  key=lambda row: (row.coverage_start, row.coverage_end))
+    rows = [
+        event.decode(EvaluationCalendarEvidence)
+        for event in store.read_as_of(manifest.experiment_id, now)
+        if event.kind == "EvaluationCalendarEvidence"
+    ]
+    rows = sorted(
+        (row for row in rows if row.synthetic == manifest.synthetic),
+        key=lambda row: (row.coverage_start, row.coverage_end),
+    )
     start = manifest.prospective_start_at.astimezone(EXCHANGE_ZONE).date()
     cursor = start
     known: dict[date, XNYSSession] = {}
@@ -106,8 +115,12 @@ class EvaluationReport(LearnerModel):
     experiment_id: Text
     recorded_at: datetime
     manifest_hash: Digest
-    status: Literal["ACCUMULATING", "ASSESSMENT_AVAILABLE", "INSUFFICIENT_EVIDENCE",
-                    "CALENDAR_COVERAGE_REQUIRED"]
+    status: Literal[
+        "ACCUMULATING",
+        "ASSESSMENT_AVAILABLE",
+        "INSUFFICIENT_EVIDENCE",
+        "CALENDAR_COVERAGE_REQUIRED",
+    ]
     scheduled_sessions: int | None
     coverage_valid_research_sessions: int
     eligible_entry_decisions: int
@@ -184,7 +197,8 @@ def evaluate_experiment(
     }
     decisions = [e.decode(DecisionRecord) for e in events if e.kind == "DecisionRecord"]
     decisions = [
-        row for row in decisions
+        row
+        for row in decisions
         if row.synthetic == manifest.synthetic
         and row.features.evaluation_class == "PROSPECTIVE_LOCAL"
         and row.features.feature_at >= manifest.prospective_start_at
@@ -219,19 +233,26 @@ def evaluate_experiment(
                 nonoverlapping += 1
                 last_target = target_at
         errors = [error for _, error in rows.values()]
-        forecasts.append(ForecastAssessment(
-            model_id=model_id,
-            labeled_rows=len(errors),
-            independent_sessions=len({r.features.feature_at.astimezone(EXCHANGE_ZONE).date()
-                                      for r, _ in rows.values()}),
-            nonoverlapping_time_blocks=nonoverlapping,
-            mse=sum(error * error for error in errors) / len(errors),
-            mae=sum(abs(error) for error in errors) / len(errors),
-            matched_comparison_rows=len(common),
-        ))
+        forecasts.append(
+            ForecastAssessment(
+                model_id=model_id,
+                labeled_rows=len(errors),
+                independent_sessions=len(
+                    {
+                        r.features.feature_at.astimezone(EXCHANGE_ZONE).date()
+                        for r, _ in rows.values()
+                    }
+                ),
+                nonoverlapping_time_blocks=nonoverlapping,
+                mse=sum(error * error for error in errors) / len(errors),
+                mae=sum(abs(error) for error in errors) / len(errors),
+                matched_comparison_rows=len(common),
+            )
+        )
     declared = {
         row.lot_id
-        for event in events if event.kind == "LotEvent"
+        for event in events
+        if event.kind == "LotEvent"
         for row in (event.decode(LotEvent),)
         if row.kind == "ENTRY_DECLARED" and row.synthetic == manifest.synthetic
     }
@@ -241,9 +262,17 @@ def evaluate_experiment(
     summary_days = [day for day in account_days if day.session_date in completed]
     summary = summarize(summary_days)
     day_counts = Counter(day.session_date for day in summary_days)
-    valid = sorted((day for day in summary_days if day_counts[day.session_date] == 1
-                    and day.status == "FINAL" and day.net_pnl is not None
-                    and day.net_pnl.is_finite()), key=lambda day: day.session_date)
+    valid = sorted(
+        (
+            day
+            for day in summary_days
+            if day_counts[day.session_date] == 1
+            and day.status == "FINAL"
+            and day.net_pnl is not None
+            and day.net_pnl.is_finite()
+        ),
+        key=lambda day: day.session_date,
+    )
     # A gap prevents a verified period drawdown; no zero-valued missing sessions.
     drawdown = None
     if valid and {day.session_date for day in valid} == completed:
@@ -255,37 +284,54 @@ def evaluate_experiment(
             drawdown = max(drawdown, peak - equity)
     ready = summary.valid_days >= manifest.performance_sessions
     exhausted = scheduled is not None and scheduled >= manifest.maximum_evaluation_sessions
-    review = (scheduled is not None and scheduled >= manifest.zero_eligibility_review_sessions
-              and not declared)
+    review = (
+        len(coverage_dates & completed) >= manifest.zero_eligibility_review_sessions
+        and not declared
+    )
     status = (
-        "CALENDAR_COVERAGE_REQUIRED" if not calendar_known
-        else "ASSESSMENT_AVAILABLE" if ready
-        else "INSUFFICIENT_EVIDENCE" if exhausted else "ACCUMULATING"
+        "CALENDAR_COVERAGE_REQUIRED"
+        if not calendar_known
+        else "ASSESSMENT_AVAILABLE"
+        if ready
+        else "INSUFFICIENT_EVIDENCE"
+        if exhausted
+        else "ACCUMULATING"
     )
     return EvaluationReport(
-        experiment_id=manifest.experiment_id, recorded_at=now, manifest_hash=content_id(manifest),
-        status=status, scheduled_sessions=scheduled,
+        experiment_id=manifest.experiment_id,
+        recorded_at=now,
+        manifest_hash=content_id(manifest),
+        status=status,
+        scheduled_sessions=scheduled,
         coverage_valid_research_sessions=len(coverage_dates & completed),
         eligible_entry_decisions=len(declared),
         authorized_cost_cleared_forecasts=sum(row.paper_eligible for row in decisions),
         zero_eligibility_review_required=review,
         new_research_allowed=calendar_known and not exhausted,
         new_entries_allowed=calendar_known and not exhausted,
-        assessment_ready=ready, forecasts=tuple(forecasts),
-        completed_owned_lots=len(complete), incomplete_owned_lots=len(outcomes) - len(complete),
+        assessment_ready=ready,
+        forecasts=tuple(forecasts),
+        completed_owned_lots=len(complete),
+        incomplete_owned_lots=len(outcomes) - len(complete),
         learner_realized_pnl=sum(
             (row.net_pnl for row in real if row.net_pnl is not None), Decimal(0)
         )
-        if real else None,
+        if real
+        else None,
         learner_fees=sum((row.fees for row in real if row.fees is not None), Decimal(0))
-        if real else None,
+        if real
+        else None,
         account_net_pnl=summary.net_pnl if summary.valid_days else None,
-        account_drawdown_usd=drawdown, valid_performance_days=summary.valid_days,
-        profitable_days=summary.profitable_days, losing_days=summary.losing_days,
-        flat_days=summary.flat_days, profitable_day_percent=summary.profitable_day_percent,
+        account_drawdown_usd=drawdown,
+        valid_performance_days=summary.valid_days,
+        profitable_days=summary.profitable_days,
+        losing_days=summary.losing_days,
+        flat_days=summary.flat_days,
+        profitable_day_percent=summary.profitable_day_percent,
         first_performance_session=summary.first_session,
         last_performance_session=summary.last_session,
-        next_owner="DEVELOPMENT_OPERATOR" if review or exhausted or not calendar_known
+        next_owner="DEVELOPMENT_OPERATOR"
+        if review or exhausted or not calendar_known
         else "SCHEDULED_COORDINATOR",
         synthetic=manifest.synthetic,
     )

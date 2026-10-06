@@ -79,7 +79,14 @@ def test_missing_reset_deposit_invalid_and_duplicates_not_profit(context):
 
 
 def test_five_sessions_zero_eligibility_is_owned_review_not_new_approval(context):
+    from quantbot.learner.experiment_observation import build_observation_batch
+
+    for n in range(5):
+        source = snapshot(opened=OPEN + timedelta(days=n))
+        observation = build_observation_batch(manifest(), source, now=source.received_at)
+        context.append(observation, idempotency_key=f"coverage:{n}")
     result = report(context, count=5)
+    assert result.coverage_valid_research_sessions == 5
     assert result.zero_eligibility_review_required
     assert result.next_owner == "DEVELOPMENT_OPERATOR"
     assert not result.requires_model_approval
@@ -96,9 +103,7 @@ def test_30_scheduled_sessions_stop_without_reset_or_protection_mutation(context
 
 
 def test_unknown_calendar_cannot_infer_30_days_or_performance(context):
-    result = module().evaluate_experiment(
-        context, manifest(), now=OPEN + timedelta(days=100)
-    )
+    result = module().evaluate_experiment(context, manifest(), now=OPEN + timedelta(days=100))
     assert result.scheduled_sessions is None
     assert result.status == "CALENDAR_COVERAGE_REQUIRED"
     assert not result.new_entries_allowed
@@ -156,21 +161,30 @@ def test_stored_calendar_gap_stays_unknown_and_conflicts_require_review(context)
         recorded_at=manifest().registered_at,
         coverage_start=OPEN.date(),
         coverage_end=(OPEN + timedelta(days=1)).date(),
-        sessions=calendar(2), source_hash="a" * 64, synthetic=True,
+        sessions=calendar(2),
+        source_hash="a" * 64,
+        synthetic=True,
     )
     context.append(evidence, idempotency_key="calendar-first")
     now = OPEN + timedelta(days=2, hours=7)
     result = module().evaluate_experiment(context, manifest(), now=now)
     assert result.status == "CALENDAR_COVERAGE_REQUIRED"
-    changed = evidence.model_copy(update={
-        "sessions": XNYSSessionSequence(calendar="XNYS", sessions=(
-            evidence.sessions.sessions[0].model_copy(update={
-                "close_at": evidence.sessions.sessions[0].close_at - timedelta(hours=1)
-            }),
-            evidence.sessions.sessions[1],
-        )),
-        "source_hash": "b" * 64,
-    })
+    changed = evidence.model_copy(
+        update={
+            "sessions": XNYSSessionSequence(
+                calendar="XNYS",
+                sessions=(
+                    evidence.sessions.sessions[0].model_copy(
+                        update={
+                            "close_at": evidence.sessions.sessions[0].close_at - timedelta(hours=1)
+                        }
+                    ),
+                    evidence.sessions.sessions[1],
+                ),
+            ),
+            "source_hash": "b" * 64,
+        }
+    )
     context.append(changed, idempotency_key="calendar-conflict")
     with pytest.raises(ValueError, match="CALENDAR_CONFLICT"):
         module().evaluate_experiment(context, manifest(), now=now)
@@ -179,16 +193,35 @@ def test_stored_calendar_gap_stays_unknown_and_conflicts_require_review(context)
 async def test_coordinator_stops_new_decisions_and_worker_queue_at_limit(context):
     from quantbot.learner.experiment_coordinator import coordinator_tick
 
-    context.append(module().EvaluationCalendarEvidence(
-        experiment_id=manifest().experiment_id, recorded_at=manifest().registered_at,
-        coverage_start=OPEN.date(), coverage_end=(OPEN + timedelta(days=30)).date(),
-        sessions=calendar(31), source_hash="a" * 64, synthetic=True,
-    ), idempotency_key="whole-calendar")
+    context.append(
+        module().EvaluationCalendarEvidence(
+            experiment_id=manifest().experiment_id,
+            recorded_at=manifest().registered_at,
+            coverage_start=OPEN.date(),
+            coverage_end=(OPEN + timedelta(days=30)).date(),
+            sessions=calendar(31),
+            source_hash="a" * 64,
+            synthetic=True,
+        ),
+        idempotency_key="whole-calendar",
+    )
     result = await coordinator_tick(
-        context, manifest(), now=OPEN + timedelta(days=29, hours=7),
-        observation=None, execution=None, clock_verified=True,
+        context,
+        manifest(),
+        now=OPEN + timedelta(days=29, hours=7),
+        observation=None,
+        execution=None,
+        clock_verified=True,
     )
     assert result.reason == "EVALUATION_WINDOW_COMPLETE"
     assert result.next_expected_event == "FINAL_EVIDENCE_REVIEW"
     assert result.decisions_recorded == result.intents == 0
     assert result.fit_request_ids == ()
+
+
+def test_missing_research_sessions_do_not_count_as_zero_opportunity_review(context):
+    result = report(context, count=5)
+    assert result.scheduled_sessions == 5
+    assert result.coverage_valid_research_sessions == 0
+    assert not result.zero_eligibility_review_required
+    assert result.next_owner == "SCHEDULED_COORDINATOR"
