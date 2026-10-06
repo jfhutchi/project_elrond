@@ -1,5 +1,7 @@
 # The research subsystem
 
+> **Current guidance — 2026-10-06:** [Current intraday PAPER direction](intraday-paper-direction.md) adds the bounded point-in-time forecast/market-label and later protected-trade/outcome/adaptation lanes. The trust boundaries below still apply; multiple eligible opportunities are the goal, not an annual trade-count quota.
+
 How Elrond decides what counts as evidence, and the mechanisms that stop it being talked into
 something. This complements [STATUS.md](../STATUS.md), which covers the trading side.
 

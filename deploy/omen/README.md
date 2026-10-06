@@ -1,5 +1,7 @@
 # Native Windows PAPER runtime on the HP Omen
 
+> **Current guidance — 2026-10-06:** Use the [current direction](../../docs/intraday-paper-direction.md), [adaptive staged runbook](../../docs/adaptive-paper-runbook.md) and [safe dashboard access](../../docs/dashboard-access.md) for current commissioning. Dated host/deployment measurements below are retained history; never reapply an old installer or infer current health from them.
+
 The HP Omen laptop is the sole permitted Elrond coordinator. The Raspberry Pi is retired by
 operator policy and must not be contacted or used as a coordinator, watchdog, dashboard or worker.
 The Omen runtime has no Alienware or other-computer dependency.

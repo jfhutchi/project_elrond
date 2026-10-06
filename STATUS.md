@@ -1,5 +1,7 @@
 # QuantBot — Agent Orientation
 
+> **Current guidance — 2026-10-06:** [Current direction and acceptance](docs/intraday-paper-direction.md) supersede earlier goal/runtime summaries. Dated observations below are historical, not proof of current liveness, model authority or profit.
+
 > **Runtime correction — 2026-09-08:** the Pi is retired entirely by operator policy and must not
 > be contacted or used for any role. The native Windows Omen is the sole permitted PAPER
 > coordinator, with no Alienware dependency. Local-account startup tasks are running and PAPER

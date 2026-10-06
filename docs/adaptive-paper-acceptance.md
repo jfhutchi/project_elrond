@@ -1,5 +1,7 @@
 # Adaptive PAPER candidate acceptance
 
+> **Current integration guidance — 2026-10-06:** [Intraday goals and real acceptance](intraday-paper-direction.md) are current. PR267 was retargeted to main after an independently reviewed, source-identical main-history reconciliation. Read its exact final-head checks and remote merge record; the earlier PR258-first ordering below is retained historical planning, not a current command. Dependency upgrades/docs are independently verified before integration. No branch-rule bypass, hosted-CI success or model activation is inferred.
+
 This candidate adds an isolated experiment coordinator, a permanent shared fit budget, point-in-time observations and research journals, retained PAPER execution integration, independent lot ownership, honest forward evaluation, and read-only experiment dashboards. It does not activate a model or change a running service.
 
 ## Historical source verification
@@ -32,7 +34,7 @@ The approved design makes raw 30-minute return the primary predictive **target**
 
 Seen historical prediction error, reference returns, actual PAPER outcomes and fresh forward evidence remain separate. Both artifacts can be evaluated without another fit. A lower-error constant model may still never clear the strictly positive entry-cost floor; a ridge forecast cannot bypass that floor or any retained broker/risk/ownership control. Exact-artifact consent and operational prerequisites remain distinct. Optional bounded experimental PAPER evaluation is not a profitability recommendation. No new trial, lowered threshold or automatic activation follows from this comparison.
 
-## Review dependency chain
+## Historical review dependency chain
 
 `main` currently ends at the PR257 foundation. Draft PR258, `codex/daily-close-capture-20260930`, includes merged PR259 news research at `4ee6e5ff82355dfb2821f9f187406e661ae875ee`. This branch explicitly incorporates that dependency. Its remaining diff also includes retained five-minute execution, tracking, and compatibility foundations; it must be reviewed as a consolidation, not described as an isolated adaptive-only patch.
 
@@ -50,4 +52,8 @@ Before runtime acceptance: establish repository protections, pin the actual rele
 
 Prospective completion requires a naturally eligible PAPER fill, independently protected exit, reconciled fee-bearing outcome, charged successor, and fresh evaluation. A veto is recorded honestly; no order is manufactured to complete acceptance. Twenty valid forward performance days and the thirty-session insufficiency ceiling remain distinct from historical fit validation and synthetic tests. No automatic live transition or profitability promise is made.
 
-Offline synthetic dark dashboard QA: desktop and the 500-pixel narrow rendering were captured and inspected. Exact390-pixel visual acceptance remains unverified: CLI produces a390-pixel image with a500-pixel browser layout viewport, while explicit-device capture timed out. Earlier DOM width observations lacked sufficient page-load proof and are not claimed as passed390-pixel QA. This is synthetic layout evidence, not actual deployed dashboard or account-performance evidence.
+Historical offline synthetic dark dashboard QA: desktop and the 500-pixel narrow rendering were captured and inspected. Exact390-pixel visual acceptance remains unverified: CLI produces a390-pixel image with a500-pixel browser layout viewport, while explicit-device capture timed out. Earlier DOM width observations lacked sufficient page-load proof and are not claimed as passed390-pixel QA. This is synthetic layout evidence, not actual deployed dashboard or account-performance evidence.
+
+## Later scoped console acceptance
+
+The completed-fit classification regression preserves pending/faulted-worker visibility, immutable journal and permanent budget counts. The actual 390px read-only experiment status and model-result views were subsequently inspected, with no global overflow and no false missing-worker label. This supersedes the older mobile-QA limitation above; it does not prove real fills, daily close-to-close P&L or profitability. Current release test pins/results are on the integration PR; earlier aggregate numbers remain tied to their historical heads.

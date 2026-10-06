@@ -2,12 +2,14 @@
 
 An autonomous quantitative research platform that tries hard not to fool itself.
 
-> **Current runtime policy (2026-09-08):** the Raspberry Pi is retired entirely and must not be
-> contacted or used for any role. The HP Omen is the sole permitted PAPER coordinator, with no
-> Alienware or other-host dependency. Local-account startup tasks and PAPER reconciliation are
-> verified. The tested entry-budget fix is deployed; measured readiness passed and the kill
-> switch is clear. The prior failed cycle remains in the ledger. See
-> [runtime topology](docs/runtime-topology.md).
+> **Current direction (2026-10-06):** intraday research, multiple eligible opportunities per
+> session, protected PAPER trades, reconciled costs/outcomes and bounded learning. The new
+> adaptive experiment is currently SHADOW-only; code tests and historical models do not prove
+> real trading or profitability. There is no implemented twelve-trades-per-year limit.
+> Read [the current goals and acceptance](docs/intraday-paper-direction.md), then verify actual
+> deployed pins, clock and receipts. The Omen remains the sole permitted PAPER coordinator;
+> the Pi is retired and must not be contacted. [Dashboard access](docs/dashboard-access.md)
+> is currently local to the Omen. Dated deployment reports remain historical evidence.
 
 Elrond discovers candidate market strategies, attacks them, and promotes only the ones that
 survive — through pre-registration, statistical power gates, protected holdouts, adversarial
@@ -31,8 +33,9 @@ setting called `LIVE_TRADING` — the project's prose has used that as shorthand
 including in `CLAUDE.md`, and it is worth knowing that a file which *sets* it is configuring
 nothing.
 
-Paper trading against Alpaca's paper environment *is* authorized and runs autonomously. The two
-are never treated as equivalent. The promotion ladder terminates at `LIVE_REVIEW_ELIGIBLE` and
+Paper trading against Alpaca's paper environment *is* authorized within separately commissioned
+model and risk boundaries. The new adaptive observer has no execution authority; existing PAPER
+workers retain their own gates. Paper and real money are never treated as equivalent. The promotion ladder terminates at `LIVE_REVIEW_ELIGIBLE` and
 there is no stage after it — implemented by the **absence of a destination** in the transition
 table (`ALLOWED_PROMOTIONS[Stage.LIVE_REVIEW_ELIGIBLE]` is the empty set), not by a permission
 check that could be misconfigured.
@@ -149,6 +152,8 @@ statistical confidence.
 
 | Document | For |
 |---|---|
+| [docs/intraday-paper-direction.md](docs/intraday-paper-direction.md) | Current intraday PAPER goal, the turnover clarification, model limits and real closed-loop acceptance |
+| [docs/dashboard-access.md](docs/dashboard-access.md) | Verified local dashboard address and the boundary for any future authenticated Alienware access |
 | [CLAUDE.md](CLAUDE.md) | The project charter — mission, boundaries, engineering standard |
 | [docs/research-architecture.md](docs/research-architecture.md) | The research subsystem, its trust boundaries, and the design patterns it repeats |
 | [STATUS.md](STATUS.md) | Agent orientation: current state, known defects, open questions |

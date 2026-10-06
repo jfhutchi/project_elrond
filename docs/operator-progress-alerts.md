@@ -1,5 +1,7 @@
 # Learner progress alerts — first delivery batch
 
+> **Current guidance — 2026-10-06:** See [current intraday acceptance](intraday-paper-direction.md). Operator consent, model commissioning, market/calendar waiting, coverage failure and real incidents are separate states. The approved external 17-code webhook remains unchanged; repository integration does not enable added local codes or establish digest delivery.
+
 This batch addresses portions of #251, #252 and #253. It does not close those issues.
 
 The worker now publishes independent forecast, training and PAPER-entry status in `worker.json`.

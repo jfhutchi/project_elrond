@@ -1,5 +1,7 @@
 # Runtime topology
 
+> **Current guidance — 2026-10-06:** The [current intraday PAPER direction](intraday-paper-direction.md) retains the Omen-only authority and retired-Pi policy. Dated deployment measurements below are historical, not a current inventory. Alienware dashboard viewing would not make it a trading host; see [access boundaries](dashboard-access.md).
+
 ## Current policy and observed state — 2026-09-08
 
 The HP Omen laptop is the sole permitted Elrond coordinator. It carries the scheduler,
