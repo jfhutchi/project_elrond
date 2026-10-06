@@ -298,7 +298,13 @@ def _run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
             )
             request = research_eligibility(store, manifest, now=now)
             if request is None:
-                return {"status": "NORMAL_WAIT", "reason": "NO_UNSTARTED_REGISTERED_FIT"}
+                from quantbot.learner.experiment_adaptation import schedule_next_successor
+
+                adaptation = schedule_next_successor(store, manifest, now=now, guard=Guard())
+                store.append(adaptation, idempotency_key="adaptation:" + content_id(adaptation))
+                request = research_eligibility(store, manifest, now=now)
+                if request is None:
+                    return {"status": "NORMAL_WAIT", "reason": adaptation.reason}
 
             def clock() -> datetime:
                 return datetime.now(UTC)
@@ -328,23 +334,28 @@ def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
     """Persist every bounded worker outcome without credential-bearing exceptions."""
     manifest = load_manifest(config)
     verify_checkout(config)
+
+    def persist(status: object, reason: object) -> None:
+        document = {
+            "experiment_id": manifest.experiment_id,
+            "recorded_at": datetime.now(UTC).isoformat(),
+            "status": status,
+            "reason": reason,
+            "code_commit": config.code_commit,
+            "scope": "SHADOW",
+            "synthetic": manifest.synthetic,
+        }
+        config.root.mkdir(parents=True, exist_ok=True)
+        temporary = config.root / "worker-receipt.json.tmp"
+        temporary.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+        temporary.replace(config.root / "worker-receipt.json")
+
+    persist("STARTED", "BOUNDED_RESEARCH_ATTEMPT_STARTED")
     try:
         result = _run_research_once(config)
     except Exception:
         result = {"status": "FAULTED", "reason": "RESEARCH_WORKER_FAILED"}
-    document = {
-        "experiment_id": manifest.experiment_id,
-        "recorded_at": datetime.now(UTC).isoformat(),
-        "status": result.get("status"),
-        "reason": result.get("reason", "BOUNDED_RESEARCH_ATTEMPT_COMPLETED"),
-        "code_commit": config.code_commit,
-        "scope": "SHADOW",
-        "synthetic": manifest.synthetic,
-    }
-    config.root.mkdir(parents=True, exist_ok=True)
-    temporary = config.root / "worker-receipt.json.tmp"
-    temporary.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
-    temporary.replace(config.root / "worker-receipt.json")
+    persist(result.get("status"), result.get("reason", "BOUNDED_RESEARCH_ATTEMPT_COMPLETED"))
     return result
 
 

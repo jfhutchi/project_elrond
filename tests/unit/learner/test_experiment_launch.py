@@ -158,6 +158,10 @@ def test_worker_failure_has_durable_sanitized_receipt_not_silent_pause(tmp_path,
     monkeypatch.setattr(launch, "verify_checkout", lambda config: None)
 
     def fail(config):
+        import json
+
+        running = json.loads((config.root / "worker-receipt.json").read_text())
+        assert running["status"] == "STARTED"
         raise RuntimeError("private credential-bearing registry details")
 
     monkeypatch.setattr(launch, "_run_research_once", fail, raising=False)

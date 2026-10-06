@@ -74,6 +74,7 @@ def pooled_code_hash() -> str:
                     "experiment_lots.py",
                     "experiment_store.py",
                     "experiment_research.py",
+                    "experiment_adaptation.py",
                     "../storage/lot_ownership.py",
                     "../operations/protection.py",
                 )

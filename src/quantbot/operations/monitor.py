@@ -142,12 +142,16 @@ def run_monitor(
     learner: Path, database: Path, output: Path, *, now: datetime,
     policy: MonitorPolicy | None = None,
     market: MarketStatus | None = None,
+    experiment_store: Path | None = None,
+    experiment_commit: str | None = None,
 ) -> dict[str, Any]:
     policy = policy or MonitorPolicy()
     if now.tzinfo is None:
         raise ValueError('aware clock required')
     if (output / 'alerts.db').resolve() == database.resolve():
         raise ValueError('alert output must not be the source database')
+    if (experiment_store is None) != (experiment_commit is None):
+        raise ValueError('experiment store and exact source pin must be supplied together')
     limits = dict(LEARNER=policy.learner_seconds, PROTECTION=policy.protection_seconds,
                   RECONCILIATION=policy.reconciliation_seconds, INGESTION=policy.ingestion_seconds)
     conditions = []
@@ -174,6 +178,16 @@ def run_monitor(
                              and (now - current_market.session_open).total_seconds() < 1860
                              else 'ELIGIBLE_SESSION')
     samples = _samples(learner, database)
+    if experiment_store is not None and experiment_commit is not None:
+        from quantbot.operations.experiment_health import measure_experiment_health
+
+        if experiment_store.resolve() in {database.resolve(), (output/'alerts.db').resolve()}:
+            raise ValueError('experiment store must be an independent read-only source')
+        health = measure_experiment_health(experiment_store,
+                                           expected_commit=experiment_commit, now=now)
+        conditions.extend(health['conditions'])
+        measurements['EXPERIMENT'] = dict(coordinator=health['coordinator'],
+                                          worker=health['worker'])
     with AlertStore(output / 'alerts.db') as store:
         with store.connection:
             store._time(now)
@@ -289,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--learner-directory', required=True, type=Path)
     parser.add_argument('--operations-database', required=True, type=Path)
     parser.add_argument('--output-directory', required=True, type=Path)
+    parser.add_argument('--experiment-store', type=Path)
+    parser.add_argument('--experiment-commit')
     parser.add_argument('--probe-paper-market', action='store_true',
                         help='Use existing PAPER GET clock/calendar (five second limit).')
     args = parser.parse_args(argv)
@@ -306,7 +322,9 @@ def main(argv: list[str] | None = None) -> int:
                 # An unavailable probe must never turn an unknown session into a closure.
                 market = MarketStatus()
         receipt = run_monitor(args.learner_directory, args.operations_database,
-                              args.output_directory, now=datetime.now(UTC), market=market)
+                              args.output_directory, now=datetime.now(UTC), market=market,
+                              experiment_store=args.experiment_store,
+                              experiment_commit=args.experiment_commit)
         print(json.dumps(receipt))
         return 1 if receipt['active_alerts'] else 0
     except (OSError, sqlite3.Error, ValueError):

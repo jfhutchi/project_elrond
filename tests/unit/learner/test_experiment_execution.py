@@ -394,3 +394,24 @@ async def test_integrated_cycle_retains_lifecycle_before_any_dispatch(context, h
     assert len(broker.submitted) == (1 if halt is None else 0)
     if halt is not None:
         assert store.pending_intents(manifest.experiment_id) == ()
+
+
+def test_wiring_cannot_mix_execution_and_operational_service_graphs(context):
+    manifest, decision, store, services, _, broker = context
+    runtime = SimpleNamespace(
+        database=SimpleNamespace(path=services.runner._database.path.with_name("unrelated.db")),
+        coordinator=services.deadlines.coordinator,
+    )
+    with pytest.raises(ValueError, match="OPERATIONAL_SERVICE_GRAPH_MISMATCH"):
+        module().wire_experiment_services(
+            runtime,
+            services,
+            manifest=manifest,
+            decisions=(decision,),
+            store=store,
+            owner="test",
+            data_sync=SimpleNamespace(),
+            clock=lambda: broker.now,
+            simulation=True,
+        )
+    assert not broker.submitted

@@ -473,6 +473,12 @@ def wire_experiment_services(
     No deployment, activation, daemon start, schema update or kill-switch mutation.
     The caller binds the actual run ID to services.runner before calling cycle.run.
     """
+    _paper_only(services)
+    if (
+        runtime.database.path.resolve() != services.runner._database.path.resolve()
+        or runtime.coordinator is not services.deadlines.coordinator
+    ):
+        raise ValueError("OPERATIONAL_SERVICE_GRAPH_MISMATCH")
     strategy = ExperimentStrategyRunner(
         manifest, decisions, store=store, services=services, simulation=simulation
     )

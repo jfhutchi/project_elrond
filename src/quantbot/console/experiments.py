@@ -139,13 +139,27 @@ def _summary(
             "Research coordinator receipt is stale",
             "Check the scheduled worker and its newest receipt; closed market does not stop ticks.",
         )
-    elif worker is not None and worker.status in {
-        "FAULTED",
-        "FAILED",
-        "TIMEOUT",
-        "CHARGE_REFUSED",
-        "STARTED_UNRESOLVED",
-    }:
+    elif worker is not None and (
+        now > worker.recorded_at + timedelta(seconds=1020 if worker.status == "STARTED" else 240)
+    ):
+        kind, owner, label, action = (
+            "FAILURE",
+            "DEVELOPMENT_OPERATOR",
+            "Research worker receipt is stale",
+            "Inspect the independent worker; bounded fitting grace has expired. Retain protection.",
+        )
+    elif worker is not None and (
+        worker.status
+        in {
+            "FAULTED",
+            "FAILED",
+            "TIMEOUT",
+            "CHARGE_REFUSED",
+            "STARTED_UNRESOLVED",
+        }
+        or worker.reason
+        in {"FAILED_SUCCESSOR_GENERATION_REVIEW_REQUIRED", "STARTED_SUCCESSOR_REVIEW_REQUIRED"}
+    ):
         kind, owner, label, action = (
             "FAILURE",
             "DEVELOPMENT_OPERATOR",
@@ -165,6 +179,14 @@ def _summary(
             "DEVELOPMENT_OPERATOR",
             "Evaluation calendar coverage incomplete",
             "Restore authoritative calendar coverage. New fits and entries remain gated.",
+        )
+    elif worker is not None and worker.status == "STARTED":
+        kind, owner, label, action = (
+            "NORMAL_WAIT",
+            "BOUNDED_RESEARCH_WORKER",
+            "Bounded research worker running",
+            "Wait for the charged fit receipt within its 15-minute wall limit; "
+            "no model approval is requested.",
         )
     elif state.state == "ACTIVATION_REQUIRED" and not any(
         event.kind == "ExactArtifactApproval" for event in events
