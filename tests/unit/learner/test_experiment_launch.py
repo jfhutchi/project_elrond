@@ -147,3 +147,23 @@ def test_missing_predeclared_inputs_is_setup_wait_not_model_approval(tmp_path, m
     assert result["status"] == "NORMAL_WAIT"
     assert result["reason"] == "PREDECLARED_RESEARCH_SOURCES_REQUIRED"
     assert not config.store.exists()
+    saved = (config.root / "worker-receipt.json").read_text()
+    assert "PREDECLARED_RESEARCH_SOURCES_REQUIRED" in saved
+
+
+def test_worker_failure_has_durable_sanitized_receipt_not_silent_pause(tmp_path, monkeypatch):
+    launch = module()
+    config = launch.ExperimentLaunchConfig(**config_data(tmp_path))
+    monkeypatch.setattr(launch, "load_manifest", lambda config: manifest())
+    monkeypatch.setattr(launch, "verify_checkout", lambda config: None)
+
+    def fail(config):
+        raise RuntimeError("private credential-bearing registry details")
+
+    monkeypatch.setattr(launch, "_run_research_once", fail, raising=False)
+    result = launch.run_research_once(config)
+    assert result["status"] == "FAULTED"
+    saved = (config.root / "worker-receipt.json").read_text()
+    assert "RESEARCH_WORKER_FAILED" in saved
+    assert "private credential" not in saved
+    assert not config.store.exists()

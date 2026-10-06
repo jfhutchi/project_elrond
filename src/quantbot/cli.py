@@ -231,6 +231,8 @@ def build_parser(*, output: TextIO | None = None) -> argparse.ArgumentParser:
     console = commands.add_parser("console")
     console.add_argument("--host", default=None, help="default 127.0.0.1; widen deliberately")
     console.add_argument("--port", type=int, default=None)
+    console.add_argument("--experiment-store", type=Path, default=None,
+                         help="read-only adaptive experiment store; never created by the console")
     config_view = commands.add_parser("config")
     config_view.add_argument(
         "--subsystem", help="limit to one subsystem, e.g. risk, broker, safety, market-data"
@@ -477,6 +479,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
                 if os.environ.get("QUANTBOT_LEARNER_DIRECTORY") else None,
                 market_status=market_status,
                 daily_performance=read_configured_performance,
+                experiment_store=getattr(args, "experiment_store", None),
             ),
             host=host,
             port=port,

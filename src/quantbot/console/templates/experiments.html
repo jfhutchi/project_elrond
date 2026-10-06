@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+{% set title = "Experiments" %}
+{% block body %}
+<h1>PAPER research experiments</h1>
+<p class="sub">Research, execution, protection and results retain their own evidence. No live switch.</p>
+{% if not experiments.available %}
+<div class="card"><h2>Experiment evidence unavailable</h2><p>{{ experiments.reason.replace('_', ' ').capitalize() }}</p></div>
+{% else %}
+{% for experiment in experiments.experiments %}
+<h2><a href="{{ request.url_for('experiment_detail', experiment_id=experiment.experiment_id) }}">{{ experiment.experiment_id }}</a></h2>
+{% include "_experiment_status.html" %}
+{% else %}<p>No registered experiments.</p>{% endfor %}
+{% endif %}
+{% endblock %}

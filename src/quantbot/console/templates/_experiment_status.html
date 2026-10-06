@@ -1,0 +1,12 @@
+<div class="card">
+  <h2>{{ experiment.label }}</h2>
+  {% if experiment.synthetic %}<p class="tag">SYNTHETIC — isolated test evidence</p>{% endif %}
+  <p>Owner: {{ experiment.owner.replace('_', ' ').title() }}. {{ experiment.next_action }}</p>
+  <p>Trading authority: {{ experiment.trading_authority.replace('_', ' ').lower() }}.</p>
+  <dl>
+    <dt>Last completed tick</dt><dd>{{ experiment.last_tick_at or 'Not started' }}</dd>
+    <dt>Next expected event</dt><dd>{{ experiment.next_expected_event or 'Coordinator setup' }}</dd>
+    <dt>Next scheduled wake</dt><dd>{{ experiment.next_wakeup_at or 'Not configured' }}</dd>
+    <dt>Fitting budget</dt><dd>{{ experiment.charged_fits }} charged · {{ experiment.reserved_fits }} reserved / {{ experiment.fit_budget }}</dd>
+  </dl>
+</div>

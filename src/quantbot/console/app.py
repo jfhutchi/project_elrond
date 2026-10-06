@@ -41,6 +41,7 @@ import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import cast
 from urllib.parse import parse_qsl
 
 from fastapi import FastAPI, HTTPException, Request
@@ -59,6 +60,7 @@ from quantbot.console.control import (
     rollback_to,
     validate_proposal,
 )
+from quantbot.console.experiments import ExperimentPanel, read_experiment_panel
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
 from quantbot.console.learner import LearnerPanel, read_learner_panel, read_monitor_panel
 from quantbot.console.market_status import MarketStatus, MarketStatusCache
@@ -70,6 +72,7 @@ from quantbot.console.state import (
     read_console_state,
 )
 from quantbot.operations.alerts import AlertStore
+from quantbot.operations.daily_performance import DailyPerformance, DayStatus
 from quantbot.operations.kill_switch import (
     KillSwitchClearBlocked,
     KillSwitchController,
@@ -98,6 +101,7 @@ NAVIGATION: tuple[tuple[str, str], ...] = (
     ("/risk", "Risk"),
     ("/research", "Research"),
     ("/learner", "Learner"),
+    ("/experiments", "Experiments"),
     ("/market-data", "Market data"),
     ("/capacity", "Capacity"),
     ("/discovery", "Discovery"),
@@ -121,6 +125,7 @@ def create_app(
     learner_directory: Path | None = None,
     market_status: Callable[[], Awaitable[MarketStatus]] | None = None,
     daily_performance: Callable[[], PerformanceData] | None = None,
+    experiment_store: Path | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -244,6 +249,51 @@ def create_app(
     @app.get("/api/calendar")
     def api_calendar(month: str | None = None) -> CalendarPanel:
         return performance_panel(month)
+
+    def experiment_panel(experiment_id: str | None = None) -> ExperimentPanel:
+        days = []
+        if daily_performance is not None:
+            supplied = daily_performance()
+            if supplied.available:
+                for row in supplied.rows:
+                    if row.status in ("FINAL", "PENDING", "MISSING", "INVALID"):
+                        days.append(DailyPerformance(
+                            row.session_date, cast(DayStatus, row.status), row.net_pnl, row.reason
+                        ))
+        return read_experiment_panel(
+            experiment_store, experiment_id=experiment_id, now=datetime.now(UTC), account_days=days
+        )
+
+    def require_experiment(experiment_id: str) -> ExperimentPanel:
+        panel = experiment_panel(experiment_id)
+        if not panel.available:
+            raise HTTPException(404 if panel.reason == "EXPERIMENT_NOT_FOUND" else 503,
+                                detail=panel.reason)
+        return panel
+
+    @app.get("/api/experiments")
+    def api_experiments() -> ExperimentPanel:
+        return experiment_panel()
+
+    @app.get("/api/experiments/{experiment_id}")
+    def api_experiment(experiment_id: str) -> ExperimentPanel:
+        return require_experiment(experiment_id)
+
+    def experiment_page(request: Request, panel: ExperimentPanel, template: str) -> HTMLResponse:
+        state = snapshot()
+        return TEMPLATES.TemplateResponse(
+            request=request, name=template,
+            context={"state": state, "navigation": NAVIGATION, "active": "/experiments",
+                     "attention": state.attention, "experiments": panel},
+        )
+
+    @app.get("/experiments", response_class=HTMLResponse)
+    def experiments_page(request: Request) -> HTMLResponse:
+        return experiment_page(request, experiment_panel(), "experiments.html")
+
+    @app.get("/experiments/{experiment_id}", response_class=HTMLResponse)
+    def experiment_detail(request: Request, experiment_id: str) -> HTMLResponse:
+        return experiment_page(request, require_experiment(experiment_id), "experiment_detail.html")
 
     @app.get("/calendar", response_class=HTMLResponse)
     def calendar_page(request: Request, month: str | None = None) -> HTMLResponse:

@@ -237,7 +237,7 @@ async def run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[s
         return document
 
 
-def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
+def _run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
     """Independent bounded worker; no execution, promotion, broker or migrations."""
     from quantbot.learner.experiment_research import (
         CanonicalTrialCharger,
@@ -324,6 +324,30 @@ def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
             guard_database.close()
 
 
+def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
+    """Persist every bounded worker outcome without credential-bearing exceptions."""
+    manifest = load_manifest(config)
+    verify_checkout(config)
+    try:
+        result = _run_research_once(config)
+    except Exception:
+        result = {"status": "FAULTED", "reason": "RESEARCH_WORKER_FAILED"}
+    document = {
+        "experiment_id": manifest.experiment_id,
+        "recorded_at": datetime.now(UTC).isoformat(),
+        "status": result.get("status"),
+        "reason": result.get("reason", "BOUNDED_RESEARCH_ATTEMPT_COMPLETED"),
+        "code_commit": config.code_commit,
+        "scope": "SHADOW",
+        "synthetic": manifest.synthetic,
+    }
+    config.root.mkdir(parents=True, exist_ok=True)
+    temporary = config.root / "worker-receipt.json.tmp"
+    temporary.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+    temporary.replace(config.root / "worker-receipt.json")
+    return result
+
+
 def run_experiment(config_path: Path, *, once: bool = False, check: bool = False) -> int:
     config = ExperimentLaunchConfig.model_validate(_read_json(config_path))
     load_manifest(config)
@@ -399,4 +423,9 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        result = main()
+    except Exception:
+        print(json.dumps({"status": "FAULTED", "reason": "EXPERIMENT_LAUNCH_FAILED"}))
+        result = 1
+    raise SystemExit(result)

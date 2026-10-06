@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% set title = "Experiment detail" %}
+{% block body %}
+{% set detail = experiments.detail %}
+{% set experiment = detail.summary %}
+{% set economics = detail.evaluation %}
+<h1>{{ detail.manifest.experiment_id }}</h1>
+<p class="sub">PAPER only. No live switch. Missing evidence remains unknown.</p>
+{% include "_experiment_status.html" %}
+<div class="grid">
+  <section class="card"><h2>Frozen research</h2>
+    <p>Target: raw return · 30-minute horizon · constant baseline and ridge challenger.</p>
+    <p>Prospective start: {{ detail.manifest.prospective_start_at }}.</p>
+    <p>Training: {{ detail.manifest.training_start }} to {{ detail.manifest.training_end }}.</p>
+    <p>Seen validation: {{ detail.manifest.validation_start }} to {{ detail.manifest.validation_end }}; diagnostic only.</p>
+    <ul>{% for asset in detail.manifest.roster %}<li>{{ asset.symbol }} — {{ asset.asset_class }} · identity and coverage verified {{ asset.verified_at }}</li>{% endfor %}</ul>
+    <p>News is observational. ETF news does not imply constituent-company or filings coverage.</p>
+  </section>
+  <section class="card"><h2>Forward sample and limits</h2>
+    <p>{{ economics.scheduled_sessions if economics.scheduled_sessions is not none else 'Unknown' }} completed scheduled sessions / {{ detail.manifest.maximum_evaluation_sessions }} maximum.</p>
+    <p>{{ economics.coverage_valid_research_sessions }} coverage-valid research sessions. {{ economics.valid_performance_days }} valid account days.</p>
+    <p>{{ economics.eligible_entry_decisions }} measured-risk entry declarations; {{ economics.authorized_cost_cleared_forecasts }} authorized cost-cleared forecasts.</p>
+    <p>New entries: {{ 'window open; all retained controls still apply' if economics.new_entries_allowed else 'gated' }}. Position protection continues.</p>
+    <p>One new position · ≤5% value · ≤0.25% entry risk · ≤1% stop · 30-minute horizon. Existing tighter controls remain.</p>
+    <p>Legacy positions retain their original exit owner and are not adopted as experiment profit.</p>
+  </section>
+</div>
+<section class="card"><h2>Economics</h2>
+  <p><a href="/calendar">Account P&amp;L calendar and running totals</a> use the same durable close reader.</p>
+  <dl>
+    <dt>Net account P&amp;L, cash-flow adjusted</dt><dd>{{ '$' ~ economics.account_net_pnl if economics.account_net_pnl is not none else 'Unknown' }}</dd>
+    <dt>Owned-lot realized P&amp;L after verified fees</dt><dd>{{ '$' ~ economics.learner_realized_pnl if economics.learner_realized_pnl is not none else 'Unknown' }}</dd>
+    <dt>Owned lots</dt><dd>{{ economics.completed_owned_lots }} complete · {{ economics.incomplete_owned_lots }} incomplete</dd>
+    <dt>Profitable / losing / flat days</dt><dd>{{ economics.profitable_days }} / {{ economics.losing_days }} / {{ economics.flat_days }}</dd>
+    <dt>Profitable-day percentage</dt><dd>{{ economics.profitable_day_percent if economics.profitable_day_percent is not none else 'Unknown' }}{% if economics.profitable_day_percent is not none %}%{% endif %}; denominator: all {{ economics.valid_performance_days }} valid completed days, including flats</dd>
+    <dt>Verified period drawdown in USD</dt><dd>{{ economics.account_drawdown_usd if economics.account_drawdown_usd is not none else 'Unknown' }}</dd>
+  </dl>
+  <p>Account equity includes legacy holdings and unrealized marks. Their separate contribution is not verified here. Forecast accuracy is not broker profit.</p>
+</section>
+<section class="card"><h2>Forecast evaluation</h2>
+{% for model in economics.forecasts %}
+<p><code>{{ model.model_id }}</code>: {{ model.labeled_rows }} labeled rows across {{ model.independent_sessions }} sessions and {{ model.nonoverlapping_time_blocks }} nonoverlapping time blocks. MSE {{ model.mse }} · MAE {{ model.mae }} · {{ model.matched_comparison_rows }} matched baseline rows.</p>
+{% else %}<p>No resolved forward forecast sample.</p>{% endfor %}
+<p>Symbols and overlapping forecasts are correlated; row counts are not independent samples. Twenty valid days permit assessment; 70–80% is an aspiration, not proof or promotion authority.</p>
+</section>
+<section class="card"><h2>Evidence timeline</h2>
+{% if detail.timeline_truncated %}<p>Most recent 100 receipts shown; earlier evidence is preserved.</p>{% endif %}
+<div class="scroll"><table><thead><tr><th>Recorded</th><th>Receipt</th><th>Evidence hash</th></tr></thead><tbody>
+{% for event in detail.timeline %}<tr><td>{{ event.recorded_at }}</td><td>{{ event.kind }}</td><td><code>{{ event.evidence_hash }}</code></td></tr>{% endfor %}
+</tbody></table></div>
+</section>
+{% endblock %}

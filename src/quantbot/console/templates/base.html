@@ -14,17 +14,17 @@
 <title>{{ title|default("Elrond") }} — Elrond console</title>
 <style>
   :root {
-    --bg: #0d1117; --panel: #151b23; --panel-2: #1c232c; --line: #2a323d;
-    --ink: #e6edf3; --ink-dim: #9aa7b4; --ink-faint: #6b7684;
-    --accent: #4c8dff; --ok: #3fb950; --warn: #d29922; --crit: #f85149;
+    --bg: #0E171B; --panel: #152329; --panel-2: #243239; --line: #2a423d;
+    --ink: #EDF4F1; --ink-dim: #A0B2AE; --ink-faint: #90a39d;
+    --accent: #C2EF8D; --ok: #90E4AF; --warn: #e5c57e; --crit: #FFA298;
     --absent: #7d8590;
     --radius: 8px; --gap: 1rem;
-    --mono: ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
+    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
   }
   * { box-sizing: border-box; }
   body {
     margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif;
+    font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
@@ -50,7 +50,8 @@
   nav a:hover { color: var(--ink); background: var(--panel-2); text-decoration: none; }
   nav a.on { color: var(--ink); border-left-color: var(--accent); background: var(--panel-2); }
 
-  main { padding: 1.5rem 1.75rem 4rem; max-width: 1180px; }
+  main { padding: 1.5rem 1.75rem 4rem; max-width: 1180px; min-width: 0; }
+  code, h1 { overflow-wrap: anywhere; }
   h1 { font-size: 1.35rem; margin: 0 0 .35rem; }
   h2 { font-size: .95rem; margin: 2rem 0 .75rem; color: var(--ink-dim); font-weight: 600; }
   .sub { color: var(--ink-faint); font-size: .85rem; margin: 0 0 1.5rem; }
@@ -102,6 +103,16 @@
   }
   .quiet { color: var(--ink-faint); font-size: .85rem; }
   footer { margin-top: 3rem; color: var(--ink-faint); font-size: .78rem; }
+  @media (max-width: 720px) {
+    .shell { grid-template-columns: minmax(0, 1fr); }
+    nav { display: flex; overflow-x: auto; align-items: center; padding: .35rem 0;
+          border-right: 0; border-bottom: 1px solid var(--line); }
+    nav .brand { flex: 0 0 auto; padding: .5rem 1rem; }
+    nav a { flex: 0 0 auto; border-left: 0; border-bottom: 2px solid transparent; }
+    nav a.on { border-bottom-color: var(--accent); }
+    main { padding: 1rem 1rem 3rem; }
+    .grid { grid-template-columns: minmax(0, 1fr); }
+  }
 </style>
 {% include "_performance_styles.html" %}
 {% block page_styles %}{% endblock %}
