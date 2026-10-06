@@ -142,6 +142,9 @@
     {% endfor %}
   </nav>
   <main>
+    {% if active in ['/', '/learner', '/research', '/calendar'] and experiments is defined and experiments %}
+      {% include "_experiment_panels.html" %}
+    {% endif %}
     {% block body %}{% endblock %}
     <footer>
       Generated {{ state.generated_at.strftime("%Y-%m-%d %H:%M:%S") }} UTC ·

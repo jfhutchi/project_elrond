@@ -9,12 +9,18 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field
-
 from quantbot.learner.experiment_activation import active_artifact
-from quantbot.learner.experiment_contract import CandidateArtifact, Digest, ExperimentManifest
-from quantbot.learner.experiment_coordinator import TickReceipt
+from quantbot.learner.experiment_contract import (
+    CandidateArtifact,
+    Digest,
+    ExperimentManifest,
+    WorkerReceipt,
+)
+from quantbot.learner.experiment_coordinator import ResolvedMarketLabel, TickReceipt, feature_key
 from quantbot.learner.experiment_evaluation import EvaluationReport, evaluate_experiment
+from quantbot.learner.experiment_lots import LotEvent
+from quantbot.learner.experiment_news import NewsEvidence
+from quantbot.learner.experiment_observation import ObservationBatch
 from quantbot.learner.experiment_research import FitReceipt, FitRequest, FitStart
 from quantbot.learner.experiment_store import ConsentNotice, ExperimentStore, StoredEvent
 from quantbot.learner.models import LearnerModel, Text
@@ -53,6 +59,10 @@ class ExperimentSummary(LearnerModel):
     charged_fits: int
     reserved_fits: int
     fit_budget: int
+    observation_rows: int = 0
+    resolved_market_labels: int = 0
+    decisions_recorded: int = 0
+    journaled_fill_receipts: int = 0
     synthetic: bool
 
 
@@ -62,6 +72,7 @@ class ExperimentDetail(LearnerModel):
     evaluation: EvaluationReport
     timeline: tuple[TimelineEvent, ...]
     timeline_truncated: bool
+    news: tuple[NewsEvidence, ...] = ()
     synthetic: bool
 
 
@@ -70,16 +81,6 @@ class ExperimentPanel(LearnerModel):
     reason: str | None = None
     experiments: tuple[ExperimentSummary, ...] = ()
     detail: ExperimentDetail | None = None
-
-
-class WorkerReceipt(LearnerModel):
-    experiment_id: Text
-    recorded_at: datetime
-    status: Text
-    reason: Text
-    code_commit: str = Field(pattern=r"^[a-f0-9]{40}$")
-    scope: Literal["SHADOW"]
-    synthetic: bool
 
 
 def _worker_receipt(
@@ -260,6 +261,19 @@ def _summary(
         ),
         reserved_fits=sum(event.kind == FitStart.__name__ for event in events),
         fit_budget=manifest.fit_budget,
+        observation_rows=len(
+            {
+                feature_key(row)
+                for event in events
+                if event.kind == "ObservationBatch"
+                for row in event.decode(ObservationBatch).features
+            }
+        ),
+        resolved_market_labels=sum(event.kind == ResolvedMarketLabel.__name__ for event in events),
+        decisions_recorded=sum(event.kind == "DecisionRecord" for event in events),
+        journaled_fill_receipts=sum(
+            event.decode(LotEvent).kind == "FILL" for event in events if event.kind == "LotEvent"
+        ),
         synthetic=manifest.synthetic,
     )
 
@@ -312,6 +326,11 @@ def read_experiment_panel(
                         for event in events[-100:]
                     ),
                     timeline_truncated=len(events) > 100,
+                    news=tuple(
+                        event.decode(NewsEvidence)
+                        for event in events
+                        if event.kind == "NewsEvidence"
+                    )[-50:],
                     synthetic=manifest.synthetic,
                 )
         return ExperimentPanel(available=True, experiments=tuple(summaries), detail=detail)

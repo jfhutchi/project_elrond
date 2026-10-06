@@ -1,0 +1,10 @@
+<section aria-label="Adaptive paper research status">
+{% if experiments.available %}
+  {% for experiment in experiments.experiments %}
+    <p><a href="/experiments/{{ experiment.experiment_id }}">Experiment {{ experiment.experiment_id }}</a></p>
+    {% include "_experiment_status.html" %}
+  {% endfor %}
+{% else %}
+  <p class="absent">Experiment evidence unavailable: {{ experiments.reason }}. Current research health is unverified.</p>
+{% endif %}
+</section>

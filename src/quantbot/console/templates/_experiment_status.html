@@ -9,4 +9,7 @@
     <dt>Next scheduled wake</dt><dd>{{ experiment.next_wakeup_at or 'Not configured' }}</dd>
     <dt>Fitting budget</dt><dd>{{ experiment.charged_fits }} charged · {{ experiment.reserved_fits }} reserved / {{ experiment.fit_budget }}</dd>
   </dl>
+  <p>{{ experiment.observation_rows }} observed feature rows; {{ experiment.resolved_market_labels }} resolved market labels;
+     {{ experiment.decisions_recorded }} recorded decisions; {{ experiment.journaled_fill_receipts }} journaled owned-fill receipts.</p>
+  <p>Labels and forecasts are research evidence. They do not establish a completed trade or profit.</p>
 </div>

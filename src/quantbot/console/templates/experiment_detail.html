@@ -43,6 +43,17 @@
 {% else %}<p>No resolved forward forecast sample.</p>{% endfor %}
 <p>Symbols and overlapping forecasts are correlated; row counts are not independent samples. Twenty valid days permit assessment; 70–80% is an aspiration, not proof or promotion authority.</p>
 </section>
+<section class="card"><h2>Observational news provenance</h2>
+<p>News has no order authority. Unknown coverage remains unknown; ETF fund news does not imply company filings or constituent coverage.</p>
+{% for news in detail.news %}
+<article><h3>{{ news.symbol }}: {{ news.headline }}</h3>
+<p>{{ news.status }} / {{ news.scope }} / {{ news.provider }}. Published {{ news.published_at or 'Unknown' }};
+first seen {{ news.first_seen_at or 'Unknown' }}; retrieved {{ news.retrieved_at }}.</p>
+<p>{{ news.coverage_reason or 'Complete public-information coverage is not established.' }}</p>
+{% if news.source_hash %}<p>Source receipt: <code>{{ news.source_hash }}</code></p>{% endif %}
+</article>
+{% else %}<p>No recorded observational news coverage.</p>{% endfor %}
+</section>
 <section class="card"><h2>Evidence timeline</h2>
 {% if detail.timeline_truncated %}<p>Most recent 100 receipts shown; earlier evidence is preserved.</p>{% endif %}
 <div class="scroll"><table><thead><tr><th>Recorded</th><th>Receipt</th><th>Evidence hash</th></tr></thead><tbody>

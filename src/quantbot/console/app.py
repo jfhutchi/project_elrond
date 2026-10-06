@@ -217,6 +217,7 @@ def create_app(
                 "attention": state.attention,
                 "notice": notice,
                 "performance": performance_panel(),
+                "experiments": experiment_panel() if experiment_store is not None else None,
             },
         )
 
@@ -233,6 +234,7 @@ def create_app(
                 "navigation": NAVIGATION,
                 "active": active,
                 "performance": performance_panel() if active == "/" else None,
+                "experiments": experiment_panel() if experiment_store is not None else None,
                 "attention": state.attention,
             },
         )
@@ -307,6 +309,7 @@ def create_app(
                 "active": "/calendar",
                 "attention": state.attention,
                 "performance": performance_panel(month),
+                "experiments": experiment_panel() if experiment_store is not None else None,
             },
         )
 

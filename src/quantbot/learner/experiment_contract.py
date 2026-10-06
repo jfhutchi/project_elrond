@@ -153,6 +153,18 @@ class DecisionRecord(LearnerModel):
         return self
 
 
+class WorkerReceipt(LearnerModel):
+    """Bounded shadow worker phase; a start is not a successful fit or activation."""
+
+    experiment_id: Text
+    recorded_at: datetime
+    status: Text
+    reason: Text
+    code_commit: str = Field(pattern=r"^[a-f0-9]{40}$")
+    scope: Literal["SHADOW"]
+    synthetic: bool
+
+
 class CandidateArtifact(LearnerModel):
     """A fitted pooled artifact; this envelope carries no execution authority."""
 
