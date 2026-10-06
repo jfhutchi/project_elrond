@@ -110,11 +110,20 @@ def record_lot_event(store: ExperimentStore, event: LotEvent) -> bool:
         or event.symbol not in {identity.symbol for identity in manifests[0].roster}
     ):
         raise ValueError("MANIFEST_LOT_IDENTITY_MISMATCH")
+    for row in store.read_as_of(event.experiment_id, event.recorded_at):
+        if row.kind != "LotEvent":
+            continue
+        original = row.decode(LotEvent)
+        if (original.model_dump(exclude={"recorded_at"})
+            == event.model_dump(exclude={"recorded_at"})):
+            return False
     identity = (
         f"fill:{event.fill_id}"
         if event.kind == "FILL"
         else f"{event.kind}:{event.order_id}:{event.occurred_at.isoformat()}"
     )
+    if event.kind == "PROTECTION_BOUND":
+        identity += ":" + event.source_hash
     return store.append(event, idempotency_key=f"lot:{event.lot_id}:{identity}")
 
 

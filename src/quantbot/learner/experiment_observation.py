@@ -15,7 +15,7 @@ from quantbot.learner.models import LearnerModel, Text
 class CoverageReport(LearnerModel):
     symbol: Text
     status: Literal["AVAILABLE", "MISSING", "WARMUP", "CLOSED_SESSION", "NO_ENTRY_WINDOW",
-                    "WAITING_BOUNDARY", "NOT_STARTED"]
+                    "WAITING_BOUNDARY", "NOT_STARTED", "PROTECTED_WINDOW"]
     reason: Text
     source_hash: Digest
 

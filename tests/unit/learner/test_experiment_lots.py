@@ -198,6 +198,27 @@ def test_duplicate_fill_cannot_double_pnl(tmp_path):
     )
 
 
+def test_later_receipt_of_same_fill_preserves_first_availability(tmp_path):
+    store = prepare(tmp_path)
+    repeated = event(
+        "FILL",
+        quantity=1,
+        price=100,
+        fee=Decimal(".10"),
+        side="BUY",
+        fill_id="entry-fill",
+        owner="ENTRY",
+        recorded_at=OPEN + timedelta(seconds=40),
+    )
+    assert not lots().record_lot_event(store, repeated)
+    entries = [
+        row.decode(lots().LotEvent)
+        for row in store.read_as_of(manifest().experiment_id, OPEN + timedelta(minutes=1))
+        if row.kind == "LotEvent" and row.decode(lots().LotEvent).fill_id == "entry-fill"
+    ]
+    assert entries[0].recorded_at == OPEN + timedelta(seconds=20)
+
+
 def test_terminal_receipt_before_exit_fill_is_not_complete(tmp_path):
     store = prepare(tmp_path)
     # A second incompatible terminal receipt cannot establish terminal consistency.

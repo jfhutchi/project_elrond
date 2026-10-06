@@ -576,11 +576,12 @@ class PositionProtectionSupervisor:
                                 ),
                             )
                         )
-                        link_protection_exit(
-                            session, intent, account_id=account_id,
-                            position_quantity=position.quantity, reconciled=reconciled,
-                            now=result.observed_at,
-                        )
+                        if account_id is not None:
+                            link_protection_exit(
+                                session, intent, account_id=account_id,
+                                position_quantity=position.quantity, reconciled=reconciled,
+                                now=result.observed_at,
+                            )
                     else:
                         action_id = str(active["action_id"])
                     session.execute(

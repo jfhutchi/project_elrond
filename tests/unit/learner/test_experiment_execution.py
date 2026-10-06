@@ -277,6 +277,63 @@ async def test_periodic_dispatch_cannot_submit_outside_operational_cycle(context
     assert not broker.submitted
 
 
+async def test_prepared_entry_ownership_survives_actual_fill_journal_import(context):
+    from decimal import Decimal
+
+    from quantbot.domain import Fill, OrderSide
+    from quantbot.learner.experiment_lot_reader import refresh_lot_journal
+    from quantbot.storage import StorageRepository
+
+    manifest, decision, store, services, lower, broker = context
+    intent = await module().prepare_entry(
+        manifest, decision, store=store, services=services, simulation=True
+    )
+    request = SubmissionRequest.model_validate_json(
+        store.pending_intents(manifest.experiment_id)[0].document
+    )
+    wrapper = module().ExperimentOutboxSubmitter(
+        store, services=services, lower=lower, owner="test", clock=lambda: broker.now
+    )
+    result = await wrapper.submit(
+        intent,
+        purpose=request.purpose,
+        market_eligible=request.market_eligible,
+        drawdown=request.drawdown,
+        risk_approved=request.risk_approved,
+        vetoes=request.vetoes,
+    )
+    order = result.broker_order.model_copy(
+        update={
+            "status": "filled",
+            "filled_quantity": intent.quantity,
+            "filled_average_price": Decimal(106),
+        }
+    )
+    with services.runner._database.transaction() as session:
+        repo = StorageRepository(session)
+        repo.update_broker_order_lifecycle(order)
+        repo.record_fill(
+            Fill(
+                fill_id="actual-synthetic-fill",
+                broker_order_id=order.broker_order_id,
+                symbol=intent.symbol,
+                side=OrderSide.BUY,
+                quantity=intent.quantity,
+                price=106,
+                fee=Decimal(".10"),
+                occurred_at=broker.now,
+            )
+        )
+    imported = refresh_lot_journal(
+        store,
+        manifest,
+        operational_path=services.runner._database.path,
+        now=broker.now + timedelta(seconds=1),
+    )
+    assert any(row.fill_id == "actual-synthetic-fill" for row in imported)
+    assert store.state(manifest.experiment_id).state != "FAULTED"
+
+
 @pytest.mark.parametrize("halt", [None, "kill", "reconciliation", "data"])
 async def test_integrated_cycle_retains_lifecycle_before_any_dispatch(context, halt):
     from quantbot.domain import BrokerEnvironment, TradingMode

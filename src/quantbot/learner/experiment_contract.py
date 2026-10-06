@@ -8,6 +8,7 @@ from typing import Annotated, Literal, Protocol, Self, TypeVar
 
 from pydantic import Field, model_validator
 
+from quantbot.learner.estimators import FittedEstimator
 from quantbot.learner.five_minute import FEATURE_NAMES, FiveMinuteFeatureRow
 from quantbot.learner.models import Finite, LearnerModel, Text
 from quantbot.research.manifest import content_id
@@ -149,4 +150,35 @@ class DecisionRecord(LearnerModel):
             self.activation_id is None or self.synthetic or self.risk_vetoes or self.action != "BUY"
         ):
             raise ValueError("eligible decision requires exact activation and all PAPER gates")
+        return self
+
+
+class CandidateArtifact(LearnerModel):
+    """A fitted pooled artifact; this envelope carries no execution authority."""
+
+    experiment_id: Text
+    recorded_at: datetime
+    manifest_hash: Digest
+    trial_id: Text
+    training_source_hash: Digest
+    validation_source_hash: Digest
+    artifact: FittedEstimator
+    generation: int = Field(default=0, ge=0, le=4, strict=True)
+    parent_model_id: Digest | None = None
+    synthetic: bool = False
+
+    @property
+    def model_id(self) -> str:
+        return content_id(self)
+
+    @model_validator(mode="after")
+    def frozen_estimator(self) -> Self:
+        if (
+            self.artifact.family not in {"mean", "ridge"}
+            or self.artifact.feature_names != FEATURE_NAMES
+            or self.artifact.alpha != 1.0
+            or self.artifact.seed != 0
+            or (self.generation == 0) != (self.parent_model_id is None)
+        ):
+            raise ValueError("FROZEN_POOLED_ESTIMATOR_REQUIRED")
         return self

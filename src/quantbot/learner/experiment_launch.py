@@ -1,0 +1,279 @@
+"""Pinned observational launcher; no promotion, order, migration or clock-setting API."""
+
+from __future__ import annotations
+
+import argparse
+import asyncio
+import json
+from contextlib import nullcontext
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+from typing import Literal, Self
+
+from pydantic import Field, model_validator
+
+from quantbot.config import Settings
+from quantbot.learner.experiment_contract import ExperimentManifest, InstrumentIdentity
+from quantbot.learner.experiment_coordinator import collect_observations, coordinator_tick
+from quantbot.learner.experiment_store import ExperimentStore
+from quantbot.learner.five_minute_launch import clock_healthy
+from quantbot.learner.forward import _DECLARATIONS, _REGISTRY, _guard
+from quantbot.learner.forward_source import Snapshot, collect_snapshot
+from quantbot.learner.models import LearnerModel
+from quantbot.market_data.calendar import XNYS_TIMEZONE
+from quantbot.operations.service import _git, isolated_application_environment
+from quantbot.research.manifest import content_id
+from quantbot.storage import Database, SingleWriterLock
+
+
+class ExperimentLaunchConfig(LearnerModel):
+    root: Path
+    store: Path
+    manifest_path: Path
+    operations_database: Path
+    declaration_database: Path
+    clock_receipt: Path
+    code_commit: str = Field(pattern=r"^[a-f0-9]{40}$")
+    manifest_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    environment_file: Path | None = None
+    mode: Literal["SHADOW"] = "SHADOW"
+    trading_enabled: Literal[False] = False
+    maximum_workers: Literal[2] = 2
+
+    @model_validator(mode="after")
+    def isolated(self) -> Self:
+        paths = (
+            self.root,
+            self.store,
+            self.manifest_path,
+            self.operations_database,
+            self.declaration_database,
+            self.clock_receipt,
+        )
+        if any(not path.is_absolute() or path.is_symlink() for path in paths):
+            raise ValueError("ABSOLUTE_NON_SYMLINK_PATH_REQUIRED")
+        root = self.root.resolve()
+        if root not in self.store.resolve().parents:
+            raise ValueError("EXPERIMENT_STORE_MUST_BE_ISOLATED_OUTPUT")
+        for source in paths[2:] + (
+            () if self.environment_file is None else (self.environment_file,)
+        ):
+            source = source.resolve()
+            if source == root or root in source.parents or source in root.parents:
+                raise ValueError("OUTPUT_SOURCE_OVERLAP")
+        if self.environment_file is not None and (
+            not self.environment_file.is_absolute() or self.environment_file.is_symlink()
+        ):
+            raise ValueError("EXISTING_ABSOLUTE_ENVIRONMENT_REQUIRED")
+        return self
+
+
+def load_manifest(config: ExperimentLaunchConfig) -> ExperimentManifest:
+    manifest = ExperimentManifest.model_validate(_read_json(config.manifest_path))
+    if content_id(manifest) != config.manifest_hash:
+        raise ValueError("MANIFEST_PIN_MISMATCH")
+    if manifest.synthetic:
+        raise ValueError("SYNTHETIC_NOT_DEPLOYABLE")
+    return manifest
+
+
+def _read_json(path: Path) -> dict[str, object]:
+    if path.is_symlink() or path.stat().st_size > 100_000:
+        raise ValueError("BOUNDED_CONFIGURATION_REQUIRED")
+    value = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(value, dict):
+        raise ValueError("CONFIGURATION_OBJECT_REQUIRED")
+    return value
+
+
+def verify_checkout(config: ExperimentLaunchConfig) -> None:
+    repository = Path(__file__).resolve().parents[3]
+    if _git(repository, "rev-parse", "HEAD") != config.code_commit or _git(
+        repository, "status", "--porcelain"
+    ):
+        raise ValueError("CLEAN_PINNED_CHECKOUT_REQUIRED")
+    for source in (config.operations_database, config.declaration_database, config.clock_receipt):
+        if not source.is_file():
+            raise ValueError("AUTHORITATIVE_SOURCE_MISSING")
+
+
+async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[str, object]:
+    manifest = load_manifest(config)
+    verify_checkout(config)
+
+    def clock() -> datetime:
+        return datetime.now(UTC)
+
+    def healthy(now: datetime) -> bool:
+        return clock_healthy(config.clock_receipt, now)
+
+    config.root.mkdir(parents=True, exist_ok=True)
+    with SingleWriterLock(config.root / "coordinator.lock"):
+        store = ExperimentStore(config.store, create=not config.store.exists())
+        store.append(manifest, idempotency_key="manifest")
+        now = clock()
+        observation = None
+        captures: list[Snapshot] = []
+        if healthy(now):
+            # The existing canonical guard reads both authoritative ledgers. Its local
+            # bookkeeping database is separate from operational/runtime state.
+            guard_path = config.root / "guard.db"
+            guard = Database(guard_path) if guard_path.exists() else Database.create(guard_path)
+            registry_token = _REGISTRY.set(config.operations_database)
+            declaration_token = _DECLARATIONS.set(config.declaration_database)
+            try:
+
+                async def provider(identity: InstrumentIdentity) -> Snapshot:
+                    actual = clock()
+                    if not _guard(
+                        guard, actual - timedelta(minutes=35), actual + timedelta(minutes=30)
+                    ):
+                        raise ValueError("PROTECTED_OBSERVATION_WINDOW")
+                    day = actual.astimezone(XNYS_TIMEZONE).date()
+                    captured = await collect_snapshot(
+                        config.root / "market" / content_id({"asset_id": identity.asset_id}),
+                        (identity.symbol,),
+                        day,
+                        day,
+                        settings,
+                        clock=clock,
+                        timeframe="5Min",
+                    )
+                    captures.append(captured)
+                    return captured
+
+                observation = await asyncio.wait_for(
+                    collect_observations(
+                        manifest, provider=provider, clock=clock, clock_health=healthy
+                    ),
+                    timeout=90,
+                )
+            finally:
+                _REGISTRY.reset(registry_token)
+                _DECLARATIONS.reset(declaration_token)
+                guard.close()
+        # Recheck after every blocking acquisition before evidence or decisions.
+        now = clock()
+        receipt = await coordinator_tick(
+            store,
+            manifest,
+            now=now,
+            observation=observation,
+            execution=None,
+            clock_verified=healthy(now),
+            label_snapshots=tuple(captures),
+            operational_path=config.operations_database,
+        )
+        document = receipt.model_dump(mode="json")
+        document.update(
+            code_commit=config.code_commit,
+            config_hash=content_id(config.model_dump(mode="json")),
+            scope="SHADOW",
+        )
+        _write_receipt(config, document)
+        return document
+
+
+def _write_receipt(config: ExperimentLaunchConfig, document: dict[str, object]) -> None:
+    config.root.mkdir(parents=True, exist_ok=True)
+    temporary = config.root / "receipt.json.tmp"
+    temporary.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+    temporary.replace(config.root / "receipt.json")
+
+
+async def run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[str, object]:
+    # Invalid deployment pins are fatal preflight failures, never successful ticks.
+    load_manifest(config)
+    verify_checkout(config)
+    try:
+        return await _run_once(config, settings)
+    except Exception as error:
+        # Preserve cancellation (BaseException) and never serialize raw provider errors.
+        reason = "COORDINATOR_TICK_FAILED"
+        if isinstance(error, TimeoutError):
+            reason = "COORDINATOR_TICK_TIMEOUT"
+        elif isinstance(error, ValueError) and str(error) == "CLOCK_SYNC_REQUIRED":
+            reason = "CLOCK_SYNC_REQUIRED"
+        document: dict[str, object] = {
+            "recorded_at": datetime.now(UTC).isoformat(),
+            "status": "CLOCK_SYNC_REQUIRED" if reason == "CLOCK_SYNC_REQUIRED" else "FAULTED",
+            "reason": reason,
+            "next_expected_event": "VERIFIED_CLOCK"
+            if reason == "CLOCK_SYNC_REQUIRED"
+            else "OPERATOR_REVIEW",
+            "clock_verified": False,
+            "observations_recorded": 0,
+            "labels_recorded": 0,
+            "fits": 0,
+            "intents": 0,
+            "code_commit": config.code_commit,
+            "config_hash": content_id(config.model_dump(mode="json")),
+            "scope": "SHADOW",
+        }
+        _write_receipt(config, document)
+        return document
+
+
+def run_experiment(config_path: Path, *, once: bool = False, check: bool = False) -> int:
+    config = ExperimentLaunchConfig.model_validate(_read_json(config_path))
+    load_manifest(config)
+    verify_checkout(config)
+    if check:
+        print(
+            json.dumps(
+                {
+                    "mode": "SHADOW",
+                    "trading_enabled": False,
+                    "code_commit": config.code_commit,
+                    "manifest_hash": config.manifest_hash,
+                }
+            )
+        )
+        return 0
+    context = (
+        nullcontext()
+        if config.environment_file is None
+        else isolated_application_environment(config.environment_file)
+    )
+    with context:
+        settings = Settings()
+        if settings.TRADING_MODE.value != "PAPER" or settings.BROKER_ENVIRONMENT.value != "PAPER":
+            raise ValueError("PAPER_ONLY")
+
+        async def serve() -> int:
+            while True:
+                receipt = await run_once(config, settings)
+                print(
+                    json.dumps(
+                        {
+                            key: receipt[key]
+                            for key in (
+                                "status",
+                                "reason",
+                                "next_expected_event",
+                                "observations_recorded",
+                                "labels_recorded",
+                                "fits",
+                                "intents",
+                            )
+                        }
+                    )
+                )
+                if once:
+                    return 1 if receipt["status"] == "FAULTED" else 0
+                await asyncio.sleep(120)
+
+        return asyncio.run(serve())
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", type=Path, required=True)
+    parser.add_argument("--once", action="store_true")
+    parser.add_argument("--check", action="store_true")
+    args = parser.parse_args()
+    return run_experiment(args.config, once=args.once, check=args.check)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
