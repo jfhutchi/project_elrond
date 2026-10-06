@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict
@@ -35,6 +36,12 @@ class MarketStatus(BaseModel):
     session_open: AwareDatetime | None = None
     session_close: AwareDatetime | None = None
     next_open: AwareDatetime | None = None
+    clock_status: Literal['UNVERIFIED', 'HEALTHY', 'CLOCK_SYNC_REQUIRED', 'STALE_SAMPLE'] = (
+        'UNVERIFIED'
+    )
+    clock_offset_seconds: float | None = None
+    # Informational closure evidence only; a skewed clock never gains market authority.
+    closed_session_consistent: bool = False
 
     @property
     def label(self) -> str:
@@ -44,6 +51,9 @@ class MarketStatus(BaseModel):
 
     @property
     def warning(self) -> str | None:
+        if self.clock_status == 'CLOCK_SYNC_REQUIRED':
+            return ('local clock synchronization requires operator review; '
+                    'market authority is unverified')
         if self.reported_open is None:
             return (
                 "market status could not be verified; the clock and session calendar need checking"
@@ -73,7 +83,9 @@ class MarketStatus(BaseModel):
         Existing protection failures and never-evaluated positions are handled separately.
         """
         current = self.current(now)
-        if current.expected_open is False and current.reported_open is False:
+        if current.closed_session_consistent or (
+            current.expected_open is False and current.reported_open is False
+        ):
             return False
         if current.expected_open and current.session_open is not None:
             baseline = max(last_at or current.session_open, current.session_open)
@@ -89,21 +101,50 @@ def assess_market(
         return MarketStatus()
     age = (now - clock.timestamp).total_seconds()
     day = now.astimezone(EASTERN).date()
+    diagnostic = MarketStatus(
+        checked_at=now, broker_at=clock.timestamp,
+        valid_until=now + timedelta(seconds=REFRESH_SECONDS),
+        clock_status='CLOCK_SYNC_REQUIRED' if age < -CLOCK_SKEW_SECONDS else 'STALE_SAMPLE',
+        clock_offset_seconds=-age,
+    )
     if not -CLOCK_SKEW_SECONDS <= age < REFRESH_SECONDS:
-        return MarketStatus()
+        # A future provider timestamp diagnoses clock skew. An old timestamp cannot
+        # distinguish local skew from stale provider data and remains unverified.
+        if age >= REFRESH_SECONDS or abs(age) >= REFRESH_SECONDS:
+            return diagnostic
     if clock.timestamp.astimezone(EASTERN).date() != day:
-        return MarketStatus()
+        return diagnostic if age < -CLOCK_SKEW_SECONDS else MarketStatus()
     if any(session.session_date != day for session in sessions) or len(sessions) > 1:
-        return MarketStatus()
+        return diagnostic if age < -CLOCK_SKEW_SECONDS else MarketStatus()
     today = sessions[0] if sessions else None
+    def phase(at: datetime) -> str:
+        if today is None:
+            return 'NO_SESSION'
+        if at < today.open_at:
+            return 'PRE_OPEN'
+        return 'OPEN' if at < today.close_at else 'AFTER_CLOSE'
+
+    closed_consistent = (
+        not clock.is_open and phase(clock.timestamp) == phase(now) != 'OPEN'
+    )
     expected = today is not None and today.open_at <= clock.timestamp < today.close_at
     if expected != (today is not None and today.open_at <= now < today.close_at):
-        return MarketStatus()
+        return diagnostic if age < -CLOCK_SKEW_SECONDS else MarketStatus()
     # A measurement made before an open/close must never be carried across that boundary.
     midnight = datetime.combine(day + timedelta(days=1), datetime.min.time(), tzinfo=EASTERN)
     boundaries = [min(clock.timestamp, now) + timedelta(seconds=REFRESH_SECONDS), midnight]
     if today is not None:
         boundaries.extend(at for at in (today.open_at, today.close_at) if at > clock.timestamp)
+    if age < -CLOCK_SKEW_SECONDS:
+        if today is not None:
+            # Diagnostic waits expire when either advancing clock reaches a boundary.
+            boundaries.extend(at + timedelta(seconds=age)
+                              for at in (today.open_at, today.close_at)
+                              if at > clock.timestamp)
+        return diagnostic.model_copy(update={
+            'valid_until': min(boundaries),
+            'closed_session_consistent': closed_consistent,
+        }).current(now)
     status = MarketStatus(
         checked_at=now,
         broker_at=clock.timestamp,
@@ -113,6 +154,9 @@ def assess_market(
         session_open=today.open_at if today else None,
         session_close=today.close_at if today else None,
         next_open=clock.next_open,
+        clock_status='HEALTHY',
+        clock_offset_seconds=-age,
+        closed_session_consistent=closed_consistent,
     )
     return status.current(now)
 

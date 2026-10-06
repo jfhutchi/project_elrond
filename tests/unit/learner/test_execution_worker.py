@@ -8,8 +8,8 @@ from tests.unit.learner.test_paper_runner import context as _paper_context
 
 
 @pytest.fixture(name="context")
-def execution_context(tmp_path):
-    yield from _paper_context.__wrapped__(tmp_path)
+def execution_context(tmp_path, request):
+    yield from _paper_context.__wrapped__(tmp_path, request)
 
 
 def publish(root, runner):
@@ -83,8 +83,10 @@ def test_deadline_launch_check_is_readonly_and_refuses_live_or_wrong_store(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('supervisor_alive', [False, True])
+@pytest.mark.parametrize('scenario', ['fresh', 'waiting', 'altered_config', 'protected',
+                                    'missing_account'])
 async def test_worker_consumes_forecast_submits_paper_and_preserves_independent_exits(
-    context, tmp_path, monkeypatch, supervisor_alive,
+    context, tmp_path, monkeypatch, supervisor_alive, scenario,
 ):
     import json
     from datetime import datetime
@@ -152,7 +154,13 @@ async def test_worker_consumes_forecast_submits_paper_and_preserves_independent_
                         lambda: SimpleNamespace(database=database.path))
     guards = []
     monkeypatch.setattr(execution_worker, "_guard",
-                        lambda *args: guards.append(args[1:]) or True)
+                        lambda *args: guards.append(args[1:]) or scenario != 'protected')
+    if scenario != 'fresh':
+        monkeypatch.setattr(execution_worker, 'load_cohort', lambda *args, **kwargs: None)
+    if scenario == 'altered_config':
+        path = tmp_path / 'paper-execution.json'
+        path.write_text(json.dumps(json.loads(path.read_text()) | {
+            'max_position_value_bps': 499}))
 
     class Clock(datetime):
         @classmethod
@@ -163,8 +171,19 @@ async def test_worker_consumes_forecast_submits_paper_and_preserves_independent_
     # Only the independently invoked supervisor can refresh entry permission.
     if supervisor_alive:
         await supervisor.run_once()
+    settings = _settings()
+    if scenario == 'missing_account':
+        settings = settings.model_copy(update={'EXPECTED_ACCOUNT_ID': None})
     receipt = await execution_worker.execute_paper_tick(
-        tmp_path, database, _settings(), code_commit="d" * 40)
+        tmp_path, database, settings, code_commit="d" * 40)
+    if scenario in ('altered_config', 'protected', 'missing_account'):
+        assert receipt['status'] == 'BLOCKED'
+        assert receipt['trading_enabled'] is False
+        assert not receipt.get('cleared_gate_codes')
+        assert broker.submitted == []
+        assert receipt['blockers'] == (['PROTECTED_FEATURE_WINDOW'] if scenario == 'protected'
+                                      else ['PAPER_DEPLOYMENT_OR_CONFIG_REQUIRED'])
+        return
     from quantbot.console import learner as console_learner
     from quantbot.learner.receipts import valid_worker_authority
     from quantbot.operations.monitor import _samples
@@ -186,6 +205,16 @@ async def test_worker_consumes_forecast_submits_paper_and_preserves_independent_
     tampered = worker | {'paper': receipt | {'mode': 'LIVE'}}
     assert not valid_worker_authority(tmp_path, tampered)
     assert not valid_worker_authority(tmp_path, worker | {'code_commit': 'e' * 40})
+    if scenario == 'waiting':
+        assert receipt['status'] == 'WAITING'
+        assert receipt['orders_submitted'] == 0
+        assert receipt['trading_enabled'] is False
+        assert receipt['blockers'] == ['PAPER_CURRENT_COHORT_UNAVAILABLE']
+        assert set(receipt['cleared_gate_codes']) == {
+            'PAPER_PROMOTION_REQUIRED', 'PAPER_EXECUTION_NOT_CONFIGURED'}
+        assert broker.submitted == []
+        assert len(guards) == 1
+        return
     if not supervisor_alive:
         assert receipt['orders_submitted'] == 0
         assert receipt['trading_enabled'] is False

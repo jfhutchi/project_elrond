@@ -14,9 +14,9 @@ GATES = {
         "CRITICAL",
         "OPERATOR_ACTION_REQUIRED",
         "Engineering / Operator",
-        "Prepare an empirically eligible, frozen evidence package for the exact PAPER model "
-        "deployment; then request operator approval. This gate does not prevent local forecasts. "
-        "Approval cannot replace empirical evidence or establish profitability.",
+        "Paper trading setup incomplete. Engineering must verify the frozen strategy "
+        "deployment, clock health and risk controls. Check recorded operator consent before "
+        "requesting any missing authorization. This is not a ChatGPT model selection.",
     ),
     "PAPER_EXECUTION_NOT_CONFIGURED": Condition(
         "PAPER_EXECUTION_NOT_CONFIGURED",
@@ -24,8 +24,9 @@ GATES = {
         "CRITICAL",
         "MISSING_COMPONENT",
         "Engineering",
-        "Prepare and test the PAPER execution adapter and protection handoff; "
-        "request explicit deployment approval. Local forecasts may continue.",
+        "Paper trading setup incomplete. Engineering must configure and verify the PAPER "
+        "adapter and protection handoff using recorded deployment consent. Local forecasts "
+        "may continue; configuration does not grant trading authority.",
     ),
     "FORWARD_PRODUCER_MISSING": Condition(
         "FORWARD_PRODUCER_MISSING",
@@ -55,6 +56,33 @@ GATES = {
     ),
 }
 WAITS = {"OUTSIDE_FORECAST_SESSION", "PROTECTED_FEATURE_WINDOW", "FORECAST_LOOKBACK_WARMUP"}
+
+STANDBY_ACTIONS = {
+    "STANDBY_CONFIGURATION_MISMATCH": (
+        "Verify standby metadata against the selected PAPER pilot configuration. Preserve "
+        "frozen model limits, recorded consent and entry pause."
+    ),
+    "STANDBY_BINDING_MISMATCH": (
+        "Verify the selected PAPER pilot binding and durable deployment records. Preserve "
+        "entry pause, kill switch and historical evidence."
+    ),
+    "STANDBY_CONSENT_UNVERIFIED": (
+        "Verify existing consent and the frozen PAPER model contract. Do not fabricate "
+        "consent or grant entry authority."
+    ),
+    "STANDBY_ENTRY_HEARTBEAT_STALE": (
+        "The selected PAPER entry receipt is stale. Verify the approved pause, task state "
+        "and recovery blocker. Preserve kill switch, protection and observation workers."
+    ),
+    "STANDBY_VERIFICATION_FAILED": (
+        "Inspect the safe standby failure code and reproduce in isolation. Preserve "
+        "entry pause and all PAPER controls; do not treat this as an outcome failure."
+    ),
+}
+for _code, _action in STANDBY_ACTIONS.items():
+    GATES[_code] = Condition(
+        _code, "paper_entry", "CRITICAL", "UNVERIFIED_COMPONENT_HEALTH", "Engineering", _action
+    )
 
 
 def monitor_progress(
@@ -146,10 +174,22 @@ def monitor_progress(
         last_progress_at=last,
         expected_idle_seconds=seconds,
         paper_status=(
-            "OPERATOR_ACTION_REQUIRED"
+            "STANDBY_VERIFICATION_BLOCKED"
+            if codes & STANDBY_ACTIONS.keys()
+            else "STANDBY_SELECTED_ENTRY_HALTED"
+            if receipt.get("paper", {}).get("status") == "STANDBY"
+            and receipt.get("paper", {}).get("active_pilot_status") == "HALTED"
+            else "STANDBY_FORECASTS_ACTIVE"
+            if receipt.get("paper", {}).get("status") == "STANDBY"
+            and not codes & {"PAPER_PROMOTION_REQUIRED", "PAPER_EXECUTION_NOT_CONFIGURED"}
+            else "SETUP_INCOMPLETE_CONSENT_RECORDED"
+            if "PAPER_PROMOTION_REQUIRED" in codes and receipt.get("operator_consent") == "RECORDED"
+            else "OPERATOR_ACTION_REQUIRED"
             if "PAPER_PROMOTION_REQUIRED" in codes
             else "MISSING_COMPONENT"
             if "PAPER_EXECUTION_NOT_CONFIGURED" in codes
+            else "WAITING_FOR_FORWARD_FORECAST"
+            if "PAPER_CURRENT_COHORT_UNAVAILABLE" in codes
             else "UNVERIFIED"
         ),
         training_status=(

@@ -22,6 +22,12 @@ from quantbot.console.market_status import MarketStatus, paper_market_probe
 from quantbot.learner.receipts import valid_worker_authority
 from quantbot.operations.alerts import AlertStore, Condition
 
+CLOCK_ACTION = (
+    'Inspect Windows Time status and the configured time source. Request explicit operator '
+    'approval for a one-time clock resynchronization; honor canceled elevation. '
+    'Do not change entry clock tolerances, time servers, services, security or task settings.'
+)
+
 
 @dataclass(frozen=True)
 class MonitorPolicy:
@@ -46,6 +52,32 @@ QUERIES = {
 }
 
 
+def valid_learner_liveness(learner: Path, doc: dict[str, Any]) -> bool:
+    """Read-only completion proof; never grants entry authority or entry freshness.
+
+    A selected entry worker expiring cannot invalidate a separate completed SHADOW
+    research run. Its immutable selection/consent/deployment still must agree.
+    """
+    if valid_worker_authority(learner, doc):
+        return True
+    try:
+        from quantbot.learner.standby import EntryStandby, _read, _validated_selection
+
+        paper = doc['paper']
+        if (doc.get('promotion') != 'SHADOW' or doc.get('trading_enabled') is not False
+                or paper.get('status') != 'STANDBY' or paper.get('promotion') != 'SHADOW'
+                or paper.get('trading_enabled') is not False
+                or type(paper.get('orders_submitted')) is not int
+                or paper['orders_submitted'] != 0):
+            return False
+        selection = EntryStandby.model_validate(_read(learner/'entry-standby.json', 4096))
+        verified, _ = _validated_selection(learner, selection, now=datetime.now(UTC))
+        return bool(paper.get('active_strategy_id') == verified['active_strategy_id']
+                    and paper.get('active_root') == verified['active_root'])
+    except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
+        return False
+
+
 def _samples(learner: Path, database: Path) -> dict[str, object]:
     samples: dict[str, object] = dict.fromkeys(('LEARNER', *QUERIES))
     try:
@@ -62,7 +94,7 @@ def _samples(learner: Path, database: Path) -> dict[str, object]:
                 or any(c not in '0123456789abcdef' for c in pin)
                 or pin != deployment['learner_commit']
                 or doc['status'] not in ('STARTED', 'BLOCKED', 'ERROR')
-                or not valid_worker_authority(learner, doc)):
+                or not valid_learner_liveness(learner, doc)):
             raise ValueError('invalid completed worker receipt')
         started = datetime.fromisoformat(doc['started_at'])
         if started.tzinfo is None:
@@ -110,27 +142,52 @@ def run_monitor(
     learner: Path, database: Path, output: Path, *, now: datetime,
     policy: MonitorPolicy | None = None,
     market: MarketStatus | None = None,
+    experiment_store: Path | None = None,
+    experiment_commit: str | None = None,
 ) -> dict[str, Any]:
     policy = policy or MonitorPolicy()
     if now.tzinfo is None:
         raise ValueError('aware clock required')
     if (output / 'alerts.db').resolve() == database.resolve():
         raise ValueError('alert output must not be the source database')
+    if (experiment_store is None) != (experiment_commit is None):
+        raise ValueError('experiment store and exact source pin must be supplied together')
     limits = dict(LEARNER=policy.learner_seconds, PROTECTION=policy.protection_seconds,
                   RECONCILIATION=policy.reconciliation_seconds, INGESTION=policy.ingestion_seconds)
     conditions = []
-    measurements = {}
+    measurements: dict[str, dict[str, object]] = {}
     retained = []
     current_market = (market or MarketStatus()).current(now)
     verified = current_market.reported_open is not None and current_market.warning is None
+    closed_wait = current_market.closed_session_consistent
+    if current_market.clock_status == 'CLOCK_SYNC_REQUIRED':
+        conditions.append(Condition(
+            'CLOCK_SYNC_REQUIRED', 'clock', 'CRITICAL', 'OPERATOR_ACTION_REQUIRED',
+            'Operator', CLOCK_ACTION,
+        ))
+    elif current_market.clock_status != 'HEALTHY':
+        # Absence/expiry/stale provider data cannot establish clock recovery.
+        retained.append('CLOCK_SYNC_REQUIRED')
     forecast_wait = 'UNVERIFIED_SESSION'
-    if verified:
+    if closed_wait:
+        forecast_wait = 'EXPECTED_CLOSED_SESSION'
+    elif verified:
         forecast_wait = 'EXPECTED_CLOSED_SESSION'
         if current_market.reported_open:
             forecast_wait = ('EXPECTED_FORECAST_WARMUP' if current_market.session_open
                              and (now - current_market.session_open).total_seconds() < 1860
                              else 'ELIGIBLE_SESSION')
     samples = _samples(learner, database)
+    if experiment_store is not None and experiment_commit is not None:
+        from quantbot.operations.experiment_health import measure_experiment_health
+
+        if experiment_store.resolve() in {database.resolve(), (output/'alerts.db').resolve()}:
+            raise ValueError('experiment store must be an independent read-only source')
+        health = measure_experiment_health(experiment_store,
+                                           expected_commit=experiment_commit, now=now)
+        conditions.extend(health['conditions'])
+        measurements['EXPERIMENT'] = dict(coordinator=health['coordinator'],
+                                          worker=health['worker'])
     with AlertStore(output / 'alerts.db') as store:
         with store.connection:
             store._time(now)
@@ -162,8 +219,9 @@ def run_monitor(
         valid = age is not None and age >= 0
         stale = not valid or (age is not None and age > limits[subsystem])
         status = 'STALE' if stale else 'FRESH'
-        if stale and valid and verified and subsystem in ('PROTECTION', 'RECONCILIATION'):
-            if current_market.reported_open is False:
+        if (stale and valid and (verified or closed_wait)
+                and subsystem in ('PROTECTION', 'RECONCILIATION')):
+            if closed_wait or current_market.reported_open is False:
                 status = 'EXPECTED_WAIT'
             elif (current_market.session_open is not None
                   and isinstance(value, str)
@@ -184,6 +242,36 @@ def run_monitor(
                 'A missing, invalid or overdue successful measurement cannot establish '
                 'current health. Preserve PAPER limits, kill switch and protection controls.',
             ))
+    # Entry freshness is its own component, not research-worker liveness. Preserve the
+    # strict entry verifier and only recognize waits proved by the bounded market probe.
+    if (learner/'entry-standby.json').exists():
+        from quantbot.learner.standby import StandbyVerificationError, standby_status
+        from quantbot.operations.alert_delivery import CATALOG
+
+        entry_code = None
+        try:
+            standby_status(learner, now=now)
+            entry_status = 'FRESH'
+        except StandbyVerificationError as error:
+            entry_code = error.code
+            entry_status = 'UNVERIFIED'
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
+            entry_code = 'STANDBY_VERIFICATION_FAILED'
+            entry_status = 'UNVERIFIED'
+        if entry_code == 'STANDBY_ENTRY_HEARTBEAT_STALE' and verified:
+            if closed_wait:
+                entry_status = 'EXPECTED_WAIT'
+            elif (current_market.session_open is not None
+                  and 0 <= (now-current_market.session_open).total_seconds()
+                  < policy.learner_seconds):
+                entry_status = 'SESSION_STARTUP_GRACE'
+            if entry_status != 'UNVERIFIED':
+                retained.append(entry_code)
+        if entry_code and entry_status == 'UNVERIFIED':
+            subsystem, category, action = CATALOG[entry_code]
+            conditions.append(Condition(entry_code, subsystem, 'CRITICAL', category,
+                                        'Engineering / Operator', action))
+        measurements['PAPER_ENTRY'] = dict(status=entry_status, code=entry_code)
     with AlertStore(output / 'alerts.db') as store:
         events = store.update(conditions, now=now, retain_codes=tuple(retained))
         digest = None
@@ -199,6 +287,8 @@ def run_monitor(
                                          (json.dumps(dict(digest, event='DIGEST')),))
             store.save_state('digest', {'at': now.isoformat()})
         receipt = dict(measured_at=now.isoformat(), measurements=measurements,
+                       clock_status=current_market.clock_status,
+                       clock_offset_seconds=current_market.clock_offset_seconds,
                        forecast_wait=forecast_wait,
                        active_alerts=store.active(), notifications=events, digest=digest,
                        external_delivery='NOT_CONFIGURED')
@@ -213,6 +303,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument('--learner-directory', required=True, type=Path)
     parser.add_argument('--operations-database', required=True, type=Path)
     parser.add_argument('--output-directory', required=True, type=Path)
+    parser.add_argument('--experiment-store', type=Path)
+    parser.add_argument('--experiment-commit')
     parser.add_argument('--probe-paper-market', action='store_true',
                         help='Use existing PAPER GET clock/calendar (five second limit).')
     args = parser.parse_args(argv)
@@ -230,7 +322,9 @@ def main(argv: list[str] | None = None) -> int:
                 # An unavailable probe must never turn an unknown session into a closure.
                 market = MarketStatus()
         receipt = run_monitor(args.learner_directory, args.operations_database,
-                              args.output_directory, now=datetime.now(UTC), market=market)
+                              args.output_directory, now=datetime.now(UTC), market=market,
+                              experiment_store=args.experiment_store,
+                              experiment_commit=args.experiment_commit)
         print(json.dumps(receipt))
         return 1 if receipt['active_alerts'] else 0
     except (OSError, sqlite3.Error, ValueError):

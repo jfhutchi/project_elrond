@@ -108,6 +108,21 @@ def prepare(setup):
     return record, broker, supervisor
 
 
+@pytest.mark.asyncio
+async def test_deadline_clock_is_measured_after_broker_response(setup):
+    _, broker, supervisor = prepare(setup)
+    original = broker.get_market_clock
+
+    async def delayed_clock():
+        broker.now += timedelta(seconds=2)
+        return await original()
+
+    broker.get_market_clock = delayed_clock
+    result = await supervisor.run_once()
+    assert result.healthy
+    assert broker.submitted == []
+
+
 def fill_entry(setup, record, broker, *, quantity=Decimal("1"), partial=False):
     database, _, _ = setup
     order = _accepted(record.entry_intent).model_copy(

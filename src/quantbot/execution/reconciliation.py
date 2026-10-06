@@ -240,6 +240,29 @@ def _equity_valuation_change(
     )
 
 
+def _failed_equity_evidence(
+    snapshot: ReconciliationSnapshot,
+    policy: ReconciliationPolicy,
+) -> dict[str, str]:
+    """Retain non-authoritative diagnostics without changing the comparison result."""
+    total = sum((p.market_value for p in snapshot.positions), Decimal("0"))
+    inconsistent = sum(
+        p.quantity == 0
+        or p.quantity * p.market_value <= 0
+        or abs(p.market_value - p.quantity * p.market_price) >= policy.money_tolerance
+        for p in snapshot.positions
+    )
+    return {
+        "value": _decimal(snapshot.account.equity),
+        "cash": _decimal(snapshot.account.cash),
+        "position_market_value": _decimal(total),
+        "equity_residual": _decimal(snapshot.account.equity - snapshot.account.cash - total),
+        "position_count": str(len(snapshot.positions)),
+        "inconsistent_mark_count": str(inconsistent),
+        "reporting_tolerance": _decimal(policy.money_tolerance),
+    }
+
+
 def _order_payload(order: BrokerOrder) -> dict[str, str]:
     return {
         "broker_order_id": order.broker_order_id,
@@ -332,6 +355,18 @@ def compare_reconciliation(
         if valuation is not None:
             valuation_changes = (valuation,)
             diffs = []
+        else:
+            # Preserve both sides of a refusal. Account/position GETs are not atomic;
+            # scalar equity alone cannot explain a later diagnostic investigation.
+            # This remains a material ACCOUNT difference and still blocks orders.
+            diffs = [
+                _stable_diff(
+                    "ACCOUNT",
+                    "equity",
+                    _failed_equity_evidence(expected, effective_policy),
+                    _failed_equity_evidence(actual, effective_policy),
+                )
+            ]
     ordered = tuple(sorted(diffs, key=lambda item: (item.category, item.key, item.diff_id)))
     account_mismatch = any(
         diff.category == "ACCOUNT" and diff.key == "account_id" for diff in ordered
@@ -359,6 +394,23 @@ def missing_local_snapshot_result(actual: Account) -> ReconciliationResult:
     )
 
 
+def snapshot_acquisition_failure(
+    reason: str,
+    comparison: ReconciliationResult | None = None,
+) -> ReconciliationResult:
+    """Retain genuine comparison differences and add acquisition refusal evidence."""
+    diffs = (*comparison.diffs,) if comparison is not None else ()
+    diff = _stable_diff(
+        "SNAPSHOT_ACQUISITION", "account_positions", {"stable": "true"}, {"reason": reason}
+    )
+    return ReconciliationResult(
+        status=ReconciliationStatus.ACCOUNT_MISMATCH
+        if comparison is not None and comparison.status is ReconciliationStatus.ACCOUNT_MISMATCH
+        else ReconciliationStatus.RECONCILIATION_REQUIRED,
+        diffs=tuple({d.diff_id: d for d in (*diffs, diff)}.values()),
+    )
+
+
 def record_reconciliation(
     repository: StorageRepository,
     reconciliation_id: str,
@@ -367,6 +419,7 @@ def record_reconciliation(
     started_at: datetime,
     completed_at: datetime,
     run_id: str | None = None,
+    snapshot_acquisition: Sequence[Mapping[str, object]] = (),
 ) -> bool:
     """Persist the complete comparison inside the caller-owned transaction."""
     if completed_at < started_at:
@@ -379,12 +432,21 @@ def record_reconciliation(
         summary["valuation_changes"] = [
             change.model_dump(mode="json") for change in result.valuation_changes
         ]
+    if snapshot_acquisition:
+        summary["snapshot_acquisition"] = list(snapshot_acquisition)
     return repository.save_reconciliation(
         reconciliation_id,
         status=result.status,
         started_at=started_at,
         completed_at=completed_at,
-        diffs=[diff.model_dump(mode="python") for diff in result.diffs],
+        diffs=[
+            {
+                **diff.model_dump(mode="python"),
+                "diff_id": "diff-"
+                + hashlib.sha256(f"{reconciliation_id}:{diff.diff_id}".encode()).hexdigest(),
+            }
+            for diff in result.diffs
+        ],
         run_id=run_id,
         summary=summary,
     )

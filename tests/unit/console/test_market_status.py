@@ -4,7 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from quantbot.console.app import create_app
-from quantbot.console.market_status import MarketStatusCache, assess_market
+from quantbot.console.market_status import EASTERN, MarketStatusCache, assess_market
 from quantbot.console.state import read_console_state
 from quantbot.domain.models import MarketClock
 from quantbot.storage import Database
@@ -280,3 +280,53 @@ def test_cached_measurement_expires_at_exact_boundary(boundary, opened):
     status = measured(edge - timedelta(seconds=1), opened=opened)
     assert status.current(edge - timedelta(microseconds=1)).reported_open is opened
     assert status.current(edge).reported_open is None
+
+
+@pytest.mark.parametrize('instant,sessions', [
+    ('2026-09-11T21:00:00Z', None),
+    ('2026-09-12T15:00:00Z', ()),
+])
+def test_clock_skew_diagnostic_is_separate_from_closed_session_authority(instant, sessions):
+    now = stamp(instant)
+    if sessions is None:
+        sessions = (XNYSSession(session_date=now.date(),
+                               open_at=stamp('2026-09-11T13:30:00Z'),
+                               close_at=stamp('2026-09-11T20:00:00Z')),)
+    clock = MarketClock(timestamp=now + timedelta(seconds=3.5), is_open=False,
+                        next_open=now + timedelta(days=1), next_close=now + timedelta(days=1))
+    status = assess_market(clock, sessions, now=now)
+    assert status.clock_status == 'CLOCK_SYNC_REQUIRED'
+    assert status.clock_offset_seconds == 3.5
+    assert status.reported_open is None and status.expected_open is None
+    assert status.closed_session_consistent is True
+    assert 'clock' in status.warning
+    assert status.current(now + timedelta(seconds=60)).clock_status == 'UNVERIFIED'
+
+
+@pytest.mark.parametrize('instant,ahead', [
+    ('2026-09-11T19:59:59Z', 3.5),
+    ('2026-09-11T13:29:59Z', 3.5),
+    ('2026-09-12T03:59:59Z', 3.5),
+    ('2026-09-11T21:00:00Z', 3600),
+])
+def test_clock_skew_cannot_support_wait_across_phase_date_or_unbounded_offset(instant, ahead):
+    now = stamp(instant)
+    session = XNYSSession(session_date=now.astimezone(EASTERN).date(),
+        open_at=stamp('2026-09-11T13:30:00Z'), close_at=stamp('2026-09-11T20:00:00Z'))
+    clock = MarketClock(timestamp=now + timedelta(seconds=ahead), is_open=False,
+                        next_open=now + timedelta(days=1), next_close=now + timedelta(days=1))
+    status = assess_market(clock, (session,), now=now)
+    assert status.reported_open is None
+    assert status.closed_session_consistent is False
+
+
+def test_skewed_closed_wait_expires_when_either_clock_reaches_open():
+    now = stamp('2026-09-11T13:29:50Z')
+    session = XNYSSession(session_date=now.date(),
+                         open_at=stamp('2026-09-11T13:30:00Z'),
+                         close_at=stamp('2026-09-11T20:00:00Z'))
+    clock = MarketClock(timestamp=now + timedelta(seconds=3.5), is_open=False,
+                        next_open=session.open_at, next_close=session.close_at)
+    status = assess_market(clock, (session,), now=now)
+    assert status.closed_session_consistent
+    assert status.current(session.open_at - timedelta(seconds=3.5)).clock_status == 'UNVERIFIED'

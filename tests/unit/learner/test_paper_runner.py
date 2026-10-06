@@ -1,5 +1,10 @@
+import json
+import os
+import subprocess
+import sys
 from datetime import timedelta
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 
@@ -23,8 +28,41 @@ from tests.unit.learner.test_intraday import OPEN, bars, features, historical
 from tests.unit.learner.test_paper_deadlines import Broker
 
 
+def test_frozen_binding_identical_across_process_hash_seeds(context, tmp_path):
+    _, _, runner, _ = context
+    payload = dict(model=runner.model.model_dump(mode='json'),
+                   config=runner._config.model_dump(mode='json'),
+                   execution=runner.policy.model_dump(mode='json'),
+                   veto=runner._veto_policy.model_dump(mode='json'))
+    path = tmp_path / 'binding-inputs.json'
+    path.write_text(json.dumps(payload))
+    code = '''
+import json,sys
+from quantbot.learner.intraday import IntradayModel
+from quantbot.learner.paper_runner import PaperExecutionPolicy,paper_model_binding
+from quantbot.operations.runners import MarketDataSettings
+from quantbot.risk import PortfolioVetoPolicy
+from quantbot.strategy import StrategyConfig
+p=json.load(open(sys.argv[1]))
+b=paper_model_binding(IntradayModel.model_validate(p['model']),
+ config=StrategyConfig.model_validate(p['config']),
+ policy=PaperExecutionPolicy.model_validate(p['execution']),
+ veto_policy=PortfolioVetoPolicy.model_validate(p['veto']),market_data=MarketDataSettings())
+print(b.configuration_hash)
+'''
+    hashes = []
+    for seed in ('1', '2', '3', '4'):
+        result = subprocess.run([sys.executable, '-c', code, str(path)],
+            env=os.environ | {'PYTHONHASHSEED': seed,
+                              'PYTHONPATH':str(Path(__file__).resolve().parents[3] / 'src')},
+            capture_output=True, text=True, timeout=15)
+        assert result.returncode == 0, result.stderr
+        hashes.append(result.stdout.strip())
+    assert len(set(hashes)) == 1, hashes
+
+
 @pytest.fixture
-def context(tmp_path):
+def context(tmp_path, request):
     database = Database.create(tmp_path / "paper.db")
     now = OPEN + timedelta(minutes=160)
     labels = tuple(
@@ -51,7 +89,17 @@ def context(tmp_path):
     data_settings = MarketDataSettings()
     with database.transaction() as session:
         version, _ = active_policy_version(StorageRepository(session), now=now)
-    policy = PaperExecutionPolicy()
+    if getattr(request, 'param', None) == 'inherited':
+        from quantbot.learner.inherited import InheritedBaseline
+        from quantbot.learner.paper_deadlines import PaperDeadline
+
+        policy = PaperExecutionPolicy(inherited=InheritedBaseline(
+            account_id_hash=PaperDeadline.account_hash('paper-1'),
+            captured_at=now - timedelta(minutes=1),
+            positions=tuple(dict(symbol=symbol,quantity=Decimal('1'),
+                                 average_entry_price=Decimal('450')) for symbol in ('QQQ','TLT'))))
+    else:
+        policy = PaperExecutionPolicy()
     binding = paper_model_binding(
         model, config=config, policy=policy, veto_policy=version.policy(), market_data=data_settings
     )
@@ -163,6 +211,21 @@ async def test_real_sizing_and_all_vetoes_produce_one_handed_off_entry(context):
 
 
 @pytest.mark.asyncio
+async def test_entry_clock_is_measured_after_broker_response(context):
+    _, broker, runner, supervisor = context
+    await supervisor.run_once()
+    original = broker.get_market_clock
+
+    async def delayed_clock():
+        broker.now += timedelta(seconds=2)
+        return await original()
+
+    broker.get_market_clock = delayed_clock
+    result = await runner.evaluate()
+    assert len(result.submissions) == 1, runner.last_reasons
+
+
+@pytest.mark.asyncio
 async def test_missing_supervisor_and_stale_minute_price_refuse_entries(context):
     _, broker, runner, supervisor = context
     assert (await runner.evaluate()).submissions == ()
@@ -187,6 +250,25 @@ async def test_existing_position_and_pending_buy_cannot_be_double_reserved(conte
     broker.orders[order.client_order_id] = order
     assert (await runner.evaluate()).submissions == ()
     assert "PAPER_PENDING_BUY_RISK" in runner.last_reasons
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('context',['inherited'],indirect=True)
+async def test_grandfathered_roster_is_monitored_without_duplicate_entry_or_adoption(context):
+    db, broker, runner, supervisor = context
+    await supervisor.run_once()
+    broker.positions = tuple(_long_position(Decimal('1')).model_copy(update={'symbol':symbol})
+                             for symbol in ('QQQ','TLT'))
+    result = await runner.evaluate()
+    assert result.submissions == ()
+    assert 'PAPER_MODEL_POSITION_LIMIT' not in runner.last_reasons
+    assert 'PAPER_SYMBOL_ALREADY_HELD' in runner.last_reasons
+    with db.transaction() as session:
+        rows = StorageRepository(session).list_signals()
+        assert len([r for r in rows if r.payload.get('kind') ==
+                    'LEARNER_INHERITED_MONITOR_V1']) == 2
+        assert not any(r.payload.get('kind') == 'LEARNER_PAPER_DEADLINE_V1' for r in rows)
+        assert not StorageRepository(session).list_unresolved_order_intents()
 
 
 @pytest.mark.asyncio

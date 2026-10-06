@@ -15,18 +15,23 @@ from dataclasses import asdict, dataclass
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from pydantic import Field
+from sqlalchemy import select
 
 from quantbot.brokers import BrokerAdapter
 from quantbot.domain import (
+    Bar,
     OrderIntent,
     OrderSide,
     OrderType,
+    Position,
     StrategyIdentity,
     TimeInForce,
 )
+from quantbot.learner.five_minute_forward import FiveMinutePrediction
+from quantbot.learner.inherited import InheritedBaseline, observe_inherited
 from quantbot.learner.intraday import IntradayModel, IntradayPrediction, predict_intraday
 from quantbot.learner.models import LearnerModel
 from quantbot.learner.paper import PaperModelBinding, assess_paper_entry, build_learner_paper_cycle
@@ -37,6 +42,7 @@ from quantbot.learner.paper_deadlines import (
     record_deadline,
     supervisor_objections,
 )
+from quantbot.market_data import MarketDataCache
 from quantbot.market_data.calendar import latest_completed_session
 from quantbot.operations.cycle import (
     CycleStrategyResult,
@@ -48,6 +54,7 @@ from quantbot.operations.cycle import (
 from quantbot.operations.runners import (
     AdaptiveMomentumRunner,
     MarketDataSettings,
+    MarketDataSync,
     SessionCalendar,
     _position_open_times,
 )
@@ -67,6 +74,7 @@ from quantbot.risk import (
 from quantbot.risk.freshness import DataCadence, MarketFreshnessPolicy
 from quantbot.risk.policy_versions import recorded_policy_version
 from quantbot.storage import Database, StorageRepository
+from quantbot.storage.schema import promotion_state
 from quantbot.strategy import StrategyConfig, realized_volatility
 
 if TYPE_CHECKING:
@@ -78,11 +86,36 @@ def _now() -> datetime:
 
 
 class PaperExecutionPolicy(LearnerModel):
+    inherited: InheritedBaseline | None = None
+    exclusive_learner_entry: bool = False
     round_trip_cost_bps: int = Field(default=10, ge=10)
     stop_loss_bps: int = Field(default=100, ge=10, le=200)
     max_reference_age_seconds: int = Field(default=120, gt=0, le=120)
     session_exit_buffer_seconds: int = Field(default=120, ge=60)
     buying_power_reserve_bps: int = Field(default=500, ge=0, lt=10000)
+
+
+def one_minute_code_hash() -> str:
+    """Bind the shared recovery implementation as well as the learner entry code."""
+    root = Path(__file__).parent
+    return content_id(
+        {
+            name: hashlib.sha256((root / name).read_bytes()).hexdigest()
+            for name in (
+                "intraday.py",
+                "paper.py",
+                "paper_runner.py",
+                "paper_deadlines.py",
+                "inherited.py",
+                "execution_worker.py",
+                "../execution/snapshot_capture.py",
+                "../operations/cycle.py",
+                "../execution/recovery.py",
+                "../execution/reconciliation.py",
+                "../operations/runners.py",
+            )
+        }
+    )
 
 
 def paper_model_binding(
@@ -93,13 +126,10 @@ def paper_model_binding(
     veto_policy: PortfolioVetoPolicy,
     market_data: MarketDataSettings,
 ) -> PaperModelBinding:
-    root = Path(__file__).parent
-    code_hash = content_id(
-        {
-            name: hashlib.sha256((root / name).read_bytes()).hexdigest()
-            for name in ("intraday.py", "paper.py", "paper_runner.py", "paper_deadlines.py")
-        }
-    )
+    veto_document = veto_policy.model_dump(mode="json")
+    # Enabled rules are a set: identical controls must bind identically in each process.
+    veto_document["enabled"] = sorted(veto_document["enabled"])
+    code_hash = one_minute_code_hash()
     return PaperModelBinding.from_config(
         model_id=model.model_id,
         artifact_hash=content_id(model.artifact),
@@ -107,11 +137,18 @@ def paper_model_binding(
         execution_config={
             "strategy_risk": config.model_dump(mode="json"),
             "execution": policy.model_dump(mode="json"),
-            "veto": veto_policy.model_dump(mode="json"),
+            "veto": veto_document,
             "risk_market_data": asdict(market_data),
             "selection": "positive-cost-adjusted-top-quintile-one-entry-per-cycle",
         },
     )
+
+
+class PaperModelView(Protocol):
+    @property
+    def model_id(self) -> str: ...
+    @property
+    def training_symbols(self) -> tuple[str, ...]: ...
 
 
 class IntradayPaperRunner(AdaptiveMomentumRunner):
@@ -121,6 +158,9 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
     learner-specific. Deadline execution belongs to PaperDeadlineSupervisor, which
     keeps running even when RunOnceCycle cannot evaluate this entry strategy.
     """
+
+    model: PaperModelView
+    predictions: tuple[IntradayPrediction | FiveMinutePrediction, ...]
 
     def __init__(
         self,
@@ -139,16 +179,18 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         expected_account_id: str,
         clock: Callable[[], datetime] = _now,
     ) -> None:
-        self.model = IntradayModel.model_validate(model.model_dump())
-        self.predictions = tuple(
+        verified_model = IntradayModel.model_validate(model.model_dump())
+        verified_predictions = tuple(
             IntradayPrediction.model_validate(item.model_dump()) for item in predictions
         )
-        if not self.predictions:
+        if not verified_predictions:
             raise ValueError("PAPER runner requires a complete immutable prediction cohort")
-        first = self.predictions[0]
+        first = verified_predictions[0]
         if (
-            len({item.features.symbol for item in self.predictions}) != len(self.predictions)
-            or {item.features.symbol for item in self.predictions} != set(config.universe) - {"SPY"}
+            len({item.features.symbol for item in verified_predictions})
+            != len(verified_predictions)
+            or {item.features.symbol for item in verified_predictions}
+            != set(config.universe) - {"SPY"}
             or len(
                 {
                     (
@@ -157,21 +199,21 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                         item.recorded_at,
                         item.features.source_snapshot_hash,
                     )
-                    for item in self.predictions
+                    for item in verified_predictions
                 }
             )
             != 1
         ):
             raise ValueError("PAPER runner requires one complete configured universe cohort")
         reconstructed = predict_intraday(
-            self.model,
-            tuple(item.features for item in self.predictions),
+            verified_model,
+            tuple(item.features for item in verified_predictions),
             recorded_at=first.recorded_at,
         )
-        if reconstructed != self.predictions:
+        if reconstructed != verified_predictions:
             raise ValueError("prediction cohort does not match its immutable model")
         expected = paper_model_binding(
-            self.model,
+            verified_model,
             config=config,
             policy=policy,
             veto_policy=veto_policy,
@@ -183,6 +225,8 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
             raise ValueError("model/code/execution configuration does not match deployment")
         if config.calendar != "XNYS" or not expected_account_id:
             raise ValueError("intraday learner requires XNYS and a pinned PAPER account")
+        self.model = verified_model
+        self.predictions = verified_predictions
         super().__init__(
             database=database,
             broker=broker,
@@ -201,6 +245,34 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         self.last_reasons = tuple(dict.fromkeys(reasons))
         return CycleStrategyResult(submissions=(), signal_count=len(self.predictions))
 
+    def _entry_freshness(self) -> MarketFreshnessPolicy:
+        return MarketFreshnessPolicy(
+            cadence=DataCadence.INTRADAY, expected_interval_seconds=60, tolerated_intervals=2
+        )
+
+    def _pre_handoff_objections(
+        self,
+        now: datetime,
+        positions: Sequence[Position],
+    ) -> tuple[str, ...]:
+        return ()
+
+    def _load_histories(self) -> dict[str, list[Bar]]:
+        if not self.policy.exclusive_learner_entry:
+            return super()._load_histories()
+        provider = MarketDataCache.provider_key(
+            self._market_data.provider,
+            self._market_data.feed,
+            self._market_data.adjustment,
+            self._market_data.timeframe,
+        )
+        with self._database.transaction() as session:
+            repo = StorageRepository(session)
+            return {
+                symbol: repo.list_bars(symbol=symbol, provider=provider)
+                for symbol in pilot_risk_symbols(self._config, self.policy)
+            }
+
     async def evaluate_exits(self) -> CycleStrategyResult:
         # This runner has no exit-order authority. Every accepted entry was durably
         # handed to the separate deadline supervisor; emitting another sell here would
@@ -218,6 +290,19 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         )
         if not gate.allowed:
             return self._no_entry(*gate.reasons)
+        if self.policy.exclusive_learner_entry:
+            with self._database.transaction() as session:
+                other = session.execute(
+                    select(promotion_state.c.strategy_id).where(
+                        promotion_state.c.strategy_id.startswith("learner-", autoescape=True),
+                        promotion_state.c.strategy_id != self._identity.strategy_id,
+                        promotion_state.c.stage.in_(
+                            ("PAPER_OBSERVATION", "PAPER_QUALIFIED", "LIVE_REVIEW_ELIGIBLE")
+                        ),
+                    )
+                ).first()
+            if other is not None:
+                return self._no_entry("PAPER_OTHER_LEARNER_ENTRY_ACTIVE")
         heartbeat = supervisor_objections(self._database, account_id=self.account_id, now=now)
         if heartbeat:
             return self._no_entry(*heartbeat)
@@ -237,6 +322,20 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         if any(item.features.target_at > session_exit for item in self.predictions):
             return self._no_entry("PAPER_HORIZON_EXCEEDS_SESSION")
         market = await self._broker.get_market_clock()
+        measured_at = self._clock()
+        if measured_at < now:
+            return self._no_entry("PAPER_LOCAL_CLOCK_REVERSED")
+        now = measured_at
+        if not active.open_at <= now < active.close_at:
+            return self._no_entry("PAPER_MARKET_CLOSED")
+        if any(
+            not item.recorded_at <= now < item.features.target_at
+            or not 0
+            <= (now - item.features.feature_at).total_seconds()
+            <= self.policy.max_reference_age_seconds
+            for item in self.predictions
+        ):
+            return self._no_entry("PAPER_PREDICTION_STALE")
         if (
             not market.is_open
             or not 0
@@ -252,7 +351,24 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         positions = tuple(
             position for position in await self._broker.get_positions() if position.quantity
         )
-        if any(position.symbol in self.model.training_symbols for position in positions):
+        inherited = set()
+        if self.policy.inherited is not None:
+            inherited = observe_inherited(
+                self._database,
+                baseline=self.policy.inherited,
+                positions=positions,
+                account_id=self.account_id,
+                identity=self._identity,
+                run_id=self._run_id,
+                now=now,
+                predictions=self.predictions,
+                cost_bps=self.policy.round_trip_cost_bps,
+            )
+        if any(
+            (self.policy.exclusive_learner_entry or position.symbol in self.model.training_symbols)
+            and position.symbol not in inherited
+            for position in positions
+        ):
             return self._no_entry("PAPER_MODEL_POSITION_LIMIT", "PAPER_SYMBOL_ALREADY_HELD")
         pending = tuple(await self._broker.get_open_orders())
         with self._database.transaction() as session:
@@ -357,11 +473,7 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                 if Decimal(str(prediction.score)) <= modeled_cost:
                     rejections.append("PAPER_SCORE_BELOW_EXECUTION_COST")
                     continue
-                freshness = MarketFreshnessPolicy(
-                    cadence=DataCadence.INTRADAY,
-                    expected_interval_seconds=60,
-                    tolerated_intervals=2,
-                )
+                freshness = self._entry_freshness()
                 veto_inputs = build_veto_inputs(
                     symbol=symbol,
                     equity=account.account.equity,
@@ -390,6 +502,9 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                 )
                 if not now <= issued_at < min(valid_until, prediction.features.target_at):
                     return self._no_entry("PAPER_PREDICTION_STALE")
+                objections = self._pre_handoff_objections(issued_at, positions)
+                if objections:
+                    return self._no_entry(*objections)
                 entry = OrderIntent(
                     intent_id=intent_id,
                     client_order_id="qb-" + digest[:40],
@@ -461,6 +576,21 @@ def _already_handed_off(repository: StorageRepository, strategy_id: str, intent_
         if isinstance(entry, dict) and entry.get("intent_id") == intent_id:
             return True
     return False
+
+
+def pilot_risk_symbols(config: StrategyConfig, policy: PaperExecutionPolicy) -> tuple[str, ...]:
+    inherited = (
+        () if policy.inherited is None else tuple(p.symbol for p in policy.inherited.positions)
+    )
+    return tuple(sorted(set(config.universe) | set(inherited)))
+
+
+class PilotRiskDataSync(MarketDataSync):
+    """Separate universe cursor; adding DIA cannot borrow the existing daily checkpoint."""
+
+    @property
+    def source_id(self) -> str:
+        return super().source_id + ":pilot:" + self._configuration_hash()[:16]
 
 
 class IntradayCohortSync:
@@ -569,13 +699,27 @@ def build_intraday_paper_services(
         expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID,
         clock=clock,
     )
+    risk_sync = runtime.data_sync
+    if policy.exclusive_learner_entry:
+        risk_config = runtime.config.model_copy(
+            update={"universe": pilot_risk_symbols(runtime.config, policy)}
+        )
+        risk_sync = PilotRiskDataSync(
+            database=runtime.database,
+            client=runtime.market_data,
+            sessions=runtime.sessions,
+            config=risk_config,
+            market_data=runtime.market_data_config,
+            veto_policy=version.policy(),
+            clock=clock,
+        )
     cycle = build_learner_paper_cycle(
         runtime,
         runner,
         binding=binding,
         identity=identity,
         max_data_age_seconds=policy.max_reference_age_seconds,
-        data_sync=IntradayCohortSync(runtime.data_sync, runner),
+        data_sync=IntradayCohortSync(risk_sync, runner),
         clock=clock,
     )
     deadlines = PaperDeadlineSupervisor(

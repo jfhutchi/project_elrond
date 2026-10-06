@@ -21,6 +21,7 @@ from quantbot.brokers.base import (
     BrokerTransport,
     BrokerTransportError,
     BrokerTransportResponse,
+    PaperPerformanceAccount,
     SubmissionUncertainError,
 )
 from quantbot.domain import (
@@ -273,6 +274,41 @@ class AlpacaPaperBrokerAdapter:
     async def get_account(self) -> BrokerAccountSnapshot:
         response = await self._request("GET", "/v2/account")
         return self._account_from_payload(_object_payload(response))
+
+    async def get_performance_account(self) -> PaperPerformanceAccount:
+        payload = _object_payload(await self._request('GET', '/v2/account'))
+        return PaperPerformanceAccount(
+            account=self._account_from_payload(payload).account,
+            created_at=_timestamp(payload, 'created_at'),
+            previous_close_equity=_decimal(payload, 'last_equity'),
+        )
+
+    async def get_performance_activities(
+        self, *, after: datetime, until: datetime,
+    ) -> tuple[Mapping[str, object], ...]:
+        """All activities, bounded pagination; never infer empty from a partial page."""
+        if until <= after:
+            raise ValueError('performance activity interval must increase')
+        rows: list[Mapping[str, object]] = []
+        tokens: set[str] = set()
+        params = {'after': _utc_parameter(after), 'until': _utc_parameter(until),
+                  'direction': 'asc', 'page_size': '100'}
+        for _ in range(10):
+            page = _array_payload(await self._request(
+                'GET', '/v2/account/activities', params=params))
+            if len(page) > 100:
+                raise BrokerProtocolError('performance activity page exceeds bound')
+            if any(not isinstance(item, dict) for item in page):
+                raise BrokerProtocolError('invalid performance activity')
+            rows.extend(cast(list[Mapping[str, object]], page))
+            if len(page) < 100:
+                return tuple(rows)
+            token = _text(rows[-1], 'id')
+            if token in tokens:
+                raise BrokerProtocolError('repeated performance activity page')
+            tokens.add(token)
+            params['page_token'] = token
+        raise BrokerProtocolError('performance activity page limit exceeded')
 
     async def connect(self) -> BrokerHealth:
         return await self.health_check()

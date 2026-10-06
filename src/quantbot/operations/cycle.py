@@ -8,7 +8,7 @@ from collections.abc import Awaitable
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Protocol
+from typing import Protocol, runtime_checkable
 
 from pydantic import Field
 
@@ -16,6 +16,7 @@ from quantbot.brokers.base import BrokerRequestError
 from quantbot.config import SafetyValidation, Settings, validate_trading_safety
 from quantbot.domain import BrokerEnvironment, OrderIntent, StrategyIdentity, TradingMode
 from quantbot.execution import StartupRecoveryResult, SubmissionResult
+from quantbot.execution.snapshot_capture import Capture
 from quantbot.operations.deployment import DeploymentRegistry, RuntimeContext
 from quantbot.operations.health import OperationsModel
 from quantbot.operations.kill_switch import (
@@ -81,6 +82,22 @@ class RecoveryRunner(Protocol):
         *,
         started_at: datetime,
         run_id: str | None = None,
+    ) -> StartupRecoveryResult: ...
+
+
+@runtime_checkable
+class PreparedRecoveryRunner(Protocol):
+    """Read-only preparation outside the writer shared with deadline handling."""
+
+    async def prepare_snapshots(self) -> tuple[Capture, ...]: ...
+
+    async def recover(
+        self,
+        reconciliation_id: str,
+        *,
+        started_at: datetime,
+        run_id: str | None = None,
+        _prepared_captures: tuple[Capture, ...] | None = None,
     ) -> StartupRecoveryResult: ...
 
 
@@ -264,6 +281,12 @@ class RunOnceCycle:
     ) -> CycleResult:
         if not run_id or run_id != run_id.strip():
             raise ValueError("run_id must be nonempty without surrounding whitespace")
+        # Only read-only acquisition moves outside serialization. No database transaction,
+        # acknowledgement, reconciliation decision or order runs before the writer lock.
+        prepared_runner = (
+            self._recovery if isinstance(self._recovery, PreparedRecoveryRunner) else None
+        )
+        prepared = await prepared_runner.prepare_snapshots() if prepared_runner else None
         created = False
         with SingleWriterLock(self._lock_path):
             try:
@@ -286,11 +309,19 @@ class RunOnceCycle:
                         )
                 created = True
                 self._metrics.increment("quantbot_cycles_total")
-                recovery = await self._recovery.recover(
-                    f"{run_id}:reconciliation",
-                    started_at=started_at,
-                    run_id=run_id,
-                )
+                if prepared_runner is not None:
+                    recovery = await prepared_runner.recover(
+                        f"{run_id}:reconciliation",
+                        started_at=started_at,
+                        run_id=run_id,
+                        _prepared_captures=prepared,
+                    )
+                else:
+                    recovery = await self._recovery.recover(
+                        f"{run_id}:reconciliation",
+                        started_at=started_at,
+                        run_id=run_id,
+                    )
                 if not recovery.ready:
                     return self._halt(
                         run_id,

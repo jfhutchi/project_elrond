@@ -6,6 +6,8 @@ param(
     [Parameter(Mandatory = $true)][string] $Database,
     [string] $EnvironmentFile,
     [switch] $DeadlineSupervisor,
+    [switch] $CloseCapture,
+    [switch] $InitializeCapture,
     [string] $OperationsDatabase,
     [switch] $Check
 )
@@ -76,7 +78,17 @@ $ServiceJob = New-ElrondProcessJob
 $ErrorActionPreference = 'Continue'
 $global:LASTEXITCODE = $null
 $WorkerArguments = @('-m', 'quantbot.learner.worker', '--directory', $Directory, '--commit', $Commit)
-if ($DeadlineSupervisor) {
+if ($CloseCapture) {
+    if ($DeadlineSupervisor -or $Check -or -not $EnvironmentFile -or
+        -not [System.IO.Path]::IsPathRooted($OperationsDatabase) -or
+        -not (Test-Path -LiteralPath $OperationsDatabase -PathType Leaf)) {
+        throw 'PAPER_CLOSE_INPUT_INVALID'
+    }
+    $WorkerArguments = @('-m', 'quantbot.operations.close_capture', '--commit', $Commit,
+        '--database', $OperationsDatabase, '--directory', (Join-Path $Directory 'performance'))
+    if ($InitializeCapture) { $WorkerArguments += '--initialize' }
+} elseif ($InitializeCapture) { throw 'PAPER_CLOSE_MODE_REQUIRED' }
+elseif ($DeadlineSupervisor) {
     if (-not $EnvironmentFile -or -not [System.IO.Path]::IsPathRooted($OperationsDatabase) -or
         -not (Test-Path -LiteralPath $OperationsDatabase -PathType Leaf)) {
         throw 'PAPER_DEADLINE_INPUT_INVALID'

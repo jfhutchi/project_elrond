@@ -93,10 +93,66 @@ def test_read_only_routes_render_signed_results_and_unknown_default(tmp_path):
     finally:
         database.close()
 
+
 def test_navigation_at_date_limits_remains_valid():
     first = build_calendar(1, 1, PerformanceData())
     assert first.previous_month is None
-    assert first.next_month == '0001-02'
+    assert first.next_month == "0001-02"
     last = build_calendar(9999, 12, PerformanceData())
     assert last.next_month is None
-    assert last.previous_month == '9999-11'
+    assert last.previous_month == "9999-11"
+
+
+def test_calendar_renders_distinct_financial_and_unknown_states(tmp_path):
+    from html.parser import HTMLParser
+
+    class Cells(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.current = None
+            self.cells = {}
+
+        def handle_starttag(self, tag, attrs):
+            attributes = dict(attrs)
+            if tag == "td" and "data-date" in attributes:
+                self.current = attributes["data-date"]
+                self.cells[self.current] = {"status": attributes.get("data-status"), "text": ""}
+
+        def handle_endtag(self, tag):
+            if tag == "td":
+                self.current = None
+
+        def handle_data(self, data):
+            if self.current:
+                self.cells[self.current]["text"] += data
+
+    database = Database.create(tmp_path / "states.db")
+    try:
+        data = PerformanceData(
+            rows=(
+                Row(date(2026, 1, 2), "FINAL", Decimal("7")),
+                Row(date(2026, 1, 5), "FINAL", Decimal("-3")),
+                Row(date(2026, 1, 6), "FINAL", Decimal("0")),
+                Row(date(2026, 1, 7), "PENDING", None),
+            )
+        )
+        html = (
+            TestClient(create_app(database, daily_performance=lambda: data))
+            .get("/calendar?month=2026-01")
+            .text
+        )
+        cells = Cells()
+        cells.feed(html)
+        assert cells.cells["2026-01-02"]["status"] == "FINAL"
+        assert "+$7.00" in cells.cells["2026-01-02"]["text"]
+        assert "-$3.00" in cells.cells["2026-01-05"]["text"]
+        assert "Flat" in cells.cells["2026-01-06"]["text"]
+        assert "$0.00" in cells.cells["2026-01-06"]["text"]
+        assert "Pending" in cells.cells["2026-01-07"]["text"]
+        assert "$" not in cells.cells["2026-01-07"]["text"]
+        assert cells.cells["2026-01-08"]["status"] == "MISSING"
+        assert "$" not in cells.cells["2026-01-08"]["text"]
+        assert "2 valid finalized days" not in html  # flat is a third valid day
+        assert "1 profitable / 3 valid finalized days" in html
+    finally:
+        database.close()

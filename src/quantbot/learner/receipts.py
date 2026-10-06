@@ -1,7 +1,9 @@
 """Read-only validation of explicitly commissioned PAPER worker receipts."""
+
 from __future__ import annotations
 
-import hashlib
+import sqlite3
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -18,38 +20,80 @@ def valid_worker_authority(root: Path, receipt: dict[str, Any]) -> bool:
     running code pin and both durable operational records. No broker calls/writes.
     Ordinary observation-only receipts retain their existing contract.
     """
-    if receipt.get('trading_enabled') is False and receipt.get('promotion') == 'NONE':
+    if receipt.get("promotion") == "SHADOW":
+        try:
+            from quantbot.learner.standby import standby_status
+
+            verified = standby_status(root, now=datetime.now(UTC))
+            paper = receipt["paper"]
+            return (
+                receipt.get("trading_enabled") is False
+                and paper.get("status") == "STANDBY"
+                and paper.get("promotion") == "SHADOW"
+                and paper.get("trading_enabled") is False
+                and type(paper.get("orders_submitted")) is int
+                and paper["orders_submitted"] == 0
+                and paper.get("active_strategy_id") == verified["active_strategy_id"]
+                and paper.get("active_root") == verified["active_root"]
+            )
+        except (OSError, ValueError, KeyError, TypeError, sqlite3.Error):
+            return False
+    if receipt.get("trading_enabled") is False and receipt.get("promotion") == "NONE":
         return True
     try:
         from quantbot.learner.execution_worker import PaperWorkerConfig
 
-        path = root / 'paper-execution.json'
+        path = root / "paper-execution.json"
         if path.stat().st_size > 100_000:
             return False
-        config = PaperWorkerConfig.model_validate_json(path.read_text(encoding='utf-8-sig'))
-        paper = receipt['paper']
-        binding = PaperModelBinding.model_validate(paper['binding'])
-        identity = StrategyIdentity.model_validate(paper['identity'])
-        model = next(m for m in _models(root / 'intraday') if m.model_id == config.model_id)
-        submitted = paper['orders_submitted']
-        code_hash = content_id({
-            name: hashlib.sha256((Path(__file__).parent / name).read_bytes()).hexdigest()
-            for name in ('intraday.py', 'paper.py', 'paper_runner.py', 'paper_deadlines.py')
-        })
-        expected_enabled = (paper['status'] == 'SUCCEEDED'
-                            and type(submitted) is int and submitted > 0)
-        if (paper['mode'] != 'PAPER' or not config.operational_database.is_absolute()
-                or binding.model_id != config.model_id
-                or binding.code_hash != code_hash
-                or binding.artifact_hash != content_id(model.artifact)
-                or identity.git_commit != receipt['code_commit']
-                or type(submitted) is not int or submitted < 0
-                or paper['trading_enabled'] is not expected_enabled
-                or receipt['trading_enabled'] is not expected_enabled
-                or receipt['promotion'] != paper['promotion']):
+        config = PaperWorkerConfig.model_validate_json(path.read_text(encoding="utf-8-sig"))
+        paper = receipt["paper"]
+        binding = PaperModelBinding.model_validate(paper["binding"])
+        identity = StrategyIdentity.model_validate(paper["identity"])
+        if config.contract == "five-minute-price-alpha-v1":
+            from quantbot.learner.five_minute_entry import (
+                configured_source,
+                selected_model,
+                verified_consent,
+            )
+            from quantbot.learner.five_minute_paper import five_minute_code_hash
+
+            model_doc = selected_model(configured_source(config), config)
+            code_hash = five_minute_code_hash()
+            artifact_hash = content_id(model_doc["artifact"])
+            if (
+                paper.get("worker_config_hash") != content_id(config.model_dump(mode="json"))
+                or content_id(binding) != config.expected_binding_hash
+                or not verified_consent(root, config, datetime.now(UTC))
+            ):
+                return False
+        else:
+            model = next(m for m in _models(root / "intraday") if m.model_id == config.model_id)
+            artifact_hash = content_id(model.artifact)
+            from quantbot.learner.paper_runner import one_minute_code_hash
+
+            code_hash = one_minute_code_hash()
+        submitted = paper["orders_submitted"]
+        expected_enabled = (
+            paper["status"] == "SUCCEEDED" and type(submitted) is int and submitted > 0
+        )
+        if (
+            paper["mode"] != "PAPER"
+            or not config.operational_database.is_absolute()
+            or binding.model_id != config.model_id
+            or binding.code_hash != code_hash
+            or binding.artifact_hash != artifact_hash
+            or identity.git_commit != receipt["code_commit"]
+            or type(submitted) is not int
+            or submitted < 0
+            or paper["trading_enabled"] is not expected_enabled
+            or receipt["trading_enabled"] is not expected_enabled
+            or receipt["promotion"] != paper["promotion"]
+        ):
             return False
         decision = assess_paper_entry(
-            config.operational_database, binding=binding, identity=identity)
-        return decision.allowed and decision.stage == receipt['promotion']
+            config.operational_database, binding=binding, identity=identity
+        )
+        return decision.allowed and decision.stage == receipt["promotion"]
     except (OSError, ValueError, KeyError, TypeError, StopIteration):
         return False

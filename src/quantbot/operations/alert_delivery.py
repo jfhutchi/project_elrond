@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
+from quantbot.learner.progress import STANDBY_ACTIONS
+
 PREFIX = "ELROND_ALERT_V1\n"
 FIELDS = {
     "schema",
@@ -35,6 +37,25 @@ EVENTS = {
     "ACKNOWLEDGED": "ACKNOWLEDGED",
 }
 CATALOG = {
+    "EXPERIMENT_COORDINATOR_UNVERIFIED": (
+        "research",
+        "UNVERIFIED_COMPONENT_HEALTH",
+        "Inspect the pinned shadow coordinator receipt and scheduler; retain PAPER protection. "
+        "Calendar waiting and statistical insufficiency do not establish component liveness.",
+    ),
+    "EXPERIMENT_WORKER_UNVERIFIED": (
+        "research",
+        "UNVERIFIED_COMPONENT_HEALTH",
+        "Inspect the pinned bounded research worker receipt and charged-fit ledger; "
+        "do not retry unknown fits. Retain PAPER protection and the permanent fit budget.",
+    ),
+    "CLOCK_SYNC_REQUIRED": (
+        "clock",
+        "OPERATOR_ACTION_REQUIRED",
+        "Inspect Windows Time status and the configured time source. Request explicit "
+        "operator approval for a one-time clock resynchronization; honor canceled elevation. "
+        "Do not change entry clock tolerances, time servers, services, security or task settings.",
+    ),
     "DELIVERY_CANARY": (
         "delivery",
         "SYNTHETIC_TEST",
@@ -43,15 +64,16 @@ CATALOG = {
     "PAPER_PROMOTION_REQUIRED": (
         "paper_entry",
         "OPERATOR_ACTION_REQUIRED",
-        "Prepare an empirically eligible frozen PAPER evidence package, then request "
-        "approval for the exact deployment. Local forecasts may continue. Approval "
-        "cannot replace evidence or establish profitability.",
+        "Paper trading setup incomplete. Engineering must verify the frozen strategy "
+        "deployment, clock health and risk controls. Check recorded operator consent before "
+        "requesting any missing authorization. This is not a ChatGPT model selection.",
     ),
     "PAPER_EXECUTION_NOT_CONFIGURED": (
         "paper_entry",
         "MISSING_COMPONENT",
-        "Implement and test the PAPER adapter and protection handoff; request deployment "
-        "approval. Local forecasts may continue.",
+        "Paper trading setup incomplete. Engineering must configure and verify the PAPER "
+        "adapter and protection handoff using recorded deployment consent. Local forecasts "
+        "may continue; configuration does not grant trading authority.",
     ),
     "FORWARD_PRODUCER_MISSING": (
         "forecast",
@@ -84,6 +106,9 @@ for _component in ("LEARNER", "PROTECTION", "RECONCILIATION", "INGESTION"):
         "Inspect component receipts and scheduler health; current health is unverified. "
         "Preserve PAPER limits, kill switch and protection controls.",
     )
+
+for _standby_code, _standby_action in STANDBY_ACTIONS.items():
+    CATALOG[_standby_code] = ("paper_entry", "UNVERIFIED_COMPONENT_HEALTH", _standby_action)
 
 
 def _refuse() -> ValueError:
