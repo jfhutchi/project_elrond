@@ -71,6 +71,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--commit", required=True)
     parser.add_argument("--database", required=True)
     parser.add_argument("--component", required=True, choices=tuple(COMPONENT_COMMANDS))
+    parser.add_argument("--experiment-store", default=None,
+                        help="console-only existing read-only experiment journal")
     parser.add_argument("--check", action="store_true")
     return parser
 
@@ -255,9 +257,16 @@ def validate_configuration(
     component_lock = None
     if args.component not in {"daemon", "protection"}:
         component_lock = lock.with_suffix(f".{args.component}.lock")
+    command = list(COMPONENT_COMMANDS[args.component])
+    experiment_source = getattr(args, "experiment_store", None)
+    if experiment_source is not None:
+        source = _absolute_path(experiment_source)
+        if args.component != "console" or not source.is_file() or source.samefile(database):
+            raise ServiceRefusal("CONSOLE_EXPERIMENT_SOURCE_INVALID")
+        command += ["--experiment-store", str(source)]
     return ServiceConfiguration(
         component=args.component,
-        command=list(COMPONENT_COMMANDS[args.component]),
+        command=command,
         repository=active_repository,
         state_directory=state_directory,
         log_file=logs / f"{args.component}.log",

@@ -6,7 +6,8 @@ param(
     [Parameter(Mandatory = $true)][string] $Database,
     [Parameter(Mandatory = $true)]
     [ValidateSet('console', 'daemon', 'protection', 'ingestion', 'research', 'report')]
-    [string] $Component
+    [string] $Component,
+    [string] $ExperimentStore
 )
 
 $ErrorActionPreference = 'Stop'
@@ -73,7 +74,14 @@ $ServiceJob = New-ElrondProcessJob
 # wraps native stderr as error records under Stop, even when the child is behaving correctly.
 $ErrorActionPreference = 'Continue'
 $global:LASTEXITCODE = $null
-& $Python -m quantbot.operations.service --env-file $EnvironmentFile --commit $Commit `
-    --database $Database --component $Component
+$Arguments = @('-m', 'quantbot.operations.service', '--env-file', $EnvironmentFile,
+    '--commit', $Commit, '--database', $Database, '--component', $Component)
+if ($ExperimentStore) {
+    if ($Component -ne 'console' -or -not [IO.Path]::IsPathRooted($ExperimentStore)) {
+        throw 'SERVICE_WRAPPER_EXPERIMENT_SOURCE_INVALID'
+    }
+    $Arguments += @('--experiment-store', $ExperimentStore)
+}
+& $Python @Arguments
 if ($null -eq $LASTEXITCODE) { throw 'SERVICE_WRAPPER_NO_EXIT_CODE' }
 exit $LASTEXITCODE

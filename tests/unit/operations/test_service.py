@@ -102,6 +102,50 @@ def _arguments(
     )
 
 
+def test_console_service_pins_read_only_experiment_store(
+    tmp_path: Path, clean_repo: tuple[Path, str], monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from quantbot.learner.experiment_store import ExperimentStore
+
+    service = _service()
+    repo, commit = clean_repo
+    env_file, database, state, _ = _deployment(tmp_path, repo)
+    source = state / "experiment.db"
+    ExperimentStore(source, create=True)
+    before = source.read_bytes()
+    monkeypatch.setattr(service, "repository_root", lambda: repo)
+    args = _arguments(service, env_file, database, commit)
+    args.experiment_store = str(source)
+    with service.isolated_application_environment(env_file):
+        configured = service.validate_configuration(args)
+    assert configured.command == [
+        "console", "--host", "127.0.0.1", "--port", "8787",
+        "--experiment-store", str(source),
+    ]
+    assert source.read_bytes() == before
+    assert service.COMPONENT_COMMANDS["console"] == [
+        "console", "--host", "127.0.0.1", "--port", "8787",
+    ]
+
+
+@pytest.mark.parametrize("bad_source", ["missing", "operational", "other_component"])
+def test_console_experiment_source_refuses_bad_scope(
+    tmp_path: Path, clean_repo: tuple[Path, str], monkeypatch: pytest.MonkeyPatch,
+    bad_source: str,
+) -> None:
+    service = _service()
+    repo, commit = clean_repo
+    env_file, database, state, _ = _deployment(tmp_path, repo)
+    monkeypatch.setattr(service, "repository_root", lambda: repo)
+    args = _arguments(service, env_file, database, commit)
+    args.experiment_store = str(database if bad_source == "operational" else state / "missing.db")
+    if bad_source == "other_component":
+        args.component = "research"
+    with service.isolated_application_environment(env_file):
+        with pytest.raises(service.ServiceRefusal, match="CONSOLE_EXPERIMENT_SOURCE_INVALID"):
+            service.validate_configuration(args)
+
+
 def test_environment_file_replaces_inherited_application_values_without_interpolation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
