@@ -104,6 +104,7 @@ async def prepare_entry(
     now = runner._clock()
     if not simulation:
         from quantbot.learner.experiment_activation import active_artifact
+        from quantbot.learner.experiment_evaluation import evaluate_experiment
 
         activation = active_artifact(store, manifest, now=now)
         if (
@@ -112,6 +113,8 @@ async def prepare_entry(
             or activation.binding_hash != runner.binding.configuration_hash
         ):
             raise ValueError("EXACT_ARTIFACT_BINDING_ACTIVATION_REQUIRED")
+        if not evaluate_experiment(store, manifest, now=now).new_entries_allowed:
+            raise ValueError("EXPERIMENT_EVALUATION_ENTRY_WINDOW_CLOSED_OR_UNKNOWN")
     if (
         decision.recorded_at > now
         or decision.model_id != runner.model.model_id
@@ -525,6 +528,10 @@ async def run_experiment_cycle(
             or activation.binding_hash != services.runner.binding.configuration_hash
         ):
             raise ValueError("EXACT_ARTIFACT_BINDING_ACTIVATION_REQUIRED")
+        from quantbot.learner.experiment_evaluation import evaluate_experiment
+
+        if not evaluate_experiment(store, manifest, now=now).new_entries_allowed:
+            raise ValueError("EXPERIMENT_EVALUATION_ENTRY_WINDOW_CLOSED_OR_UNKNOWN")
     if not run_id or run_id != run_id.strip():
         raise ValueError("EXACT_OPERATIONAL_RUN_ID_REQUIRED")
     services.runner.bind_run(run_id)

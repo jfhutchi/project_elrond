@@ -378,6 +378,11 @@ def run_registered_fit(
         or store.state(manifest.experiment_id).manifest_hash != request.manifest_hash
     ):
         raise ValueError("FROZEN_FIT_REQUEST_MISMATCH")
+    if not manifest.synthetic:
+        from quantbot.learner.experiment_evaluation import evaluate_experiment
+
+        if not evaluate_experiment(store, manifest, now=now).new_research_allowed:
+            raise ValueError("EXPERIMENT_EVALUATION_FIT_WINDOW_CLOSED_OR_UNKNOWN")
     counts = _validate_inputs(
         manifest,
         request.training,

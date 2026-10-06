@@ -170,6 +170,12 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
                 guard.close()
         # Recheck after every blocking acquisition before evidence or decisions.
         now = clock()
+        if healthy(now):
+            from quantbot.learner.experiment_evaluation import calendar_evidence
+
+            for capture in captures:
+                evidence = calendar_evidence(manifest, capture)
+                store.append(evidence, idempotency_key="calendar:" + content_id(evidence))
         receipt = await coordinator_tick(
             store,
             manifest,
@@ -253,6 +259,11 @@ def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
     # Separate lock prevents multiple launchers from scheduling or selecting the worker.
     with SingleWriterLock(config.root / "research-worker.lock"):
         store = ExperimentStore(config.store)
+        from quantbot.learner.experiment_evaluation import evaluate_experiment
+
+        evaluation = evaluate_experiment(store, manifest, now=now)
+        if not evaluation.new_research_allowed:
+            return {"status": "NORMAL_WAIT", "reason": evaluation.status}
         guard_path = config.root / "guard.db"
         guard_database = (
             Database(guard_path) if guard_path.exists() else Database.create(guard_path)

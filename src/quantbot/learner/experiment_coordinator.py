@@ -329,9 +329,18 @@ async def coordinator_tick(
     )
     decisions_recorded = 0
     active_decisions: list[DecisionRecord] = []
+    from quantbot.learner.experiment_evaluation import evaluate_experiment
+
+    evaluation = evaluate_experiment(store, manifest, now=now)
+    exhausted = (
+        evaluation.scheduled_sessions is not None
+        and evaluation.scheduled_sessions >= manifest.maximum_evaluation_sessions
+    )
+    if exhausted:
+        pending_fits = ()
     candidates = [
         event.decode(CandidateArtifact) for event in events if event.kind == "CandidateArtifact"
-    ]
+    ] if not exhausted else []
     decision_keys = {
         (row.model_id, feature_key(row.features))
         for event in events
@@ -422,6 +431,10 @@ async def coordinator_tick(
     statuses = {row.status for row in observation.coverage} if observation else set()
     if state.state == "FAULTED":
         status, reason, next_event = "FAULTED", state.reason, "OPERATOR_REVIEW_REQUIRED"
+    elif exhausted:
+        status, reason, next_event = (
+            "NORMAL_WAIT", "EVALUATION_WINDOW_COMPLETE", "FINAL_EVIDENCE_REVIEW"
+        )
     elif "CLOSED_SESSION" in statuses:
         status, reason, next_event = "NORMAL_WAIT", "MARKET_CLOSED", "NEXT_EXCHANGE_SESSION"
     elif statuses == {"PROTECTED_WINDOW"}:
