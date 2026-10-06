@@ -45,6 +45,7 @@ from quantbot.risk.protection import (
 )
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
 from quantbot.storage.database import decode_utc, encode_decimal, encode_utc
+from quantbot.storage.lot_ownership import link_protection_exit
 from quantbot.storage.schema import (
     incidents,
     position_protection_action_evaluations,
@@ -516,7 +517,7 @@ class PositionProtectionSupervisor:
                     for position, decision, reconciled in decisions
                 ]
                 session.execute(position_protection_evaluations.insert(), evaluation_rows)
-                for position, decision, _reconciled in decisions:
+                for position, decision, reconciled in decisions:
                     if not decision.requires_exit:
                         continue
                     evaluation_id = _evaluation_id(result.cycle_id, position.symbol)
@@ -574,6 +575,11 @@ class PositionProtectionSupervisor:
                                     separators=(",", ":"),
                                 ),
                             )
+                        )
+                        link_protection_exit(
+                            session, intent, account_id=account_id,
+                            position_quantity=position.quantity, reconciled=reconciled,
+                            now=result.observed_at,
                         )
                     else:
                         action_id = str(active["action_id"])

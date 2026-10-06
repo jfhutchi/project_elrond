@@ -31,7 +31,8 @@ def store(tmp_path):
     yield from _paper_setup.__wrapped__(tmp_path)
 
 
-def episode(store, *, closed=True, exit_quantity=Decimal("1")):
+def episode(store, *, closed=True, exit_quantity=Decimal("1"), before_orders=None,
+            entry_only=False):
     database, _, _ = store
     prediction = FiveMinutePrediction(
         model_id="a" * 64,
@@ -88,6 +89,8 @@ def episode(store, *, closed=True, exit_quantity=Decimal("1")):
                 "binding": binding.model_dump(mode="json"),
             },
         )
+        if before_orders is not None:
+            before_orders(session, record)
         for order_intent, price, fee in (
             (entry, Decimal("100"), Decimal(".10")),
             (
@@ -102,6 +105,8 @@ def episode(store, *, closed=True, exit_quantity=Decimal("1")):
                 Decimal(".20"),
             ),
         ):
+            if entry_only and order_intent.side is OrderSide.SELL:
+                continue
             repo.create_order_intent(order_intent)
             quantity = Decimal("1") if order_intent.side == OrderSide.BUY else exit_quantity
             order = _accepted(order_intent).model_copy(
@@ -126,14 +131,15 @@ def episode(store, *, closed=True, exit_quantity=Decimal("1")):
                     occurred_at=NOW if order_intent.side == OrderSide.BUY else record.deadline_at,
                 )
             )
-        repo.record_order_event(
-            "exit-event",
-            event_type=EXIT_EVENT,
-            occurred_at=record.deadline_at,
-            intent_id="exit",
-            detail={"handoff_id": record.handoff_id},
-        )
-        if closed:
+        if not entry_only:
+            repo.record_order_event(
+                "exit-event",
+                event_type=EXIT_EVENT,
+                occurred_at=record.deadline_at,
+                intent_id="exit",
+                detail={"handoff_id": record.handoff_id},
+            )
+        if closed and not entry_only:
             repo.record_order_event(
                 "closed",
                 event_type=CLOSED_EVENT,

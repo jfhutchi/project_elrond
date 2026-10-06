@@ -22,6 +22,7 @@ from quantbot.learner.five_minute_forward import FiveMinutePrediction
 from quantbot.learner.forward import _read, _save
 from quantbot.learner.paper_deadlines import CLOSED_EVENT, EXIT_EVENT, HANDOFF, PaperDeadline
 from quantbot.research.manifest import canonical_result_json, content_id
+from quantbot.storage.lot_ownership import PROTECTIVE_EXIT, REGISTRATION
 
 
 def _time(value: str) -> datetime:
@@ -58,6 +59,9 @@ def _fills(
     record: PaperDeadline,
     side: str,
     now: datetime,
+    *,
+    exit_strategy_id: str | None = None,
+    ownership_at: datetime | None = None,
 ) -> list[sqlite3.Row]:
     durable = connection.execute(
         "SELECT * FROM order_intents WHERE intent_id=?", (intent_id,)
@@ -81,11 +85,12 @@ def _fills(
     for row in visible:
         numbers = tuple(Decimal(row[field]) for field in ("quantity", "price", "fee"))
         if (
-            row["strategy_id"] != record.identity.strategy_id
+            row["strategy_id"] != (exit_strategy_id or record.identity.strategy_id)
             or row["symbol"] != record.entry_intent.symbol
             or row["side"] != side
             or _time(row["occurred_at"]) < record.recorded_at
             or _time(row["occurred_at"]) < _time(row["created_at"])
+            or (ownership_at is not None and _time(row["occurred_at"]) < ownership_at)
             or any(not value.is_finite() for value in numbers)
             or numbers[0] <= 0
             or numbers[1] <= 0
@@ -93,6 +98,49 @@ def _fills(
         ):
             raise ValueError("fill provenance or numeric integrity mismatch")
     return sorted(visible, key=lambda r: (_time(r["occurred_at"]), r["fill_id"]))
+
+
+def _protection_owner(connection: sqlite3.Connection, event: sqlite3.Row,
+                      record: PaperDeadline) -> str | None:
+    """An event alone cannot confer foreign-strategy attribution."""
+    detail = json.loads(event["detail_json"])
+    registration = connection.execute("SELECT * FROM signals WHERE signal_id=?",
+        ("adaptive-lot-" + str(detail.get("lot_id")),)).fetchone()
+    if registration is None:
+        return None
+    payload = json.loads(registration["payload_json"])
+    document = payload.get("document")
+    if (not isinstance(document, dict) or payload.get("kind") != REGISTRATION
+        or payload.get("document_hash") != content_id(document)
+        or detail.get("registration_hash") != content_id(document)
+        or document.get("handoff_id") != record.handoff_id
+        or document.get("handoff_transport_hash") != content_id(record.model_dump(mode="json"))
+        or document.get("entry_intent_id") != record.entry_intent.intent_id
+        or document.get("account_id_hash") != record.account_id_hash
+        or detail.get("account_id_hash") != record.account_id_hash
+        or document.get("symbol") != record.entry_intent.symbol
+        or document.get("position_before_entry") != "0"
+        or _time(registration["occurred_at"]) != record.recorded_at
+        or _time(event["occurred_at"]) < record.recorded_at):
+        return None
+    action = connection.execute(
+        "SELECT a.*, e.strategy_id, e.reconciled, e.quantity AS evaluated_quantity, "
+        "e.account_id AS evaluated_account, e.symbol AS evaluated_symbol "
+        "FROM position_protection_actions a JOIN position_protection_evaluations e "
+        "ON a.trigger_evaluation_id=e.evaluation_id WHERE a.intent_id=?",
+        (event["intent_id"],),
+    ).fetchone()
+    if (action is None or action["reconciled"] != 1 or detail.get("reconciled") is not True
+        or action["strategy_id"] != detail.get("exit_strategy_id")
+        or PaperDeadline.account_hash(action["account_id"]) != record.account_id_hash
+        or action["evaluated_account"] != action["account_id"]
+        or action["symbol"] != record.entry_intent.symbol
+        or action["evaluated_symbol"] != record.entry_intent.symbol
+        or action["side"] != "SELL"
+        or Decimal(action["quantity"]) != Decimal(str(detail.get("quantity")))
+        or Decimal(action["evaluated_quantity"]) != Decimal(action["quantity"])):
+        return None
+    return str(action["strategy_id"])
 
 
 def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime) -> TradeEpisode:
@@ -129,7 +177,8 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
     ):
         raise ValueError("forecast lineage mismatch")
     events = connection.execute(
-        "SELECT * FROM order_events WHERE event_type IN (?,?)", (EXIT_EVENT, CLOSED_EVENT)
+        "SELECT * FROM order_events WHERE event_type IN (?,?,?)",
+        (EXIT_EVENT, CLOSED_EVENT, PROTECTIVE_EXIT),
     ).fetchall()
     owned = [
         e
@@ -137,10 +186,13 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
         if json.loads(e["detail_json"]).get("handoff_id") == record.handoff_id
         and _time(e["occurred_at"]) <= now
     ]
-    exit_ids = {e["intent_id"] for e in owned if e["event_type"] == EXIT_EVENT}
+    protective = {e["intent_id"]: (actor, _time(e["occurred_at"])) for e in owned
+                  if e["event_type"] == PROTECTIVE_EXIT
+                  and (actor := _protection_owner(connection, e, record)) is not None}
+    exit_ids = {e["intent_id"] for e in owned if e["event_type"] == EXIT_EVENT} | set(protective)
     if None in exit_ids or any(
         e["intent_id"] in exit_ids
-        and e["event_type"] == EXIT_EVENT
+        and e["event_type"] in {EXIT_EVENT, PROTECTIVE_EXIT}
         and json.loads(e["detail_json"]).get("handoff_id") != record.handoff_id
         for e in events
     ):
@@ -153,7 +205,11 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
     exits = [
         fill
         for identity in sorted(exit_ids)
-        for fill in _fills(connection, identity, record, "SELL", now)
+        for fill in _fills(
+            connection, identity, record, "SELL", now,
+            exit_strategy_id=(protective[identity][0] if identity in protective else None),
+            ownership_at=(protective[identity][1] if identity in protective else None),
+        )
     ]
     entry_qty = sum((Decimal(r["quantity"]) for r in entries), Decimal(0))
     exit_qty = sum((Decimal(r["quantity"]) for r in exits), Decimal(0))
