@@ -120,7 +120,7 @@ def _protection_owner(connection: sqlite3.Connection, event: sqlite3.Row,
         or detail.get("account_id_hash") != record.account_id_hash
         or document.get("symbol") != record.entry_intent.symbol
         or document.get("position_before_entry") != "0"
-        or _time(registration["occurred_at"]) != record.recorded_at
+        or not record.recorded_at <= _time(registration["occurred_at"]) < record.entry_valid_until
         or _time(event["occurred_at"]) < record.recorded_at):
         return None
     action = connection.execute(

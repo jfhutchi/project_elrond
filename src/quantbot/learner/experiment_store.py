@@ -83,6 +83,14 @@ class StoredEvent(LearnerModel):
         return model.model_validate_json(self.document)
 
 
+class OutboxIntent(LearnerModel):
+    intent_id: Text
+    experiment_id: Text
+    document: Text
+    state: Literal["PENDING", "CLAIMED", "ACKNOWLEDGED"]
+    owner: str | None
+
+
 class ExperimentStore:
     def __init__(self, path: Path, *, create: bool = False, read_only: bool = False) -> None:
         if read_only and create:
@@ -284,6 +292,26 @@ class ExperimentStore:
             db.execute("UPDATE outbox SET state='CLAIMED', owner=? WHERE intent_id=?",
                        (owner, intent_id))
             return str(row["document"])
+
+    def get_intent(self, intent_id: str) -> OutboxIntent | None:
+        with self._transaction(write=False) as db:
+            row = db.execute("SELECT * FROM outbox WHERE intent_id=?", (intent_id,)).fetchone()
+            return None if row is None else OutboxIntent.model_validate(dict(row))
+
+    def pending_intents(self, experiment_id: str) -> tuple[OutboxIntent, ...]:
+        with self._transaction(write=False) as db:
+            rows = db.execute("SELECT * FROM outbox WHERE experiment_id=? "
+                              "AND state!='ACKNOWLEDGED' ORDER BY intent_id",
+                              (experiment_id,)).fetchall()
+            return tuple(OutboxIntent.model_validate(dict(row)) for row in rows)
+
+    def acknowledge_intent(self, intent_id: str, *, owner: str) -> None:
+        with self._transaction() as db:
+            row = db.execute("SELECT state, owner FROM outbox WHERE intent_id=?",
+                             (intent_id,)).fetchone()
+            if row is None or row[1] != owner or row[0] not in {"CLAIMED", "ACKNOWLEDGED"}:
+                raise ValueError("OUTBOX_ACKNOWLEDGEMENT_OWNER_MISMATCH")
+            db.execute("UPDATE outbox SET state='ACKNOWLEDGED' WHERE intent_id=?", (intent_id,))
 
 
 def content_hash(manifest: ExperimentManifest) -> str:

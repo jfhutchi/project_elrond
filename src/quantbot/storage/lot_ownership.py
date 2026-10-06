@@ -82,8 +82,7 @@ def register_new_lot(
         or run.strategy_id != record.identity.strategy_id
         or repository.get_strategy_deployment(record.identity.strategy_id, record.identity.version)
         != record.identity
-        or now != record.recorded_at
-        or now != record.entry_intent.created_at
+        or not record.recorded_at <= now < record.entry_valid_until
         or not experiment_id
         or len(decision_id) != 64
         or any(c not in "0123456789abcdef" for c in decision_id)

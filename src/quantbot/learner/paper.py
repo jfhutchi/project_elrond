@@ -281,6 +281,7 @@ def build_learner_paper_cycle(
     max_data_age_seconds: int = 900,
     data_sync: DataSyncRunner | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    submission_wrapper: Callable[[PromotionGatedSubmitter], OrderSubmitter] | None = None,
 ) -> RunOnceCycle:
     """Compose a configured runtime; do not open, migrate, deploy or start one.
 
@@ -297,6 +298,7 @@ def build_learner_paper_cycle(
         max_data_age_seconds=max_data_age_seconds,
         data_sync=data_sync,
         clock=clock,
+        submission_wrapper=submission_wrapper,
     )
 
 
@@ -338,6 +340,7 @@ class LearnerPaperCycle(RunOnceCycle):
         max_data_age_seconds: int,
         data_sync: DataSyncRunner | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+        submission_wrapper: Callable[[PromotionGatedSubmitter], OrderSubmitter] | None = None,
     ) -> None:
         _validate_runtime(runtime, runner, binding=binding, identity=identity)
         from quantbot.learner.paper_deadlines import DeadlineGatedSubmitter
@@ -347,6 +350,14 @@ class LearnerPaperCycle(RunOnceCycle):
         strategy = PromotionGatedStrategy(
             runtime.database.path, runner, binding=binding, identity=identity
         )
+        retained_submitter = PromotionGatedSubmitter(
+            runtime.database.path,
+            DeadlineGatedSubmitter(
+                runtime.database, runtime.coordinator,
+                expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID, clock=clock,
+            ),
+            binding=binding, identity=identity,
+        )
         super().__init__(
             database=runtime.database,
             lock_path=runtime.paths.lock,
@@ -354,17 +365,8 @@ class LearnerPaperCycle(RunOnceCycle):
             recovery=runtime.recovery,
             data_sync=data_sync or runtime.data_sync,
             strategy=strategy,
-            submitter=PromotionGatedSubmitter(
-                runtime.database.path,
-                DeadlineGatedSubmitter(
-                    runtime.database,
-                    runtime.coordinator,
-                    expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID,
-                    clock=clock,
-                ),
-                binding=binding,
-                identity=identity,
-            ),
+            submitter=(retained_submitter if submission_wrapper is None
+                       else submission_wrapper(retained_submitter)),
             metrics=runtime.metrics,
             runtime=runtime.runtime_context(),
             max_data_age_seconds=max_data_age_seconds,
