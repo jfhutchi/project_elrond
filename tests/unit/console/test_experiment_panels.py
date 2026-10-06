@@ -11,6 +11,49 @@ def module():
     return import_module("quantbot.console.experiments")
 
 
+def test_completed_fits_do_not_require_worker_in_plain_observation(tmp_path):
+    from quantbot.learner.experiment_coordinator import TickReceipt
+    from quantbot.learner.experiment_research import FitReceipt, FitRequest, FitStart
+    from quantbot.research.manifest import content_id
+
+    frozen = manifest()
+    store = ExperimentStore(tmp_path / "experiment.db", create=True)
+    store.append(frozen, idempotency_key="manifest")
+    request = FitRequest(
+        experiment_id=frozen.experiment_id, recorded_at=frozen.registered_at,
+        manifest_hash=content_id(frozen), family="constant", training=(), validation=(),
+        training_sessions=20, validation_sessions=5, synthetic=True,
+    )
+    store.append(request, idempotency_key="request")
+    store.append(FitStart(
+        experiment_id=frozen.experiment_id, recorded_at=frozen.registered_at,
+        request_id=request.request_id, trial_id=request.trial_id,
+        manifest_hash=content_id(frozen), synthetic=True,
+    ), idempotency_key="start")
+    store.append(TickReceipt(
+        experiment_id=frozen.experiment_id, recorded_at=frozen.registered_at,
+        tick_id="a" * 64, input_hash="b" * 64, status="NORMAL_WAIT", reason="NOT_STARTED",
+        next_expected_event="NEXT_EXCHANGE_SESSION",
+        next_wakeup_at=frozen.registered_at + timedelta(minutes=2),
+        clock_verified=True, synthetic=True,
+    ), idempotency_key="tick")
+    pending = module().read_experiment_panel(store.path, now=frozen.registered_at).experiments[0]
+    assert pending.label == "Research worker receipt unavailable"
+    store.append(FitReceipt(
+        experiment_id=frozen.experiment_id, recorded_at=frozen.registered_at,
+        request_id=request.request_id, trial_id=request.trial_id, status="SUCCEEDED",
+        charged=True, candidate_id="c" * 64, validation_mse=0.00001,
+        reason="SYNTHETIC_TEST_RECEIPT", synthetic=True,
+    ), idempotency_key="finished")
+    before = store.path.read_bytes()
+    complete = module().read_experiment_panel(store.path, now=frozen.registered_at).experiments[0]
+    assert complete.label == "Scheduled waiting"
+    assert complete.blocker_kind == "NORMAL_WAIT"
+    assert complete.charged_fits == complete.reserved_fits == 1
+    assert complete.trading_authority == "NONE"
+    assert store.path.read_bytes() == before
+
+
 def test_historical_fit_results_are_read_only_as_of_and_not_forward_profit(tmp_path):
     from quantbot.learner.experiment_research import FitReceipt
 

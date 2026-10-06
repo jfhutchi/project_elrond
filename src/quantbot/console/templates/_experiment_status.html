@@ -7,7 +7,7 @@
     <dt>Last completed tick</dt><dd>{{ experiment.last_tick_at or 'Not started' }}</dd>
     <dt>Next expected event</dt><dd>{{ experiment.next_expected_event or 'Coordinator setup' }}</dd>
     <dt>Next scheduled wake</dt><dd>{{ experiment.next_wakeup_at or 'Not configured' }}</dd>
-    <dt>Fitting budget</dt><dd>{{ experiment.charged_fits }} charged · {{ experiment.reserved_fits }} reserved / {{ experiment.fit_budget }}</dd>
+    <dt>Fitting budget</dt><dd>{{ experiment.charged_fits }} confirmed charges within {{ experiment.reserved_fits }} permanent reservations / {{ experiment.fit_budget }}</dd>
   </dl>
   <p>{{ experiment.observation_rows }} observed feature rows; {{ experiment.resolved_market_labels }} resolved market labels;
      {{ experiment.decisions_recorded }} recorded decisions; {{ experiment.journaled_fill_receipts }} journaled owned-fill receipts.</p>

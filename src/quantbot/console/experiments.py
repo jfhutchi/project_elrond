@@ -112,6 +112,12 @@ def _summary(
     state = store.state(manifest.experiment_id)
     ticks = [event.decode(TickReceipt) for event in events if event.kind == "TickReceipt"]
     tick = max(ticks, key=lambda row: row.recorded_at) if ticks else None
+    completed_fit_requests = {
+        receipt.request_id
+        for event in events if event.kind == "FitReceipt"
+        for receipt in (event.decode(FitReceipt),)
+        if receipt.status == "SUCCEEDED"
+    }
     consent = state.consent_recorded or any(
         event.kind == ConsentNotice.__name__ for event in events
     )
@@ -217,7 +223,10 @@ def _summary(
             "Research coordinator not started",
             "Configure and start the pinned shadow coordinator; no model choice is requested.",
         )
-    elif worker is None and any(event.kind == FitRequest.__name__ for event in events):
+    elif worker is None and any(
+        event.decode(FitRequest).request_id not in completed_fit_requests
+        for event in events if event.kind == FitRequest.__name__
+    ):
         kind, owner, label, action = (
             "SERVICE_SETUP",
             "DEVELOPMENT_OPERATOR",
