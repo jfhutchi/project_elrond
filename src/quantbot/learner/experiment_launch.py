@@ -7,27 +7,37 @@ import asyncio
 import hashlib
 import json
 import os
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from contextlib import nullcontext
+from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from pathlib import Path
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 from pydantic import Field, model_validator
 
 from quantbot.config import Settings
 from quantbot.learner.experiment_contract import ExperimentManifest, InstrumentIdentity
-from quantbot.learner.experiment_coordinator import collect_observations, coordinator_tick
+from quantbot.learner.experiment_coordinator import (
+    ActiveCycleContext,
+    collect_observations,
+    coordinator_tick,
+)
 from quantbot.learner.experiment_news import read_position_journal
+from quantbot.learner.experiment_observation import ObservationBatch
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.five_minute_launch import clock_healthy
 from quantbot.learner.forward import _DECLARATIONS, _REGISTRY, _guard
 from quantbot.learner.forward_source import Snapshot, collect_snapshot
 from quantbot.learner.models import LearnerModel
+from quantbot.learner.paper_runner import IntradayPaperServices
 from quantbot.market_data.calendar import XNYS_TIMEZONE
 from quantbot.operations.service import _git, isolated_application_environment
 from quantbot.research.manifest import content_id
 from quantbot.storage import Database, SingleWriterLock
+
+if TYPE_CHECKING:
+    from quantbot.runtime import Runtime
 
 
 class ResearchSources(LearnerModel):
@@ -97,6 +107,35 @@ class ExperimentLaunchConfig(LearnerModel):
         ):
             raise ValueError("EXISTING_ABSOLUTE_ENVIRONMENT_REQUIRED")
         return self
+
+
+@dataclass(frozen=True)
+class PreparedExecution:
+    runtime: Runtime
+    services: IntradayPaperServices
+    context: ActiveCycleContext | None
+    close_guard: Callable[[], None]
+
+    async def close(self) -> None:
+        try:
+            await self.runtime.aclose()
+        finally:
+            self.runtime.database.close()
+            self.close_guard()
+
+
+ActivePreparation = Callable[
+    [
+        ExperimentLaunchConfig,
+        Settings,
+        ExperimentStore,
+        ExperimentManifest,
+        ObservationBatch | None,
+        tuple[Snapshot, ...],
+        datetime,
+    ],
+    Awaitable[PreparedExecution | None],
+]
 
 
 def load_manifest(config: ExperimentLaunchConfig) -> ExperimentManifest:
@@ -196,7 +235,12 @@ def _pending_label_days(
     )
 
 
-async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[str, object]:
+async def _run_once(
+    config: ExperimentLaunchConfig,
+    settings: Settings,
+    *,
+    prepare_active: ActivePreparation | None = None,
+) -> dict[str, object]:
     manifest = load_manifest(config)
     verify_checkout(config)
 
@@ -294,28 +338,40 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
             for capture in captures:
                 evidence = calendar_evidence(manifest, capture)
                 store.append(evidence, idempotency_key="calendar:" + content_id(evidence))
-        receipt = await coordinator_tick(
-            store,
-            manifest,
-            now=now,
-            observation=observation,
-            execution=None,
-            clock_verified=healthy(now),
-            owner=f"coordinator:{os.getpid()}",
-            label_snapshots=tuple(captures),
-            operational_path=config.operations_database,
-            news_evidence=read_position_journal(
-                config.position_research_database,
+        prepared = (
+            None
+            if prepare_active is None
+            else await prepare_active(
+                config, settings, store, manifest, observation, tuple(captures), now
+            )
+        )
+        try:
+            receipt = await coordinator_tick(
+                store,
                 manifest,
                 now=now,
-                expected_commit=config.position_research_commit,
-            ),
-        )
+                observation=observation,
+                execution=prepared.services if prepared is not None else None,
+                active_cycle=prepared.context if prepared is not None else None,
+                clock_verified=healthy(now),
+                owner=f"coordinator:{os.getpid()}",
+                label_snapshots=tuple(captures),
+                operational_path=config.operations_database,
+                news_evidence=read_position_journal(
+                    config.position_research_database,
+                    manifest,
+                    now=now,
+                    expected_commit=config.position_research_commit,
+                ),
+            )
+        finally:
+            if prepared is not None:
+                await prepared.close()
         document = receipt.model_dump(mode="json")
         document.update(
             code_commit=config.code_commit,
             config_hash=content_id(config.model_dump(mode="json")),
-            scope="SHADOW",
+            scope="PAPER" if prepared is not None and prepared.context is not None else "SHADOW",
         )
         _write_receipt(config, document)
         return document
@@ -328,12 +384,21 @@ def _write_receipt(config: ExperimentLaunchConfig, document: dict[str, object]) 
     temporary.replace(config.root / "receipt.json")
 
 
-async def run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[str, object]:
+async def run_once(
+    config: ExperimentLaunchConfig,
+    settings: Settings,
+    *,
+    prepare_active: ActivePreparation | None = None,
+) -> dict[str, object]:
     # Invalid deployment pins are fatal preflight failures, never successful ticks.
     load_manifest(config)
     verify_checkout(config)
     try:
-        return await _run_once(config, settings)
+        return (
+            await _run_once(config, settings)
+            if prepare_active is None
+            else await _run_once(config, settings, prepare_active=prepare_active)
+        )
     except Exception as error:
         # Preserve cancellation (BaseException) and never serialize raw provider errors.
         reason = "COORDINATOR_TICK_FAILED"
@@ -484,7 +549,13 @@ def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
 
 
 def run_experiment(
-    config_path: Path, *, once: bool = False, check: bool = False, config_hash: str | None = None
+    config_path: Path,
+    *,
+    once: bool = False,
+    check: bool = False,
+    config_hash: str | None = None,
+    after_tick: Callable[[ExperimentLaunchConfig, Settings], Awaitable[None]] | None = None,
+    prepare_active: ActivePreparation | None = None,
 ) -> int:
     if config_hash is not None:
         _read_json(config_path)  # Bound size and reject symlinks before reading bytes.
@@ -530,7 +601,19 @@ def run_experiment(
                                 )
                             )
                     worker = asyncio.create_task(asyncio.to_thread(run_research_once, config))
-                receipt = await run_once(config, settings)
+                receipt = (
+                    await run_once(config, settings)
+                    if prepare_active is None
+                    else await run_once(config, settings, prepare_active=prepare_active)
+                )
+                # Explicit active launcher reuses this process and the same bounded
+                # research worker. SHADOW CLI never supplies this callback.
+                if after_tick is not None and receipt["status"] not in {
+                    "FAULTED",
+                    "CLOCK_SYNC_REQUIRED",
+                    "LEASE_BUSY",
+                }:
+                    await after_tick(config, settings)
                 print(
                     json.dumps(
                         {
