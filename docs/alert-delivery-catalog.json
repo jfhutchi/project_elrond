@@ -9,6 +9,16 @@
     "category": "SYNTHETIC_TEST",
     "action": "Confirm this synthetic alert arrived once in the approved Elrond chat."
   },
+  "EXPERIMENT_COORDINATOR_UNVERIFIED": {
+    "subsystem": "research",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect the pinned shadow coordinator receipt and scheduler; retain PAPER protection. Calendar waiting and statistical insufficiency do not establish component liveness."
+  },
+  "EXPERIMENT_WORKER_UNVERIFIED": {
+    "subsystem": "research",
+    "category": "UNVERIFIED_COMPONENT_HEALTH",
+    "action": "Inspect the pinned bounded research worker receipt and charged-fit ledger; do not retry unknown fits. Retain PAPER protection and the permanent fit budget."
+  },
   "FORWARD_PRODUCER_MISSING": {
     "subsystem": "forecast",
     "category": "MISSING_COMPONENT",

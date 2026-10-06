@@ -37,6 +37,18 @@ EVENTS = {
     "ACKNOWLEDGED": "ACKNOWLEDGED",
 }
 CATALOG = {
+    "EXPERIMENT_COORDINATOR_UNVERIFIED": (
+        "research",
+        "UNVERIFIED_COMPONENT_HEALTH",
+        "Inspect the pinned shadow coordinator receipt and scheduler; retain PAPER protection. "
+        "Calendar waiting and statistical insufficiency do not establish component liveness.",
+    ),
+    "EXPERIMENT_WORKER_UNVERIFIED": (
+        "research",
+        "UNVERIFIED_COMPONENT_HEALTH",
+        "Inspect the pinned bounded research worker receipt and charged-fit ledger; "
+        "do not retry unknown fits. Retain PAPER protection and the permanent fit budget.",
+    ),
     "CLOCK_SYNC_REQUIRED": (
         "clock",
         "OPERATOR_ACTION_REQUIRED",

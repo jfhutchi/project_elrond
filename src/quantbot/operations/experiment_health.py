@@ -12,6 +12,7 @@ from typing import TypedDict
 from quantbot.learner.experiment_contract import ExperimentManifest, WorkerReceipt
 from quantbot.learner.experiment_coordinator import TickReceipt
 from quantbot.learner.experiment_store import ExperimentStore
+from quantbot.operations.alert_delivery import CATALOG
 from quantbot.operations.alerts import Condition
 
 
@@ -74,8 +75,7 @@ def measure_experiment_health(
             "CRITICAL",
             "UNVERIFIED_COMPONENT_HEALTH",
             "DEVELOPMENT_OPERATOR",
-            "Inspect the pinned shadow component receipt and scheduler; retain PAPER protection. "
-            "Calendar waiting and statistical insufficiency do not establish component liveness.",
+            CATALOG["EXPERIMENT_" + component.upper() + "_UNVERIFIED"][2],
         )
         for component, status in (("coordinator", coordinator), ("worker", worker))
         if status == "UNVERIFIED"

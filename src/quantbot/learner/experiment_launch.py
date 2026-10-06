@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import hashlib
 import json
 import os
 from contextlib import nullcontext
@@ -359,7 +360,13 @@ def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
     return result
 
 
-def run_experiment(config_path: Path, *, once: bool = False, check: bool = False) -> int:
+def run_experiment(
+    config_path: Path, *, once: bool = False, check: bool = False, config_hash: str | None = None
+) -> int:
+    if config_hash is not None:
+        _read_json(config_path)  # Bound size and reject symlinks before reading bytes.
+        if hashlib.sha256(config_path.read_bytes()).hexdigest() != config_hash:
+            raise ValueError("PINNED_LAUNCH_CONFIGURATION_CHANGED")
     config = ExperimentLaunchConfig.model_validate(_read_json(config_path))
     load_manifest(config)
     verify_checkout(config)
@@ -429,8 +436,11 @@ def main() -> int:
     parser.add_argument("--config", type=Path, required=True)
     parser.add_argument("--once", action="store_true")
     parser.add_argument("--check", action="store_true")
+    parser.add_argument("--config-hash")
     args = parser.parse_args()
-    return run_experiment(args.config, once=args.once, check=args.check)
+    return run_experiment(
+        args.config, once=args.once, check=args.check, config_hash=args.config_hash
+    )
 
 
 if __name__ == "__main__":

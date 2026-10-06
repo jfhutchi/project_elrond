@@ -171,3 +171,11 @@ def test_worker_failure_has_durable_sanitized_receipt_not_silent_pause(tmp_path,
     assert "RESEARCH_WORKER_FAILED" in saved
     assert "private credential" not in saved
     assert not config.store.exists()
+
+
+def test_task_config_change_is_refused_before_any_runtime_or_manifest_access(tmp_path, monkeypatch):
+    launch = module()
+    path = tmp_path / "changed.json"
+    path.write_text("{}")
+    with pytest.raises(ValueError, match="PINNED_LAUNCH_CONFIGURATION_CHANGED"):
+        launch.run_experiment(path, check=True, config_hash="a" * 64)
