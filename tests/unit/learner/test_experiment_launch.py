@@ -37,6 +37,73 @@ def test_config_cannot_reenable_entries_or_change_worker_budget(tmp_path):
             module().ExperimentLaunchConfig(**(base | changes))
 
 
+@pytest.mark.parametrize("configured_research", [False, True])
+def test_observational_loop_starts_no_unconfigured_research_worker(
+    tmp_path, monkeypatch, configured_research
+):
+    import asyncio
+    from types import SimpleNamespace
+
+    launch = module()
+    data = config_data(tmp_path)
+    if configured_research:
+        data["research_sources"] = dict(
+            training_path=tmp_path / "training.json",
+            validation_path=tmp_path / "validation.json",
+            training_hash="a" * 64,
+            validation_hash="b" * 64,
+        )
+    config = launch.ExperimentLaunchConfig(**data)
+    starts = []
+    ticks = []
+    real_sleep = asyncio.sleep
+
+    class StopLoop(BaseException):
+        pass
+
+    async def held_worker(function, worker_config):
+        starts.append((function, worker_config))
+        await asyncio.Event().wait()
+
+    async def tick(tick_config, settings):
+        ticks.append(tick_config)
+        await real_sleep(0)
+        return dict(
+            status="NORMAL_WAIT",
+            reason="SESSION_CLOSED",
+            next_expected_event="SESSION_OPEN",
+            observations_recorded=0,
+            labels_recorded=0,
+            fits=0,
+            intents=0,
+        )
+
+    async def sleep(seconds):
+        assert seconds == 120
+        if len(ticks) == 2:
+            raise StopLoop
+        await real_sleep(0)
+
+    monkeypatch.setattr(launch, "_read_json", lambda path: config.model_dump(mode="python"))
+    monkeypatch.setattr(launch, "load_manifest", lambda value: manifest())
+    monkeypatch.setattr(launch, "verify_checkout", lambda value: None)
+    monkeypatch.setattr(
+        launch,
+        "Settings",
+        lambda: SimpleNamespace(
+            TRADING_MODE=SimpleNamespace(value="PAPER"),
+            BROKER_ENVIRONMENT=SimpleNamespace(value="PAPER"),
+        ),
+    )
+    monkeypatch.setattr(launch, "run_once", tick)
+    monkeypatch.setattr(launch.asyncio, "to_thread", held_worker)
+    monkeypatch.setattr(launch.asyncio, "sleep", sleep)
+    with pytest.raises(StopLoop):
+        launch.run_experiment(tmp_path / "config.json")
+    assert len(ticks) == 2
+    assert starts == ([(launch.run_research_once, config)] if configured_research else [])
+
+
 def test_output_cannot_overlap_authoritative_sources(tmp_path):
     base = config_data(tmp_path)
     with pytest.raises(ValueError):

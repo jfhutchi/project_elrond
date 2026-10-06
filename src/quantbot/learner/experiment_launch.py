@@ -589,7 +589,11 @@ def run_experiment(
         async def serve() -> int:
             worker: asyncio.Task[dict[str, object]] | None = None
             while True:
-                if not once and (worker is None or worker.done()):
+                if (
+                    not once
+                    and config.research_sources is not None
+                    and (worker is None or worker.done())
+                ):
                     if worker is not None:
                         try:
                             worker.result()
