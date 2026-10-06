@@ -1,5 +1,7 @@
 # Adaptive PAPER source compatibility baseline
 
+> **Current guidance — 2026-10-06:** The [current direction](intraday-paper-direction.md) supersedes earlier rollout ordering, not compatibility or safety floors. Read the current integration PR and verify actual deployed pins; a main merge is not a runtime or exact-model activation.
+
 Implementation begins from approved plan commit `087dfc8c89d07986bded1c799fbf25450eb87189` in an existing isolated linked worktree. Native branch: `codex/adaptive-paper-coordinator`. No runtime/task changes are made to establish this baseline.
 
 | Retained component | Source revision | Integration status |

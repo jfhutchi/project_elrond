@@ -1,5 +1,7 @@
 # Five-minute PAPER adapter candidate
 
+> **Current guidance — 2026-10-06:** See [current direction and acceptance](intraday-paper-direction.md). These retained commissioning controls continue to apply; historical setup records do not activate the new shadow artifacts or earn fresh outcomes.
+
 This is local source, not an activated strategy. It consumes existing frozen DIA
 observations and preserves the original models, trial charges, zero-selection
 validation result, cost threshold and observation/outcome files. Positive-score

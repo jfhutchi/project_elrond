@@ -1,5 +1,7 @@
 # Separate five-minute PAPER experiment specification
 
+> **Current guidance — 2026-10-06:** Historical October 1 experiment record. The [current direction](intraday-paper-direction.md) supersedes its current-goal interpretation while preserving all recorded limits, evidence and failures below.
+
 Status: source-only preparation. The active minute-alpha-v1 DIA model and its
 configuration are unchanged. This specification is not an activation approval,
 trial charge, trained artifact, or claim of prospective performance.

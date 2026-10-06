@@ -1,5 +1,7 @@
 # Learner dashboard
 
+> **Current guidance — 2026-10-06:** See [current direction](intraday-paper-direction.md) and [safe access](dashboard-access.md). The experiment journal is separately exposed through /experiments; the optional existing-store console binding is read-only. Historical fit diagnostics, shadow forecasts, matured market labels and actual PAPER P&L must remain separate, with missing data unknown.
+
 The operator console now exposes `/learner` and `/api/learner`. Operations and Research link to
 the new page. `/api/state` contains the same learner projection. Refresh reads the latest saved
 records; there is no polling worker, training action, order action or promotion action in this UI.

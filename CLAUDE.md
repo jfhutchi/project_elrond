@@ -6,6 +6,13 @@ Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` 
 
 ## Primary Mission
 
+**Current delivery priority (2026-10-06):** the [intraday PAPER direction](docs/intraday-paper-direction.md)
+requires research, multiple eligible daily opportunities, protected trades, reconciled costs and
+outcomes, and bounded adaptation tested on later fresh evidence. The new adaptive experiment is
+currently SHADOW-only. Neither the historical turnover comment nor a 70–80% profitable-day goal
+is an implemented trade-count quota or authority to activate weak models. Preserve all existing
+risk, kill-switch, holdout, permanent fit-budget and real-money boundaries.
+
 Build Elrond into a continuously improving research system that can:
 
 1. Discover potentially overlooked market relationships.

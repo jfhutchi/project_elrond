@@ -1,5 +1,7 @@
 # Deployed state: what is actually running
 
+> **Current guidance — 2026-10-06:** Use [current direction and acceptance](intraday-paper-direction.md) alongside these identity semantics. A merged branch, configured task or live process does not prove current forecasts, actual fills, reconciled outcomes or profitability.
+
 **Issue:** #190 · **Schema:** 27 · **Command:** `quantbot deployment-status`
 
 Current Omen observations are in [the September 10 runtime record](omen-runtime-2026-09-10.md).

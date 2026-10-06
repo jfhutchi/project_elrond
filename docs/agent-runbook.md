@@ -1,5 +1,7 @@
 # QuantBot Agent Runbook
 
+> **Current guidance — 2026-10-06:** Start with the [current intraday PAPER direction](intraday-paper-direction.md), [staged runbook](adaptive-paper-runbook.md) and [dashboard access](dashboard-access.md). Verify actual pins/receipts and gates locally. September measurements and baseline rotation descriptions below are historical and do not establish current clearance or adaptive-model authority.
+
 Continuation notes for any session picking this repository up. `PROJECT_STATUS.md` is
 machine-generated and overwritten by `quantbot run-once` / `quantbot doctor`; this file is
 hand-maintained and never overwritten.

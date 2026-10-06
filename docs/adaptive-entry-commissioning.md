@@ -1,5 +1,7 @@
 # Adaptive PAPER entry commissioning
 
+> **Current guidance — 2026-10-06:** See [current intraday PAPER direction](intraday-paper-direction.md). The deployed new experiment is observational SHADOW; this document describes a separately gated entry capability, not proof that it is active. Existing entry/protection owners retain authority until an exact authorized, readiness-verified transfer.
+
 The default `experiment_launch` remains SHADOW-only. The separate
 `experiment_entry` launcher supplies retained PAPER services before the unchanged
 coordinator records decisions. It never writes an approval, activation, deployment

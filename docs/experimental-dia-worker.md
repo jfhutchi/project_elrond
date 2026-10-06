@@ -1,5 +1,7 @@
 # Isolated experimental DIA PAPER worker
 
+> **Current guidance — 2026-10-06:** The [current direction](intraday-paper-direction.md) adds a separate shadow sector-ETF research lane. This retained DIA entry capability keeps its own commissioning, risk limits and exit ownership; its last receipt and natural next cohort must be measured independently.
+
 This optional worker uses a separate learner directory, explicit DIA-only configuration and an existing operator-approved frozen model. It does not alter the original learner universe, transfer legacy exit ownership, or grant live execution.
 
 The forward configuration must name the original learner declaration database as well as the shared research registry. Both sources must permit a feature/training window. Protected declarations are immutable; a missing declaration store fails closed.

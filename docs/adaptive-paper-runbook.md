@@ -30,9 +30,10 @@ independent deadline supervisor and protection services retain their own pins.
    task definitions. Credential contents are never copied. There is no
    operational migration, operational database write or protection interruption
    for this collection-only stage. Preserve all original services and pins.
-6. Verify the real scheduled receipt, bounded worker start/completion, genuine
-   provider/calendar coverage, the following natural tick, and the actual
-   read-only HTML/API. A completed closed-session tick is liveness, not a trade.
+6. Verify the real scheduled receipt, genuine provider/calendar coverage, the
+   following natural tick, and the actual read-only HTML/API. Collection-only
+   SHADOW intentionally has no fit worker; verify worker start/completion only
+   in the separately configured research stage. A completed closed-session tick is liveness, not a trade.
    Configure the independent monitor with the exact experiment source pin only
    after validating its local measurements. New experiment alert codes remain
    local until their exact predefined catalog and existing chat route are
