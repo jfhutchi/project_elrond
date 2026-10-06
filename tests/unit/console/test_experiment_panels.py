@@ -11,6 +11,35 @@ def module():
     return import_module("quantbot.console.experiments")
 
 
+def test_historical_fit_results_are_read_only_as_of_and_not_forward_profit(tmp_path):
+    from quantbot.learner.experiment_research import FitReceipt
+
+    frozen = manifest()
+    path = tmp_path / "experiment.db"
+    store = ExperimentStore(path, create=True)
+    store.append(frozen, idempotency_key="manifest")
+    for index, seconds in enumerate((0, 1, 60)):
+        store.append(FitReceipt(
+            experiment_id=frozen.experiment_id,
+            recorded_at=frozen.registered_at + timedelta(seconds=seconds),
+            request_id=str(index + 1) * 64, trial_id=f"synthetic-fit-{index}",
+            status="SUCCEEDED", charged=True, candidate_id=str(index + 4) * 64,
+            validation_mse=(index + 1) * 0.00001,
+            reason="SYNTHETIC_TEST_RECEIPT", synthetic=True,
+        ), idempotency_key=f"fit-{index}")
+    before = path.read_bytes()
+    panel = module().read_experiment_panel(
+        path, experiment_id=frozen.experiment_id,
+        now=frozen.registered_at + timedelta(seconds=2),
+    )
+    assert len(panel.detail.historical_fits) == 2
+    assert [fit.validation_mse for fit in panel.detail.historical_fits] == [0.00001, 0.00002]
+    assert panel.detail.fit_families == {}  # Missing model metadata stays unknown.
+    assert panel.detail.evaluation.learner_realized_pnl is None
+    assert panel.detail.summary.trading_authority == "NONE"
+    assert path.read_bytes() == before
+
+
 def test_missing_store_is_unavailable_and_never_created(tmp_path):
     path = tmp_path / "absent.db"
     panel = module().read_experiment_panel(path, now=manifest().registered_at)

@@ -9,6 +9,8 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
+
 from quantbot.learner.experiment_activation import active_artifact
 from quantbot.learner.experiment_contract import (
     CandidateArtifact,
@@ -73,6 +75,8 @@ class ExperimentDetail(LearnerModel):
     timeline: tuple[TimelineEvent, ...]
     timeline_truncated: bool
     news: tuple[NewsEvidence, ...] = ()
+    historical_fits: tuple[FitReceipt, ...] = ()
+    fit_families: dict[str, str] = Field(default_factory=dict)
     synthetic: bool
 
 
@@ -326,6 +330,14 @@ def read_experiment_panel(
                         for event in events[-100:]
                     ),
                     timeline_truncated=len(events) > 100,
+                    historical_fits=tuple(
+                        event.decode(FitReceipt) for event in events if event.kind == "FitReceipt"
+                    ),
+                    fit_families={
+                        candidate.model_id: candidate.artifact.family
+                        for event in events if event.kind == "CandidateArtifact"
+                        for candidate in (event.decode(CandidateArtifact),)
+                    },
                     news=tuple(
                         event.decode(NewsEvidence)
                         for event in events

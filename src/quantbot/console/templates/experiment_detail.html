@@ -25,6 +25,18 @@
     <p>Legacy positions retain their original exit owner and are not adopted as experiment profit.</p>
   </section>
 </div>
+<section class="card"><h2>Historical diagnostic fit results</h2>
+<p>These are seen validation results, not fresh forward performance or trade profit. Model availability grants no trading authority.</p>
+{% for fit in detail.historical_fits %}
+<article>
+  {% set family = detail.fit_families.get(fit.candidate_id) %}
+  <h3>{{ 'Constant baseline' if family == 'mean' else 'Ridge challenger' if family == 'ridge' else 'Model metadata unknown' }}</h3>
+  <p>{{ fit.status }}; recorded {{ fit.recorded_at }}. {% if fit.synthetic %}SYNTHETIC test evidence.{% endif %}</p>
+  <p>Model: <code>{{ fit.candidate_id or 'No candidate artifact' }}</code>.</p>
+  <p>Validation MSE (fractional return squared): {{ fit.validation_mse if fit.validation_mse is not none else 'Unknown' }}.</p>
+</article>
+{% else %}<p>No completed historical fit receipts.</p>{% endfor %}
+</section>
 <section class="card"><h2>Economics</h2>
   <p><a href="/calendar">Account P&amp;L calendar and running totals</a> use the same durable close reader.</p>
   <dl>
