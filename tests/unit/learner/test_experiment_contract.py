@@ -34,6 +34,7 @@ def manifest_data():
         ),
         "code_hash": "c" * 64,
         "policy_hash": "d" * 64,
+        "synthetic": True,
     }
 
 

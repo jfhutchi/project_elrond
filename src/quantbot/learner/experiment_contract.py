@@ -8,8 +8,8 @@ from typing import Annotated, Literal, Protocol, Self, TypeVar
 
 from pydantic import Field, model_validator
 
-from quantbot.learner.five_minute import FEATURE_NAMES
-from quantbot.learner.models import LearnerModel, Text
+from quantbot.learner.five_minute import FEATURE_NAMES, FiveMinuteFeatureRow
+from quantbot.learner.models import Finite, LearnerModel, Text
 from quantbot.research.manifest import content_id
 
 Digest = Annotated[str, Field(pattern=r"^[0-9a-f]{64}$")]
@@ -118,3 +118,35 @@ def guarded_read(
     """Canonical authority is consulted before the caller opens any archived source."""
     validate_manifest(manifest, guard=guard)
     return loader()
+
+
+class DecisionRecord(LearnerModel):
+    experiment_id: Text
+    recorded_at: datetime
+    model_id: Digest
+    features: FiveMinuteFeatureRow
+    score: Finite
+    action: Literal["BUY", "HOLD", "EXIT", "WAIT"]
+    reason: Text
+    risk_vetoes: tuple[str, ...] = ()
+    activation_id: str | None = None
+    paper_eligible: bool = False
+    synthetic: bool = False
+
+    @property
+    def decision_id(self) -> str:
+        return content_id(self)
+
+    @model_validator(mode="after")
+    def point_in_time(self) -> Self:
+        row = self.features
+        if not (
+            row.receipt_at <= row.decision_at <= self.recorded_at < row.target_at
+            and self.recorded_at <= row.feature_at + timedelta(seconds=120)
+        ):
+            raise ValueError("decision must follow receipt and precede target within freshness")
+        if self.paper_eligible and (
+            self.activation_id is None or self.synthetic or self.risk_vetoes or self.action != "BUY"
+        ):
+            raise ValueError("eligible decision requires exact activation and all PAPER gates")
+        return self
