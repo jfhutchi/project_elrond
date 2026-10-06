@@ -103,3 +103,47 @@ async def test_cancellation_is_not_misreported_as_recoverable_failure(tmp_path, 
     with pytest.raises(asyncio.CancelledError):
         await launch.run_once(config, object())
     assert not (config.root / "receipt.json").exists()
+
+
+def test_research_sources_are_all_or_none_and_cannot_overlap_output(tmp_path):
+    launch = module()
+    base = config_data(tmp_path)
+    source = dict(
+        training_path=tmp_path / "training.json",
+        validation_path=tmp_path / "validation.json",
+        training_hash="a" * 64,
+        validation_hash="b" * 64,
+    )
+    config = launch.ExperimentLaunchConfig(**(base | {"research_sources": source}))
+    assert config.research_sources.training_hash == "a" * 64
+    with pytest.raises(ValueError):
+        launch.ExperimentLaunchConfig(
+            **(base | {"research_sources": {"training_path": source["training_path"]}})
+        )
+    with pytest.raises(ValueError, match="OVERLAP"):
+        launch.ExperimentLaunchConfig(
+            **(base | {"research_sources": source | {"training_path": base["store"]}})
+        )
+
+
+def test_unverified_worker_clock_prevents_store_or_registry_access(tmp_path, monkeypatch):
+    launch = module()
+    config = launch.ExperimentLaunchConfig(**config_data(tmp_path))
+    monkeypatch.setattr(launch, "load_manifest", lambda config: manifest())
+    monkeypatch.setattr(launch, "verify_checkout", lambda config: None)
+    monkeypatch.setattr(launch, "clock_healthy", lambda path, now: False)
+    result = launch.run_research_once(config)
+    assert result["status"] == "CLOCK_SYNC_REQUIRED"
+    assert not config.store.exists()
+
+
+def test_missing_predeclared_inputs_is_setup_wait_not_model_approval(tmp_path, monkeypatch):
+    launch = module()
+    config = launch.ExperimentLaunchConfig(**config_data(tmp_path))
+    monkeypatch.setattr(launch, "load_manifest", lambda config: manifest())
+    monkeypatch.setattr(launch, "verify_checkout", lambda config: None)
+    monkeypatch.setattr(launch, "clock_healthy", lambda path, now: True)
+    result = launch.run_research_once(config)
+    assert result["status"] == "NORMAL_WAIT"
+    assert result["reason"] == "PREDECLARED_RESEARCH_SOURCES_REQUIRED"
+    assert not config.store.exists()

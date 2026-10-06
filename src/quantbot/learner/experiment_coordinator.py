@@ -67,6 +67,7 @@ class TickReceipt(LearnerModel):
     labels_recorded: int = 0
     decisions_recorded: int = 0
     fits: int = 0
+    fit_budget_reserved: int = 0
     intents: int = 0
     fit_request_ids: tuple[str, ...] = ()
     event_ids: tuple[str, ...] = ()
@@ -272,6 +273,21 @@ async def coordinator_tick(
         observations_recorded = len({feature_key(row) for row in observation.features} - observed)
         store.append(observation, idempotency_key="observation:" + content_id(observation))
         event_ids.append(content_id(observation))
+    from quantbot.learner.experiment_research import FitReceipt, FitRequest, FitStart
+
+    starts = [event.decode(FitStart) for event in events if event.kind == "FitStart"]
+    fit_receipts = [event.decode(FitReceipt) for event in events if event.kind == "FitReceipt"]
+    pending_fits = (
+        tuple(
+            request.request_id
+            for event in events
+            if event.kind == "FitRequest"
+            for request in (event.decode(FitRequest),)
+            if request.request_id not in {row.request_id for row in starts}
+        )
+        if len(starts) < manifest.fit_budget
+        else ()
+    )
     decisions_recorded = 0
     candidates = [
         event.decode(CandidateArtifact) for event in events if event.kind == "CandidateArtifact"
@@ -290,6 +306,13 @@ async def coordinator_tick(
             or not manifest.registered_at <= candidate.recorded_at <= now
         ):
             raise ValueError("CANDIDATE_MANIFEST_MISMATCH")
+        if not manifest.synthetic and not any(
+            fit.status == "SUCCEEDED"
+            and fit.charged is True
+            and fit.candidate_id == candidate.model_id
+            for fit in fit_receipts
+        ):
+            raise ValueError("CANONICAL_CHARGED_ARTIFACT_RECEIPT_REQUIRED")
         rows = tuple(
             row
             for row in (observation.features if observation else ())
@@ -359,7 +382,9 @@ async def coordinator_tick(
         observations_recorded=observations_recorded,
         labels_recorded=labels_recorded,
         decisions_recorded=decisions_recorded,
-        fits=sum(event.kind == "FitReceipt" for event in events),
+        fits=sum(row.charged is True for row in fit_receipts),
+        fit_budget_reserved=len(starts),
+        fit_request_ids=pending_fits,
         event_ids=tuple(event_ids),
     )
     store.append(receipt, idempotency_key="tick:" + tick_id)

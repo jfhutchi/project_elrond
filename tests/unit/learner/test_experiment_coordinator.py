@@ -270,3 +270,33 @@ async def test_label_receipt_cannot_backdate_availability(context):
                 | {"recorded_at": resolved.label.available_at - timedelta(seconds=1)}
             )
         )
+
+
+async def test_tick_reports_charged_worker_queue_without_fitting(context):
+    from quantbot.learner.experiment_research import schedule_initial_fits
+    from tests.unit.learner.test_experiment_research import Guard, inputs
+
+    store, observation = context
+    training, validation = inputs()
+    queued = schedule_initial_fits(
+        store,
+        manifest(),
+        training=training,
+        validation=validation,
+        now=manifest().registered_at,
+        guard=Guard(),
+    )
+    result = await module().coordinator_tick(
+        store,
+        manifest(),
+        now=observation.recorded_at,
+        observation=observation,
+        execution=None,
+        clock_verified=True,
+    )
+    assert result.fit_request_ids == tuple(row.request_id for row in queued)
+    assert result.fits == 0
+    assert not any(
+        e.kind == "FitStart"
+        for e in store.read_as_of(manifest().experiment_id, observation.recorded_at)
+    )

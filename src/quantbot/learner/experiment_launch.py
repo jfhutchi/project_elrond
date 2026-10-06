@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import os
 from contextlib import nullcontext
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -26,6 +27,13 @@ from quantbot.research.manifest import content_id
 from quantbot.storage import Database, SingleWriterLock
 
 
+class ResearchSources(LearnerModel):
+    training_path: Path
+    validation_path: Path
+    training_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+    validation_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
+
+
 class ExperimentLaunchConfig(LearnerModel):
     root: Path
     store: Path
@@ -39,6 +47,7 @@ class ExperimentLaunchConfig(LearnerModel):
     mode: Literal["SHADOW"] = "SHADOW"
     trading_enabled: Literal[False] = False
     maximum_workers: Literal[2] = 2
+    research_sources: ResearchSources | None = None
 
     @model_validator(mode="after")
     def isolated(self) -> Self:
@@ -49,6 +58,13 @@ class ExperimentLaunchConfig(LearnerModel):
             self.operations_database,
             self.declaration_database,
             self.clock_receipt,
+        ) + (
+            ()
+            if self.research_sources is None
+            else (
+                self.research_sources.training_path,
+                self.research_sources.validation_path,
+            )
         )
         if any(not path.is_absolute() or path.is_symlink() for path in paths):
             raise ValueError("ABSOLUTE_NON_SYMLINK_PATH_REQUIRED")
@@ -161,6 +177,7 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
             observation=observation,
             execution=None,
             clock_verified=healthy(now),
+            owner=f"coordinator:{os.getpid()}",
             label_snapshots=tuple(captures),
             operational_path=config.operations_database,
         )
@@ -214,6 +231,88 @@ async def run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[s
         return document
 
 
+def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
+    """Independent bounded worker; no execution, promotion, broker or migrations."""
+    from quantbot.learner.experiment_research import (
+        CanonicalTrialCharger,
+        load_initial_inputs,
+        research_eligibility,
+        run_registered_fit,
+        schedule_initial_fits,
+    )
+
+    manifest = load_manifest(config)
+    verify_checkout(config)
+    now = datetime.now(UTC)
+    if not clock_healthy(config.clock_receipt, now):
+        return {"status": "CLOCK_SYNC_REQUIRED", "reason": "CLOCK_SYNC_REQUIRED"}
+    if config.research_sources is None:
+        return {"status": "NORMAL_WAIT", "reason": "PREDECLARED_RESEARCH_SOURCES_REQUIRED"}
+    if not config.store.exists():
+        return {"status": "NORMAL_WAIT", "reason": "COORDINATOR_REGISTRATION_REQUIRED"}
+    # Separate lock prevents multiple launchers from scheduling or selecting the worker.
+    with SingleWriterLock(config.root / "research-worker.lock"):
+        store = ExperimentStore(config.store)
+        guard_path = config.root / "guard.db"
+        guard_database = (
+            Database(guard_path) if guard_path.exists() else Database.create(guard_path)
+        )
+        registry_token = _REGISTRY.set(config.operations_database)
+        declaration_token = _DECLARATIONS.set(config.declaration_database)
+        try:
+
+            class Guard:
+                def permits(self, start: datetime, end: datetime) -> bool:
+                    return _guard(guard_database, start, end)
+
+            sources = config.research_sources
+            training, validation = load_initial_inputs(
+                manifest,
+                training_path=sources.training_path,
+                validation_path=sources.validation_path,
+                training_hash=sources.training_hash,
+                validation_hash=sources.validation_hash,
+                guard=Guard(),
+            )
+            now = datetime.now(UTC)
+            if not clock_healthy(config.clock_receipt, now):
+                return {"status": "CLOCK_SYNC_REQUIRED", "reason": "CLOCK_SYNC_REQUIRED"}
+            schedule_initial_fits(
+                store,
+                manifest,
+                training=training,
+                validation=validation,
+                now=now,
+                guard=Guard(),
+            )
+            request = research_eligibility(store, manifest, now=now)
+            if request is None:
+                return {"status": "NORMAL_WAIT", "reason": "NO_UNSTARTED_REGISTERED_FIT"}
+
+            def clock() -> datetime:
+                return datetime.now(UTC)
+
+            receipt = run_registered_fit(
+                store,
+                manifest,
+                request,
+                guard=Guard(),
+                charger=CanonicalTrialCharger(request, clock=clock),
+                now=now,
+                clock=clock,
+            )
+            document = receipt.model_dump(mode="json")
+            document.update(code_commit=config.code_commit, scope="SHADOW")
+            temporary = config.root / "research-receipt.json.tmp"
+            temporary.write_text(json.dumps(document, sort_keys=True), encoding="utf-8")
+            temporary.replace(config.root / "research-receipt.json")
+            return document
+        finally:
+            _REGISTRY.reset(registry_token)
+            _DECLARATIONS.reset(declaration_token)
+            guard_database.close()
+
+
 def run_experiment(config_path: Path, *, once: bool = False, check: bool = False) -> int:
     config = ExperimentLaunchConfig.model_validate(_read_json(config_path))
     load_manifest(config)
@@ -241,7 +340,20 @@ def run_experiment(config_path: Path, *, once: bool = False, check: bool = False
             raise ValueError("PAPER_ONLY")
 
         async def serve() -> int:
+            worker: asyncio.Task[dict[str, object]] | None = None
             while True:
+                if not once and (worker is None or worker.done()):
+                    if worker is not None:
+                        try:
+                            worker.result()
+                        except Exception:
+                            # Bounded sanitized diagnostic; no raw registry/provider error.
+                            print(
+                                json.dumps(
+                                    {"status": "FAULTED", "reason": "RESEARCH_WORKER_FAILED"}
+                                )
+                            )
+                    worker = asyncio.create_task(asyncio.to_thread(run_research_once, config))
                 receipt = await run_once(config, settings)
                 print(
                     json.dumps(
