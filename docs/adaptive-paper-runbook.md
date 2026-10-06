@@ -126,8 +126,12 @@ inform that decision, even if the experiment journal is written later.
 Each scored decision gets a thesis record with observational authority only.
 The existing strategy's forecast, hard risk and exit authority remain unchanged.
 
-Crash recovery reads at most the two oldest unresolved prior target sessions on
-each wake. Canonical date protection covers the actual UTC price-query bounds
+Crash recovery reads at most two unresolved prior target sessions on each wake,
+rotating by least recent auditable attempt. Missing old targets cannot starve
+later dates. Recovery runs before current observation collection; failed old
+queries leave current acquisition running and retain sanitized failure receipts.
+Expired current features remain observations but cannot create decisions or
+orders; the next boundary is a calendar wait, with all freshness limits retained. Canonical date protection covers the actual UTC price-query bounds
 before retrieval or archive writes. Recovered labels become available at actual
 retrieval, never at the historical target timestamp. The shared canonical trial
 transaction serializes the six-fit budget across independent experiment roots;

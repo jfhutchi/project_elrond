@@ -227,3 +227,138 @@ def test_pending_target_days_survive_overnight_restart(tmp_path):
     store.append(batch, idempotency_key="observation")
     now = OPEN + timedelta(days=1)
     assert module()._pending_label_days(store, manifest(), now=now) == (OPEN.date(),)
+
+
+def test_pending_recovery_rotates_missing_dates_instead_of_starving_later_days(tmp_path):
+    from datetime import timedelta
+
+    from quantbot.learner.experiment_observation import build_observation_batch
+    from quantbot.learner.experiment_store import ExperimentStore
+    from tests.fixtures.adaptive_paper import OPEN, snapshot
+
+    store = ExperimentStore(tmp_path / "fair.db", create=True)
+    store.append(manifest(), idempotency_key="manifest")
+    for n in range(3):
+        source = snapshot(opened=OPEN + timedelta(days=n))
+        store.append(
+            build_observation_batch(manifest(), source, now=source.received_at),
+            idempotency_key=f"observation:{n}",
+        )
+    now = OPEN + timedelta(days=4)
+    launch = module()
+    first = launch._pending_label_days(store, manifest(), now=now)
+    assert first == (OPEN.date(), (OPEN + timedelta(days=1)).date())
+    for day in first:
+        attempt = launch.PendingLabelRecovery(
+            experiment_id=manifest().experiment_id,
+            recorded_at=now,
+            session_date=day,
+            status="UNAVAILABLE",
+            synthetic=True,
+        )
+        store.append(attempt, idempotency_key="attempt:" + day.isoformat())
+    assert launch._pending_label_days(store, manifest(), now=now) == (
+        (OPEN + timedelta(days=2)).date(),
+        OPEN.date(),
+    )
+
+
+@pytest.mark.parametrize("history_failure", [False, True])
+async def test_backlog_before_near_expired_current_feature_and_failure_is_isolated(
+    tmp_path, monkeypatch, history_failure
+):
+    from datetime import datetime, timedelta
+
+    from quantbot.learner.estimators import FittedEstimator
+    from quantbot.learner.experiment_contract import CandidateArtifact
+    from quantbot.learner.experiment_observation import build_observation_batch
+    from quantbot.learner.experiment_store import ExperimentStore
+    from tests.fixtures.adaptive_paper import OPEN, snapshot
+
+    launch = module()
+    config = launch.ExperimentLaunchConfig(**config_data(tmp_path))
+    config.root.mkdir()
+    store = ExperimentStore(config.store, create=True)
+    store.append(manifest(), idempotency_key="manifest")
+    old = snapshot()
+    store.append(
+        build_observation_batch(manifest(), old, now=old.received_at), idempotency_key="old"
+    )
+    candidate = CandidateArtifact(
+        experiment_id=manifest().experiment_id,
+        recorded_at=OPEN - timedelta(seconds=1),
+        manifest_hash=launch.content_id(manifest()),
+        trial_id="synthetic",
+        training_source_hash="a" * 64,
+        validation_source_hash="b" * 64,
+        synthetic=True,
+        artifact=FittedEstimator(
+            family="mean",
+            feature_names=manifest().feature_names,
+            means=(0.0,) * 10,
+            scales=(1.0,) * 10,
+            coefficients=(0.0,) * 10,
+            intercept=0.02,
+            alpha=1.0,
+            training_mse=0.0,
+            seed=0,
+            algorithm_version="mean-v1",
+        ),
+    )
+    store.append(candidate, idempotency_key="candidate")
+    clock = [OPEN + timedelta(days=1, minutes=35, seconds=119)]
+    calls = []
+
+    class Clock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return clock[0]
+
+    def received(source):
+        return source.model_copy(
+            update={
+                "received_at": clock[0],
+                "inputs": tuple(
+                    row.model_copy(update={"available_at": clock[0]}) for row in source.inputs
+                ),
+                "receipts": tuple(
+                    row.model_copy(update={"received_at": clock[0]}) for row in source.receipts
+                ),
+            }
+        )
+
+    async def history(*args, **kwargs):
+        calls.append("history")
+        clock[0] += timedelta(seconds=2)
+        if history_failure:
+            raise RuntimeError("synthetic unavailable prior target")
+        return received(snapshot(65))
+
+    async def current(manifest, **kwargs):
+        calls.append("current")
+        source = received(snapshot(opened=OPEN + timedelta(days=1)))
+        return build_observation_batch(manifest, source, now=clock[0])
+
+    monkeypatch.setattr(launch, "datetime", Clock)
+    monkeypatch.setattr(launch, "clock_healthy", lambda path, now: True)
+    monkeypatch.setattr(launch, "load_manifest", lambda config: manifest())
+    monkeypatch.setattr(launch, "verify_checkout", lambda config: None)
+    monkeypatch.setattr(launch, "_collect_guarded_day", history)
+    monkeypatch.setattr(launch, "collect_observations", current)
+    # Lot-reader acceptance is independently tested; no operational source here.
+    monkeypatch.setattr(
+        "quantbot.learner.experiment_lot_reader.refresh_lot_journal", lambda *args, **kwargs: ()
+    )
+    result = await launch._run_once(config, object())
+    assert calls == ["history", "current"]
+    assert result["status"] != "FAULTED"
+    assert result["decisions_recorded"] == 0
+    assert result["labels_recorded"] == (0 if history_failure else 6)
+    events = store.read_as_of(manifest().experiment_id, clock[0])
+    attempts = [
+        row.decode(launch.PendingLabelRecovery)
+        for row in events
+        if row.kind == "PendingLabelRecovery"
+    ]
+    assert len(attempts) == 1
+    assert attempts[0].status == ("UNAVAILABLE" if history_failure else "FETCHED")

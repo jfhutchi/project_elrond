@@ -22,7 +22,6 @@ from quantbot.market_data.instrument import InstrumentIdentity
 from quantbot.market_data.instruments import Instrument
 from quantbot.market_data.transports import HttpxMarketDataTransport
 from quantbot.operations.service import _git, isolated_application_environment
-from quantbot.research.manifest import content_id
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
 
 
@@ -83,6 +82,8 @@ def current_prediction(learner: Path, config: ShadowConfiguration, symbol: str,
 
 async def run_once(directory: Path, learner: Path, config: ShadowConfiguration,
                    settings: Settings, commit: str) -> dict[str, object]:
+    from quantbot.research.manifest import content_id
+
     now = datetime.now(UTC)
     config.verify(now)
     key, secret = settings.ALPACA_PAPER_API_KEY, settings.ALPACA_PAPER_API_SECRET

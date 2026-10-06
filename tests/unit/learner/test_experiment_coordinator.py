@@ -348,11 +348,17 @@ async def test_overnight_target_label_uses_actual_retrieval_availability(context
     )
     now = OPEN + timedelta(days=1)
     original = snapshot(65)
-    target = original.model_copy(update={
-        "received_at": now,
-        "receipts": tuple(row.model_copy(update={"received_at": now}) for row in original.receipts),
-        "inputs": tuple(row.model_copy(update={"available_at": now}) for row in original.inputs),
-    })
+    target = original.model_copy(
+        update={
+            "received_at": now,
+            "receipts": tuple(
+                row.model_copy(update={"received_at": now}) for row in original.receipts
+            ),
+            "inputs": tuple(
+                row.model_copy(update={"available_at": now}) for row in original.inputs
+            ),
+        }
+    )
     result = await module().coordinator_tick(
         store,
         manifest(),
@@ -370,3 +376,41 @@ async def test_overnight_target_label_uses_actual_retrieval_availability(context
     ]
     assert all(row.label.available_at == now for row in labels)
     assert all(row.recorded_at == now for row in labels)
+
+
+async def test_expired_feature_keeps_evidence_and_labels_without_fault_or_decision(context):
+    from quantbot.learner.estimators import FittedEstimator
+    from quantbot.research.manifest import content_id
+
+    store, observation = context
+    candidate = module().CandidateArtifact(
+        experiment_id=manifest().experiment_id,
+        recorded_at=OPEN - timedelta(seconds=1),
+        manifest_hash=content_id(manifest()),
+        trial_id="synthetic-expiry",
+        training_source_hash="a" * 64,
+        validation_source_hash="b" * 64,
+        synthetic=True,
+        artifact=FittedEstimator(
+            family="mean",
+            feature_names=manifest().feature_names,
+            means=(0.0,) * 10,
+            scales=(1.0,) * 10,
+            coefficients=(0.0,) * 10,
+            intercept=0.02,
+            alpha=1.0,
+            training_mse=0.0,
+            seed=0,
+            algorithm_version="mean-v1",
+        ),
+    )
+    store.append(candidate, idempotency_key="candidate")
+    now = observation.features[0].feature_at + timedelta(seconds=121)
+    result = await module().coordinator_tick(
+        store, manifest(), now=now, observation=observation, execution=None, clock_verified=True
+    )
+    assert result.observations_recorded == 6
+    assert result.decisions_recorded == result.intents == 0
+    assert result.status == "NORMAL_WAIT"
+    assert result.reason == "CURRENT_FEATURE_WINDOW_EXPIRED"
+    assert result.next_expected_event == "NEXT_FIVE_MINUTE_BOUNDARY"

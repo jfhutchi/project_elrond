@@ -15,7 +15,6 @@ from quantbot.learner import experiment_launch as launch
 from quantbot.learner.experiment_contract import ExperimentManifest
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.five_minute_launch import clock_healthy
-from quantbot.research.manifest import content_id
 
 TASK_NAME = "Elrond Adaptive Paper Shadow"
 
@@ -23,6 +22,8 @@ TASK_NAME = "Elrond Adaptive Paper Shadow"
 def prepare_shadow_rollout(
     config_path: Path, *, expected_commit: str, backup: Path, write_backup: bool = False
 ) -> dict[str, Any]:
+    from quantbot.research.manifest import content_id
+
     config = launch.ExperimentLaunchConfig.model_validate(launch._read_json(config_path))
     raw = config_path.read_bytes()
     if launch.ExperimentLaunchConfig.model_validate_json(raw) != config:

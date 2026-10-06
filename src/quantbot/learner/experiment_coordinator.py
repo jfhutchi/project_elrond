@@ -371,6 +371,7 @@ async def coordinator_tick(
             row
             for row in (observation.features if observation else ())
             if candidate.recorded_at <= row.decision_at
+            and now <= row.feature_at + timedelta(seconds=120)
             and (candidate.model_id, feature_key(row)) not in decision_keys
         )
         for row, score in zip(
@@ -465,6 +466,16 @@ async def coordinator_tick(
         )
     elif statuses and statuses <= {"WARMUP", "WAITING_BOUNDARY", "NOT_STARTED", "NO_ENTRY_WINDOW"}:
         status, reason, next_event = "NORMAL_WAIT", sorted(statuses)[0], "NEXT_FIVE_MINUTE_BOUNDARY"
+    elif (
+        observation is not None
+        and observation.features
+        and all(now > row.feature_at + timedelta(seconds=120) for row in observation.features)
+    ):
+        status, reason, next_event = (
+            "NORMAL_WAIT",
+            "CURRENT_FEATURE_WINDOW_EXPIRED",
+            "NEXT_FIVE_MINUTE_BOUNDARY",
+        )
     elif "AVAILABLE" in statuses:
         status, reason, next_event = (
             "OBSERVING",

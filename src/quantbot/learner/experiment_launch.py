@@ -153,6 +153,14 @@ async def _collect_guarded_day(
     return await collect_snapshot(root, symbols, day, day, settings, clock=clock, timeframe="5Min")
 
 
+class PendingLabelRecovery(LearnerModel):
+    experiment_id: str
+    recorded_at: datetime
+    session_date: date
+    status: Literal["FETCHED", "UNAVAILABLE", "PROTECTED"]
+    synthetic: bool
+
+
 def _pending_label_days(
     store: ExperimentStore, manifest: ExperimentManifest, *, now: datetime
 ) -> tuple[date, ...]:
@@ -175,7 +183,17 @@ def _pending_label_days(
         and feature_key(row) not in labeled
         and row.target_at.astimezone(XNYS_TIMEZONE).date() < today
     }
-    return tuple(sorted(days)[:2])
+    attempts: dict[date, datetime] = {}
+    for event in events:
+        if event.kind == "PendingLabelRecovery":
+            attempt = event.decode(PendingLabelRecovery)
+            attempts[attempt.session_date] = max(
+                attempts.get(attempt.session_date, datetime.min.replace(tzinfo=UTC)),
+                attempt.recorded_at,
+            )
+    return tuple(
+        sorted(days, key=lambda day: (attempts.get(day, datetime.min.replace(tzinfo=UTC)), day))[:2]
+    )
 
 
 async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[str, object]:
@@ -218,19 +236,14 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
                     captures.append(captured)
                     return captured
 
-                observation = await asyncio.wait_for(
-                    collect_observations(
-                        manifest, provider=provider, clock=clock, clock_health=healthy
-                    ),
-                    timeout=90,
-                )
-                # Recovery reads only the two oldest unresolved target sessions;
-                # actual retrieval time remains the label's availability time.
+                # Retry older targets before collecting a fresh feature; historical
+                # latency must not expire the current decision window.
                 for day in _pending_label_days(store, manifest, now=clock()):
                     if not healthy(clock()):
                         break
-                    captures.append(
-                        await asyncio.wait_for(
+                    status: Literal["FETCHED", "UNAVAILABLE", "PROTECTED"] = "UNAVAILABLE"
+                    try:
+                        capture = await asyncio.wait_for(
                             _collect_guarded_day(
                                 guard,
                                 config.root / "market" / "pending" / day.isoformat(),
@@ -241,7 +254,34 @@ async def _run_once(config: ExperimentLaunchConfig, settings: Settings) -> dict[
                             ),
                             timeout=30,
                         )
-                    )
+                        captures.append(capture)
+                        status = "FETCHED"
+                    except Exception as error:
+                        # Failed historical recovery cannot stop current collection;
+                        # cancellation remains BaseException and propagates.
+                        if (
+                            isinstance(error, ValueError)
+                            and str(error) == "PROTECTED_OBSERVATION_WINDOW"
+                        ):
+                            status = "PROTECTED"
+                    finished = clock()
+                    if healthy(finished):
+                        attempt = PendingLabelRecovery(
+                            experiment_id=manifest.experiment_id,
+                            recorded_at=finished,
+                            session_date=day,
+                            status=status,
+                            synthetic=manifest.synthetic,
+                        )
+                        store.append(
+                            attempt, idempotency_key="label-recovery:" + content_id(attempt)
+                        )
+                observation = await asyncio.wait_for(
+                    collect_observations(
+                        manifest, provider=provider, clock=clock, clock_health=healthy
+                    ),
+                    timeout=90,
+                )
             finally:
                 _REGISTRY.reset(registry_token)
                 _DECLARATIONS.reset(declaration_token)
