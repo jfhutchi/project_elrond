@@ -10,6 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import TYPE_CHECKING
+from zoneinfo import ZoneInfo
 
 from quantbot.domain import BrokerEnvironment, IntentState, OrderIntent, TradingMode
 from quantbot.execution import SubmissionResult
@@ -22,7 +23,12 @@ from quantbot.learner.models import LearnerModel, Text
 from quantbot.learner.paper import PromotionGatedSubmitter, build_learner_paper_cycle
 from quantbot.learner.paper_deadlines import DeadlineGatedSubmitter, _read_record, _signal_id
 from quantbot.learner.paper_runner import IntradayPaperServices
-from quantbot.operations.cycle import CycleStrategyResult, DataSyncRunner, SubmissionRequest
+from quantbot.operations.cycle import (
+    CycleResult,
+    CycleStrategyResult,
+    DataSyncRunner,
+    SubmissionRequest,
+)
 from quantbot.research.manifest import content_id
 from quantbot.risk import DrawdownState, OrderPurpose, PortfolioVetoDecision
 from quantbot.storage import StorageRepository
@@ -480,3 +486,59 @@ def wire_experiment_services(
         ),
     )
     return IntradayPaperServices(runner=services.runner, cycle=cycle, deadlines=services.deadlines)
+
+
+async def run_experiment_cycle(
+    runtime: Runtime,
+    services: IntradayPaperServices,
+    *,
+    manifest: ExperimentManifest,
+    decisions: Sequence[DecisionRecord],
+    store: ExperimentStore,
+    owner: str,
+    data_sync: DataSyncRunner,
+    clock: Callable[[], datetime],
+    run_id: str,
+    simulation: bool = False,
+) -> CycleResult:
+    """Execute one explicit tick through the complete retained PAPER lifecycle.
+
+    The shadow launcher never calls this entry point. Real use requires the
+    separately commissioned exact artifact, existing operational deployment and
+    independent deadline owner; this function cannot create any of them.
+    """
+    from quantbot.learner.experiment_activation import active_artifact
+
+    _paper_only(services)
+    manifest = ExperimentManifest.model_validate(manifest.model_dump())
+    now = clock()
+    if simulation:
+        if not manifest.synthetic or str(services.runner._broker.provider) != "synthetic":
+            raise ValueError("SYNTHETIC_SANDBOX_ONLY")
+    else:
+        activation = active_artifact(store, manifest, now=now)
+        if (
+            manifest.synthetic
+            or activation is None
+            or activation.synthetic
+            or activation.model_id != services.runner.model.model_id
+            or activation.binding_hash != services.runner.binding.configuration_hash
+        ):
+            raise ValueError("EXACT_ARTIFACT_BINDING_ACTIVATION_REQUIRED")
+    if not run_id or run_id != run_id.strip():
+        raise ValueError("EXACT_OPERATIONAL_RUN_ID_REQUIRED")
+    services.runner.bind_run(run_id)
+    wired = wire_experiment_services(
+        runtime,
+        services,
+        manifest=manifest,
+        decisions=decisions,
+        store=store,
+        owner=owner,
+        data_sync=data_sync,
+        clock=clock,
+        simulation=simulation,
+    )
+    return await wired.cycle.run(
+        run_id, started_at=now, trading_date=now.astimezone(ZoneInfo("America/New_York")).date()
+    )

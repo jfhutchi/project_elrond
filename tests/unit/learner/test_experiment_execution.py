@@ -373,7 +373,12 @@ async def test_integrated_cycle_retains_lifecycle_before_any_dispatch(context, h
         runtime_context=lambda: None,
     )
     sync = Sync()
-    wired = module().wire_experiment_services(
+    if halt == "kill":
+        with runner._database.transaction() as session:
+            StorageRepository(session).set_kill_switch(
+                True, reason="synthetic halt", updated_at=broker.now
+            )
+    result = await module().run_experiment_cycle(
         runtime,
         services,
         manifest=manifest,
@@ -383,15 +388,7 @@ async def test_integrated_cycle_retains_lifecycle_before_any_dispatch(context, h
         data_sync=sync,
         clock=lambda: broker.now,
         simulation=True,
-    )
-    runner.bind_run("adaptive-cycle")
-    if halt == "kill":
-        with runner._database.transaction() as session:
-            StorageRepository(session).set_kill_switch(
-                True, reason="synthetic halt", updated_at=broker.now
-            )
-    result = await wired.cycle.run(
-        "adaptive-cycle", started_at=broker.now, trading_date=broker.now.date()
+        run_id="adaptive-cycle",
     )
     assert result.status == ("SUCCEEDED" if halt is None else "HALTED")
     assert len(broker.submitted) == (1 if halt is None else 0)

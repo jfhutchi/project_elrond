@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 from pydantic import model_validator
 
@@ -30,7 +31,29 @@ from quantbot.learner.forward_source import Snapshot
 from quantbot.learner.models import LearnerModel, Text
 from quantbot.learner.paper_runner import IntradayPaperServices
 from quantbot.market_data.base import MarketDataError
+from quantbot.operations.cycle import CycleResult, DataSyncRunner
 from quantbot.research.manifest import content_id
+
+if TYPE_CHECKING:
+    from quantbot.runtime import Runtime
+
+
+@dataclass(frozen=True)
+class ActiveCycleContext:
+    """Explicit commissioned service dependencies, absent from shadow launcher."""
+
+    runtime: Runtime
+    data_sync: DataSyncRunner
+    clock: Callable[[], datetime]
+
+
+class ExperimentCycleReceipt(LearnerModel):
+    experiment_id: Text
+    recorded_at: datetime
+    tick_id: Digest
+    activation_id: Digest
+    result: CycleResult
+    synthetic: Literal[False] = False
 
 
 class ResolvedMarketLabel(LearnerModel):
@@ -176,17 +199,33 @@ async def coordinator_tick(
     owner: str = "coordinator",
     label_snapshots: Sequence[Snapshot] = (),
     operational_path: Path | None = None,
+    active_cycle: ActiveCycleContext | None = None,
 ) -> TickReceipt:
     manifest = ExperimentManifest.model_validate(manifest.model_dump())
     state = store.state(manifest.experiment_id)
     if state.manifest_hash != content_id(manifest):
         raise ValueError("FROZEN_MANIFEST_MISMATCH")
+    activation = None
+    if active_cycle is not None:
+        from quantbot.learner.experiment_activation import active_artifact
+
+        activation = active_artifact(store, manifest, now=now)
+        if (
+            manifest.synthetic
+            or activation is None
+            or activation.synthetic
+            or execution is None
+            or execution.runner.model.model_id != activation.model_id
+            or execution.runner.binding.configuration_hash != activation.binding_hash
+        ):
+            raise ValueError("EXACT_ARTIFACT_BINDING_ACTIVATION_REQUIRED")
     tick_id = content_id({"experiment": manifest.experiment_id, "wake": now})
     input_hash = content_id(
         {
             "observation": observation,
             "label_sources": label_snapshots,
             "clock_verified": clock_verified,
+            "activation_id": activation.activation_id if activation is not None else None,
         }
     )
     base = dict(
@@ -289,6 +328,7 @@ async def coordinator_tick(
         else ()
     )
     decisions_recorded = 0
+    active_decisions: list[DecisionRecord] = []
     candidates = [
         event.decode(CandidateArtifact) for event in events if event.kind == "CandidateArtifact"
     ]
@@ -322,6 +362,11 @@ async def coordinator_tick(
         for row, score in zip(
             rows, predict(candidate.artifact, tuple(row.values for row in rows)), strict=True
         ):
+            activated = (
+                activation is not None
+                and candidate.model_id == activation.model_id
+                and activation.recorded_at <= row.decision_at
+            )
             decision = DecisionRecord(
                 experiment_id=manifest.experiment_id,
                 recorded_at=now,
@@ -329,10 +374,12 @@ async def coordinator_tick(
                 features=row,
                 score=score,
                 action="BUY" if score > manifest.round_trip_cost_bps / 10000 else "WAIT",
-                reason="SHADOW_SCORE_ABOVE_COST"
+                reason=("PAPER_SCORE_ABOVE_COST" if activated else "SHADOW_SCORE_ABOVE_COST")
                 if score > manifest.round_trip_cost_bps / 10000
                 else "SCORE_BELOW_COST",
                 synthetic=manifest.synthetic,
+                activation_id=activation.activation_id if activated and activation else None,
+                paper_eligible=activated and score > manifest.round_trip_cost_bps / 10000,
             )
             store.append(
                 decision,
@@ -341,6 +388,37 @@ async def coordinator_tick(
             decision_keys.add((candidate.model_id, feature_key(row)))
             decisions_recorded += 1
             event_ids.append(decision.decision_id)
+            if activated:
+                active_decisions.append(decision)
+    cycle_result = None
+    if (
+        active_cycle is not None
+        and execution is not None
+        and activation is not None
+        and active_decisions
+    ):
+        from quantbot.learner.experiment_execution import run_experiment_cycle
+
+        cycle_result = await run_experiment_cycle(
+            active_cycle.runtime,
+            execution,
+            manifest=manifest,
+            decisions=active_decisions,
+            store=store,
+            owner=owner,
+            data_sync=active_cycle.data_sync,
+            clock=active_cycle.clock,
+            run_id="adaptive-" + tick_id,
+        )
+        cycle_receipt = ExperimentCycleReceipt(
+            experiment_id=manifest.experiment_id,
+            recorded_at=cycle_result.finished_at,
+            tick_id=tick_id,
+            activation_id=activation.activation_id,
+            result=cycle_result,
+        )
+        store.append(cycle_receipt, idempotency_key="cycle:" + tick_id)
+        event_ids.append(content_id(cycle_receipt))
     statuses = {row.status for row in observation.coverage} if observation else set()
     if state.state == "FAULTED":
         status, reason, next_event = "FAULTED", state.reason, "OPERATOR_REVIEW_REQUIRED"
@@ -385,6 +463,7 @@ async def coordinator_tick(
         fits=sum(row.charged is True for row in fit_receipts),
         fit_budget_reserved=len(starts),
         fit_request_ids=pending_fits,
+        intents=cycle_result.orders_submitted if cycle_result is not None else 0,
         event_ids=tuple(event_ids),
     )
     store.append(receipt, idempotency_key="tick:" + tick_id)

@@ -300,3 +300,25 @@ async def test_tick_reports_charged_worker_queue_without_fitting(context):
         e.kind == "FitStart"
         for e in store.read_as_of(manifest().experiment_id, observation.recorded_at)
     )
+
+
+async def test_active_cycle_context_cannot_commission_unapproved_experiment(context):
+    from types import SimpleNamespace
+
+    store, observation = context
+    active = module().ActiveCycleContext(
+        runtime=SimpleNamespace(),
+        data_sync=SimpleNamespace(),
+        clock=lambda: observation.recorded_at,
+    )
+    with pytest.raises(ValueError, match="EXACT_ARTIFACT_BINDING_ACTIVATION_REQUIRED"):
+        await module().coordinator_tick(
+            store,
+            manifest(),
+            now=observation.recorded_at,
+            observation=observation,
+            execution=None,
+            active_cycle=active,
+            clock_verified=True,
+        )
+    assert not store.pending_intents(manifest().experiment_id)
