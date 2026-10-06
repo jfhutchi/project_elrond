@@ -19,13 +19,30 @@ if($Commit -notmatch '^[a-f0-9]{40}$'){throw 'ADAPTIVE_PIN_REQUIRED'}
 $Existing=Get-ScheduledTask -TaskName $Name -TaskPath '\' -ErrorAction SilentlyContinue
 if($null -ne $Existing){throw 'ADAPTIVE_TASK_ALREADY_EXISTS_NO_IMPLICIT_UPDATE'}
 $Learner=Get-ScheduledTask -TaskName 'Elrond Learner' -TaskPath '\'
-if(-not ([string]$Learner.Description).StartsWith(
- 'Managed by project_elrond deploy/omen/schedule-learner.ps1.') -or
+$Description=[string]$Learner.Description
+# This exact legacy description is on the previously authorized Omen learner.
+# It identifies only that installation, not arbitrary task descriptions or commits.
+$KnownLegacyDescription='Native intraday data and guarded learning pass every 10 minutes; '+
+ 'PAPER entry requires approved deployment. Commit=3fdfce992686342749c5da0ae65f7e58bb3b7d67'
+$Managed=$Description.StartsWith('Managed by project_elrond deploy/omen/schedule-learner.ps1.') -or
+ $Description -ceq $KnownLegacyDescription
+if(-not $Managed -or
  [string]$Learner.Principal.LogonType -ne 'Interactive' -or
  [string]$Learner.Principal.RunLevel -ne 'Limited' -or
  @($Learner.Actions).Count -ne 1 -or $Learner.Actions[0].Execute -ne $ServiceHost){
  throw 'ADAPTIVE_EXISTING_LIMITED_PRINCIPAL_REQUIRED'
 }
+try {
+ $TaskOwner=[string]$Learner.Principal.UserId
+ if($TaskOwner -match '^S-1-'){
+  $TaskOwnerSid=([System.Security.Principal.SecurityIdentifier]$TaskOwner).Value
+ } else {
+  $TaskOwnerSid=([System.Security.Principal.NTAccount]$TaskOwner).Translate(
+   [System.Security.Principal.SecurityIdentifier]).Value
+ }
+ $CurrentOwnerSid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
+ if($TaskOwnerSid -ne $CurrentOwnerSid){throw 'owner mismatch'}
+} catch {throw 'ADAPTIVE_EXISTING_CURRENT_OWNER_REQUIRED'}
 $Wrapper=Join-Path $Repository 'deploy\omen\start-adaptive-paper.ps1'
 $Python=Join-Path $Repository '.venv\Scripts\python.exe'
 foreach($Path in @($Repository,$Config,$ServiceHost,$Wrapper,$Python)){

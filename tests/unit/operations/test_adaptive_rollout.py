@@ -178,6 +178,70 @@ def test_powershell_scripts_parse_without_registration_or_execution():
         assert result.returncode == 0, result.stdout + result.stderr
 
 
+@pytest.mark.parametrize(
+    'case,expected',
+    [('current','ADAPTIVE_ROLLOUT_SOURCE_MISSING'),
+     ('known-legacy','ADAPTIVE_ROLLOUT_SOURCE_MISSING'),
+     ('unknown','ADAPTIVE_EXISTING_LIMITED_PRINCIPAL_REQUIRED'),
+     ('other-legacy-commit','ADAPTIVE_EXISTING_LIMITED_PRINCIPAL_REQUIRED'),
+     ('highest','ADAPTIVE_EXISTING_LIMITED_PRINCIPAL_REQUIRED'),
+     ('second-action','ADAPTIVE_EXISTING_LIMITED_PRINCIPAL_REQUIRED'),
+     ('other-host','ADAPTIVE_EXISTING_LIMITED_PRINCIPAL_REQUIRED'),
+     ('other-owner','ADAPTIVE_EXISTING_CURRENT_OWNER_REQUIRED')],
+)
+def test_existing_task_provenance_and_owner_are_verified_before_shadow_registration(
+    tmp_path, case, expected,
+):
+    import shutil
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    shell = shutil.which('pwsh') or shutil.which('powershell')
+    if shell is None or sys.platform != 'win32':
+        pytest.skip('Native Windows scheduled-task ownership contract')
+    script = Path(__file__).resolve().parents[3] / 'deploy/omen/adaptive-paper-rollout.ps1'
+    def quote(path):
+        return "'" + str(path).replace("'", "''") + "'"
+
+    current = 'Managed by project_elrond deploy/omen/schedule-learner.ps1. Commit=' + 'a'*40
+    legacy = ('Native intraday data and guarded learning pass every 10 minutes; '
+              'PAPER entry requires approved deployment. Commit='
+              '3fdfce992686342749c5da0ae65f7e58bb3b7d67')
+    description = legacy if case == 'known-legacy' else current
+    if case == 'unknown':
+        description = 'unverified task'
+    if case == 'other-legacy-commit':
+        description = legacy.replace('3fdfce992686342749c5da0ae65f7e58bb3b7d67', 'a'*40)
+    host = tmp_path/'host.exe'
+    selected_host = tmp_path/'other.exe' if case == 'other-host' else host
+    level = 'Highest' if case == 'highest' else 'Limited'
+    owner = (
+        "'S-1-5-18'" if case == 'other-owner'
+        else '[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value'
+    )
+    actions = "@($Action,$Action)" if case == 'second-action' else '@($Action)'
+    command = f"""
+      function Get-ScheduledTask {{ param($TaskName,$TaskPath)
+        if($TaskName -eq 'Elrond Adaptive Paper Shadow'){{return $null}}
+        if($TaskName -ne 'Elrond Learner'){{throw 'UNRELATED_TASK_READ'}}
+        $Action=[pscustomobject]@{{Execute={quote(selected_host)}}}
+        [pscustomobject]@{{Description='{description}';Actions={actions};
+          Principal=[pscustomobject]@{{LogonType='Interactive';RunLevel='{level}';UserId={owner}}}}}
+      }}
+      function Register-ScheduledTask {{throw 'MUST_NOT_REGISTER'}}
+      try {{ & {quote(script)} -Repository {quote(tmp_path/'missing-release')}
+        -Config {quote(tmp_path/'config.json')} -Commit {'a'*40}
+        -ServiceHost {quote(host)} -BackupDirectory {quote(tmp_path/'backup')}; exit 3
+      }} catch {{ if($_.Exception.Message -eq '{expected}'){{'EXPECTED_REFUSAL';exit 0}};throw }}
+    """.replace('\n        -', ' -')
+    result = subprocess.run([shell, '-NoProfile', '-NonInteractive', '-Command', command],
+        capture_output=True, text=True, timeout=15, check=False)
+    assert result.returncode == 0, result.stdout+result.stderr
+    assert 'EXPECTED_REFUSAL' in result.stdout
+    assert not (tmp_path/'backup').exists()
+
+
 def test_mocked_shadow_rollback_only_stops_its_exact_task_and_keeps_evidence(tmp_path):
     import shutil
     import subprocess
