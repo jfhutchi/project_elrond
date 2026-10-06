@@ -59,6 +59,7 @@ async def prepare_entry(
     store: ExperimentStore,
     services: IntradayPaperServices,
     simulation: bool = False,
+    alternate_decisions: Sequence[DecisionRecord] = (),
 ) -> OrderIntent | None:
     manifest = ExperimentManifest.model_validate(manifest.model_dump())
     decision = DecisionRecord.model_validate(decision.model_dump())
@@ -96,7 +97,8 @@ async def prepare_entry(
         raise ValueError("EXACT_ACTIVATION_REQUIRED")
     now = runner._clock()
     if (
-        decision.model_id != runner.model.model_id
+        decision.recorded_at > now
+        or decision.model_id != runner.model.model_id
         or decision.action != "BUY"
         or decision.risk_vetoes
         or now < manifest.prospective_start_at
@@ -109,11 +111,41 @@ async def prepare_entry(
         if prediction.features == decision.features
         and prediction.model_id == decision.model_id
         and prediction.score == decision.score
+        and prediction.recorded_at == decision.recorded_at
     ]
     if len(matching) != 1:
         raise ValueError("EXACT_FORECAST_REQUIRED")
     if decision.score <= manifest.round_trip_cost_bps / 10000:
         return None
+    candidates = [decision]
+    for alternative in alternate_decisions:
+        alternative = DecisionRecord.model_validate(alternative.model_dump())
+        if (
+            alternative.recorded_at > now
+            or alternative.experiment_id != decision.experiment_id
+            or alternative.model_id != decision.model_id
+            or alternative.activation_id != decision.activation_id
+            or alternative.synthetic != decision.synthetic
+            or (not simulation and not alternative.paper_eligible)
+            or alternative.action != "BUY"
+            or alternative.risk_vetoes
+            or alternative.score <= manifest.round_trip_cost_bps / 10000
+            or alternative.features.symbol not in {row.symbol for row in manifest.roster}
+        ):
+            raise ValueError("ALTERNATE_DECISION_AUTHORITY_MISMATCH")
+        matching_alternative = [
+            prediction
+            for prediction in runner.predictions
+            if prediction.features == alternative.features
+            and prediction.model_id == alternative.model_id
+            and prediction.score == alternative.score
+            and prediction.recorded_at == alternative.recorded_at
+        ]
+        if len(matching_alternative) != 1:
+            raise ValueError("EXACT_ALTERNATE_FORECAST_REQUIRED")
+        candidates.append(alternative)
+    if len({row.features.symbol for row in candidates}) != len(candidates):
+        raise ValueError("DUPLICATE_ENTRY_CANDIDATE")
     # This retained runner evaluates measured sizing, exposure, cost, stop/deadline,
     # pending buys, inherited holdings, calendar, clock, account and promotion gates.
     result = await runner.evaluate()
@@ -122,6 +154,10 @@ async def prepare_entry(
     if len(result.submissions) != 1:
         raise ValueError("ONE_NEW_ENTRY_LIMIT")
     request = result.submissions[0]
+    selected = [row for row in candidates if row.features.symbol == request.intent.symbol]
+    if len(selected) != 1:
+        raise ValueError("RETAINED_GATEWAY_REQUEST_MISMATCH")
+    decision = selected[0]
     if (
         request.intent.symbol != decision.features.symbol
         or request.purpose is not OrderPurpose.ENTRY
@@ -390,6 +426,7 @@ class ExperimentStrategyRunner:
             store=self.store,
             services=self.services,
             simulation=self.simulation,
+            alternate_decisions=eligible[1:],
         )
         queued = self.store.get_intent(intent.intent_id) if intent is not None else None
         return CycleStrategyResult(
