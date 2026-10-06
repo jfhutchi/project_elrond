@@ -576,3 +576,36 @@ def test_guard_runs_before_opening_research_input_files(tmp_path):
             validation_hash="b" * 64,
             guard=Guard(False),
         )
+
+
+def test_historical_retrieval_time_is_preserved_not_backdated_to_validation():
+    training, validation = inputs()
+    retrieved = manifest().registered_at - timedelta(seconds=1)
+
+    def archived(rows):
+        return tuple(
+            row.model_copy(
+                update={
+                    "features": row.features.model_copy(
+                        update={
+                            "receipt_at": retrieved,
+                            "evaluation_class": "EXPLORATORY_HISTORICAL",
+                        }
+                    ),
+                    "available_at": retrieved,
+                    "evaluation_class": "EXPLORATORY_HISTORICAL",
+                }
+            )
+            for row in rows
+        )
+
+    prepared = module().prepare_fit_request(
+        manifest(),
+        family="ridge",
+        training=archived(training),
+        validation=archived(validation),
+        now=manifest().registered_at,
+        guard=Guard(),
+    )
+    assert all(row.available_at == retrieved for row in prepared.training)
+    assert prepared.training_sessions == 20 and prepared.validation_sessions == 5

@@ -96,6 +96,16 @@ async def prepare_entry(
     ):
         raise ValueError("EXACT_ACTIVATION_REQUIRED")
     now = runner._clock()
+    if not simulation:
+        from quantbot.learner.experiment_activation import active_artifact
+
+        activation = active_artifact(store, manifest, now=now)
+        if (
+            activation is None
+            or activation.model_id != decision.model_id
+            or activation.binding_hash != runner.binding.configuration_hash
+        ):
+            raise ValueError("EXACT_ARTIFACT_BINDING_ACTIVATION_REQUIRED")
     if (
         decision.recorded_at > now
         or decision.model_id != runner.model.model_id

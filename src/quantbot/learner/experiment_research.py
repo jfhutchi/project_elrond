@@ -176,7 +176,13 @@ def _validate_inputs(
     earliest_validation = min(row.features.feature_at for row in validation)
     if latest_train + timedelta(minutes=35) > earliest_validation:
         raise ValueError("PURGED_CHRONOLOGY_REQUIRED")
-    if any(row.available_at >= earliest_validation for row in training):
+    # Offline exploratory history can be retrieved after historical validation
+    # event time. Its real availability must precede this fit, never a fabricated
+    # historical freeze. Forward training retains the stricter as-of boundary.
+    if any(
+        row.evaluation_class == "PROSPECTIVE_LOCAL" and row.available_at >= earliest_validation
+        for row in training
+    ):
         raise ValueError("TRAINING_NOT_AVAILABLE_BEFORE_VALIDATION")
     if generation == 0:
         for panel, start, end in (
