@@ -113,13 +113,13 @@ def test_archive_reader_refuses_hash_substitution_and_missing_original(tmp_path)
     [
         (
             [
-                {"name": "Elrond Five Minute PAPER Entry", "enabled": False, "state": "Disabled"},
+                {"name": "Elrond DIA Learner", "enabled": False, "state": "Disabled"},
                 {"name": "Elrond Adaptive Paper Shadow", "enabled": False, "state": "Disabled"},
             ],
             True,
         ),
-        ([{"name": "Elrond Five Minute PAPER Entry", "enabled": True, "state": "Ready"}], False),
-        ([{"name": "Elrond Five Minute PAPER Entry", "enabled": False, "state": "Running"}], False),
+        ([{"name": "Elrond DIA Learner", "enabled": True, "state": "Ready"}], False),
+        ([{"name": "Elrond DIA Learner", "enabled": False, "state": "Running"}], False),
         ([], False),
     ],
 )
@@ -562,3 +562,32 @@ async def test_prepared_context_creates_one_authoritative_activated_decision(
     assert not broker.submitted
     await prepared.close()
     assert closed == ["closed"]
+
+
+def test_wrong_legacy_entry_alias_cannot_satisfy_transfer():
+    assert not module().entry_ownership_safe(
+        [
+            {"name": "Elrond Five Minute PAPER Entry", "enabled": False, "state": "Disabled"},
+            {"name": "Elrond Adaptive Paper Shadow", "enabled": False, "state": "Disabled"},
+        ]
+    )
+
+
+def test_native_ownership_query_names_actual_entry_owner(monkeypatch):
+    from types import SimpleNamespace
+
+    def query(command, **kwargs):
+        script = command[-1]
+        assert "Elrond DIA Learner" in script
+        assert "Elrond Five Minute PAPER Entry" not in script
+        assert "Elrond Adaptive Paper Shadow" in script
+        return SimpleNamespace(
+            returncode=0,
+            stdout=(
+                '[{"name":"Elrond DIA Learner","enabled":false,"state":"Disabled"},'
+                '{"name":"Elrond Adaptive Paper Shadow","enabled":false,"state":"Disabled"}]'
+            ),
+        )
+
+    monkeypatch.setattr(module().subprocess, "run", query)
+    assert module().read_entry_ownership()

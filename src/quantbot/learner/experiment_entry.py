@@ -53,7 +53,7 @@ from quantbot.storage import Database
 from quantbot.strategy import StrategyConfig, load_strategy_config, strategy_id_for
 from quantbot.strategy.identity import validate_strategy_identity
 
-PREDECESSORS = frozenset({"Elrond Five Minute PAPER Entry", "Elrond Adaptive Paper Shadow"})
+PREDECESSORS = frozenset({"Elrond DIA Learner", "Elrond Adaptive Paper Shadow"})
 
 
 class EntryLaunchConfig(LearnerModel):
@@ -164,7 +164,7 @@ def read_entry_ownership() -> bool:
     # Fixed read-only query: no task arguments, credentials, registration or elevation.
     script = (
         "$ErrorActionPreference='Stop'; $rows=@(); "
-        "foreach($name in @('Elrond Five Minute PAPER Entry','Elrond Adaptive Paper Shadow')) { "
+        "foreach($name in @('Elrond DIA Learner','Elrond Adaptive Paper Shadow')) { "
         "$t=Get-ScheduledTask -TaskName $name -TaskPath '\\'; "
         "$rows+=@{name=$name; enabled=[bool]$t.Settings.Enabled; state=[string]$t.State} }; "
         "ConvertTo-Json -InputObject $rows -Compress"

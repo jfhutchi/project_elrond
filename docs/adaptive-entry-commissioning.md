@@ -31,6 +31,10 @@ activation additionally requires a genuine current cohort and retained operation
 deployment/PAPER_OBSERVATION prerequisites. Never fabricate a cohort to activate
 overnight. Historical validation loss is exploratory, not prospective profitability.
 
+The existing entry predecessor is named `Elrond DIA Learner`. A nonexistent older
+alias cannot satisfy the ownership check. The new SHADOW predecessor must also be
+registered and explicitly stopped before transfer.
+
 After activation, use a *later* fresh cohort: the coordinator requires the
 activation timestamp to precede each decision. The entry preparer computes service
 inputs in memory; the coordinator journals exactly one immutable decision for each
