@@ -201,41 +201,81 @@ async def test_ingestion_stamps_accepted_response_completion(tmp_path):
         database.close()
 
 
-async def test_ingestion_and_comparison_share_one_capture_budget(tmp_path, monkeypatch):
+@pytest.mark.parametrize("reset_shared_budget", [False, True])
+async def test_ingestion_and_comparison_share_one_capture_budget(
+    tmp_path, monkeypatch, reset_shared_budget
+):
+    import quantbot.execution.recovery as startup
     import quantbot.operations.runners as runners
 
-    monkeypatch.setattr(runners, "CAPTURE_BUDGET_SECONDS", 0.08)
+    elapsed = [1000.0]
+    monkeypatch.setattr(runners, "monotonic", lambda: elapsed[0])
+    monkeypatch.setattr(startup, "monotonic", lambda: elapsed[0])
     flat_account = account().model_copy(update={"cash": Decimal("2000")})
 
-    class Slow(RecoveryBroker):
+    class Immediate(RecoveryBroker):
+        account_reads = 0
+        position_reads = 0
+
         async def get_account(self):
-            await asyncio.sleep(0.025)
+            self.account_reads += 1
             return await super().get_account()
 
         async def get_positions(self):
-            await asyncio.sleep(0.005)
+            self.position_reads += 1
             return ()
 
     database = _prepare_database(tmp_path, flat_account)
-    broker = Slow(account=flat_account)
+    broker = Immediate(account=flat_account)
     recovery = LedgerSyncingRecovery(
         database,
         cast(BrokerAdapter, broker),
         StartupRecovery(database, cast(BrokerAdapter, broker), _settings()),
     )
-    start = monotonic()
+    real_ingest = recovery._ingest
+    after_ingest = []
+
+    async def completed_ingest(**kwargs):
+        reasons = await real_ingest(**kwargs)
+        assert reasons == ()
+        after_ingest.append((broker.account_reads, broker.position_reads))
+        # Simulate expensive ledger work AFTER the genuine successful capture.
+        # Keep asyncio's real clock and the production capture budget untouched.
+        elapsed[0] += runners.CAPTURE_BUDGET_SECONDS + 0.01
+        return reasons
+
+    monkeypatch.setattr(recovery, "_ingest", completed_ingest)
+    if reset_shared_budget:
+        real_recover = recovery._recovery.recover
+
+        async def dropped_deadline(*args, **kwargs):
+            # Negative control: reproduce resetting the budget at the comparison.
+            kwargs.pop("_capture_deadline", None)
+            return await real_recover(*args, **kwargs)
+
+        monkeypatch.setattr(recovery._recovery, "recover", dropped_deadline)
     try:
         result = await recovery.recover("shared-budget", started_at=NOW)
-        assert not result.ready and "SNAPSHOT_ACQUISITION_TIMEOUT" in result.reasons
-        assert monotonic() - start < 0.5
         with database.transaction() as session:
             captures = (
                 StorageRepository(session)
                 .get_reconciliation("shared-budget")
                 .summary["snapshot_acquisition"]
             )
+
+        def shared_budget_assertions():
+            assert not result.ready and "SNAPSHOT_ACQUISITION_TIMEOUT" in result.reasons
             assert len(captures) == 2 and captures[0]["status"] == "ACQUIRED"
             assert captures[1]["status"] == "ACQUISITION_TIMEOUT"
+            assert (broker.account_reads, broker.position_reads) == after_ingest[0] == (2, 1)
+
+        if reset_shared_budget:
+            assert result.ready
+            assert (broker.account_reads, broker.position_reads) == (4, 2)
+            with pytest.raises(AssertionError):
+                shared_budget_assertions()
+        else:
+            shared_budget_assertions()
     finally:
         database.close()
 

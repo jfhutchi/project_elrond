@@ -2,6 +2,8 @@
 
 from datetime import timedelta
 from importlib import import_module
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -90,9 +92,16 @@ def test_cohort_reader_does_not_substitute_challenger_or_future_decision(tmp_pat
     assert rows == ()
 
 
-def test_archive_reader_refuses_hash_substitution_and_missing_original(tmp_path):
+@pytest.fixture
+def short_archive_root():
+    # The two content hashes make this path long; never depend on suite basetemp.
+    with TemporaryDirectory(prefix="ea-archive-") as directory:
+        yield Path(directory)
+
+
+def test_archive_reader_refuses_hash_substitution_and_missing_original(short_archive_root):
     frozen, _candidate, decisions, sources = cohort()
-    root = tmp_path / "shadow"
+    root = short_archive_root / "shadow"
     source = sources[decisions[0].features.symbol]
     identity = frozen.roster[0]
     directory = root / "market" / content_id({"asset_id": identity.asset_id})
