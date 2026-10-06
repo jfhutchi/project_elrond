@@ -43,9 +43,9 @@ try {
  $CurrentOwnerSid=[System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value
  if($TaskOwnerSid -ne $CurrentOwnerSid){throw 'owner mismatch'}
 } catch {throw 'ADAPTIVE_EXISTING_CURRENT_OWNER_REQUIRED'}
-$Wrapper=Join-Path $Repository 'deploy\omen\start-adaptive-paper.ps1'
+$Bootstrap=Join-Path $Repository 'deploy\omen\adaptive-native-command.ps1'
 $Python=Join-Path $Repository '.venv\Scripts\python.exe'
-foreach($Path in @($Repository,$Config,$ServiceHost,$Wrapper,$Python)){
+foreach($Path in @($Repository,$Config,$ServiceHost,$Bootstrap,$Python)){
  if(-not (Test-Path -LiteralPath $Path)){throw 'ADAPTIVE_ROLLOUT_SOURCE_MISSING'}
 }
 $env:PYTHONPATH=Join-Path $Repository 'src'
@@ -65,8 +65,9 @@ $ConfigHash=(Get-Content -LiteralPath (Join-Path $BackupDirectory 'rollback.json
 if($ConfigHash -notmatch '^[a-f0-9]{64}$'){throw 'ADAPTIVE_BACKUP_PIN_INVALID'}
 $Log=Join-Path $Root 'logs\adaptive-launcher.log'
 New-Item -ItemType Directory -Path (Split-Path $Log -Parent) -Force | Out-Null
-$Arguments='"'+$Log+'" -NoProfile -NonInteractive -WindowStyle Hidden -File "'+$Wrapper+
- '" -Repository "'+$Repository+'" -Config "'+$Config+'" -ConfigHash '+$ConfigHash
+. $Bootstrap
+$NativeCommand=New-ElrondAdaptiveNativeCommand -Repository $Repository -Config $Config -ConfigHash $ConfigHash
+$Arguments='"'+$Log+'" -NoProfile -NonInteractive -WindowStyle Hidden -Command "'+$NativeCommand+'"'
 $Action=New-ScheduledTaskAction -Execute $ServiceHost -Argument $Arguments -WorkingDirectory $Root
 $Once=New-ScheduledTaskTrigger -Once -At ((Get-Date).AddMinutes(1))
 $Logon=New-ScheduledTaskTrigger -AtLogOn -User $Learner.Principal.UserId

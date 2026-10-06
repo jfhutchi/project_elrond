@@ -160,6 +160,7 @@ def test_powershell_scripts_parse_without_registration_or_execution():
         "adaptive-paper-rollout.ps1",
         "adaptive-paper-rollback.ps1",
         "start-adaptive-paper.ps1",
+        "adaptive-native-command.ps1",
     ):
         literal = str(directory / name).replace("'", "''")
         command = (
