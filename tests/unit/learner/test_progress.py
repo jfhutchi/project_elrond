@@ -6,6 +6,20 @@ from quantbot.operations.alerts import AlertPolicy, AlertStore
 NOW = datetime(2026, 10, 1, 14, 10, tzinfo=UTC)
 
 
+def test_verified_closed_entry_wait_does_not_hide_component_failure(tmp_path):
+    with AlertStore(tmp_path / "alerts.db") as store:
+        doc = receipt(blockers=["SELECTED_ENTRY_MARKET_CLOSED"], expected=False)
+        doc["paper"] = dict(status="STANDBY_UNVERIFIED", entry_expected_wait=True)
+        report = monitor_progress(store, doc, now=NOW)
+        assert report["paper_status"] == "SELECTED_ENTRY_EXPECTED_CLOSED_WAIT"
+        assert report["forecast_status"] == "EXPECTED_WAIT"
+        assert report["active_alerts"] == []
+        doc["blockers"].append("PAPER_EXECUTION_NOT_CONFIGURED")
+        report = monitor_progress(store, doc, now=NOW + timedelta(minutes=10))
+        assert report["paper_status"] == "MISSING_COMPONENT"
+        assert [a["code"] for a in report["active_alerts"]] == ["PAPER_EXECUTION_NOT_CONFIGURED"]
+
+
 def receipt(*, blockers=(), progress=0, expected=True, session="2026-10-01"):
     return dict(
         status="BLOCKED",

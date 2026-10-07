@@ -20,6 +20,7 @@ from quantbot.config import Settings
 from quantbot.learner.experiment_contract import ExperimentManifest, InstrumentIdentity
 from quantbot.learner.experiment_coordinator import (
     ActiveCycleContext,
+    ExplorationCycleContext,
     collect_observations,
     coordinator_tick,
 )
@@ -113,7 +114,7 @@ class ExperimentLaunchConfig(LearnerModel):
 class PreparedExecution:
     runtime: Runtime
     services: IntradayPaperServices
-    context: ActiveCycleContext | None
+    context: ActiveCycleContext | ExplorationCycleContext | None
     close_guard: Callable[[], None]
 
     async def close(self) -> None:

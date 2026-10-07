@@ -27,6 +27,7 @@ from quantbot.learner.experiment_observation import (
     resolve_batch_labels,
 )
 from quantbot.learner.experiment_store import ExperimentStore
+from quantbot.learner.exploration import ExplorationPolicy
 from quantbot.learner.five_minute import FiveMinuteFeatureRow, FiveMinuteLabel
 from quantbot.learner.forward_source import Snapshot
 from quantbot.learner.models import LearnerModel, Text
@@ -46,6 +47,25 @@ class ActiveCycleContext:
     runtime: Runtime
     data_sync: DataSyncRunner
     clock: Callable[[], datetime]
+
+
+@dataclass(frozen=True)
+class ExplorationCycleContext:
+    """Distinct policy authority; never substitutes for fitted-model activation."""
+    runtime: Runtime
+    data_sync: DataSyncRunner
+    clock: Callable[[], datetime]
+    policy: ExplorationPolicy
+
+
+class ExplorationCycleReceipt(LearnerModel):
+    experiment_id: Text
+    recorded_at: datetime
+    tick_id: Digest
+    commission_id: Digest
+    policy_id: Digest
+    result: CycleResult
+    synthetic: Literal[False] = False
 
 
 class ExperimentCycleReceipt(LearnerModel):
@@ -200,7 +220,7 @@ async def coordinator_tick(
     owner: str = "coordinator",
     label_snapshots: Sequence[Snapshot] = (),
     operational_path: Path | None = None,
-    active_cycle: ActiveCycleContext | None = None,
+    active_cycle: ActiveCycleContext | ExplorationCycleContext | None = None,
     news_evidence: Sequence[NewsEvidence] = (),
 ) -> TickReceipt:
     manifest = ExperimentManifest.model_validate(manifest.model_dump())
@@ -208,7 +228,14 @@ async def coordinator_tick(
     if state.manifest_hash != content_id(manifest):
         raise ValueError("FROZEN_MANIFEST_MISMATCH")
     activation = None
-    if active_cycle is not None:
+    commission = None
+    if isinstance(active_cycle, ExplorationCycleContext):
+        from quantbot.learner.exploration_execution import verified_commission
+
+        if execution is None:
+            raise ValueError("EXACT_OPERATOR_EXPLORATION_COMMISSION_REQUIRED")
+        commission = verified_commission(store, active_cycle.policy, execution, now=now)
+    elif active_cycle is not None:
         from quantbot.learner.experiment_activation import active_artifact
 
         activation = active_artifact(store, manifest, now=now)
@@ -222,15 +249,16 @@ async def coordinator_tick(
         ):
             raise ValueError("EXACT_ARTIFACT_BINDING_ACTIVATION_REQUIRED")
     tick_id = content_id({"experiment": manifest.experiment_id, "wake": now})
-    input_hash = content_id(
-        {
+    inputs = {
             "observation": observation,
             "label_sources": label_snapshots,
             "clock_verified": clock_verified,
             "news_evidence": news_evidence,
             "activation_id": activation.activation_id if activation is not None else None,
         }
-    )
+    if commission is not None:
+        inputs["exploration_commission_id"] = commission.commission_id
+    input_hash = content_id(inputs)
     base = dict(
         experiment_id=manifest.experiment_id,
         recorded_at=now,
@@ -283,6 +311,10 @@ async def coordinator_tick(
         refreshed = refresh_lot_journal(store, manifest, operational_path=operational_path, now=now)
     else:
         refreshed = ()
+    if isinstance(active_cycle, ExplorationCycleContext):
+        from quantbot.learner.exploration_feedback import journal_exploration_feedback
+
+        journal_exploration_feedback(store, active_cycle.policy, now=now)
     known = [event.decode(ObservationBatch) for event in events if event.kind == "ObservationBatch"]
     labeled = {
         feature_key(event.decode(ResolvedMarketLabel).label.features)
@@ -419,7 +451,26 @@ async def coordinator_tick(
             if activated:
                 active_decisions.append(decision)
     cycle_result = None
-    if (
+    if (isinstance(active_cycle, ExplorationCycleContext) and execution is not None
+            and not exhausted and state.state not in
+            {"FAULTED", "COMPLETED", "REJECTED", "INSUFFICIENT_EVIDENCE"}):
+        from quantbot.learner.exploration_execution import run_exploration_cycle
+
+        if commission is None:
+            raise ValueError("EXACT_OPERATOR_EXPLORATION_COMMISSION_REQUIRED")
+        cycle_result = await run_exploration_cycle(
+            active_cycle.runtime, execution, manifest=manifest, policy=active_cycle.policy,
+            store=store, owner=owner, data_sync=active_cycle.data_sync, clock=active_cycle.clock,
+            run_id="exploration-" + tick_id,
+        )
+        experience_receipt = ExplorationCycleReceipt(
+            experiment_id=manifest.experiment_id, recorded_at=cycle_result.finished_at,
+            tick_id=tick_id, commission_id=commission.commission_id,
+            policy_id=active_cycle.policy.policy_id, result=cycle_result,
+        )
+        store.append(experience_receipt, idempotency_key="exploration-cycle:" + tick_id)
+        event_ids.append(content_id(experience_receipt))
+    elif (
         active_cycle is not None
         and execution is not None
         and activation is not None

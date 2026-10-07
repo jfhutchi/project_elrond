@@ -30,6 +30,7 @@ from quantbot.domain import (
     StrategyIdentity,
     TimeInForce,
 )
+from quantbot.learner.exploration import ExplorationObservation
 from quantbot.learner.five_minute_forward import FiveMinutePrediction
 from quantbot.learner.inherited import InheritedBaseline, observe_inherited
 from quantbot.learner.intraday import IntradayModel, IntradayPrediction, predict_intraday
@@ -160,7 +161,8 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
     """
 
     model: PaperModelView
-    predictions: tuple[IntradayPrediction | FiveMinutePrediction, ...]
+    predictions: tuple[IntradayPrediction | FiveMinutePrediction | ExplorationObservation, ...]
+    observation_kind = "LEARNER_PAPER_FORECAST_V1"
 
     def __init__(
         self,
@@ -249,6 +251,28 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         return MarketFreshnessPolicy(
             cadence=DataCadence.INTRADAY, expected_interval_seconds=60, tolerated_intervals=2
         )
+
+    def _entry_candidates(
+        self,
+    ) -> tuple[IntradayPrediction | FiveMinutePrediction | ExplorationObservation, ...]:
+        forecasts = tuple(row for row in self.predictions
+                          if isinstance(row, (IntradayPrediction, FiveMinutePrediction)))
+        if len(forecasts) != len(self.predictions):
+            raise ValueError("SEPARATE_EXPLORATION_POLICY_REQUIRED")
+        ranked = sorted(forecasts, key=lambda item: (-item.score, item.features.symbol))
+        return tuple(ranked[:max(1, math.ceil(len(ranked) / 5))])
+
+    def _economic_edge_objection(
+        self, prediction: IntradayPrediction | FiveMinutePrediction | ExplorationObservation,
+        modeled_cost: Decimal | None,
+    ) -> str | None:
+        if isinstance(prediction, ExplorationObservation):
+            return "SEPARATE_EXPLORATION_POLICY_REQUIRED"
+        if prediction.score <= self.policy.round_trip_cost_bps / 10000:
+            return "PAPER_SCORE_BELOW_COST_FLOOR"
+        if modeled_cost is not None and Decimal(str(prediction.score)) <= modeled_cost:
+            return "PAPER_SCORE_BELOW_EXECUTION_COST"
+        return None
 
     def _pre_handoff_objections(
         self,
@@ -361,7 +385,8 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                 identity=self._identity,
                 run_id=self._run_id,
                 now=now,
-                predictions=self.predictions,
+                predictions=tuple(row for row in self.predictions
+                                  if isinstance(row, (IntradayPrediction, FiveMinutePrediction))),
                 cost_bps=self.policy.round_trip_cost_bps,
             )
         if any(
@@ -403,13 +428,13 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
             ],
         )
         opened = _position_open_times(fills)
-        ranked = sorted(self.predictions, key=lambda item: (-item.score, item.features.symbol))
-        top = ranked[: max(1, math.ceil(len(ranked) / 5))]
+        top = self._entry_candidates()
         rejections: list[str] = []
         for prediction in top:
             symbol = prediction.features.symbol
-            if prediction.score <= self.policy.round_trip_cost_bps / 10000:
-                rejections.append("PAPER_SCORE_BELOW_COST_FLOOR")
+            economic_objection = self._economic_edge_objection(prediction, None)
+            if economic_objection:
+                rejections.append(economic_objection)
                 continue
             if any(position.symbol == symbol for position in positions):
                 rejections.append("PAPER_SYMBOL_ALREADY_HELD")
@@ -470,8 +495,9 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                 modeled_cost = Decimal(2 * max(5, self._config.slippage_bps)) / Decimal(
                     10000
                 ) + 2 * self._config.commission_per_order / (sized.quantity * reference)
-                if Decimal(str(prediction.score)) <= modeled_cost:
-                    rejections.append("PAPER_SCORE_BELOW_EXECUTION_COST")
+                economic_objection = self._economic_edge_objection(prediction, modeled_cost)
+                if economic_objection:
+                    rejections.append(economic_objection)
                     continue
                 freshness = self._entry_freshness()
                 veto_inputs = build_veto_inputs(
@@ -524,12 +550,13 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                     symbol=symbol,
                     occurred_at=issued_at,
                     payload={
-                        "kind": "LEARNER_PAPER_FORECAST_V1",
+                        "kind": self.observation_kind,
                         "prediction": prediction.model_dump(mode="json"),
                         "cohort_hash": content_id(self.predictions),
                         "binding": self.binding.model_dump(),
                         "risk_approval": sized.model_dump(mode="json"),
                         "vetoes": vetoes.model_dump(mode="json"),
+                        "modeled_round_trip_cost": str(modeled_cost),
                     },
                 )
             record_deadline(

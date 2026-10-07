@@ -12,6 +12,7 @@ from typing import Any, Literal
 
 from pydantic import Field
 
+from quantbot.console.market_status import MarketStatus
 from quantbot.learner.consent import consent_recorded
 from quantbot.learner.models import LearnerModel
 from quantbot.learner.paper import PaperModelBinding
@@ -42,6 +43,7 @@ class EntryStandby(LearnerModel):
     paper_configuration_hash: str = Field(pattern=r"^[a-f0-9]{64}$")
     active_root: Path
     operational_database: Path
+    active_contract: Literal["LEGACY_DIA", "PAPER_EXPLORATION"] = "LEGACY_DIA"
     recorded_at: datetime
     authority: Literal["EXPLICIT_OPERATOR_PAPER_PILOT_SWITCH"]
 
@@ -69,13 +71,18 @@ def _validated_selection(
         or record.recorded_at > now
     ):
         raise StandbyVerificationError("STANDBY_VERIFICATION_FAILED")
-    config = _read(record.active_root / "paper-execution.json")
-    if content_id(config) != record.paper_configuration_hash:
+    if record.active_contract == "PAPER_EXPLORATION":
+        config, target = _exploration_selection(record, now=now)
+    else:
+        config = _read(record.active_root / "paper-execution.json")
+        target = _read(record.active_root / "worker.json")
+    if (record.active_contract == "LEGACY_DIA"
+            and content_id(config) != record.paper_configuration_hash):
         raise StandbyVerificationError("STANDBY_CONFIGURATION_MISMATCH")
     policy = config.get("policy", {})
     if (
         config.get("mode") != "PAPER"
-        or config.get("experimental_symbol") != "DIA"
+        or (record.active_contract == "LEGACY_DIA" and config.get("experimental_symbol") != "DIA")
         or config.get("operational_database") != str(record.operational_database)
         or not 0 < config.get("risk_per_trade_bps", 10000) <= 25
         or not 0 < config.get("max_position_value_bps", 10000) <= 500
@@ -84,9 +91,9 @@ def _validated_selection(
         or not policy.get("inherited")
     ):
         raise StandbyVerificationError("STANDBY_CONFIGURATION_MISMATCH")
-    if not consent_recorded(record.active_root, now=now):
+    if (record.active_contract == "LEGACY_DIA"
+            and not consent_recorded(record.active_root, now=now)):
         raise StandbyVerificationError("STANDBY_CONSENT_UNVERIFIED")
-    target = _read(record.active_root / "worker.json")
     finished = datetime.fromisoformat(target["finished_at"])
     paper = target.get("paper", {})
     binding = PaperModelBinding.model_validate(paper["binding"])
@@ -142,6 +149,7 @@ def _validated_selection(
         active_strategy_id=record.active_strategy_id,
         active_root=str(record.active_root),
         active_pilot_status=paper.get("status"),
+        active_worker_status=target.get("status"),
         blockers=list(paper.get("blockers", [])),
         cleared_gate_codes=[
             "PAPER_PROMOTION_REQUIRED",
@@ -152,12 +160,136 @@ def _validated_selection(
     ), finished
 
 
+def _exploration_selection(
+    record: EntryStandby, *, now: datetime,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Read actual coordinator completion and separate explicit policy commissioning.
+
+    Static selection metadata makes no heartbeat or profitable-model claim. A matching
+    journaled TickReceipt, binding, operator commission and registry remain mandatory.
+    """
+    from quantbot.learner.experiment_coordinator import ExplorationCycleReceipt, TickReceipt
+    from quantbot.learner.experiment_launch import load_manifest
+    from quantbot.learner.experiment_store import ExperimentStore
+    from quantbot.learner.exploration_execution import ExplorationCommission
+    from quantbot.learner.exploration_launch import (
+        ExplorationLaunchConfig,
+        configured_source,
+        read_policy,
+    )
+
+    proof = _read(record.active_root / "exploration-selection.json")
+    if (proof.get("schema") != "PAPER_EXPLORATION_SELECTION_V1"
+            or content_id(proof) != record.paper_configuration_hash):
+        raise StandbyVerificationError("STANDBY_CONFIGURATION_MISMATCH")
+    path = Path(proof["launch_config"])
+    launch_document = _read(path)
+    if (not path.is_absolute() or path.is_symlink()
+            or hashlib.sha256(path.read_bytes()).hexdigest() != proof["launch_hash"]):
+        raise StandbyVerificationError("STANDBY_CONFIGURATION_MISMATCH")
+    launch = ExplorationLaunchConfig.model_validate(launch_document)
+    source, policy = configured_source(launch), read_policy(launch)
+    manifest = load_manifest(source)
+    binding = PaperModelBinding.model_validate(proof["binding"])
+    if (source.root.resolve() != record.active_root.resolve()
+            or source.operations_database.resolve() != record.operational_database.resolve()
+            or source.code_commit != record.active_commit
+            or policy.manifest_hash != content_id(manifest)
+            or binding.model_id != policy.policy_id or binding.code_hash != policy.code_hash
+            or binding.artifact_hash != content_id(policy)
+            or binding.configuration_hash != launch.binding_hash):
+        raise StandbyVerificationError("STANDBY_BINDING_MISMATCH")
+    target = _read(record.active_root / "receipt.json")
+    receipt = TickReceipt.model_validate({field: target[field] for field in TickReceipt.model_fields
+                                          if field in target})
+    if (target.get("code_commit") != record.active_commit
+            or target.get("config_hash") != content_id(source.model_dump(mode="json"))
+            or receipt.synthetic or not receipt.clock_verified
+            or receipt.experiment_id != manifest.experiment_id
+            or receipt.status in {"FAULTED", "CLOCK_SYNC_REQUIRED", "LEASE_BUSY"}):
+        raise StandbyVerificationError("STANDBY_VERIFICATION_FAILED")
+    store = ExperimentStore(source.store, read_only=True)
+    events = store.read_as_of(manifest.experiment_id, now)
+    commissions = tuple(event.decode(ExplorationCommission) for event in events
+                        if event.kind == "ExplorationCommission"
+                        and event.decode(ExplorationCommission).policy_id == policy.policy_id)
+    if (len(commissions) != 1 or commissions[0].commission_id != proof["commission_id"]
+            or commissions[0].binding_hash != binding.configuration_hash
+            or commissions[0].manifest_hash != policy.manifest_hash
+            or commissions[0].code_commit != record.active_commit
+            or not commissions[0].source_authorization_ref.startswith("chat:")
+            or not policy.recorded_at <= commissions[0].recorded_at <= receipt.recorded_at
+            or not any(event.kind == "ExplorationPolicy" and event.decode(type(policy)) == policy
+                       for event in events)
+            or not any(event.kind == "TickReceipt" and event.decode(TickReceipt) == receipt
+                       for event in events)):
+        raise StandbyVerificationError("STANDBY_CONSENT_UNVERIFIED")
+    cycles = tuple(event.decode(ExplorationCycleReceipt) for event in events
+                   if event.kind == "ExplorationCycleReceipt"
+                   and event.decode(ExplorationCycleReceipt).tick_id == receipt.tick_id)
+    if len(cycles) > 1 or any(row.commission_id != commissions[0].commission_id
+                             or row.policy_id != policy.policy_id for row in cycles):
+        raise StandbyVerificationError("STANDBY_BINDING_MISMATCH")
+    # Adapter only in memory: never invent or write a legacy worker completion.
+    config = dict(mode="PAPER", model_id=policy.policy_id,
+                  operational_database=str(record.operational_database),
+                  risk_per_trade_bps=policy.maximum_entry_risk_bps,
+                  max_position_value_bps=policy.maximum_position_bps,
+                  policy=launch.policy.model_dump(mode="json"),
+                  expected_binding_hash=content_id(binding))
+    selected = dict(code_commit=record.active_commit, finished_at=receipt.recorded_at.isoformat(),
+                    status="FAILED" if cycles and cycles[0].result.status != "SUCCEEDED" else "OK",
+                    paper=dict(binding=binding.model_dump(), identity=proof["identity"],
+                               status=cycles[0].result.status if cycles else "WAITING",
+                               blockers=list(cycles[0].result.reasons)
+                               if cycles else [receipt.reason]))
+    return config, selected
+
+
 def standby_status(root: Path, *, now: datetime) -> dict[str, Any]:
     """Selection plus fresh heartbeat; no broker, database writes or entry authority."""
     record = EntryStandby.model_validate(_read(root / "entry-standby.json", 4096))
     result, finished = _validated_selection(root, record, now=now)
     if not timedelta(0) <= now - finished <= timedelta(minutes=10):
         raise StandbyVerificationError("STANDBY_ENTRY_HEARTBEAT_STALE")
+    return result
+
+
+def observation_standby_status(
+    root: Path, *, now: datetime, market: MarketStatus
+) -> dict[str, Any]:
+    """Classify a verified closure without verifying entry liveness or granting authority.
+
+    Immutable selection, consent and deployment must still agree. Only heartbeat expiry
+    is an expected wait; configuration failures and unknown market health remain failures.
+    """
+    try:
+        return standby_status(root, now=now)
+    except StandbyVerificationError as error:
+        if error.code != "STANDBY_ENTRY_HEARTBEAT_STALE":
+            raise
+        current = market.current(now)
+        if not (
+            current.clock_status == "HEALTHY"
+            and current.reported_open is False
+            and current.expected_open is False
+            and current.closed_session_consistent
+        ):
+            raise
+    record = EntryStandby.model_validate(_read(root / "entry-standby.json", 4096))
+    result, finished = _validated_selection(root, record, now=now)
+    if (
+        now - finished <= timedelta(minutes=10)
+        or result.get("active_pilot_status") in {"HALTED", "ERROR", "FAILED"}
+        or result.get("active_worker_status") in {"ERROR", "FAILED"}
+    ):
+        raise StandbyVerificationError("STANDBY_ENTRY_HEARTBEAT_STALE")
+    result.update(
+        status="STANDBY_UNVERIFIED",
+        entry_expected_wait=True,
+        reason="Fresh PAPER clock and calendar verify closure; entry heartbeat remains stale.",
+        blockers=[*result["blockers"], "SELECTED_ENTRY_MARKET_CLOSED"],
+    )
     return result
 
 
