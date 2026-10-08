@@ -182,11 +182,15 @@ async def test_gate_runs_before_strategy_and_rechecks_each_entry(setup):
     database, binding, identity = setup
     runner = Runner()
     gated = PromotionGatedStrategy(database.path, runner, binding=binding, identity=identity)
-    await gated.evaluate()
+    refused = await gated.evaluate()
+    assert refused.entry_gate_reasons == assess_paper_entry(
+        database.path, binding=binding, identity=identity).reasons
+    assert refused.entry_gate_reasons
     assert runner.calls == 0
     assert runner.exit_calls == 1
     deploy(setup)
-    await gated.evaluate()
+    eligible = await gated.evaluate()
+    assert eligible.entry_gate_reasons == ()
     delegate = Submitter()
     submitter = PromotionGatedSubmitter(
         database.path,

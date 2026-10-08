@@ -58,7 +58,20 @@ class ForwardConfig(BaseModel):
 
 def _ensure_contract(root: Path, config: ForwardConfig) -> None:
     # A different universe or training policy needs an explicitly separate experiment.
-    _save(root / "contract.json", config.model_dump(mode="json", exclude={"registry_database"}))
+    path = root / "contract.json"
+    document = config.model_dump(mode="json", exclude={"registry_database"})
+    if path.is_file():
+        previous = _read(path)  # Verify the original immutable envelope/hash.
+        missing = set(document) - set(previous)
+        # Only absent null identity/declaration extensions are equivalent to
+        # their legacy defaults. Never rewrite the original evidence or accept
+        # a changed universe, training policy or non-null declaration.
+        comparable = {key: value for key, value in document.items() if key not in missing}
+        if (missing <= {"declaration_database", "experiment_id"}
+                and all(document[key] is None for key in missing)
+                and previous == comparable):
+            return
+    _save(path, document)
 
 
 _REGISTRY: ContextVar[Path | None] = ContextVar("intraday_registry", default=None)

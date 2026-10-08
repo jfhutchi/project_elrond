@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from datetime import datetime, timedelta
 from typing import Literal
 
@@ -95,3 +96,8 @@ def resolve_batch_labels(
         if label is not None:
             labels.append(label)
     return tuple(labels)
+
+
+def validate_label_sources(snapshots: Sequence[Snapshot], *, now: datetime) -> tuple[Snapshot, ...]:
+    """Validate every supplied capture even when its labels are already complete."""
+    return tuple(_source(snapshot, now) for snapshot in snapshots)

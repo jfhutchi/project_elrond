@@ -25,6 +25,7 @@ from quantbot.learner.experiment_observation import (
     ObservationBatch,
     build_observation_batch,
     resolve_batch_labels,
+    validate_label_sources,
 )
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.exploration import ExplorationPolicy
@@ -325,8 +326,13 @@ async def coordinator_tick(
     labels_recorded, observations_recorded = 0, 0
     event_ids = [content_id(row) for row in refreshed]
     # Resolve prior targets even after close. Market labels are never trade returns.
+    validated_sources = validate_label_sources(label_snapshots, now=now)
     for batch in known:
-        for source in label_snapshots:
+        # Canonical labels are immutable. Reprocessing completed batches adds
+        # no evidence and grows entry latency with the entire archive.
+        if all(feature_key(row) in labeled for row in batch.features):
+            continue
+        for source in validated_sources:
             for label in resolve_batch_labels(batch, source, now=now):
                 key = feature_key(label.features)
                 if key in labeled:

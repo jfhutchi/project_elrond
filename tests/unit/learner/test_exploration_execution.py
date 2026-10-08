@@ -84,6 +84,28 @@ async def test_synthetic_exploration_cannot_be_commissioned_as_real_paper(contex
     assert broker.submitted == []
 
 
+async def test_entry_refusal_is_durable_and_does_not_create_an_intent(context, monkeypatch):
+    module = import_module("quantbot.learner.exploration_execution")
+    kwargs, services, store, broker = context
+    async def refuse():
+        return services.runner._no_entry("PAPER_PREDICTION_STALE")
+    monkeypatch.setattr(services.runner, "evaluate", refuse)
+    assert await module.prepare_exploration_entry(kwargs["manifest"], kwargs["exploration"],
+                                                 store=store, services=services,
+                                                 simulation=True) is None
+    events = store.read_as_of(kwargs["manifest"].experiment_id, broker.now)
+    rows = [e for e in events if e.kind == "ExplorationEntryRefusal"]
+    assert len(rows) == 1
+    record = rows[0].decode(module.ExplorationEntryRefusal)
+    assert record.reasons == ("PAPER_PREDICTION_STALE",)
+    assert record.recorded_at == broker.now and record.synthetic
+    assert record.grants_execution is False
+    assert record.policy_id == kwargs["exploration"].policy_id
+    assert record.binding_hash == services.runner.binding.configuration_hash
+    assert not store.pending_intents(kwargs["manifest"].experiment_id)
+    assert broker.submitted == []
+
+
 @pytest.mark.parametrize("state", ["FAULTED", "COMPLETED", "REJECTED", "INSUFFICIENT_EVIDENCE"])
 async def test_terminal_exploration_cannot_prepare_new_entry(context, monkeypatch, state):
     module = import_module("quantbot.learner.exploration_execution")

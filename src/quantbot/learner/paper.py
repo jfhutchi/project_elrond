@@ -191,7 +191,9 @@ class PromotionGatedStrategy:
         result = await self._runner.evaluate_exits()
         if any(request.purpose is OrderPurpose.ENTRY for request in result.submissions):
             raise PaperEntryBlocked(PaperEligibility(reasons=("EXIT_ONLY_RUNNER_RETURNED_ENTRY",)))
-        return result
+        # Preserve exact outer gate diagnostics even when the entry runner is
+        # skipped. Exit behavior and the historical CycleResult schema remain intact.
+        return result.model_copy(update={"entry_gate_reasons": decision.reasons})
 
 
 class _PaperQualificationTracker(QualificationTracker):

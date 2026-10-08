@@ -61,6 +61,18 @@ class ExplorationCommission(LearnerModel):
         return content_id(self)
 
 
+class ExplorationEntryRefusal(LearnerModel):
+    """Diagnostic evidence only; cannot grant or alter any entry authority."""
+    experiment_id: Text
+    policy_id: Digest
+    binding_hash: Digest
+    run_id: Text
+    recorded_at: datetime
+    reasons: tuple[Text, ...] = Field(min_length=1)
+    grants_execution: Literal[False] = False
+    synthetic: bool
+
+
 def prior_episode_objections(
     store: ExperimentStore, policy: ExplorationPolicy, *, cohort_at: datetime, now: datetime,
 ) -> tuple[str, ...]:
@@ -120,6 +132,15 @@ async def prepare_exploration_entry(
             or store.state(manifest.experiment_id).manifest_hash != content_id(manifest)):
         raise ValueError("EXACT_EXPLORATION_MANIFEST_REQUIRED")
     now = runner._clock()
+    def refuse(*reasons: str) -> None:
+        record = ExplorationEntryRefusal(
+            experiment_id=manifest.experiment_id, policy_id=policy.policy_id,
+            binding_hash=runner.binding.configuration_hash, run_id=runner._run_id,
+            recorded_at=runner._clock(),
+            reasons=tuple(dict.fromkeys(reasons)) or ("NO_ELIGIBLE_EXPLORATION_ENTRY",),
+            synthetic=simulation,
+        )
+        store.append(record, idempotency_key="exploration-entry-refusal:" + content_id(record))
     if simulation:
         if (not manifest.synthetic or not policy.synthetic
                 or str(runner._broker.provider) != "synthetic"):
@@ -129,27 +150,36 @@ async def prepare_exploration_entry(
             raise ValueError("SYNTHETIC_EVIDENCE_HAS_NO_REAL_PAPER_AUTHORITY")
         commission = verified_commission(store, policy, services, now=now)
         if any(commission.recorded_at > row.features.decision_at for row in runner.predictions):
+            refuse("POST_COMMISSION_COHORT_REQUIRED")
             return None
     if (now < manifest.prospective_start_at
             or store.state(manifest.experiment_id).state in
             {"FAULTED", "COMPLETED", "REJECTED", "INSUFFICIENT_EVIDENCE"}):
+        refuse("EXPERIMENT_NOT_IN_ACTIVE_PROSPECTIVE_WINDOW")
         return None
     from quantbot.learner.experiment_evaluation import evaluate_experiment
 
     evaluation = evaluate_experiment(store, manifest, now=now)
     if not evaluation.new_entries_allowed:
+        refuse("EXPERIMENT_EVALUATION_ENTRY_NOT_ALLOWED")
         return None  # Unknown calendar or exhausted window never grants entry authority.
     if store.pending_intents(manifest.experiment_id):
+        refuse("EXPERIMENT_PENDING_INTENT_REQUIRES_RECOVERY")
         return None  # Recovery never releases an unknown/unsent ID for another broker send.
-    if any(prior_episode_objections(store, policy, cohort_at=row.features.feature_at, now=now)
-           for row in runner.predictions):
+    prior = tuple(sorted({reason for row in runner.predictions for reason in
+                          prior_episode_objections(store, policy,
+                                                   cohort_at=row.features.feature_at, now=now)}))
+    if prior:
+        refuse(*prior)
         return None
     journal_exploration_feedback(store, policy, now=now)
     completed = len(verified_feedback(store, policy, now=now))
     if runner.completed_lots != completed:
+        refuse("IMMUTABLE_EXPERIENCE_REFRESH_REQUIRED")
         return None  # Rebuild the next selection from newly available immutable experience.
     result = await runner.evaluate()
     if not result.submissions:
+        refuse(*runner.last_reasons)
         return None
     if len(result.submissions) != 1:
         raise ValueError("ONE_CONCURRENT_EXPLORATION_ENTRY_REQUIRED")

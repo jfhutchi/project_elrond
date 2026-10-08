@@ -15,6 +15,34 @@ from quantbot.storage.schema import search_runs
 from tests.unit.learner.test_intraday import OPEN, bars, calendar
 
 
+def test_legacy_null_contract_fields_preserve_immutable_bytes(tmp_path):
+    config = forward.ForwardConfig()
+    legacy = config.model_dump(mode="json", exclude={
+        "registry_database", "declaration_database", "experiment_id"})
+    path = tmp_path / "contract.json"
+    forward._save(path, legacy)
+    before = path.read_bytes()
+    forward._ensure_contract(tmp_path, config)
+    assert path.read_bytes() == before
+
+
+@pytest.mark.parametrize("change", [
+    {"declaration_database": "declared.db"}, {"experiment_id": "separate-experiment"},
+    {"symbols": ("DIA",)}, {"retrain_after_cohorts": 48},
+])
+def test_legacy_contract_still_rejects_actual_changes(tmp_path, change):
+    config = forward.ForwardConfig()
+    legacy = config.model_dump(mode="json", exclude={
+        "registry_database", "declaration_database", "experiment_id"})
+    path = tmp_path / "contract.json"
+    forward._save(path, legacy)
+    before = path.read_bytes()
+    with pytest.raises(ValueError, match="immutable forward record conflict"):
+        changed = forward.ForwardConfig.model_validate(config.model_dump() | change)
+        forward._ensure_contract(tmp_path, changed)
+    assert path.read_bytes() == before
+
+
 def snapshot(minute):
     received = OPEN + timedelta(minutes=minute, seconds=1)
     return cast(

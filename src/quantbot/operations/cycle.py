@@ -66,6 +66,7 @@ class SubmissionRequest(OperationsModel):
 class CycleStrategyResult(OperationsModel):
     submissions: tuple[SubmissionRequest, ...]
     signal_count: int = Field(ge=0)
+    entry_gate_reasons: tuple[str, ...] = ()
 
 
 class CycleResult(OperationsModel):
@@ -375,7 +376,8 @@ class RunOnceCycle:
                 # after successful reconciliation. Preserve its original cause;
                 # do not manufacture a fresh reconciliation incident each tick.
                 existing_latch_only = (
-                    recovery.reasons == ("KILL_SWITCH_ENGAGED",)
+                    not recovery.ready
+                    and recovery.reasons == ("KILL_SWITCH_ENGAGED",)
                     and recovery.reconciliation.allows_new_orders
                     and recovery.broker_health.healthy
                     and not recovery.unresolved_intent_ids
@@ -476,6 +478,7 @@ class RunOnceCycle:
                     "signals_evaluated": strategy.signal_count,
                     "orders_submitted": submitted,
                     "bars_stored": data.bars_stored,
+                    "entry_gate_reasons": strategy.entry_gate_reasons,
                 }
                 self._finish(run_id, status="SUCCEEDED", finished_at=finished_at, detail=detail)
                 self._qualification.record_real_trading_day(
