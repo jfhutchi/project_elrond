@@ -67,6 +67,35 @@ async def test_clock_unverified_never_credits_observations_or_trades(context):
     assert result.observations_recorded == result.intents == 0
 
 
+async def test_completed_labels_do_not_repeat_historical_resolution(context, monkeypatch):
+    store, observation = context
+    await module().coordinator_tick(store, manifest(), now=observation.recorded_at,
+                                    observation=observation, execution=None, clock_verified=True)
+    later = OPEN + timedelta(hours=7)
+    result = await module().coordinator_tick(store, manifest(), now=later, observation=None,
+                                            label_snapshots=(snapshot(65),), execution=None,
+                                            clock_verified=True)
+    assert result.labels_recorded == 6
+    def duplicate_work(*args, **kwargs):
+        raise AssertionError("already-completed labels must not be recomputed")
+    monkeypatch.setattr(module(), "resolve_batch_labels", duplicate_work)
+    result = await module().coordinator_tick(store, manifest(), now=later+timedelta(minutes=2),
+                                            observation=None, label_snapshots=(snapshot(65),),
+                                            execution=None, clock_verified=True)
+    assert result.labels_recorded == 0
+    # Skipping completed labels must never skip validation of newly supplied data.
+    captured = snapshot(65)
+    future_at = later + timedelta(hours=1)
+    future = captured.model_copy(update={"received_at": future_at, "receipts": tuple(
+        r.model_copy(update={"received_at": future_at}) for r in captured.receipts),
+        "inputs": tuple(row.model_copy(update={"available_at": future_at})
+                        for row in captured.inputs)})
+    with pytest.raises(ValueError, match="FUTURE_SOURCE_RECEIPT"):
+        await module().coordinator_tick(store, manifest(), now=later+timedelta(minutes=4),
+                                       observation=None, label_snapshots=(future,), execution=None,
+                                       clock_verified=True)
+
+
 async def test_same_wakeup_receipt_replays_without_duplicate_evidence(context):
     store, observation = context
     first = await module().coordinator_tick(
