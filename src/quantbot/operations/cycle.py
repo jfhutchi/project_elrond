@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import os
-from collections.abc import Awaitable
+from collections.abc import AsyncIterator, Awaitable
+from contextlib import asynccontextmanager
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -27,8 +29,36 @@ from quantbot.operations.metrics import OperationalMetrics
 from quantbot.operations.qualification import QualificationTracker
 from quantbot.risk import DrawdownState, OrderPurpose, PortfolioVetoDecision
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
+from quantbot.storage.lock import AlreadyLockedError
 
 PAPER_SMOKE_ACKNOWLEDGEMENT = "I_ACKNOWLEDGE_ONE_PAPER_SMOKE_ORDER"
+
+
+class OperationalWriterBusy(AlreadyLockedError):
+    """Cycle never acquired its writer lock or started any operational mutation."""
+
+
+@asynccontextmanager
+async def _bounded_writer_lock(
+    path: Path, *, timeout_seconds: float = 5,
+) -> AsyncIterator[None]:
+    """Wait briefly for the real owner; never steal or bypass the writer lock."""
+    lock = SingleWriterLock(path)
+    loop = asyncio.get_running_loop()
+    expires = loop.time() + timeout_seconds
+    while True:
+        try:
+            lock.acquire()
+            break
+        except AlreadyLockedError:
+            remaining = expires - loop.time()
+            if remaining <= 0:
+                raise OperationalWriterBusy("OPERATIONAL_WRITER_BUSY") from None
+            await asyncio.sleep(min(.1, remaining))
+    try:
+        yield
+    finally:
+        lock.release()
 
 # Only identified missing/stale data pauses are retryable. Unknown faults, future
 # timestamps, risk failure and trade-stream loss still require the hard-stop path.
@@ -338,7 +368,7 @@ class RunOnceCycle:
         )
         prepared = await prepared_runner.prepare_snapshots() if prepared_runner else None
         created = False
-        with SingleWriterLock(self._lock_path):
+        async with _bounded_writer_lock(self._lock_path):
             try:
                 with self._database.transaction() as session:
                     StorageRepository(session).create_run(

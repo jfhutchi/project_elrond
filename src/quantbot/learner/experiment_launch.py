@@ -33,6 +33,7 @@ from quantbot.learner.forward_source import Snapshot, collect_snapshot
 from quantbot.learner.models import LearnerModel
 from quantbot.learner.paper_runner import IntradayPaperServices
 from quantbot.market_data.calendar import XNYS_TIMEZONE
+from quantbot.operations.cycle import OperationalWriterBusy
 from quantbot.operations.service import _git, isolated_application_environment
 from quantbot.research.manifest import content_id
 from quantbot.storage import Database, SingleWriterLock
@@ -407,14 +408,23 @@ async def run_once(
             reason = "COORDINATOR_TICK_TIMEOUT"
         elif isinstance(error, ValueError) and str(error) == "CLOCK_SYNC_REQUIRED":
             reason = "CLOCK_SYNC_REQUIRED"
+        elif isinstance(error, OperationalWriterBusy):
+            reason = (
+                "OPERATIONAL_WRITER_BUSY" if clock_healthy(config.clock_receipt, datetime.now(UTC))
+                else "CLOCK_SYNC_REQUIRED"
+            )
         document: dict[str, object] = {
             "recorded_at": datetime.now(UTC).isoformat(),
-            "status": "CLOCK_SYNC_REQUIRED" if reason == "CLOCK_SYNC_REQUIRED" else "FAULTED",
+            "status": (
+                "NORMAL_WAIT" if reason == "OPERATIONAL_WRITER_BUSY"
+                else "CLOCK_SYNC_REQUIRED" if reason == "CLOCK_SYNC_REQUIRED" else "FAULTED"
+            ),
             "reason": reason,
             "next_expected_event": "VERIFIED_CLOCK"
             if reason == "CLOCK_SYNC_REQUIRED"
+            else "NEXT_WRITER_AVAILABILITY" if reason == "OPERATIONAL_WRITER_BUSY"
             else "OPERATOR_REVIEW",
-            "clock_verified": False,
+            "clock_verified": reason == "OPERATIONAL_WRITER_BUSY",
             "observations_recorded": 0,
             "labels_recorded": 0,
             "fits": 0,
@@ -518,6 +528,17 @@ def _run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
             _REGISTRY.reset(registry_token)
             _DECLARATIONS.reset(declaration_token)
             guard_database.close()
+
+
+def cohort_poll_delay(now: datetime) -> float:
+    """Bound polls to two minutes, also waking shortly after actual five-minute closes."""
+    if now.tzinfo is None:
+        raise ValueError("aware clock required")
+    utc = now.astimezone(UTC)
+    boundary = utc.replace(second=20, microsecond=0) - timedelta(minutes=utc.minute % 5)
+    if boundary <= utc:
+        boundary += timedelta(minutes=5)
+    return min(120, (boundary - utc).total_seconds())
 
 
 def run_research_once(config: ExperimentLaunchConfig) -> dict[str, object]:
@@ -637,7 +658,11 @@ def run_experiment(
                 )
                 if once:
                     return 1 if receipt["status"] == "FAULTED" else 0
-                await asyncio.sleep(120)
+                delay = (
+                    120 if receipt["reason"] in {"SESSION_CLOSED", "MARKET_CLOSED"}
+                    else cohort_poll_delay(datetime.now(UTC))
+                )
+                await asyncio.sleep(delay)
 
         return asyncio.run(serve())
 
