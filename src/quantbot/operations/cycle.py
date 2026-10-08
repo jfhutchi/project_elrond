@@ -371,7 +371,17 @@ class RunOnceCycle:
                         started_at=started_at,
                         run_id=run_id,
                     )
-                if not recovery.ready:
+                # Startup safety reports an existing latch as not ready even
+                # after successful reconciliation. Preserve its original cause;
+                # do not manufacture a fresh reconciliation incident each tick.
+                existing_latch_only = (
+                    recovery.reasons == ("KILL_SWITCH_ENGAGED",)
+                    and recovery.reconciliation.allows_new_orders
+                    and recovery.broker_health.healthy
+                    and not recovery.unresolved_intent_ids
+                    and self._kill_switch.get().engaged
+                )
+                if not recovery.ready and not existing_latch_only:
                     return self._halt(
                         run_id,
                         kind="RECONCILIATION_FAILED",

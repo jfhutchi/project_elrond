@@ -32,6 +32,44 @@ class ResultSync(FakeDataSync):
         return self.result
 
 
+@pytest.mark.asyncio
+async def test_recovery_only_existing_latch_preserves_original_cause(tmp_path: Path) -> None:
+    database = Database.create(tmp_path / "paper.db")
+    _clear(database)
+    before = KillSwitchController(database).engage(reason="PAPER_PREDICTION_STALE", updated_at=NOW)
+    calls: list[str] = []
+    recovery = FakeRecovery(
+        _recovery().model_copy(update={"ready": False, "reasons": ("KILL_SWITCH_ENGAGED",)}),
+        calls,
+    )
+    cycle = _cycle(database, tmp_path, calls, ResultSync(calls, _data()), recovery=recovery)
+    for n in range(2):
+        result = await cycle.run(f"latched-{n}", started_at=NOW, trading_date=NOW.date())
+        assert result.status == "HALTED" and result.orders_submitted == 0
+        assert result.reasons == ("KILL_SWITCH_ENGAGED",)
+        assert KillSwitchController(database).get() == before
+    with database.transaction() as session:
+        assert not StorageRepository(session).list_incidents(unresolved_only=True)
+    assert calls == ["recover", "recover"]
+    database.close()
+
+
+@pytest.mark.asyncio
+async def test_real_recovery_failure_with_existing_latch_still_halts(tmp_path: Path) -> None:
+    database = Database.create(tmp_path / "paper.db")
+    _clear(database)
+    KillSwitchController(database).engage(reason="PAPER_PREDICTION_STALE", updated_at=NOW)
+    calls: list[str] = []
+    recovery = FakeRecovery(_recovery(ready=False).model_copy(
+        update={"reasons": ("KILL_SWITCH_ENGAGED", "RECONCILIATION_REQUIRED")}), calls)
+    cycle = _cycle(database, tmp_path, calls, ResultSync(calls, _data()), recovery=recovery)
+    result = await cycle.run("mixed-recovery", started_at=NOW, trading_date=NOW.date())
+    assert result.status == "HALTED" and result.orders_submitted == 0
+    assert KillSwitchController(database).get().reason == "RECONCILIATION_FAILED"
+    assert calls == ["recover"]
+    database.close()
+
+
 def _data(**changes: object) -> DataSyncResult:
     return DataSyncResult(
         healthy=True, completed_through=NOW, bars_stored=1, stale_symbols=(), reasons=()
