@@ -101,6 +101,126 @@ def test_verified_standby_does_not_grant_authority_or_write_database(case):
     assert op.read_bytes() == before
 
 
+@pytest.mark.parametrize("state", ["closed", "open", "unknown", "expired", "skewed"])
+def test_observation_wait_requires_fresh_healthy_verified_closure(case, state):
+    from quantbot.console.market_status import MarketStatus
+
+    original, _, op, at, *_ = case
+    now = at + timedelta(minutes=11)
+    market = MarketStatus(
+        checked_at=now, valid_until=now + timedelta(seconds=30),
+        reported_open=state == "open", expected_open=state == "open",
+        clock_status="HEALTHY", closed_session_consistent=state == "closed",
+    )
+    if state == "unknown":
+        market = MarketStatus()
+    elif state == "expired":
+        market = market.model_copy(update={"valid_until": now})
+    elif state == "skewed":
+        market = market.model_copy(update={"clock_status": "CLOCK_SYNC_REQUIRED"})
+    before = op.read_bytes()
+    if state != "closed":
+        with pytest.raises(standby.StandbyVerificationError,
+                           match="STANDBY_ENTRY_HEARTBEAT_STALE"):
+            standby.observation_standby_status(original, now=now, market=market)
+    else:
+        result = standby.observation_standby_status(original, now=now, market=market)
+        assert result["status"] == "STANDBY_UNVERIFIED"
+        assert result["entry_expected_wait"] is True
+        assert result["trading_enabled"] is False and result["orders_submitted"] == 0
+        assert result["blockers"] == ["PAPER_CURRENT_COHORT_UNAVAILABLE",
+                                      "SELECTED_ENTRY_MARKET_CLOSED"]
+        with pytest.raises(standby.StandbyVerificationError):
+            standby.standby_status(original, now=now)
+    assert op.read_bytes() == before
+
+
+def test_closed_market_cannot_mask_selected_binding_failure(case):
+    from quantbot.console.market_status import MarketStatus
+
+    original, active, _, at, _, config, _ = case
+    now = at + timedelta(minutes=11)
+    config["risk_per_trade_bps"] = 26
+    (active / "paper-execution.json").write_text(json.dumps(config))
+    market = MarketStatus(checked_at=now, valid_until=now + timedelta(seconds=30),
+                          reported_open=False, expected_open=False, clock_status="HEALTHY",
+                          closed_session_consistent=True)
+    with pytest.raises(standby.StandbyVerificationError,
+                       match="STANDBY_CONFIGURATION_MISMATCH"):
+        standby.observation_standby_status(original, now=now, market=market)
+
+
+def test_closed_market_cannot_mask_future_selected_receipt(case):
+    from quantbot.console.market_status import MarketStatus
+
+    original, active, _, now, _, _, receipt = case
+    receipt["finished_at"] = (now + timedelta(seconds=1)).isoformat()
+    (active / "worker.json").write_text(json.dumps(receipt))
+    market = MarketStatus(checked_at=now, valid_until=now + timedelta(seconds=30),
+                          reported_open=False, expected_open=False, clock_status="HEALTHY",
+                          closed_session_consistent=True)
+    with pytest.raises(standby.StandbyVerificationError,
+                       match="STANDBY_ENTRY_HEARTBEAT_STALE"):
+        standby.observation_standby_status(original, now=now, market=market)
+
+
+@pytest.mark.parametrize("failure", ["HALTED", "ERROR"])
+def test_closed_market_cannot_mask_selected_failure(case, failure):
+    from quantbot.console.market_status import MarketStatus
+
+    original, active, _, at, _, _, receipt = case
+    now = at + timedelta(minutes=11)
+    if failure == "HALTED":
+        receipt["paper"]["status"] = "HALTED"
+    else:
+        receipt["status"] = "ERROR"
+    (active / "worker.json").write_text(json.dumps(receipt))
+    market = MarketStatus(checked_at=now, valid_until=now + timedelta(seconds=30),
+                          reported_open=False, expected_open=False, clock_status="HEALTHY",
+                          closed_session_consistent=True)
+    with pytest.raises(standby.StandbyVerificationError,
+                       match="STANDBY_ENTRY_HEARTBEAT_STALE"):
+        standby.observation_standby_status(original, now=now, market=market)
+
+
+@pytest.mark.parametrize("state", ["closed", "open", "failed", "timeout"])
+async def test_worker_probe_is_bounded_read_only_and_fails_closed(case, monkeypatch, state):
+    import asyncio
+
+    from quantbot.console import market_status
+    from quantbot.learner import worker
+
+    original, _, op, at, *_ = case
+    now = at + timedelta(minutes=11)
+    calls = []
+
+    async def probe():
+        calls.append("GET_ONLY")
+        if state == "failed":
+            raise RuntimeError("SYNTHETIC_PRIVATE_PROVIDER_ERROR")
+        if state == "timeout":
+            await asyncio.Event().wait()
+        return market_status.MarketStatus(
+            checked_at=now, valid_until=now+timedelta(seconds=30),
+            reported_open=state == "open", expected_open=state == "open",
+            clock_status="HEALTHY", closed_session_consistent=state == "closed",
+        )
+
+    monkeypatch.setattr(market_status, "paper_market_probe", lambda: probe)
+    monkeypatch.setattr(market_status, "PROBE_TIMEOUT_SECONDS", .01)
+    before = op.read_bytes()
+    if state == "closed":
+        result = await worker._observation_standby(original, now=lambda: now)
+        assert result["entry_expected_wait"] is True
+        assert result["orders_submitted"] == 0
+    else:
+        with pytest.raises(standby.StandbyVerificationError,
+                           match="STANDBY_ENTRY_HEARTBEAT_STALE"):
+            await worker._observation_standby(original, now=lambda: now)
+    assert calls == ["GET_ONLY"]
+    assert op.read_bytes() == before
+
+
 @pytest.mark.parametrize(
     "failure",
     [

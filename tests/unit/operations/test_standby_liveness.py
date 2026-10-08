@@ -63,3 +63,22 @@ def test_fresh_shadow_completion_survives_selected_entry_expiry(case):
     selected['risk_per_trade_bps']=26
     (active/'paper-execution.json').write_text(json.dumps(selected))
     assert _samples(root,op)['LEARNER'] is None
+
+
+def test_closed_observation_completion_is_liveness_not_entry_authority(case):
+    root, _, op, now, *_ = case
+    completed = now + timedelta(minutes=11)
+    market = MarketStatus(checked_at=completed, valid_until=completed+timedelta(seconds=30),
+                          reported_open=False, expected_open=False, clock_status='HEALTHY',
+                          closed_session_consistent=True)
+    paper = standby.observation_standby_status(root, now=completed, market=market)
+    doc = dict(run_id='d59d7164-688b-4d39-bd3c-471944f30121', code_commit='a'*40,
+               started_at=completed.isoformat(), finished_at=completed.isoformat(),
+               status='BLOCKED', trading_enabled=False, promotion='SHADOW', paper=paper)
+    (root/'worker.json').write_text(json.dumps(doc))
+    (root/'deployment.json').write_text(json.dumps(dict(learner_commit='a'*40)))
+    assert _samples(root, op)['LEARNER']['phase'] == 'COMPLETED'
+    assert not valid_worker_authority(root, doc)
+    paper['entry_expected_wait'] = False
+    (root/'worker.json').write_text(json.dumps(doc))
+    assert _samples(root, op)['LEARNER'] is None

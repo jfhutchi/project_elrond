@@ -3,7 +3,8 @@ param(
  [Parameter(Mandatory=$true)][string]$Repository,
  [Parameter(Mandatory=$true)][string]$Config,
  [Parameter(Mandatory=$true)][string]$ConfigHash,
- [switch]$Check
+ [switch]$Check,
+ [switch]$Exploration
 )
 $ErrorActionPreference='Stop'
 if($ConfigHash -notmatch '^[a-f0-9]{64}$'){throw 'ADAPTIVE_ENTRY_CONFIG_PIN_REQUIRED'}
@@ -31,7 +32,8 @@ foreach($Name in @('PYTHONHOME','PYTHONEXECUTABLE','__PYVENV_LAUNCHER__')){
 }
 . (Join-Path $PSScriptRoot 'windows-job.ps1')
 $ServiceJob=New-ElrondProcessJob
-$Arguments=@('-m','quantbot.learner.experiment_entry','--config',$Config,'--config-hash',$ConfigHash)
+$Module=if($Exploration){'quantbot.learner.exploration_launch'}else{'quantbot.learner.experiment_entry'}
+$Arguments=@('-m',$Module,'--config',$Config,'--config-hash',$ConfigHash)
 if($Check){$Arguments+='--check'}
 $ErrorActionPreference='Continue'
 $global:LASTEXITCODE=$null

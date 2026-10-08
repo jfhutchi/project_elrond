@@ -65,7 +65,10 @@ def valid_learner_liveness(learner: Path, doc: dict[str, Any]) -> bool:
 
         paper = doc['paper']
         if (doc.get('promotion') != 'SHADOW' or doc.get('trading_enabled') is not False
-                or paper.get('status') != 'STANDBY' or paper.get('promotion') != 'SHADOW'
+                or paper.get('status') not in ('STANDBY', 'STANDBY_UNVERIFIED')
+                or (paper.get('status') == 'STANDBY_UNVERIFIED'
+                    and paper.get('entry_expected_wait') is not True)
+                or paper.get('promotion') != 'SHADOW'
                 or paper.get('trading_enabled') is not False
                 or type(paper.get('orders_submitted')) is not int
                 or paper['orders_submitted'] != 0):

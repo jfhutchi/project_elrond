@@ -8,6 +8,7 @@ import hashlib
 import json
 import os
 import subprocess
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,30 @@ from quantbot.operations.alerts import AlertPolicy, AlertStore
 from quantbot.storage import Database, SingleWriterLock
 from quantbot.storage.schema import learner_evaluations, learner_outcomes, learner_predictions
 from quantbot.strategy import XNYSSessionSequence
+
+
+async def _observation_standby(
+    root: Path, *, now: Callable[[], datetime] = lambda: datetime.now(UTC),
+) -> dict[str, Any]:
+    from quantbot.console.market_status import MarketStatusCache, paper_market_probe
+    from quantbot.learner.standby import (
+        StandbyVerificationError,
+        observation_standby_status,
+        standby_status,
+    )
+
+    try:
+        return standby_status(root, now=now())
+    except StandbyVerificationError as error:
+        if error.code != "STANDBY_ENTRY_HEARTBEAT_STALE":
+            raise
+        # Existing PAPER-only GET capability and five-second bound. A failed probe cannot
+        # reclassify the strict verification failure or produce entry authority.
+        try:
+            market = await MarketStatusCache(paper_market_probe(), now=now).refresh()
+        except Exception:
+            raise error from None
+        return observation_standby_status(root, now=now(), market=market)
 
 
 def _publish(root: Path, receipt: dict[str, Any], *, final: bool) -> None:
@@ -171,11 +196,10 @@ def run_cycle(
                     if (root / "entry-standby.json").exists():
                         from quantbot.learner.standby import (
                             StandbyVerificationError,
-                            standby_status,
                         )
 
                         try:
-                            receipt["paper"] = standby_status(root, now=datetime.now(UTC))
+                            receipt["paper"] = asyncio.run(_observation_standby(root))
                         except Exception as error:
                             code = (
                                 error.code

@@ -55,7 +55,10 @@ GATES = {
         "failed attempts and cumulative search burden before resuming training.",
     ),
 }
-WAITS = {"OUTSIDE_FORECAST_SESSION", "PROTECTED_FEATURE_WINDOW", "FORECAST_LOOKBACK_WARMUP"}
+WAITS = {
+    "OUTSIDE_FORECAST_SESSION", "PROTECTED_FEATURE_WINDOW", "FORECAST_LOOKBACK_WARMUP",
+    "SELECTED_ENTRY_MARKET_CLOSED",
+}
 
 STANDBY_ACTIONS = {
     "STANDBY_CONFIGURATION_MISMATCH": (
@@ -176,6 +179,12 @@ def monitor_progress(
         paper_status=(
             "STANDBY_VERIFICATION_BLOCKED"
             if codes & STANDBY_ACTIONS.keys()
+            else "SELECTED_ENTRY_EXPECTED_CLOSED_WAIT"
+            if receipt.get("paper", {}).get("status") == "STANDBY_UNVERIFIED"
+            and receipt.get("paper", {}).get("entry_expected_wait") is True
+            and "SELECTED_ENTRY_MARKET_CLOSED" in codes
+            and not codes & GATES.keys()
+            and receipt.get("paper", {}).get("active_pilot_status") != "HALTED"
             else "STANDBY_SELECTED_ENTRY_HALTED"
             if receipt.get("paper", {}).get("status") == "STANDBY"
             and receipt.get("paper", {}).get("active_pilot_status") == "HALTED"

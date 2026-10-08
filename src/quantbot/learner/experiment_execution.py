@@ -23,6 +23,7 @@ from quantbot.execution.snapshot_capture import capture_account_positions
 from quantbot.learner.experiment_contract import DecisionRecord, Digest, ExperimentManifest
 from quantbot.learner.experiment_lots import LotEvent, record_lot_event
 from quantbot.learner.experiment_store import ExperimentStore
+from quantbot.learner.exploration import ExplorationObservation
 from quantbot.learner.models import LearnerModel, Text
 from quantbot.learner.paper import PromotionGatedSubmitter, build_learner_paper_cycle
 from quantbot.learner.paper_deadlines import DeadlineGatedSubmitter, _read_record, _signal_id
@@ -131,7 +132,8 @@ async def prepare_entry(
     matching = [
         prediction
         for prediction in runner.predictions
-        if prediction.features == decision.features
+        if not isinstance(prediction, ExplorationObservation)
+        and prediction.features == decision.features
         and prediction.model_id == decision.model_id
         and prediction.score == decision.score
         and prediction.recorded_at == decision.recorded_at
@@ -159,7 +161,8 @@ async def prepare_entry(
         matching_alternative = [
             prediction
             for prediction in runner.predictions
-            if prediction.features == alternative.features
+            if not isinstance(prediction, ExplorationObservation)
+            and prediction.features == alternative.features
             and prediction.model_id == alternative.model_id
             and prediction.score == alternative.score
             and prediction.recorded_at == alternative.recorded_at
@@ -188,6 +191,21 @@ async def prepare_entry(
         or request.vetoes is None
         or not request.vetoes.allowed
     ):
+        raise ValueError("RETAINED_GATEWAY_REQUEST_MISMATCH")
+    return await journal_entry_request(manifest, decision, store=store, services=services,
+                                       request=request)
+
+
+async def journal_entry_request(
+    manifest: ExperimentManifest, decision: DecisionRecord | ExplorationObservation,
+    *, store: ExperimentStore, services: IntradayPaperServices, request: SubmissionRequest,
+) -> OrderIntent:
+    """Shared attribution/outbox, called only after the respective policy and retained gates."""
+    _paper_only(services)
+    runner = services.runner
+    if (request.intent.symbol != decision.features.symbol
+            or request.purpose is not OrderPurpose.ENTRY or request.risk_approved is not True
+            or request.vetoes is None or not request.vetoes.allowed):
         raise ValueError("RETAINED_GATEWAY_REQUEST_MISMATCH")
     capture = await capture_account_positions(
         runner._broker,
