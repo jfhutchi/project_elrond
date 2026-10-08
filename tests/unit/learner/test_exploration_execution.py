@@ -166,6 +166,11 @@ async def test_exploration_cycle_preserves_all_retained_entry_gates(context, hal
         paths=SimpleNamespace(lock=runner._database.path.with_suffix(".cycle.lock")),
         recovery=Recovery(), metrics=OperationalMetrics(), runtime_context=lambda: None,
     )
+    from quantbot.operations.protection import PositionProtectionSupervisor
+    runtime.protector = lambda: PositionProtectionSupervisor(
+        database=runner._database, broker=broker, expected_account_id="paper-1",
+        strategy_identity=runner._identity, metrics=runtime.metrics,
+    )
     if halt == "kill":
         with runner._database.transaction() as session:
             StorageRepository(session).set_kill_switch(True, reason="synthetic test",

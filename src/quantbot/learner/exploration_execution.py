@@ -6,6 +6,7 @@ No consent creation, registration, promotion, orders or schema changes on import
 from __future__ import annotations
 
 from collections.abc import Callable
+from dataclasses import replace
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 from zoneinfo import ZoneInfo
@@ -197,15 +198,18 @@ class ExplorationStrategyRunner:
     """Policy-specific journal; the retained cycle alone owns actual submissions."""
     def __init__(
         self, manifest: ExperimentManifest, policy: ExplorationPolicy, *, store: ExperimentStore,
-        services: IntradayPaperServices, simulation: bool = False,
+        services: IntradayPaperServices, runtime: Runtime, clock: Callable[[], datetime],
+        simulation: bool = False,
     ) -> None:
         self.manifest, self.policy, self.store = manifest, policy, store
         self.services, self.simulation = services, simulation
+        self.runtime, self.clock = runtime, clock
 
     async def evaluate_exits(self) -> CycleStrategyResult:
         return await self.services.runner.evaluate_exits()
 
     async def evaluate(self) -> CycleStrategyResult:
+        await refresh_entry_protection(self.runtime, now=self.clock())
         intent = await prepare_exploration_entry(
             self.manifest, self.policy, store=self.store, services=self.services,
             simulation=self.simulation,
@@ -216,6 +220,17 @@ class ExplorationStrategyRunner:
             else (SubmissionRequest.model_validate_json(queued.document),),
             signal_count=len(self.services.runner.predictions),
         )
+
+
+async def refresh_entry_protection(runtime: Runtime, *, now: datetime) -> None:
+    """Genuine fresh assessment under the cycle lock; no additional sell authority.
+
+    Reuse the existing protection identity/policy and retain the separate daemon.
+    Its durable assessment can still block entry for failed state or required exits.
+    The original supervisor and its submitter are never modified.
+    """
+    evaluator = replace(runtime.protector(), submitter=None)
+    await evaluator.evaluate(now=now)
 
 
 async def run_exploration_cycle(
@@ -238,7 +253,7 @@ async def run_exploration_cycle(
         raise ValueError("EXACT_OPERATIONAL_RUN_ID_REQUIRED")
     services.runner.bind_run(run_id)
     strategy = ExplorationStrategyRunner(manifest, policy, store=store, services=services,
-                                          simulation=simulation)
+                                          runtime=runtime, clock=clock, simulation=simulation)
     cycle = build_learner_paper_cycle(
         runtime, strategy, binding=services.runner.binding, identity=services.runner._identity,
         data_sync=data_sync, max_data_age_seconds=services.runner.policy.max_reference_age_seconds,
