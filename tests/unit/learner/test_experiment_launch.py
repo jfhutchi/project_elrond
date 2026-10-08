@@ -172,6 +172,40 @@ async def test_cancellation_is_not_misreported_as_recoverable_failure(tmp_path, 
     assert not (config.root / "receipt.json").exists()
 
 
+@pytest.mark.parametrize("clock_ok", [True, False])
+async def test_operational_writer_contention_is_wait_not_research_fault(
+    tmp_path, monkeypatch, clock_ok,
+):
+    from quantbot.operations.cycle import OperationalWriterBusy
+    launch = module()
+    config = launch.ExperimentLaunchConfig(**config_data(tmp_path))
+    monkeypatch.setattr(launch, "load_manifest", lambda config: manifest())
+    monkeypatch.setattr(launch, "verify_checkout", lambda config: None)
+    monkeypatch.setattr(launch, "clock_healthy", lambda *args: clock_ok)
+    async def busy(*args, **kwargs):
+        raise OperationalWriterBusy("private path")
+    monkeypatch.setattr(launch, "_run_once", busy)
+    result = await launch.run_once(config, object())
+    assert result['status'] == ('NORMAL_WAIT' if clock_ok else 'CLOCK_SYNC_REQUIRED')
+    assert result['reason'] == ('OPERATIONAL_WRITER_BUSY' if clock_ok else 'CLOCK_SYNC_REQUIRED')
+    assert result['clock_verified'] is clock_ok
+    assert result['intents'] == 0
+    assert 'private path' not in (config.root/'receipt.json').read_text()
+
+
+@pytest.mark.parametrize('stamp,seconds', [
+    ('2026-10-08T17:24:50+00:00',30),
+    ('2026-10-08T17:25:05+00:00',15),
+    ('2026-10-08T17:25:20+00:00',120),
+    ('2026-10-08T17:23:00+00:00',120),
+])
+def test_natural_poll_aligns_to_bar_publication_without_widening_age(stamp, seconds):
+    from datetime import datetime
+    delay = getattr(module(), 'cohort_poll_delay', None)
+    assert callable(delay)
+    assert delay(datetime.fromisoformat(stamp)) == seconds
+
+
 def test_research_sources_are_all_or_none_and_cannot_overlap_output(tmp_path):
     launch = module()
     base = config_data(tmp_path)
