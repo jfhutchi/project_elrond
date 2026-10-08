@@ -10,8 +10,9 @@ import argparse
 import hashlib
 import json
 from datetime import UTC, datetime, time, timedelta
+from decimal import Decimal
 from pathlib import Path
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 from pydantic import Field, model_validator
 
@@ -45,8 +46,11 @@ from quantbot.learner.models import LearnerModel
 from quantbot.learner.paper_runner import PaperExecutionPolicy
 from quantbot.research.manifest import content_id
 from quantbot.risk.exposure import load_exposure_classification
-from quantbot.storage import Database
+from quantbot.storage import Database, StorageRepository
 from quantbot.strategy import StrategyConfig, load_strategy_config
+
+if TYPE_CHECKING:
+    from quantbot.runtime import Runtime
 
 
 class ExplorationLaunchConfig(LearnerModel):
@@ -245,6 +249,35 @@ def complete_cohort(manifest: ExperimentManifest, observation: ObservationBatch 
                 and len({(row.feature_at, row.target_at) for row in observation.features}) == 1)
 
 
+def affordability_objections(
+    runtime: Runtime, observation: ObservationBatch, policy: PaperExecutionPolicy, *, now: datetime,
+) -> tuple[str, ...]:
+    """Necessary sizing feasibility only; never a risk approval or extra broker request.
+
+    Unknown/stale cached accounts leave verification to normal fresh recovery.
+    A fresh account proving every candidate unaffordable must not look executable.
+    """
+    from quantbot.risk.sizing import MINIMUM_FRACTIONAL_NOTIONAL
+
+    account_id = runtime.settings.EXPECTED_ACCOUNT_ID
+    if account_id is None:
+        return ()  # Unknown identity still requires the normal fresh account gate.
+    with runtime.database.transaction() as session:
+        account = StorageRepository(session).get_latest_account_snapshot(account_id)
+    if account is None or not 0 <= (now-account.captured_at).total_seconds() <= 120:
+        return ()
+    cap = account.account.equity * Decimal(runtime.config.max_position_value_bps) / 10000
+    cash = min(account.account.cash, max(Decimal(0), account.account.buying_power
+               * Decimal(10000-policy.buying_power_reserve_bps) / 10000))
+    if runtime.config.allow_fractional_shares:
+        return () if min(cap, cash) >= MINIMUM_FRACTIONAL_NOTIONAL else (
+            "PAPER_FRACTIONAL_MINIMUM_UNAFFORDABLE",)
+    if any(0 < Decimal(str(row.reference_close)) <= min(cap, cash)
+           for row in observation.features):
+        return ()
+    return ("PAPER_WHOLE_SHARE_AFFORDABILITY_BLOCKED",)
+
+
 async def prepare_exploration_tick(
     config: ExplorationLaunchConfig,
     source: ExperimentLaunchConfig,
@@ -354,6 +387,12 @@ async def prepare_exploration_tick(
             wait("EXACT_RUNTIME_COMMIT_REQUIRED")
             return None
         runtime.config = exploration_risk_config(runtime.config, frozen, policy)
+
+        if not pending:
+            objections = affordability_objections(runtime, observation, config.policy, now=now)
+            if objections:
+                wait(objections[0], "WAITING")
+                return None
 
         def clock() -> datetime:
             return datetime.now(UTC)
