@@ -30,6 +30,16 @@ from quantbot.storage import Database, SingleWriterLock, StorageRepository
 
 PAPER_SMOKE_ACKNOWLEDGEMENT = "I_ACKNOWLEDGE_ONE_PAPER_SMOKE_ORDER"
 
+# Only identified missing/stale data pauses are retryable. Unknown faults, future
+# timestamps, risk failure and trade-stream loss still require the hard-stop path.
+_PAPER_RETRYABLE_DATA_REASONS = frozenset(
+    {
+        "MARKET_DATA_STALE",
+        "MARKET_DATA_INCOMPLETE_UNIVERSE",
+        "PAPER_PREDICTION_STALE",
+    }
+)
+
 
 class DataSyncResult(OperationsModel):
     healthy: bool
@@ -272,6 +282,45 @@ class RunOnceCycle:
             finished_at=finished_at,
         )
 
+    def _pause_entries(
+        self,
+        run_id: str,
+        *,
+        reasons: tuple[str, ...],
+        started_at: datetime,
+        trading_date: date,
+    ) -> CycleResult:
+        """Journal an actual refused cycle, without engaging or clearing a global stop.
+
+        The normal next cycle repeats recovery/data/strategy/submission gates. It
+        cannot authorize a retry from this receipt or borrow an old readiness result.
+        Independent position protection and exits retain their existing ownership.
+        """
+        finished_at = self._finished_at(started_at)
+        detail: dict[str, object] = {
+            "reasons": reasons,
+            "signals_evaluated": 0,
+            "orders_submitted": 0,
+            "blocking_scope": "STRATEGY_ENTRIES",
+            "retryable": True,
+        }
+        self._finish(run_id, status="BLOCKED", finished_at=finished_at, detail=detail)
+        self._qualification.record_real_trading_day(
+            trading_date,
+            qualified=False,
+            detail=detail,
+        )
+        self._metrics.increment("quantbot_entry_data_pauses_total")
+        return CycleResult(
+            run_id=run_id,
+            status="BLOCKED",
+            reasons=reasons,
+            signals_evaluated=0,
+            orders_submitted=0,
+            started_at=started_at,
+            finished_at=finished_at,
+        )
+
     async def run(
         self,
         run_id: str,
@@ -372,7 +421,27 @@ class RunOnceCycle:
                     max(data_age, Decimal("0")),
                 )
                 if data_reasons:
-                    kind = data_reasons[0]
+                    paper_cycle = (
+                        self._runtime is not None
+                        and self._runtime.trading_mode == TradingMode.PAPER.value
+                        and recovery.broker_health.healthy
+                        and recovery.broker_health.environment == BrokerEnvironment.PAPER.value
+                    )
+                    hard_reasons = tuple(
+                        reason
+                        for reason in data_reasons
+                        if reason not in _PAPER_RETRYABLE_DATA_REASONS
+                    )
+                    if paper_cycle and not hard_reasons:
+                        return self._pause_entries(
+                            run_id,
+                            reasons=data_reasons,
+                            started_at=started_at,
+                            trading_date=trading_date,
+                        )
+                    # Mixed faults must retain the actual serious cause as the latch
+                    # reason, instead of labeling a risk/stream fault as stale data.
+                    kind = hard_reasons[0] if paper_cycle and hard_reasons else data_reasons[0]
                     return self._halt(
                         run_id,
                         kind=kind,
