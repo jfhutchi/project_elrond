@@ -76,7 +76,7 @@ def _fills(
     ):
         raise ValueError("durable entry intent differs from handoff")
     rows = connection.execute(
-        "SELECT f.*, i.strategy_id, i.created_at, b.filled_quantity, b.status "
+        "SELECT f.*, i.strategy_id, i.created_at, b.filled_quantity, b.status, b.submitted_at "
         "FROM order_intents i JOIN broker_orders b USING(client_order_id) "
         "JOIN fills f USING(broker_order_id) WHERE i.intent_id=? "
         "AND i.symbol=f.symbol AND i.side=f.side AND b.symbol=f.symbol AND b.side=f.side",
@@ -90,7 +90,10 @@ def _fills(
             or row["symbol"] != record.entry_intent.symbol
             or row["side"] != side
             or _time(row["occurred_at"]) < record.recorded_at
-            or _time(row["occurred_at"]) < _time(row["created_at"])
+            or _time(row["occurred_at"]) < _time(
+                row["submitted_at"] if side == "SELL" else row["created_at"]
+            )
+            or (side == "SELL" and _time(row["created_at"]) < record.recorded_at)
             or (ownership_at is not None and _time(row["occurred_at"]) < ownership_at)
             or any(not value.is_finite() for value in numbers)
             or numbers[0] <= 0

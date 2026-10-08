@@ -88,12 +88,15 @@ def deadline(setup):
     )
 
 
-def prepare(setup):
+def prepare(setup, *, quantity=None):
     deploy(setup)
     database, binding, identity = setup
     with database.transaction() as session:
         StorageRepository(session).create_run("entry-run", identity, started_at=NOW)
     record = deadline(setup)
+    if quantity is not None:
+        record = PaperDeadline.model_validate(record.model_dump() | {
+            "entry_intent": record.entry_intent.model_dump() | {"quantity": quantity}})
     record_deadline(database, record, run_id="entry-run")
     broker = Broker(database)
     supervisor = PaperDeadlineSupervisor(
@@ -457,3 +460,139 @@ async def test_pending_protective_exit_does_not_prevent_due_partial_entry_cancel
     with setup[0].transaction() as session:
         stored = StorageRepository(session).get_order_intent(record.entry_intent.intent_id)
         assert stored.state is IntentState.CANCELLED
+
+
+@pytest.mark.asyncio
+async def test_fractional_exit_uses_its_broker_clock_and_never_sends_twice(setup):
+    record, broker, supervisor = prepare(setup, quantity=Decimal("0.045887"))
+    fill_entry(setup, record, broker, quantity=Decimal("0.045887"))
+    original_submit = broker.submit_order
+    async def filled_exit(request):
+        order = await original_submit(request)
+        broker_order = order.model_copy(update={
+            "submitted_at": broker.now - timedelta(milliseconds=121), "status": "filled",
+            "filled_quantity": request.quantity, "filled_average_price": Decimal("100")})
+        broker.orders[order.client_order_id] = broker_order
+        broker.fills.append(Fill(fill_id="fractional-exit-fill",
+            broker_order_id=broker_order.broker_order_id, symbol=request.symbol,
+            side=OrderSide.SELL, quantity=request.quantity, price=Decimal("100"),
+            occurred_at=broker.now - timedelta(milliseconds=117)))
+        broker.positions = ()
+        return order
+    broker.submit_order = filled_exit
+    async def filtered_fills(*, after=None):
+        return [f for f in broker.fills if after is None or f.occurred_at >= after]
+    broker.get_fills = filtered_fills
+    broker.now = record.deadline_at
+    assert (await supervisor.run_once()).exits_submitted == 1
+    broker.now += timedelta(seconds=10)
+    assert (await supervisor.run_once()).healthy
+    broker.now += timedelta(seconds=10)
+    assert (await supervisor.run_once()).healthy
+    assert len(broker.submitted) == 1
+    with setup[0].transaction() as session:
+        events = StorageRepository(session).list_order_events()
+        assert sum(e.event_type == "LEARNER_PAPER_DEADLINE_CLOSED_V1" for e in events) == 1
+
+
+@pytest.mark.asyncio
+async def test_same_deadline_failure_has_one_incident_but_every_measurement_is_retained(setup):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+    broker.positions = (_long_position(Decimal("2")),)
+    broker.now = record.deadline_at
+    assert not (await supervisor.run_once()).healthy
+    broker.now += timedelta(seconds=10)
+    assert not (await supervisor.run_once()).healthy
+    with setup[0].transaction() as session:
+        repo = StorageRepository(session)
+        assert len(repo.list_incidents(unresolved_only=True)) == 1
+        assert len(repo.list_signals(symbol="PAPER_DEADLINES")) == 2
+    # A different active root cause must still get its own incident.
+    async def stale_clock():
+        return MarketClock(timestamp=broker.now-timedelta(seconds=121), is_open=True,
+                           next_open=broker.now+timedelta(days=1),
+                           next_close=broker.now.replace(hour=20))
+    broker.get_market_clock = stale_clock
+    broker.now += timedelta(seconds=10)
+    assert (await supervisor.run_once()).reasons == ("DEADLINE_BROKER_CLOCK_STALE",)
+    with setup[0].transaction() as session:
+        assert len(StorageRepository(session).list_incidents(unresolved_only=True)) == 2
+    assert broker.submitted == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "damage", ["duplicate", "quantity", "symbol", "side", "order", "early", "future"]
+)
+async def test_broker_clock_anchor_cannot_adopt_invalid_or_unowned_fills(setup, damage):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+    fill = broker.fills[0]
+    if damage == "duplicate":
+        broker.fills.append(fill)
+    else:
+        values = {"quantity": {"quantity": Decimal(".5")},
+                  "symbol": {"symbol": "OTHER"},
+                  "side": {"side": OrderSide.SELL},
+                  "order": {"broker_order_id": "unrelated-order"},
+                  "early": {"occurred_at": NOW-timedelta(seconds=1)},
+                  "future": {"occurred_at": NOW+timedelta(hours=1)}}[damage]
+        broker.fills[0] = fill.model_copy(update=values)
+    broker.now = record.deadline_at
+    assert not (await supervisor.run_once()).healthy
+    assert broker.submitted == []
+
+
+@pytest.mark.asyncio
+async def test_unrelated_provider_fills_are_not_attributed_to_owned_order(setup):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+    broker.fills.append(broker.fills[0].model_copy(update={
+        "fill_id": "foreign-fill", "broker_order_id": "foreign-order", "quantity": Decimal("7")}))
+    broker.now = record.deadline_at
+    assert (await supervisor.run_once()).exits_submitted == 1
+    assert len(broker.submitted) == 1 and broker.submitted[0].quantity == Decimal("1")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["stale", "future", "reversed"])
+async def test_clock_domain_fix_still_refuses_unhealthy_actual_clock(setup, failure):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+    broker.now = record.deadline_at
+    async def bad_clock():
+        if failure == "reversed":
+            broker.now -= timedelta(seconds=1)
+        timestamp = broker.now + (timedelta(seconds=-121) if failure == "stale"
+                                  else timedelta(seconds=1) if failure == "future"
+                                  else timedelta(0))
+        return MarketClock(timestamp=timestamp, is_open=True,
+                           next_open=broker.now+timedelta(days=1),
+                           next_close=broker.now.replace(hour=20))
+    broker.get_market_clock = bad_clock
+    assert not (await supervisor.run_once()).healthy
+    assert broker.submitted == []
+
+
+@pytest.mark.asyncio
+async def test_deduplication_does_not_hide_a_different_handoff_or_resolve_history(setup):
+    from quantbot.learner.paper_deadlines import DeadlineStateError
+    record, broker, supervisor = prepare(setup)
+    async def failed_process(*args, **kwargs):
+        raise DeadlineStateError("DEADLINE_POSITION_MISMATCH")
+    supervisor._process = failed_process
+    assert not (await supervisor.run_once()).healthy
+    second = PaperDeadline.model_validate(record.model_dump() | {
+        "entry_intent": record.entry_intent.model_dump() | {
+            "intent_id": "another-entry", "client_order_id": "another-entry-client"}})
+    record_deadline(setup[0], second, run_id="entry-run")
+    broker.now += timedelta(seconds=10)
+    assert not (await supervisor.run_once()).healthy
+    broker.now += timedelta(seconds=10)
+    assert not (await supervisor.run_once()).healthy
+    with setup[0].transaction() as session:
+        repo = StorageRepository(session)
+        assert len(repo.list_incidents(unresolved_only=True)) == 2
+        assert len(repo.list_signals(symbol="PAPER_DEADLINES")) == 3
+    assert broker.submitted == []

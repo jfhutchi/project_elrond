@@ -345,3 +345,24 @@ def test_exploration_cannot_masquerade_as_model_forecast(store):
         ).values(payload_json=json.dumps(payload)))
     with pytest.raises(ValueError):
         read_trade_episodes(database.path, now=NOW + timedelta(hours=1))
+
+
+def test_fractional_broker_clock_exit_is_attributed_without_timestamp_rewrite(store):
+    from quantbot.storage.schema import broker_orders
+    database, _, _ = store
+    episode(store, exploration=True)
+    # Reproduce the two clock domains: broker submission precedes its own fill;
+    # both precede the local exit intent by a small amount. Preserve raw values.
+    local = NOW + timedelta(minutes=30)
+    with database.transaction() as session:
+        session.execute(update(order_intents).where(order_intents.c.side == "SELL")
+                        .values(created_at=local.isoformat()))
+        session.execute(update(broker_orders).where(broker_orders.c.side == "SELL")
+                        .values(submitted_at=(local-timedelta(milliseconds=121)).isoformat()))
+        session.execute(update(fills).where(fills.c.side == "SELL")
+                        .values(occurred_at=(local-timedelta(milliseconds=117)).isoformat()))
+    before = hashlib.sha256(database.path.read_bytes()).hexdigest()
+    (result,) = read_trade_episodes(database.path, now=NOW + timedelta(hours=1))
+    assert result.status == "CLOSED" and result.realized_net_pnl == Decimal("1.70")
+    assert result.forecast_score is None
+    assert hashlib.sha256(database.path.read_bytes()).hexdigest() == before

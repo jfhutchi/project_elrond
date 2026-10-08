@@ -44,6 +44,7 @@ def prepare(
     exit_owner="PROTECTION",
     exit_time=None,
     closed=True,
+    exit_link_time=None,
 ):
     module = lots()
     store = ExperimentStore(tmp_path / "lots.db", create=True)
@@ -62,7 +63,14 @@ def prepare(
         ),
         event("PROTECTION_BOUND", quantity=1, occurred_at=OPEN + timedelta(seconds=1)),
         event("ORDER_TERMINAL", quantity=1, terminal=True),
-        event("ORDER_LINK", order_id="stop", side="SELL", owner=exit_owner),
+        event(
+            "ORDER_LINK",
+            order_id="stop",
+            side="SELL",
+            owner=exit_owner,
+            quantity=1,
+            occurred_at=exit_link_time or OPEN,
+        ),
         event(
             "FILL",
             quantity=exit_quantity,
@@ -261,3 +269,76 @@ def test_outcome_revision_is_durable_and_unchanged_tick_deduplicates(tmp_path):
     assert len(revisions) == 1
     assert revisions[0].outcome.net_pnl == Decimal("1.70")
     assert revisions[0].recorded_at == OPEN + timedelta(seconds=30)
+
+
+@pytest.mark.parametrize(
+    "invalid",
+    [
+        None,
+        "missing",
+        "duplicate",
+        "wrong_hash",
+        "wrong_quantity",
+        "wrong_order",
+        "late",
+        "protection",
+        "future",
+    ],
+)
+def test_cross_clock_exit_requires_exact_unique_deadline_broker_evidence(tmp_path, invalid):
+    from pydantic import ValidationError
+
+    from quantbot.research.manifest import content_id
+
+    module = lots()
+    local = OPEN + timedelta(seconds=5, milliseconds=117)
+    store = prepare(
+        tmp_path,
+        exit_owner="PROTECTION" if invalid == "protection" else "DEADLINE",
+        exit_link_time=local,
+    )
+    link = next(
+        row.decode(module.LotEvent)
+        for row in store.read_as_of(manifest().experiment_id, OPEN + timedelta(seconds=30))
+        if row.kind == "LotEvent"
+        and row.decode(module.LotEvent).kind == "ORDER_LINK"
+        and row.decode(module.LotEvent).side == "SELL"
+    )
+    values = dict(
+        experiment_id=manifest().experiment_id,
+        lot_id=link.lot_id,
+        recorded_at=OPEN + timedelta(seconds=20),
+        order_id=link.order_id,
+        quantity=1,
+        ownership_hash=content_id(link),
+        broker_order_id="broker-exit",
+        broker_order_hash="e" * 64,
+        submitted_at=OPEN + timedelta(seconds=4, milliseconds=996),
+    )
+    if invalid == "wrong_hash":
+        values["ownership_hash"] = "f" * 64
+    if invalid == "wrong_quantity":
+        values["quantity"] = Decimal(".9")
+    if invalid == "wrong_order":
+        values["order_id"] = "foreign-exit"
+    if invalid == "late":
+        values["submitted_at"] = OPEN + timedelta(seconds=5, milliseconds=1)
+    if invalid == "future":
+        values["submitted_at"] = OPEN + timedelta(seconds=21)
+        with pytest.raises(ValidationError):
+            module.DeadlineBrokerClockEvidence(**values)
+    elif invalid != "missing":
+        anchor = module.DeadlineBrokerClockEvidence(**values)
+        store.append(anchor, idempotency_key="anchor")
+        if invalid == "duplicate":
+            store.append(
+                anchor.model_copy(update={"broker_order_hash": "f" * 64}),
+                idempotency_key="conflicting-anchor",
+            )
+    outcome = module.resolve_lot(store, link.lot_id, now=OPEN + timedelta(seconds=30))
+    if invalid is None:
+        assert outcome.status == "COMPLETE"
+        assert outcome.net_pnl == Decimal("1.70")
+    else:
+        assert outcome.net_pnl is None
+        assert "EXIT_OWNERSHIP_UNVERIFIED" in outcome.reasons

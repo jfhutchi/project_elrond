@@ -11,7 +11,7 @@ from decimal import Decimal
 from typing import Literal
 
 from quantbot.learner.experiment_contract import Digest
-from quantbot.learner.experiment_lots import LotEvent, resolve_lot
+from quantbot.learner.experiment_lots import DeadlineBrokerClockEvidence, LotEvent, resolve_lot
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.exploration import ExplorationObservation, ExplorationPolicy
 from quantbot.learner.models import LearnerModel, Text
@@ -41,8 +41,19 @@ class ExplorationFeedback(LearnerModel):
     synthetic: bool
 
 
-def _source_hash(rows: tuple[LotEvent, ...]) -> str:
-    return content_id(sorted(content_id(row) for row in rows))
+def _source_hash(
+    rows: tuple[LotEvent, ...], anchors: tuple[DeadlineBrokerClockEvidence, ...] = (),
+) -> str:
+    return content_id(sorted(content_id(row) for row in (*rows, *anchors)))
+
+
+def _anchors(
+    store: ExperimentStore, experiment: str, lot_id: str, now: datetime,
+) -> tuple[DeadlineBrokerClockEvidence, ...]:
+    return tuple(record.decode(DeadlineBrokerClockEvidence)
+                 for record in store.read_as_of(experiment, now)
+                 if record.kind == "DeadlineBrokerClockEvidence"
+                 and record.decode(DeadlineBrokerClockEvidence).lot_id == lot_id)
 
 
 def journal_exploration_feedback(
@@ -95,7 +106,8 @@ def journal_exploration_feedback(
         )
         feedback = ExplorationFeedback(
             experiment_id=policy.experiment_id, policy_id=policy.policy_id, lot_id=lot_id,
-            observation_id=observation.prediction_id, source_state_hash=_source_hash(tuple(rows)),
+            observation_id=observation.prediction_id, source_state_hash=_source_hash(
+                tuple(rows), _anchors(store, policy.experiment_id, lot_id, now)),
             recorded_at=now, result="WIN" if win else "LOSS" if outcome.net_pnl < 0 else "FLAT",
             net_pnl=outcome.net_pnl, actual_fees=outcome.fees, actual_net_return=net,
             executed_gross_return=gross,
@@ -122,7 +134,8 @@ def verified_feedback(
             continue
         row = event.decode(ExplorationFeedback)
         current = tuple(item for item in lots if item.lot_id == row.lot_id)
-        if (row.policy_id == policy.policy_id and row.source_state_hash == _source_hash(current)
+        if (row.policy_id == policy.policy_id and row.source_state_hash == _source_hash(
+                current, _anchors(store, policy.experiment_id, row.lot_id, now))
                 and resolve_lot(store, row.lot_id, now=now).status == "COMPLETE"):
             result.append(row)
     return tuple(sorted(result, key=lambda row: (row.recorded_at, row.lot_id)))

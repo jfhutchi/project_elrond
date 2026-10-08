@@ -9,7 +9,12 @@ from decimal import Decimal
 from pathlib import Path
 
 from quantbot.learner.experiment_contract import ExperimentManifest
-from quantbot.learner.experiment_lots import LotEvent, journal_lot_outcome, record_lot_event
+from quantbot.learner.experiment_lots import (
+    DeadlineBrokerClockEvidence,
+    LotEvent,
+    journal_lot_outcome,
+    record_lot_event,
+)
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.paper_deadlines import CLOSED_EVENT, EXIT_EVENT, HEARTBEAT
 from quantbot.learner.trade_learning import _episode, _time
@@ -100,7 +105,8 @@ def refresh_lot_journal(
             for fill_id in (*episode.entry_fill_ids, *episode.exit_fill_ids):
                 row = db.execute(
                     "SELECT f.*, i.intent_id, i.quantity AS intent_quantity, i.strategy_id, "
-                    "i.client_order_id FROM fills f JOIN broker_orders b USING(broker_order_id) "
+                    "i.client_order_id, i.created_at AS intent_created_at, b.submitted_at "
+                    "FROM fills f JOIN broker_orders b USING(broker_order_id) "
                     "JOIN order_intents i USING(client_order_id) WHERE f.fill_id=?",
                     (fill_id,),
                 ).fetchone()
@@ -115,7 +121,14 @@ def refresh_lot_journal(
                             (row["intent_id"], EXIT_EVENT, PROTECTIVE_EXIT),
                         )
                         if json.loads(event["detail_json"]).get("handoff_id") == episode.handoff_id
-                        and _time(event["occurred_at"]) <= _time(row["occurred_at"])
+                        and (
+                            _time(event["occurred_at"]) <= _time(row["occurred_at"])
+                            or (
+                                event["event_type"] == EXIT_EVENT
+                                and _time(event["occurred_at"]) <= _time(row["intent_created_at"])
+                                and _time(row["submitted_at"]) <= _time(row["occurred_at"])
+                            )
+                        )
                     ]
                     if len(ownership) != 1:
                         raise ValueError("EXIT_OWNERSHIP_UNVERIFIED")
@@ -156,6 +169,60 @@ def refresh_lot_journal(
                         owner=owner,
                         quantity=row["intent_quantity"],
                     )
+                if owner == "DEADLINE" and linked_at > _time(row["occurred_at"]):
+                    link = next(
+                        event
+                        for event in existing
+                        if event.kind == "ORDER_LINK" and event.order_id == row["intent_id"]
+                    )
+                    broker_order = db.execute(
+                        "SELECT * FROM broker_orders WHERE broker_order_id=?",
+                        (row["broker_order_id"],),
+                    ).fetchone()
+                    if broker_order is None:
+                        raise ValueError("VERIFIED_BROKER_ORDER_DISAPPEARED")
+                    anchors = [
+                        record.decode(DeadlineBrokerClockEvidence)
+                        for record in store.read_as_of(manifest.experiment_id, now)
+                        if record.kind == "DeadlineBrokerClockEvidence"
+                        and record.decode(DeadlineBrokerClockEvidence).lot_id == declared.lot_id
+                        and record.decode(DeadlineBrokerClockEvidence).order_id == row["intent_id"]
+                    ]
+                    anchor = DeadlineBrokerClockEvidence(
+                        experiment_id=manifest.experiment_id,
+                        lot_id=declared.lot_id,
+                        recorded_at=now,
+                        order_id=row["intent_id"],
+                        quantity=Decimal(row["intent_quantity"]),
+                        ownership_hash=content_id(link),
+                        broker_order_id=row["broker_order_id"],
+                        broker_order_hash=content_id(
+                            {
+                                key: broker_order[key]
+                                for key in (
+                                    "broker_order_id",
+                                    "client_order_id",
+                                    "symbol",
+                                    "side",
+                                    "order_type",
+                                    "time_in_force",
+                                    "quantity",
+                                    "submitted_at",
+                                )
+                            }
+                        ),
+                        submitted_at=_time(row["submitted_at"]),
+                    )
+                    if anchors:
+                        if len(anchors) != 1 or anchors[0].model_dump(
+                            exclude={"recorded_at"}
+                        ) != anchor.model_dump(exclude={"recorded_at"}):
+                            raise ValueError("BROKER_CLOCK_EVIDENCE_CONFLICT")
+                    else:
+                        store.append(
+                            anchor,
+                            idempotency_key=f"deadline-clock:{declared.lot_id}:{row['intent_id']}",
+                        )
                 fill_document = {
                     key: row[key]
                     for key in (

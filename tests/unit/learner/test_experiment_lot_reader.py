@@ -115,3 +115,71 @@ def test_unobserved_protection_never_becomes_verified_profit(context):
     outcome = resolve_lot(journal, events[0].lot_id, now=NOW + timedelta(hours=1))
     assert outcome.net_pnl is None
     assert "PROTECTION_UNVERIFIED" in outcome.reasons
+
+
+def test_deadline_broker_clock_bridge_preserves_original_timestamps(context):
+    from sqlalchemy import update
+
+    from quantbot.learner.experiment_lots import DeadlineBrokerClockEvidence
+    from quantbot.storage.schema import broker_orders, fills, order_intents
+
+    manifest, journal, database, record = context
+    local = record.deadline_at
+    with database.transaction() as session:
+        session.execute(
+            update(order_intents)
+            .where(order_intents.c.side == "SELL")
+            .values(created_at=local.isoformat())
+        )
+        session.execute(
+            update(broker_orders)
+            .where(broker_orders.c.side == "SELL")
+            .values(submitted_at=(local - timedelta(milliseconds=121)).isoformat())
+        )
+        session.execute(
+            update(fills)
+            .where(fills.c.side == "SELL")
+            .values(occurred_at=(local - timedelta(milliseconds=117)).isoformat())
+        )
+        repo = StorageRepository(session)
+        repo.record_signal(
+            "clock-heartbeat",
+            run_id="run",
+            strategy_id=record.identity.strategy_id,
+            symbol="PAPER_DEADLINES",
+            occurred_at=NOW + timedelta(minutes=1),
+            payload={
+                "kind": HEARTBEAT,
+                "account_id_hash": record.account_id_hash,
+                "healthy": True,
+                "reasons": (),
+            },
+        )
+        repo.finish_run("run", finished_at=local, status="SUCCEEDED", detail={})
+    before = hashlib.sha256(database.path.read_bytes()).hexdigest()
+    reader = import_module("quantbot.learner.experiment_lot_reader")
+    events = reader.refresh_lot_journal(
+        journal, manifest, operational_path=database.path, now=NOW + timedelta(hours=1)
+    )
+    outcome = resolve_lot(journal, events[0].lot_id, now=NOW + timedelta(hours=1))
+    assert outcome.status == "COMPLETE"
+    assert outcome.net_pnl == Decimal("1.70")
+    exit_link = next(row for row in events if row.kind == "ORDER_LINK" and row.side == "SELL")
+    exit_fill = next(row for row in events if row.kind == "FILL" and row.side == "SELL")
+    assert exit_link.occurred_at == local
+    assert exit_fill.occurred_at == local - timedelta(milliseconds=117)
+    anchors = [
+        row.decode(DeadlineBrokerClockEvidence)
+        for row in journal.read_as_of(manifest.experiment_id, NOW + timedelta(hours=1))
+        if row.kind == "DeadlineBrokerClockEvidence"
+    ]
+    assert len(anchors) == 1
+    assert anchors[0].submitted_at == local - timedelta(milliseconds=121)
+    assert anchors[0].ownership_hash == content_id(exit_link)
+    assert hashlib.sha256(database.path.read_bytes()).hexdigest() == before
+    assert (
+        reader.refresh_lot_journal(
+            journal, manifest, operational_path=database.path, now=NOW + timedelta(hours=2)
+        )
+        == ()
+    )
