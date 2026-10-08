@@ -62,6 +62,7 @@ class ExplorationLaunchConfig(LearnerModel):
     policy: PaperExecutionPolicy
     mode: Literal["PAPER"] = "PAPER"
     maximum_workers: Literal[2] = 2
+    quantity_mode: Literal["WHOLE", "FRACTIONAL"] = "WHOLE"
 
     @model_validator(mode="after")
     def bounded(self) -> Self:
@@ -100,12 +101,18 @@ def exploration_risk_config(
     base: StrategyConfig,
     manifest: ExperimentManifest,
     policy: ExplorationPolicy,
+    *,
+    quantity_mode: Literal["WHOLE", "FRACTIONAL"] | None = None,
 ) -> StrategyConfig:
     return StrategyConfig.model_validate(
         base.model_dump()
         | {
             "universe": tuple(row.symbol for row in manifest.roster) + ("SPY",),
             "roster_size": 1,
+            "allow_fractional_shares": (
+                base.allow_fractional_shares if quantity_mode is None
+                else quantity_mode == "FRACTIONAL"
+            ),
             "risk_per_trade_bps": min(
                 base.risk_per_trade_bps,
                 manifest.risk.maximum_entry_risk_bps,
@@ -386,7 +393,9 @@ async def prepare_exploration_tick(
         if runtime.running_git_commit != source.code_commit:
             wait("EXACT_RUNTIME_COMMIT_REQUIRED")
             return None
-        runtime.config = exploration_risk_config(runtime.config, frozen, policy)
+        runtime.config = exploration_risk_config(
+            runtime.config, frozen, policy, quantity_mode=config.quantity_mode,
+        )
 
         if not pending:
             objections = affordability_objections(runtime, observation, config.policy, now=now)

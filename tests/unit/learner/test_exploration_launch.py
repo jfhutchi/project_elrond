@@ -65,6 +65,17 @@ def test_exploration_launch_only_tightens_retained_strategy_risk():
         exclude={"universe", "roster_size", "max_position_value_bps", "risk_per_trade_bps"})
 
 
+def test_explicit_fractional_quantity_mode_changes_only_rounding():
+    module = import_module("quantbot.learner.exploration_launch")
+    manifest, _, policy = example()
+    base = load_strategy_config("config/strategy-v1.yaml")
+    whole = module.exploration_risk_config(base, manifest, policy, quantity_mode="WHOLE")
+    fractional = module.exploration_risk_config(base, manifest, policy, quantity_mode="FRACTIONAL")
+    assert not whole.allow_fractional_shares and fractional.allow_fractional_shares
+    assert whole.model_dump(exclude={"allow_fractional_shares"}) == fractional.model_dump(
+        exclude={"allow_fractional_shares"})
+
+
 def test_exploration_task_plan_retains_limited_identity_and_pinned_native_launcher():
     from xml.etree import ElementTree as ET
 
