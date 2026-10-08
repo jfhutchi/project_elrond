@@ -32,7 +32,7 @@ def store(tmp_path):
 
 
 def episode(store, *, closed=True, exit_quantity=Decimal("1"), before_orders=None,
-            entry_only=False):
+            entry_only=False, exploration=False, entry_delay=timedelta(0)):
     database, _, _ = store
     prediction = FiveMinutePrediction(
         model_id="a" * 64,
@@ -51,23 +51,38 @@ def episode(store, *, closed=True, exit_quantity=Decimal("1"), before_orders=Non
         score=0.002,
         cost_status="ABOVE_FIXED_COST_FLOOR",
     )
+    execution_config = {"bar_minutes": 5, "horizon_minutes": 30}
+    observation_kind = "LEARNER_PAPER_FORECAST_V1"
+    model_id = prediction.model_id
+    if exploration:
+        from quantbot.learner.exploration import ExplorationObservation, ExplorationPolicy
+        policy = ExplorationPolicy(experiment_id="synthetic-exploration", manifest_hash="d" * 64,
+                                   recorded_at=NOW, code_hash="b" * 64, synthetic=True)
+        prediction = ExplorationObservation(experiment_id=policy.experiment_id,
+            policy_id=policy.policy_id, features=prediction.features, recorded_at=NOW,
+            baseline_scores={"a" * 64: .002}, baseline_decision_ids=("e" * 64,), synthetic=True)
+        execution_config.update(exploration_policy=policy.model_dump(mode="json"),
+                                manifest_hash=policy.manifest_hash)
+        observation_kind = "LEARNER_PAPER_EXPLORATION_V1"
+        model_id = policy.policy_id
+    from quantbot.research.manifest import content_id
     binding = PaperModelBinding.from_config(
-        model_id=prediction.model_id,
-        artifact_hash="a" * 64,
+        model_id=model_id,
+        artifact_hash=content_id(policy) if exploration else "a" * 64,
         code_hash="b" * 64,
-        execution_config={"bar_minutes": 5, "horizon_minutes": 30},
+        execution_config=execution_config,
     )
     identity = binding.strategy_identity(git_commit="c" * 40, deployed_at=NOW)
     deploy((database, binding, identity))
-    entry = intent(identity).model_copy(update={"symbol": "DIA"})
+    entry = intent(identity).model_copy(update={"symbol": "DIA", "created_at": NOW + entry_delay})
     record = PaperDeadline(
         entry_intent=entry,
         binding=binding,
         identity=identity,
-        model_id=prediction.model_id,
+        model_id=model_id,
         prediction_id=prediction.prediction_id,
         account_id_hash=PaperDeadline.account_hash("paper"),
-        recorded_at=NOW,
+        recorded_at=entry.created_at,
         reference_at=NOW,
         entry_valid_until=NOW + timedelta(seconds=120),
         deadline_at=NOW + timedelta(minutes=30),
@@ -82,9 +97,9 @@ def episode(store, *, closed=True, exit_quantity=Decimal("1"), before_orders=Non
             run_id="run",
             strategy_id=identity.strategy_id,
             symbol="DIA",
-            occurred_at=NOW,
+            occurred_at=entry.created_at,
             payload={
-                "kind": "LEARNER_PAPER_FORECAST_V1",
+                "kind": observation_kind,
                 "prediction": prediction.model_dump(mode="json"),
                 "binding": binding.model_dump(mode="json"),
             },
@@ -128,7 +143,8 @@ def episode(store, *, closed=True, exit_quantity=Decimal("1"), before_orders=Non
                     quantity=quantity,
                     price=price,
                     fee=fee,
-                    occurred_at=NOW if order_intent.side == OrderSide.BUY else record.deadline_at,
+                    occurred_at=(entry.created_at if order_intent.side == OrderSide.BUY
+                                 else record.deadline_at),
                 )
             )
         if not entry_only:
@@ -292,3 +308,40 @@ def test_open_journal_does_not_invent_realized_learning_target(store, tmp_path):
     document = _read(next((tmp_path / "journal").glob("*.json")))
     assert document["realized_net_pnl"] is None
     assert document["usable_executed_outcome"] is False
+
+
+@pytest.mark.parametrize("closed", [False, True])
+def test_exploration_attributes_fills_without_inventing_forecast(store, closed):
+    database, _, _ = store
+    episode(store, exploration=True, entry_only=not closed, entry_delay=timedelta(seconds=10))
+    before = hashlib.sha256(database.path.read_bytes()).hexdigest()
+    (result,) = read_trade_episodes(database.path, now=NOW + timedelta(hours=1))
+    assert result.status == ("CLOSED" if closed else "OPEN")
+    assert result.forecast_score is None
+    assert result.realized_net_pnl == (Decimal("1.70") if closed else None)
+    assert hashlib.sha256(database.path.read_bytes()).hexdigest() == before
+
+
+def test_genuine_forecast_may_be_persisted_at_later_valid_entry_handoff(store):
+    database, _, _ = store
+    episode(store, entry_delay=timedelta(seconds=10))
+    (result,) = read_trade_episodes(database.path, now=NOW + timedelta(hours=1))
+    assert result.status == "CLOSED" and result.forecast_score == .002
+
+
+def test_exploration_cannot_masquerade_as_model_forecast(store):
+    import json
+    database, _, _ = store
+    record = episode(store, exploration=True)
+    with database.transaction() as session:
+        query = signals.select().where(
+            signals.c.signal_id == "learner-forecast-" + record.prediction_id
+        )
+        row = session.execute(query).mappings().one()
+        payload = json.loads(row["payload_json"])
+        payload["kind"] = "LEARNER_PAPER_FORECAST_V1"
+        session.execute(update(signals).where(
+            signals.c.signal_id == row["signal_id"]
+        ).values(payload_json=json.dumps(payload)))
+    with pytest.raises(ValueError):
+        read_trade_episodes(database.path, now=NOW + timedelta(hours=1))
