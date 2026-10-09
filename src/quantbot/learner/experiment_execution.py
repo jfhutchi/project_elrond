@@ -22,6 +22,7 @@ from quantbot.execution.coordinator import (
 from quantbot.execution.snapshot_capture import capture_account_positions
 from quantbot.learner.experiment_contract import DecisionRecord, Digest, ExperimentManifest
 from quantbot.learner.experiment_lots import LotEvent, record_lot_event
+from quantbot.learner.experiment_rejections import PreSendRejection as PreSendRejection
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.exploration import ExplorationObservation
 from quantbot.learner.models import LearnerModel, Text
@@ -46,16 +47,6 @@ from quantbot.storage.lot_ownership import register_new_lot
 
 if TYPE_CHECKING:
     from quantbot.runtime import Runtime
-
-
-class PreSendRejection(LearnerModel):
-    """Immutable proof of a known gateway refusal, never a broker acknowledgement."""
-
-    experiment_id: Text
-    intent_id: Text
-    recorded_at: datetime
-    request_hash: Digest
-    reasons: tuple[Text, ...]
 
 
 class ExecutionReceipt(LearnerModel):
