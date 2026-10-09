@@ -30,6 +30,9 @@ def refresh_lot_journal(
         for event in store.read_as_of(manifest.experiment_id, now)
         if event.kind == "LotEvent" and event.decode(LotEvent).kind == "ENTRY_DECLARED"
     ]
+    from quantbot.learner.experiment_rejections import verified_refused_lots
+
+    refused = verified_refused_lots(store, manifest.experiment_id, now=now)
     result: list[LotEvent] = []
     with sqlite3.connect(operational_path.resolve().as_uri() + "?mode=ro", uri=True) as db:
         db.row_factory = sqlite3.Row
@@ -59,6 +62,32 @@ def refresh_lot_journal(
             ).fetchone()
             if signal is None:
                 raise ValueError("OPERATIONAL_HANDOFF_MISSING")
+            if declared.lot_id in refused:
+                from quantbot.learner.paper_deadlines import PaperDeadline
+                from quantbot.operations.cycle import SubmissionRequest
+
+                queued = store.get_intent(declared.order_id)
+                assert queued is not None  # Verified immutable refusal above.
+                request = SubmissionRequest.model_validate_json(queued.document)
+                handoff = json.loads(signal["payload_json"])
+                record = PaperDeadline.model_validate(handoff.get("document"))
+                if (
+                    handoff.get("document_hash") != record.handoff_id
+                    or record.handoff_id != document.get("handoff_id")
+                    or record.entry_intent != request.intent
+                    or db.execute(
+                        "SELECT 1 FROM order_intents WHERE intent_id=?", (declared.order_id,)
+                    ).fetchone()
+                    is not None
+                    or db.execute(
+                        "SELECT 1 FROM broker_orders WHERE client_order_id=?",
+                        (request.intent.client_order_id,),
+                    ).fetchone()
+                    is not None
+                ):
+                    raise ValueError("PRE_SEND_REJECTION_PROVENANCE_MISMATCH")
+                # Keep its declaration/audit; no fill or completed economic episode exists.
+                continue
             episode = _episode(db, signal, now)
             if episode.handoff_id != document.get("handoff_id"):
                 raise ValueError("OPERATIONAL_HANDOFF_MISMATCH")

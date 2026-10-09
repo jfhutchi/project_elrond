@@ -132,6 +132,7 @@ class EvaluationReport(LearnerModel):
     assessment_ready: bool
     forecasts: tuple[ForecastAssessment, ...]
     completed_owned_lots: int
+    rejected_entry_requests: int = 0
     incomplete_owned_lots: int
     learner_realized_pnl: Decimal | None
     learner_fees: Decimal | None
@@ -249,12 +250,16 @@ def evaluate_experiment(
                 matched_comparison_rows=len(common),
             )
         )
+    from quantbot.learner.experiment_rejections import verified_refused_lots
+
+    refused = verified_refused_lots(store, manifest.experiment_id, now=now)
     declared = {
         row.lot_id
         for event in events
         if event.kind == "LotEvent"
         for row in (event.decode(LotEvent),)
         if row.kind == "ENTRY_DECLARED" and row.synthetic == manifest.synthetic
+        and row.lot_id not in refused
     }
     outcomes = [resolve_lot(store, lot_id, now=now) for lot_id in sorted(declared)]
     complete = [row for row in outcomes if row.status == "COMPLETE"]
@@ -313,6 +318,7 @@ def evaluate_experiment(
         forecasts=tuple(forecasts),
         completed_owned_lots=len(complete),
         incomplete_owned_lots=len(outcomes) - len(complete),
+        rejected_entry_requests=len(refused),
         learner_realized_pnl=sum(
             (row.net_pnl for row in real if row.net_pnl is not None), Decimal(0)
         )

@@ -199,3 +199,86 @@ async def test_coordinator_exploration_context_requires_distinct_real_commission
             ),
         )
     assert broker.submitted == []
+
+
+@pytest.mark.parametrize("known_refusal", [False, True])
+async def test_later_cohort_skips_only_proven_never_submitted_entry(context, known_refusal):
+    from quantbot.learner.experiment_evaluation import evaluate_experiment
+    from quantbot.learner.experiment_execution import ExperimentOutboxSubmitter
+    from quantbot.learner.paper import PromotionGatedSubmitter
+    from quantbot.learner.paper_deadlines import DeadlineGatedSubmitter
+    from quantbot.operations.cycle import SubmissionRequest
+
+    module = import_module("quantbot.learner.exploration_execution")
+    kwargs, services, store, broker = context
+    manifest, policy = kwargs["manifest"], kwargs["exploration"]
+    intent = await module.prepare_exploration_entry(
+        manifest, policy, store=store, services=services, simulation=True
+    )
+    assert intent is not None
+    runner = services.runner
+    lower = PromotionGatedSubmitter(
+        runner._database.path,
+        DeadlineGatedSubmitter(
+            runner._database,
+            services.deadlines.coordinator,
+            expected_account_id="paper-1",
+            clock=lambda: broker.now,
+        ),
+        binding=runner.binding,
+        identity=runner._identity,
+    )
+    if known_refusal:
+        request = SubmissionRequest.model_validate_json(store.get_intent(intent.intent_id).document)
+        wrapper = ExperimentOutboxSubmitter(
+            store, services=services, lower=lower, owner="test", clock=lambda: broker.now
+        )
+        broker.now += timedelta(seconds=61)
+        with pytest.raises(ValueError, match="DEADLINE_SUPERVISOR_STALE"):
+            await wrapper.submit(
+                intent,
+                purpose=request.purpose,
+                market_eligible=request.market_eligible,
+                drawdown=request.drawdown,
+                risk_approved=request.risk_approved,
+                vetoes=request.vetoes,
+            )
+    else:
+        store.claim_intent(intent.intent_id, owner="test", now=broker.now)
+    later = broker.now + timedelta(minutes=5)
+    reasons = module.prior_episode_objections(store, policy, cohort_at=later, now=later)
+    report = evaluate_experiment(store, manifest, now=later)
+    if known_refusal:
+        assert reasons == ()
+        assert "FRESH_POST_EPISODE_COHORT_REQUIRED" in module.prior_episode_objections(
+            store,
+            policy,
+            cohort_at=broker.now,
+            now=later,
+        )
+        assert report.eligible_entry_decisions == 0
+        assert report.incomplete_owned_lots == 0
+        assert report.learner_realized_pnl is None
+        assert report.learner_fees is None
+        assert report.rejected_entry_requests == 1
+    else:
+        assert "PRIOR_OWNED_EPISODE_INCOMPLETE" in reasons
+        assert report.incomplete_owned_lots == 1
+    assert not broker.submitted
+
+
+@pytest.mark.parametrize("changed", ["experiment_rejections.py", "experiment_lot_reader.py"])
+def test_no_send_disposition_and_reader_are_execution_hash_bound(monkeypatch, changed):
+    from pathlib import Path
+
+    from quantbot.learner.experiment_paper import pooled_code_hash
+
+    original = pooled_code_hash()
+    read = Path.read_bytes
+
+    def altered(path):
+        data = read(path)
+        return data + b"\n# synthetic hash regression\n" if path.name == changed else data
+
+    monkeypatch.setattr(Path, "read_bytes", altered)
+    assert pooled_code_hash() != original

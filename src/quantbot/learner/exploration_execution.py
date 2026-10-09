@@ -84,9 +84,17 @@ def prior_episode_objections(
                     for row in (event.decode(ExplorationObservation),)
                     if row.policy_id == policy.policy_id}
     lots = tuple(event.decode(LotEvent) for event in events if event.kind == "LotEvent")
+    from quantbot.learner.experiment_rejections import verified_refused_lots
+
+    refused = verified_refused_lots(store, policy.experiment_id, now=now)
     reasons: set[str] = set()
     for declaration in (row for row in lots if row.kind == "ENTRY_DECLARED"):
         observation = observations.get(declaration.decision_id)
+        if declaration.lot_id in refused:
+            if (cohort_at <= refused[declaration.lot_id].recorded_at
+                    or observation is not None and cohort_at <= observation.features.feature_at):
+                reasons.add("FRESH_POST_EPISODE_COHORT_REQUIRED")
+            continue
         # Other owned experiment lots also count toward the concurrent-position fence.
         if resolve_lot(store, declaration.lot_id, now=now).status != "COMPLETE":
             reasons.add("PRIOR_OWNED_EPISODE_INCOMPLETE")

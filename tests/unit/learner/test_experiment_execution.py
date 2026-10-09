@@ -460,3 +460,100 @@ async def test_terminal_durable_ack_recovers_without_send(context, state, status
     ]
     assert len(receipts) == 1
     assert receipts[0].result.intent.state == IntentState[state]
+
+
+async def test_deadline_rejection_after_claim_is_journaled_without_stranding(context):
+    manifest, decision, store, services, lower, broker = context
+    intent = await module().prepare_entry(
+        manifest, decision, store=store, services=services, simulation=True
+    )
+    assert intent is not None
+    request = SubmissionRequest.model_validate_json(store.get_intent(intent.intent_id).document)
+    wrapper = module().ExperimentOutboxSubmitter(
+        store, services=services, lower=lower, owner="test", clock=lambda: broker.now
+    )
+    broker.now += timedelta(seconds=61)
+    with pytest.raises(ValueError, match="DEADLINE_SUPERVISOR_STALE"):
+        await wrapper.submit(
+            intent,
+            purpose=request.purpose,
+            market_eligible=request.market_eligible,
+            drawdown=request.drawdown,
+            risk_approved=request.risk_approved,
+            vetoes=request.vetoes,
+        )
+    assert not broker.submitted
+    assert store.pending_intents(manifest.experiment_id) == ()
+    rejected = [
+        r
+        for r in store.read_as_of(manifest.experiment_id, broker.now)
+        if r.kind == "PreSendRejection"
+    ]
+    assert len(rejected) == 1
+    proof = rejected[0].decode(module().PreSendRejection)
+    assert "DEADLINE_SUPERVISOR_STALE" in proof.reasons
+    assert proof.intent_id == intent.intent_id
+    from quantbot.learner.experiment_lot_reader import refresh_lot_journal
+
+    assert (
+        refresh_lot_journal(
+            store, manifest, operational_path=services.runner._database.path, now=broker.now
+        )
+        == ()
+    )
+    assert not any(
+        r.kind == "EconomicOutcome" for r in store.read_as_of(manifest.experiment_id, broker.now)
+    )
+    await services.deadlines.run_once()
+    with pytest.raises(ValueError, match="PREVIOUS_PRE_SEND_REJECTION"):
+        await wrapper.submit(
+            intent,
+            purpose=request.purpose,
+            market_eligible=request.market_eligible,
+            drawdown=request.drawdown,
+            risk_approved=request.risk_approved,
+            vetoes=request.vetoes,
+        )
+    assert not broker.submitted
+    assert (
+        len(
+            [
+                r
+                for r in store.read_as_of(manifest.experiment_id, broker.now)
+                if r.kind == "PreSendRejection"
+            ]
+        )
+        == 1
+    )
+
+
+async def test_typed_rejection_receipt_survives_ack_crash_without_resend(context, monkeypatch):
+    manifest, decision, store, services, lower, broker = context
+    intent = await module().prepare_entry(
+        manifest, decision, store=store, services=services, simulation=True
+    )
+    request = SubmissionRequest.model_validate_json(store.get_intent(intent.intent_id).document)
+    wrapper = module().ExperimentOutboxSubmitter(
+        store, services=services, lower=lower, owner="test", clock=lambda: broker.now
+    )
+    original = store.acknowledge_intent
+
+    def crash_ack(*args, **kwargs):
+        raise RuntimeError("isolated acknowledgement crash")
+
+    monkeypatch.setattr(store, "acknowledge_intent", crash_ack)
+    broker.now += timedelta(seconds=61)
+    with pytest.raises(RuntimeError, match="acknowledgement crash"):
+        await wrapper.submit(
+            intent,
+            purpose=request.purpose,
+            market_eligible=request.market_eligible,
+            drawdown=request.drawdown,
+            risk_approved=request.risk_approved,
+            vetoes=request.vetoes,
+        )
+    assert store.get_intent(intent.intent_id).state == "CLAIMED"
+    monkeypatch.setattr(store, "acknowledge_intent", original)
+    await module().dispatch_pending(store, services=services, now=broker.now)
+    assert store.pending_intents(manifest.experiment_id) == ()
+    assert not broker.submitted

@@ -22,11 +22,17 @@ from quantbot.execution.coordinator import (
 from quantbot.execution.snapshot_capture import capture_account_positions
 from quantbot.learner.experiment_contract import DecisionRecord, Digest, ExperimentManifest
 from quantbot.learner.experiment_lots import LotEvent, record_lot_event
+from quantbot.learner.experiment_rejections import PreSendRejection as PreSendRejection
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.exploration import ExplorationObservation
 from quantbot.learner.models import LearnerModel, Text
 from quantbot.learner.paper import PromotionGatedSubmitter, build_learner_paper_cycle
-from quantbot.learner.paper_deadlines import DeadlineGatedSubmitter, _read_record, _signal_id
+from quantbot.learner.paper_deadlines import (
+    DeadlineEntryBlocked,
+    DeadlineGatedSubmitter,
+    _read_record,
+    _signal_id,
+)
 from quantbot.learner.paper_runner import IntradayPaperServices
 from quantbot.operations.cycle import (
     CycleResult,
@@ -192,20 +198,29 @@ async def prepare_entry(
         or not request.vetoes.allowed
     ):
         raise ValueError("RETAINED_GATEWAY_REQUEST_MISMATCH")
-    return await journal_entry_request(manifest, decision, store=store, services=services,
-                                       request=request)
+    return await journal_entry_request(
+        manifest, decision, store=store, services=services, request=request
+    )
 
 
 async def journal_entry_request(
-    manifest: ExperimentManifest, decision: DecisionRecord | ExplorationObservation,
-    *, store: ExperimentStore, services: IntradayPaperServices, request: SubmissionRequest,
+    manifest: ExperimentManifest,
+    decision: DecisionRecord | ExplorationObservation,
+    *,
+    store: ExperimentStore,
+    services: IntradayPaperServices,
+    request: SubmissionRequest,
 ) -> OrderIntent:
     """Shared attribution/outbox, called only after the respective policy and retained gates."""
     _paper_only(services)
     runner = services.runner
-    if (request.intent.symbol != decision.features.symbol
-            or request.purpose is not OrderPurpose.ENTRY or request.risk_approved is not True
-            or request.vetoes is None or not request.vetoes.allowed):
+    if (
+        request.intent.symbol != decision.features.symbol
+        or request.purpose is not OrderPurpose.ENTRY
+        or request.risk_approved is not True
+        or request.vetoes is None
+        or not request.vetoes.allowed
+    ):
         raise ValueError("RETAINED_GATEWAY_REQUEST_MISMATCH")
     capture = await capture_account_positions(
         runner._broker,
@@ -332,6 +347,12 @@ class ExperimentOutboxSubmitter:
             raise ValueError("IMMUTABLE_REQUEST_MISMATCH")
         now = self.clock()
         for row in self.store.read_as_of(queued.experiment_id, now):
+            if row.kind == "PreSendRejection":
+                rejected = row.decode(PreSendRejection)
+                if rejected.intent_id == intent.intent_id and rejected.request_hash == content_id(
+                    request
+                ):
+                    raise ValueError("PREVIOUS_PRE_SEND_REJECTION")
             if row.kind == "ExecutionReceipt":
                 receipt = row.decode(ExecutionReceipt)
                 if receipt.intent_id == intent.intent_id and receipt.request_hash == content_id(
@@ -340,14 +361,30 @@ class ExperimentOutboxSubmitter:
                     return receipt.result
         claimed = self.store.claim_intent(intent.intent_id, owner=self.owner, now=now)
         if claimed is not None:
-            result = await self.lower.submit(
-                intent,
-                purpose=purpose,
-                market_eligible=market_eligible,
-                drawdown=drawdown,
-                risk_approved=risk_approved,
-                vetoes=vetoes,
-            )
+            try:
+                result = await self.lower.submit(
+                    intent,
+                    purpose=purpose,
+                    market_eligible=market_eligible,
+                    drawdown=drawdown,
+                    risk_approved=risk_approved,
+                    vetoes=vetoes,
+                )
+            except DeadlineEntryBlocked as error:
+                # Only this typed gate proves no lower coordinator or broker call.
+                # Unknown exceptions and crash ambiguity retain the claimed outbox.
+                self.store.append(
+                    PreSendRejection(
+                        experiment_id=queued.experiment_id,
+                        intent_id=intent.intent_id,
+                        recorded_at=self.clock(),
+                        request_hash=content_id(request),
+                        reasons=error.reasons,
+                    ),
+                    idempotency_key="pre-send-rejection:" + intent.intent_id,
+                )
+                self.store.acknowledge_intent(intent.intent_id, owner=self.owner)
+                raise
         else:
             with self.services.runner._database.transaction() as session:
                 durable = StorageRepository(session).get_order_intent(intent.intent_id)
@@ -425,6 +462,24 @@ async def dispatch_pending(
                 continue
             request = SubmissionRequest.model_validate_json(queued.document)
             if request.intent.strategy_id != services.runner._identity.strategy_id:
+                continue
+            rejected = tuple(
+                row.decode(PreSendRejection)
+                for row in store.read_as_of(experiment, now)
+                if row.kind == "PreSendRejection"
+                and row.decode(PreSendRejection).intent_id == queued.intent_id
+            )
+            if rejected:
+                if (
+                    len(rejected) != 1
+                    or rejected[0].request_hash != content_id(request)
+                    or queued.owner is None
+                ):
+                    raise ValueError("PRE_SEND_REJECTION_PROVENANCE_MISMATCH")
+                with services.runner._database.transaction() as session:
+                    if StorageRepository(session).get_order_intent(queued.intent_id) is not None:
+                        raise ValueError("PRE_SEND_REJECTION_DURABLE_INTENT_CONFLICT")
+                store.acknowledge_intent(queued.intent_id, owner=queued.owner)
                 continue
             with services.runner._database.transaction() as session:
                 durable = StorageRepository(session).get_order_intent(queued.intent_id)

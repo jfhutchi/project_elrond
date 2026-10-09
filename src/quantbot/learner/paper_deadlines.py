@@ -204,6 +204,14 @@ def deadline_entry_objections(
     return tuple(reasons) + supervisor_objections(database, account_id=account_id, now=now)
 
 
+class DeadlineEntryBlocked(ValueError):
+    """Known rejection before the durable coordinator or broker is invoked."""
+
+    def __init__(self, reasons: tuple[str, ...]) -> None:
+        self.reasons = reasons
+        super().__init__(", ".join(reasons))
+
+
 class DeadlineGatedSubmitter:
     def __init__(
         self,
@@ -231,7 +239,7 @@ class DeadlineGatedSubmitter:
                 self._database, intent, account_id=self._account_id, now=self._clock()
             )
             if reasons:
-                raise ValueError(", ".join(reasons))
+                raise DeadlineEntryBlocked(reasons)
         return await self._submitter.submit(
             intent,
             purpose=purpose,
