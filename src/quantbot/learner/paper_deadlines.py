@@ -8,7 +8,7 @@ coordinator's risk-reducing exit authority. It complements position protection.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
@@ -262,6 +262,7 @@ class PaperDeadlineSupervisor:
         expected_account_id: str,
         lock_path: str | Path,
         clock: Callable[[], datetime] = _now,
+        reconcile_fills: Callable[[datetime], Awaitable[tuple[str, ...]]] | None = None,
     ) -> None:
         if not isinstance(coordinator, ExecutionCoordinator):
             raise TypeError("deadline exits require ExecutionCoordinator")
@@ -280,6 +281,7 @@ class PaperDeadlineSupervisor:
         self.database, self.broker, self.coordinator = database, broker, coordinator
         self.identity, self.account_id = identity, expected_account_id
         self.lock_path, self.clock = lock_path, clock
+        self.reconcile_fills = reconcile_fills
 
     async def run_once(self) -> DeadlineResult:
         now = self.clock()
@@ -342,6 +344,13 @@ class PaperDeadlineSupervisor:
                             failed_handoffs.append(row.signal_id)
             except Exception:
                 reasons.append("DEADLINE_BROKER_UNAVAILABLE")
+            # Existing exits have priority. Account refresh cannot submit orders,
+            # clear a stop, or make a completed exit disappear on retry.
+            if self.reconcile_fills is not None and not reasons:
+                try:
+                    await self._reconcile_confirmed_fills()
+                except Exception:
+                    reasons.append("DEADLINE_POST_FILL_RECONCILIATION_REQUIRED")
             result = DeadlineResult(
                 reasons=tuple(dict.fromkeys(reasons)), exits_submitted=submitted
             )
@@ -486,7 +495,47 @@ class PaperDeadlineSupervisor:
                     )
             for fill in fills:
                 repository.record_fill(fill)
+            if fills and self.reconcile_fills is not None:
+                fingerprint = content_id({"account": PaperDeadline.account_hash(self.account_id),
+                                          "intent": intent.intent_id,
+                                          "fills": sorted(fill.fill_id for fill in fills)})
+                repository.record_order_event(
+                    "fill-reconciliation-request-" + fingerprint,
+                    event_type="PAPER_FILL_RECONCILIATION_REQUEST_V1",
+                    occurred_at=max(fill.occurred_at for fill in fills),
+                    intent_id=intent.intent_id, broker_order_id=order.broker_order_id,
+                    detail={"account_id_hash": PaperDeadline.account_hash(self.account_id),
+                            "fill_evidence_hash": content_id(tuple(sorted(
+                                (fill.model_dump(mode="json") for fill in fills),
+                                key=lambda row: str(row["fill_id"]))))},
+                )
         return order, fills
+
+    async def _reconcile_confirmed_fills(self) -> None:
+        with self.database.transaction() as session:
+            repository = StorageRepository(session)
+            pending = [event for event in repository.list_order_events()
+                       if event.event_type == "PAPER_FILL_RECONCILIATION_REQUEST_V1"
+                       and event.detail.get("account_id_hash") == PaperDeadline.account_hash(
+                           self.account_id)
+                       and repository.get_order_event("fill-reconciled-" + event.event_id)
+                       is None]
+        if not pending:
+            return
+        assert self.reconcile_fills is not None
+        reasons = await asyncio.wait_for(self.reconcile_fills(self.clock()), timeout=5)
+        if reasons:
+            raise DeadlineStateError("DEADLINE_POST_FILL_RECONCILIATION_REQUIRED")
+        with self.database.transaction() as session:
+            repository = StorageRepository(session)
+            for event in pending:
+                repository.record_order_event(
+                    "fill-reconciled-" + event.event_id,
+                    event_type="PAPER_FILL_RECONCILED_V1", occurred_at=self.clock(),
+                    intent_id=event.intent_id, broker_order_id=event.broker_order_id,
+                    detail={"request_event_id": event.event_id,
+                            "entry_authority_granted": False, "kill_switch_cleared": False},
+                )
 
     async def _process(self, record: PaperDeadline, *, now: datetime, market_open: bool) -> int:
         with self.database.transaction() as session:
