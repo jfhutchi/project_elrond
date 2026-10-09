@@ -59,6 +59,45 @@ def refresh_lot_journal(
             ).fetchone()
             if signal is None:
                 raise ValueError("OPERATIONAL_HANDOFF_MISSING")
+            from quantbot.learner.experiment_execution import PreSendRejection
+            from quantbot.operations.cycle import SubmissionRequest
+
+            rejected = tuple(
+                event.decode(PreSendRejection)
+                for event in store.read_as_of(manifest.experiment_id, now)
+                if event.kind == "PreSendRejection"
+                and event.decode(PreSendRejection).intent_id == declared.order_id
+            )
+            if rejected:
+                queued = store.get_intent(declared.order_id)
+                request = (
+                    SubmissionRequest.model_validate_json(queued.document)
+                    if queued is not None
+                    else None
+                )
+                if (
+                    len(rejected) != 1
+                    or queued is None
+                    or request is None
+                    or queued.state != "ACKNOWLEDGED"
+                    or rejected[0].request_hash != content_id(request)
+                    or rejected[0].experiment_id != manifest.experiment_id
+                    or json.loads(signal["payload_json"]).get("document", {}).get("entry_intent")
+                    != request.intent.model_dump(mode="json")
+                    or db.execute(
+                        "SELECT 1 FROM order_intents WHERE intent_id=?", (declared.order_id,)
+                    ).fetchone()
+                    is not None
+                    or db.execute(
+                        "SELECT 1 FROM broker_orders WHERE client_order_id=?",
+                        (request.intent.client_order_id,),
+                    ).fetchone()
+                    is not None
+                ):
+                    raise ValueError("PRE_SEND_REJECTION_PROVENANCE_MISMATCH")
+                # A refused request is neither a fill nor a completed economic episode.
+                # Keep its declaration/audit; do not repeatedly import nonexistent orders.
+                continue
             episode = _episode(db, signal, now)
             if episode.handoff_id != document.get("handoff_id"):
                 raise ValueError("OPERATIONAL_HANDOFF_MISMATCH")

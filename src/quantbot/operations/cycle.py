@@ -40,7 +40,9 @@ class OperationalWriterBusy(AlreadyLockedError):
 
 @asynccontextmanager
 async def _bounded_writer_lock(
-    path: Path, *, timeout_seconds: float = 5,
+    path: Path,
+    *,
+    timeout_seconds: float = 5,
 ) -> AsyncIterator[None]:
     """Wait briefly for the real owner; never steal or bypass the writer lock."""
     lock = SingleWriterLock(path)
@@ -54,11 +56,12 @@ async def _bounded_writer_lock(
             remaining = expires - loop.time()
             if remaining <= 0:
                 raise OperationalWriterBusy("OPERATIONAL_WRITER_BUSY") from None
-            await asyncio.sleep(min(.1, remaining))
+            await asyncio.sleep(min(0.1, remaining))
     try:
         yield
     finally:
         lock.release()
+
 
 # Only identified missing/stale data pauses are retryable. Unknown faults, future
 # timestamps, risk failure and trade-stream loss still require the hard-stop path.
@@ -494,14 +497,38 @@ class RunOnceCycle:
                 strategy = await self._strategy.evaluate()
                 submitted = 0
                 for request in strategy.submissions:
-                    await self._submitter.submit(
-                        request.intent,
-                        purpose=request.purpose,
-                        market_eligible=request.market_eligible,
-                        drawdown=request.drawdown,
-                        risk_approved=request.risk_approved,
-                        vetoes=request.vetoes,
-                    )
+                    from quantbot.learner.paper_deadlines import DeadlineEntryBlocked
+
+                    try:
+                        await self._submitter.submit(
+                            request.intent,
+                            purpose=request.purpose,
+                            market_eligible=request.market_eligible,
+                            drawdown=request.drawdown,
+                            risk_approved=request.risk_approved,
+                            vetoes=request.vetoes,
+                        )
+                    except DeadlineEntryBlocked as error:
+                        if (
+                            self._runtime is None
+                            or self._runtime.trading_mode != TradingMode.PAPER.value
+                            or request.purpose is not OrderPurpose.ENTRY
+                            or not error.reasons
+                            or not set(error.reasons)
+                            <= {
+                                "DEADLINE_SUPERVISOR_STALE",
+                                "PAPER_ENTRY_REFERENCE_EXPIRED",
+                                "DEADLINE_ALREADY_DUE",
+                            }
+                            or submitted
+                        ):
+                            raise
+                        return self._pause_entries(
+                            run_id,
+                            reasons=error.reasons,
+                            started_at=started_at,
+                            trading_date=trading_date,
+                        )
                     submitted += 1
                 finished_at = self._finished_at(started_at)
                 detail: dict[str, object] = {
