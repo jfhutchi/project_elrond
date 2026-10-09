@@ -69,6 +69,26 @@ class LotEvent(LearnerModel):
         return self
 
 
+class DeadlineBrokerClockEvidence(LearnerModel):
+    """Corroborates an existing deadline owner without rewriting either clock."""
+
+    experiment_id: Text
+    lot_id: Digest
+    recorded_at: datetime
+    order_id: Text
+    quantity: Quantity
+    ownership_hash: Digest
+    broker_order_id: Text
+    broker_order_hash: Digest
+    submitted_at: datetime
+
+    @model_validator(mode="after")
+    def check(self) -> Self:
+        if self.submitted_at > self.recorded_at or self.quantity <= 0:
+            raise ValueError("INVALID_BROKER_CLOCK_EVIDENCE")
+        return self
+
+
 class EconomicOutcome(LearnerModel):
     lot_id: Digest
     status: Literal["COMPLETE", "INCOMPLETE"]
@@ -114,8 +134,9 @@ def record_lot_event(store: ExperimentStore, event: LotEvent) -> bool:
         if row.kind != "LotEvent":
             continue
         original = row.decode(LotEvent)
-        if (original.model_dump(exclude={"recorded_at"})
-            == event.model_dump(exclude={"recorded_at"})):
+        if original.model_dump(exclude={"recorded_at"}) == event.model_dump(
+            exclude={"recorded_at"}
+        ):
             return False
     identity = (
         f"fill:{event.fill_id}"
@@ -150,7 +171,17 @@ def journal_lot_outcome(store: ExperimentStore, lot_id: str, *, now: datetime) -
     if len(experiments) != 1:
         raise ValueError("LOT_EXPERIMENT_UNVERIFIED")
     experiment = next(iter(experiments))
-    source_hash = content_id(sorted(content_id(row) for row in rows))
+    source_hash = content_id(
+        sorted(
+            [content_id(row) for row in rows]
+            + [
+                content_id(record.decode(DeadlineBrokerClockEvidence))
+                for record in store.read_as_of(experiment, now)
+                if record.kind == "DeadlineBrokerClockEvidence"
+                and record.decode(DeadlineBrokerClockEvidence).lot_id == lot_id
+            ]
+        )
+    )
     for event in store.read_as_of(experiment, now):
         if event.kind == "LotOutcomeRevision":
             revision = event.decode(LotOutcomeRevision)
@@ -178,6 +209,13 @@ def resolve_lot(store: ExperimentStore, lot_id: str, *, now: datetime) -> Econom
     links = {row.order_id: row for row in rows if row.kind == "ORDER_LINK"}
     if len(links) != sum(row.kind == "ORDER_LINK" for row in rows):
         reasons.add("ORDER_OWNERSHIP_CONFLICT")
+    anchors = [
+        record.decode(DeadlineBrokerClockEvidence)
+        for experiment in {row.experiment_id for row in rows}
+        for record in store.read_as_of(experiment, now)
+        if record.kind == "DeadlineBrokerClockEvidence"
+        and record.decode(DeadlineBrokerClockEvidence).lot_id == lot_id
+    ]
     fills = sorted(
         (row for row in rows if row.kind == "FILL"),
         key=lambda row: (row.occurred_at, row.fill_id or ""),
@@ -189,13 +227,25 @@ def resolve_lot(store: ExperimentStore, lot_id: str, *, now: datetime) -> Econom
     declaration = declarations[0] if len(declarations) == 1 else None
     for row in fills:
         link = links.get(row.order_id)
+        matching_anchors = [anchor for anchor in anchors if anchor.order_id == row.order_id]
+        broker_chronology = (
+            link is not None
+            and row.side == "SELL"
+            and row.owner == link.owner == "DEADLINE"
+            and len(matching_anchors) == 1
+            and matching_anchors[0].ownership_hash == content_id(link)
+            and matching_anchors[0].quantity == link.quantity
+            and matching_anchors[0].submitted_at <= row.occurred_at
+            and sum((fill.quantity for fill in fills if fill.order_id == row.order_id), Decimal(0))
+            <= link.quantity
+        )
         allowed = {"ENTRY"} if row.side == "BUY" else {"DEADLINE", "PROTECTION"}
         if (
             link is None
             or link.side != row.side
             or link.owner != row.owner
             or row.owner not in allowed
-            or link.occurred_at > row.occurred_at
+            or (link.occurred_at > row.occurred_at and not broker_chronology)
         ):
             reasons.add(
                 "ENTRY_OWNERSHIP_UNVERIFIED" if row.side == "BUY" else "EXIT_OWNERSHIP_UNVERIFIED"

@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from quantbot.domain import IntentState, OrderIntent
+from quantbot.learner.exploration import ExplorationObservation
 from quantbot.learner.five_minute_forward import FiveMinutePrediction
 from quantbot.learner.forward import _read, _save
 from quantbot.learner.paper_deadlines import CLOSED_EVENT, EXIT_EVENT, HANDOFF, PaperDeadline
@@ -46,7 +47,7 @@ class TradeEpisode:
     fees: Decimal
     realized_net_pnl: Decimal | None
     net_return: Decimal | None
-    forecast_score: float
+    forecast_score: float | None
     entry_notional: Decimal
     exit_notional: Decimal
     feature_identity: str
@@ -75,7 +76,7 @@ def _fills(
     ):
         raise ValueError("durable entry intent differs from handoff")
     rows = connection.execute(
-        "SELECT f.*, i.strategy_id, i.created_at, b.filled_quantity, b.status "
+        "SELECT f.*, i.strategy_id, i.created_at, b.filled_quantity, b.status, b.submitted_at "
         "FROM order_intents i JOIN broker_orders b USING(client_order_id) "
         "JOIN fills f USING(broker_order_id) WHERE i.intent_id=? "
         "AND i.symbol=f.symbol AND i.side=f.side AND b.symbol=f.symbol AND b.side=f.side",
@@ -89,7 +90,10 @@ def _fills(
             or row["symbol"] != record.entry_intent.symbol
             or row["side"] != side
             or _time(row["occurred_at"]) < record.recorded_at
-            or _time(row["occurred_at"]) < _time(row["created_at"])
+            or _time(row["occurred_at"]) < _time(
+                row["submitted_at"] if side == "SELL" else row["created_at"]
+            )
+            or (side == "SELL" and _time(row["created_at"]) < record.recorded_at)
             or (ownership_at is not None and _time(row["occurred_at"]) < ownership_at)
             or any(not value.is_finite() for value in numbers)
             or numbers[0] <= 0
@@ -161,16 +165,27 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
     if forecast is None:
         raise ValueError("exact durable forecast missing")
     document = json.loads(forecast["payload_json"])
-    prediction = FiveMinutePrediction.model_validate(document["prediction"])
+    prediction: FiveMinutePrediction | ExplorationObservation
+    if document["kind"] == "LEARNER_PAPER_EXPLORATION_V1":
+        prediction = ExplorationObservation.model_validate(document["prediction"])
+        # The retained binding stores the immutable policy hash, not its body.
+        # The handoff also binds the exact observation ID; no forecast is invented.
+        if record.binding.artifact_hash != prediction.policy_id:
+            raise ValueError("exploration policy lineage mismatch")
+        model_id, forecast_score = prediction.policy_id, None
+    elif document["kind"] == "LEARNER_PAPER_FORECAST_V1":
+        prediction = FiveMinutePrediction.model_validate(document["prediction"])
+        model_id, forecast_score = prediction.model_id, prediction.score
+    else:
+        raise ValueError("unknown durable entry observation kind")
     if (
-        document["kind"] != "LEARNER_PAPER_FORECAST_V1"
-        or prediction.prediction_id != record.prediction_id
-        or prediction.model_id != record.model_id
+        prediction.prediction_id != record.prediction_id
+        or model_id != record.model_id
         or prediction.features.symbol != record.entry_intent.symbol
         or forecast["strategy_id"] != record.identity.strategy_id
         or forecast["run_id"] != signal["run_id"]
         or forecast["symbol"] != record.entry_intent.symbol
-        or _time(forecast["occurred_at"]) != prediction.recorded_at
+        or _time(forecast["occurred_at"]) < prediction.recorded_at
         or _time(forecast["occurred_at"]) > min(record.recorded_at, now)
         or prediction.recorded_at > record.recorded_at
         or document["binding"] != record.binding.model_dump(mode="json")
@@ -273,7 +288,7 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
         fees,
         pnl,
         net_return,
-        prediction.score,
+        forecast_score,
         sum((Decimal(r["price"]) * Decimal(r["quantity"]) for r in entries), Decimal(0)),
         sum((Decimal(r["price"]) * Decimal(r["quantity"]) for r in exits), Decimal(0)),
         content_id(prediction.features),

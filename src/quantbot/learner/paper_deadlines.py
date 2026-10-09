@@ -308,6 +308,7 @@ class PaperDeadlineSupervisor:
                     row for row in repository.list_signals() if row.payload.get("kind") == HANDOFF
                 ]
             reasons: list[str] = []
+            failed_handoffs: list[str] = []
             submitted = 0
             try:
                 account = await self.broker.get_account()
@@ -338,6 +339,7 @@ class PaperDeadlineSupervisor:
                                 else "DEADLINE_BROKER_OR_LEDGER_UNAVAILABLE"
                             )
                             reasons.append(reason)
+                            failed_handoffs.append(row.signal_id)
             except Exception:
                 reasons.append("DEADLINE_BROKER_UNAVAILABLE")
             result = DeadlineResult(
@@ -365,15 +367,30 @@ class PaperDeadlineSupervisor:
                     detail=result.model_dump(mode="json"),
                 )
                 if not result.healthy:
-                    repository.create_incident(
-                        "paper-deadline-incident-" + stamp,
-                        severity="ERROR",
-                        kind="PAPER_DEADLINE_FAILURE",
-                        message="Independent learner deadline protection needs attention",
-                        occurred_at=now,
-                        run_id=run_id,
-                        detail={"reasons": result.reasons},
-                    )
+                    failure_fingerprint = content_id({
+                        "account_id_hash": PaperDeadline.account_hash(self.account_id),
+                        "strategy_id": self.identity.strategy_id,
+                        "configuration_hash": self.identity.configuration_hash,
+                        "handoffs": sorted(failed_handoffs or [row.signal_id for row in records]),
+                        "reasons": sorted(result.reasons),
+                    })
+                    # Every failed run and heartbeat remains durable. Deduplicate
+                    # only the exact still-open incident; never resolve or hide it.
+                    if not any(
+                        incident.kind == "PAPER_DEADLINE_FAILURE"
+                        and incident.detail.get("failure_fingerprint") == failure_fingerprint
+                        for incident in repository.list_incidents(unresolved_only=True)
+                    ):
+                        repository.create_incident(
+                            "paper-deadline-incident-" + stamp,
+                            severity="ERROR",
+                            kind="PAPER_DEADLINE_FAILURE",
+                            message="Independent learner deadline protection needs attention",
+                            occurred_at=now,
+                            run_id=run_id,
+                            detail={"reasons": result.reasons,
+                                    "failure_fingerprint": failure_fingerprint},
+                        )
             return result
 
     async def serve(self, stop: asyncio.Event, *, interval_seconds: float = 10) -> None:
@@ -411,17 +428,22 @@ class PaperDeadlineSupervisor:
             intent.time_in_force,
         ):
             raise DeadlineStateError("DEADLINE_BROKER_INTENT_MISMATCH")
+        # Preserve the entry chronology floor. Owned risk-reducing exits use
+        # their provider's own submission clock, not a different local clock.
+        fill_not_before = order.submitted_at if intent.side is OrderSide.SELL else intent.created_at
         fills = tuple(
             fill
-            for fill in await self.broker.get_fills(after=intent.created_at)
+            for fill in await self.broker.get_fills(after=fill_not_before)
             if fill.broker_order_id == order.broker_order_id
         )
+        measured_at = self.clock()
         if (
-            len({fill.fill_id for fill in fills}) != len(fills)
+            order.submitted_at > measured_at
+            or len({fill.fill_id for fill in fills}) != len(fills)
             or any(
                 fill.symbol != intent.symbol
                 or fill.side is not intent.side
-                or not intent.created_at <= fill.occurred_at <= self.clock()
+                or not fill_not_before <= fill.occurred_at <= measured_at
                 for fill in fills
             )
             or sum((fill.quantity for fill in fills), Decimal(0)) != order.filled_quantity
