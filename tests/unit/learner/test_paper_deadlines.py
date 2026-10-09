@@ -22,6 +22,105 @@ from tests.unit.learner.test_paper import NOW, deploy, intent
 from tests.unit.learner.test_paper import setup as _paper_setup
 
 
+@pytest.mark.asyncio
+async def test_confirmed_fill_reconciliation_is_durable_and_idempotent(setup):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+
+    async def reconcile(now):
+        return ()
+
+    supervisor.reconcile_fills = reconcile
+    assert (await supervisor.run_once()).healthy
+    database, _, _ = setup
+    with database.transaction() as session:
+        events = StorageRepository(session).list_order_events()
+        completed = [e for e in events if e.event_type == "PAPER_FILL_RECONCILED_V1"]
+    assert len(completed) == 1
+    broker.now += timedelta(seconds=10)
+    assert (await supervisor.run_once()).healthy
+    with database.transaction() as session:
+        events = StorageRepository(session).list_order_events()
+        assert len([e for e in events if e.event_type == "PAPER_FILL_RECONCILED_V1"]) == 1
+    assert broker.submitted == []
+
+
+@pytest.mark.asyncio
+async def test_failed_fill_reconciliation_retries_after_worker_recreation(setup):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+
+    async def failed(now):
+        return ("SNAPSHOT_ACQUISITION_UNSTABLE",)
+
+    supervisor.reconcile_fills = failed
+    result = await supervisor.run_once()
+    assert "DEADLINE_POST_FILL_RECONCILIATION_REQUIRED" in result.reasons
+    database, _, identity = setup
+    with database.transaction() as session:
+        events = StorageRepository(session).list_order_events()
+        assert any(e.event_type == "PAPER_FILL_RECONCILIATION_REQUEST_V1" for e in events)
+        assert not any(e.event_type == "PAPER_FILL_RECONCILED_V1" for e in events)
+
+    async def recovered(now):
+        return ()
+
+    replacement = PaperDeadlineSupervisor(
+        database=database, broker=broker, coordinator=supervisor.coordinator,
+        identity=identity, expected_account_id="paper-1", lock_path=supervisor.lock_path,
+        clock=lambda: broker.now,
+    )
+    replacement.reconcile_fills = recovered
+    broker.now += timedelta(seconds=10)
+    assert (await replacement.run_once()).healthy
+    with database.transaction() as session:
+        assert any(e.event_type == "PAPER_FILL_RECONCILED_V1"
+                   for e in StorageRepository(session).list_order_events())
+    assert broker.submitted == []
+
+
+@pytest.mark.asyncio
+async def test_due_exit_precedes_failed_post_fill_refresh(setup):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+    broker.now = record.deadline_at
+
+    async def failed(now):
+        assert len(broker.submitted) == 1
+        assert broker.submitted[0].side is OrderSide.SELL
+        return ("SNAPSHOT_ACQUISITION_UNSTABLE",)
+
+    supervisor.reconcile_fills = failed
+    result = await supervisor.run_once()
+    assert result.exits_submitted == 1
+    assert result.reasons == ("DEADLINE_POST_FILL_RECONCILIATION_REQUIRED",)
+    database, _, _ = setup
+    with database.transaction() as session:
+        assert StorageRepository(session).get_kill_switch_state().engaged
+
+
+@pytest.mark.asyncio
+async def test_invalid_clock_cannot_run_post_fill_reconciliation(setup):
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+    broker.now += timedelta(minutes=3)
+
+    async def stale_clock():
+        clock = MarketClock(timestamp=NOW, is_open=True,
+                            next_open=NOW + timedelta(days=1), next_close=NOW.replace(hour=20))
+        return clock
+
+    broker.get_market_clock = stale_clock
+
+    async def forbidden(now):
+        return ("POST_FILL_RECONCILIATION_REQUIRED",)
+
+    supervisor.reconcile_fills = forbidden
+    result = await supervisor.run_once()
+    assert result.reasons == ("DEADLINE_BROKER_CLOCK_STALE",)
+    assert broker.submitted == []
+
+
 @pytest.fixture(name="setup")
 def paper_store(tmp_path):
     yield from _paper_setup.__wrapped__(tmp_path)

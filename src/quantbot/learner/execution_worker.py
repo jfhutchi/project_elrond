@@ -345,6 +345,33 @@ async def _waiting_setup(
         runtime.database.close()
 
 
+async def reconcile_deadline_fills(runtime: Any, now: datetime) -> tuple[str, ...]:
+    """Refresh confirmed fill state without order authority or stop clearing.
+
+    A latched entry stop is preserved. Acknowledgement means only that strict
+    broker-ledger reconciliation and independent protection both succeeded.
+    """
+    from dataclasses import replace
+
+    if (runtime.settings.TRADING_MODE is not TradingMode.PAPER
+            or runtime.settings.BROKER_ENVIRONMENT is not BrokerEnvironment.PAPER):
+        raise ValueError("post-fill synchronization requires PAPER runtime")
+    recovery = await runtime.recovery.recover(
+        "paper-fill-reconciliation-" + str(uuid4()), started_at=now,
+    )
+    if (not recovery.reconciliation.allows_new_orders
+            or not recovery.broker_health.healthy
+            or recovery.unresolved_intent_ids
+            or (not recovery.ready and set(recovery.reasons) != {"KILL_SWITCH_ENGAGED"})):
+        return ("POST_FILL_RECONCILIATION_REQUIRED",)
+    assessment = await replace(runtime.protector(), submitter=None).evaluate(
+        now=datetime.now(UTC),
+    )
+    if assessment.outcome != "HEALTHY" or assessment.unprotected_count:
+        return ("POST_FILL_PROTECTION_REQUIRED",)
+    return ()
+
+
 async def serve_deadlines(settings: Settings) -> None:
     """Independent risk-reducing loop; deliberately never builds an entry runner."""
     if (
@@ -365,6 +392,7 @@ async def serve_deadlines(settings: Settings) -> None:
             identity=runtime.identity,
             expected_account_id=settings.EXPECTED_ACCOUNT_ID,
             lock_path=runtime.paths.lock,
+            reconcile_fills=lambda now: reconcile_deadline_fills(runtime, now),
         )
         await supervisor.serve(asyncio.Event())
     finally:
