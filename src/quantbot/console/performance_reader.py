@@ -9,6 +9,7 @@ from collections.abc import Mapping
 from contextlib import closing
 from dataclasses import fields
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -97,6 +98,48 @@ def read_configured_performance(
     return read_performance(directory, now=now)
 
 
+def _baseline_diagnostics(
+    path: Path, sessions: Mapping[date, Session], moment: datetime,
+) -> list[DailyPerformance]:
+    """Retained capture failures inform cells, never daily profit or ledger finalization."""
+    if not path.exists():
+        return []
+    with closing(sqlite3.connect(path.resolve().as_uri() + "?mode=ro", uri=True)) as connection:
+        tables = {row[0] for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if tables != {"paper_close_baselines_v1"}:
+            raise ValueError("Invalid baseline schema")
+        records = connection.execute(
+            "SELECT session_date,close_at,captured_at,equity,evidence_json "
+            "FROM paper_close_baselines_v1 ORDER BY session_date").fetchall()
+    result = []
+    seen: set[date] = set()
+    expected_fields = {field.name for field in fields(CloseEvidence)}
+    for stored_date, close_at, captured_at, equity, document in records:
+        _reject_duplicate_keys(document)
+        if set(json.loads(document)) != expected_fields:
+            raise ValueError("Invalid baseline evidence")
+        evidence = TypeAdapter(CloseEvidence).validate_json(document, strict=True)
+        if evidence.captured_at > moment:
+            continue
+        session = sessions.get(evidence.session_date)
+        if (session is None or evidence.session_date in seen
+                or stored_date != str(evidence.session_date)
+                or session.close_at != evidence.close_at
+                or datetime.fromisoformat(close_at) != evidence.close_at
+                or datetime.fromisoformat(captured_at) != evidence.captured_at
+                or Decimal(equity) != evidence.close_equity):
+            raise ValueError("Unmatched baseline evidence")
+        seen.add(evidence.session_date)
+        day = evaluate_day(evidence)
+        result.append(DailyPerformance(
+            day.session_date, "PENDING" if day.status == "FINAL" else day.status, None,
+            "Reconciled close awaits durable finalization."
+            if day.status == "FINAL" else day.reason,
+        ))
+    return result
+
+
 def read_performance(directory: Path, *, now: datetime | None = None) -> PerformanceData:
     """Read existing files only; errors never reveal paths, identifiers or raw JSON.
 
@@ -162,6 +205,10 @@ def read_performance(directory: Path, *, now: datetime | None = None) -> Perform
                 raise ValueError("Non-final persisted close")
             seen.add(day.session_date)
             rows.append(day)
+        for diagnostic in _baseline_diagnostics(directory / "baselines.db", sessions, moment):
+            if diagnostic.session_date not in seen:
+                rows.append(diagnostic)
+                seen.add(diagnostic.session_date)
         status_path = directory / "capture-status.json"
         status = (
             CaptureStatus.model_validate_json(_document(status_path))

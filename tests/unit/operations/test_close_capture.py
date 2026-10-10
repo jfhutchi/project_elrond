@@ -100,6 +100,31 @@ async def test_real_two_close_path_cash_adjustment_and_production_reader(setup):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('change', ['epoch', 'mark'])
+async def test_continuity_failures_have_specific_immutable_diagnostics(setup, change):
+    directory, _, broker, _ = setup
+    await capture(setup)
+    broker.snapshot = broker.snapshot.model_copy(update={
+        'created_at': datetime(2026, 10, 2, tzinfo=UTC)} if change == 'epoch'
+        else {'previous_close_equity': Decimal('2000')})
+    assert (await capture(setup, 2))['status'] == 'INVALID'
+    paths = list((directory / 'validation-receipts').glob('*.json'))
+    assert paths, 'Close continuity inputs lack durable specific validation receipts'
+    latest = max((json.loads(path.read_text()) for path in paths),
+                 key=lambda row: row['recorded_at'])
+    assert latest['epoch_matches'] == (change != 'epoch')
+    assert latest['prior_close_mark_matches'] == (change != 'mark')
+    assert latest['reasons'] == [
+        'ACCOUNT_EPOCH_CHANGED' if change == 'epoch' else 'PRIOR_CLOSE_MARK_UNVERIFIED']
+    assert latest['grants_accounting_finalization'] is False
+    assert CloseLedger(directory / 'closes.db').read_days() == []
+    before = {path.name: path.read_bytes() for path in paths}
+    assert (await capture(setup, 2))['status'] == 'INVALID'
+    assert before == {path.name: path.read_bytes()
+                      for path in (directory / 'validation-receipts').glob('*.json')}
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('kind,amount,equity,expected', [
     ('CSW', '-100', '890', '-10'), ('CSD', '100', '1100', '0'),
 ])

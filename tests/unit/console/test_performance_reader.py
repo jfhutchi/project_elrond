@@ -60,6 +60,40 @@ def test_valid_final_is_read_only_and_authoritative(tmp_path, monkeypatch):
     assert before == {p.name: (p.read_bytes(), p.stat().st_mtime_ns) for p in tmp_path.iterdir()}
 
 
+@pytest.mark.parametrize("state", ["missing", "invalid", "unfinalized", "future"])
+def test_retained_baseline_diagnostics_never_become_final_profit(tmp_path, state):
+    from dataclasses import asdict, replace
+
+    document = bundle(tmp_path / "canonical")
+    CloseLedger(tmp_path / "closes.db", create=True)
+    (tmp_path / "calendar.json").write_text(json.dumps(document))
+    row = evidence()
+    if state == "missing":
+        row = replace(row, previous_close_equity=None, previous_session_date=None)
+    elif state == "invalid":
+        row = replace(row, same_account_epoch=False)
+    elif state == "future":
+        row = replace(row, captured_at=NOW.replace(minute=4))
+    with sqlite3.connect(tmp_path / "baselines.db") as db:
+        db.execute("CREATE TABLE paper_close_baselines_v1 "
+                   "(session_date TEXT,close_at TEXT,captured_at TEXT,equity TEXT,"
+                   "epoch TEXT,evidence_json TEXT)")
+        db.execute("INSERT INTO paper_close_baselines_v1 VALUES (?,?,?,?,?,?)", (
+            str(row.session_date), row.close_at.isoformat(), row.captured_at.isoformat(),
+            str(row.close_equity), "e" * 64, json.dumps(asdict(row), default=str)))
+    before = {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
+    data = read_performance(tmp_path, now=NOW)
+    assert data.available
+    day = next(day for day in data.rows if day.session_date == row.session_date)
+    assert day.net_pnl is None and day.status != "FINAL"
+    expected = {"missing": "Previous close baseline is unavailable.",
+                "invalid": "Account continuity or prior-close mark is unverified.",
+                "unfinalized": "Reconciled close awaits durable finalization.",
+                "future": "Timely exchange close not captured."}
+    assert day.reason == expected[state]
+    assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
+
+
 def test_missing_files_never_created(tmp_path):
     path = tmp_path / "absent"
     assert not read_performance(path, now=NOW).available

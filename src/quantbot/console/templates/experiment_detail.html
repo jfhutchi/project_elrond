@@ -67,6 +67,23 @@
 </article>
 {% else %}<p>No registered exploration policy. Completed outcome learning is not established.</p>{% endfor %}
 </section>
+{% if detail.evidence_readiness %}
+{% set readiness = detail.evidence_readiness %}
+<section class="card"><h2>Retained coverage and adaptation readiness</h2>
+{% if readiness.synthetic %}<p><strong>Synthetic test receipts.</strong></p>{% endif %}
+<p>Coverage describes retained five-minute cohort receipts, not current entry permission or complete public-information coverage. Missing bars remain unknown.</p>
+{% for instrument in readiness.coverage %}
+<p>{{ instrument.symbol }}: {{ instrument.status }} / {{ instrument.reason }}; recorded {{ instrument.recorded_at or 'Unknown' }}. Last productive receipt {{ instrument.last_productive_at or 'Unknown' }}; last recorded gap {{ instrument.last_gap_at or 'None recorded' }}.</p>
+{% if instrument.source_hash %}<p>Coverage reference: <code>{{ instrument.source_hash }}</code>. Capture-unavailable references do not prove successful provider retrieval.</p>{% endif %}
+{% endfor %}
+{% if readiness.adaptation %}
+{% set adaptation = readiness.adaptation %}
+<p>Latest registered assessment: {{ adaptation.status }} / {{ adaptation.reason }} at {{ adaptation.recorded_at }}. Measured fresh complete sessions: {{ adaptation.fresh_complete_sessions }} / {{ adaptation.required_fresh_sessions }} required across training and later unseen validation. Elapsed days do not increase this sample.</p>
+<p>Parent: <code>{{ adaptation.parent_model_id or 'Unknown' }}</code>; request: <code>{{ adaptation.request_id or 'None recorded' }}</code>; fit: {{ adaptation.fit_status or 'No linked attempt' }}; candidate: <code>{{ adaptation.candidate_model_id or 'None verified' }}</code>.</p>
+<p>Assessment evidence: <code>{{ adaptation.evidence_hash }}</code>. Queued, fitted and evidence-supported adoption are separate states. Improvement is not established by this assessment; it grants no activation or live authority.</p>
+{% else %}<p>No retained adaptation assessment. Readiness and applied improvement are unknown.</p>{% endif %}
+</section>
+{% endif %}
 <section class="card"><h2>Forecast evaluation</h2>
 {% for model in economics.forecasts %}
 <p><code>{{ model.model_id }}</code>: {{ model.labeled_rows }} labeled rows across {{ model.independent_sessions }} sessions and {{ model.nonoverlapping_time_blocks }} nonoverlapping time blocks. MSE {{ model.mse }} · MAE {{ model.mae }} · {{ model.matched_comparison_rows }} matched baseline rows.</p>

@@ -42,7 +42,30 @@ The scorecard does not fit, promote, trade, change the strategy, write the ledge
 perform migration or grant authority. Existing frozen execution code hashes are
 unchanged because the reporting module is separate from execution source.
 
-## Remaining acceptance
+## Second increment: coverage, adaptation and close diagnostics
+
+The same experiment detail HTML and JSON now expose retained per-instrument
+coverage, its source reference and last productive/gap timestamps. Missing
+receipts remain unknown. A capture failure reference does not establish a
+successful provider retrieval, and elapsed days do not create complete sessions.
+
+Adaptation reporting links a recorded assessment to its registered successor
+request, fit start/receipt and matching immutable candidate. Queued, started,
+failed and fitted states remain separate from adoption and demonstrated benefit.
+Synthetic receipts are explicitly labeled; this reader grants no execution.
+
+The calendar reader shows historical baseline diagnostics without including
+unfinalized or invalid captures in account P&L. A failed continuity comparison
+does not prove an account reset. New close captures retain immutable validation
+sidecars distinguishing epoch and prior-close mark checks, linked by evidence
+hash. These diagnostics grant no accounting finalization and do not change
+existing comparison, cash-flow or reconciliation gates, schemas or history.
+
+This increment also incorporates the existing #270 worker classification repair:
+a configured PAPER entry failure is identified as an entry failure rather than
+an absent producer or model approval. Error details remain sanitized.
+
+## Prospective acceptance still required
 
 - Review source and run required lint/types/frozen aggregate checks on its exact head.
 - Deploy only through separately authorized normal rollout; source tests are not deployment.

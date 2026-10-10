@@ -150,7 +150,7 @@ def evaluate_day(evidence: CloseEvidence) -> DailyPerformance:
     if not all(value.is_finite() for value in values):
         return result("INVALID", "Non-finite accounting evidence.")
     if not evidence.same_account_epoch:
-        return result("INVALID", "Account reset or baseline epoch change.")
+        return result("INVALID", "Account continuity or prior-close mark is unverified.")
     if not evidence.flows_verified:
         return result("INVALID", "External cash flows have not been verified.")
     if not evidence.reconciled:
