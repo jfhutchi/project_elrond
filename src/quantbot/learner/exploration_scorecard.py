@@ -63,7 +63,7 @@ def exploration_scorecard(
     recorded = [event.decode(ExplorationFeedback) for event in events
                 if event.kind == "ExplorationFeedback"
                 and event.decode(ExplorationFeedback).policy_id == policy.policy_id]
-    counts = Counter(row.lot_id for row in recorded)
+    counts = Counter((row.lot_id, row.source_state_hash) for row in recorded)
     observations = [event.decode(ExplorationObservation) for event in events
                     if event.kind == "ExplorationObservation"]
     observation_counts = Counter(row.prediction_id for row in observations)
@@ -91,7 +91,7 @@ def exploration_scorecard(
             continue
         notional = sum((fill.quantity * fill.price for fill in owned if fill.kind == "FILL"
                         and fill.side == "BUY" and fill.price is not None), Decimal(0))
-        if (counts[row.lot_id] == 1 and row.synthetic == policy.synthetic
+        if (counts[row.lot_id, row.source_state_hash] == 1 and row.synthetic == policy.synthetic
                 and outcome.synthetic == policy.synthetic and row.net_pnl == outcome.net_pnl
                 and row.actual_fees == outcome.fees and notional > 0
                 and row.actual_net_return == row.net_pnl / notional):
