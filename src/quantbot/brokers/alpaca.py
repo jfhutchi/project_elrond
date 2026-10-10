@@ -24,6 +24,7 @@ from quantbot.brokers.base import (
     PaperPerformanceAccount,
     SubmissionUncertainError,
 )
+from quantbot.brokers.performance import PortfolioCloseHistory, validate_history_interval
 from quantbot.domain import (
     Account,
     BrokerOrder,
@@ -282,6 +283,17 @@ class AlpacaPaperBrokerAdapter:
             created_at=_timestamp(payload, 'created_at'),
             previous_close_equity=_decimal(payload, 'last_equity'),
         )
+
+    async def get_performance_close_history(
+        self, *, start: datetime, end: datetime,
+    ) -> PortfolioCloseHistory:
+        # Validate before HTTP; explicit bounds avoid the provider's default end rollover.
+        validate_history_interval(start, end)
+        response = await self._request('GET', '/v2/account/portfolio/history', params={
+            'start': _utc_parameter(start), 'end': _utc_parameter(end),
+            'timeframe': '1D', 'cashflow_types': 'ALL',
+        })
+        return PortfolioCloseHistory(start, end, response.content.decode('utf-8'))
 
     async def get_performance_activities(
         self, *, after: datetime, until: datetime,
