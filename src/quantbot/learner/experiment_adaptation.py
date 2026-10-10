@@ -73,6 +73,8 @@ def schedule_next_successor(
             synthetic=manifest.synthetic,
         )
 
+    if state.reason.startswith('EXACT_SWITCH_PENDING:'):
+        return receipt('EXACT_SWITCH_PENDING')
     if state.state in {"FAULTED", "COMPLETED", "REJECTED", "INSUFFICIENT_EVIDENCE"}:
         return receipt("EXPERIMENT_NOT_RESEARCH_ACTIVE")
     if sum(e.kind == FitStart.__name__ for e in events) >= manifest.fit_budget:

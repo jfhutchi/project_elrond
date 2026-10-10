@@ -112,7 +112,7 @@ def active_artifact(
     return activation
 
 
-def activate_exact_package(
+def _validate_activation_request(
     store: ExperimentStore,
     manifest: ExperimentManifest,
     package: ActivationPackage,
@@ -120,7 +120,7 @@ def activate_exact_package(
     approval: ExactArtifactApproval,
     services: IntradayPaperServices,
     simulation: bool = False,
-) -> ArtifactActivation:
+) -> datetime:
     approval = ExactArtifactApproval.model_validate(approval.model_dump())
     package = ActivationPackage.model_validate(package.model_dump())
     now = services.runner._clock()
@@ -193,7 +193,24 @@ def activate_exact_package(
         getattr(services.runner, "clock_health", lambda _: False)(completed_at)
     ):
         raise ValueError("CLOCK_SYNC_REQUIRED")
-    now = completed_at
+    return completed_at
+
+
+def activate_exact_package(
+    store: ExperimentStore,
+    manifest: ExperimentManifest,
+    package: ActivationPackage,
+    *,
+    approval: ExactArtifactApproval,
+    services: IntradayPaperServices,
+    simulation: bool = False,
+) -> ArtifactActivation:
+    approval = ExactArtifactApproval.model_validate(approval.model_dump())
+    package = ActivationPackage.model_validate(package.model_dump())
+    now = _validate_activation_request(store, manifest, package, approval=approval,
+                                       services=services, simulation=simulation)
+    if store.state(manifest.experiment_id).reason.startswith('EXACT_SWITCH_PENDING:'):
+        raise ValueError('EXPLICIT_ACTIVE_MODEL_SWITCH_PROCEDURE_REQUIRED')
     previous = active_artifact(store, manifest, now=now)
     if previous is not None:
         if (
@@ -203,6 +220,8 @@ def activate_exact_package(
             return previous
         raise ValueError("EXPLICIT_ACTIVE_MODEL_SWITCH_PROCEDURE_REQUIRED")
     state = store.state(manifest.experiment_id)
+    if state.activation_id is not None:
+        raise ValueError('EXPLICIT_ACTIVE_MODEL_SWITCH_PROCEDURE_REQUIRED')
     if state.state not in {"CANDIDATE_SHADOW", "ACTIVATION_REQUIRED", "EVALUATING"}:
         raise ValueError("EXPERIMENT_NOT_ACTIVATION_READY")
     store.append(approval, idempotency_key="exact-approval:" + approval.approval_id)
@@ -213,7 +232,7 @@ def activate_exact_package(
         package_id=package.package_id,
         model_id=package.model_id,
         approval_id=approval.approval_id,
-        binding_hash=binding.configuration_hash,
+        binding_hash=package.configuration_hash,
         synthetic=manifest.synthetic,
     )
     store.append(activation, idempotency_key="artifact-activation:" + activation.activation_id)

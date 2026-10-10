@@ -241,6 +241,8 @@ class ExperimentStore:
             state = self._state(db, experiment_id)
             if state.revision != expected_revision:
                 raise ValueError("STALE_STATE_REVISION")
+            if state.reason.startswith('EXACT_SWITCH_PENDING:') and target != 'FAULTED':
+                raise ValueError('EXPLICIT_ACTIVE_MODEL_SWITCH_PROCEDURE_REQUIRED')
             if target == "ACTIVE_PAPER" and state.activation_id is None:
                 raise ValueError("EXACT_ARTIFACT_ACTIVATION_REQUIRED")
             if target not in TRANSITIONS[state.state] or now < state.changed_at:

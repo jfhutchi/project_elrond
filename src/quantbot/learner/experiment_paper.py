@@ -68,6 +68,8 @@ def pooled_code_hash() -> str:
                     "experiment_contract.py",
                     "experiment_execution.py",
                     "experiment_activation.py",
+                    "experiment_switch.py",
+                    "experience_continuity.py",
                     "experiment_coordinator.py",
                     "experiment_evaluation.py",
                     "experiment_paper.py",

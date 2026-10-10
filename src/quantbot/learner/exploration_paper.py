@@ -66,7 +66,7 @@ def exploration_code_hash() -> str:
         "exploration": {name: hashlib.sha256((root / name).read_bytes()).hexdigest()
                         for name in ("exploration.py", "exploration_paper.py",
                                      "exploration_execution.py", "exploration_feedback.py",
-                                     "exploration_launch.py")},
+                                     "exploration_launch.py", "experience_consideration.py")},
     })
 
 

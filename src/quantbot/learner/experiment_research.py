@@ -317,6 +317,8 @@ def research_eligibility(
     now: datetime,
 ) -> FitRequest | None:
     state = store.state(manifest.experiment_id)
+    if state.reason.startswith('EXACT_SWITCH_PENDING:'):
+        return None
     if state.manifest_hash != content_id(manifest):
         raise ValueError("FROZEN_MANIFEST_MISMATCH")
     if state.state in {"FAULTED", "COMPLETED", "REJECTED", "INSUFFICIENT_EVIDENCE"}:
@@ -387,6 +389,8 @@ def run_registered_fit(
     synthetic_engine: Callable[[FitRequest], FittedEstimator] | None = None,
     clock: Callable[[], datetime] | None = None,
 ) -> FitReceipt:
+    if store.state(manifest.experiment_id).reason.startswith('EXACT_SWITCH_PENDING:'):
+        raise ValueError('EXACT_SWITCH_PENDING_NO_NEW_FIT')
     if synthetic_engine is not None and (not manifest.synthetic or not request.synthetic):
         raise ValueError("SYNTHETIC_ENGINE_NOT_REAL_ROUTE")
     if clock is None:
