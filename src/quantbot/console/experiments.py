@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from quantbot.console.evidence_readiness import EvidenceReadiness, read_evidence_readiness
 from quantbot.learner.experiment_activation import active_artifact
 from quantbot.learner.experiment_contract import (
     CandidateArtifact,
@@ -80,6 +81,7 @@ class ExperimentDetail(LearnerModel):
     historical_fits: tuple[FitReceipt, ...] = ()
     fit_families: dict[str, str] = Field(default_factory=dict)
     exploration_scorecards: tuple[ExplorationScorecard, ...] = ()
+    evidence_readiness: EvidenceReadiness | None = None
     synthetic: bool
 
 
@@ -354,6 +356,7 @@ def read_experiment_panel(
                         exploration_scorecard(store, event.decode(ExplorationPolicy), now=now)
                         for event in events if event.kind == "ExplorationPolicy"
                     ),
+                    evidence_readiness=read_evidence_readiness(store, manifest, now=now),
                     news=tuple(
                         event.decode(NewsEvidence)
                         for event in events

@@ -22,7 +22,7 @@ from quantbot.learner.models import Evaluation, EvaluationClass
 from quantbot.learner.progress import monitor_progress
 from quantbot.learner.store import resolve_from_store
 from quantbot.operations.alerts import AlertPolicy, AlertStore
-from quantbot.storage import Database, SingleWriterLock
+from quantbot.storage import AlreadyLockedError, Database, SingleWriterLock
 from quantbot.storage.schema import learner_evaluations, learner_outcomes, learner_predictions
 from quantbot.strategy import XNYSSessionSequence
 
@@ -102,6 +102,10 @@ def run_cycle(
                     and not (root / "entry-standby.json").exists()
                 ):
                     PaperWorkerConfig.model_validate(paper_document)
+                    # This is a configured frozen producer. A later execution failure
+                    # cannot establish that its software or operator approval is missing.
+                    receipt["blockers"] = []
+                    receipt["failure_phase"] = "PAPER_ENTRY"
                     if settings is None:
                         raise ValueError("frozen entry requires explicit PAPER settings")
                     receipt["paper"] = asyncio.run(
@@ -111,6 +115,7 @@ def run_cycle(
                     receipt["promotion"] = receipt["paper"].get("promotion") or "NONE"
                     receipt["blockers"] = receipt["paper"]["blockers"]
                     receipt["status"] = "BLOCKED"
+                    receipt.pop("failure_phase", None)
                     return receipt
             with database.transaction() as session:
                 pending = tuple(
@@ -231,10 +236,15 @@ def run_cycle(
                     ]
                     receipt["blockers"].extend(receipt["paper"]["blockers"])
             receipt["status"] = "BLOCKED"
-        except Exception:
+        except Exception as error:
             # Provider or validation exceptions may include secrets; only publish a fixed code.
             receipt["status"] = "ERROR"
             receipt["blockers"].append("OUTCOME_PROCESSING_FAILED")
+            if receipt.get("failure_phase") == "PAPER_ENTRY":
+                receipt["safe_failure_code"] = (
+                    "SHARED_WRITER_BUSY" if isinstance(error, AlreadyLockedError)
+                    else "PAPER_ENTRY_FAILED"
+                )
         finally:
             if database is not None:
                 database.close()

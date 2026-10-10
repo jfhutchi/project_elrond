@@ -87,6 +87,47 @@ def test_worker_error_is_recorded_without_raw_exception_text(tmp_path,monkeypatc
     database.close()
 
 
+@pytest.mark.parametrize('error_type,safe_code', [
+    (AlreadyLockedError, 'SHARED_WRITER_BUSY'),
+    (ValueError, 'PAPER_ENTRY_FAILED'),
+])
+def test_configured_frozen_entry_failure_does_not_claim_missing_producer(
+    tmp_path, monkeypatch, error_type, safe_code,
+):
+    from quantbot.config import Settings
+    from quantbot.learner.execution_worker import PaperWorkerConfig
+    from quantbot.learner.inherited import InheritedBaseline
+    from quantbot.learner.paper_runner import PaperExecutionPolicy
+
+    root, database = worker_store(tmp_path)
+    config = PaperWorkerConfig(
+        model_id='a' * 64, operational_database=tmp_path / 'paper.db',
+        experimental_symbol='DIA', contract='five-minute-price-alpha-v1',
+        five_minute_config=tmp_path / 'observer.json',
+        five_minute_config_sha256='b' * 64, expected_binding_hash='c' * 64,
+        policy=PaperExecutionPolicy(exclusive_learner_entry=True,
+            inherited=InheritedBaseline(account_id_hash='d' * 64,
+                captured_at=datetime.now(UTC), positions=())),
+    )
+    (root / 'paper-execution.json').write_text(config.model_dump_json())
+
+    async def fail(*args, **kwargs):
+        raise error_type('sk-SYNTHETIC-private-lock-path')
+
+    monkeypatch.setattr('quantbot.learner.execution_worker.execute_paper_tick', fail)
+    result = run_cycle(root, code_commit='a' * 40, settings=Settings())
+    assert result['status'] == 'ERROR'
+    assert result['blockers'] == ['OUTCOME_PROCESSING_FAILED']
+    assert result['failure_phase'] == 'PAPER_ENTRY'
+    assert result['safe_failure_code'] == safe_code
+    assert result['trading_enabled'] is False
+    assert 'SYNTHETIC' not in (root / 'worker.json').read_text()
+    assert {a['code'] for a in result['progress']['active_alerts']} == {
+        'OUTCOME_PROCESSING_FAILED',
+    }
+    database.close()
+
+
 def test_worker_retries_evaluation_after_resolution_commits(tmp_path, monkeypatch):
     root, database = worker_store(tmp_path)
     original = service.evaluate

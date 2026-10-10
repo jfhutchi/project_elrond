@@ -81,6 +81,21 @@ def _write(directory: Path, name: str, document: Mapping[str, Any]) -> None:
     temporary.replace(path)
 
 
+def _retain_validation(directory: Path, document: Mapping[str, Any]) -> None:
+    """Immutable diagnostic proof; never grants or reconstructs daily accounting."""
+    payload = json.dumps(document, sort_keys=True, separators=(',', ':'))
+    digest = hashlib.sha256(payload.encode()).hexdigest()
+    receipts = directory / 'validation-receipts'
+    receipts.mkdir(exist_ok=True)
+    path = receipts / (digest + '.json')
+    try:
+        with path.open('x', encoding='utf-8') as handle:
+            handle.write(payload)
+    except FileExistsError:
+        if path.read_text(encoding='utf-8') != payload:
+            raise ValueError('conflicting close validation receipt') from None
+
+
 def _reconciled(operational: Path, account: PaperPerformanceAccount,
                 *, close_at: datetime, captured_at: datetime) -> tuple[bool, str]:
     """A timely completed reconciliation and matching durable account, one RO snapshot."""
@@ -219,6 +234,16 @@ async def capture_close(
             flows_verified=flows_verified, same_account_epoch=same_epoch, reconciled=reconciled,
         )
         day = evaluate_day(evidence)
+        reasons = (['BASELINE_MISSING'] if not baseline else
+                   (['ACCOUNT_EPOCH_CHANGED'] if not epoch_matches else [])
+                   + (['PRIOR_CLOSE_MARK_UNVERIFIED'] if not mark_matches else []))
+        _retain_validation(directory, dict(
+            session_date=today.isoformat(), recorded_at=captured_at.isoformat(),
+            epoch_matches=epoch_matches, prior_close_mark_matches=mark_matches,
+            reasons=reasons, grants_accounting_finalization=False,
+            evidence_hash=hashlib.sha256(json.dumps(
+                asdict(evidence), default=str, sort_keys=True).encode()).hexdigest(),
+        ))
         # Seed even the first/reset close, but never label that comparison profitable.
         document = json.dumps(asdict(evidence), default=str, sort_keys=True)
         record = (today.isoformat(), current.close_at.isoformat(), captured_at.isoformat(),
