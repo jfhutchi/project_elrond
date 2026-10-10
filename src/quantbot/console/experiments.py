@@ -32,6 +32,24 @@ from quantbot.learner.models import LearnerModel, Text
 from quantbot.operations.daily_performance import DailyPerformance
 
 
+class _PanelStore(ExperimentStore):
+    """Reuse complete hash-checked journals only for the lifetime of one panel read.
+
+    Nested economic/provenance readers retain their normal validation paths. No
+    process-wide cache can hide new receipts or mix different as-of cutoffs.
+    """
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(path, read_only=True)
+        self._journals: dict[tuple[str, datetime], tuple[StoredEvent, ...]] = {}
+
+    def read_as_of(self, experiment_id: str, now: datetime) -> tuple[StoredEvent, ...]:
+        key = (experiment_id, now)
+        if key not in self._journals:
+            self._journals[key] = super().read_as_of(experiment_id, now)
+        return self._journals[key]
+
+
 class TimelineEvent(LearnerModel):
     recorded_at: datetime
     kind: Text
@@ -306,7 +324,7 @@ def read_experiment_panel(
     if store_path is None:
         return ExperimentPanel(available=False, reason="EXPERIMENT_STORE_NOT_CONFIGURED")
     try:
-        store = ExperimentStore(store_path, read_only=True)
+        store = _PanelStore(store_path)
         with store._transaction(write=False) as db:
             ids = tuple(
                 row[0]
