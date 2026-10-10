@@ -56,29 +56,30 @@ async def test_repeated_full_activity_page_cannot_be_treated_as_complete():
 
 async def test_close_history_uses_bounded_paper_get_and_retains_source():
     start, end = NOW - timedelta(days=1, minutes=1), NOW - timedelta(minutes=1)
-    payload = dict(timeframe='1D', timestamp=[int(start.timestamp()), int(end.timestamp())],
-                   equity=[1000, 1010])
-    transport = ScriptedBrokerTransport([response(200, payload)])
+    payloads = [dict(timeframe='1Min', timestamp=[int(at.timestamp())], equity=[value])
+                for at, value in ((start, 1000), (end, 1010))]
+    transport = ScriptedBrokerTransport([response(200, payload) for payload in payloads])
     method = getattr(adapter(transport), 'get_performance_close_history', None)
     assert callable(method), 'Supported broker-close GET is missing'
     history = await method(start=start, end=end)
     assert history.equity_at(start) == Decimal('1000')
     assert history.equity_at(end) == Decimal('1010')
     assert len(history.source_hash) == 64 and history.source_document
-    call = transport.calls[0]
-    assert call['method'] == 'GET'
-    assert call['url'] == 'https://paper-api.alpaca.markets/v2/account/portfolio/history'
-    assert call['params'] == dict(start='2026-09-30T20:00:00Z', end='2026-10-01T20:00:00Z',
-                                  timeframe='1D', cashflow_types='ALL')
+    assert len(transport.calls) == 2
+    for call, day in zip(transport.calls, ('2026-09-30', '2026-10-01'), strict=True):
+        assert call['method'] == 'GET'
+        assert call['url'] == 'https://paper-api.alpaca.markets/v2/account/portfolio/history'
+        assert call['params'] == dict(start=f'{day}T19:59:00Z', end=f'{day}T20:01:00Z',
+            timeframe='1Min', intraday_reporting='market_hours', cashflow_types='ALL')
 
 
 @pytest.mark.parametrize('patch', [
-    {'timeframe': '1Min'}, {'equity': [1000]}, {'equity': [1000, 'NaN']},
-    {'timestamp': [1790884800, 1790884800]}, {'timestamp': [True, 1790884800]},
+    {'timeframe': '1D'}, {'equity': [1000]}, {'equity': [1000, 'NaN']},
+    {'timestamp': [1790798400, 1790798400]}, {'timestamp': [True, 1790798400]},
     {'timestamp': [1790798400, 1790971200]},
 ])
 async def test_close_history_rejects_ambiguous_or_incomplete_series(patch):
-    payload = dict(timeframe='1D', timestamp=[1790798400, 1790884800], equity=[1000, 1010])
+    payload = dict(timeframe='1Min', timestamp=[1790798340, 1790798400], equity=[1000, 1010])
     method = getattr(adapter(ScriptedBrokerTransport([response(200, payload | patch)])),
                      'get_performance_close_history', None)
     assert callable(method), 'Supported broker-close GET is missing'

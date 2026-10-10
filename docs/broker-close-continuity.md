@@ -1,10 +1,18 @@
 # Prospective PAPER close continuity
 
 The optional `--broker-close-reference` capture mode uses Alpaca's authenticated
-PAPER `GET /v2/account/portfolio/history`, with explicit start/end exchange closes,
-`timeframe=1D` and `cashflow_types=ALL`. The source is documented at
+PAPER `GET /v2/account/portfolio/history`. Each previous/current exchange close
+gets a separate two-minute query window, from one minute before to one minute
+after close, with `timeframe=1Min`, `intraday_reporting=market_hours` and
+`cashflow_types=ALL`. The source is documented at
 [Alpaca portfolio history](https://docs.alpaca.markets/us/reference/getaccountportfoliohistory-1).
 Its reported P/L and percentage arrays are not used as our performance metric.
+Daily history labels are not guaranteed to identify the exact exchange-close
+instant. We therefore retain both intraday query parameters and untouched raw
+responses with individual hashes inside an immutable composite source document.
+Only the exact close timestamp is selected. An absent current close rejects the
+capture; an absent previous close can only seed a baseline, never a comparison.
+Previously retained exact-close daily receipts remain readable without relabeling.
 
 Daily account performance remains exact current-close equity minus the immediately
 preceding close equity minus classified external cash flow. Equity includes marked
@@ -57,7 +65,7 @@ Source tests use synthetic account/history/activity fixtures. They establish cod
 behavior, not actual provider completeness, runtime health or profitability.
 Prospective acceptance still needs a separately approved capture rollout, a real
 timely canonical seed and a later real reconciled comparison, plus actual provider
-confirmation of exact-close 1D timestamps and close-boundary activity filtering.
+confirmation of exact-close intraday points and close-boundary activity filtering.
 If those supported responses are unavailable or incompatible, the mode fails closed.
 
 No deployment, task/security change, credential expansion, stop clearance, increased

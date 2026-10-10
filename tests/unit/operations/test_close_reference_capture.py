@@ -1,4 +1,5 @@
 """Synthetic broker-close contract tests, never historical account reconstruction."""
+import hashlib
 import json
 import sqlite3
 from contextlib import closing
@@ -17,11 +18,23 @@ class ReferenceBroker(Broker):
     intervals = ()
     post_close_rows = ()
     omit_prior = False
+    intraday = False
 
     async def get_performance_close_history(self, *, start, end):
         from quantbot.brokers.performance import PortfolioCloseHistory
         self.calls += 1
         points = [end] if self.omit_prior else [start, end]
+        if self.intraday:
+            from quantbot.brokers.performance import INTRADAY_SCHEMA, close_window_query
+            windows = []
+            for at in (start, end):
+                raw = json.dumps(dict(timeframe='1Min',
+                    timestamp=[int(at.timestamp())] if at in points else [],
+                    equity=[self.marks[str(at.date())]] if at in points else []))
+                windows.append(dict(close_at=at.isoformat(), query=close_window_query(at),
+                    response_document=raw, response_hash=hashlib.sha256(raw.encode()).hexdigest()))
+            return PortfolioCloseHistory(start, end, json.dumps(dict(
+                schema=INTRADAY_SCHEMA, windows=windows)))
         return PortfolioCloseHistory(start, end, json.dumps(dict(
             timeframe='1D', timestamp=[int(at.timestamp()) for at in points],
             equity=[self.marks[str(at.date())] for at in points],
@@ -41,10 +54,13 @@ def reference_setup(setup):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('early', [False, True])
-async def test_prospective_close_proof_seeds_then_finalizes_exact_close_metric(setup, early):
+@pytest.mark.parametrize('intraday', [False, True])
+async def test_prospective_close_proof_seeds_then_finalizes_exact_close_metric(
+        setup, early, intraday):
     context = reference_setup(setup)
     directory, _, broker, calendar = context
     calendar.early = early
+    broker.intraday = intraday
     broker.snapshot = broker.snapshot.model_copy(update={
         'account': broker.snapshot.account.model_copy(update={'equity': Decimal('1002')})})
     assert (await capture(context, broker_close_reference=True))['status'] == 'MISSING'

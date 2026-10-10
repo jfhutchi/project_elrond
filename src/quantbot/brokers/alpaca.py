@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 from collections.abc import Mapping
 from datetime import UTC, datetime
@@ -24,7 +25,13 @@ from quantbot.brokers.base import (
     PaperPerformanceAccount,
     SubmissionUncertainError,
 )
-from quantbot.brokers.performance import PortfolioCloseHistory, validate_history_interval
+from quantbot.brokers.performance import (
+    INTRADAY_SCHEMA,
+    PortfolioCloseHistory,
+    close_window_query,
+    intraday_window_equity,
+    validate_history_interval,
+)
 from quantbot.domain import (
     Account,
     BrokerOrder,
@@ -287,13 +294,22 @@ class AlpacaPaperBrokerAdapter:
     async def get_performance_close_history(
         self, *, start: datetime, end: datetime,
     ) -> PortfolioCloseHistory:
-        # Validate before HTTP; explicit bounds avoid the provider's default end rollover.
         validate_history_interval(start, end)
-        response = await self._request('GET', '/v2/account/portfolio/history', params={
-            'start': _utc_parameter(start), 'end': _utc_parameter(end),
-            'timeframe': '1D', 'cashflow_types': 'ALL',
-        })
-        return PortfolioCloseHistory(start, end, response.content.decode('utf-8'))
+        windows = []
+        # Two narrow supported market-hours queries retain their raw documents. Only
+        # the actual exact-close points pass; a daily label or nearest minute cannot.
+        for close_at in (start, end):
+            query = close_window_query(close_at)
+            response = await self._request('GET', '/v2/account/portfolio/history', params=query)
+            raw = response.content.decode('utf-8')
+            if len(raw.encode()) > 131072:
+                raise ValueError('bounded intraday close document required')
+            window = dict(close_at=close_at.isoformat(), query=query, response_document=raw,
+                          response_hash=hashlib.sha256(raw.encode()).hexdigest())
+            intraday_window_equity(window, close_at, required=close_at == end)
+            windows.append(window)
+        return PortfolioCloseHistory(start, end, json.dumps(
+            dict(schema=INTRADAY_SCHEMA, windows=windows), sort_keys=True))
 
     async def get_performance_activities(
         self, *, after: datetime, until: datetime,
