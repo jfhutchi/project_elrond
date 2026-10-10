@@ -52,3 +52,35 @@ async def test_repeated_full_activity_page_cannot_be_treated_as_complete():
     with pytest.raises(BrokerProtocolError,match='repeated'):
         await adapter(transport).get_performance_activities(
             after=NOW-timedelta(days=1),until=NOW)
+
+
+async def test_close_history_uses_bounded_paper_get_and_retains_source():
+    start, end = NOW - timedelta(days=1, minutes=1), NOW - timedelta(minutes=1)
+    payload = dict(timeframe='1D', timestamp=[int(start.timestamp()), int(end.timestamp())],
+                   equity=[1000, 1010])
+    transport = ScriptedBrokerTransport([response(200, payload)])
+    method = getattr(adapter(transport), 'get_performance_close_history', None)
+    assert callable(method), 'Supported broker-close GET is missing'
+    history = await method(start=start, end=end)
+    assert history.equity_at(start) == Decimal('1000')
+    assert history.equity_at(end) == Decimal('1010')
+    assert len(history.source_hash) == 64 and history.source_document
+    call = transport.calls[0]
+    assert call['method'] == 'GET'
+    assert call['url'] == 'https://paper-api.alpaca.markets/v2/account/portfolio/history'
+    assert call['params'] == dict(start='2026-09-30T20:00:00Z', end='2026-10-01T20:00:00Z',
+                                  timeframe='1D', cashflow_types='ALL')
+
+
+@pytest.mark.parametrize('patch', [
+    {'timeframe': '1Min'}, {'equity': [1000]}, {'equity': [1000, 'NaN']},
+    {'timestamp': [1790884800, 1790884800]}, {'timestamp': [True, 1790884800]},
+    {'timestamp': [1790798400, 1790971200]},
+])
+async def test_close_history_rejects_ambiguous_or_incomplete_series(patch):
+    payload = dict(timeframe='1D', timestamp=[1790798400, 1790884800], equity=[1000, 1010])
+    method = getattr(adapter(ScriptedBrokerTransport([response(200, payload | patch)])),
+                     'get_performance_close_history', None)
+    assert callable(method), 'Supported broker-close GET is missing'
+    with pytest.raises((ValueError, BrokerProtocolError)):
+        await method(start=NOW-timedelta(days=1, minutes=1), end=NOW-timedelta(minutes=1))

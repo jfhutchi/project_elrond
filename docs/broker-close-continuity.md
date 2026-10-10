@@ -1,0 +1,74 @@
+# Prospective PAPER close continuity
+
+The optional `--broker-close-reference` capture mode uses Alpaca's authenticated
+PAPER `GET /v2/account/portfolio/history`, with explicit start/end exchange closes,
+`timeframe=1D` and `cashflow_types=ALL`. The source is documented at
+[Alpaca portfolio history](https://docs.alpaca.markets/us/reference/getaccountportfoliohistory-1).
+Its reported P/L and percentage arrays are not used as our performance metric.
+
+Daily account performance remains exact current-close equity minus the immediately
+preceding close equity minus classified external cash flow. Equity includes marked
+positions and broker costs. Deposits/withdrawals are not profit; missing and invalid
+days are excluded, and flat valid days remain in the profitable-day denominator.
+
+## Required proof
+
+- The existing pinned PAPER account and creation/store epoch must be verified.
+- A completed, diff-free reconciliation and matching durable live account snapshot
+  must fall inside the close window and remain fresh. Before/after account reads
+  must agree. Any activity between close and snapshot invalidates the comparison;
+  this avoids claiming that later economic changes were reconciled at close.
+- History must contain a unique finite equity point at the exact authoritative
+  exchange close. No nearest timestamp, day-label reinterpretation or interpolation
+  is allowed. Early close times come from the same authoritative session calendar.
+- The immediately previous session needs a retained canonical reference matching
+  its immutable baseline. Its equity must agree exactly with both the new history
+  response's prior-close point and the broker account's `last_equity`.
+- Activity queries use previous exchange close through current exchange close,
+  not the later receipt timestamps. Complete pagination and the existing strict
+  activity classifier remain required. Unknown journals, duplicate IDs and ambiguous
+  funding do not pass. Retained activity JSON/hash permits classification and net
+  flow to be recomputed during reference validation.
+- All provider requests must finish within the existing five-minute close window;
+  reconciliation freshness is checked again before retaining/finalizing evidence.
+
+`close-references/<close-evidence-hash>.json` binds the raw history response/hash,
+request bounds, account epoch, exact evidence hash, reconciliation ID/timing/snapshot
+hash, pinned-account verification and activity inputs/hash. Files are created
+exclusively; an incompatible retry raises instead of overwriting. The existing
+validation sidecars and daily ledger are reused; no operational migration or new
+accounting table is needed.
+
+## Bootstrap and compatibility
+
+A verified current close can seed a canonical baseline without a profit comparison,
+even when prior history is absent. A later session still requires the exact prior
+point and all continuity/flow gates. A legacy baseline without this reference cannot
+bridge into a broker-close profit comparison. Existing invalid/unfinalized historical
+captures are neither fetched again nor rewritten. Missing history is never invented.
+
+The flag is off by default. An immutable `close-reference-mode.json` marker prevents
+mode downgrade even when reference files are lost. After canonical mode is recorded,
+new captures refuse an implicit return to live after-close marks. Finalization
+recovery in opt-in mode requires the retained matching reference; no new provider
+read or historical recapture substitutes for a lost proof.
+
+Source tests use synthetic account/history/activity fixtures. They establish code
+behavior, not actual provider completeness, runtime health or profitability.
+Prospective acceptance still needs a separately approved capture rollout, a real
+timely canonical seed and a later real reconciled comparison, plus actual provider
+confirmation of exact-close 1D timestamps and close-boundary activity filtering.
+If those supported responses are unavailable or incompatible, the mode fails closed.
+
+No deployment, task/security change, credential expansion, stop clearance, increased
+assessment cadence, orders, promotion or historical accounting repair is authorized
+by this source work. Capture rollout approval remains separate; frozen worker hash
+review is not part of this feature.
+
+An approved rollout would update only the existing capture launcher/source and
+explicit flag, retaining its schedule/security/credential reference. Back up its
+launcher and performance stores without copying credentials. If rolled back after
+canonical receipts exist, pause that accounting writer rather than resume an older
+writer unaware of the new mark basis. Preserve all new/old ledger and reference
+files; restoring an older database over later evidence is not a rollback option.
+No position-protection or execution task is involved.
