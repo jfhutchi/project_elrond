@@ -73,12 +73,16 @@ def test_later_evidence_invalidates_feedback_without_erasing_receipt(tmp_path):
 
 
 @pytest.mark.parametrize("changes", [{"synthetic": False},
-                                    {"actual_net_return": Decimal("10")}])
+                                    {"actual_net_return": Decimal("10")},
+                                    {"observation_id": "f" * 64},
+                                    {"recorded_at": None}])
 def test_inconsistent_feedback_cannot_supply_economic_metrics(tmp_path, changes):
     from quantbot.learner.experiment_store import ExperimentStore
 
     store, policy, _, now = journal(tmp_path)
     feedback = journal_exploration_feedback(store, policy, now=now)[0]
+    if changes == {"recorded_at": None}:
+        changes = {"recorded_at": policy.recorded_at}
     isolated = ExperimentStore(tmp_path / "inconsistent.db", create=True)
     for index, event in enumerate(store.read_as_of(policy.experiment_id, now)):
         if event.kind != "ExplorationFeedback":
@@ -95,6 +99,18 @@ def test_inconsistent_feedback_cannot_supply_economic_metrics(tmp_path, changes)
     result = scorecard(isolated, policy, now)
     assert result.recorded_feedback == result.excluded_feedback == 1
     assert result.verified_episodes == 0 and result.mean_net_return is None
+
+
+def test_feedback_cannot_be_reassigned_to_another_registered_policy(tmp_path):
+    store, policy, _, now = journal(tmp_path)
+    feedback = journal_exploration_feedback(store, policy, now=now)[0]
+    alternate = policy.model_copy(update={"code_hash": "e" * 64})
+    store.append(alternate, idempotency_key="alternate-policy")
+    store.append(feedback.model_copy(update={"policy_id": alternate.policy_id}),
+                 idempotency_key="reassigned-feedback")
+    result = scorecard(store, alternate, now)
+    assert result.recorded_feedback == result.excluded_feedback == 1
+    assert result.verified_episodes == 0 and result.net_pnl is None
 
 
 def test_dashboard_html_and_json_share_verified_scorecard(tmp_path):

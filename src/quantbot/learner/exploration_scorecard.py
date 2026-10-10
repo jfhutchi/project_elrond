@@ -12,9 +12,9 @@ from decimal import Decimal
 from typing import Literal
 
 from quantbot.learner.experiment_contract import Digest, ExperimentManifest
-from quantbot.learner.experiment_lots import LotEvent, resolve_lot
+from quantbot.learner.experiment_lots import DeadlineBrokerClockEvidence, LotEvent, resolve_lot
 from quantbot.learner.experiment_store import ExperimentStore
-from quantbot.learner.exploration import ExplorationPolicy
+from quantbot.learner.exploration import ExplorationObservation, ExplorationPolicy
 from quantbot.learner.exploration_feedback import ExplorationFeedback, verified_feedback
 from quantbot.learner.models import LearnerModel, Text
 from quantbot.research.manifest import content_id
@@ -64,12 +64,32 @@ def exploration_scorecard(
                 if event.kind == "ExplorationFeedback"
                 and event.decode(ExplorationFeedback).policy_id == policy.policy_id]
     counts = Counter(row.lot_id for row in recorded)
+    observations = [event.decode(ExplorationObservation) for event in events
+                    if event.kind == "ExplorationObservation"]
+    observation_counts = Counter(row.prediction_id for row in observations)
+    indexed_observations = {row.prediction_id: row for row in observations}
+    lots = [event.decode(LotEvent) for event in events if event.kind == "LotEvent"]
+    anchors = [event.decode(DeadlineBrokerClockEvidence) for event in events
+               if event.kind == "DeadlineBrokerClockEvidence"]
     verified = []
     for row in verified_feedback(store, policy, now=now):
         outcome = resolve_lot(store, row.lot_id, now=now)
-        notional = sum((fill.quantity * fill.price for event in events
-                        if event.kind == "LotEvent" for fill in (event.decode(LotEvent),)
-                        if fill.lot_id == row.lot_id and fill.kind == "FILL"
+        owned = [event for event in lots if event.lot_id == row.lot_id]
+        declarations = [event for event in owned if event.kind == "ENTRY_DECLARED"]
+        observation = indexed_observations.get(row.observation_id)
+        if (observation is None or observation_counts[row.observation_id] != 1
+                or observation.policy_id != policy.policy_id
+                or observation.synthetic != policy.synthetic or len(declarations) != 1):
+            continue
+        declaration = declarations[0]
+        if (declaration.decision_id != observation.prediction_id
+                or declaration.symbol != observation.features.symbol
+                or not policy.recorded_at <= observation.recorded_at <= declaration.occurred_at
+                or any(event.recorded_at > row.recorded_at for event in owned)
+                or any(anchor.recorded_at > row.recorded_at for anchor in anchors
+                       if anchor.lot_id == row.lot_id)):
+            continue
+        notional = sum((fill.quantity * fill.price for fill in owned if fill.kind == "FILL"
                         and fill.side == "BUY" and fill.price is not None), Decimal(0))
         if (counts[row.lot_id] == 1 and row.synthetic == policy.synthetic
                 and outcome.synthetic == policy.synthetic and row.net_pnl == outcome.net_pnl
