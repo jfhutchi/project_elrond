@@ -25,6 +25,8 @@ from quantbot.learner.experiment_news import NewsEvidence
 from quantbot.learner.experiment_observation import ObservationBatch
 from quantbot.learner.experiment_research import FitReceipt, FitRequest, FitStart
 from quantbot.learner.experiment_store import ConsentNotice, ExperimentStore, StoredEvent
+from quantbot.learner.exploration import ExplorationPolicy
+from quantbot.learner.exploration_scorecard import ExplorationScorecard, exploration_scorecard
 from quantbot.learner.models import LearnerModel, Text
 from quantbot.operations.daily_performance import DailyPerformance
 
@@ -77,6 +79,7 @@ class ExperimentDetail(LearnerModel):
     news: tuple[NewsEvidence, ...] = ()
     historical_fits: tuple[FitReceipt, ...] = ()
     fit_families: dict[str, str] = Field(default_factory=dict)
+    exploration_scorecards: tuple[ExplorationScorecard, ...] = ()
     synthetic: bool
 
 
@@ -347,6 +350,10 @@ def read_experiment_panel(
                         for event in events if event.kind == "CandidateArtifact"
                         for candidate in (event.decode(CandidateArtifact),)
                     },
+                    exploration_scorecards=tuple(
+                        exploration_scorecard(store, event.decode(ExplorationPolicy), now=now)
+                        for event in events if event.kind == "ExplorationPolicy"
+                    ),
                     news=tuple(
                         event.decode(NewsEvidence)
                         for event in events

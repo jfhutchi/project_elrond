@@ -49,6 +49,24 @@
   </dl>
   <p>Account equity includes legacy holdings and unrealized marks. Their separate contribution is not verified here. Forecast accuracy is not broker profit.</p>
 </section>
+<section class="card"><h2>Executed exploration outcomes and learning</h2>
+{% for score in detail.exploration_scorecards %}
+<article>
+<p>Policy <code>{{ score.policy_id }}</code>. {{ score.evidence_class }}.
+{% if score.synthetic %}<strong>Synthetic test evidence; not actual PAPER profit.</strong>{% endif %}</p>
+<dl>
+<dt>Currently verified / recorded feedback episodes</dt><dd>{{ score.verified_episodes }} / {{ score.recorded_feedback }}; {{ score.excluded_feedback }} excluded as unverified</dd>
+<dt>Net owned P&amp;L after verified fees</dt><dd>{{ '$' ~ score.net_pnl if score.net_pnl is not none else 'Unknown' }}</dd>
+<dt>Verified fees (already included in net P&amp;L)</dt><dd>{{ '$' ~ score.verified_fees if score.verified_fees is not none else 'Unknown' }}</dd>
+<dt>Descriptive expectancy per completed episode</dt><dd>{{ '$' ~ score.expectancy_usd if score.expectancy_usd is not none else 'Unknown' }}</dd>
+<dt>Profitable / losing / flat episodes</dt><dd>{{ score.profitable_episodes }} / {{ score.losing_episodes }} / {{ score.flat_episodes }}</dd>
+<dt>Profitable-episode percentage</dt><dd>{{ score.profitable_episode_percent if score.profitable_episode_percent is not none else 'Unknown' }}{% if score.profitable_episode_percent is not none %}%{% endif %}; denominator: all {{ score.verified_episodes }} verified episodes, including flats; not trading days</dd>
+<dt>Profit factor</dt><dd>{{ score.profit_factor if score.profit_factor is not none else 'Unknown (no verified losses or no sample)' }}</dd>
+</dl>
+<p>Feedback affects the next round-robin selection count only. Predictor parameters are not fitted by this feedback. Improvement and profitable edge are not established; later fresh comparison is still required. Fill-price effects are included; modeled slippage is not deducted twice.</p>
+</article>
+{% else %}<p>No registered exploration policy. Completed outcome learning is not established.</p>{% endfor %}
+</section>
 <section class="card"><h2>Forecast evaluation</h2>
 {% for model in economics.forecasts %}
 <p><code>{{ model.model_id }}</code>: {{ model.labeled_rows }} labeled rows across {{ model.independent_sessions }} sessions and {{ model.nonoverlapping_time_blocks }} nonoverlapping time blocks. MSE {{ model.mse }} · MAE {{ model.mae }} · {{ model.matched_comparison_rows }} matched baseline rows.</p>
