@@ -48,11 +48,21 @@ or insufficient evidence; a trade/day does not force a parameter change.
 
 An activation package is a proposal. Applying an exact fitted artifact requires the
 existing package-specific approval, operational deployment/promotion, clock and binding
-checks. Broad consent and synthetic demonstrations cannot activate a real model. A second
-active model switch is refused by `EXPLICIT_ACTIVE_MODEL_SWITCH_PROCEDURE_REQUIRED`;
-automatic challenger application and a verified active-policy feedback transition are
-not completed by this feedback enhancement. Incumbent evidence and proposed rollback
-identity remain retained; there is no new automatic strategy rollback authority.
+checks. Broad consent and synthetic demonstrations cannot activate a real model.
+The opt-in `experiment_switch` APIs now support an exactly approved staged switch:
+staging fences entries and research, and completion rechecks the exact target binding,
+clock, readiness and unchanged inventory evidence before recording activation atomically.
+Generic activation cannot replace an incumbent. An interrupted switch remains fenced;
+recovery or rollback requires its own exact approval and retained artifact. These APIs do
+not update operational bindings, scheduled tasks or broker orders, and are not wired into
+an unattended deployment path. Evidence and permanent trial charges are preserved.
+
+The opt-in `experience_continuity` APIs verify approved, registered code-only policy
+transitions. Prior feedback retains its original policy and lot attribution.
+`experience_consideration` records current source revisions and an explicit `NO_CHANGE`
+decision, including missing evidence. Neither lineage nor consideration grants fitting,
+execution or activation authority. The deployed selector and launcher are unchanged;
+application and prospective acceptance remain separate from these source contracts.
 
 Remaining research/product acceptance: genuine eligible owned episodes and daily close
 comparisons, charged fresh-data successors, a preregistered unseen incumbent comparison,
