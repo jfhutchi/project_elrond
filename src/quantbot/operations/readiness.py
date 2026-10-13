@@ -71,6 +71,7 @@ DEFAULT_MAX_RECONCILIATION_AGE = timedelta(hours=36)
 #: and a freshness check that cries wolf every long weekend is one an operator learns to ignore.
 DEFAULT_MAX_BAR_AGE = timedelta(days=5)
 
+
 class HealthProbe(Protocol):
     """The part of a broker adapter this module needs. Injected so tests need no network."""
 
@@ -134,6 +135,8 @@ async def measure_readiness(
         detail.append(f"the newest reconciliation is {latest.status.value}")
     elif latest.diffs:
         detail.append(f"the newest reconciliation carries {len(latest.diffs)} diffs")
+    elif latest.completed_at > now:
+        detail.append("the newest reconciliation is dated in the future")
     elif now - latest.completed_at > max_reconciliation_age:
         # New. A clean reconciliation from three weeks ago used to satisfy this, and a ledger
         # that matched three weeks ago is not a ledger that matches.
@@ -148,6 +151,8 @@ async def measure_readiness(
     data_healthy = False
     if newest_bar is None:
         detail.append("no market data has been stored")
+    elif newest_bar > now:
+        detail.append("the newest market data is dated in the future")
     elif now - newest_bar > max_bar_age:
         detail.append(f"the newest bar is {(now - newest_bar).days}d old")
     else:

@@ -9,6 +9,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.windows_shell import permitted_powershell
+
 ROOT = Path(__file__).resolve().parents[3]
 pytestmark = pytest.mark.skipif(sys.platform != 'win32', reason='Windows scheduler doubles')
 
@@ -68,18 +70,30 @@ def invoke(tmp_path, script, body):
     repo = tmp_path / 'repo'
     scripts = repo / 'deploy' / 'omen'
     scripts.mkdir(parents=True)
-    (scripts / 'start-monitor.ps1').write_text('exit 0')
-    (scripts / 'start-alert-dispatch.ps1').write_text('exit 0')
-    (scripts / 'start-learner.ps1').write_text('throw "must not launch learner"')
-    (directory / 'state').mkdir()
-    (directory / 'state' / 'learner.db').write_bytes(b'untouched fixture')
-    (directory / 'deployment.json').write_text(json.dumps({'learner_commit': 'a' * 40}))
-    wrapper = tmp_path / 'double.ps1'
-    wrapper.write_text(DOUBLES + body, encoding='utf-8')
-    result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
-                             'Bypass', '-File', str(wrapper), str(path), str(directory), str(host)],
-                            capture_output=True, text=True, timeout=30,
-                            env={**os.environ, 'ELROND_TEST_ROOT': str(repo)})
+    (scripts / "start-monitor.ps1").write_text("exit 0")
+    (scripts / "start-alert-dispatch.ps1").write_text("exit 0")
+    (scripts / "start-learner.ps1").write_text('throw "must not launch learner"')
+    (directory / "state").mkdir()
+    (directory / "state" / "learner.db").write_bytes(b"untouched fixture")
+    (directory / "deployment.json").write_text(json.dumps({"learner_commit": "a" * 40}))
+    wrapper = tmp_path / "double.ps1"
+    wrapper.write_text(DOUBLES + body, encoding="utf-8")
+    result = subprocess.run(
+        [
+            permitted_powershell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(wrapper),
+            str(path),
+            str(directory),
+            str(host),
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        env={**os.environ, "ELROND_TEST_ROOT": str(repo)},
+    )
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout.strip().splitlines()[-1])
 
@@ -269,19 +283,44 @@ def test_monitor_wrapper_uses_owned_interpreter_and_check_arguments(tmp_path):
     (module / 'monitor_launch.py').write_text(
         'import json,sys\nprint(json.dumps({"argv":sys.argv[1:],"python":sys.executable}))\n')
     target = Path(sys.prefix).resolve()
-    subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
-                    f"New-Item -ItemType Junction -Path '{repo / '.venv'}' "
-                    f"-Target '{target}' | Out-Null"], check=True, timeout=15)
-    environment = tmp_path / 'fixture.env'
-    environment.write_text('TRADING_MODE=PAPER\n')
-    database = tmp_path / 'paper.db'
-    database.write_bytes(b'not opened by fixture')
-    result = subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy',
-                             'Bypass', '-File', str(scripts / 'start-monitor.ps1'),
-                             '-Repository', str(repo), '-Directory', str(tmp_path),
-                             '-Database', str(database), '-EnvironmentFile', str(environment),
-                             '-Commit', 'b' * 40, '-Check'],
-                            capture_output=True, text=True, timeout=30)
+    subprocess.run(
+        [
+            permitted_powershell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            f"New-Item -ItemType Junction -Path '{repo / '.venv'}' -Target '{target}' | Out-Null",
+        ],
+        check=True,
+        timeout=15,
+    )
+    environment = tmp_path / "fixture.env"
+    environment.write_text("TRADING_MODE=PAPER\n")
+    database = tmp_path / "paper.db"
+    database.write_bytes(b"not opened by fixture")
+    result = subprocess.run(
+        [
+            permitted_powershell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(scripts / "start-monitor.ps1"),
+            "-Repository",
+            str(repo),
+            "-Directory",
+            str(tmp_path),
+            "-Database",
+            str(database),
+            "-EnvironmentFile",
+            str(environment),
+            "-Commit",
+            "b" * 40,
+            "-Check",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
     assert result.returncode == 0, result.stderr
     observed = json.loads(result.stdout.strip())
     assert Path(observed['python']).resolve() == (repo / '.venv/Scripts/python.exe').resolve()
@@ -305,7 +344,7 @@ def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_p
     (module / '__init__.py').write_text('')
     (module / ('execution_worker.py' if mode == 'deadline' else 'close_capture.py')).write_text(
         'import json,sys\nprint(json.dumps({"argv":sys.argv[1:],"python":sys.executable}))\n')
-    subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+    subprocess.run([permitted_powershell(), '-NoProfile', '-NonInteractive', '-Command',
                     f"New-Item -ItemType Junction -Path '{repo / '.venv'}' "
                     f"-Target '{Path(sys.prefix).resolve()}' | Out-Null"], check=True, timeout=15)
     directory = tmp_path / 'learner'
@@ -317,7 +356,7 @@ def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_p
     environment = tmp_path / 'fixture.env'
     environment.write_text('TRADING_MODE=PAPER\n')
     result = subprocess.run([
-        'powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+        permitted_powershell(), '-NoProfile', '-NonInteractive', '-File',
         str(scripts / 'start-learner.ps1'), '-Repository', str(repo), '-Directory', str(directory),
         '-Database', str(learner_database), '-EnvironmentFile', str(environment),
         '-Commit', 'b' * 40,
@@ -349,7 +388,7 @@ def test_dispatch_wrapper_checks_both_readonly_sources_with_owned_python(tmp_pat
     (module / '__init__.py').write_text('')
     (module / 'alert_dispatch.py').write_text(
         'import json,sys\nprint(json.dumps({"argv":sys.argv[1:],"python":sys.executable}))\n')
-    subprocess.run(['powershell', '-NoProfile', '-NonInteractive', '-Command',
+    subprocess.run([permitted_powershell(), '-NoProfile', '-NonInteractive', '-Command',
                     f"New-Item -ItemType Junction -Path '{repo / '.venv'}' "
                     f"-Target '{Path(sys.prefix).resolve()}' | Out-Null"], check=True, timeout=15)
     database = tmp_path / 'alerts.db'
@@ -358,7 +397,7 @@ def test_dispatch_wrapper_checks_both_readonly_sources_with_owned_python(tmp_pat
     observer.write_bytes(b'fixture: never opened')
     queues = (tmp_path / 'queue.db', tmp_path / 'observer-queue.db')
     result = subprocess.run([
-        'powershell', '-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-File',
+        permitted_powershell(), '-NoProfile', '-NonInteractive', '-File',
         str(scripts / 'start-alert-dispatch.ps1'), '-Repository', str(repo),
         '-Directory', str(tmp_path), '-Database', str(database), '-QueueDatabase', str(queues[0]),
         '-ObserverDatabase', str(observer), '-ObserverQueueDatabase', str(queues[1]),

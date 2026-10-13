@@ -99,7 +99,8 @@ def context(tmp_path, request):
             positions=tuple(dict(symbol=symbol,quantity=Decimal('1'),
                                  average_entry_price=Decimal('450')) for symbol in ('QQQ','TLT'))))
     else:
-        policy = PaperExecutionPolicy()
+        policy = PaperExecutionPolicy(clock_contract='RELATIVE_V1'
+            if getattr(request,'param',None)=='relative-clock' else 'STRICT_V0')
     binding = paper_model_binding(
         model, config=config, policy=policy, veto_policy=version.policy(), market_data=data_settings
     )
@@ -169,6 +170,7 @@ def context(tmp_path, request):
         expected_account_id="paper-1",
         lock_path=database.path.with_suffix(".lock"),
         clock=lambda: broker.now,
+        clock_contract=policy.clock_contract,
     )
     runner = IntradayPaperRunner(
         database=database,

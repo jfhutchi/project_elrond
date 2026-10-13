@@ -290,10 +290,12 @@ def build_exploration_paper_services(
         runtime, runner, binding=binding, identity=identity,
         max_data_age_seconds=policy.max_reference_age_seconds,
         data_sync=IntradayCohortSync(risk_sync, runner), clock=clock,
+        clock_contract=policy.clock_contract,
     )
     deadlines = PaperDeadlineSupervisor(
         database=runtime.database, broker=runtime.broker, coordinator=runtime.coordinator,
         identity=runtime.identity, expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID,
         lock_path=runtime.paths.lock, clock=clock,
+        clock_contract=policy.clock_contract,
     )
     return IntradayPaperServices(runner=runner, cycle=cycle, deadlines=deadlines)

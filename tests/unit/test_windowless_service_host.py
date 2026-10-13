@@ -11,6 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.windows_shell import permitted_powershell
+
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows service host")
 
 
@@ -21,10 +23,18 @@ def service_host(tmp_path_factory: pytest.TempPathFactory) -> Path:
     assert builder.exists(), "the scheduled action needs a windowless process host"
     result = subprocess.run(
         [
-            "powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
-            "-File", str(builder), "-OutputDirectory", str(tmp_path_factory.mktemp("host")),
+            permitted_powershell(),
+            "-NoProfile",
+            "-NonInteractive",
+            "-File",
+            str(builder),
+            "-OutputDirectory",
+            str(tmp_path_factory.mktemp("host")),
         ],
-        capture_output=True, text=True, timeout=60, check=False,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr
     return Path(result.stdout.strip().splitlines()[-1])
@@ -45,27 +55,26 @@ def _alive(process_id: int) -> bool:
 
 
 def test_host_is_a_gui_executable_and_child_has_no_console(
-    service_host: Path, tmp_path: Path,
+    service_host: Path,
+    tmp_path: Path,
 ) -> None:
     binary = service_host.read_bytes()
     pe = struct.unpack_from("<I", binary, 0x3C)[0]
     assert struct.unpack_from("<H", binary, pe + 24 + 68)[0] == 2, "must use GUI subsystem"
     result_file = tmp_path / "console.json"
-    script = tmp_path / "probe.ps1"
-    script.write_text(
+    command = (
         "Add-Type 'using System; using System.Runtime.InteropServices; "
-        "public class ConsoleProbe { [DllImport(\"kernel32.dll\")] "
+        'public class ConsoleProbe { [DllImport("kernel32.dll")] '
         "public static extern IntPtr GetConsoleWindow(); }'\n"
         "[ConsoleProbe]::GetConsoleWindow().ToInt64() | "
         f"Set-Content -Encoding ASCII -LiteralPath '{result_file}'\n"
-        "Write-Output 'HOST_STDOUT'\n[Console]::Error.WriteLine('HOST_STDERR')\nexit 37\n",
-        encoding="utf-8",
+        "Write-Output 'HOST_STDOUT'\n[Console]::Error.WriteLine('HOST_STDERR')\nexit 37\n"
     )
     log = tmp_path / "launcher.log"
     result = subprocess.run(
-        [str(service_host), str(log), "-NoProfile", "-NonInteractive", "-ExecutionPolicy",
-         "Bypass", "-File", str(script)],
-        timeout=20, check=False,
+        [str(service_host), str(log), "-NoProfile", "-NonInteractive", "-Command", command],
+        timeout=20,
+        check=False,
     )
     assert result.returncode == 37
     assert int(result_file.read_text()) == 0
@@ -74,25 +83,35 @@ def test_host_is_a_gui_executable_and_child_has_no_console(
 
 
 def test_host_preserves_quoted_and_empty_arguments(service_host: Path, tmp_path: Path) -> None:
-    script = tmp_path / "argument probe.ps1"
     result_file = tmp_path / "arguments.json"
-    script.write_text(
-        "ConvertTo-Json -InputObject @($args) -Compress | "
-        f"Set-Content -Encoding UTF8 '{result_file}'\n",
-        encoding="utf-8",
+    # Inspect native argv before PowerShell interprets argument text as code.
+    # No unsigned script file is loaded by the fixed Windows PowerShell host.
+    command = (
+        "ConvertTo-Json -InputObject @([Environment]::GetCommandLineArgs() | "
+        "Select-Object -Skip 5) -Compress | "
+        f"Set-Content -Encoding UTF8 '{result_file}'; #"
     )
     arguments = ["has spaces", "", 'a"quote', "ends-in-\\", 'slash\\"quote', "日本語"]
     result = subprocess.run(
-        [str(service_host), str(tmp_path / "host.log"), "-NoProfile", "-NonInteractive",
-         "-ExecutionPolicy", "Bypass",
-         "-File", str(script), *arguments], timeout=20, check=False,
+        [
+            str(service_host),
+            str(tmp_path / "host.log"),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            command,
+            *arguments,
+        ],
+        timeout=20,
+        check=False,
     )
     assert result.returncode == 0
     assert json.loads(result_file.read_text(encoding="utf-8-sig")) == arguments
 
 
 def test_terminating_host_stops_powershell_and_its_descendant(
-    service_host: Path, tmp_path: Path,
+    service_host: Path,
+    tmp_path: Path,
 ) -> None:
     ready = tmp_path / "ready.json"
     child_ready = tmp_path / "child.json"
@@ -100,18 +119,22 @@ def test_terminating_host_stops_powershell_and_its_descendant(
     child.write_text(
         "import json, os, time\nfrom pathlib import Path\n"
         f"Path({str(child_ready)!r}).write_text(json.dumps({{'pid': os.getpid()}}))\n"
-        "time.sleep(60)\n", encoding="utf-8",
-    )
-    script = tmp_path / "parent.ps1"
-    script.write_text(
-        f"$PID | Set-Content -Encoding ASCII -LiteralPath '{ready}'\n"
-        f"& '{sys.executable}' '{child}'\n",
+        "time.sleep(60)\n",
         encoding="utf-8",
     )
+    command = (
+        f"$PID | Set-Content -Encoding ASCII -LiteralPath '{ready}'\n"
+        f"& '{sys.executable}' '{child}'\n"
+    )
     process = subprocess.Popen(
-        [str(service_host), str(tmp_path / "host.log"), "-NoProfile", "-NonInteractive",
-         "-ExecutionPolicy", "Bypass",
-         "-File", str(script)],
+        [
+            str(service_host),
+            str(tmp_path / "host.log"),
+            "-NoProfile",
+            "-NonInteractive",
+            "-Command",
+            command,
+        ],
     )
     descendants: list[int] = []
     try:
@@ -139,16 +162,55 @@ def test_terminating_host_stops_powershell_and_its_descendant(
 def test_unwritable_log_refuses_before_starting_child(service_host: Path, tmp_path: Path) -> None:
     marker = tmp_path / "unexpected-child"
     result = subprocess.run(
-        [str(service_host), str(tmp_path), "-NoProfile", "-Command",
-         f"New-Item -ItemType File -Path '{marker}'"],
-        timeout=20, check=False,
+        [
+            str(service_host),
+            str(tmp_path),
+            "-NoProfile",
+            "-Command",
+            f"New-Item -ItemType File -Path '{marker}'",
+        ],
+        timeout=20,
+        check=False,
     )
     assert result.returncode != 0
     assert not marker.exists()
 
 
+def test_host_preserves_actual_script_execution_policy(service_host: Path, tmp_path: Path):
+    shell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+
+    def policy():
+        return subprocess.run(
+            [str(shell), "-NoProfile", "-NonInteractive", "-Command", "Get-ExecutionPolicy"],
+            capture_output=True,
+            text=True,
+            check=True,
+            timeout=10,
+        ).stdout.strip()
+
+    before = policy()
+    marker = tmp_path / "file-executed"
+    script = tmp_path / "unsigned-fixture.ps1"
+    script.write_text(f"'fixture' | Set-Content -LiteralPath '{marker}'", encoding="utf-8")
+    log = tmp_path / "policy.log"
+    result = subprocess.run(
+        [str(service_host), str(log), "-NoProfile", "-NonInteractive", "-File", str(script)],
+        timeout=20,
+        check=False,
+    )
+    assert policy() == before
+    if before in {"Restricted", "AllSigned"}:
+        assert result.returncode != 0
+        assert not marker.exists()
+        assert "cannot be loaded" in log.read_text(encoding="utf-8-sig")
+    else:
+        assert before in {"RemoteSigned", "Unrestricted"}, "unsupported inherited test policy"
+        assert result.returncode == 0 and marker.read_text().strip() == "fixture"
+
+
 def test_log_failure_exits_deliberately_without_an_unhandled_callback_exception(
-    service_host: Path, tmp_path: Path,
+    service_host: Path,
+    tmp_path: Path,
 ) -> None:
     harness = tmp_path / "log-failure.cs"
     harness.write_text(
@@ -174,13 +236,16 @@ class Probe {
         } catch (Exception) { return 99; }
     }
 }
-""", encoding="utf-8",
+""",
+        encoding="utf-8",
     )
     executable = tmp_path / "log-failure.exe"
     compiler = Path(os.environ["SystemRoot"]) / "Microsoft.NET/Framework64/v4.0.30319/csc.exe"
     subprocess.run(
         [str(compiler), "/nologo", "/target:winexe", f"/out:{executable}", str(harness)],
-        capture_output=True, timeout=30, check=True,
+        capture_output=True,
+        timeout=30,
+        check=True,
     )
     result = subprocess.run([str(executable), str(service_host)], timeout=10, check=False)
     assert result.returncode == 70, "log failure must not escape an asynchronous reader callback"

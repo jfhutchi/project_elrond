@@ -26,6 +26,7 @@ from quantbot.operations.cycle import (
     OrderSubmitter,
     RunOnceCycle,
 )
+from quantbot.operations.paper_clock import ClockContract
 from quantbot.operations.qualification import QualificationTracker
 from quantbot.research.manifest import content_id
 from quantbot.research.promotion import PromotionState, Stage
@@ -284,6 +285,7 @@ def build_learner_paper_cycle(
     data_sync: DataSyncRunner | None = None,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     submission_wrapper: Callable[[PromotionGatedSubmitter], OrderSubmitter] | None = None,
+    clock_contract: ClockContract='STRICT_V0',
 ) -> RunOnceCycle:
     """Compose a configured runtime; do not open, migrate, deploy or start one.
 
@@ -301,6 +303,7 @@ def build_learner_paper_cycle(
         data_sync=data_sync,
         clock=clock,
         submission_wrapper=submission_wrapper,
+        clock_contract=clock_contract,
     )
 
 
@@ -343,6 +346,7 @@ class LearnerPaperCycle(RunOnceCycle):
         data_sync: DataSyncRunner | None = None,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         submission_wrapper: Callable[[PromotionGatedSubmitter], OrderSubmitter] | None = None,
+        clock_contract: ClockContract='STRICT_V0',
     ) -> None:
         _validate_runtime(runtime, runner, binding=binding, identity=identity)
         from quantbot.learner.paper_deadlines import DeadlineGatedSubmitter
@@ -357,6 +361,7 @@ class LearnerPaperCycle(RunOnceCycle):
             DeadlineGatedSubmitter(
                 runtime.database, runtime.coordinator,
                 expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID, clock=clock,
+                clock_contract=clock_contract,
             ),
             binding=binding, identity=identity,
         )

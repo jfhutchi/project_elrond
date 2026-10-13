@@ -14,6 +14,7 @@ import pytest
 
 from quantbot.runtime import CREDENTIALS_MISSING, RuntimeConfigurationError
 from quantbot.storage import Database, SingleWriterLock
+from tests.windows_shell import permitted_powershell
 
 
 def _service() -> ModuleType:
@@ -103,7 +104,9 @@ def _arguments(
 
 
 def test_console_service_pins_read_only_experiment_store(
-    tmp_path: Path, clean_repo: tuple[Path, str], monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    clean_repo: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     from quantbot.learner.experiment_store import ExperimentStore
 
@@ -119,18 +122,29 @@ def test_console_service_pins_read_only_experiment_store(
     with service.isolated_application_environment(env_file):
         configured = service.validate_configuration(args)
     assert configured.command == [
-        "console", "--host", "127.0.0.1", "--port", "8787",
-        "--experiment-store", str(source),
+        "console",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8787",
+        "--experiment-store",
+        str(source),
     ]
     assert source.read_bytes() == before
     assert service.COMPONENT_COMMANDS["console"] == [
-        "console", "--host", "127.0.0.1", "--port", "8787",
+        "console",
+        "--host",
+        "127.0.0.1",
+        "--port",
+        "8787",
     ]
 
 
 @pytest.mark.parametrize("bad_source", ["missing", "operational", "other_component"])
 def test_console_experiment_source_refuses_bad_scope(
-    tmp_path: Path, clean_repo: tuple[Path, str], monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    clean_repo: tuple[Path, str],
+    monkeypatch: pytest.MonkeyPatch,
     bad_source: str,
 ) -> None:
     service = _service()
@@ -229,8 +243,9 @@ def test_check_refuses_ambiguous_database_configuration(
     )
     args = _arguments(service, env_file, database, commit)
 
-    with service.isolated_application_environment(env_file), pytest.raises(
-        service.ServiceRefusal, match="DATABASE_TARGET_AMBIGUOUS"
+    with (
+        service.isolated_application_environment(env_file),
+        pytest.raises(service.ServiceRefusal, match="DATABASE_TARGET_AMBIGUOUS"),
     ):
         service.validate_configuration(args, repository=repo)
 
@@ -248,8 +263,9 @@ def test_check_refuses_relative_runtime_path(
     )
     args = _arguments(service, env_file, database, commit)
 
-    with service.isolated_application_environment(env_file), pytest.raises(
-        service.ServiceRefusal, match="ABSOLUTE_RUNTIME_PATHS_REQUIRED"
+    with (
+        service.isolated_application_environment(env_file),
+        pytest.raises(service.ServiceRefusal, match="ABSOLUTE_RUNTIME_PATHS_REQUIRED"),
     ):
         service.validate_configuration(args, repository=repo)
 
@@ -267,8 +283,9 @@ def test_check_does_not_bootstrap_a_missing_database(
     )
     args = _arguments(service, env_file, database, commit)
 
-    with service.isolated_application_environment(env_file), pytest.raises(
-        service.ServiceRefusal, match="DATABASE_NOT_FOUND"
+    with (
+        service.isolated_application_environment(env_file),
+        pytest.raises(service.ServiceRefusal, match="DATABASE_NOT_FOUND"),
     ):
         service.validate_configuration(args, repository=repo)
 
@@ -284,8 +301,9 @@ def test_check_refuses_commit_pin_drift(
     env_file, database, _, _ = _deployment(tmp_path, repo)
     args = _arguments(service, env_file, database, "f" * 40)
 
-    with service.isolated_application_environment(env_file), pytest.raises(
-        service.ServiceRefusal, match="CHECKOUT_PIN_MISMATCH"
+    with (
+        service.isolated_application_environment(env_file),
+        pytest.raises(service.ServiceRefusal, match="CHECKOUT_PIN_MISMATCH"),
     ):
         service.validate_configuration(args, repository=repo)
 
@@ -300,8 +318,9 @@ def test_check_refuses_a_dirty_checkout(
     (repo / "untracked.txt").write_text("drift", encoding="utf-8")
     args = _arguments(service, env_file, database, commit)
 
-    with service.isolated_application_environment(env_file), pytest.raises(
-        service.ServiceRefusal, match="CHECKOUT_NOT_CLEAN"
+    with (
+        service.isolated_application_environment(env_file),
+        pytest.raises(service.ServiceRefusal, match="CHECKOUT_NOT_CLEAN"),
     ):
         service.validate_configuration(args, repository=repo)
 
@@ -332,8 +351,9 @@ def test_check_refuses_lock_and_report_paths_inside_checkout(
     env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
     args = _arguments(service, env_file, database, commit)
 
-    with service.isolated_application_environment(env_file), pytest.raises(
-        service.ServiceRefusal, match="EXTERNAL_STATE_REQUIRED"
+    with (
+        service.isolated_application_environment(env_file),
+        pytest.raises(service.ServiceRefusal, match="EXTERNAL_STATE_REQUIRED"),
     ):
         service.validate_configuration(args, repository=repo)
 
@@ -347,8 +367,9 @@ def test_broker_component_check_reports_missing_paper_credentials(
     env_file, database, _, _ = _deployment(tmp_path, repo)
     args = _arguments(service, env_file, database, commit, component="daemon")
 
-    with service.isolated_application_environment(env_file), pytest.raises(
-        service.ServiceRefusal, match="PAPER_CREDENTIALS_REQUIRED"
+    with (
+        service.isolated_application_environment(env_file),
+        pytest.raises(service.ServiceRefusal, match="PAPER_CREDENTIALS_REQUIRED"),
     ):
         service.validate_configuration(args, repository=repo)
 
@@ -501,7 +522,7 @@ def test_service_wrapper_terminates_its_python_process_tree(tmp_path: Path) -> N
     shutil.copy2(helper.with_name("process-job.cs"), repo / "deploy/omen/process-job.cs")
     subprocess.run(
         [
-            "powershell",
+            permitted_powershell(),
             "-NoProfile",
             "-Command",
             f"New-Item -ItemType Junction -Path '{repo / '.venv'}' -Target "
@@ -513,14 +534,12 @@ def test_service_wrapper_terminates_its_python_process_tree(tmp_path: Path) -> N
     database = tmp_path / "paper.db"
     env_file.write_text("TRADING_MODE=PAPER\n", encoding="utf-8")
     database.write_bytes(b"fixture")
-    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    powershell = Path(permitted_powershell())
     process = subprocess.Popen(
         [
             str(powershell),
             "-NoProfile",
             "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(repo / "deploy" / "omen" / wrapper.name),
             "-Repository",
@@ -601,12 +620,10 @@ def test_windows_installer_registers_bounded_tasks_through_scheduler_doubles(
         shutil.copy2(source_root / "deploy/omen" / name, repo / "deploy/omen" / name)
     (repo / "config").mkdir()
     (repo / "config" / "strategy.yaml").write_text("version: test\n", encoding="utf-8")
-    (repo / ".gitignore").write_text(
-        ".venv/\n__pycache__/\n*.pyc\n", encoding="utf-8"
-    )
+    (repo / ".gitignore").write_text(".venv/\n__pycache__/\n*.pyc\n", encoding="utf-8")
     subprocess.run(
         [
-            "powershell",
+            permitted_powershell(),
             "-NoProfile",
             "-Command",
             f"New-Item -ItemType Junction -Path '{repo / '.venv'}' -Target "
@@ -690,10 +707,8 @@ function Disable-ScheduledTask { param($TaskName) $global:disabled += $TaskName 
     )
     completed = subprocess.run(
         [
-            "powershell",
+            permitted_powershell(),
             "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(wrapper),
             str(repo / "deploy" / "omen" / "setup-windows.ps1"),
@@ -761,10 +776,8 @@ function Disable-ScheduledTask { throw 'TEST_DOUBLE_LEAK' }
     )
     refused = subprocess.run(
         [
-            "powershell",
+            permitted_powershell(),
             "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(refusal_wrapper),
             str(repo / "deploy" / "omen" / "setup-windows.ps1"),
@@ -808,10 +821,8 @@ function Disable-ScheduledTask { throw 'TEST_DOUBLE_LEAK' }
     )
     running = subprocess.run(
         [
-            "powershell",
+            permitted_powershell(),
             "-NoProfile",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(running_wrapper),
             str(repo / "deploy" / "omen" / "setup-windows.ps1"),

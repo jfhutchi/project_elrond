@@ -36,6 +36,12 @@ from quantbot.execution.recovery import is_open_order
 from quantbot.learner.models import LearnerModel
 from quantbot.learner.paper import PaperModelBinding
 from quantbot.operations.cycle import OrderSubmitter
+from quantbot.operations.paper_clock import (
+    ClockContract,
+    ClockEvidence,
+    ClockVerifier,
+    PaperClockProbe,
+)
 from quantbot.research.manifest import content_id
 from quantbot.risk import DrawdownState, OrderPurpose, PortfolioVetoDecision
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
@@ -156,7 +162,8 @@ def _read_record(signal: SignalRecord) -> PaperDeadline:
     return record
 
 
-def supervisor_objections(database: Database, *, account_id: str, now: datetime) -> tuple[str, ...]:
+def supervisor_objections(database: Database, *, account_id: str, now: datetime,
+    clock_contract: ClockContract|None=None) -> tuple[str, ...]:
     account_hash = PaperDeadline.account_hash(account_id)
     with database.transaction() as session:
         repository = StorageRepository(session)
@@ -172,6 +179,8 @@ def supervisor_objections(database: Database, *, account_id: str, now: datetime)
         run = repository.get_run(heartbeat.run_id)
         if run is None or run.status != "SUCCEEDED" or heartbeat.payload.get("healthy") is not True:
             return ("DEADLINE_SUPERVISOR_UNHEALTHY",)
+        if clock_contract=='RELATIVE_V1' and heartbeat.payload.get('clock_contract')!='RELATIVE_V1':
+            return ('DEADLINE_CLOCK_CONTRACT_MISMATCH',)
     age = (now - heartbeat.occurred_at).total_seconds()
     return () if 0 <= age <= HEARTBEAT_SECONDS else ("DEADLINE_SUPERVISOR_STALE",)
 
@@ -182,6 +191,7 @@ def deadline_entry_objections(
     *,
     account_id: str,
     now: datetime,
+    clock_contract: ClockContract|None=None,
 ) -> tuple[str, ...]:
     with database.transaction() as session:
         repository = StorageRepository(session)
@@ -201,7 +211,8 @@ def deadline_entry_objections(
         reasons.append("DEADLINE_ALREADY_DUE")
     if now >= record.entry_valid_until:
         reasons.append("PAPER_ENTRY_REFERENCE_EXPIRED")
-    return tuple(reasons) + supervisor_objections(database, account_id=account_id, now=now)
+    return tuple(reasons) + supervisor_objections(database, account_id=account_id, now=now,
+        clock_contract=clock_contract)
 
 
 class DeadlineEntryBlocked(ValueError):
@@ -220,9 +231,11 @@ class DeadlineGatedSubmitter:
         *,
         expected_account_id: str,
         clock: Callable[[], datetime] = _now,
+        clock_contract: ClockContract='STRICT_V0',
     ) -> None:
         self._database, self._submitter = database, submitter
         self._account_id, self._clock = expected_account_id, clock
+        self._clock_contract=clock_contract
 
     async def submit(
         self,
@@ -236,7 +249,8 @@ class DeadlineGatedSubmitter:
     ) -> SubmissionResult:
         if purpose is OrderPurpose.ENTRY:
             reasons = deadline_entry_objections(
-                self._database, intent, account_id=self._account_id, now=self._clock()
+                self._database, intent, account_id=self._account_id, now=self._clock(),
+                clock_contract=self._clock_contract,
             )
             if reasons:
                 raise DeadlineEntryBlocked(reasons)
@@ -271,6 +285,8 @@ class PaperDeadlineSupervisor:
         lock_path: str | Path,
         clock: Callable[[], datetime] = _now,
         reconcile_fills: Callable[[datetime], Awaitable[tuple[str, ...]]] | None = None,
+        clock_contract: ClockContract='STRICT_V0',
+        clock_probe: ClockVerifier|None=None,
     ) -> None:
         if not isinstance(coordinator, ExecutionCoordinator):
             raise TypeError("deadline exits require ExecutionCoordinator")
@@ -290,6 +306,11 @@ class PaperDeadlineSupervisor:
         self.identity, self.account_id = identity, expected_account_id
         self.lock_path, self.clock = lock_path, clock
         self.reconcile_fills = reconcile_fills
+        if clock_contract not in ('STRICT_V0','RELATIVE_V1'):
+            raise ValueError('unsupported PAPER clock contract')
+        self.clock_contract=clock_contract
+        self.clock_probe=clock_probe or (PaperClockProbe(broker,clock=clock)
+            if clock_contract=='RELATIVE_V1' else None)
 
     async def run_once(self) -> DeadlineResult:
         now = self.clock()
@@ -320,17 +341,40 @@ class PaperDeadlineSupervisor:
             reasons: list[str] = []
             failed_handoffs: list[str] = []
             submitted = 0
+            clock_evidence: ClockEvidence|None=None
             try:
                 account = await self.broker.get_account()
-                market = await self.broker.get_market_clock()
+                if self.clock_contract=='RELATIVE_V1':
+                    assert self.clock_probe is not None
+                    check=await self.clock_probe.verify()
+                    if check.reasons or check.evidence is None:
+                        reasons.extend(check.reasons or ('PAPER_CLOCK_UNVERIFIED',))
+                        market=None
+                    else:
+                        clock_evidence=check.evidence
+                        market=clock_evidence.market
+                else:
+                    market = await self.broker.get_market_clock()
                 measured_at = self.clock()
                 if measured_at < now:
                     reasons.append("DEADLINE_LOCAL_CLOCK_REVERSED")
                 elif account.account.account_id != self.account_id:
                     reasons.append("DEADLINE_ACCOUNT_MISMATCH")
-                elif not 0 <= (measured_at - market.timestamp).total_seconds() <= 120:
+                elif clock_evidence is not None and (
+                    self.clock_probe is None
+                    or not clock_evidence.valid_at(
+                        measured_at, monotonic_now=self.clock_probe.monotonic()
+                    )
+                ):
+                    reasons.append("PAPER_CLOCK_EVIDENCE_EXPIRED")
+                elif (
+                    not reasons
+                    and market is not None
+                    and clock_evidence is None
+                    and not 0 <= (measured_at - market.timestamp).total_seconds() <= 120
+                ):
                     reasons.append("DEADLINE_BROKER_CLOCK_STALE")
-                else:
+                elif not reasons and market is not None:
                     now = measured_at
                     for row in records:
                         try:
@@ -339,9 +383,14 @@ class PaperDeadlineSupervisor:
                                 self.account_id
                             ):
                                 continue
-                            submitted += await self._process(
-                                record, now=now, market_open=market.is_open
-                            )
+                            if clock_evidence is None:
+                                submitted += await self._process(
+                                    record, now=now, market_open=market.is_open
+                                )
+                            else:
+                                _,latest=clock_evidence.time_bounds(now)
+                                submitted += await self._process(record,now=now,
+                                    market_open=market.is_open,deadline_now=max(now,latest))
                         except Exception as error:
                             reason = (
                                 str(error)
@@ -375,13 +424,15 @@ class PaperDeadlineSupervisor:
                         "account_id_hash": PaperDeadline.account_hash(self.account_id),
                         "healthy": result.healthy,
                         "reasons": result.reasons,
+                        'clock_contract':self.clock_contract,
                     },
                 )
                 repository.finish_run(
                     run_id,
                     finished_at=self.clock(),
                     status="SUCCEEDED" if result.healthy else "ERROR",
-                    detail=result.model_dump(mode="json"),
+                    detail=result.model_dump(mode="json")|{'clock_contract':self.clock_contract,
+                        'clock_evidence':clock_evidence.audit() if clock_evidence else None},
                 )
                 if not result.healthy:
                     failure_fingerprint = content_id({
@@ -545,7 +596,8 @@ class PaperDeadlineSupervisor:
                             "entry_authority_granted": False, "kill_switch_cleared": False},
                 )
 
-    async def _process(self, record: PaperDeadline, *, now: datetime, market_open: bool) -> int:
+    async def _process(self, record: PaperDeadline, *, now: datetime, market_open: bool,
+        deadline_now: datetime|None=None) -> int:
         with self.database.transaction() as session:
             repository = StorageRepository(session)
             if repository.get_order_event("deadline-closed-" + record.handoff_id) is not None:
@@ -612,7 +664,7 @@ class PaperDeadlineSupervisor:
             for position in await self.broker.get_positions()
             if position.symbol == entry.symbol and position.quantity != 0
         ]
-        due = now >= min(record.deadline_at, record.session_exit_at)
+        due = (deadline_now or now) >= min(record.deadline_at, record.session_exit_at)
         due = due or bool(positions and positions[0].market_price <= record.initial_stop)
         # Stop an overdue entry from accumulating more exposure even when another
         # protection authority already owns a pending exit for its partial fill.

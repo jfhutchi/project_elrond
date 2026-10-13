@@ -372,7 +372,9 @@ async def reconcile_deadline_fills(runtime: Any, now: datetime) -> tuple[str, ..
     return ()
 
 
-async def serve_deadlines(settings: Settings) -> None:
+async def serve_deadlines(
+    settings: Settings, *, clock_contract: Literal["STRICT_V0", "RELATIVE_V1"] = "STRICT_V0"
+) -> None:
     """Independent risk-reducing loop; deliberately never builds an entry runner."""
     if (
         settings.TRADING_MODE is not TradingMode.PAPER
@@ -393,6 +395,7 @@ async def serve_deadlines(settings: Settings) -> None:
             expected_account_id=settings.EXPECTED_ACCOUNT_ID,
             lock_path=runtime.paths.lock,
             reconcile_fills=lambda now: reconcile_deadline_fills(runtime, now),
+            clock_contract=clock_contract,
         )
         await supervisor.serve(asyncio.Event())
     finally:
@@ -406,6 +409,7 @@ def main() -> int:
     parser.add_argument("--env-file", required=True, type=Path)
     parser.add_argument("--database", required=True, type=Path)
     parser.add_argument("--check", action="store_true")
+    parser.add_argument('--clock-contract',choices=('STRICT_V0','RELATIVE_V1'),default='STRICT_V0')
     args = parser.parse_args()
     repository = Path(__file__).resolve().parents[3]
     try:
@@ -435,7 +439,10 @@ def main() -> int:
             if args.check:
                 print("PAPER_DEADLINE_LAUNCH_CHECK_OK")
             else:
-                asyncio.run(serve_deadlines(settings))
+                if args.clock_contract=='RELATIVE_V1':
+                    asyncio.run(serve_deadlines(settings,clock_contract='RELATIVE_V1'))
+                else:
+                    asyncio.run(serve_deadlines(settings))
     except KeyboardInterrupt:
         return 0
     except Exception:

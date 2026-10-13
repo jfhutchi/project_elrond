@@ -101,6 +101,7 @@ def five_minute_code_hash() -> str:
                 "../execution/recovery.py",
                 "../execution/reconciliation.py",
                 "../operations/runners.py",
+                "../operations/paper_clock.py",
             )
         }
     )
@@ -426,6 +427,7 @@ def build_five_minute_paper_services(
         max_data_age_seconds=policy.max_reference_age_seconds,
         data_sync=IntradayCohortSync(risk_sync, runner),
         clock=clock,
+        clock_contract=policy.clock_contract,
     )
     deadlines = PaperDeadlineSupervisor(
         database=runtime.database,
@@ -435,6 +437,7 @@ def build_five_minute_paper_services(
         expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID,
         lock_path=runtime.paths.lock,
         clock=clock,
+        clock_contract=policy.clock_contract,
     )
     return IntradayPaperServices(runner=runner, cycle=cycle, deadlines=deadlines)
 

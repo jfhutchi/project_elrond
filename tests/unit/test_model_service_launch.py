@@ -8,6 +8,8 @@ from pathlib import Path
 
 import pytest
 
+from tests.windows_shell import permitted_powershell
+
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows task launcher")
 
 
@@ -44,15 +46,13 @@ def test_native_stderr_does_not_stop_model_task_and_broker_secrets_are_removed(
         encoding="utf-8",
     )
     script = Path(__file__).resolve().parents[2] / "deploy/omen/start-model-server.ps1"
-    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    powershell = Path(permitted_powershell())
     logs = tmp_path / "logs"
     result = subprocess.run(
         [
             str(powershell),
             "-NoProfile",
             "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(script),
             "-Executable",
@@ -73,8 +73,14 @@ def test_native_stderr_does_not_stop_model_task_and_broker_secrets_are_removed(
         },
     )
     assert result.returncode == 0, result.stderr
-    stdout = (logs / "model-server.stdout.log").read_text(encoding="utf-16")
-    stderr = (logs / "model-server.stderr.log").read_text(encoding="utf-16")
+
+    # PowerShell 7 preserves native bytes; Windows PowerShell redirects as UTF-16.
+    def output(path):
+        data = path.read_bytes()
+        return data.decode("utf-16" if data.startswith(b"\xff\xfe") else "utf-8-sig")
+
+    stdout = output(logs / "model-server.stdout.log")
+    stderr = output(logs / "model-server.stderr.log")
     assert "SERVER_INFO" in stderr
     assert "alive" in stdout
     assert "keepalive=0" in stdout
@@ -89,15 +95,13 @@ def test_an_existing_file_that_cannot_launch_is_not_reported_as_success(tmp_path
     executable = tmp_path / "not-an-executable.exe"
     executable.write_text("this is not a Windows executable", encoding="utf-8")
     script = Path(__file__).resolve().parents[2] / "deploy/omen/start-model-server.ps1"
-    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    powershell = Path(permitted_powershell())
 
     result = subprocess.run(
         [
             str(powershell),
             "-NoProfile",
             "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(script),
             "-Executable",
@@ -119,15 +123,13 @@ def test_a_native_server_failure_is_the_task_exit_code(tmp_path: Path) -> None:
     executable = tmp_path / "model.cmd"
     executable.write_text("@echo off\necho failed 1>&2\nexit /b 37\n", encoding="utf-8")
     script = Path(__file__).resolve().parents[2] / "deploy/omen/start-model-server.ps1"
-    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    powershell = Path(permitted_powershell())
 
     result = subprocess.run(
         [
             str(powershell),
             "-NoProfile",
             "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(script),
             "-Executable",
@@ -153,14 +155,12 @@ def test_terminating_the_task_wrapper_terminates_its_server_process(tmp_path: Pa
         encoding="utf-8",
     )
     script = Path(__file__).resolve().parents[2] / "deploy/omen/start-model-server.ps1"
-    powershell = Path(os.environ["SystemRoot"]) / "System32/WindowsPowerShell/v1.0/powershell.exe"
+    powershell = Path(permitted_powershell())
     wrapper = subprocess.Popen(
         [
             str(powershell),
             "-NoProfile",
             "-NonInteractive",
-            "-ExecutionPolicy",
-            "Bypass",
             "-File",
             str(script),
             "-Executable",

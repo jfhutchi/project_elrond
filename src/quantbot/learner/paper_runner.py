@@ -52,6 +52,12 @@ from quantbot.operations.cycle import (
     RunOnceCycle,
     SubmissionRequest,
 )
+from quantbot.operations.paper_clock import (
+    ClockContract,
+    ClockEvidence,
+    ClockVerifier,
+    PaperClockProbe,
+)
 from quantbot.operations.runners import (
     AdaptiveMomentumRunner,
     MarketDataSettings,
@@ -87,6 +93,7 @@ def _now() -> datetime:
 
 
 class PaperExecutionPolicy(LearnerModel):
+    clock_contract: ClockContract = 'STRICT_V0'
     inherited: InheritedBaseline | None = None
     exclusive_learner_entry: bool = False
     round_trip_cost_bps: int = Field(default=10, ge=10)
@@ -114,6 +121,7 @@ def one_minute_code_hash() -> str:
                 "../execution/recovery.py",
                 "../execution/reconciliation.py",
                 "../operations/runners.py",
+                "../operations/paper_clock.py",
             )
         }
     )
@@ -163,6 +171,7 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
     model: PaperModelView
     predictions: tuple[IntradayPrediction | FiveMinutePrediction | ExplorationObservation, ...]
     observation_kind = "LEARNER_PAPER_FORECAST_V1"
+    clock_probe: ClockVerifier|None = None
 
     def __init__(
         self,
@@ -327,7 +336,8 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                 ).first()
             if other is not None:
                 return self._no_entry("PAPER_OTHER_LEARNER_ENTRY_ACTIVE")
-        heartbeat = supervisor_objections(self._database, account_id=self.account_id, now=now)
+        heartbeat = supervisor_objections(self._database, account_id=self.account_id, now=now,
+            clock_contract=self.policy.clock_contract)
         if heartbeat:
             return self._no_entry(*heartbeat)
         if any(
@@ -345,11 +355,43 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
         session_exit = active.close_at - timedelta(seconds=self.policy.session_exit_buffer_seconds)
         if any(item.features.target_at > session_exit for item in self.predictions):
             return self._no_entry("PAPER_HORIZON_EXCEEDS_SESSION")
-        market = await self._broker.get_market_clock()
+        clock_evidence: ClockEvidence|None=None
+        if self.policy.clock_contract=='RELATIVE_V1':
+            if self.clock_probe is None:
+                self.clock_probe=PaperClockProbe(self._broker,clock=self._clock)
+            check=await self.clock_probe.verify()
+            if check.reasons or check.evidence is None:
+                return self._no_entry(*(check.reasons or ('PAPER_CLOCK_UNVERIFIED',)))
+            clock_evidence=check.evidence
+            market=clock_evidence.market
+        else:
+            market = await self._broker.get_market_clock()
         measured_at = self._clock()
         if measured_at < now:
             return self._no_entry("PAPER_LOCAL_CLOCK_REVERSED")
         now = measured_at
+        if clock_evidence is not None:
+            assert self.clock_probe is not None
+            if not clock_evidence.valid_at(now, monotonic_now=self.clock_probe.monotonic()):
+                return self._no_entry("PAPER_CLOCK_EVIDENCE_EXPIRED")
+            earliest, latest = clock_evidence.time_bounds(now)
+            if not active.open_at <= earliest <= latest < active.close_at:
+                return self._no_entry("PAPER_CLOCK_SESSION_UNCERTAIN")
+            if any(
+                not 0 <= (earliest - item.features.feature_at).total_seconds()
+                or (latest - item.features.feature_at).total_seconds()
+                > self.policy.max_reference_age_seconds
+                or latest >= item.features.target_at
+                for item in self.predictions
+            ):
+                return self._no_entry("PAPER_PREDICTION_STALE")
+            with self._database.transaction() as session:
+                StorageRepository(session).record_signal(
+                    content_id({'kind':'PAPER_CLOCK_EVIDENCE_V1','run_id':self._run_id,
+                                'document':clock_evidence.audit()}),
+                    run_id=self._run_id,strategy_id=self._identity.strategy_id,
+                    symbol='PAPER_CLOCK',occurred_at=now,
+                    payload={'kind':'PAPER_CLOCK_EVIDENCE_V1','document':clock_evidence.audit()})
         if not active.open_at <= now < active.close_at:
             return self._no_entry("PAPER_MARKET_CLOSED")
         if any(
@@ -362,9 +404,9 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
             return self._no_entry("PAPER_PREDICTION_STALE")
         if (
             not market.is_open
-            or not 0
+            or (clock_evidence is None and not 0
             <= (now - market.timestamp).total_seconds()
-            <= self.policy.max_reference_age_seconds
+            <= self.policy.max_reference_age_seconds)
         ):
             return self._no_entry("PAPER_BROKER_CLOCK_UNAVAILABLE")
         account = await self._broker.get_account()
@@ -528,6 +570,19 @@ class IntradayPaperRunner(AdaptiveMomentumRunner):
                 )
                 if not now <= issued_at < min(valid_until, prediction.features.target_at):
                     return self._no_entry("PAPER_PREDICTION_STALE")
+                if clock_evidence is not None:
+                    assert self.clock_probe is not None
+                    if not clock_evidence.valid_at(
+                        issued_at, monotonic_now=self.clock_probe.monotonic()
+                    ):
+                        return self._no_entry("PAPER_CLOCK_EVIDENCE_EXPIRED")
+                    earliest, latest = clock_evidence.time_bounds(issued_at)
+                    if (
+                        earliest < active.open_at
+                        or latest >= active.close_at
+                        or latest >= min(valid_until, prediction.features.target_at)
+                    ):
+                        return self._no_entry("PAPER_CLOCK_ENTRY_TIME_UNCERTAIN")
                 objections = self._pre_handoff_objections(issued_at, positions)
                 if objections:
                     return self._no_entry(*objections)
@@ -748,6 +803,7 @@ def build_intraday_paper_services(
         max_data_age_seconds=policy.max_reference_age_seconds,
         data_sync=IntradayCohortSync(risk_sync, runner),
         clock=clock,
+        clock_contract=policy.clock_contract,
     )
     deadlines = PaperDeadlineSupervisor(
         database=runtime.database,
@@ -757,5 +813,6 @@ def build_intraday_paper_services(
         expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID,
         lock_path=runtime.paths.lock,
         clock=clock,
+        clock_contract=policy.clock_contract,
     )
     return IntradayPaperServices(runner=runner, cycle=cycle, deadlines=deadlines)
