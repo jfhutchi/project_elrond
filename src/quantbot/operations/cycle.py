@@ -410,6 +410,7 @@ class RunOnceCycle:
                 # do not manufacture a fresh reconciliation incident each tick.
                 if (
                     not recovery.ready
+                    and isinstance(recovery, StartupRecoveryResult)
                     and recovery.retryable_acquisition
                     and self._runtime is not None
                     and self._runtime.trading_mode == TradingMode.PAPER.value
