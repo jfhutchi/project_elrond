@@ -9,7 +9,7 @@ from time import monotonic
 from quantbot.brokers import BrokerAdapter, BrokerHealth
 from quantbot.brokers.base import BrokerModel
 from quantbot.config import Settings, validate_trading_safety
-from quantbot.domain import BrokerOrder, IntentState, OrderIntent
+from quantbot.domain import BrokerEnvironment, BrokerOrder, IntentState, OrderIntent, TradingMode
 from quantbot.execution.coordinator import persist_broker_acknowledgement
 from quantbot.execution.reconciliation import (
     ReconciliationPolicy,
@@ -39,6 +39,7 @@ class StartupRecoveryResult(BrokerModel):
     resolved_intent_ids: tuple[str, ...]
     unresolved_intent_ids: tuple[str, ...]
     broker_health: BrokerHealth
+    retryable_acquisition: bool = False
 
 
 def is_open_order(order: BrokerOrder) -> bool:
@@ -187,6 +188,7 @@ class StartupRecovery:
                 health=health,
                 captures=captures,
                 reasons=(*_prior_failure_reasons, reason),
+                local_snapshot=local_snapshot,
             )
         account_snapshot = capture.attempts[-1].after
         assert account_snapshot is not None
@@ -272,7 +274,100 @@ class StartupRecovery:
         health: BrokerHealth,
         captures: tuple[Capture, ...],
         reasons: tuple[str, ...],
+        local_snapshot: ReconciliationSnapshot | None,
     ) -> StartupRecoveryResult:
+        unresolved = tuple(
+            sorted(
+                intent.intent_id
+                for intent in self._pending_intents()
+                if intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}
+            )
+        )
+        with self._database.transaction() as session:
+            durable_kill = StorageRepository(session).get_kill_switch_state().engaged
+        safety = validate_trading_safety(
+            self._settings.model_copy(
+                update={
+                    "KILL_SWITCH": self._settings.KILL_SWITCH or durable_kill,
+                    "BROKER_HEALTHY": self._settings.BROKER_HEALTHY and health.healthy,
+                    "RECONCILIATION_SUCCESSFUL": False,
+                }
+            ),
+            health.account_id,
+        )
+        # Preserve historical failure reasons and LIVE behavior. Control evidence
+        # additionally restricts PAPER pause eligibility; it cannot grant readiness.
+        ordered_reasons = tuple(dict.fromkeys((*reasons, "RECONCILIATION_REQUIRED")))
+        allowed_reasons = {
+            "SNAPSHOT_ACQUISITION_FAILED",
+            "SNAPSHOT_ACQUISITION_TIMEOUT",
+            "SNAPSHOT_SKIPPED_AFTER_INGESTION_FAILURE",
+            "RECONCILIATION_REQUIRED",
+            "KILL_SWITCH_ENGAGED",
+        }
+        safety_allowed = {"RECONCILIATION_REQUIRED", "KILL_SWITCH_ENGAGED"}
+        if health.transient_read_failure and health.account_id is None:
+            safety_allowed |= {"BROKER_UNHEALTHY", "ACCOUNT_VERIFICATION_UNAVAILABLE"}
+        retryable = (
+            self._settings.TRADING_MODE is TradingMode.PAPER
+            and self._settings.BROKER_ENVIRONMENT is BrokerEnvironment.PAPER
+            and health.environment == BrokerEnvironment.PAPER.value
+            and (health.healthy or health.transient_read_failure)
+            and self._settings.BROKER_HEALTHY
+            and local_snapshot is not None
+            and not unresolved
+            and set(ordered_reasons) <= allowed_reasons
+            and set(safety.reasons) <= safety_allowed
+            and bool(captures)
+            and any(c.transient_failure for c in captures)
+            and all(d.category == "SNAPSHOT_ACQUISITION" for d in comparison.diffs)
+        )
+        if retryable:
+            assert local_snapshot is not None
+            for capture in captures:
+                if capture.status == "ACQUIRED":
+                    retryable &= (
+                        validate_capture_freshness(capture, now=self._clock(), clock_healthy=True)
+                        is None
+                    )
+                elif capture.status in {"ACQUISITION_FAILED", "ACQUISITION_TIMEOUT"}:
+                    retryable &= capture.transient_failure
+                elif capture.status != "SKIPPED_AFTER_INGESTION_FAILURE":
+                    retryable = False
+                for attempt in capture.attempts:
+                    for account in (attempt.before, attempt.after):
+                        if account is not None:
+                            # Partial changed/restricted account evidence is not assumed
+                            # to be harmless marks while position acquisition is missing.
+                            retryable &= (
+                                account.account == local_snapshot.account
+                                and account.order_entry_allowed
+                                and not account.restrictions
+                            )
+                    if attempt.positions is not None:
+                        try:
+                            partial = local_snapshot.model_copy(
+                                update={"positions": attempt.positions}
+                            )
+                            partial = ReconciliationSnapshot.model_validate(partial.model_dump())
+                            retryable &= compare_reconciliation(
+                                local_snapshot, partial, self._policy
+                            ).allows_new_orders
+                            marked = sum(
+                                (p.market_value for p in partial.positions), partial.account.cash
+                            )
+                            retryable &= (
+                                abs(partial.account.equity - marked) < self._policy.money_tolerance
+                            )
+                            retryable &= all(
+                                p.quantity != 0
+                                and p.quantity * p.market_value > 0
+                                and abs(p.market_value - p.quantity * p.market_price)
+                                < self._policy.money_tolerance
+                                for p in partial.positions
+                            )
+                        except ValueError:
+                            retryable = False
         with self._database.transaction() as session:
             record_reconciliation(
                 StorageRepository(session),
@@ -285,15 +380,10 @@ class StartupRecovery:
             )
         return StartupRecoveryResult(
             ready=False,
-            reasons=tuple(dict.fromkeys((*reasons, "RECONCILIATION_REQUIRED"))),
+            reasons=ordered_reasons,
             reconciliation=comparison,
             resolved_intent_ids=(),
-            unresolved_intent_ids=tuple(
-                sorted(
-                    intent.intent_id
-                    for intent in self._pending_intents()
-                    if intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}
-                )
-            ),
+            unresolved_intent_ids=unresolved,
             broker_health=health,
+            retryable_acquisition=retryable,
         )

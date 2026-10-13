@@ -32,6 +32,10 @@ class BrokerTransportError(BrokerError):
     """Raised by a transport for an ambiguous connectivity failure."""
 
 
+class BrokerTransportTimeoutError(BrokerTransportError):
+    """Positively identified transport timeout; not a submission outcome proof."""
+
+
 class SubmissionUncertainError(BrokerError):
     """Raised when a submission outcome cannot be proven safely."""
 
@@ -62,11 +66,11 @@ class PaperPerformanceAccount(BrokerModel):
     created_at: datetime
     previous_close_equity: Decimal
 
-    @field_validator('previous_close_equity')
+    @field_validator("previous_close_equity")
     @classmethod
     def finite_equity(cls, value: Decimal) -> Decimal:
         if not value.is_finite():
-            raise ValueError('non-finite close equity')
+            raise ValueError("non-finite close equity")
         return value
 
 
@@ -76,6 +80,7 @@ class BrokerHealth(BrokerModel):
     environment: str
     account_id: str | None
     reasons: tuple[str, ...]
+    transient_read_failure: bool = False
 
 
 class BrokerTransportResponse(BrokerModel):

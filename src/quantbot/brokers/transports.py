@@ -17,6 +17,7 @@ from quantbot.brokers.alpaca_stream import (
 from quantbot.brokers.base import (
     BrokerTransportError,
     BrokerTransportResponse,
+    BrokerTransportTimeoutError,
 )
 
 
@@ -47,6 +48,8 @@ class HttpxBrokerTransport:
                 json=json_body,
                 timeout=float(timeout_seconds),
             )
+        except httpx.TimeoutException as error:
+            raise BrokerTransportTimeoutError("broker HTTP transport timed out") from error
         except httpx.TransportError as error:
             raise BrokerTransportError("broker HTTP transport failed") from error
         return BrokerTransportResponse(

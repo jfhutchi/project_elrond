@@ -14,7 +14,11 @@ from dataclasses import dataclass, replace
 from datetime import datetime
 from typing import Protocol, TypeVar
 
-from quantbot.brokers.base import BrokerAccountSnapshot, BrokerRequestError
+from quantbot.brokers.base import (
+    BrokerAccountSnapshot,
+    BrokerRequestError,
+    BrokerTransportTimeoutError,
+)
 from quantbot.domain import Position
 from quantbot.execution.reconciliation import (
     ReconciliationPolicy,
@@ -50,6 +54,7 @@ class Capture:
     received_at: datetime | None
     attempts: tuple[Attempt, ...]
     provider_as_of_verified: bool = False
+    transient_failure: bool = False
 
     def evidence(self) -> dict[str, object]:
         """Private durable diagnostics; raw provider exceptions are never retained."""
@@ -57,6 +62,7 @@ class Capture:
             "status": self.status,
             "received_at": self.received_at.isoformat() if self.received_at else None,
             "provider_as_of_verified": False,
+            "transient_failure": self.transient_failure,
             "attempts": [
                 {
                     "started_at": a.started_at.isoformat(),
@@ -123,9 +129,11 @@ async def capture_account_positions(
     ):
         raise ValueError("maximum two attempts and five seconds total")
     attempts: list[Attempt] = []
+    transient_failure = False
+    reading = False
 
     def stopped(status: str) -> Capture:
-        return Capture(status, None, None, tuple(attempts))
+        return Capture(status, None, None, tuple(attempts), transient_failure=transient_failure)
 
     async def acquire() -> Capture:
         for _ in range(max_attempts):
@@ -138,10 +146,21 @@ async def capture_account_positions(
             async def read(
                 request: Callable[[], Awaitable[T]], stage: str
             ) -> tuple[T | None, str | None]:
-                nonlocal last
+                nonlocal last, transient_failure, reading
                 try:
+                    reading = True
                     value = await request()
                 except Exception as exc:
+                    # Failed data acquisition only: never ambiguous transport errors,
+                    # schema failures or a timeout following an unstable first sample.
+                    transient_failure = (
+                        isinstance(exc, (TimeoutError, BrokerTransportTimeoutError))
+                        or (
+                            isinstance(exc, BrokerRequestError)
+                            and exc.status_code is not None
+                            and (exc.status_code == 429 or 500 <= exc.status_code <= 599)
+                        )
+                    ) and not any(a.reason for a in attempts)
                     attempts[-1] = replace(
                         attempts[-1],
                         reason=stage + "_READ_FAILED",
@@ -151,6 +170,11 @@ async def capture_account_positions(
                         else None,
                     )
                     return None, "ACQUISITION_FAILED"
+                finally:
+                    # Cancellation by the capture budget deliberately leaves this set.
+                    task = asyncio.current_task()
+                    if task is None or not task.cancelling():
+                        reading = False
                 received = clock()
                 attempts[-1] = replace(
                     attempts[-1],
@@ -203,6 +227,7 @@ async def capture_account_positions(
     try:
         return await asyncio.wait_for(acquire(), timeout=total_timeout_seconds)
     except TimeoutError:
+        transient_failure = reading and not any(a.reason for a in attempts)
         if attempts:
             attempts[-1] = replace(attempts[-1], reason="TOTAL_CAPTURE_TIMEOUT")
         return stopped("ACQUISITION_TIMEOUT")

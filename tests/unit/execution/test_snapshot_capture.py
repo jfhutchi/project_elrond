@@ -179,6 +179,7 @@ async def test_timeout_has_no_partial_snapshot_or_retry():
 
     r = await capture(Slow(), total_timeout_seconds=0.02)
     assert r.status == "ACQUISITION_TIMEOUT" and r.snapshot is None and len(r.attempts) == 1
+    assert r.transient_failure is True
 
 
 @pytest.mark.asyncio
@@ -194,6 +195,22 @@ async def test_partial_provider_failure_has_no_snapshot_and_retains_read_stage()
     assert r.status == "ACQUISITION_FAILED" and r.snapshot is None
     assert r.attempts[0].reason == "POSITION_READ_FAILED"
     assert "sensitive" not in repr(r)
+    assert r.transient_failure is False
+
+
+@pytest.mark.asyncio
+async def test_timeout_after_an_unstable_sample_never_becomes_retryable():
+    class UnstableThenTimeout(Broker):
+        async def get_positions(self):
+            if self.calls.count("positions"):
+                raise TimeoutError()
+            return await super().get_positions()
+
+    r = await capture(
+        UnstableThenTimeout([account(), account("2000.01"), account()], [positions()])
+    )
+    assert r.status == "ACQUISITION_FAILED" and r.transient_failure is False
+    assert r.attempts[0].reason == "ACCOUNT_CHANGED_DURING_CAPTURE"
 
 
 @pytest.mark.asyncio

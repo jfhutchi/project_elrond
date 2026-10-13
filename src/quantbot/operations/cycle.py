@@ -408,6 +408,35 @@ class RunOnceCycle:
                 # Startup safety reports an existing latch as not ready even
                 # after successful reconciliation. Preserve its original cause;
                 # do not manufacture a fresh reconciliation incident each tick.
+                if (
+                    not recovery.ready
+                    and recovery.retryable_acquisition
+                    and self._runtime is not None
+                    and self._runtime.trading_mode == TradingMode.PAPER.value
+                    and recovery.broker_health.environment == BrokerEnvironment.PAPER.value
+                    and (
+                        recovery.broker_health.healthy
+                        or recovery.broker_health.transient_read_failure
+                    )
+                    and not recovery.unresolved_intent_ids
+                    and set(recovery.reasons)
+                    <= {
+                        "SNAPSHOT_ACQUISITION_FAILED",
+                        "SNAPSHOT_ACQUISITION_TIMEOUT",
+                        "SNAPSHOT_SKIPPED_AFTER_INGESTION_FAILURE",
+                        "RECONCILIATION_REQUIRED",
+                        "KILL_SWITCH_ENGAGED",
+                    }
+                    and all(
+                        d.category == "SNAPSHOT_ACQUISITION" for d in recovery.reconciliation.diffs
+                    )
+                ):
+                    return self._pause_entries(
+                        run_id,
+                        reasons=recovery.reasons,
+                        started_at=started_at,
+                        trading_date=trading_date,
+                    )
                 existing_latch_only = (
                     not recovery.ready
                     and recovery.reasons == ("KILL_SWITCH_ENGAGED",)

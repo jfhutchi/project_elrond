@@ -22,6 +22,7 @@ from quantbot.brokers.base import (
     BrokerTransport,
     BrokerTransportError,
     BrokerTransportResponse,
+    BrokerTransportTimeoutError,
     PaperPerformanceAccount,
     SubmissionUncertainError,
 )
@@ -350,13 +351,19 @@ class AlpacaPaperBrokerAdapter:
     async def health_check(self) -> BrokerHealth:
         try:
             snapshot = await self.get_account()
-        except (BrokerRequestError, BrokerTransportError, BrokerProtocolError):
+        except (BrokerRequestError, BrokerTransportError, BrokerProtocolError) as error:
             return BrokerHealth(
                 healthy=False,
                 provider=self.provider,
                 environment=self.environment,
                 account_id=None,
                 reasons=("BROKER_UNAVAILABLE",),
+                transient_read_failure=isinstance(error, BrokerTransportTimeoutError)
+                or (
+                    isinstance(error, BrokerRequestError)
+                    and error.status_code is not None
+                    and (error.status_code == 429 or 500 <= error.status_code <= 599)
+                ),
             )
         return BrokerHealth(
             healthy=snapshot.order_entry_allowed,
