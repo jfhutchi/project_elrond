@@ -86,7 +86,25 @@ def test_canary_is_excluded_before_any_materialization(tmp_path, monkeypatch, ki
             session.execute(
                 table("core_outcome_revisions")
                 .insert()
-                .values(id="canary-target", payload="DO_NOT_HYDRATE")
+                .values(
+                    id="canary-target",
+                    payload=json.dumps(
+                        {
+                            "lot_id": "canary-lot",
+                            "revision": 1,
+                            "source_start": "2026-10-14T14:00:00Z",
+                            "source_end": "2026-10-14T15:00:00Z",
+                            "available_at": "2026-10-16T00:00:00Z"
+                            if kind == "unavailable"
+                            else "2026-10-14T16:00:00Z",
+                            "dataset": "EXPLICIT_SYNTHETIC",
+                            "policy_id": "foreign" if kind == "policy" else store.config.policy_id,
+                            "evidence_lane": "BROKER_PAPER" if kind == "lane" else "SYNTHETIC_TEST",
+                            "status": "COSTS_PENDING" if kind == "costs" else "COMPLETE",
+                            "net_pnl": "DO_NOT_HYDRATE",
+                        }
+                    ),
+                )
             )
             session.execute(
                 table("core_outcome_index")
@@ -143,7 +161,11 @@ def test_canary_is_excluded_before_any_materialization(tmp_path, monkeypatch, ki
 
         monkeypatch.setattr(learning, "_materialize", forbidden)
         monkeypatch.setattr(learning, "_fit_subprocess", forbidden)
-        receipt = learning.consider_learning(store, LearningPolicy(), cutoff=cutoff)
+        from tests.fixtures.core_m4 import ExecutionClock
+
+        receipt = learning.consider_learning(
+            store, LearningPolicy(), cutoff=cutoff, execution_clock=ExecutionClock(cutoff)
+        )
         assert receipt.status == "NO_CHANGE" and receipt.considered_ids == ("canary-target",)
         assert len(receipt.exclusions) == 1
         assert receipt.trial_charge_id is None
@@ -253,7 +275,10 @@ def test_zero_baseline_error_is_not_a_five_percent_improvement():
     assert not _passes_validation(metrics, 0.05)
 
 
-def test_most_recent_sixty_sessions_and_intersections_are_metadata_only(tmp_path, monkeypatch):
+@pytest.mark.parametrize("modern", [False, True])
+def test_all_history_and_legacy_sixty_session_intersections_are_metadata_only(
+    tmp_path, monkeypatch, modern
+):
     from datetime import UTC, datetime, timedelta
 
     from tests.fixtures.core_m2 import prepare
@@ -284,13 +309,17 @@ def test_most_recent_sixty_sessions_and_intersections_are_metadata_only(tmp_path
         )
     rows.append({**rows[-1], "outcome_id": "overlap-canary"})
     monkeypatch.setattr(learning, "_metadata", lambda session: rows)
+    monkeypatch.setattr(learning, "_revision_metadata", lambda session, cutoff: rows)
     try:
         with db.transaction() as session:
             selected, excluded, considered = learning._select(
-                session, LearningPolicy(), begin + timedelta(days=62)
+                session,
+                LearningPolicy() if modern else LearningPolicy.legacy_fixture(),
+                begin + timedelta(days=62),
+                execution_now=begin + timedelta(days=62),
             )
-            assert len(selected) == 60 and len(considered) == 62
-            assert ("metadata-0", "OUTSIDE_LAST_60_SESSIONS") in excluded
+            assert len(selected) == (61 if modern else 60) and len(considered) == 62
+            assert (("metadata-0", "OUTSIDE_LAST_60_SESSIONS") in excluded) is (not modern)
             assert ("overlap-canary", "INTERSECTING_FEATURE_HOLDING_WINDOW") in excluded
     finally:
         db.close()

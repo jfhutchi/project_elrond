@@ -5,7 +5,7 @@ import sqlite3
 from datetime import timedelta
 
 import pytest
-from tests.fixtures.core_m4 import episodes
+from tests.fixtures.core_m4 import ExecutionClock, episodes, learning_calendar
 
 
 @pytest.mark.asyncio
@@ -24,21 +24,43 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
         with sqlite3.connect(db.path) as source, sqlite3.connect(before) as destination:
             source.backup(destination)
         cutoff = broker.now + timedelta(hours=8)
-        policy = LearningPolicy(parent_model=parent)
-        receipt = consider_learning(store, policy, cutoff=cutoff)
+        policy = LearningPolicy(
+            parent_model=parent,
+            procedure_version="daily-all-history-walk-forward-v2",
+            max_sessions=None,
+        )
+        calendar = learning_calendar()
+        clock = ExecutionClock(cutoff)
+        receipt = consider_learning(
+            store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+        )
         assert receipt.status == "AWAITING_ACTIVATION", receipt.reason
         assert receipt.activation_at is None
         assert receipt.parent_model_id == parent.id != receipt.resulting_model_id
         assert len(receipt.training_ids) == 30 and len(receipt.validation_ids) == 10
         assert len(receipt.session_metrics) == 5
+        assert len(receipt.final_input_ids) == 40
+        assert [len(f.training_ids) for f in receipt.fold_results] == [30, 32, 34, 36, 38]
+        assert all(f.scores.incumbent_bps == (0, 0) for f in receipt.fold_results)
         candidate = store.read("core_models", receipt.resulting_model_id, ModelArtifact)
         assert candidate.learning_receipt_id == receipt.run_id
         assert any(c != 0 for c in candidate.estimator.coefficients)
         assert predict_bps(candidate, (dict(joins[0]["observation"]["features"]),))[0] > 10
-        assert consider_learning(store, policy, cutoff=cutoff) == receipt
+        assert (
+            consider_learning(
+                store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+            )
+            == receipt
+        )
         with db.transaction() as session:
             assert HypothesisRegistry(session).learner_trials_spent() == 1
-        repeat = consider_learning(store, policy, cutoff=cutoff + timedelta(seconds=1))
+        repeat = consider_learning(
+            store,
+            policy,
+            cutoff=cutoff + timedelta(seconds=1),
+            calendar=calendar,
+            execution_clock=clock,
+        )
         assert repeat.status == "NO_CHANGE" and repeat.reason == "SESSION_BUDGET_OR_INPUT_REUSED"
         assert repeat.trial_charge_id is None
         failure_path = tmp_path / "failed-fit.db"
@@ -54,13 +76,24 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
         with Database(failure_path) as failure_db:
             failure_store = CoreStore(failure_db, store.config)
             monkeypatch.setattr(learning, "_fit_subprocess", failed)
-            failure = consider_learning(failure_store, policy, cutoff=cutoff)
+            failure = consider_learning(
+                failure_store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+            )
             assert failure.status == "FIT_FAILED" and failure.reason == "TimeoutError"
             assert failure.resulting_model_id == parent.id and failure.activation_at is None
-            assert consider_learning(failure_store, policy, cutoff=cutoff) == failure
             assert (
                 consider_learning(
-                    failure_store, policy, cutoff=cutoff + timedelta(seconds=1)
+                    failure_store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+                )
+                == failure
+            )
+            assert (
+                consider_learning(
+                    failure_store,
+                    policy,
+                    cutoff=cutoff + timedelta(seconds=1),
+                    calendar=calendar,
+                    execution_clock=clock,
                 ).status
                 == "NO_CHANGE"
             )
@@ -78,13 +111,15 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
         from quantbot.research.manifest import content_id
 
         old_inputs = candidate.input_ids
+        correction_at = broker.now + timedelta(hours=8)
+        clock.advance((correction_at - clock.at).total_seconds())
         old = next(
             CostItem.model_validate(c)
             for c in joins[0]["cost_items"]
             if c["fill_id"] == trips[0].entry_fill_ids[0]
         )
         revised = old.model_copy(
-            update={"recorded_at_utc": cutoff, "revision": 2, "supersedes": old.id}
+            update={"recorded_at_utc": correction_at, "revision": 2, "supersedes": old.id}
         )
         # Decimal accounting is explicit, including the late revision fixture.
         from decimal import Decimal
@@ -99,8 +134,8 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
             store,
             (
                 BrokerEvent(
-                    recorded_at_utc=cutoff,
-                    occurred_at=cutoff,
+                    recorded_at_utc=correction_at,
+                    occurred_at=correction_at,
                     account_id=store.config.account_id,
                     endpoint="synthetic/fee-correction",
                     client_order_id=order.client_order_id,
@@ -110,15 +145,26 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
                 ),
             ),
         )
-        corrections = process_outcomes(store, cutoff=cutoff).outcomes
+        corrections = process_outcomes(store, cutoff=correction_at).outcomes
         corrected = next(t for t in corrections if t.lot_id == trips[0].lot_id)
         assert corrected.supersedes == trips[0].id
-        reconsidered = consider_learning(store, policy, cutoff=cutoff + timedelta(seconds=2))
+        reconsidered = consider_learning(
+            store,
+            policy,
+            cutoff=correction_at,
+            calendar=calendar,
+            execution_clock=clock,
+        )
         assert (
             corrected.id in reconsidered.considered_ids
             and trips[0].id not in reconsidered.considered_ids
         )
-        assert reconsidered.status == "NO_CHANGE"
+        assert reconsidered.status == "AWAITING_ACTIVATION", reconsidered.reason
+        assert corrected.id in reconsidered.final_input_ids
+        assert all(
+            trips[0].id in f.training_ids and corrected.id not in f.training_ids
+            for f in reconsidered.fold_results
+        )
         assert candidate.input_ids == old_inputs and trips[0].id in old_inputs
         assert len(store.documents("core_round_trips")) == 40
         print(
@@ -129,6 +175,16 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
                     "corrected": corrected.model_dump(mode="json"),
                     "receipt": reconsidered.model_dump(mode="json"),
                     "sample_count": 40,
+                    "calendar": calendar.model_dump(mode="json"),
+                    "candidate": store.read(
+                        "core_models", reconsidered.resulting_model_id, ModelArtifact
+                    ).model_dump(mode="json"),
+                    "export": next(
+                        p
+                        for p in store.documents("core_learning_inputs")
+                        if content_id(p) == reconsidered.input_export_id
+                    ),
+                    "joins": [store.export_loop(j["decision_id"]) for j in joins],
                 },
                 sort_keys=True,
             )
@@ -141,6 +197,13 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
                     "parent": parent.model_dump(mode="json"),
                     "candidate": candidate.model_dump(mode="json"),
                     "joins": joins,
+                    "calendar": calendar.model_dump(mode="json"),
+                    "export": next(
+                        p
+                        for p in store.documents("core_learning_inputs")
+                        if content_id(p) == receipt.input_export_id
+                    ),
+                    "fixture_parent_benchmark_bps": -20,
                     "units": "net_pnl/entry_notional * 10000 = bps",
                     "positive_prediction_bps": predict_bps(
                         candidate, (dict(joins[0]["observation"]["features"]),)
@@ -149,6 +212,16 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
                 sort_keys=True,
             )
         )
+        quiet_at = calendar.sequence.sessions[11].close_at
+        clock.advance((quiet_at - clock.at).total_seconds())
+        quiet = consider_learning(
+            store, policy, cutoff=quiet_at, calendar=calendar, execution_clock=clock
+        )
+        assert quiet.status == "NO_CHANGE" and quiet.trial_charge_id is None
+        assert quiet.reason == "SESSION_BUDGET_OR_INPUT_REUSED"
+        with db.transaction() as session:
+            assert HypothesisRegistry(session).learner_trials_spent() == 2
+        print("M4_DAILY_ACTUAL_QUIET:" + quiet.model_dump_json())
     finally:
         db.close()
 
@@ -259,11 +332,13 @@ async def test_truthful_no_change(tmp_path):
     db, store, broker, parent, trips, joins = await episodes(tmp_path, 2)
     try:
         receipt = consider_learning(
-            store, LearningPolicy(parent_model=parent), cutoff=broker.now + timedelta(hours=8)
+            store,
+            LearningPolicy(parent_model=parent),
+            cutoff=broker.now + timedelta(hours=8),
+            execution_clock=ExecutionClock(broker.now + timedelta(hours=8)),
+            calendar=learning_calendar(),
         )
-        assert (
-            receipt.status == "NO_CHANGE" and receipt.reason == "INSUFFICIENT_EPISODES_OR_SESSIONS"
-        )
+        assert receipt.status == "NO_CHANGE" and receipt.reason == "TEN_COMPLETED_SESSION_WARMUP"
         assert receipt.parent_model_id == receipt.resulting_model_id == parent.id
         assert receipt.activation_at is None and receipt.trial_charge_id is None
         assert set(receipt.considered_ids) == {t.id for t in trips}

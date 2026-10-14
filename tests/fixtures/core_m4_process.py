@@ -18,9 +18,20 @@ def wait_file(path):
 
 
 async def exercise_process_recovery(
-    tmp_path, before, config, policy, cutoff, receipt, store, broker, joins
+    tmp_path,
+    before,
+    config,
+    policy,
+    cutoff,
+    receipt,
+    store,
+    broker,
+    joins,
+    *,
+    variants=("alive-orphan", "automatic-timeout", "pre-lock-orphan"),
 ):
     from sqlalchemy import select
+    from tests.fixtures.core_m4 import ExecutionClock, learning_calendar
 
     from quantbot.paper_core.contracts import LearningReceipt
     from quantbot.paper_core.learning import consider_learning
@@ -29,6 +40,8 @@ async def exercise_process_recovery(
     from quantbot.research.registry import HypothesisRegistry
     from quantbot.storage import Database
 
+    calendar = learning_calendar()
+    clock = ExecutionClock(cutoff)
     evidence = []
     with store.database.transaction() as session:
         encoded = session.execute(
@@ -37,7 +50,7 @@ async def exercise_process_recovery(
             )
         ).scalar_one()
     assert len(broker.posts) == 80 and len(joins) == 40
-    for variant in ("alive-orphan", "automatic-timeout", "pre-lock-orphan"):
+    for variant in variants:
         delayed = variant == "pre-lock-orphan"
         path = tmp_path / f"crashed-{variant}.db"
         with sqlite3.connect(before) as source, sqlite3.connect(path) as destination:
@@ -57,11 +70,13 @@ source,result,ready,start,delayed=map(Path,sys.argv[1:])
 if delayed.name == 'True':
     ready.write_text('pre-lock')
     while not start.exists(): time.sleep(.01)
-original=learning.fit_candidate
+from quantbot.paper_core import learning_procedure
+original=learning_procedure.fit_candidate
 def wait_fit(*args,**kwargs):
     ready.write_text('worker-lock-held')
     while not start.exists(): time.sleep(.01)
     return original(*args,**kwargs)
+learning_procedure.fit_candidate=wait_fit
 learning.fit_candidate=wait_fit
 sys.argv=[sys.argv[0],str(source),str(result)]
 learning._main()
@@ -83,10 +98,13 @@ import json,os,subprocess,sys,time
 from datetime import datetime
 from pathlib import Path
 from quantbot.paper_core import learning
-from quantbot.paper_core.contracts import CoreConfig,LearningPolicy
+from quantbot.paper_core.contracts import CoreConfig,LearningPolicy,LearningCalendar
 from quantbot.paper_core.store import CoreStore
 from quantbot.storage import Database
-path,config,policy,cutoff,args,ready,pid_path=sys.argv[1:]
+path,config,policy,cutoff,args,ready,pid_path,calendar=sys.argv[1:]
+class Clock:
+    execution_domain="SYNTHETIC_TEST:m4-execution-v1"
+    def sample(self): return datetime.fromisoformat(cutoff),0.0
 def crash_after_child_start(export,policy,*,scratch_root):
     child=subprocess.Popen(json.loads(args),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
     Path(pid_path).write_text(str(child.pid))
@@ -95,7 +113,7 @@ def crash_after_child_start(export,policy,*,scratch_root):
 learning._fit_subprocess=crash_after_child_start
 with Database(path) as db:
     learning.consider_learning(CoreStore(db,CoreConfig.model_validate_json(config)),
-        LearningPolicy.model_validate_json(policy),cutoff=datetime.fromisoformat(cutoff))
+        LearningPolicy.model_validate_json(policy),cutoff=datetime.fromisoformat(cutoff),execution_clock=Clock(),calendar=LearningCalendar.model_validate_json(calendar))
 """
         pid_path = folder / "child-pid"
         env = {k: os.environ[k] for k in ("SystemRoot", "WINDIR", "COMSPEC") if k in os.environ}
@@ -115,6 +133,7 @@ with Database(path) as db:
                     json.dumps(child_args),
                     str(ready),
                     str(pid_path),
+                    calendar.model_dump_json(),
                 ],
                 env=env,
                 stdout=subprocess.DEVNULL,
@@ -125,7 +144,9 @@ with Database(path) as db:
             wait_file(ready)
             child_pid = int(pid_path.read_text())
             if not delayed:
-                busy = consider_learning(restarted_store, policy, cutoff=cutoff)
+                busy = consider_learning(
+                    restarted_store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+                )
                 assert busy.reason == "LEARNING_WORKER_BUSY" and busy.trial_charge_id is None
                 # Stop only this explicitly-created disposable fixture child.
                 import ctypes
@@ -158,7 +179,9 @@ with Database(path) as db:
                         time.sleep(0.05)
                     else:
                         time.sleep(31)
-            recovered = consider_learning(restarted_store, policy, cutoff=cutoff)
+            recovered = consider_learning(
+                restarted_store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+            )
             assert recovered.status == "FIT_FAILED" and recovered.reason == "PRIOR_PROCESS_LOST"
             assert recovered.trial_charge_id == receipt.trial_charge_id
             assert recovered.resulting_model_id == policy.parent_model.id
@@ -257,7 +280,11 @@ with Database(path) as db:
                     import_broker_events(restarted_store, tuple(events))
                     assert process_outcomes(restarted_store, cutoff=broker.now).outcomes
                 later = consider_learning(
-                    restarted_store, policy, cutoff=broker.now + timedelta(hours=8)
+                    restarted_store,
+                    policy,
+                    cutoff=broker.now + timedelta(hours=8),
+                    calendar=calendar,
+                    execution_clock=ExecutionClock(broker.now + timedelta(hours=8)),
                 )
                 assert later.status == "AWAITING_ACTIVATION", later.reason
                 with restarted.transaction() as session:
@@ -268,6 +295,16 @@ with Database(path) as db:
                         "receipt": later.model_dump(mode="json"),
                         "posts": len(broker.posts),
                         "canonical_trials": 2,
+                        "calendar": calendar.model_dump(mode="json"),
+                        "candidate": restarted_store.read(
+                            "core_models", later.resulting_model_id, ModelArtifact
+                        ).model_dump(mode="json"),
+                        "export": next(
+                            p
+                            for p in restarted_store.documents("core_learning_inputs")
+                            if content_id(p) == later.input_export_id
+                        ),
+                        "original_joins": joins,
                         "joins": [
                             restarted_store.export_loop(d["decision_id"])
                             for d in restarted_store.links()

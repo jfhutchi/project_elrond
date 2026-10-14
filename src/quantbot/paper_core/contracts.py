@@ -13,6 +13,7 @@ from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, Position
 from quantbot.learner.estimators import FittedEstimator
 from quantbot.learner.five_minute import FEATURE_NAMES
 from quantbot.research.manifest import content_id
+from quantbot.strategy import XNYSSessionSequence
 
 Money = Annotated[Decimal, Field(allow_inf_nan=False)]
 Positive = Annotated[Decimal, Field(gt=0, allow_inf_nan=False)]
@@ -450,7 +451,10 @@ class LearningPolicy(BrokerModel):
     seed: Literal[0] = 0
     clip_bps: Literal[100] = 100
     fit_timeout_seconds: Literal[30] = 30
-    max_sessions: Literal[60] = 60
+    max_sessions: Literal[60] | None = None
+    procedure_version: Literal["daily-all-history-walk-forward-v2"] | None = (
+        "daily-all-history-walk-forward-v2"
+    )
     min_training: Literal[30] = 30
     min_training_sessions: Literal[5] = 5
     min_validation: Literal[10] = 10
@@ -458,6 +462,36 @@ class LearningPolicy(BrokerModel):
     embargo_minutes: Literal[30] = 30
     min_improvement: Annotated[float, Field(ge=0.05, le=0.05)] = 0.05
     fits_per_session: Literal[1] = 1
+
+    @model_serializer(mode="wrap")
+    def legacy_policy(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if self.procedure_version is None:
+            payload.pop("procedure_version", None)
+        return payload
+
+    @model_validator(mode="before")
+    @classmethod
+    def decode_legacy_policy(cls, value: Any) -> Any:
+        if (
+            isinstance(value, dict)
+            and value.get("max_sessions") == 60
+            and "procedure_version" not in value
+        ):
+            return {**value, "procedure_version": None}
+        return value
+
+    @classmethod
+    def legacy_fixture(cls, **fields: Any) -> Self:
+        return cls(**fields, max_sessions=60, procedure_version=None)
+
+    @model_validator(mode="after")
+    def versioned_envelope(self) -> Self:
+        if (self.procedure_version is None) != (self.max_sessions == 60):
+            raise ValueError(
+                "legacy fixed split uses 60 sessions; daily procedure uses all history"
+            )
+        return self
 
     @property
     def id(self) -> str:
@@ -476,7 +510,86 @@ class SessionMetrics(BrokerModel):
     constant_mse: float
 
 
+class LearningCalendar(BrokerModel):
+    """Explicit synthetic contiguous exchange calendar; runtime acquisition belongs to M6."""
+
+    sequence: XNYSSessionSequence
+    authority: Literal["EXPLICIT_SYNTHETIC_XNYS_V1"] = "EXPLICIT_SYNTHETIC_XNYS_V1"
+
+    @property
+    def id(self) -> str:
+        return content_id(self)
+
+
+class LearningFold(BrokerModel):
+    session: date
+    cutoff: datetime
+    training: tuple[LearningEpisode, ...]
+    validation: tuple[LearningEpisode, ...]
+    historical_model_ids: tuple[str, ...]
+    historical_models: tuple[ModelArtifact, ...]
+    historical_available_at: tuple[datetime | None, ...]
+    historical_receipt_ids: tuple[str | None, ...]
+    historical_acknowledgement_ids: tuple[str | None, ...]
+    historical_acknowledgement_available_at: tuple[datetime | None, ...]
+    historical_receipt_payloads: tuple[str | None, ...]
+    historical_acknowledgement_payloads: tuple[str | None, ...]
+
+
+class FoldResult(BrokerModel):
+    session: date
+    cutoff: datetime
+    training_ids: tuple[str, ...]
+    validation_ids: tuple[str, ...]
+    scoring_available_at: tuple[datetime, ...]
+    raw_weights: tuple[float, ...]
+    artifact: ModelArtifact
+    historical_model_ids: tuple[str, ...]
+    historical_available_at: tuple[datetime | None, ...]
+    historical_receipt_ids: tuple[str | None, ...]
+    historical_acknowledgement_ids: tuple[str | None, ...]
+    historical_acknowledgement_available_at: tuple[datetime | None, ...]
+    scores: SessionMetrics
+
+
+class ProcedureResult(BrokerModel):
+    candidate: ModelArtifact | None = None
+    folds: tuple[FoldResult, ...]
+    metrics: tuple[tuple[str, float], ...]
+    session_metrics: tuple[SessionMetrics, ...]
+    gates_passed: bool
+    final_raw_weights: tuple[float, ...] = ()
+
+
 class LearningReceipt(Evidence):
+    legacy_optional_fields = frozenset(
+        {
+            "execution_clock_domain",
+            "started_at",
+            "fit_started_at",
+            "completed_at",
+            "available_at",
+            "completion_clock_domain",
+            "calendar_id",
+            "completed_session",
+            "fold_results",
+            "final_input_ids",
+            "final_raw_weights",
+            "final_validation_absent_reason",
+        }
+    )
+    execution_clock_domain: str | None = None
+    started_at: datetime | None = None
+    fit_started_at: datetime | None = None
+    completed_at: datetime | None = None
+    available_at: datetime | None = None
+    completion_clock_domain: str | None = None
+    calendar_id: str | None = None
+    completed_session: date | None = None
+    fold_results: tuple[FoldResult, ...] = ()
+    final_input_ids: tuple[str, ...] = ()
+    final_raw_weights: tuple[float, ...] = ()
+    final_validation_absent_reason: str | None = None
     run_id: str
     cutoff: datetime
     parent_model_id: str
@@ -496,6 +609,25 @@ class LearningReceipt(Evidence):
     metrics: tuple[tuple[str, float], ...] = ()
     session_metrics: tuple[SessionMetrics, ...] = ()
     activation_at: None = None
+
+    @model_validator(mode="after")
+    def completion_evidence(self) -> Self:
+        if self.available_at is not None:
+            if (
+                not self.execution_clock_domain
+                or self.started_at is None
+                or self.completed_at != self.available_at
+                or self.recorded_at_utc != self.completed_at
+                or self.started_at > self.available_at
+                or (
+                    self.fit_started_at is not None
+                    and not self.started_at <= self.fit_started_at <= self.available_at
+                )
+            ):
+                raise ValueError(
+                    "learning availability requires ordered declared execution evidence"
+                )
+        return self
 
 
 class Health(Evidence):

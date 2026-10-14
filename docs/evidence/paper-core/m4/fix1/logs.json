@@ -1,0 +1,121 @@
+{
+  "green-affected": {
+    "file": "green-affected.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-cplnujtq\\result.txt",
+    "raw_sha256": "ffdfa8cb18b893920146811c1a9c91bc8eed2d4396546ffadbfd0bd4a9739a9e",
+    "compressed_sha256": "14cdf9239f5010f7b7ff91952b3dc6742a6359191b9102c60e09b010e85f378c",
+    "raw_bytes": 166251674
+  },
+  "red-temporal": {
+    "file": "red-temporal.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-nkbjf799\\result.txt",
+    "raw_sha256": "3420fb17f2172ed1f20ac7a870495cf4b5f319cf3d0395ef833cfcd89476ca4b",
+    "compressed_sha256": "bf99bdd93f69edf594e6ad50486044979f44a844907daf6c8128a2de455c3655",
+    "raw_bytes": 12313
+  },
+  "green-temporal6": {
+    "file": "green-temporal6.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-vcg0e10d\\result.txt",
+    "raw_sha256": "53a02c792f98a5518ee15f9781473b5f9c0441a2f18a4df257283b27dd787ae1",
+    "compressed_sha256": "b55e26c27027a33095468410e29a19e2196ffea534bb8d088b5a53eda77726ad",
+    "raw_bytes": 16982
+  },
+  "fixture-error-temporal10": {
+    "file": "fixture-error-temporal10.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qsfv50m1\\result.txt",
+    "raw_sha256": "afc354788f64ab7d6947a71d4ff0fae193d8d344038d6912decfd7ab25780f9e",
+    "compressed_sha256": "30583264c0c6416aae76bee6eb73fc0f7104865179ebddad389d20832e08946c",
+    "raw_bytes": 20023
+  },
+  "green-temporal10": {
+    "file": "green-temporal10.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-1ywem0_i\\result.txt",
+    "raw_sha256": "d5c67a7445d9146cdc151fb06cd5ab259c95a85df74ae5877579561c5c9a556d",
+    "compressed_sha256": "b2a1b3faac376aeca8be3b36caa2a727248e7f1163ef6856959e65c07bf82247",
+    "raw_bytes": 16988
+  },
+  "red-weighted": {
+    "file": "red-weighted.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-86avzvds\\result.txt",
+    "raw_sha256": "2bc3bee32c847310047886f868075732f67d7704ac4ff7bdf805980106f8ac73",
+    "compressed_sha256": "eab38565936fa999e3fe168794d4133a420f471ed618d34ed2f3a9f42b0c8f39",
+    "raw_bytes": 4109
+  },
+  "green-weighted45": {
+    "file": "green-weighted45.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-i7n_cmsg\\result.txt",
+    "raw_sha256": "0f92049207f024dfd3bccb130b6ebe2022b56ca1df294b3d93f4e7edb0c231b1",
+    "compressed_sha256": "5955281f06c39397c97c94559c809205443e78b8d08899246f556d862d8c7c26",
+    "raw_bytes": 81
+  },
+  "red-daily": {
+    "file": "red-daily.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-1pbxx_yk\\result.txt",
+    "raw_sha256": "92ffe4ee117a0c1c1a0b93d14f4e92210731564ab0f2d3796525a150f68ca706",
+    "compressed_sha256": "6ae8c2da77a0dd8a4a72088566b408818b37aa563d521715f0ede302510f4cf5",
+    "raw_bytes": 4981
+  },
+  "green-daily-temporal12": {
+    "file": "green-daily-temporal12.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-6ohye4hk\\result.txt",
+    "raw_sha256": "4208f92aa778c742c7655af90b8e57da8220901a67e852bb157f327d7f189aa3",
+    "compressed_sha256": "890d66774ce04b0ee0b10f365c6bde9878b6abe2f5d1814929bc6b2edd071052",
+    "raw_bytes": 81
+  },
+  "red-quarantine": {
+    "file": "red-quarantine.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-p9op2e09\\result.txt",
+    "raw_sha256": "92618437b2af6d983a4425381568ae980190822747cce4662607888f4527558a",
+    "compressed_sha256": "fc3bc4bec8f41287073e20e2485920bdd31cbe42cb17df9b3ce9db6169d9f94c",
+    "raw_bytes": 4348
+  },
+  "green-combined22": {
+    "file": "green-combined22.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s3z_bacg\\result.txt",
+    "raw_sha256": "005660608b2669367e8019f3f36a0242baa6203f014ce6bff8ce1fa75bdb4ab1",
+    "compressed_sha256": "b5a46ba38614add1c37b8d1d28a3dbdc97de65342f13a8fc0235997ec3dfbdec",
+    "raw_bytes": 81
+  },
+  "fixture-error-combined": {
+    "file": "fixture-error-combined.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-_uu87nwx\\result.txt",
+    "raw_sha256": "638a9c7c739cd775546f56dcd2eaa96e70ddc167812c92f04b71eff83b08a9a2",
+    "compressed_sha256": "b825894af60570c2e1627e04a2eb65bbe0d97fc270b20a6fc89ce0c6218aadee",
+    "raw_bytes": 143094
+  },
+  "green-combined58": {
+    "file": "green-combined58.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-2inau2wj\\result.txt",
+    "raw_sha256": "7bb9d51724d8feecdd6ed04cc086ec4ea2d77df9c48e2758f179cb12537bf12a",
+    "compressed_sha256": "799999106aaad8a4517793f5f94554bcb60562a6782a6a9d3fba0fc96cf1fce7",
+    "raw_bytes": 81
+  },
+  "green-combined64": {
+    "file": "green-combined64.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-erk4cwwe\\result.txt",
+    "raw_sha256": "a32952e7f241dc95eb9fe9c6c25b25f2f570b7e8f23beaa5f23b9ccfce4d62d4",
+    "compressed_sha256": "779a385425605e29c662710f2fd38d2eabc6ba90aaf497f095541f74469d5cc8",
+    "raw_bytes": 274207
+  },
+  "green-child-daily17": {
+    "file": "green-child-daily17.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-umszjmq2\\result.txt",
+    "raw_sha256": "b17d61cfee497eb157f0b193ac18ba6d87db5a4288ec74f069451624461c8e64",
+    "compressed_sha256": "cf13d15a7f2071e31baaa51abdff9c2fa3c61d02b3913ff2fc269741842a291a",
+    "raw_bytes": 249701
+  },
+  "scoped-process-collection-error": {
+    "file": "scoped-process-collection-error.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-03vjh3qv\\result.txt",
+    "raw_sha256": "cb7d0306a70d6d19ab4e943027acc96a3b23a09691eede9c81bcc8b3c48331fb",
+    "compressed_sha256": "82954002ebf6c1f053cc0ca8e8728526a8262efcaa12afbde75f79e01cc7590a",
+    "raw_bytes": 1115
+  },
+  "green-scoped-modern-process": {
+    "file": "green-scoped-modern-process.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-hnc9b4m3\\result.txt",
+    "raw_sha256": "b3a6d7b82a306f20a303cf3ef9105647b9d9929cae7174e5c01a8e2d03d80fc3",
+    "compressed_sha256": "dc4159886a2a346fa07a18bcf20da2e869ec7990a99d57a035c1c68d256bce28",
+    "raw_bytes": 15871
+  }
+}

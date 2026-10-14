@@ -6,6 +6,45 @@ from decimal import Decimal
 from tests.fixtures.core_m2 import prepare
 
 
+class ExecutionClock:
+    """Explicit synthetic execution domain, independently advanced from input cutoff."""
+
+    process_id = "m4-execution-fixture"
+    execution_domain = "SYNTHETIC_TEST:m4-execution-v1"
+
+    def __init__(self, at):
+        self.at = at
+        self.elapsed = 0.0
+
+    def sample(self):
+        return self.at, self.elapsed
+
+    def advance(self, seconds):
+        self.at += timedelta(seconds=seconds)
+        self.elapsed += seconds
+
+
+def learning_calendar():
+    from quantbot.paper_core.contracts import LearningCalendar
+    from quantbot.strategy import XNYSSession, XNYSSessionSequence
+
+    opens = tuple(
+        datetime(2026, 10, day, 13, 30, tzinfo=UTC)
+        for day in (14, 15, 16, 19, 20, 21, 22, 23, 26, 27, 28, 29, 30)
+    )
+    return LearningCalendar(
+        sequence=XNYSSessionSequence(
+            calendar="XNYS",
+            sessions=tuple(
+                XNYSSession(
+                    session_date=s.date(), open_at=s, close_at=s + timedelta(hours=6, minutes=30)
+                )
+                for s in opens
+            ),
+        )
+    )
+
+
 async def episodes(path, count=40):
     from quantbot.domain import Bar
     from quantbot.learner.five_minute import FEATURE_NAMES, build_features
