@@ -1,0 +1,68 @@
+.............FF......                                                    [100%]
+================================== FAILURES ===================================
+_ test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-9m9p_u3z/pytest/test_fresh_process_restart_cut4')
+cut = 'before_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+        assert first.returncode == 91, first.stdout + first.stderr
+        resumed = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                                 text=True, capture_output=True)
+        assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+        one = json.loads(resumed.stdout.split("M2_RECOVERY:")[1])
+        again = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                               text=True, capture_output=True)
+        assert again.returncode == 0, again.stdout + again.stderr
+        two = json.loads(again.stdout.split("M2_RECOVERY:")[1])
+>       assert one == two
+E       AssertionError: assert {'cash': '100...: '0.000000'}} == {'cash': '100...: '0.000000'}}
+E
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'current': [{'actual_fees': '0', 'available_at': '2026-10-14T14:30:00+00:00', 'cost_item_ids': ['54b47a9b37927e571892...b75c', 'a2f4e8f10a0ab33610bcd7018915737cb455e08293a3326609eb2be4983720b3'], 'cost_reason': 'PROVEN_ACTUAL_FEES', ...}]} != {'current': [{'actual_fees': '0', 'available_at': '2026-10-14T14:30:00+00:00', 'cost_item_ids': ['54b47a9b37927e571892...b75c', 'a2f4e8f10a0ab33610bcd7018915737cb455e08293a3326609eb2be4983720b3'], 'cost_reason': 'PROVEN_ACTUAL_FEES', ...}]}
+E         Use -v to get more diff
+
+tests\fault\paper_core\test_restart_matrix.py:31: AssertionError
+__ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-9m9p_u3z/pytest/test_fresh_process_restart_cut5')
+cut = 'after_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+        assert first.returncode == 91, first.stdout + first.stderr
+        resumed = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                                 text=True, capture_output=True)
+        assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+        one = json.loads(resumed.stdout.split("M2_RECOVERY:")[1])
+        again = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                               text=True, capture_output=True)
+        assert again.returncode == 0, again.stdout + again.stderr
+        two = json.loads(again.stdout.split("M2_RECOVERY:")[1])
+>       assert one == two
+E       AssertionError: assert {'cash': '100...: '0.000000'}} == {'cash': '100...: '0.000000'}}
+E
+E         Omitting 3 identical items, use -vv to show
+E         Differing items:
+E         {'current': [{'actual_fees': '0', 'available_at': '2026-10-14T14:30:00+00:00', 'cost_item_ids': ['54b47a9b37927e571892...b75c', 'a2f4e8f10a0ab33610bcd7018915737cb455e08293a3326609eb2be4983720b3'], 'cost_reason': 'PROVEN_ACTUAL_FEES', ...}]} != {'current': [{'actual_fees': '0', 'available_at': '2026-10-14T14:30:00+00:00', 'cost_item_ids': ['54b47a9b37927e571892...b75c', 'a2f4e8f10a0ab33610bcd7018915737cb455e08293a3326609eb2be4983720b3'], 'cost_reason': 'PROVEN_ACTUAL_FEES', ...}]}
+E         Use -v to get more diff
+
+tests\fault\paper_core\test_restart_matrix.py:31: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome]
+2 failed, 19 passed in 42.34s

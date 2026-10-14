@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Annotated, Literal, Self
+from typing import Annotated, Any, ClassVar, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from quantbot.brokers.base import BrokerModel
-from quantbot.domain import Account, OrderIntent, Position
+from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, Position
 from quantbot.research.manifest import content_id
 
 Money = Annotated[Decimal, Field(allow_inf_nan=False)]
@@ -36,11 +36,22 @@ class CoreConfig(BrokerModel):
 
 
 class Evidence(BrokerModel):
+    legacy_optional_fields: ClassVar[frozenset[str]] = frozenset()
     schema_version: Literal[1] = 1
     release_id: str = "m1-synthetic-fixture"
     evidence_lane: Literal["SYNTHETIC_TEST"] = "SYNTHETIC_TEST"
     recorded_at_utc: datetime
     source_refs: tuple[str, ...] = ()
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_document(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = handler(self)
+        # Added optional contract fields are serialized only when supplied. A
+        # decoded v30 document therefore retains its original canonical digest,
+        # and new documents round-trip with the same explicit field set.
+        for field in self.legacy_optional_fields - self.model_fields_set:
+            payload.pop(field, None)
+        return dict(payload)
 
     @property
     def id(self) -> str:
@@ -77,6 +88,7 @@ class ModelArtifact(BrokerModel):
 
 
 class ReconciliationProof(Evidence):
+    legacy_optional_fields = frozenset({"cash_complete"})
     account: Account
     baseline_id: str
     generation: int = Field(ge=1)
@@ -84,13 +96,15 @@ class ReconciliationProof(Evidence):
     expected_quantities: tuple[tuple[str, Money], ...]
     actual_quantities: tuple[tuple[str, Money], ...]
     positions: tuple[Position, ...]
-    expected_cash: Money
+    expected_cash: Money | None
+    cash_complete: bool = True
     acquisition_id: str
     complete: bool
     order_ids: tuple[str, ...] = ()
 
 
 class Decision(Evidence):
+    legacy_optional_fields = frozenset({"source_start"})
     observation_id: str
     policy_id: str
     model_id: str
@@ -105,6 +119,7 @@ class Decision(Evidence):
     price: Positive
     valid_until: datetime
     session_close: datetime
+    source_start: datetime | None = None
 
 
 class ProtectionPlan(Evidence):
@@ -157,6 +172,23 @@ class CycleReceipt(Evidence):
 
 
 class RoundTrip(Evidence):
+    legacy_optional_fields = frozenset(
+        {
+            "cost_item_ids",
+            "actual_fees",
+            "modeled_costs",
+            "modeled_net_pnl",
+            "source_state_hash",
+            "revision",
+            "supersedes",
+            "entry_notional",
+            "policy_id",
+            "dataset",
+            "source_start",
+            "source_end",
+            "available_at",
+        }
+    )
     lot_id: str
     decision_id: str
     entry_fill_ids: tuple[str, ...]
@@ -166,12 +198,102 @@ class RoundTrip(Evidence):
     reconciliation_id: str
     open_quantity: Money
     gross_pnl: Money
-    net_pnl: None = None
-    status: Literal["COSTS_PENDING"] = "COSTS_PENDING"
-    cost_reason: Literal["M1_COST_PROVENANCE_UNAVAILABLE"] = "M1_COST_PROVENANCE_UNAVAILABLE"
+    net_pnl: Money | None = None
+    status: Literal["COSTS_PENDING", "COMPLETE"] = "COSTS_PENDING"
+    cost_reason: str = "M1_COST_PROVENANCE_UNAVAILABLE"
+    cost_item_ids: tuple[str, ...] = ()
+    actual_fees: Money | None = None
+    modeled_costs: Money | None = None
+    modeled_net_pnl: Money | None = None
+    source_state_hash: str = ""
+    revision: int = Field(default=1, ge=1)
+    supersedes: str | None = None
+    entry_notional: Money = Decimal(0)
+    policy_id: str = "collect-owned-30m-stop100-v1"
+    dataset: str = "EXPLICIT_SYNTHETIC"
+    source_start: datetime | None = None
+    source_end: datetime | None = None
+    available_at: datetime | None = None
 
     @model_validator(mode="after")
     def completed_owned_lot(self) -> Self:
         if self.open_quantity != 0 or not self.entry_fill_ids or not self.exit_fill_ids:
             raise ValueError("round trip requires attributable nonempty fills and owned flat")
         return self
+
+
+class CostItem(Evidence):
+    fill_id: str
+    component: Literal["FEE", "MODELED_SLIPPAGE"] = "FEE"
+    amount: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)] | None = None
+    currency: Literal["USD"] = "USD"
+    source: Literal["BROKER_REPORTED", "CONTRACTUAL_ZERO", "MODELED", "UNKNOWN"] = "UNKNOWN"
+    document_id: str | None = None
+    effective_start: datetime
+    effective_end: datetime
+    allocation_rule: Literal["EXACT_FILL"] = "EXACT_FILL"
+    revision: int = Field(default=1, ge=1)
+    supersedes: str | None = None
+
+    @model_validator(mode="after")
+    def authority(self) -> Self:
+        if self.effective_end < self.effective_start:
+            raise ValueError("cost effective dates are reversed")
+        if self.source == "UNKNOWN" and self.amount is not None:
+            raise ValueError("unknown cost cannot provide an amount")
+        if self.source != "UNKNOWN" and (self.amount is None or not self.document_id):
+            raise ValueError("known cost requires amount and document authority")
+        if self.source == "CONTRACTUAL_ZERO" and self.amount != 0:
+            raise ValueError("contractual zero requires exactly zero")
+        if (self.source == "MODELED") != (self.component == "MODELED_SLIPPAGE"):
+            raise ValueError("modeled economics must be separate from actual fees")
+        if (self.revision == 1) != (self.supersedes is None):
+            raise ValueError("cost revision requires exact predecessor")
+        return self
+
+
+class CashActivity(Evidence):
+    account_id: str
+    document_id: str = Field(min_length=1)
+    activity_ids: tuple[str, ...]
+    movements: tuple[tuple[str, Money], ...]
+    currency: Literal["USD"] = "USD"
+    complete: bool
+    watermark: datetime
+
+
+class BrokerEvent(Evidence):
+    event_id: str = Field(min_length=1)
+    raw_digest: str = Field(min_length=1)
+    provider: Literal["EXPLICIT_SYNTHETIC"] = "EXPLICIT_SYNTHETIC"
+    account_id: str
+    endpoint: str = Field(min_length=1)
+    client_order_id: str
+    occurred_at: datetime
+    order: BrokerOrder | None = None
+    fill: Fill | None = None
+    cost: CostItem | None = None
+    cash_activity: CashActivity | None = None
+    activity_complete: bool = False
+    activity_fill_ids: tuple[str, ...] = ()
+    activity_watermark: datetime | None = None
+    correction_of: str | None = None
+
+    @model_validator(mode="after")
+    def event_payload(self) -> Self:
+        if sum(v is not None for v in (self.order, self.fill, self.cost, self.cash_activity)) != 1:
+            raise ValueError("event requires one order, fill or cost payload")
+        if self.occurred_at > self.recorded_at_utc:
+            raise ValueError("event cannot be received before occurrence")
+        if self.activity_complete and self.order is None:
+            raise ValueError("activity watermark belongs to an order observation")
+        if self.activity_complete and (
+            self.activity_watermark is None or self.activity_watermark > self.recorded_at_utc
+        ):
+            raise ValueError("complete activities require a provider watermark")
+        return self
+
+
+class OutcomeBatch(Evidence):
+    outcomes: tuple[RoundTrip, ...] = ()
+    reasons: tuple[str, ...] = ()

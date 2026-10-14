@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 30
+SCHEMA_VERSION = 31
 
 metadata = MetaData(
     naming_convention={
@@ -217,7 +217,9 @@ fills = Table(
     Column("quantity", Text, nullable=False),
     Column("price", Text, nullable=False),
     Column("occurred_at", String(40), nullable=False),
-    Column("fee", Text, nullable=False),
+    Column("fee", Text),
+    Column("fee_source", String(32), nullable=False, server_default="UNKNOWN"),
+    Column("fee_reference", Text),
 )
 Index("ix_fills_broker_time", fills.c.broker_order_id, fills.c.occurred_at)
 
@@ -1800,3 +1802,7 @@ Index("ix_runtime_deployments_commit", runtime_deployments.c.git_commit)
 from quantbot.storage.core_schema import core_tables  # noqa: E402
 
 _core_tables = core_tables(metadata)
+
+from quantbot.storage.core_cost_schema import cost_tables  # noqa: E402
+
+_cost_tables = cost_tables(metadata)

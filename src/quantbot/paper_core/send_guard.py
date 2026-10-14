@@ -6,8 +6,13 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, text
 
 from quantbot.domain import IntentState, OrderIntent
-from quantbot.paper_core.contracts import Decision, GuardianReceipt, ProtectionPlan
-from quantbot.paper_core.store import CoreStore, table
+from quantbot.paper_core.contracts import (
+    Decision,
+    GuardianReceipt,
+    ProtectionPlan,
+    ReconciliationProof,
+)
+from quantbot.paper_core.store import CoreStore, latest_certification, table
 from quantbot.research.manifest import content_id
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
@@ -84,6 +89,36 @@ def final_send_objections(
         # Sample after durable reads and writer-lock acquisition, never the caller's decision time.
         now = clock()
         reasons = []
+        if any(
+            i.kind == "CORE_EVIDENCE_CONFLICT" for i in repo.list_incidents(unresolved_only=True)
+        ):
+            reasons.append("CORE_EVIDENCE_QUARANTINED")
+        latest = latest_certification(session)
+        proof = (
+            None
+            if latest is None
+            else ReconciliationProof.model_validate_json(
+                session.execute(
+                    select(table("core_reconciliation_proofs").c.payload).where(
+                        table("core_reconciliation_proofs").c.id == latest[1]
+                    )
+                ).scalar_one()
+            )
+        )
+        if (
+            proof is None
+            or not proof.cash_complete
+            or proof.expected_cash is None
+            or proof.account.cash != proof.expected_cash
+            or decision.inventory_id != proof.id
+            or session.execute(
+                select(table("core_cash_authority_revocations").c.snapshot_id).where(
+                    table("core_cash_authority_revocations").c.snapshot_id
+                    == "core-certified-" + proof.id
+                )
+            ).first()
+        ):
+            reasons.append("CORE_CASH_AUTHORITY_UNAVAILABLE")
         if (
             stored.state is not IntentState.ORDER_CREATED
             or intent.state is not IntentState.ORDER_CREATED

@@ -22,7 +22,7 @@ from quantbot.paper_core.features import observation_objections
 from quantbot.paper_core.runtime import coordinator, require_synthetic
 from quantbot.paper_core.send_guard import definitively_unsent
 from quantbot.paper_core.simulation import SyntheticBroker
-from quantbot.paper_core.store import CoreStore, put, table
+from quantbot.paper_core.store import CoreStore, latest_certification, put, table
 from quantbot.research.manifest import canonical_result_json, content_id
 from quantbot.risk import DrawdownState, OrderPurpose, PortfolioVetoDecision
 from quantbot.storage import StorageRepository
@@ -45,6 +45,9 @@ def evaluate_entry(
         inventory.account.account_id != config.account_id
         or inventory.expected_quantities != inventory.actual_quantities
         or not inventory.complete
+        or not inventory.cash_complete
+        or inventory.expected_cash is None
+        or inventory.account.cash != inventory.expected_cash
     ):
         objections.append("INVENTORY_UNCERTIFIED")
     if not 0 <= (observation.recorded_at_utc - inventory.recorded_at_utc).total_seconds() <= 120:
@@ -82,6 +85,7 @@ def evaluate_entry(
         price=observation.price,
         valid_until=observation.source_end + timedelta(seconds=120),
         session_close=observation.session_close,
+        source_start=observation.source_start,
     )
 
 
@@ -93,13 +97,29 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         if decision.action != "BUY":
             return None
         repo = StorageRepository(session)
+        if any(
+            i.kind == "CORE_EVIDENCE_CONFLICT" for i in repo.list_incidents(unresolved_only=True)
+        ):
+            return None
         if repo.get_kill_switch_state().engaged:
             return None
         certs = table("core_inventory_certifications")
         latest = session.execute(
             select(certs.c.proof_id).order_by(certs.c.generation.desc()).limit(1)
         ).scalar_one()
-        if decision.inventory_id != latest or decision.config_id != store.config_id:
+        certification = latest_certification(session)
+        revoked = table("core_cash_authority_revocations")
+        if (
+            certification is None
+            or certification[1] != latest
+            or session.execute(
+                select(revoked.c.snapshot_id).where(
+                    revoked.c.snapshot_id == "core-certified-" + latest
+                )
+            ).first()
+            or decision.inventory_id != latest
+            or decision.config_id != store.config_id
+        ):
             return None
         observed = Observation.model_validate_json(
             session.execute(
@@ -192,6 +212,16 @@ async def trader_cycle(
 ) -> Decision:
     require_synthetic(store, broker)
     record_observation(store, observation)
+    previous = next(
+        (
+            link
+            for link in store.links()
+            if link["role"] == "ENTRY" and link["observation_id"] == observation.id
+        ),
+        None,
+    )
+    if previous is not None:
+        return store.read("core_decisions", previous["decision_id"], Decision)
     decision = evaluate_entry(store.config, observation, model, inventory)
     plan = ProtectionPlan.for_decision(decision, store.config)
     if now < decision.recorded_at_utc or now >= decision.valid_until:

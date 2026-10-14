@@ -1,0 +1,26 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+___________ test_accounting_unknown_zero_never_becomes_cash_or_net ____________
+
+    def test_accounting_unknown_zero_never_becomes_cash_or_net():
+        from quantbot.brokers import TradeUpdate, TradeUpdateEvent
+        from quantbot.domain import BrokerOrder, Fill, OrderSide, OrderType, TimeInForce
+        from quantbot.execution.accounting import PortfolioAccountingState, apply_trade_update
+        from quantbot.reporting.performance import ReportingDataError, analyze_fills
+
+        fill = Fill(fill_id="f", broker_order_id="o", symbol="XLE", side=OrderSide.BUY,
+                    quantity=1, price=100, occurred_at=NOW, fee=0)
+        order = BrokerOrder(broker_order_id="o", client_order_id="c", symbol="XLE",
+                            side=OrderSide.BUY, order_type=OrderType.MARKET, time_in_force=TimeInForce.DAY,
+                            quantity=1, filled_quantity=1, status="filled", submitted_at=NOW)
+        update = TradeUpdate(event=TradeUpdateEvent.FILL, order=order, fill=fill,
+                             occurred_at=NOW, event_id="test-update", connection_generation=1, position_quantity=Decimal(1))
+        state = apply_trade_update(PortfolioAccountingState(cash=1000, realized_pnl=0), update)
+>       assert state.cash is None and state.realized_pnl is None and state.fees_paid is None
+E       AssertionError: assert (Decimal('900') is None)
+E        +  where Decimal('900') = PortfolioAccountingState(cash=Decimal('900'), realized_pnl=Decimal('0'), positions=(AccountingPosition(symbol='XLE', q...nce=None), position_quantity=Decimal('1'), reference_price=None),), fees_paid=Decimal('0'), slippage_cost=Decimal('0')).cash
+
+tests\integration\paper_core\test_costed_loop.py:38: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_costed_loop.py::test_accounting_unknown_zero_never_becomes_cash_or_net
+1 failed, 9 deselected in 1.99s

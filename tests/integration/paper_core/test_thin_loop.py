@@ -262,6 +262,13 @@ async def test_full_round_trip_releases_single_position_slot(tmp_path):
         await trader_cycle(store, broker, observation, model, proof, now=NOW)
         broker.now = NOW + timedelta(minutes=30)
         await guardian_cycle(store, broker, now=broker.now)
+        from tests.fixtures.core_m2 import fee_events
+
+        from quantbot.paper_core.guardian import synchronize
+        from quantbot.paper_core.outcomes import import_broker_events
+
+        import_broker_events(store, fee_events(store, broker))
+        await synchronize(store, broker, now=broker.now)
         later = observation.model_copy(
             update={
                 "recorded_at_utc": broker.now,
@@ -290,6 +297,13 @@ async def test_certification_keeps_non_100_fill_basis_and_owned_stop(tmp_path):
         observation = observation.model_copy(update={"price": Decimal("125")})
         broker.set_mark("XLE", Decimal("125"), as_of=NOW)
         await trader_cycle(store, broker, observation, model, proof, now=NOW)
+        from tests.fixtures.core_m2 import fee_events
+
+        from quantbot.paper_core.guardian import synchronize
+        from quantbot.paper_core.outcomes import import_broker_events
+
+        import_broker_events(store, fee_events(store, broker))
+        await synchronize(store, broker, now=broker.now)
         with db.transaction() as session:
             baseline = StorageRepository(session).get_latest_account_snapshot(
                 store.config.account_id, certified_only=True

@@ -77,6 +77,8 @@ def test_fill_analysis_counts_completed_round_trips_and_net_outcomes() -> None:
             price=Decimal("100"),
             occurred_at=datetime(2026, 8, 11, 14, 30, tzinfo=UTC),
             fee=Decimal("1"),
+            fee_source="BROKER_REPORTED",
+            fee_reference="synthetic-reported-fee",
         ),
         Fill(
             fill_id="fill-sell",
@@ -87,6 +89,8 @@ def test_fill_analysis_counts_completed_round_trips_and_net_outcomes() -> None:
             price=Decimal("110"),
             occurred_at=datetime(2026, 8, 14, 14, 30, tzinfo=UTC),
             fee=Decimal("1"),
+            fee_source="BROKER_REPORTED",
+            fee_reference="synthetic-reported-fee",
         ),
     )
 

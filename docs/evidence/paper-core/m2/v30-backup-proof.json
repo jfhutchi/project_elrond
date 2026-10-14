@@ -1,0 +1,9 @@
+{
+  "source": "accepted M1 synthetic v30 fixture",
+  "source_sha256_before": "83e8d9c449b5103977acbac8a4539e90381a58be4924e65a494a471001a1d2dd",
+  "source_sha256_after": "83e8d9c449b5103977acbac8a4539e90381a58be4924e65a494a471001a1d2dd",
+  "copy_schema": 30,
+  "copy_integrity": "ok",
+  "immutable_intent_links": 2,
+  "copy_path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-m2-v30-backup-xxnq7fxs\\copied.db"
+}

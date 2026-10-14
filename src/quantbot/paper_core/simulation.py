@@ -116,6 +116,10 @@ class SyntheticBroker:
     async def get_fills(self, *, after: datetime | None = None) -> tuple[Fill, ...]:
         return tuple(f for f in self.fills if after is None or f.occurred_at > after)
 
+    async def get_activity_watermark(self) -> datetime | None:
+        """The synchronous synthetic journal is complete through its current clock."""
+        return self.now
+
     async def submit_order(self, intent: OrderIntent) -> BrokerOrder:
         if intent.client_order_id in self.orders:
             raise RuntimeError("duplicate synthetic POST")

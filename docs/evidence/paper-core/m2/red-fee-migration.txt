@@ -1,0 +1,274 @@
+FFFFFFF                                                                  [100%]
+================================== FAILURES ===================================
+______ test_provider_missing_fee_is_unknown_and_zero_requires_authority _______
+
+    def test_provider_missing_fee_is_unknown_and_zero_requires_authority():
+        from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter
+
+        fill = AlpacaPaperBrokerAdapter._fill_from_payload({
+            "activity_type": "FILL", "id": "f", "order_id": "o", "symbol": "XLE",
+            "side": "buy", "qty": "1", "price": "100", "transaction_time": NOW.isoformat(),
+        })
+>       assert fill.fee is None, "missing provider fee cannot be a verified zero"
+E       AssertionError: missing provider fee cannot be a verified zero
+E       assert Decimal('0') is None
+E        +  where Decimal('0') = Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')).fee
+
+tests\integration\paper_core\test_costed_loop.py:20: AssertionError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[1] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-st4zovy4/pytest/test_fixture_legacy_migration_0')
+version = 1
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+            connection.exec_driver_sql(
+                "INSERT INTO order_intents (intent_id,client_order_id,strategy_id,signal_date,symbol,side,order_type,quantity,limit_price,stop_price,time_in_force,extended_hours,state,created_at) VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO broker_orders VALUES ('o','c','XLE','BUY','MARKET','DAY','1','1',"
+                "'filled','2026-10-14T14:00:00Z','100')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO fills VALUES ('f','o','XLE','BUY','1','100','2026-10-14T14:00:00Z','0')"
+            )
+        engine.dispose()
+        with pytest.raises(MigrationRequiredError):
+            Database(path)
+        with sqlite3.connect(path) as original, sqlite3.connect(tmp_path / "backup.db") as backup:
+            original.backup(backup)
+        with Database.migrate(path) as db:
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+>               assert repo.get_fill("f").fee is None
+E               AssertionError: assert Decimal('0') is None
+E                +  where Decimal('0') = Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')).fee
+E                +    where Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')) = get_fill('f')
+E                +      where get_fill = <quantbot.storage.repositories.StorageRepository object at 0x000002759AD43910>.get_fill
+
+tests\integration\paper_core\test_costed_loop.py:118: AssertionError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[26] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-st4zovy4/pytest/test_fixture_legacy_migration_1')
+version = 26
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+            connection.exec_driver_sql(
+                "INSERT INTO order_intents (intent_id,client_order_id,strategy_id,signal_date,symbol,side,order_type,quantity,limit_price,stop_price,time_in_force,extended_hours,state,created_at) VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO broker_orders VALUES ('o','c','XLE','BUY','MARKET','DAY','1','1',"
+                "'filled','2026-10-14T14:00:00Z','100')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO fills VALUES ('f','o','XLE','BUY','1','100','2026-10-14T14:00:00Z','0')"
+            )
+        engine.dispose()
+        with pytest.raises(MigrationRequiredError):
+            Database(path)
+        with sqlite3.connect(path) as original, sqlite3.connect(tmp_path / "backup.db") as backup:
+            original.backup(backup)
+        with Database.migrate(path) as db:
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+>               assert repo.get_fill("f").fee is None
+E               AssertionError: assert Decimal('0') is None
+E                +  where Decimal('0') = Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')).fee
+E                +    where Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')) = get_fill('f')
+E                +      where get_fill = <quantbot.storage.repositories.StorageRepository object at 0x00000275997686D0>.get_fill
+
+tests\integration\paper_core\test_costed_loop.py:118: AssertionError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[27] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-st4zovy4/pytest/test_fixture_legacy_migration_2')
+version = 27
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+            connection.exec_driver_sql(
+                "INSERT INTO order_intents (intent_id,client_order_id,strategy_id,signal_date,symbol,side,order_type,quantity,limit_price,stop_price,time_in_force,extended_hours,state,created_at) VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO broker_orders VALUES ('o','c','XLE','BUY','MARKET','DAY','1','1',"
+                "'filled','2026-10-14T14:00:00Z','100')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO fills VALUES ('f','o','XLE','BUY','1','100','2026-10-14T14:00:00Z','0')"
+            )
+        engine.dispose()
+        with pytest.raises(MigrationRequiredError):
+            Database(path)
+        with sqlite3.connect(path) as original, sqlite3.connect(tmp_path / "backup.db") as backup:
+            original.backup(backup)
+        with Database.migrate(path) as db:
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+>               assert repo.get_fill("f").fee is None
+E               AssertionError: assert Decimal('0') is None
+E                +  where Decimal('0') = Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')).fee
+E                +    where Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')) = get_fill('f')
+E                +      where get_fill = <quantbot.storage.repositories.StorageRepository object at 0x0000027599647010>.get_fill
+
+tests\integration\paper_core\test_costed_loop.py:118: AssertionError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[28] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-st4zovy4/pytest/test_fixture_legacy_migration_3')
+version = 28
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+            connection.exec_driver_sql(
+                "INSERT INTO order_intents (intent_id,client_order_id,strategy_id,signal_date,symbol,side,order_type,quantity,limit_price,stop_price,time_in_force,extended_hours,state,created_at) VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO broker_orders VALUES ('o','c','XLE','BUY','MARKET','DAY','1','1',"
+                "'filled','2026-10-14T14:00:00Z','100')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO fills VALUES ('f','o','XLE','BUY','1','100','2026-10-14T14:00:00Z','0')"
+            )
+        engine.dispose()
+        with pytest.raises(MigrationRequiredError):
+            Database(path)
+        with sqlite3.connect(path) as original, sqlite3.connect(tmp_path / "backup.db") as backup:
+            original.backup(backup)
+        with Database.migrate(path) as db:
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+>               assert repo.get_fill("f").fee is None
+E               AssertionError: assert Decimal('0') is None
+E                +  where Decimal('0') = Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')).fee
+E                +    where Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')) = get_fill('f')
+E                +      where get_fill = <quantbot.storage.repositories.StorageRepository object at 0x000002759B409150>.get_fill
+
+tests\integration\paper_core\test_costed_loop.py:118: AssertionError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[29] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-st4zovy4/pytest/test_fixture_legacy_migration_4')
+version = 29
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+            connection.exec_driver_sql(
+                "INSERT INTO order_intents (intent_id,client_order_id,strategy_id,signal_date,symbol,side,order_type,quantity,limit_price,stop_price,time_in_force,extended_hours,state,created_at) VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO broker_orders VALUES ('o','c','XLE','BUY','MARKET','DAY','1','1',"
+                "'filled','2026-10-14T14:00:00Z','100')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO fills VALUES ('f','o','XLE','BUY','1','100','2026-10-14T14:00:00Z','0')"
+            )
+        engine.dispose()
+        with pytest.raises(MigrationRequiredError):
+            Database(path)
+        with sqlite3.connect(path) as original, sqlite3.connect(tmp_path / "backup.db") as backup:
+            original.backup(backup)
+        with Database.migrate(path) as db:
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+>               assert repo.get_fill("f").fee is None
+E               AssertionError: assert Decimal('0') is None
+E                +  where Decimal('0') = Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')).fee
+E                +    where Fill(symbol='XLE', fill_id='f', broker_order_id='o', side=<OrderSide.BUY: 'BUY'>, quantity=Decimal('1'), price=Decimal('100'), occurred_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=Decimal('0')) = get_fill('f')
+E                +      where get_fill = <quantbot.storage.repositories.StorageRepository object at 0x000002759B4B8410>.get_fill
+
+tests\integration\paper_core\test_costed_loop.py:118: AssertionError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[30] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-st4zovy4/pytest/test_fixture_legacy_migration_5')
+version = 30
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+            connection.exec_driver_sql(
+                "INSERT INTO order_intents (intent_id,client_order_id,strategy_id,signal_date,symbol,side,order_type,quantity,limit_price,stop_price,time_in_force,extended_hours,state,created_at) VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO broker_orders VALUES ('o','c','XLE','BUY','MARKET','DAY','1','1',"
+                "'filled','2026-10-14T14:00:00Z','100')"
+            )
+            connection.exec_driver_sql(
+                "INSERT INTO fills VALUES ('f','o','XLE','BUY','1','100','2026-10-14T14:00:00Z','0')"
+            )
+        engine.dispose()
+>       with pytest.raises(MigrationRequiredError):
+E       Failed: DID NOT RAISE MigrationRequiredError
+
+tests\integration\paper_core\test_costed_loop.py:111: Failed
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_costed_loop.py::test_provider_missing_fee_is_unknown_and_zero_requires_authority
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[1]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[26]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[27]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[28]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[29]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[30]
+7 failed, 2 deselected in 6.48s

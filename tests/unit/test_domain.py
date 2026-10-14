@@ -167,7 +167,8 @@ def test_account_position_and_fill_constraints() -> None:
 
     assert account.cash == Decimal("0")
     assert position.market_value == Decimal("210")
-    assert fill.fee == Decimal("0")
+    assert fill.fee is None
+    assert fill.fee_source == "UNKNOWN"
 
     with pytest.raises(ValidationError):
         Account(

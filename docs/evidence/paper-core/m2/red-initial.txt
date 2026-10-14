@@ -1,0 +1,1491 @@
+FFFFFFFFFFFFFFFFFFFF                                                     [100%]
+================================== FAILURES ===================================
+______ test_provider_missing_fee_is_unknown_and_zero_requires_authority _______
+
+    def test_provider_missing_fee_is_unknown_and_zero_requires_authority():
+>       from quantbot.brokers.alpaca import AlpacaBroker
+E       ImportError: cannot import name 'AlpacaBroker' from 'quantbot.brokers.alpaca' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\brokers\alpaca.py)
+
+tests\integration\paper_core\test_costed_loop.py:14: ImportError
+________ test_late_fees_replace_current_outcome_and_preserve_revisions ________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_late_fees_replace_current0')
+
+    @pytest.mark.asyncio
+    async def test_late_fees_replace_current_outcome_and_preserve_revisions(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+>       from quantbot.paper_core.outcomes import import_broker_events, process_outcomes
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+
+tests\integration\paper_core\test_costed_loop.py:27: ModuleNotFoundError
+__________ test_event_batch_is_atomic_and_conflicting_replay_refused __________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_event_batch_is_atomic_and0')
+
+    @pytest.mark.asyncio
+    async def test_event_batch_is_atomic_and_conflicting_replay_refused(tmp_path):
+>       from quantbot.paper_core.outcomes import import_broker_events
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+
+tests\integration\paper_core\test_costed_loop.py:68: ModuleNotFoundError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[1] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001DA92FBC110>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FBC4D0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA92FBECD0>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FBC4D0>
+cursor = <sqlite3.Cursor object at 0x000001DA93155540>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA92FBECD0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: NOT NULL constraint failed: order_intents.quantity
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fixture_legacy_migration_0')
+version = 1
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+>           connection.exec_driver_sql(
+                "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+
+tests\integration\paper_core\test_costed_loop.py:99:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1781: in exec_driver_sql
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FBC4D0>
+cursor = <sqlite3.Cursor object at 0x000001DA93155540>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA92FBECD0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: order_intents.quantity
+E       [SQL: INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[26] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001DA92FCA910>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FCA090>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA92FC8F90>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FCA090>
+cursor = <sqlite3.Cursor object at 0x000001DA94560B40>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA92FC8F90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: NOT NULL constraint failed: order_intents.quantity
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fixture_legacy_migration_1')
+version = 26
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+>           connection.exec_driver_sql(
+                "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+
+tests\integration\paper_core\test_costed_loop.py:99:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1781: in exec_driver_sql
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FCA090>
+cursor = <sqlite3.Cursor object at 0x000001DA94560B40>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA92FC8F90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: order_intents.quantity
+E       [SQL: INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[27] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001DA944D42D0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA944D5210>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA931A70D0>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA944D5210>
+cursor = <sqlite3.Cursor object at 0x000001DA944EA4C0>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA931A70D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: NOT NULL constraint failed: order_intents.quantity
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fixture_legacy_migration_2')
+version = 27
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+>           connection.exec_driver_sql(
+                "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+
+tests\integration\paper_core\test_costed_loop.py:99:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1781: in exec_driver_sql
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA944D5210>
+cursor = <sqlite3.Cursor object at 0x000001DA944EA4C0>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA931A70D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: order_intents.quantity
+E       [SQL: INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[28] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001DA931FA310>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA931F80D0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA948A7C50>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA931F80D0>
+cursor = <sqlite3.Cursor object at 0x000001DA94B3CD40>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA948A7C50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: NOT NULL constraint failed: order_intents.quantity
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fixture_legacy_migration_3')
+version = 28
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+>           connection.exec_driver_sql(
+                "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+
+tests\integration\paper_core\test_costed_loop.py:99:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1781: in exec_driver_sql
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA931F80D0>
+cursor = <sqlite3.Cursor object at 0x000001DA94B3CD40>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA948A7C50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: order_intents.quantity
+E       [SQL: INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[29] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001DA92FA8410>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FAA8D0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA932770D0>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FAA8D0>
+cursor = <sqlite3.Cursor object at 0x000001DA944AF640>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA932770D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: NOT NULL constraint failed: order_intents.quantity
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fixture_legacy_migration_4')
+version = 29
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+>           connection.exec_driver_sql(
+                "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+
+tests\integration\paper_core\test_costed_loop.py:99:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1781: in exec_driver_sql
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA92FAA8D0>
+cursor = <sqlite3.Cursor object at 0x000001DA944AF640>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA932770D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: order_intents.quantity
+E       [SQL: INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+_ test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[30] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001DA932B9450>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA932B8E90>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA9454EE90>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA932B8E90>
+cursor = <sqlite3.Cursor object at 0x000001DA944943C0>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA9454EE90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: NOT NULL constraint failed: order_intents.quantity
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fixture_legacy_migration_5')
+version = 30
+
+    @pytest.mark.parametrize("version", [1, 26, 27, 28, 29, 30])
+    def test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup(tmp_path, version):
+        from alembic import command
+        from sqlalchemy import create_engine
+
+        from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+
+        path = tmp_path / "legacy.db"
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), f"{version:04d}")
+            connection.exec_driver_sql("UPDATE kill_switch_state SET reason='manual pause', engaged=1")
+>           connection.exec_driver_sql(
+                "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET',"
+                "'1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+            )
+
+tests\integration\paper_core\test_costed_loop.py:99:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1781: in exec_driver_sql
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001DA932B8E90>
+cursor = <sqlite3.Cursor object at 0x000001DA944943C0>
+statement = "INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')"
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001DA9454EE90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) NOT NULL constraint failed: order_intents.quantity
+E       [SQL: INSERT INTO order_intents VALUES ('i','c','s','2026-10-14','XLE','BUY','MARKET','1',NULL,NULL,'DAY',0,'FILLED','2026-10-14T14:00:00Z')]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+__ test_fresh_process_restart_cut_never_reposts_or_duplicates[before_claim] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fresh_process_restart_cut0')
+cut = 'before_claim'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 19, in run
+E             from quantbot.paper_core.outcomes import import_broker_events, process_outcomes, recover_intents
+E         ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...er_events, process_outcomes, recover_intents\nModuleNotFoundError: No module named \'quantbot.paper_core.outcomes\'\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_claim] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fresh_process_restart_cut1')
+cut = 'after_claim'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 19, in run
+E             from quantbot.paper_core.outcomes import import_broker_events, process_outcomes, recover_intents
+E         ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...er_events, process_outcomes, recover_intents\nModuleNotFoundError: No module named \'quantbot.paper_core.outcomes\'\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_send] ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fresh_process_restart_cut2')
+cut = 'after_send'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 19, in run
+E             from quantbot.paper_core.outcomes import import_broker_events, process_outcomes, recover_intents
+E         ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...er_events, process_outcomes, recover_intents\nModuleNotFoundError: No module named \'quantbot.paper_core.outcomes\'\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[fill_import] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fresh_process_restart_cut3')
+cut = 'fill_import'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 19, in run
+E             from quantbot.paper_core.outcomes import import_broker_events, process_outcomes, recover_intents
+E         ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...er_events, process_outcomes, recover_intents\nModuleNotFoundError: No module named \'quantbot.paper_core.outcomes\'\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+_ test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fresh_process_restart_cut4')
+cut = 'before_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 19, in run
+E             from quantbot.paper_core.outcomes import import_broker_events, process_outcomes, recover_intents
+E         ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...er_events, process_outcomes, recover_intents\nModuleNotFoundError: No module named \'quantbot.paper_core.outcomes\'\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+__ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_fresh_process_restart_cut5')
+cut = 'after_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 19, in run
+E             from quantbot.paper_core.outcomes import import_broker_events, process_outcomes, recover_intents
+E         ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...er_events, process_outcomes, recover_intents\nModuleNotFoundError: No module named \'quantbot.paper_core.outcomes\'\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+________________ test_404_after_possible_post_stays_uncertain _________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_404_after_possible_post_s0')
+
+    @pytest.mark.asyncio
+    async def test_404_after_possible_post_stays_uncertain(tmp_path):
+        from quantbot.domain import IntentState
+        from quantbot.paper_core.contracts import ProtectionPlan
+>       from quantbot.paper_core.outcomes import recover_intents
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+
+tests\fault\paper_core\test_restart_matrix.py:41: ModuleNotFoundError
+____________ test_partial_fill_is_protected_before_entry_terminal _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_partial_fill_is_protected0')
+
+    @pytest.mark.asyncio
+    async def test_partial_fill_is_protected_before_entry_terminal(tmp_path):
+        from decimal import Decimal
+
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import trader_cycle
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            broker.partial = Decimal(2)
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.partial = None
+            broker.now = NOW + timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+>           assert len(broker.posts) == 2 and broker.posts[-1].quantity == Decimal(2)
+E           AssertionError: assert (1 == 2)
+E            +  where 1 = len([OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cl...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))])
+E            +    where [OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cl...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))] = <tests.fixtures.core_m2.JournalBroker object at 0x000001DA93196910>.posts
+
+tests\fault\paper_core\test_restart_matrix.py:79: AssertionError
+_______ test_quantity_only_proof_protects_but_never_unlocks_cash_entry ________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_quantity_only_proof_prote0')
+
+    @pytest.mark.asyncio
+    async def test_quantity_only_proof_protects_but_never_unlocks_cash_entry(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import evaluate_entry, trader_cycle
+        from quantbot.storage import StorageRepository
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            quantity_proof = store.latest_proof()
+>           assert quantity_proof.expected_cash is None
+E           AssertionError: assert Decimal('99500') is None
+E            +  where Decimal('99500') = ReconciliationProof(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_u...ae621bf3887434ded0ca8dcb3b5f924f', complete=True, order_ids=('synthetic-qb-e236da596872e8980b271e708dcec0fbcc09d961',)).expected_cash
+
+tests\fault\paper_core\test_outcomes_independent.py:21: AssertionError
+_ test_closed_market_missing_observation_and_manual_pause_do_not_delay_outcome _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_closed_market_missing_obs0')
+
+    @pytest.mark.asyncio
+    async def test_closed_market_missing_observation_and_manual_pause_do_not_delay_outcome(tmp_path):
+        from sqlalchemy import delete
+
+        from quantbot.paper_core.guardian import guardian_cycle
+>       from quantbot.paper_core.outcomes import import_broker_events, process_outcomes
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+
+tests\fault\paper_core\test_outcomes_independent.py:45: ModuleNotFoundError
+__________________ test_empty_fills_cannot_become_round_trip __________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ccrj4mwj/pytest/test_empty_fills_cannot_become0')
+
+    def test_empty_fills_cannot_become_round_trip(tmp_path):
+>       from quantbot.paper_core.outcomes import process_outcomes
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.outcomes'
+
+tests\fault\paper_core\test_outcomes_independent.py:74: ModuleNotFoundError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_costed_loop.py::test_provider_missing_fee_is_unknown_and_zero_requires_authority
+FAILED tests/integration/paper_core/test_costed_loop.py::test_late_fees_replace_current_outcome_and_preserve_revisions
+FAILED tests/integration/paper_core/test_costed_loop.py::test_event_batch_is_atomic_and_conflicting_replay_refused
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[1]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[26]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[27]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[28]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[29]
+FAILED tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[30]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_claim]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_claim]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_send]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[fill_import]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_404_after_possible_post_stays_uncertain
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_partial_fill_is_protected_before_entry_terminal
+FAILED tests/fault/paper_core/test_outcomes_independent.py::test_quantity_only_proof_protects_but_never_unlocks_cash_entry
+FAILED tests/fault/paper_core/test_outcomes_independent.py::test_closed_market_missing_observation_and_manual_pause_do_not_delay_outcome
+FAILED tests/fault/paper_core/test_outcomes_independent.py::test_empty_fills_cannot_become_round_trip
+20 failed in 16.15s

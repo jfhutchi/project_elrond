@@ -1,0 +1,277 @@
+.FF........FFFF..F...                                                    [100%]
+================================== FAILURES ===================================
+________ test_late_fees_replace_current_outcome_and_preserve_revisions ________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wsgczofw/pytest/test_late_fees_replace_current0')
+
+    @pytest.mark.asyncio
+    async def test_late_fees_replace_current_outcome_and_preserve_revisions(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.outcomes import import_broker_events, process_outcomes
+        from quantbot.paper_core.trader import trader_cycle
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            decision = await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now = NOW + timedelta(minutes=30)
+            broker.set_mark("XLE", Decimal(102), as_of=broker.now)
+            await guardian_cycle(store, broker, now=broker.now)
+            imported = import_broker_events(store, events(store, broker))
+>           assert imported
+E           assert ()
+
+tests\integration\paper_core\test_costed_loop.py:37: AssertionError
+__________ test_event_batch_is_atomic_and_conflicting_replay_refused __________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wsgczofw/pytest/test_event_batch_is_atomic_and0')
+
+    @pytest.mark.asyncio
+    async def test_event_batch_is_atomic_and_conflicting_replay_refused(tmp_path):
+        from quantbot.paper_core.outcomes import import_broker_events
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StateConflictError
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            batch = events(store, broker)
+            bad = batch[-1].model_copy(update={"raw_digest": "conflict"})
+            with pytest.raises(StateConflictError):
+                import_broker_events(store, (*batch, bad))
+>           assert not store.documents("core_broker_event_sources")
+E           AssertionError: assert not [{'account_id': 'synthetic-account', 'activity_complete': True, 'activity_fill_ids': ['synthetic-fill-qb-e236da596872e..., {'account_id': 'synthetic-account', 'activity_complete': False, 'activity_fill_ids': [], 'cash_activity': None, ...}]
+E            +  where [{'account_id': 'synthetic-account', 'activity_complete': True, 'activity_fill_ids': ['synthetic-fill-qb-e236da596872e..., {'account_id': 'synthetic-account', 'activity_complete': False, 'activity_fill_ids': [], 'cash_activity': None, ...}] = documents('core_broker_event_sources')
+E            +    where documents = <quantbot.paper_core.store.CoreStore object at 0x00000173B2C43990>.documents
+
+tests\integration\paper_core\test_costed_loop.py:79: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_send] ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wsgczofw/pytest/test_fresh_process_restart_cut2')
+cut = 'after_send'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+        assert first.returncode == 91, first.stdout + first.stderr
+        resumed = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                                 text=True, capture_output=True)
+>       assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 73, in run
+E             import_broker_events(store, batch)
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\outcomes.py", line 88, in import_broker_events
+E             raise StateConflictError("conflicting source event replay")
+E         quantbot.storage.repositories.StateConflictError: conflicting source event replay
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...onflicting source event replay")\nquantbot.storage.repositories.StateConflictError: conflicting source event replay\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:25: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[fill_import] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wsgczofw/pytest/test_fresh_process_restart_cut3')
+cut = 'fill_import'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+        assert first.returncode == 91, first.stdout + first.stderr
+        resumed = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                                 text=True, capture_output=True)
+>       assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 73, in run
+E             import_broker_events(store, batch)
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\outcomes.py", line 88, in import_broker_events
+E             raise StateConflictError("conflicting source event replay")
+E         quantbot.storage.repositories.StateConflictError: conflicting source event replay
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...onflicting source event replay")\nquantbot.storage.repositories.StateConflictError: conflicting source event replay\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:25: AssertionError
+_ test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wsgczofw/pytest/test_fresh_process_restart_cut4')
+cut = 'before_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+        assert first.returncode == 91, first.stdout + first.stderr
+        resumed = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                                 text=True, capture_output=True)
+>       assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 67, in run
+E             await recover_intents(store, broker)
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\outcomes.py", line 336, in recover_intents
+E             import_broker_events(store, tuple(events))
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\outcomes.py", line 88, in import_broker_events
+E             raise StateConflictError("conflicting source event replay")
+E         quantbot.storage.repositories.StateConflictError: conflicting source event replay
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...onflicting source event replay")\nquantbot.storage.repositories.StateConflictError: conflicting source event replay\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:25: AssertionError
+__ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wsgczofw/pytest/test_fresh_process_restart_cut5')
+cut = 'after_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+        assert first.returncode == 91, first.stdout + first.stderr
+        resumed = subprocess.run([sys.executable, str(worker), str(tmp_path), "recover"],
+                                 text=True, capture_output=True)
+>       assert resumed.returncode == 0, resumed.stdout + resumed.stderr
+E       AssertionError: Traceback (most recent call last):
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 84, in <module>
+E             asyncio.run(run(Path(sys.argv[1]), sys.argv[2]))
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+E             return runner.run(main)
+E                    ^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+E             return self._loop.run_until_complete(task)
+E                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+E             return future.result()
+E                    ^^^^^^^^^^^^^^^
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 67, in run
+E             await recover_intents(store, broker)
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\outcomes.py", line 336, in recover_intents
+E             import_broker_events(store, tuple(events))
+E           File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\outcomes.py", line 88, in import_broker_events
+E             raise StateConflictError("conflicting source event replay")
+E         quantbot.storage.repositories.StateConflictError: conflicting source event replay
+E
+E       assert 1 == 0
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...onflicting source event replay")\nquantbot.storage.repositories.StateConflictError: conflicting source event replay\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:25: AssertionError
+_______ test_quantity_only_proof_protects_but_never_unlocks_cash_entry ________
+
+self = Column('snapshot_id', String(length=128), table=<account_snapshots>, primary_key=True, nullable=False)
+key = 'not_in_'
+
+    def __getattr__(self, key: str) -> Any:
+        try:
+>           return getattr(self.comparator, key)
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           AttributeError: 'Comparator' object has no attribute 'not_in_'
+
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:1517: AttributeError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wsgczofw/pytest/test_quantity_only_proof_prote0')
+
+    @pytest.mark.asyncio
+    async def test_quantity_only_proof_protects_but_never_unlocks_cash_entry(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import evaluate_entry, trader_cycle
+        from quantbot.storage import StorageRepository
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            quantity_proof = store.latest_proof()
+            assert quantity_proof.expected_cash is None
+            assert not quantity_proof.cash_complete
+            assert "INVENTORY_UNCERTIFIED" in evaluate_entry(
+                store.config, observation, model, quantity_proof
+            ).gates
+            with db.transaction() as session:
+>               snapshot = StorageRepository(session).get_latest_account_snapshot(
+                    store.config.account_id, certified_only=True
+                )
+
+tests\fault\paper_core\test_outcomes_independent.py:27:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\repositories.py:1601: in get_latest_account_snapshot
+    account_snapshots.c.snapshot_id.not_in_(
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = Column('snapshot_id', String(length=128), table=<account_snapshots>, primary_key=True, nullable=False)
+key = 'not_in_'
+
+    def __getattr__(self, key: str) -> Any:
+        try:
+            return getattr(self.comparator, key)
+        except AttributeError as err:
+>           raise AttributeError(
+                "Neither %r object nor %r object has an attribute %r"
+                % (
+                    type(self).__name__,
+                    type(self.comparator).__name__,
+                    key,
+                )
+            ) from err
+E           AttributeError: Neither 'Column' object nor 'Comparator' object has an attribute 'not_in_'
+
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:1519: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_costed_loop.py::test_late_fees_replace_current_outcome_and_preserve_revisions
+FAILED tests/integration/paper_core/test_costed_loop.py::test_event_batch_is_atomic_and_conflicting_replay_refused
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_send]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[fill_import]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome]
+FAILED tests/fault/paper_core/test_outcomes_independent.py::test_quantity_only_proof_protects_but_never_unlocks_cash_entry
+7 failed, 14 passed in 35.70s

@@ -59,6 +59,8 @@ def update(
             price=Decimal(price),
             occurred_at=NOW,
             fee=Decimal(fee),
+            fee_source="BROKER_REPORTED",
+            fee_reference="synthetic-fee-activity",
         )
         if has_fill
         else None

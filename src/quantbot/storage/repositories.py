@@ -1387,7 +1387,9 @@ class StorageRepository:
             "quantity": encode_decimal(fill.quantity),
             "price": encode_decimal(fill.price),
             "occurred_at": encode_utc(fill.occurred_at),
-            "fee": encode_decimal(fill.fee),
+            "fee": encode_decimal(fill.fee) if fill.fee is not None else None,
+            "fee_source": fill.fee_source,
+            "fee_reference": fill.fee_reference,
         }
         row = (
             self._session.execute(select(fills).where(fills.c.fill_id == fill.fill_id))
@@ -1395,7 +1397,7 @@ class StorageRepository:
             .one_or_none()
         )
         if row is not None:
-            if _row_matches(row, payload):
+            if _row_matches(row, payload) or self._fill_from_row(row) == fill:
                 return False
             raise StateConflictError(f"fill {fill.fill_id} conflicts with stored data")
         broker_id = self._session.execute(
@@ -1437,7 +1439,11 @@ class StorageRepository:
             quantity=decode_decimal(str(row["quantity"])),
             price=decode_decimal(str(row["price"])),
             occurred_at=decode_utc(str(row["occurred_at"])),
-            fee=decode_decimal(str(row["fee"])),
+            fee=(decode_decimal(str(row["fee"])) if row["fee"] is not None
+                 and not (row["fee_source"] == "UNKNOWN" and Decimal(str(row["fee"])) == 0)
+                 else None),
+            fee_source=row["fee_source"],
+            fee_reference=row["fee_reference"],
         )
 
     def record_order_event(
@@ -1591,7 +1597,9 @@ class StorageRepository:
         statement = select(account_snapshots).where(account_snapshots.c.account_id == account_id)
         if certified_only:
             statement = statement.where(account_snapshots.c.snapshot_id.in_(
-                select(certifications.c.snapshot_id)))
+                select(certifications.c.snapshot_id)),
+                account_snapshots.c.snapshot_id.not_in(
+                    select(metadata.tables["core_cash_authority_revocations"].c.snapshot_id)))
         row = (
             self._session.execute(
                 statement

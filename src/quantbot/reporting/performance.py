@@ -62,7 +62,8 @@ class _OpenCycle:
         self.opened_at = fill.occurred_at
         self.entry_notional = fill.quantity * fill.price
         self.cycle_gross = Decimal("0")
-        self.cycle_costs = fill.fee
+        assert fill.fee is not None
+        self.cycle_costs: Decimal = fill.fee
 
 
 def analyze_fills(fills: tuple[Fill, ...]) -> FillLedgerAnalysis:
@@ -78,6 +79,8 @@ def analyze_fills(fills: tuple[Fill, ...]) -> FillLedgerAnalysis:
     trades: list[TradeOutcome] = []
 
     for fill in ordered:
+        if fill.fee is None or fill.fee_source == "UNKNOWN":
+            raise ReportingDataError("fee evidence unavailable; net performance cannot be reported")
         cycle = open_cycles.get(fill.symbol)
         if fill.side is OrderSide.BUY:
             movements.append(

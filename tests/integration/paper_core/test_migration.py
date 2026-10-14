@@ -7,6 +7,7 @@ from alembic import command
 from sqlalchemy import create_engine
 
 from quantbot.storage import Database, MigrationRequiredError, StorageRepository
+from quantbot.storage.schema import SCHEMA_VERSION
 
 
 def test_explicit_v29_fixture_migration_is_additive_and_does_not_adopt_or_resume(tmp_path):
@@ -42,7 +43,8 @@ def test_explicit_v29_fixture_migration_is_additive_and_does_not_adopt_or_resume
             r[0] for r in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert old_tables <= new_tables
-        assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == 30
+        assert (connection.execute("SELECT version FROM schema_version").fetchone()[0]
+                == SCHEMA_VERSION)
         assert connection.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
         backup_path = tmp_path / "restored.db"
         with sqlite3.connect(backup_path) as restored:

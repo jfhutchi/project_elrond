@@ -289,7 +289,9 @@ def _fill_payload(fill: Fill) -> dict[str, str]:
         "quantity": _decimal(fill.quantity),
         "price": _decimal(fill.price),
         "occurred_at": _timestamp(fill.occurred_at),
-        "fee": _decimal(fill.fee),
+        "fee": _decimal(fill.fee) if fill.fee is not None else "UNKNOWN",
+        "fee_source": fill.fee_source,
+        "fee_reference": fill.fee_reference or "UNKNOWN",
     }
 
 

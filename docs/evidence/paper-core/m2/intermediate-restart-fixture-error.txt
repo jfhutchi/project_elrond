@@ -1,0 +1,190 @@
+.........FFFFFF.....F                                                    [100%]
+================================== FAILURES ===================================
+__ test_fresh_process_restart_cut_never_reposts_or_duplicates[before_claim] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-pim4647w/pytest/test_fresh_process_restart_cut0')
+cut = 'before_claim'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError:   File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 76
+E             broker.now = NOW + timedelta(minutes=30)
+E         IndentationError: unexpected indent
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...core_restart_worker.py", line 76\n    broker.now = NOW + timedelta(minutes=30)\nIndentationError: unexpected indent\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_claim] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-pim4647w/pytest/test_fresh_process_restart_cut1')
+cut = 'after_claim'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError:   File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 76
+E             broker.now = NOW + timedelta(minutes=30)
+E         IndentationError: unexpected indent
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...core_restart_worker.py", line 76\n    broker.now = NOW + timedelta(minutes=30)\nIndentationError: unexpected indent\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_send] ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-pim4647w/pytest/test_fresh_process_restart_cut2')
+cut = 'after_send'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError:   File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 76
+E             broker.now = NOW + timedelta(minutes=30)
+E         IndentationError: unexpected indent
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...core_restart_worker.py", line 76\n    broker.now = NOW + timedelta(minutes=30)\nIndentationError: unexpected indent\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+___ test_fresh_process_restart_cut_never_reposts_or_duplicates[fill_import] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-pim4647w/pytest/test_fresh_process_restart_cut3')
+cut = 'fill_import'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError:   File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 76
+E             broker.now = NOW + timedelta(minutes=30)
+E         IndentationError: unexpected indent
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...core_restart_worker.py", line 76\n    broker.now = NOW + timedelta(minutes=30)\nIndentationError: unexpected indent\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+_ test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-pim4647w/pytest/test_fresh_process_restart_cut4')
+cut = 'before_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError:   File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 76
+E             broker.now = NOW + timedelta(minutes=30)
+E         IndentationError: unexpected indent
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...core_restart_worker.py", line 76\n    broker.now = NOW + timedelta(minutes=30)\nIndentationError: unexpected indent\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+__ test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-pim4647w/pytest/test_fresh_process_restart_cut5')
+cut = 'after_outcome'
+
+    @pytest.mark.parametrize("cut", ["before_claim", "after_claim", "after_send", "fill_import",
+                                     "before_outcome", "after_outcome"])
+    def test_fresh_process_restart_cut_never_reposts_or_duplicates(tmp_path, cut):
+        worker = Path(__file__).parents[2] / "fixtures" / "core_restart_worker.py"
+        db, _, _, _, _, _ = prepare(tmp_path)
+        db.close()
+        first = subprocess.run([sys.executable, str(worker), str(tmp_path), cut],
+                               text=True, capture_output=True)
+>       assert first.returncode == 91, first.stdout + first.stderr
+E       AssertionError:   File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\tests\fixtures\core_restart_worker.py", line 76
+E             broker.now = NOW + timedelta(minutes=30)
+E         IndentationError: unexpected indent
+E
+E       assert 1 == 91
+E        +  where 1 = CompletedProcess(args=['C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe...core_restart_worker.py", line 76\n    broker.now = NOW + timedelta(minutes=30)\nIndentationError: unexpected indent\n').returncode
+
+tests\fault\paper_core\test_restart_matrix.py:22: AssertionError
+__ test_independent_cash_activity_restores_entry_while_costs_remain_pending ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-pim4647w/pytest/test_independent_cash_activity0')
+
+    @pytest.mark.asyncio
+    async def test_independent_cash_activity_restores_entry_while_costs_remain_pending(tmp_path):
+        from decimal import Decimal
+
+        from quantbot.paper_core.contracts import BrokerEvent, CashActivity
+        from quantbot.paper_core.guardian import guardian_cycle, synchronize
+        from quantbot.paper_core.outcomes import import_broker_events, process_outcomes
+        from quantbot.paper_core.trader import evaluate_entry, trader_cycle
+        from quantbot.research.manifest import content_id
+        from quantbot.storage import StateConflictError
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now = NOW + timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            movements = tuple((f.fill_id, f.price * f.quantity * (-1 if f.side.value == "BUY" else 1))
+                              for f in broker.fills)
+            activity = CashActivity(
+                recorded_at_utc=broker.now, account_id=store.config.account_id,
+                document_id="independent-provider-cash-ledger", activity_ids=("cash-buy", "cash-sell"),
+                movements=movements, complete=True, watermark=broker.now,
+            )
+            event = BrokerEvent(
+                recorded_at_utc=broker.now, occurred_at=broker.now, account_id=store.config.account_id,
+                endpoint="synthetic/cash-activities", event_id=activity.id, raw_digest=content_id(activity),
+                client_order_id=broker.posts[0].client_order_id, cash_activity=activity,
+            )
+            incomplete = activity.model_copy(update={"complete": False})
+            with pytest.raises(StateConflictError):
+                import_broker_events(store, (event.model_copy(update={"cash_activity": incomplete}),))
+            import_broker_events(store, (event,))
+            await synchronize(store, broker, now=broker.now)
+            cash_proof = store.latest_proof()
+            assert cash_proof.cash_complete and cash_proof.expected_cash == Decimal(100000)
+            fresh = observation.model_copy(update={"recorded_at_utc": broker.now, "source_end": broker.now,
+                                                  "available_at": broker.now, "sequence": 2})
+            assert evaluate_entry(store.config, fresh, model, cash_proof).action == "BUY"
+>           assert process_outcomes(store, cutoff=broker.now).outcomes[0].status == "COSTS_PENDING"
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E           IndexError: tuple index out of range
+
+tests\fault\paper_core\test_outcomes_independent.py:119: IndexError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_claim]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_claim]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_send]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[fill_import]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome]
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome]
+FAILED tests/fault/paper_core/test_outcomes_independent.py::test_independent_cash_activity_restores_entry_while_costs_remain_pending
+7 failed, 14 passed in 15.11s

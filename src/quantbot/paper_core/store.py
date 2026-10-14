@@ -3,12 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
-from sqlalchemy import Table, select, text
+from sqlalchemy import Table, select, text, union_all
 from sqlalchemy.orm import Session
 
 from quantbot.domain import Account, OrderSide, Position, ReconciliationStatus
@@ -35,6 +35,16 @@ def put(session: Session, name: str, identity: str, payload: object) -> None:
             raise StateConflictError(f"conflicting immutable {name} {identity}")
         return
     session.execute(target.insert().values(id=identity, payload=encoded))
+
+
+def latest_certification(session: Session) -> tuple[int, str] | None:
+    full, quantity = table("core_inventory_certifications"), table("core_quantity_certifications")
+    combined = union_all(
+        select(full.c.generation, full.c.proof_id),
+        select(quantity.c.generation, quantity.c.proof_id),
+    ).subquery()
+    row = session.execute(select(combined).order_by(combined.c.generation.desc()).limit(1)).first()
+    return (int(row[0]), str(row[1])) if row else None
 
 
 class CoreStore:
@@ -68,11 +78,17 @@ class CoreStore:
         return kind.model_validate_json(payload)
 
     def latest_proof(self) -> ReconciliationProof:
-        certs = table("core_inventory_certifications")
         with self.database.transaction() as session:
-            identity = session.execute(
-                select(certs.c.proof_id).order_by(certs.c.generation.desc()).limit(1)
-            ).scalar_one()
+            latest = latest_certification(session)
+            assert latest is not None
+            identity = latest[1]
+            revoked = table("core_cash_authority_revocations")
+            if session.execute(
+                select(revoked.c.snapshot_id).where(
+                    revoked.c.snapshot_id == "core-certified-" + identity
+                )
+            ).first():
+                raise StateConflictError("CASH_AUTHORITY_REVOKED_RECONCILIATION_REQUIRED")
         return self.read("core_reconciliation_proofs", identity, ReconciliationProof)
 
     def links(self) -> list[dict[str, Any]]:
@@ -81,7 +97,9 @@ class CoreStore:
                 dict(row) for row in session.execute(select(table("core_intent_links"))).mappings()
             ]
 
-    def ledger(self, session: Session) -> tuple[dict[str, Decimal], Decimal, tuple[str, ...]]:
+    def ledger(
+        self, session: Session
+    ) -> tuple[dict[str, Decimal], Decimal | None, tuple[str, ...]]:
         """Derive holdings from frozen inherited baseline + attributable canonical fills."""
         baseline = session.execute(select(table("core_fixture_baselines").c.payload)).scalar_one()
         payload = json.loads(baseline)
@@ -94,6 +112,10 @@ class CoreStore:
         }
         totals: dict[str, Decimal] = {}
         fills = repo.list_fills()
+        from quantbot.paper_core.costs import actual_fee, current_costs
+
+        costs = current_costs(session, cutoff=datetime.max.replace(tzinfo=UTC))
+        cash_complete = True
         for fill in fills:
             order = repo.get_broker_order(fill.broker_order_id)
             assert order is not None
@@ -116,9 +138,33 @@ class CoreStore:
             sign = Decimal(1) if fill.side is OrderSide.BUY else Decimal(-1)
             quantities[fill.symbol] = quantities.get(fill.symbol, Decimal(0)) + sign * fill.quantity
             cash -= sign * fill.quantity * fill.price
+            fee = actual_fee(fill, costs)
+            if fee is None:
+                cash_complete = False
+            else:
+                cash -= fee
+        # Cash movements are an independent provider ledger, never a balancing
+        # delta derived from the observed cash we are about to compare.
+        from quantbot.paper_core.contracts import CashActivity
+
+        activities = [
+            CashActivity.model_validate_json(p)
+            for p in session.execute(select(table("core_cash_activities").c.payload)).scalars()
+        ]
+        complete = [
+            a
+            for a in activities
+            if a.complete and set(dict(a.movements)) == {f.fill_id for f in fills}
+        ]
+        if complete:
+            authority = max(complete, key=lambda a: (a.watermark, a.id))
+            cash = Decimal(payload["account"]["cash"]) + sum(
+                (v for _, v in authority.movements), Decimal(0)
+            )
+            cash_complete = True
         return (
             {s: q for s, q in quantities.items() if q != 0},
-            cash,
+            cash if cash_complete else None,
             tuple(f.fill_id for f in fills),
         )
 
@@ -135,11 +181,8 @@ class CoreStore:
         with self.database.transaction() as session:
             expected, cash, fill_ids = self.ledger(session)
             baseline_id = session.execute(select(table("core_fixture_baselines").c.id)).scalar_one()
-            generation = session.execute(
-                select(table("core_inventory_certifications").c.generation)
-                .order_by(table("core_inventory_certifications").c.generation.desc())
-                .limit(1)
-            ).scalar_one_or_none()
+            certification = latest_certification(session)
+            generation = certification[0] if certification else 0
             orders = tuple(
                 o.broker_order_id for o in StorageRepository(session).list_broker_orders()
             )
@@ -154,6 +197,7 @@ class CoreStore:
             expected_quantities=tuple(sorted(expected.items())),
             actual_quantities=tuple(sorted(quantities)),
             expected_cash=cash,
+            cash_complete=cash is not None,
             acquisition_id=acquisition_id,
             complete=complete,
             order_ids=orders,
@@ -177,7 +221,7 @@ class CoreStore:
             r for r in self.documents("core_round_trips") if r["decision_id"] == decision_id
         ]
         return {
-            "schema_version": 30,
+            "schema_version": 31,
             "evidence_lane": "SYNTHETIC_TEST",
             "config": self.config.model_dump(mode="json"),
             "decision_id": decision_id,
@@ -195,11 +239,16 @@ class CoreStore:
             "guardian_receipts": self.documents("core_guardian_receipts"),
             "proofs": self.documents("core_reconciliation_proofs"),
             "round_trip": round_trips[0] if round_trips else None,
+            "outcome_revisions": self.documents("core_outcome_revisions"),
+            "cost_items": self.documents("core_cost_items"),
+            "broker_sources": self.documents("core_broker_event_sources"),
         }
 
 
 def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
-    certs = table("core_inventory_certifications")
+    certs = table(
+        "core_inventory_certifications" if proof.cash_complete else "core_quantity_certifications"
+    )
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
         put(session, "core_reconciliation_proofs", proof.id, proof)
@@ -209,9 +258,8 @@ def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
         if existing is not None:
             return int(existing)
         expected, cash, fills = store.ledger(session)
-        last = session.execute(
-            select(certs.c.generation).order_by(certs.c.generation.desc()).limit(1)
-        ).scalar_one_or_none()
+        latest = latest_certification(session)
+        last = latest[0] if latest else 0
         if (
             not proof.complete
             or proof.account.account_id != store.config.account_id
@@ -224,13 +272,14 @@ def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
             or proof.release_id != store.config.release_id
             or proof.fill_ids != fills
             or proof.expected_cash != cash
-            or proof.account.cash != cash
+            or proof.cash_complete != (cash is not None)
+            or (cash is not None and proof.account.cash != cash)
             or proof.generation != (last or 0) + 1
         ):
             # Refusal evidence must survive; certification authority must not.
             session.commit()
             raise StateConflictError("INVENTORY_MISMATCH")
-        snapshot_id = "core-certified-" + proof.id
+        snapshot_id = ("core-certified-" if proof.cash_complete else "core-quantity-") + proof.id
         repo = StorageRepository(session)
         # Preserve actual marks; cost basis is independently reconstructed below.
         baseline = json.loads(
@@ -284,6 +333,22 @@ def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
                 generation=proof.generation, proof_id=proof.id, snapshot_id=snapshot_id
             )
         )
+        if not proof.cash_complete:
+            revoked = table("core_cash_authority_revocations")
+            full = table("core_inventory_certifications")
+            for snapshot in session.execute(select(full.c.snapshot_id)).scalars():
+                if (
+                    session.execute(
+                        select(revoked.c.snapshot_id).where(revoked.c.snapshot_id == snapshot)
+                    ).first()
+                    is None
+                ):
+                    session.execute(
+                        revoked.insert().values(
+                            snapshot_id=snapshot, reason="CURRENT_CASH_INCOMPLETE"
+                        )
+                    )
+            return proof.generation
         repo.save_reconciliation(
             "core-" + proof.id,
             status=ReconciliationStatus.RECONCILED,
