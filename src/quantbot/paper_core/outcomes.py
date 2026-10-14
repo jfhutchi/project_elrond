@@ -97,6 +97,12 @@ class _EvidenceRejected(StateConflictError):
 def _implicated_clients(repo: StorageRepository, event: BrokerEvent) -> tuple[str, ...]:
     clients = {event.client_order_id}
     fills = [event.fill] if event.fill is not None else []
+    if event.fill is not None:
+        # A new source can reuse an immutable fill ID under a different order.
+        # Both the original owner and incoming claimed owner are implicated.
+        canonical = repo.get_fill(event.fill.fill_id)
+        if canonical is not None:
+            fills.append(canonical)
     if event.cost is not None:
         fill = repo.get_fill(event.cost.fill_id)
         if fill is not None:

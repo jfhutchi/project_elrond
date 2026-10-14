@@ -1,0 +1,29 @@
+{
+  "base": "63970bb3c375077ce99fd5fafea7c8e307e808e9",
+  "commands": [
+    ".venv/Scripts/python.exe .superpowers/sdd/2026-10-13-paper-core/check.py tests/fault/paper_core/test_fill_collision_scope.py tests/fault/paper_core/test_review_repairs.py::test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors tests/integration/paper_core/test_costed_loop.py -s",
+    ".venv/Scripts/python.exe .superpowers/sdd/2026-10-13-paper-core/check.py tests/fault/paper_core/test_fill_collision_scope.py -s"
+  ],
+  "limits": "No full suite or 398-test gate rerun. Earlier repair gates and root accepted P1/broad structures remain separate evidence.",
+  "logs_sha256": {
+    "fix2-adjacent-green16.txt": "a04ff469a16b5ad7c3560bec78fda2312d25e1a12607391cb924b0e0ff499108",
+    "fix2-green-collision-final.txt": "02c488773683c5cea5d8551da1838fcf6139dbdc20bbc1a444b47b481f4770a5",
+    "fix2-red-collision.txt": "4e7e1147274f6933b352279f158bc45dfc587a1f2dd095ae9f6b33a825e32dfe",
+    "fix2-test-assertion-error.txt": "38c55e0e889e5e392f2320cea2e2dfa66a4be39b8e1415b19abc48282db2cb35"
+  },
+  "production_changes": "six added lines in _implicated_clients: preserve canonical stored fill owner and incoming binding",
+  "raw_log_paths": {
+    "fix2-adjacent-green16.txt": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-wmkxnbfl\\result.txt",
+    "fix2-green-collision-final.txt": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-hbkdy1fz\\result.txt",
+    "fix2-red-collision.txt": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-ej0r5mya\\result.txt",
+    "fix2-test-assertion-error.txt": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-pwr1lb8w\\result.txt"
+  },
+  "results": [
+    "16 passed in 14.23s (before the final test-only healthy outcome advancement assertion)",
+    "1 passed in 2.74s (final expanded collision regression)"
+  ],
+  "source_files_sha256": {
+    "src/quantbot/paper_core/outcomes.py": "dca5370225616a0ca12f26b4d142738af5d0ed714000ff35db91528b8fe9a655",
+    "tests/fault/paper_core/test_fill_collision_scope.py": "8c4e70c80f4202ff35545552127bb91bf0dc398f6bd977a05475674d3cf0dc1f"
+  }
+}

@@ -1,0 +1,3 @@
+COMMAND: uv run --frozen mypy --platform linux scripts/ci_checks.py scripts/local_ci.py scripts/ci_process.py
+Success: no issues found in 3 source files
+EXIT: 0
