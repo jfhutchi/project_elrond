@@ -22,7 +22,7 @@ def prepare(tmp_path, *, inherited=False):
         account_id=config.account_id, now=NOW, inherited={"SPY": Decimal("2")} if inherited else {}
     )
     store = CoreStore(db, config)
-    proof = initialize_fixture(store, broker, now=NOW)
+    proof = initialize_fixture(store, broker, now=NOW, entry_enabled=True)
     observation = Observation(
         symbol="XLE",
         source_start=NOW - timedelta(minutes=5),

@@ -1,6 +1,7 @@
 """Fixture initialization only. Operational launcher and model activation are later milestones."""
 
 from datetime import datetime, timedelta
+from functools import partial
 from typing import cast
 
 from sqlalchemy import select
@@ -10,6 +11,7 @@ from quantbot.config import Settings
 from quantbot.execution import ExecutionCoordinator
 from quantbot.execution.coordinator import SubmissionPolicy
 from quantbot.paper_core.contracts import GuardianReceipt, ReconciliationProof
+from quantbot.paper_core.send_guard import final_send_objections
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, certify_inventory, put, table
 from quantbot.research.manifest import content_id
@@ -22,7 +24,7 @@ def require_synthetic(store: CoreStore, broker: SyntheticBroker) -> None:
 
 
 def initialize_fixture(
-    store: CoreStore, broker: SyntheticBroker, *, now: datetime
+    store: CoreStore, broker: SyntheticBroker, *, now: datetime, entry_enabled: bool = False
 ) -> ReconciliationProof:
     require_synthetic(store, broker)
     baseline = {
@@ -45,9 +47,10 @@ def initialize_fixture(
             raise ValueError("fixture initialization requires an empty execution ledger")
         put(session, "core_fixture_baselines", content_id(baseline), baseline)
         # An explicit empty fixture's default stop is set by its author, never a runtime resume.
-        StorageRepository(session).set_kill_switch(
-            False, reason="explicit synthetic fixture setup", updated_at=now
-        )
+        if entry_enabled:
+            StorageRepository(session).set_kill_switch(
+                False, reason="explicit synthetic fixture setup", updated_at=now
+            )
     proof = store.proof(
         broker.snapshot().account,
         tuple(sorted((s, q) for s, q in broker.quantities.items() if q != 0)),
@@ -87,4 +90,5 @@ def coordinator(store: CoreStore, broker: SyntheticBroker) -> ExecutionCoordinat
         cast(BrokerAdapter, broker),
         settings,
         submission_policy=SubmissionPolicy(max_not_found_retries=0),
+        final_send_check=partial(final_send_objections, store, clock=lambda: broker.now),
     )

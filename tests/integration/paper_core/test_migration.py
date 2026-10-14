@@ -64,3 +64,18 @@ def test_v30_refuses_destructive_downgrade_and_preserves_evidence(tmp_path):
     finally:
         engine.dispose()
     assert path.read_bytes() == before
+
+
+def test_migration_does_not_accept_malformed_preexisting_core_table(tmp_path):
+    from quantbot.storage import UnsupportedSchemaVersionError
+
+    path = tmp_path / "malformed.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    with engine.begin() as connection:
+        command.upgrade(Database._alembic_config(connection), "0029")
+        connection.exec_driver_sql("CREATE TABLE core_identities (id VARCHAR(64) PRIMARY KEY)")
+    engine.dispose()
+    with pytest.raises(UnsupportedSchemaVersionError, match="incompatible schema"):
+        Database.migrate(path)
+    with sqlite3.connect(path) as connection:
+        assert connection.execute("SELECT version FROM schema_version").fetchone()[0] == 29

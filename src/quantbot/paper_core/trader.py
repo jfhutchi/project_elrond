@@ -20,6 +20,7 @@ from quantbot.paper_core.contracts import (
 )
 from quantbot.paper_core.features import observation_objections
 from quantbot.paper_core.runtime import coordinator, require_synthetic
+from quantbot.paper_core.send_guard import definitively_unsent
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, put, table
 from quantbot.research.manifest import canonical_result_json, content_id
@@ -124,13 +125,19 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             )
         ).first():
             return None
-        # Reserve the one position slot including every prepared/unknown entry, not just fills.
-        if session.execute(
-            select(links.c.lot_id).where(
-                links.c.role == "ENTRY", ~links.c.lot_id.in_(select(table("core_round_trips").c.id))
-            )
-        ).first():
-            return None
+        # Only a proven pre-SUBMITTING refusal releases the slot; ERROR alone is unsafe.
+        for link in session.execute(select(links).where(links.c.role == "ENTRY")).mappings():
+            if (
+                session.execute(
+                    select(table("core_round_trips").c.id).where(
+                        table("core_round_trips").c.id == link["lot_id"]
+                    )
+                ).first()
+                is not None
+            ):
+                continue
+            if not definitively_unsent(repo, link["intent_id"]):
+                return None
         receipts = [
             GuardianReceipt.model_validate_json(p)
             for p in session.execute(select(table("core_guardian_receipts").c.payload)).scalars()
@@ -187,7 +194,7 @@ async def trader_cycle(
     record_observation(store, observation)
     decision = evaluate_entry(store.config, observation, model, inventory)
     plan = ProtectionPlan.for_decision(decision, store.config)
-    if now < decision.recorded_at_utc or now > decision.valid_until:
+    if now < decision.recorded_at_utc or now >= decision.valid_until:
         store.record("core_decisions", decision)
         return decision
     entry = claim_entry(store, decision, plan)
@@ -223,5 +230,5 @@ async def trader_cycle(
     )
     from quantbot.paper_core.guardian import synchronize
 
-    await synchronize(store, broker, now=now)
+    await synchronize(store, broker, now=broker.now)
     return decision

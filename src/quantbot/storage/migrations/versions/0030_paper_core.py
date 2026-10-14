@@ -26,7 +26,7 @@ def upgrade() -> None:
     Table("order_intents", metadata, Column("intent_id", String(128), primary_key=True))
     Table("account_snapshots", metadata, Column("snapshot_id", String(128), primary_key=True))
     for table in core_tables(metadata):
-        table.create(op.get_bind())
+        table.create(op.get_bind(), checkfirst=True)
     schema = Table(
         "schema_version",
         MetaData(),

@@ -1,0 +1,1782 @@
+FF.F.F.FF...FFFF.....FF..................FFFFF                           [100%]
+================================== FAILURES ===================================
+_ test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence[get_account] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_final_acquisition_delay_r0')
+method = 'get_account'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("method", ["get_account", "get_positions"])
+    async def test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence(tmp_path, method):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            delay_final_fetch(broker, method, at=NOW + timedelta(minutes=31))
+>           with pytest.raises(OrderSubmissionBlocked) as error:
+E           Failed: DID NOT RAISE OrderSubmissionBlocked
+
+tests\fault\paper_core\test_final_send_authority.py:42: Failed
+_ test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence[get_positions] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_final_acquisition_delay_r1')
+method = 'get_positions'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("method", ["get_account", "get_positions"])
+    async def test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence(tmp_path, method):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            delay_final_fetch(broker, method, at=NOW + timedelta(minutes=31))
+>           with pytest.raises(OrderSubmissionBlocked) as error:
+E           Failed: DID NOT RAISE OrderSubmissionBlocked
+
+tests\fault\paper_core\test_final_send_authority.py:42: Failed
+______ test_decision_expiry_is_exclusive_at_actual_send[120000000-False] ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_decision_expiry_is_exclus1')
+microseconds = 120000000, allowed = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("microseconds,allowed", [(119999999, True), (120000000, False)])
+    async def test_decision_expiry_is_exclusive_at_actual_send(tmp_path, microseconds, allowed):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            delay_final_fetch(broker, "get_account", at=NOW + timedelta(microseconds=microseconds))
+            if allowed:
+                await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            else:
+>               with pytest.raises(OrderSubmissionBlocked):
+E               Failed: DID NOT RAISE OrderSubmissionBlocked
+
+tests\fault\paper_core\test_final_send_authority.py:69: Failed
+_ test_latest_guardian_ack_expiry_is_exclusive_even_with_older_valid_ack[60000000-False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_latest_guardian_ack_expir1')
+microseconds = 60000000, allowed = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("microseconds,allowed", [(59999999, True), (60000000, False)])
+    async def test_latest_guardian_ack_expiry_is_exclusive_even_with_older_valid_ack(tmp_path, microseconds, allowed):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            delay_final_fetch(broker, "get_account", at=NOW + timedelta(microseconds=microseconds),
+                store=store, receipt_expiry=NOW + timedelta(seconds=60))
+            if allowed:
+                await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            else:
+>               with pytest.raises(OrderSubmissionBlocked) as error:
+E               Failed: DID NOT RAISE OrderSubmissionBlocked
+
+tests\fault\paper_core\test_final_send_authority.py:86: Failed
+____ test_session_protection_deadline_is_exclusive_at_send[60000000-False] ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_session_protection_deadli1')
+microseconds = 60000000, allowed = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("microseconds,allowed", [(59999999, True), (60000000, False)])
+    async def test_session_protection_deadline_is_exclusive_at_send(tmp_path, microseconds, allowed):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            observation = observation.model_copy(update={"session_close": NOW + timedelta(seconds=180)})
+            delay_final_fetch(broker, "get_positions", at=NOW + timedelta(microseconds=microseconds))
+            if allowed:
+                await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            else:
+>               with pytest.raises(OrderSubmissionBlocked) as error:
+E               Failed: DID NOT RAISE OrderSubmissionBlocked
+
+tests\fault\paper_core\test_final_send_authority.py:104: Failed
+_ test_unsent_expiry_frees_slot_for_fresh_observation_but_never_replays_old_claim _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_unsent_expiry_frees_slot_0')
+
+    @pytest.mark.asyncio
+    async def test_unsent_expiry_frees_slot_for_fresh_observation_but_never_replays_old_claim(tmp_path):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            delay_final_fetch(broker, "get_account", at=NOW + timedelta(minutes=31))
+>           with pytest.raises(OrderSubmissionBlocked):
+E           Failed: DID NOT RAISE OrderSubmissionBlocked
+
+tests\fault\paper_core\test_final_send_authority.py:117: Failed
+_ test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[100-True] _
+
+database = <quantbot.storage.database.Database object at 0x000001E697996C90>
+price = '100', healthy = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("price,healthy", [("100", True), ("75", False)])
+    async def test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders(
+        database,
+        price,
+        healthy,
+    ):
+        refresh = getattr(
+            import_module("quantbot.learner.exploration_execution"), "refresh_entry_protection", None
+        )
+        assert callable(refresh), "entry needs a genuine fresh protection assessment"
+        positions = (position("SPY", quantity="0.024862", price=price),)
+        seed_local(database, positions)
+        broker = FakeBroker(account(), positions)
+        protection = supervisor(database, broker)
+    
+        class ForbiddenSubmitter:
+            async def submit(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+    
+            async def submit_durable(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+    
+        original_submitter = ForbiddenSubmitter()
+        protection.submitter = original_submitter
+        await refresh(SimpleNamespace(protector=lambda: protection), now=NOW)
+        assert protection.submitter is original_submitter
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_PROTECTION_SNAPSHOT_NOT_CURRENT" not in reasons
+        assert ("PAPER_POSITION_PROTECTION_UNVERIFIED" not in reasons) is healthy
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT')
+
+tests\unit\learner\test_entry_protection_assessment.py:55: AssertionError
+_ test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[75-False] _
+
+database = <quantbot.storage.database.Database object at 0x000001E697541550>
+price = '75', healthy = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("price,healthy", [("100", True), ("75", False)])
+    async def test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders(
+        database,
+        price,
+        healthy,
+    ):
+        refresh = getattr(
+            import_module("quantbot.learner.exploration_execution"), "refresh_entry_protection", None
+        )
+        assert callable(refresh), "entry needs a genuine fresh protection assessment"
+        positions = (position("SPY", quantity="0.024862", price=price),)
+        seed_local(database, positions)
+        broker = FakeBroker(account(), positions)
+        protection = supervisor(database, broker)
+    
+        class ForbiddenSubmitter:
+            async def submit(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+    
+            async def submit_durable(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+    
+        original_submitter = ForbiddenSubmitter()
+        protection.submitter = original_submitter
+        await refresh(SimpleNamespace(protector=lambda: protection), now=NOW)
+        assert protection.submitter is original_submitter
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_PROTECTION_SNAPSHOT_NOT_CURRENT" not in reasons
+        assert ("PAPER_POSITION_PROTECTION_UNVERIFIED" not in reasons) is healthy
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT', 'PAPER_POSITION_PROTECTION_UNVERIFIED')
+
+tests\unit\learner\test_entry_protection_assessment.py:55: AssertionError
+_ test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[account] _
+
+database = <quantbot.storage.database.Database object at 0x000001E696145F50>
+operation = 'account'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("operation", ["account", "positions"])
+    async def test_failed_real_protection_probe_never_manufactures_fresh_healthy_state(
+        database, operation,
+    ):
+        from quantbot.brokers import BrokerRequestError
+        from quantbot.learner.exploration_execution import refresh_entry_protection
+        positions = (position("SPY"),)
+        seed_local(database, positions)
+        failure = BrokerRequestError("private provider diagnostic", status_code=503)
+        broker = FakeBroker(account(), positions,
+                            account_error=failure if operation == "account" else None,
+                            position_error=failure if operation == "positions" else None)
+        protection = supervisor(database, broker)
+        await refresh_entry_protection(SimpleNamespace(protector=lambda: protection), now=NOW)
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_POSITION_PROTECTION_UNVERIFIED" in reasons
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT', 'PAPER_POSITION_PROTECTION_UNVERIFIED')
+
+tests\unit\learner\test_entry_protection_assessment.py:79: AssertionError
+_ test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[positions] _
+
+database = <quantbot.storage.database.Database object at 0x000001E697C9EC90>
+operation = 'positions'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("operation", ["account", "positions"])
+    async def test_failed_real_protection_probe_never_manufactures_fresh_healthy_state(
+        database, operation,
+    ):
+        from quantbot.brokers import BrokerRequestError
+        from quantbot.learner.exploration_execution import refresh_entry_protection
+        positions = (position("SPY"),)
+        seed_local(database, positions)
+        failure = BrokerRequestError("private provider diagnostic", status_code=503)
+        broker = FakeBroker(account(), positions,
+                            account_error=failure if operation == "account" else None,
+                            position_error=failure if operation == "positions" else None)
+        protection = supervisor(database, broker)
+        await refresh_entry_protection(SimpleNamespace(protector=lambda: protection), now=NOW)
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_POSITION_PROTECTION_UNVERIFIED" in reasons
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT', 'PAPER_POSITION_PROTECTION_UNVERIFIED')
+
+tests\unit\learner\test_entry_protection_assessment.py:79: AssertionError
+__ test_actual_protection_action_is_owned_and_economically_attributed[False] __
+
+store = (<quantbot.storage.database.Database object at 0x000001E695DA75D0>, PaperModelBinding(model_id='intraday-model-1', art...d11f11492fb6fe81d2684455a0', deployment_timestamp=datetime.datetime(2026, 9, 21, 15, 0, tzinfo=datetime.timezone.utc)))
+corrupt_registration = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("corrupt_registration", [False, True])
+    async def test_actual_protection_action_is_owned_and_economically_attributed(
+        store,
+        corrupt_registration,
+    ):
+        from sqlalchemy import select, update
+    
+        from quantbot.learner.paper_deadlines import CLOSED_EVENT
+        from quantbot.learner.trade_learning import read_trade_episodes
+        from quantbot.operations.metrics import OperationalMetrics
+        from quantbot.operations.protection import PositionProtectionSupervisor
+        from quantbot.risk.protection import ProtectionPolicy
+        from quantbot.storage.schema import order_events, position_protection_actions, signals
+        from tests.integration.test_execution_coordinator import _accepted
+        from tests.unit.operations.test_position_protection_supervisor import IDENTITY, FakeBroker
+    
+        database, _, _ = store
+        record = episode(store, before_orders=register, entry_only=True)
+        held = (
+            Position(
+                symbol="DIA", quantity=1, market_price=90, market_value=90, average_entry_price=100
+            ),
+        )
+        initial = capture().attempts[0].before
+        snapshot = initial.model_copy(
+            update={"account": initial.account.model_copy(update={"cash": Decimal(910)})}
+        )
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+            repo.save_strategy_deployment(IDENTITY)
+            repo.save_account_snapshot("owned-local", snapshot.account, held, captured_at=NOW)
+            if corrupt_registration:
+                session.execute(
+                    update(signals)
+                    .where(signals.c.signal_id.like("adaptive-lot-%"))
+                    .values(payload_json='{"kind":"ADAPTIVE_PAPER_NEW_LOT_V1","document":null}')
+                )
+        protection = PositionProtectionSupervisor(
+            database=database,
+            broker=FakeBroker(snapshot, held),
+            expected_account_id="paper",
+            strategy_identity=IDENTITY,
+            metrics=OperationalMetrics(),
+            policy=ProtectionPolicy(hard_stop_bps=Decimal(100)),
+        )
+        await protection.evaluate(now=NOW + timedelta(minutes=1))
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+>           action = session.execute(select(position_protection_actions)).mappings().one()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\learner\test_lot_ownership.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:2172: in one
+    return self._only_one_row(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.engine.result.MappingResult object at 0x000001E69724A0D0>
+raise_for_second_row = True, raise_for_none = True, scalar = False
+
+    def _only_one_row(
+        self,
+        raise_for_second_row: bool,
+        raise_for_none: bool,
+        scalar: bool,
+    ) -> Optional[_R]:
+        onerow = self._fetchone_impl
+    
+        row: Optional[_InterimRowType[Any]] = onerow(hard_close=True)
+        if row is None:
+            if raise_for_none:
+>               raise exc.NoResultFound(
+                    "No row was found when one was required"
+                )
+E               sqlalchemy.exc.NoResultFound: No row was found when one was required
+
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:799: NoResultFound
+__ test_actual_protection_action_is_owned_and_economically_attributed[True] ___
+
+store = (<quantbot.storage.database.Database object at 0x000001E6972BF5D0>, PaperModelBinding(model_id='intraday-model-1', art...d11f11492fb6fe81d2684455a0', deployment_timestamp=datetime.datetime(2026, 9, 21, 15, 0, tzinfo=datetime.timezone.utc)))
+corrupt_registration = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("corrupt_registration", [False, True])
+    async def test_actual_protection_action_is_owned_and_economically_attributed(
+        store,
+        corrupt_registration,
+    ):
+        from sqlalchemy import select, update
+    
+        from quantbot.learner.paper_deadlines import CLOSED_EVENT
+        from quantbot.learner.trade_learning import read_trade_episodes
+        from quantbot.operations.metrics import OperationalMetrics
+        from quantbot.operations.protection import PositionProtectionSupervisor
+        from quantbot.risk.protection import ProtectionPolicy
+        from quantbot.storage.schema import order_events, position_protection_actions, signals
+        from tests.integration.test_execution_coordinator import _accepted
+        from tests.unit.operations.test_position_protection_supervisor import IDENTITY, FakeBroker
+    
+        database, _, _ = store
+        record = episode(store, before_orders=register, entry_only=True)
+        held = (
+            Position(
+                symbol="DIA", quantity=1, market_price=90, market_value=90, average_entry_price=100
+            ),
+        )
+        initial = capture().attempts[0].before
+        snapshot = initial.model_copy(
+            update={"account": initial.account.model_copy(update={"cash": Decimal(910)})}
+        )
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+            repo.save_strategy_deployment(IDENTITY)
+            repo.save_account_snapshot("owned-local", snapshot.account, held, captured_at=NOW)
+            if corrupt_registration:
+                session.execute(
+                    update(signals)
+                    .where(signals.c.signal_id.like("adaptive-lot-%"))
+                    .values(payload_json='{"kind":"ADAPTIVE_PAPER_NEW_LOT_V1","document":null}')
+                )
+        protection = PositionProtectionSupervisor(
+            database=database,
+            broker=FakeBroker(snapshot, held),
+            expected_account_id="paper",
+            strategy_identity=IDENTITY,
+            metrics=OperationalMetrics(),
+            policy=ProtectionPolicy(hard_stop_bps=Decimal(100)),
+        )
+        await protection.evaluate(now=NOW + timedelta(minutes=1))
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+>           action = session.execute(select(position_protection_actions)).mappings().one()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\learner\test_lot_ownership.py:208: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:2172: in one
+    return self._only_one_row(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.engine.result.MappingResult object at 0x000001E697810050>
+raise_for_second_row = True, raise_for_none = True, scalar = False
+
+    def _only_one_row(
+        self,
+        raise_for_second_row: bool,
+        raise_for_none: bool,
+        scalar: bool,
+    ) -> Optional[_R]:
+        onerow = self._fetchone_impl
+    
+        row: Optional[_InterimRowType[Any]] = onerow(hard_close=True)
+        if row is None:
+            if raise_for_none:
+>               raise exc.NoResultFound(
+                    "No row was found when one was required"
+                )
+E               sqlalchemy.exc.NoResultFound: No row was found when one was required
+
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:799: NoResultFound
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a healthy row carrying reasons-HEALTHY-SOMETHING-1] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001E695EFA8D0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E696007690>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697D47390>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001E697D454D0>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E696007690>
+cursor = <sqlite3.Cursor object at 0x000001E69771F740>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697D47390>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_the_migrated_table_refuse0')
+label = 'a healthy row carrying reasons', outcome = 'HEALTHY'
+reasons = 'SOMETHING', market_open = 1
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+    
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+    
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+    
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+    
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E696007690>
+cursor = <sqlite3.Cursor object at 0x000001E69771F740>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697D47390>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL: 
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL, 
+E       	payload TEXT NOT NULL, 
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E       
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a fault naming no reason-DEGRADED--1] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001E695CB0590>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E695D77410>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E6925F7E90>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001E6925F5250>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E695D77410>
+cursor = <sqlite3.Cursor object at 0x000001E6977F4DC0>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E6925F7E90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_the_migrated_table_refuse1')
+label = 'a fault naming no reason', outcome = 'DEGRADED', reasons = ''
+market_open = 1
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+    
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+    
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+    
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+    
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E695D77410>
+cursor = <sqlite3.Cursor object at 0x000001E6977F4DC0>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E6925F7E90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL: 
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL, 
+E       	payload TEXT NOT NULL, 
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E       
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[an outcome nobody defined-NOT_AN_OUTCOME-r-1] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001E6975364D0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E698095DD0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697510F50>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001E69732D990>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E698095DD0>
+cursor = <sqlite3.Cursor object at 0x000001E69748BE40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697510F50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_the_migrated_table_refuse2')
+label = 'an outcome nobody defined', outcome = 'NOT_AN_OUTCOME', reasons = 'r'
+market_open = 1
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+    
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+    
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+    
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+    
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E698095DD0>
+cursor = <sqlite3.Cursor object at 0x000001E69748BE40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697510F50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL: 
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL, 
+E       	payload TEXT NOT NULL, 
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E       
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[market_open as something other than a flag-HEALTHY--7] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001E6975E2C10>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E6972AFB10>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697F274D0>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001E697F27490>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E6972AFB10>
+cursor = <sqlite3.Cursor object at 0x000001E6979A8E40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697F274D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_the_migrated_table_refuse3')
+label = 'market_open as something other than a flag', outcome = 'HEALTHY'
+reasons = '', market_open = 7
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+    
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+    
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+    
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+    
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E6972AFB10>
+cursor = <sqlite3.Cursor object at 0x000001E6979A8E40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E697F274D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL: 
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL, 
+E       	payload TEXT NOT NULL, 
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E       
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+_______________ test_the_migration_reaches_the_current_version ________________
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001E6979981D0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E697A6DE90>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E69773F090>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001E69773CD50>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E697A6DE90>
+cursor = <sqlite3.Cursor object at 0x000001E697AB8D40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E69773F090>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2ujkge8t/pytest/test_the_migration_reaches_the0')
+
+    def test_the_migration_reaches_the_current_version(tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """The upgrade path preserves v21 and reaches current head, so a v20 store is not stranded."""
+        import sqlite3
+    
+        path = tmp_path / "upgrade.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:438: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001E697A6DE90>
+cursor = <sqlite3.Cursor object at 0x000001E697AB8D40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001E69773F090>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL: 
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL, 
+E       	payload TEXT NOT NULL, 
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E       
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_final_send_authority.py::test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence[get_account]
+FAILED tests/fault/paper_core/test_final_send_authority.py::test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence[get_positions]
+FAILED tests/fault/paper_core/test_final_send_authority.py::test_decision_expiry_is_exclusive_at_actual_send[120000000-False]
+FAILED tests/fault/paper_core/test_final_send_authority.py::test_latest_guardian_ack_expiry_is_exclusive_even_with_older_valid_ack[60000000-False]
+FAILED tests/fault/paper_core/test_final_send_authority.py::test_session_protection_deadline_is_exclusive_at_send[60000000-False]
+FAILED tests/fault/paper_core/test_final_send_authority.py::test_unsent_expiry_frees_slot_for_fresh_observation_but_never_replays_old_claim
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[100-True]
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[75-False]
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[account]
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[positions]
+FAILED tests/unit/learner/test_lot_ownership.py::test_actual_protection_action_is_owned_and_economically_attributed[False]
+FAILED tests/unit/learner/test_lot_ownership.py::test_actual_protection_action_is_owned_and_economically_attributed[True]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a healthy row carrying reasons-HEALTHY-SOMETHING-1]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a fault naming no reason-DEGRADED--1]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[an outcome nobody defined-NOT_AN_OUTCOME-r-1]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[market_open as something other than a flag-HEALTHY--7]
+FAILED tests/unit/operations/test_observation.py::test_the_migration_reaches_the_current_version
+17 failed, 29 passed in 18.75s

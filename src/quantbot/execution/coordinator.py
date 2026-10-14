@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 
 from pydantic import Field
 from sqlalchemy import text
@@ -170,11 +171,13 @@ class ExecutionCoordinator:
         settings: Settings,
         *,
         submission_policy: SubmissionPolicy | None = None,
+        final_send_check: Callable[[OrderIntent, OrderPurpose], tuple[str, ...]] | None = None,
     ) -> None:
         self._database = database
         self._broker = broker
         self._settings = settings
         self._submission_policy = submission_policy or SubmissionPolicy()
+        self._final_send_check = final_send_check
 
     def _gate(
         self,
@@ -563,6 +566,14 @@ class ExecutionCoordinator:
             vetoes,
             await self._open_exit_orders(purpose),
         )
+        # Lifetime/ownership authority is consumed after the last awaited acquisition.
+        # Recovery of a possibly sent intent bypasses this prepared-send path entirely.
+        if fresh_gate.allowed and self._final_send_check is not None:
+            objections = self._final_send_check(intent, purpose)
+            if objections:
+                fresh_gate = fresh_gate.model_copy(
+                    update={"allowed": False, "reasons": (*fresh_gate.reasons, *objections)}
+                )
         if not fresh_gate.allowed:
             self._transition(intent.intent_id, IntentState.ERROR, IntentState.ORDER_CREATED)
             raise OrderSubmissionBlocked(fresh_gate)
