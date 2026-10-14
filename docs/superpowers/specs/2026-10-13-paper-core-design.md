@@ -1,6 +1,6 @@
 # A smaller PAPER trading and learning core
 
-Status: **PROPOSED FOR USER REVIEW; NOT APPROVED FOR IMPLEMENTATION OR DEPLOYMENT.** October 13, 2026, America/New_York.
+Status: **LOCAL IMPLEMENTATION APPROVED October 14, 2026; DEPLOYMENT NOT APPROVED.** Design dated October 13, 2026, America/New_York. The user's instruction to implement the reviewed changes authorizes isolated implementation and tests of the proposed contracts. Exact runtime, model-use and clock-contract commissioning remain subject to the concrete M6 rollout review.
 
 The [source-backed audit](../../reviews/2026-10-13-paper-redesign/audit.md) is the basis for this design. The [single authoritative implementation plan](../plans/2026-10-13-paper-core.md) owns sequencing, review status and handoffs. The [test plan](../../reviews/2026-10-13-paper-redesign/test-plan.md) distinguishes existing reproducible failures, future acceptance tests, and broker-PAPER acceptance.
 

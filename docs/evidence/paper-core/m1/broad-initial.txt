@@ -1,0 +1,2619 @@
+........................................................................ [  1%]
+........................................................................ [  3%]
+........................................................................ [  4%]
+..............................................ss........................ [  6%]
+sssssss..................................................s.............. [  8%]
+..sssssss..............ssssssssssssssssssssssssss....................... [  9%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 14%]
+........................................................................ [ 16%]
+........................................................................ [ 18%]
+........................................................................ [ 19%]
+........................................................................ [ 21%]
+......................ss................................................ [ 22%]
+..............................FFFF...................................... [ 24%]
+........................................................................ [ 26%]
+........................................................................ [ 27%]
+........................................................................ [ 29%]
+........................................................................ [ 31%]
+........................................................................ [ 32%]
+........................................................................ [ 34%]
+.........................................FF............................. [ 36%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 49%]
+...FFFFF................................................................ [ 50%]
+........................................................................ [ 52%]
+........................................................................ [ 54%]
+........................................................................ [ 55%]
+........................................................................ [ 57%]
+........................................................................ [ 58%]
+........................................................................ [ 60%]
+........................................................................ [ 62%]
+........................................................................ [ 63%]
+........................................................................ [ 65%]
+........................................................................ [ 67%]
+........................................................................ [ 68%]
+........................................................................ [ 70%]
+........................................................................ [ 72%]
+........................................................................ [ 73%]
+........................................................................ [ 75%]
+........................................................................ [ 77%]
+........................................................................ [ 78%]
+........................................................................ [ 80%]
+........................................................................ [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 86%]
+........s............................................................... [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+.......................s................................................ [ 96%]
+........................................................................ [ 98%]
+........................................................................ [ 99%]
+..                                                                       [100%]
+================================== FAILURES ===================================
+_ test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[100-True] _
+
+database = <quantbot.storage.database.Database object at 0x000001B5264740D0>
+price = '100', healthy = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("price,healthy", [("100", True), ("75", False)])
+    async def test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders(
+        database,
+        price,
+        healthy,
+    ):
+        refresh = getattr(
+            import_module("quantbot.learner.exploration_execution"), "refresh_entry_protection", None
+        )
+        assert callable(refresh), "entry needs a genuine fresh protection assessment"
+        positions = (position("SPY", quantity="0.024862", price=price),)
+        seed_local(database, positions)
+        broker = FakeBroker(account(), positions)
+        protection = supervisor(database, broker)
+
+        class ForbiddenSubmitter:
+            async def submit(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+
+            async def submit_durable(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+
+        original_submitter = ForbiddenSubmitter()
+        protection.submitter = original_submitter
+        await refresh(SimpleNamespace(protector=lambda: protection), now=NOW)
+        assert protection.submitter is original_submitter
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_PROTECTION_SNAPSHOT_NOT_CURRENT" not in reasons
+        assert ("PAPER_POSITION_PROTECTION_UNVERIFIED" not in reasons) is healthy
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT')
+
+tests\unit\learner\test_entry_protection_assessment.py:55: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+----------------------------- Captured log setup ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[75-False] _
+
+database = <quantbot.storage.database.Database object at 0x000001B529F36B90>
+price = '75', healthy = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("price,healthy", [("100", True), ("75", False)])
+    async def test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders(
+        database,
+        price,
+        healthy,
+    ):
+        refresh = getattr(
+            import_module("quantbot.learner.exploration_execution"), "refresh_entry_protection", None
+        )
+        assert callable(refresh), "entry needs a genuine fresh protection assessment"
+        positions = (position("SPY", quantity="0.024862", price=price),)
+        seed_local(database, positions)
+        broker = FakeBroker(account(), positions)
+        protection = supervisor(database, broker)
+
+        class ForbiddenSubmitter:
+            async def submit(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+
+            async def submit_durable(self, *args, **kwargs):
+                pytest.fail("entry assessment must never send a legacy protective order")
+
+        original_submitter = ForbiddenSubmitter()
+        protection.submitter = original_submitter
+        await refresh(SimpleNamespace(protector=lambda: protection), now=NOW)
+        assert protection.submitter is original_submitter
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_PROTECTION_SNAPSHOT_NOT_CURRENT" not in reasons
+        assert ("PAPER_POSITION_PROTECTION_UNVERIFIED" not in reasons) is healthy
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT', 'PAPER_POSITION_PROTECTION_UNVERIFIED')
+
+tests\unit\learner\test_entry_protection_assessment.py:55: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+----------------------------- Captured log setup ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[account] _
+
+database = <quantbot.storage.database.Database object at 0x000001B528D78650>
+operation = 'account'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("operation", ["account", "positions"])
+    async def test_failed_real_protection_probe_never_manufactures_fresh_healthy_state(
+        database, operation,
+    ):
+        from quantbot.brokers import BrokerRequestError
+        from quantbot.learner.exploration_execution import refresh_entry_protection
+        positions = (position("SPY"),)
+        seed_local(database, positions)
+        failure = BrokerRequestError("private provider diagnostic", status_code=503)
+        broker = FakeBroker(account(), positions,
+                            account_error=failure if operation == "account" else None,
+                            position_error=failure if operation == "positions" else None)
+        protection = supervisor(database, broker)
+        await refresh_entry_protection(SimpleNamespace(protector=lambda: protection), now=NOW)
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_POSITION_PROTECTION_UNVERIFIED" in reasons
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT', 'PAPER_POSITION_PROTECTION_UNVERIFIED')
+
+tests\unit\learner\test_entry_protection_assessment.py:79: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+----------------------------- Captured log setup ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[positions] _
+
+database = <quantbot.storage.database.Database object at 0x000001B526914490>
+operation = 'positions'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("operation", ["account", "positions"])
+    async def test_failed_real_protection_probe_never_manufactures_fresh_healthy_state(
+        database, operation,
+    ):
+        from quantbot.brokers import BrokerRequestError
+        from quantbot.learner.exploration_execution import refresh_entry_protection
+        positions = (position("SPY"),)
+        seed_local(database, positions)
+        failure = BrokerRequestError("private provider diagnostic", status_code=503)
+        broker = FakeBroker(account(), positions,
+                            account_error=failure if operation == "account" else None,
+                            position_error=failure if operation == "positions" else None)
+        protection = supervisor(database, broker)
+        await refresh_entry_protection(SimpleNamespace(protector=lambda: protection), now=NOW)
+        readonly = ReadOnlyStore(database.path)
+        try:
+            reasons = operational_objections(readonly, account_id=ACCOUNT_ID, now=NOW, position_count=1)
+        finally:
+            readonly.close()
+        assert "PAPER_POSITION_PROTECTION_UNVERIFIED" in reasons
+>       assert "PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE" in reasons
+E       AssertionError: assert 'PAPER_KILL_SWITCH_ENGAGED_OR_UNAVAILABLE' in ('DEADLINE_SUPERVISOR_UNAVAILABLE', 'PAPER_RECONCILIATION_SNAPSHOT_NOT_CURRENT', 'PAPER_POSITION_PROTECTION_UNVERIFIED')
+
+tests\unit\learner\test_entry_protection_assessment.py:79: AssertionError
+---------------------------- Captured stderr setup ----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+----------------------------- Captured log setup ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+__ test_actual_protection_action_is_owned_and_economically_attributed[False] __
+
+store = (<quantbot.storage.database.Database object at 0x000001B52D598F50>, PaperModelBinding(model_id='intraday-model-1', art...d11f11492fb6fe81d2684455a0', deployment_timestamp=datetime.datetime(2026, 9, 21, 15, 0, tzinfo=datetime.timezone.utc)))
+corrupt_registration = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("corrupt_registration", [False, True])
+    async def test_actual_protection_action_is_owned_and_economically_attributed(
+        store,
+        corrupt_registration,
+    ):
+        from sqlalchemy import select, update
+
+        from quantbot.learner.paper_deadlines import CLOSED_EVENT
+        from quantbot.learner.trade_learning import read_trade_episodes
+        from quantbot.operations.metrics import OperationalMetrics
+        from quantbot.operations.protection import PositionProtectionSupervisor
+        from quantbot.risk.protection import ProtectionPolicy
+        from quantbot.storage.schema import order_events, position_protection_actions, signals
+        from tests.integration.test_execution_coordinator import _accepted
+        from tests.unit.operations.test_position_protection_supervisor import IDENTITY, FakeBroker
+
+        database, _, _ = store
+        record = episode(store, before_orders=register, entry_only=True)
+        held = (
+            Position(
+                symbol="DIA", quantity=1, market_price=90, market_value=90, average_entry_price=100
+            ),
+        )
+        initial = capture().attempts[0].before
+        snapshot = initial.model_copy(
+            update={"account": initial.account.model_copy(update={"cash": Decimal(910)})}
+        )
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+            repo.save_strategy_deployment(IDENTITY)
+            repo.save_account_snapshot("owned-local", snapshot.account, held, captured_at=NOW)
+            if corrupt_registration:
+                session.execute(
+                    update(signals)
+                    .where(signals.c.signal_id.like("adaptive-lot-%"))
+                    .values(payload_json='{"kind":"ADAPTIVE_PAPER_NEW_LOT_V1","document":null}')
+                )
+        protection = PositionProtectionSupervisor(
+            database=database,
+            broker=FakeBroker(snapshot, held),
+            expected_account_id="paper",
+            strategy_identity=IDENTITY,
+            metrics=OperationalMetrics(),
+            policy=ProtectionPolicy(hard_stop_bps=Decimal(100)),
+        )
+        await protection.evaluate(now=NOW + timedelta(minutes=1))
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+>           action = session.execute(select(position_protection_actions)).mappings().one()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\learner\test_lot_ownership.py:208:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:2172: in one
+    return self._only_one_row(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.engine.result.MappingResult object at 0x000001B52AB9B070>
+raise_for_second_row = True, raise_for_none = True, scalar = False
+
+    def _only_one_row(
+        self,
+        raise_for_second_row: bool,
+        raise_for_none: bool,
+        scalar: bool,
+    ) -> Optional[_R]:
+        onerow = self._fetchone_impl
+
+        row: Optional[_InterimRowType[Any]] = onerow(hard_close=True)
+        if row is None:
+            if raise_for_none:
+>               raise exc.NoResultFound(
+                    "No row was found when one was required"
+                )
+E               sqlalchemy.exc.NoResultFound: No row was found when one was required
+
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:799: NoResultFound
+---------------------------- Captured stderr setup ----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+----------------------------- Captured log setup ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+__ test_actual_protection_action_is_owned_and_economically_attributed[True] ___
+
+store = (<quantbot.storage.database.Database object at 0x000001B53062C0D0>, PaperModelBinding(model_id='intraday-model-1', art...d11f11492fb6fe81d2684455a0', deployment_timestamp=datetime.datetime(2026, 9, 21, 15, 0, tzinfo=datetime.timezone.utc)))
+corrupt_registration = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("corrupt_registration", [False, True])
+    async def test_actual_protection_action_is_owned_and_economically_attributed(
+        store,
+        corrupt_registration,
+    ):
+        from sqlalchemy import select, update
+
+        from quantbot.learner.paper_deadlines import CLOSED_EVENT
+        from quantbot.learner.trade_learning import read_trade_episodes
+        from quantbot.operations.metrics import OperationalMetrics
+        from quantbot.operations.protection import PositionProtectionSupervisor
+        from quantbot.risk.protection import ProtectionPolicy
+        from quantbot.storage.schema import order_events, position_protection_actions, signals
+        from tests.integration.test_execution_coordinator import _accepted
+        from tests.unit.operations.test_position_protection_supervisor import IDENTITY, FakeBroker
+
+        database, _, _ = store
+        record = episode(store, before_orders=register, entry_only=True)
+        held = (
+            Position(
+                symbol="DIA", quantity=1, market_price=90, market_value=90, average_entry_price=100
+            ),
+        )
+        initial = capture().attempts[0].before
+        snapshot = initial.model_copy(
+            update={"account": initial.account.model_copy(update={"cash": Decimal(910)})}
+        )
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+            repo.save_strategy_deployment(IDENTITY)
+            repo.save_account_snapshot("owned-local", snapshot.account, held, captured_at=NOW)
+            if corrupt_registration:
+                session.execute(
+                    update(signals)
+                    .where(signals.c.signal_id.like("adaptive-lot-%"))
+                    .values(payload_json='{"kind":"ADAPTIVE_PAPER_NEW_LOT_V1","document":null}')
+                )
+        protection = PositionProtectionSupervisor(
+            database=database,
+            broker=FakeBroker(snapshot, held),
+            expected_account_id="paper",
+            strategy_identity=IDENTITY,
+            metrics=OperationalMetrics(),
+            policy=ProtectionPolicy(hard_stop_bps=Decimal(100)),
+        )
+        await protection.evaluate(now=NOW + timedelta(minutes=1))
+        with database.transaction() as session:
+            repo = StorageRepository(session)
+>           action = session.execute(select(position_protection_actions)).mappings().one()
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\learner\test_lot_ownership.py:208:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:2172: in one
+    return self._only_one_row(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.engine.result.MappingResult object at 0x000001B528E72FD0>
+raise_for_second_row = True, raise_for_none = True, scalar = False
+
+    def _only_one_row(
+        self,
+        raise_for_second_row: bool,
+        raise_for_none: bool,
+        scalar: bool,
+    ) -> Optional[_R]:
+        onerow = self._fetchone_impl
+
+        row: Optional[_InterimRowType[Any]] = onerow(hard_close=True)
+        if row is None:
+            if raise_for_none:
+>               raise exc.NoResultFound(
+                    "No row was found when one was required"
+                )
+E               sqlalchemy.exc.NoResultFound: No row was found when one was required
+
+.venv\Lib\site-packages\sqlalchemy\engine\result.py:799: NoResultFound
+---------------------------- Captured stderr setup ----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+----------------------------- Captured log setup ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a healthy row carrying reasons-HEALTHY-SOMETHING-1] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001B52F5D82D0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52A23C490>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B5234C7C90>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001B5234C5E50>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52A23C490>
+cursor = <sqlite3.Cursor object at 0x000001B52FF06B40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B5234C7C90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-r_ibajb7/pytest/test_the_migrated_table_refuse0')
+label = 'a healthy row carrying reasons', outcome = 'HEALTHY'
+reasons = 'SOMETHING', market_open = 1
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52A23C490>
+cursor = <sqlite3.Cursor object at 0x000001B52FF06B40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B5234C7C90>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL:
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL,
+E       	payload TEXT NOT NULL,
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+------------------------------ Captured log call ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a fault naming no reason-DEGRADED--1] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001B52FDD46D0>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52ACE4590>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B529BE8090>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001B529BEBD10>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52ACE4590>
+cursor = <sqlite3.Cursor object at 0x000001B5303ABA40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B529BE8090>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-r_ibajb7/pytest/test_the_migrated_table_refuse1')
+label = 'a fault naming no reason', outcome = 'DEGRADED', reasons = ''
+market_open = 1
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52ACE4590>
+cursor = <sqlite3.Cursor object at 0x000001B5303ABA40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B529BE8090>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL:
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL,
+E       	payload TEXT NOT NULL,
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+------------------------------ Captured log call ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[an outcome nobody defined-NOT_AN_OUTCOME-r-1] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001B52DE56190>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52D8D3A50>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B532D846D0>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001B532D85350>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52D8D3A50>
+cursor = <sqlite3.Cursor object at 0x000001B5268B14C0>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B532D846D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-r_ibajb7/pytest/test_the_migrated_table_refuse2')
+label = 'an outcome nobody defined', outcome = 'NOT_AN_OUTCOME', reasons = 'r'
+market_open = 1
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B52D8D3A50>
+cursor = <sqlite3.Cursor object at 0x000001B5268B14C0>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B532D846D0>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL:
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL,
+E       	payload TEXT NOT NULL,
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+------------------------------ Captured log call ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[market_open as something other than a flag-HEALTHY--7] _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001B533218C10>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B5201AA110>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B5206E2990>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001B5206E1910>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B5201AA110>
+cursor = <sqlite3.Cursor object at 0x000001B52B1C8AC0>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B5206E2990>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-r_ibajb7/pytest/test_the_migrated_table_refuse3')
+label = 'market_open as something other than a flag', outcome = 'HEALTHY'
+reasons = '', market_open = 7
+
+    @pytest.mark.parametrize(
+        ("label", "outcome", "reasons", "market_open"),
+        [
+            ("a healthy row carrying reasons", "HEALTHY", "SOMETHING", 1),
+            ("a fault naming no reason", "DEGRADED", "", 1),
+            ("an outcome nobody defined", "NOT_AN_OUTCOME", "r", 1),
+            ("market_open as something other than a flag", "HEALTHY", "", 7),
+        ],
+    )
+    def test_the_migrated_table_refuses_a_row_that_would_be_ambiguous(
+        tmp_path, label: str, outcome: str, reasons: str, market_open: int
+    ) -> None:  # type: ignore[no-untyped-def]
+        """The constraints, asserted on a store that arrived at v21 through the migration.
+
+        A row claiming health while carrying reasons -- or a fault naming none -- makes every later
+        reading of this table ambiguous, which is what the table exists to prevent.
+
+        One correction worth recording, because the first version of this docstring was wrong. It
+        claimed to isolate the migration layer from `schema.py`. It does not, and it cannot: dropping
+        a constraint from the migration alone does not reach these assertions at all, because
+        `Database._compare_against_metadata` already refuses to open a store whose live schema
+        differs from the metadata this build was compiled against. Migration/schema drift is
+        prevented by that pre-existing guard, not by this test.
+
+        So what this actually asserts is that the constraint exists in the effective schema, checked
+        through the path an operator's existing store takes. Verified by mutation: removing a
+        constraint from the migration alone fails here with `UnsupportedSchemaVersionError` -- red for
+        an unrelated reason, which proves nothing -- while removing it from *both* layers fails these
+        assertions specifically.
+        """
+        import sqlite3
+
+        path = tmp_path / "migrated.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:415:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B5201AA110>
+cursor = <sqlite3.Cursor object at 0x000001B52B1C8AC0>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B5206E2990>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL:
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL,
+E       	payload TEXT NOT NULL,
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+------------------------------ Captured log call ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_______________ test_the_migration_reaches_the_current_version ________________
+
+self = <sqlalchemy.engine.base.Connection object at 0x000001B528CF3550>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B5320B2B10>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B52FFC7990>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteDDLCompiler object at 0x000001B52FFC79D0>
+parameters = [()]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+
+        effective_parameters: Optional[_AnyExecuteParams]
+
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+
+        if self._echo:
+            self._log_info(str_statement)
+
+            stats = context._get_cache_stats()
+
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B5320B2B10>
+cursor = <sqlite3.Cursor object at 0x000001B529A83E40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B52FFC7990>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.OperationalError: table core_identities already exists
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-r_ibajb7/pytest/test_the_migration_reaches_the0')
+
+    def test_the_migration_reaches_the_current_version(tmp_path) -> None:  # type: ignore[no-untyped-def]
+        """The upgrade path preserves v21 and reaches current head, so a v20 store is not stranded."""
+        import sqlite3
+
+        path = tmp_path / "upgrade.db"
+        with Database.create(path):
+            pass
+        _staged_at_v20(path)
+>       with Database.migrate(path):
+             ^^^^^^^^^^^^^^^^^^^^^^
+
+tests\unit\operations\test_observation.py:438:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:281: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:212: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:424: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0030_paper_core.py:29: in upgrade
+    table.create(op.get_bind())
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1532: in _execute_ddl
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000001B5320B2B10>
+cursor = <sqlite3.Cursor object at 0x000001B529A83E40>
+statement = '\nCREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)\n\n'
+parameters = ()
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000001B52FFC7990>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.OperationalError: (sqlite3.OperationalError) table core_identities already exists
+E       [SQL:
+E       CREATE TABLE core_identities (
+E       	id VARCHAR(64) NOT NULL,
+E       	payload TEXT NOT NULL,
+E       	CONSTRAINT pk_core_identities PRIMARY KEY (id)
+E       )
+E
+E       ]
+E       (Background on this error at: https://sqlalche.me/e/20/e3q8)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: OperationalError
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+------------------------------ Captured log call ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+============================== warnings summary ===============================
+.venv\Lib\site-packages\fastapi\testclient.py:1
+  C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\.venv\Lib\site-packages\fastapi\testclient.py:1: StarletteDeprecationWarning: Using `httpx` with `starlette.testclient` is deprecated; install `httpx2` instead.
+    from starlette.testclient import TestClient as TestClient  # noqa
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+SKIPPED [1] tests\integration\test_generated_experiment.py:185: generated code requires the OS-enforced sandbox; this must not pass without one
+SKIPPED [1] tests\integration\test_generated_experiment.py:384: generated code requires the OS-enforced sandbox; this must not pass without one
+SKIPPED [1] tests\integration\test_mining_sandboxed.py:73: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_mining_sandboxed.py:96: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_mining_sandboxed.py:133: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_model_runtime_live.py:55: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_model_runtime_live.py:70: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_model_runtime_live.py:91: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_model_runtime_live.py:106: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_sandbox_windows.py:199: the deployed runtime checkout is not present on this host
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:46: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:78: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:101: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:128: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:150: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:168: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:185: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [2] tests\integration\test_storage_parity.py:161: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [4] tests\integration\test_storage_parity.py:200: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:207: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:232: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:257: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [10] tests\integration\test_storage_parity.py:399: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:417: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:424: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [1] tests\unit\forecasting\test_shadow_forecasting.py:358: platform does not support unprivileged symlinks
+SKIPPED [1] tests\unit\forecasting\test_shadow_forecasting.py:399: platform does not support unprivileged symlinks
+SKIPPED [1] tests\unit\sandbox\test_backend_selection.py:126: the refusal under test is the non-Windows one
+SKIPPED [1] tests\unit\test_local_ci.py:327: no managed Python 3.11 installed for actual bootstrap verification
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[100-True]
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_real_assessment_refresh_preserves_rules_and_cannot_send_legacy_orders[75-False]
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[account]
+FAILED tests/unit/learner/test_entry_protection_assessment.py::test_failed_real_protection_probe_never_manufactures_fresh_healthy_state[positions]
+FAILED tests/unit/learner/test_lot_ownership.py::test_actual_protection_action_is_owned_and_economically_attributed[False]
+FAILED tests/unit/learner/test_lot_ownership.py::test_actual_protection_action_is_owned_and_economically_attributed[True]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a healthy row carrying reasons-HEALTHY-SOMETHING-1]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[a fault naming no reason-DEGRADED--1]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[an outcome nobody defined-NOT_AN_OUTCOME-r-1]
+FAILED tests/unit/operations/test_observation.py::test_the_migrated_table_refuses_a_row_that_would_be_ambiguous[market_open as something other than a flag-HEALTHY--7]
+FAILED tests/unit/operations/test_observation.py::test_the_migration_reaches_the_current_version
+11 failed, 4336 passed, 47 skipped, 1 warning in 1115.04s (0:18:35)

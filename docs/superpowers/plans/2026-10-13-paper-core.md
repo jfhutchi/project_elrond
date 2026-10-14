@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- Status: **M0 ACCEPTED; M1 is the next ready implementation milestone**. M1–M6 not started. Implementation approval does not authorize deployment, model activation, OS resync or clearing existing stops.
+- Status: **M0 and M1 ACCEPTED; M2 is the next ready milestone**. M2–M6 not started. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
 - PAPER only; no LIVE path, paid CI, new credentials/services, OS resync/security/policy changes, forced trades, holdings reset, deleted history, silent stop clearance, or untested protection removal.
 - Existing limits remain: one new position, 50 bps of equity per position, 25 bps maximum entry risk, 100 bps stop, 30-minute horizon, ≥120 s session-exit buffer, 500 bps buying-power reserve. Existing tighter portfolio controls win.
 - Relative skew bound remains **±2 s**. Proposed replacement `PAPER_TIME_V2` keeps 5 s acquisition, 120 s maximum evidence age and initial 50 ms continuity bound. Its changed health/authority semantics require specific review; do not silently substitute it for STRICT_V0/RELATIVE_V1.
@@ -31,8 +31,8 @@ After each milestone a reviewer who did not implement it reviews both diff and i
 | Milestone | Dependency | Integrated capability | Status |
 |---|---|---|---|
 | M0 | User approves design/plan | Reproducible read-only release/ownership/blocker inventory and legacy trade trace | ACCEPTED |
-| M1 | M0 accepted | Thin synthetic observation → guarded intent → owned fill → independent exit → flat round trip; protection baseline repair | READY |
-| M2 | M1 accepted | Cost provenance and restart-safe uncertain/partial-order/outcome processing | NOT STARTED |
+| M1 | M0 accepted | Thin synthetic observation → guarded intent → owned fill → independent exit → flat round trip; protection baseline repair | ACCEPTED |
+| M2 | M1 accepted | Cost provenance and restart-safe uncertain/partial-order/outcome processing | READY |
 | M3 | M2 accepted; clock contract reviewed | Scoped recovery/timing and per-symbol eligibility; outcome/protection progress during entry failure | NOT STARTED |
 | M4 | M2 accepted; learning envelope reviewed | Real bounded outcome-driven parameter fitting and explicit NO_CHANGE, in shadow | NOT STARTED |
 | M5 | M3 + M4 accepted | Atomic model activation and later decision witness; synthetic whole loop; real-data local simulation | NOT STARTED |
@@ -97,6 +97,8 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 ## M1 — Sol implementation brief: a thin protected round trip
 
+**Execution:** ACCEPTED at source commit `d24a7f45cf74c1b0079922172379090814634148`, following initial implementation `8ccdb39` and one independently reviewed fix round. [Review and evidence](../../evidence/paper-core/m1/review.md) verify the immediate synthetic round trip and expired-entry refusal followed by a fresh observation. Broad regression at `8ccdb39`: 4,336 passed, 11 failed, 47 skipped, one existing dependency warning. Every failed case and the final-send review defect passed in the final 325-test affected/retained run; full Ruff and both-platform type checks pass. Counts are separate runs, not a wholly green final-commit full-suite claim. M2 is now ready; operational deployment remains unchanged.
+
 **Scope:** Build the new path in temporary stores with an explicit synthetic broker, plus repair the reused protection baseline boundary. Demonstrate the complete trading-to-outcome mechanics using one eligible symbol; outcomes may correctly be COSTS_PENDING until M2. No deployed task or broker writer changes.
 
 **Relevant code:** `execution/coordinator.py`, `execution/recovery.py`, `execution/reconciliation.py`, `storage/repositories.py`, `operations/protection.py:267,285,448`, `learner/paper_runner.py`, `learner/paper_deadlines.py`, `learner/five_minute.py`, `risk/`, and the saved expected-red protection probe. Retain client-ID generation, pre-send deadline handoff, fixed limits, manual-stop checks and immutable fill IDs. Retire none of the existing exits in this milestone.
@@ -107,11 +109,13 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 **Integrated assertions:** One causal synthetic observation yields one recorded eligible decision, one deterministic intent and durable protection handoff before fake POST, owned fill, independent stop/deadline exit, terminal order and reconciled flat lot. Killing/stalling trader activity cannot prevent guardian exit. Duplicate observation/intents cause exactly one fake POST. Raw mismatched quantity remains uncertified on repeated passes; only fill-derived proof can certify. Exit can never exceed owned quantity or consume inherited positions. A manual pause arriving between decision and final claim prevents POST.
 
-- [ ] Add the thin-loop tests and copy/adapt the two-pass expected-red authority probe into owned suite tests.
-- [ ] Run `python -m pytest tests/integration/paper_core/test_thin_loop.py tests/fault/paper_core/test_protection_authority.py -q`; preserve red evidence.
-- [ ] Implement only the path and authority repair described; leave optional research disconnected.
-- [ ] Execute the integrated trace, duplicate/race tests, retained execution/deadline regression and proof export. Examine order sequence and quantity conservation, not just pytest status.
-- [ ] Commit and obtain independent diff/evidence review; record known cost incompleteness and accepted interfaces in this plan.
+- [x] Add the thin-loop tests and copy/adapt the two-pass expected-red authority probe into owned suite tests.
+- [x] Run `python -m pytest tests/integration/paper_core/test_thin_loop.py tests/fault/paper_core/test_protection_authority.py -q`; preserve red evidence.
+- [x] Implement only the path and authority repair described; leave optional research disconnected.
+- [x] Execute the integrated trace, duplicate/race tests, retained execution/deadline regression and proof export. Examine order sequence and quantity conservation, not just pytest status.
+- [x] Commit and obtain independent diff/evidence review; record known cost incompleteness and accepted interfaces in this plan.
+
+**Integration-owner ruling:** Historical snapshots do not become certified merely because they lack a new raw marker. Matching legacy reconciliation status/run/time is also insufficient: the old runner can ingest broker cash before comparing against that same snapshot. Only affirmative, independently validated certification may establish the new protection baseline. Preserve all unproven history and require explicit ownership handover at M6. Protection fixtures must establish synthetic certified baselines instead of silently trusting bare snapshots.
 
 **Migration/rollback:** Schema changes exercised only in fixture copies. Production protection remains running; source repair has no deployment claim. Revert code on isolated branch if rejected. Done requires joined evidence and persistent two-pass refusal, not a mocked assertion of protection health.
 
@@ -147,7 +151,7 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 **Acceptance:** ±2.000 s boundary honored both directions; ±2.001 s rejected. Two samples must advance, agree and finish in ≤5 s; proof expires after 120 s and on process restart/clock discontinuity. Boundary overlap waits for entry and does not extend owned holding time. Windows status text does not grant or fabricate UTC accuracy. Changing marks or 429/timeout pauses affected entries; fresh complete proof recovers without operator reset or global switch mutation. True unowned quantity/cash contradiction remains quarantined until explicitly resolved by proof, not another identical snapshot. One missing roster symbol blocks only decisions that actually depend on it; missing SPY still blocks features requiring SPY. Guardian and trustworthy outcome/learning work continue through each entry refusal. Old broker marks cannot become current by stamping receipt time; independent deadline exits remain available.
 
-- [ ] Before coding, record the user's reviewed V2 contract or remain on existing contract and mark this milestone WAITING; never infer approval from elapsed time or a test pass.
+- [x] User authorized implementation of the reviewed changes on October 14, 2026. Implement and test the specified V2 contract locally; exact operational commissioning remains subject to the M6 artifact review. No OS resync or policy change is authorized.
 - [ ] Add and run the three named test files with exact boundary/race assertions, including the existing expected-red unstable-acquisition case.
 - [ ] Implement classification and shared timing evidence; retain historical stop records and distinguish manual/integrity pauses from new retryable waits.
 - [ ] Run an integrated sequence: valid entry, provider timeout, stale unrelated symbol, market close, wall jump, recovery; show zero unauthorized POSTs, continued exit/outcome progress and fresh-evidence-only resumption.

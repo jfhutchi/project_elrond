@@ -39,7 +39,7 @@ tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tf797
                 ),
             )
         database.close()
-    
+
         engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
         config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
         # Bring the store down to exactly 0027 first, in its own committed step. This test was written
@@ -53,7 +53,7 @@ tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tf797
                 config.attributes["connection"] = connection
 >               command.downgrade(config, "0027")
 
-tests\unit\test_migration_authority.py:294: 
+tests\unit\test_migration_authority.py:294:
 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
 .venv\Lib\site-packages\alembic\command.py:534: in downgrade
     script.run_env()
@@ -167,7 +167,7 @@ tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tf797
         tmp_path: Path,
     ) -> None:
         """0028's downgrade must join the caller's transaction, not commit its drop on its own.
-    
+
         pysqlite begins a transaction only on DML, so a `DROP TABLE` issued before any write runs in
         autocommit. Measured: with the drop first, a `downgrade 0026` that 0027 refuses -- and whose
         caller rolls back -- leaves a store claiming revision 28 with `research_proposals` gone. That is
@@ -177,7 +177,7 @@ tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tf797
         path = tmp_path / "chained.db"
         Database.create(path).close()
         before = fingerprint(path)
-    
+
         engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
         config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
         try:
