@@ -54,7 +54,7 @@ Use temporary DB/lock/report paths and no inherited broker credentials for that 
 
 ## Future executable test matrix
 
-Each row specifies a named assertion and owner. Implement it in the exact test files in that milestone's brief; then run that brief's `python -m pytest ...` command. Use parameterized cuts/scenarios rather than tests that mirror internal methods. Every integration run exports the actual event chain to `docs/evidence/paper-core/mN/` with source/fixture/seed/config digests. No row is currently represented as passing.
+Each row specifies a named assertion and owner. Implement it in the exact test files in that milestone's brief; then run that brief's `python -m pytest ...` command. Use parameterized cuts/scenarios rather than tests that mirror internal methods. Every integration run exports the actual event chain to `docs/evidence/paper-core/mN/` with source/fixture/seed/config digests. Current acceptance status and reviewed evidence are recorded in the authoritative implementation plan; a matrix row alone is not a passing claim.
 
 | ID / milestone | Stimulus | Required observable result |
 |---|---|---|
@@ -69,9 +69,12 @@ Each row specifies a named assertion and owner. Implement it in the exact test f
 | R02 M2 | POST timeout, temporary lookup 404, later accepted | Unknown exposure remains reserved; lookup-only recovery; no new POST/ID |
 | R03 M2 | Cancel ack followed by late partial fill | Filled residual imported/protected; no oversell or premature flat outcome |
 | R04 M2 | Duplicate event vs same ID/different payload; paginated activity overlap | Identical duplicate inert; conflict quarantined; pagination complete before certification |
+| R05 M2 | Expired RISK_APPROVED/ORDER_CREATED claim, delayed original sender, fresh observation | Atomic precise unsent refusal releases the slot; fresh observation can POST once, original sender cannot; SUBMITTING/unknown remains reserved despite 404 |
 | C01 M2 | Missing fee, explicit reported zero, applicable contractual zero, modeled estimate | Four distinct provenance paths; only proven actual zero finalizes broker net |
 | C02 M2 | Entry 100, exit 102, fee 0.10 each; reference 99/103 | Actual net 1.80; reference shortfall remains diagnostic; no second slippage charge |
 | C03 M2 | Late fee, correction/bust, currency/adjustment gap | Append revision; one current sample, earlier history intact; unresolved amount blocks verified net |
+| C04 M2 | Fee revision after cash certification, racing final send; independent complete cash activity | Obsolete fee-derived cash authority revoked transactionally; actual send-state transition sees current proof; still-authoritative independent cash activity permits progress while fee allocation remains pending |
+| C05 M2 | Mixed batch with one conflicting old source and an unrelated healthy lot | Whole business batch rolls back and rejected envelope persists; only implicated source/lot authority quarantined; healthy outcome remains processable |
 | O01 M2 | Entry paused/closed/missing symbol/no buying power/learning crashed | Certified completed outcomes continue within healthy worker cadence; zero new entries |
 | D01 M3 | One roster symbol missing; candidate and SPY fresh | Other candidate evaluated; SPY-dependent missing data blocks only dependent decisions |
 | T01 M3 | Full bracket at ±2.000 s, outside at ±2.001 s | Inclusive approved bound; outside pauses affected entry, never global stop |

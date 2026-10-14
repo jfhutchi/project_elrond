@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- Status: **M0 and M1 ACCEPTED; M2 is the next ready milestone**. M2–M6 not started. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
+- Status: **M0–M2 ACCEPTED; M3 READY**. M4–M6 not started. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
 - PAPER only; no LIVE path, paid CI, new credentials/services, OS resync/security/policy changes, forced trades, holdings reset, deleted history, silent stop clearance, or untested protection removal.
 - Existing limits remain: one new position, 50 bps of equity per position, 25 bps maximum entry risk, 100 bps stop, 30-minute horizon, ≥120 s session-exit buffer, 500 bps buying-power reserve. Existing tighter portfolio controls win.
 - Relative skew bound remains **±2 s**. Proposed replacement `PAPER_TIME_V2` keeps 5 s acquisition, 120 s maximum evidence age and initial 50 ms continuity bound. Its changed health/authority semantics require specific review; do not silently substitute it for STRICT_V0/RELATIVE_V1.
@@ -32,8 +32,8 @@ After each milestone a reviewer who did not implement it reviews both diff and i
 |---|---|---|---|
 | M0 | User approves design/plan | Reproducible read-only release/ownership/blocker inventory and legacy trade trace | ACCEPTED |
 | M1 | M0 accepted | Thin synthetic observation → guarded intent → owned fill → independent exit → flat round trip; protection baseline repair | ACCEPTED |
-| M2 | M1 accepted | Cost provenance and restart-safe uncertain/partial-order/outcome processing | READY |
-| M3 | M2 accepted; clock contract reviewed | Scoped recovery/timing and per-symbol eligibility; outcome/protection progress during entry failure | NOT STARTED |
+| M2 | M1 accepted | Cost provenance and restart-safe uncertain/partial-order/outcome processing | ACCEPTED |
+| M3 | M2 accepted; clock contract reviewed | Scoped recovery/timing and per-symbol eligibility; outcome/protection progress during entry failure | READY |
 | M4 | M2 accepted; learning envelope reviewed | Real bounded outcome-driven parameter fitting and explicit NO_CHANGE, in shadow | NOT STARTED |
 | M5 | M3 + M4 accepted | Atomic model activation and later decision witness; synthetic whole loop; real-data local simulation | NOT STARTED |
 | M6 | M5 accepted; concrete rollout review | Frozen release handover and a naturally eligible broker-PAPER whole-loop evidence bundle | NOT STARTED |
@@ -121,6 +121,10 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 ## M2 — Sol implementation brief: cost provenance and crash recovery
 
+**Execution:** ACCEPTED at source `800e67bf5d15e3cf1d878b46f50775dc0bdf6f82`, following initial `0d9510e` and independently reviewed repairs `63970bb` and `800e67b`. [Independent review](../../evidence/paper-core/m2/review.md) closed all findings and accepted the integrated cash/restart/cost/quarantine evidence. The initial full regression recorded 4,372 passes, 21 failures and 47 skips; all 21 failures passed in the stable 398-pass/26-skip repair gate. The final six-line collision-scope repair passed 16 adjacent cases, then the expanded third-lot regression; exact lint and both-platform type gates passed. Counts are separate runs, not a final-head full-suite claim. M3 is ready. Provider completeness, disposable PostgreSQL execution and deployment retain documented limits.
+
+**Integration-owner rulings:** A quantity-only proof permits attributable protection but never grants cash authority. Complete independently sourced cash activity may establish current cash while outcome fees remain pending; do not require every past outcome to be fee-complete before future entries. A relevant cost/source revision must invalidate obsolete cash authority transactionally, and the final authority check must share the transaction that enters SUBMITTING. Expired pre-send claims may release their slot only through durable proof and a state fence that prevents a delayed original sender from POSTing. Broker absence alone never proves an intent unsent. Rejected batches preserve the complete envelope while quarantining only the actually implicated evidence and lots. Every repair needs an integrated progress/race witness, not only a refusal assertion.
+
 **Scope:** Make the thin loop durably correct across ambiguous POST, partial/cancel races, restarts, fees and late evidence. Completed outcomes run without fresh observations or entry eligibility. This milestone owns outcome/cost contracts, not predictive learning or timing-rule changes.
 
 **Relevant code:** `domain/models.py:Fill`, `brokers/alpaca.py:_fill_from_payload`, `execution/coordinator.py`, `execution/accounting.py`, `learner/experiment_lots.py`, `experiment_lot_reader.py`, `exploration_feedback.py` main's revisions, `storage/database.py`, and PR287's immutable lineage concepts. Preserve canonical fill/intent IDs. Retain cash/quantity tolerances and uncertain-submission rules.
@@ -131,11 +135,11 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 **Required outcomes:** Quantity and cash conservation hold across multiple partial fills; exit reservations prevent concurrent stop/deadline oversell. Crash points before claim, after claim/before send, after send/before ack, during fill import, before/after outcome commit each recover without a second POST or duplicate sample. A 404 after an ambiguous POST remains uncertain. Empty fills cannot become a completed round trip. Outcome status is COSTS_PENDING for missing fee evidence; known zero requires documented authority. Late fee revision updates one current outcome while preserving earlier versions. Actual gross/net and modeled economics are separate, with no second slippage deduction.
 
-- [ ] Implement failing tests for every restart cut and the fee-source probe, with credential-free fake broker logs persisted across subprocess restarts.
-- [ ] Run `python -m pytest tests/integration/paper_core/test_costed_loop.py tests/fault/paper_core/test_restart_matrix.py tests/fault/paper_core/test_outcomes_independent.py -q` and capture red evidence.
-- [ ] Implement provenance, single-store transaction boundaries and replay-safe import. Use main's revision behavior; do not reintroduce b496109's one-receipt-per-lot limitation.
-- [ ] Run the same full scenario in a fresh process, replay all events twice, and compare current outcome IDs, quantities and money. Close market and remove entry data; prove completed outcome still appears within a healthy ≤15 s worker poll.
-- [ ] Restore a consistent fixture backup and re-import subsequent events; prove no lost/duplicated evidence. Commit, independently review and update plan.
+- [x] Implement failing tests for every restart cut and the fee-source probe, with credential-free fake broker logs persisted across subprocess restarts.
+- [x] Run `python -m pytest tests/integration/paper_core/test_costed_loop.py tests/fault/paper_core/test_restart_matrix.py tests/fault/paper_core/test_outcomes_independent.py -q` and capture red evidence.
+- [x] Implement provenance, single-store transaction boundaries and replay-safe import. Use main's revision behavior; do not reintroduce b496109's one-receipt-per-lot limitation.
+- [x] Run the same full scenario in a fresh process, replay all events twice, and compare current outcome IDs, quantities and money. Close market and remove entry data; prove completed outcome still appears within a healthy ≤15 s worker poll.
+- [x] Restore a consistent fixture backup and re-import subsequent events; prove no lost/duplicated evidence. Commit, independently review and update plan.
 
 **Migration/rollback:** Test additive migration on copies of all legacy store variants identified in M0. Backups use SQLite online backup and restore integrity check. Unknown historic cost is never “fixed” by overwriting a zero. No production import yet. Once deployed later, rollback cannot restore pre-trade state over newer broker events.
 

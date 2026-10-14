@@ -1,0 +1,4 @@
+FILL_SCOPE_ERROR fill synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961 conflicts with stored data
+FILL_SCOPE canonical_lot= b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd incoming_lot= 864acb766a0bdbdc0f2fa1ad47655163a16912c1c4cf67e996e4a54c1afeec17 statuses= {'b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd': 'COMPLETE', '864acb766a0bdbdc0f2fa1ad47655163a16912c1c4cf67e996e4a54c1afeec17': 'INTEGRITY_FAILURE'} incident_lots= ['864acb766a0bdbdc0f2fa1ad47655163a16912c1c4cf67e996e4a54c1afeec17']
+.
+1 passed in 2.85s

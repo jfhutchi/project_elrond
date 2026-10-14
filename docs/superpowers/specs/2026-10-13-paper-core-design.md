@@ -79,6 +79,10 @@ Add these tables to the **authoritative operational store**, through one explici
 
 One SQL transaction writes decision + intent + protection handoff + reserved quantity. Network acquisition occurs outside the writer lock, then state versions and freshness are rechecked inside the short transaction. The broker side effect follows the durable claim. A crash may leave an uncertain intent, but cannot erase the evidence that an attempt may have occurred.
 
+The final entry-authority check and transition to SUBMITTING share a writer transaction. Recovery may retire an expired claim only while durable state proves it never reached a possible-send state; the same state fence prevents a delayed original sender from posting afterward. Retain the original decision, intent and precise refusal evidence. A fresh observation may then claim a new slot. Broker 404, elapsed time or a generic error never supplies definitive-unsent proof.
+
+Cash authority reflects current accepted evidence. Importing a cash-affecting revision invalidates any superseded certification in the same transaction; raw broker cash never repairs the gap by itself. Independently sourced complete cash activity can remain authoritative while fee allocation and outcome net are pending. Rejected batches roll back their business changes and retain the full rejected envelope, but quarantine follows the actual conflicting source/ownership graph rather than every unrelated item included in the batch.
+
 ## States and recovery
 
 State is **per role and scope**, not a single Boolean for the entire installation.
