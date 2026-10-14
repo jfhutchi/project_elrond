@@ -1,0 +1,233 @@
+[
+  {
+    "stage": "v34-before-source",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-lx6se3_g\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/v34-before-source.txt.gz",
+    "raw_bytes": 2817,
+    "raw_sha256": "710f32fbebe9bfd6823019de491a82cc526a79492e153cb3ee25bd6f591728c3",
+    "compressed_sha256": "6216e2a8dc216619af9549c52486b948395d203433989e00f17cde518577c228",
+    "result_lines": [
+      "1 passed in 12.82s"
+    ]
+  },
+  {
+    "stage": "release-api-red",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-e5o1em7s\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/release-api-red.txt.gz",
+    "raw_bytes": 2125,
+    "raw_sha256": "7fbc01dcca94d1ed05df973a84f8f955f43f459665e627592bb9a87d43e75c88",
+    "compressed_sha256": "575630c5f1a6702e3595f49801929ce935047b0777bdb8e422deffa88fc1b4d4",
+    "result_lines": [
+      "3 failed, 1 passed in 2.46s"
+    ]
+  },
+  {
+    "stage": "bootstrap-red",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-e7n9l6lw\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/bootstrap-red.txt.gz",
+    "raw_bytes": 1811,
+    "raw_sha256": "bc6f50460e03bed283b44be9da0ed1398f0ee265eb32efc1d1980288f6dc8037",
+    "compressed_sha256": "b0a4c2d786eb99a68041582369097c6694e1b9f7cc5042de9f86f8556b4aed23",
+    "result_lines": [
+      "1 failed, 4 passed, 1 warning in 2.50s"
+    ]
+  },
+  {
+    "stage": "helper-setup-failure",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-1g964n1k\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/helper-setup-failure.txt.gz",
+    "raw_bytes": 5906,
+    "raw_sha256": "9ff2ac40fabb9bfa10626af0add7343f2f04b77a8e8ed253d712af3a5f469355",
+    "compressed_sha256": "97ed025252339a875cb504fdccee4140cfa5ec70f6df6da4a7a4e2c705418e58",
+    "result_lines": [
+      "2 failed, 5 passed in 3.54s"
+    ]
+  },
+  {
+    "stage": "currency-setup-failure",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-b7s1sgl0\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/currency-setup-failure.txt.gz",
+    "raw_bytes": 6435,
+    "raw_sha256": "b7fdea16aac6cfe48bc1d8fb59e2f55f71d73dbe9c4905e39b01bc8cef337556",
+    "compressed_sha256": "bfee33921e1dd7df29305b73e61696dbe0853e49749d30df62bddec38ddb7b90",
+    "result_lines": [
+      "2 failed, 5 passed in 28.89s"
+    ]
+  },
+  {
+    "stage": "initial-empty-role-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-oqlm6ztm\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/initial-empty-role-green.txt.gz",
+    "raw_bytes": 27853,
+    "raw_sha256": "c764fade7f2bccd88ba917ac123812a493bbe2383dfe54a1dfabe2362585ee98",
+    "compressed_sha256": "8312fdf7180dba34bc0159cead3a262b6d482298f5a28a931c173ad0940d478c",
+    "result_lines": [
+      "7 passed in 15.35s"
+    ]
+  },
+  {
+    "stage": "owned-witness-disabled-setup",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-1nzxbhpz\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/owned-witness-disabled-setup.txt.gz",
+    "raw_bytes": 29228,
+    "raw_sha256": "6667ba05126f190a72efbc3976142a8c7795b28eaf1ca25ecf77872c3e06023b",
+    "compressed_sha256": "89fd7d499d93f79a17365cfb4e436111097ce5c35a6f8f45371ebe97e3d458e6",
+    "result_lines": [
+      "1 failed, 6 passed in 16.06s"
+    ]
+  },
+  {
+    "stage": "actual-feature-calendar-setup",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s7jg_tvb\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/actual-feature-calendar-setup.txt.gz",
+    "raw_bytes": 4468,
+    "raw_sha256": "70c7f288d06f8e39e565db2b7aade97d887d653ca451baa3d348fa48ba41bb43",
+    "compressed_sha256": "f20a6f849b8057ce72cdee7dc8453f165680e2da7930b4872fccbabe5a46eb7c",
+    "result_lines": [
+      "1 failed, 1 passed in 1.96s"
+    ]
+  },
+  {
+    "stage": "feature-assert-and-ack-race",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-60tn7zmq\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/feature-assert-and-ack-race.txt.gz",
+    "raw_bytes": 34677,
+    "raw_sha256": "92c789e202154b3e48bd46bd10a7884b905668d5f03fd8f1891ff12cea3ac6b4",
+    "compressed_sha256": "c04b2022f2fb002ecdead1d2879c25c61f791c40d973b6866fcc3ab54bdd07a9",
+    "result_lines": [
+      "2 failed, 8 passed in 18.45s"
+    ]
+  },
+  {
+    "stage": "presend-fixture-clock-setup",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-eq9hn5ue\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/presend-fixture-clock-setup.txt.gz",
+    "raw_bytes": 30644,
+    "raw_sha256": "ec29d7b7a7bf83d9315cfc92fea1271100a0ee512dcddc9a4bf2cdf88240bd56",
+    "compressed_sha256": "f0bd71bdb047ac01c3b367537276124e279c85508bbdab424ec65d0cb2bdff24",
+    "result_lines": [
+      "1 failed, 9 passed in 16.85s"
+    ]
+  },
+  {
+    "stage": "owned-witness-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-yzosxz48\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/owned-witness-green.txt.gz",
+    "raw_bytes": 29110,
+    "raw_sha256": "2626aea2bda673b184d013991ca7bbfa14089bb5e173e95cf59c6bbddb1bd037",
+    "compressed_sha256": "3f498097fe255a58240a6759a74aaf04ebe377344b87fe850aa3b97fb7105c79",
+    "result_lines": [
+      "10 passed in 17.17s"
+    ]
+  },
+  {
+    "stage": "canonical-test-name-setup",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-9pc3euzf\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/canonical-test-name-setup.txt.gz",
+    "raw_bytes": 35467,
+    "raw_sha256": "aad7df9cecfcc7fb500fce2270cd8f97f36609a57b4ce662cc75d6abc317a907",
+    "compressed_sha256": "0d6294e8ebf90c8a82bd2194c2e14566a87527f850fa902ccc8d3c1b4a4ef70e",
+    "result_lines": [
+      "1 failed, 13 passed in 20.20s"
+    ]
+  },
+  {
+    "stage": "canonical-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-0ics1xn3\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/canonical-green.txt.gz",
+    "raw_bytes": 389,
+    "raw_sha256": "902374931620f142427a383c3ec80f19197dc4b9e8054879f94a49c7a53c1fa1",
+    "compressed_sha256": "2c3db81c1d0db674d5dac50175baad7a4383dd7c53bc536977b25dfa350c7a44",
+    "result_lines": [
+      "4 passed in 7.51s"
+    ]
+  },
+  {
+    "stage": "canonical-daily-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-dhh0_qy_\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/canonical-daily-green.txt.gz",
+    "raw_bytes": 390,
+    "raw_sha256": "548374589f35b496d61249e72c37f0c3816b9b79f413b69847add9ccc764e421",
+    "compressed_sha256": "b481e5e73eb63ea722080ae1da2779422cfb1a469123d6ead146b9383f78f85e",
+    "result_lines": [
+      "5 passed in 7.77s"
+    ]
+  },
+  {
+    "stage": "joined-export-decimal-assert",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-pmhguc1m\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/joined-export-decimal-assert.txt.gz",
+    "raw_bytes": 35474,
+    "raw_sha256": "7392780d66700f8413123729eaac12f90cb4634fd4cd4e63fd8af73e71c440b4",
+    "compressed_sha256": "c34dea410cfbb462eb79cfaa554a76450986b86717b805e46231ac34c2eba51a",
+    "result_lines": [
+      "1 failed, 15 passed in 22.97s"
+    ]
+  },
+  {
+    "stage": "focused-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s2nlvmra\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/focused-green.txt.gz",
+    "raw_bytes": 56297,
+    "raw_sha256": "ca99d11c632b9532444d28fb3e4a0130f7de0a5388da7b867c973581ec4292c0",
+    "compressed_sha256": "1395879739c5375612f0e84afac2f1cfbe5142716ecaf6e66a4886c001368ea0",
+    "result_lines": [
+      "16 passed in 24.66s"
+    ]
+  },
+  {
+    "stage": "rollback-command-red",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-xzcjzvuj\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/rollback-command-red.txt.gz",
+    "raw_bytes": 6776,
+    "raw_sha256": "14b70e8daf178150316e324769ee4d03251b8fc68cfd70bc92b439b18912ca6b",
+    "compressed_sha256": "1077a7c0159c644909837320acbffab2cefa7d52b0b40b6f833edf8cb3e4f191",
+    "result_lines": [
+      "1 failed, 9 deselected in 2.09s"
+    ]
+  },
+  {
+    "stage": "rollback-command-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-pg67lbg3\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/rollback-command-green.txt.gz",
+    "raw_bytes": 114,
+    "raw_sha256": "8edc2c4cedc8b1307ada213b717fa7de93a1bba576b4ffae19d08824432f7b66",
+    "compressed_sha256": "a8c636134068cfaf1664334ad5e9cbc6a47ccf00d19e63be86c55c482dd83c31",
+    "result_lines": [
+      "1 passed, 9 deselected in 1.83s"
+    ]
+  },
+  {
+    "stage": "frozen-affected-gate",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-__pjhcko\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/frozen-affected-gate.txt.gz",
+    "raw_bytes": 175284797,
+    "raw_sha256": "5c9144d8d72fb45373ac609d3465f960f92adfa469ac0142a8b4615c0fb9fed8",
+    "compressed_sha256": "8785505ba4344775d6c80d501ead5b1bd7ff073e015f79875023d1c6ea3458ee",
+    "result_lines": [
+      "409 passed, 26 skipped in 1187.96s (0:19:47)"
+    ]
+  },
+  {
+    "stage": "default-identity-red",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-e_jn3pla\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/default-identity-red.txt.gz",
+    "raw_bytes": 1584,
+    "raw_sha256": "e741bca64fa3465db10e0b09dd988961b6334e631f43f749d1572601bb5a535c",
+    "compressed_sha256": "0f089ed47eb298130832b1b3ae8c198f96aa3691bd957a4f02e1737b546843d4",
+    "result_lines": [
+      "1 failed, 10 deselected in 3.41s"
+    ]
+  },
+  {
+    "stage": "default-fix-release-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-u1i97niy\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/default-fix-release-green.txt.gz",
+    "raw_bytes": 55206,
+    "raw_sha256": "859af7c4763427d143b5236878047fa04dcad0f20de0eee5e40ccd87a2bbf27b",
+    "compressed_sha256": "cf3ad114cdedf07a8415a3a5e6e5a1763be35988654c7153ac26906617646596",
+    "result_lines": [
+      "11 passed in 21.66s"
+    ]
+  }
+]

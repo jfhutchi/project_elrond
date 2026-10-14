@@ -1,0 +1,20 @@
+{
+  "observed_at": "2026-10-14T19:24:48.158643+00:00",
+  "operation": "read nonsecret JSON and archive exact bytes; no referenced environment file or credentials opened",
+  "records": [
+    {
+      "label": "coordinator_source",
+      "source_path": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\exploration-commission-b496109\\source.json",
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-config-archive\\coordinator_source-a73c0ba08a3c068abcc04140aae787424e76bd5dee091d5cd597804fc62b3919.json",
+      "bytes": 1109,
+      "sha256": "a73c0ba08a3c068abcc04140aae787424e76bd5dee091d5cd597804fc62b3919"
+    },
+    {
+      "label": "experiment_manifest",
+      "source_path": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\project_elrond-trade-learning\\.superpowers\\sdd\\2026-10-06-adaptive-paper-coordinator\\prepared\\manifest.json",
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-config-archive\\experiment_manifest-1ca42758455dde28c189e70ec8119f66268c41326396a49f5aecdc1211422bc9.json",
+      "bytes": 4171,
+      "sha256": "1ca42758455dde28c189e70ec8119f66268c41326396a49f5aecdc1211422bc9"
+    }
+  ]
+}

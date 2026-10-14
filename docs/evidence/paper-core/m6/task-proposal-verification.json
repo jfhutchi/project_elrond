@@ -1,0 +1,41 @@
+{
+  "state": "STATIC_XML_VERIFIED_NOT_REGISTERED",
+  "records": [
+    {
+      "task": "Elrond Paper Core Guardian",
+      "sha256": "252c614ea6600499cb05a6318bd252f224c04b093820ff139d2f6e878afdb686",
+      "uri": "\\Elrond Paper Core Guardian",
+      "description": "Prepared continuous PAPER core guardian; disabled submission-disabled proposal; not commissioned",
+      "enabled": "false",
+      "execution_time_limit": "PT0S",
+      "triggers": 0,
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-guardian-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\deploy\\omen\\start-paper-core.ps1\" -Repository \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\" -Config \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\m6\\prepared-config.json\" -Manifest \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\m6\\prepared-release.json\" -Role guardian -SubmissionDisabled",
+      "logon_type": "InteractiveToken",
+      "run_level": "LeastPrivilege"
+    },
+    {
+      "task": "Elrond Paper Core Outcomes",
+      "sha256": "14200979de7f21a75a534c8f9fd0bdeead5e96f56266b4be990b639aa6d14a12",
+      "uri": "\\Elrond Paper Core Outcomes",
+      "description": "Prepared continuous PAPER core outcomes; disabled submission-disabled proposal; not commissioned",
+      "enabled": "false",
+      "execution_time_limit": "PT0S",
+      "triggers": 0,
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-outcomes-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\deploy\\omen\\start-paper-core.ps1\" -Repository \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\" -Config \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\m6\\prepared-config.json\" -Manifest \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\m6\\prepared-release.json\" -Role outcomes -SubmissionDisabled",
+      "logon_type": "InteractiveToken",
+      "run_level": "LeastPrivilege"
+    },
+    {
+      "task": "Elrond Paper Core Trader",
+      "sha256": "465f6403761d1c54c88edb11d19ea28cabc59448309df1bb5b0796b98ebc1986",
+      "uri": "\\Elrond Paper Core Trader",
+      "description": "Prepared continuous PAPER core trader; disabled submission-disabled proposal; not commissioned",
+      "enabled": "false",
+      "execution_time_limit": "PT0S",
+      "triggers": 0,
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-trader-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\deploy\\omen\\start-paper-core.ps1\" -Repository \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\" -Config \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\m6\\prepared-config.json\" -Manifest \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\m6\\prepared-release.json\" -Role trader -SubmissionDisabled",
+      "logon_type": "InteractiveToken",
+      "run_level": "LeastPrivilege"
+    }
+  ]
+}

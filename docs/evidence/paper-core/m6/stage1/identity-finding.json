@@ -1,0 +1,12 @@
+{
+  "finding": "INTEGER_FLOAT_DEFAULT_SERIALIZATION_IDENTITY_CHANGE",
+  "original_pre_serialization_release_id": "d281a62bc49668973e5ba5e3f9000b6fd43c5c379b9b0d9bc5d1be5965c0b1cb",
+  "reloaded_release_id": "6774bd3b28a279f2fada08c636da23f5065fa71c29ed9b069346bdd617d3c38e",
+  "source_pins_passed": true,
+  "affected_fields": [
+    "guardian_poll_seconds",
+    "outcomes_poll_seconds",
+    "entry_poll_seconds"
+  ],
+  "action": "PRESERVE_STAGE_REPAIR_DEFAULTS_AND_REGRESS_SERIALIZATION"
+}

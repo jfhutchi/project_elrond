@@ -1,0 +1,170 @@
+{
+  "scope": "DATED_READ_ONLY_PREPARATION_NOT_FRESH_BROKER_AUTHORITY",
+  "records": [
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-backup-preparation.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-backup-preparation.json",
+      "sha256": "74538f9c820bb8ec1c851fe93f29518e5aea5adf088f434d38adf26fd811a33f"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-host-metadata-preparation.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-host-metadata-preparation.json",
+      "sha256": "2380a7bf3c61d45435737a02e6ce1f33ad0b367d39ce6dc54c6c9db3350bf311"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-inventory-preparation.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-inventory-preparation.json",
+      "sha256": "28c5cf4d5b9f567cb0ee1c617cb7289848e2a49ab964e7be45764c93567eb823"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-principals-preparation.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-principals-preparation.json",
+      "sha256": "378743804dab41618ba4e77de4b2336f4f33fea4de2e7501b6f20f74b63dcc0c"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-restored-ledger-metadata.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-restored-ledger-metadata.json",
+      "sha256": "ed12b2384edd2c1e98b737e9edebed218a532d8e119d6d160369917046811d87"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-restored-protection-metadata.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-restored-protection-metadata.json",
+      "sha256": "ec7e45ef5f4f818e3bbda02dc3b076e97a9667f132f87a3893804cd8f5e9113a"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-remote-heads-preparation.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-remote-heads-preparation.json",
+      "sha256": "4309be86c848161b914ff06f315056a7c76880fec60050cda31ff9183b2b5614"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-action-index.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-action-index.json",
+      "sha256": "e8ac32f06d53b483169b6220e159823893a54b26978f43fb0f025ee92c345245"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-registry-metadata.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-registry-metadata.json",
+      "sha256": "e503eb88c2ae923c73b88286b62a9d17bc4126f0a0f08185ba29a4dc5e7243dd"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-v34-root-verification.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-v34-root-verification.json",
+      "sha256": "1bb718a65675e4611f126efbb9639c6cd0a88eefa9f4b87cd6aa3b828cbac970"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\02a786fdf5f09872f5694f965cdac029f336a94d2d7d8dae685b4ae7991fde4e.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\02a786fdf5f09872f5694f965cdac029f336a94d2d7d8dae685b4ae7991fde4e.xml",
+      "sha256": "02a786fdf5f09872f5694f965cdac029f336a94d2d7d8dae685b4ae7991fde4e"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\07854a4ab6e8a4e7b23f97c06d7eef19f979b39615b1ab382bfc29e5c16d248b.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\07854a4ab6e8a4e7b23f97c06d7eef19f979b39615b1ab382bfc29e5c16d248b.xml",
+      "sha256": "07854a4ab6e8a4e7b23f97c06d7eef19f979b39615b1ab382bfc29e5c16d248b"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\14af5823bf2fa34dcd93a2deecae9de3fbd6de677b78f3428b3cd94a7d4a0089.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\14af5823bf2fa34dcd93a2deecae9de3fbd6de677b78f3428b3cd94a7d4a0089.xml",
+      "sha256": "14af5823bf2fa34dcd93a2deecae9de3fbd6de677b78f3428b3cd94a7d4a0089"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\2df254324631cc75eed512d6c568ea7ff08b9096629c07f2018aa0fc05a6bec6.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\2df254324631cc75eed512d6c568ea7ff08b9096629c07f2018aa0fc05a6bec6.xml",
+      "sha256": "2df254324631cc75eed512d6c568ea7ff08b9096629c07f2018aa0fc05a6bec6"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\3f5527c3c75306ff3e43eb999152c0455f975e73757084b2bc247488d8425e55.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\3f5527c3c75306ff3e43eb999152c0455f975e73757084b2bc247488d8425e55.xml",
+      "sha256": "3f5527c3c75306ff3e43eb999152c0455f975e73757084b2bc247488d8425e55"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\4909e1b5d610c859e379a7626c976a55f935981d6ec3457d681958cf568cecfd.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\4909e1b5d610c859e379a7626c976a55f935981d6ec3457d681958cf568cecfd.xml",
+      "sha256": "4909e1b5d610c859e379a7626c976a55f935981d6ec3457d681958cf568cecfd"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc.xml",
+      "sha256": "5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\5c7c4d7a29a88ec1689d9d7f84e6c1b57ae585f9beeff613408b65d1c6c4cf2c.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\5c7c4d7a29a88ec1689d9d7f84e6c1b57ae585f9beeff613408b65d1c6c4cf2c.xml",
+      "sha256": "5c7c4d7a29a88ec1689d9d7f84e6c1b57ae585f9beeff613408b65d1c6c4cf2c"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\74938c7edaabcb0e067e54784d53297d007a982c9f1f1df3dc3175e75c8c593e.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\74938c7edaabcb0e067e54784d53297d007a982c9f1f1df3dc3175e75c8c593e.xml",
+      "sha256": "74938c7edaabcb0e067e54784d53297d007a982c9f1f1df3dc3175e75c8c593e"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\9918d179ede7c081888e06354979b9ce03772ed438d3b01908977e8442e84d0c.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\9918d179ede7c081888e06354979b9ce03772ed438d3b01908977e8442e84d0c.xml",
+      "sha256": "9918d179ede7c081888e06354979b9ce03772ed438d3b01908977e8442e84d0c"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\9a255044887db7368d69f159b5ce068d05cdfc9b1da2fc7f481afb9b512af237.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\9a255044887db7368d69f159b5ce068d05cdfc9b1da2fc7f481afb9b512af237.xml",
+      "sha256": "9a255044887db7368d69f159b5ce068d05cdfc9b1da2fc7f481afb9b512af237"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\a24a965063445e6bf56009143601b7b288a1e88cb039e0ec4b5d3a9e2f5ced20.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\a24a965063445e6bf56009143601b7b288a1e88cb039e0ec4b5d3a9e2f5ced20.xml",
+      "sha256": "a24a965063445e6bf56009143601b7b288a1e88cb039e0ec4b5d3a9e2f5ced20"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\ab8d2788c3a7221db23d45029045027098d6fb43d88384d2a30a244f8102dde7.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\ab8d2788c3a7221db23d45029045027098d6fb43d88384d2a30a244f8102dde7.xml",
+      "sha256": "ab8d2788c3a7221db23d45029045027098d6fb43d88384d2a30a244f8102dde7"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\c499dbf2c9d9c4bb704a340ee82c1e13286b46b1dbc431940deafd280695210c.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\c499dbf2c9d9c4bb704a340ee82c1e13286b46b1dbc431940deafd280695210c.xml",
+      "sha256": "c499dbf2c9d9c4bb704a340ee82c1e13286b46b1dbc431940deafd280695210c"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\ca00634898bf17a7650879aecd57960ee388ea4b239e8d0d1423ad58d8cdc038.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\ca00634898bf17a7650879aecd57960ee388ea4b239e8d0d1423ad58d8cdc038.xml",
+      "sha256": "ca00634898bf17a7650879aecd57960ee388ea4b239e8d0d1423ad58d8cdc038"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\d4864a9396f57e351fd376e665d83f857eb18c38b5e580d1af4041676e7d3c30.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\d4864a9396f57e351fd376e665d83f857eb18c38b5e580d1af4041676e7d3c30.xml",
+      "sha256": "d4864a9396f57e351fd376e665d83f857eb18c38b5e580d1af4041676e7d3c30"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\e02581c69c2c18805ff13de0a5690f7cd992802512e6831720a0ba8f0f4e7a10.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\e02581c69c2c18805ff13de0a5690f7cd992802512e6831720a0ba8f0f4e7a10.xml",
+      "sha256": "e02581c69c2c18805ff13de0a5690f7cd992802512e6831720a0ba8f0f4e7a10"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\f65373d43d2ceae78a764102d1c8b673ee2df33a29b161cb3f9878fa10b14bb7.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\f65373d43d2ceae78a764102d1c8b673ee2df33a29b161cb3f9878fa10b14bb7.xml",
+      "sha256": "f65373d43d2ceae78a764102d1c8b673ee2df33a29b161cb3f9878fa10b14bb7"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\fa077b8a026412fb5bcbbcefb51fec2a444b1db312c81247ddeddccc8cb7101f.xml",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\fa077b8a026412fb5bcbbcefb51fec2a444b1db312c81247ddeddccc8cb7101f.xml",
+      "sha256": "fa077b8a026412fb5bcbbcefb51fec2a444b1db312c81247ddeddccc8cb7101f"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-task-archive\\manifest.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-task-archive\\manifest.json",
+      "sha256": "5b07c711b77ccbc59000c0f97672938b5c98b885cb0a37982963c2167e9cbd13"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-config-archive\\coordinator_source-a73c0ba08a3c068abcc04140aae787424e76bd5dee091d5cd597804fc62b3919.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-config-archive\\coordinator_source-a73c0ba08a3c068abcc04140aae787424e76bd5dee091d5cd597804fc62b3919.json",
+      "sha256": "a73c0ba08a3c068abcc04140aae787424e76bd5dee091d5cd597804fc62b3919"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-config-archive\\experiment_manifest-1ca42758455dde28c189e70ec8119f66268c41326396a49f5aecdc1211422bc9.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-config-archive\\experiment_manifest-1ca42758455dde28c189e70ec8119f66268c41326396a49f5aecdc1211422bc9.json",
+      "sha256": "1ca42758455dde28c189e70ec8119f66268c41326396a49f5aecdc1211422bc9"
+    },
+    {
+      "source": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\m6-config-archive\\manifest.json",
+      "archive": "docs\\evidence\\paper-core\\m6\\preparation\\m6-config-archive\\manifest.json",
+      "sha256": "73b4b9e926948f69f3a315a55efdb350e7ec22c7c4e2dbf87c5e59b68c78a6cf"
+    }
+  ]
+}

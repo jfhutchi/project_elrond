@@ -31,6 +31,8 @@ class Clocks(Protocol):
 
 
 class SystemClocks:
+    execution_domain = "HOST_UTC"
+
     def __init__(self) -> None:
         self.process_id = str(uuid4())
 

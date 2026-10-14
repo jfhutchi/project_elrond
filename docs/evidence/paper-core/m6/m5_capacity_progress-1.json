@@ -1,0 +1,7 @@
+{
+  "duplicate_outcome_resolution": false,
+  "guardian_and_durable_outcome_seconds": 9.030999999988126,
+  "guardian_progress_bound_seconds": 10,
+  "restart_setup_seconds": 0.23499999998603016,
+  "total_intervention_seconds": 9.265999999974156
+}

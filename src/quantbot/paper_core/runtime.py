@@ -1,21 +1,28 @@
 """Fixture initialization only. Operational launcher and model activation are later milestones."""
 
 from datetime import datetime, timedelta
+from decimal import Decimal
 from functools import partial
 from typing import cast
 
 from sqlalchemy import select
 
 from quantbot.brokers import BrokerAdapter
+from quantbot.brokers.base import BrokerAccountSnapshot
 from quantbot.config import Settings
+from quantbot.domain import BrokerOrder, OrderIntent, Position
 from quantbot.execution import ExecutionCoordinator
 from quantbot.execution.coordinator import SubmissionPolicy
 from quantbot.paper_core.contracts import GuardianReceipt, ReconciliationProof
+from quantbot.paper_core.release import prepare_release, read_status, verify_release
 from quantbot.paper_core.send_guard import final_send_in_session
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, certify_inventory, put, table
 from quantbot.research.manifest import content_id
+from quantbot.risk import DrawdownState, OrderGateDecision, OrderPurpose, PortfolioVetoDecision
 from quantbot.storage import StorageRepository
+
+__all__ = ["prepare_release", "read_status", "verify_release"]
 
 
 def require_synthetic(store: CoreStore, broker: SyntheticBroker) -> None:
@@ -28,6 +35,164 @@ def require_synthetic(store: CoreStore, broker: SyntheticBroker) -> None:
     )
     if not matches_lane or broker.account_id != store.config.account_id:
         raise ValueError("M1 permits only an explicit matching synthetic broker")
+
+
+def require_runtime_broker(store: CoreStore, broker: object) -> None:
+    from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
+    from quantbot.paper_core.authority import commission_in_session
+
+    if store.config.evidence_lane != "BROKER_PAPER":
+        if not isinstance(broker, SyntheticBroker):
+            raise ValueError("fixture broker required")
+        require_synthetic(store, broker)
+        return
+    if type(broker) is not AlpacaCoreBroker:
+        raise ValueError("exact commissioned PAPER adapter required")
+    with store.database.transaction() as session:
+        commission = commission_in_session(store, session)
+    if broker.account_id != commission.account_id or broker.endpoint != commission.endpoint:
+        raise ValueError("commissioned broker identity mismatch")
+
+
+def coordinator(store: CoreStore, broker: object) -> ExecutionCoordinator:
+    require_runtime_broker(store, broker)
+    if isinstance(broker, SyntheticBroker):
+        legacy = fixture_coordinator(store, broker)
+        if store.runtime_role is None:
+            return legacy
+        return CoreExecutionCoordinator(store, cast(BrokerAdapter, broker), legacy._settings)
+    settings = getattr(store, "runtime_settings", None)
+    if not isinstance(settings, Settings):
+        raise ValueError("existing operational Settings authority required")
+    return CoreExecutionCoordinator(
+        store,
+        cast(BrokerAdapter, broker),
+        settings,
+    )
+
+
+class CoreExecutionCoordinator(ExecutionCoordinator):
+    """Only optional general entry policies change; parent outbox/send/recovery is retained."""
+
+    def __init__(self, store: CoreStore, broker: BrokerAdapter, settings: Settings) -> None:
+        self.store = store
+        super().__init__(
+            store.database,
+            broker,
+            settings,
+            submission_policy=SubmissionPolicy(max_not_found_retries=0),
+            transactional_send_check=partial(
+                final_send_in_session, store, clock=lambda: store.clocks.sample()[0]
+            ),
+        )
+
+    def _adopt(self, intent: OrderIntent, order: BrokerOrder) -> OrderIntent:
+        # Another independent recovery reader may advance SUBMITTING while POST is in flight.
+        # Revalidate the immutable request and adopt its actual acknowledgement under one lock.
+        from sqlalchemy import text
+
+        from quantbot.brokers.base import BrokerProtocolError
+        from quantbot.paper_core.outcomes import _adopt
+
+        with self.store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            repo = StorageRepository(session)
+            current = repo.get_order_intent(intent.intent_id)
+            if current is None or current.model_copy(update={"state": intent.state}) != intent:
+                raise BrokerProtocolError("acknowledgement request changed during recovery")
+            _adopt(repo, current, order)
+            adopted = repo.get_order_intent(intent.intent_id)
+            assert adopted is not None
+            return adopted
+
+    def _gate(
+        self,
+        account_snapshot: BrokerAccountSnapshot,
+        positions: tuple[Position, ...],
+        intent: OrderIntent,
+        purpose: OrderPurpose,
+        market_eligible: bool,
+        drawdown: DrawdownState | None,
+        risk_approved: bool | None,
+        vetoes: PortfolioVetoDecision | None,
+        open_orders: tuple[BrokerOrder, ...],
+    ) -> OrderGateDecision:
+        from quantbot.config import validate_trading_authority
+        from quantbot.execution.coordinator import _competing_exit, _risk_reducing_exit_reasons
+        from quantbot.paper_core.authority import runtime_objections
+        from quantbot.paper_core.health import entry_health_objections
+        from quantbot.risk import OrderGateDecision, OrderPurpose
+
+        safety = validate_trading_authority(self._settings, account_snapshot.account.account_id)
+        reasons = list(safety.reasons)
+        with self.store.database.transaction() as session:
+            if self.store.config.evidence_lane == "BROKER_PAPER":
+                reasons.extend(
+                    runtime_objections(self.store, session, entry=purpose is OrderPurpose.ENTRY)
+                )
+            repo = StorageRepository(session)
+            if purpose is OrderPurpose.ENTRY:
+                if not self.store.runtime_entry_enabled:
+                    reasons.append("CORE_ENTRY_DISABLED")
+                if self._settings.KILL_SWITCH or repo.get_kill_switch_state().engaged:
+                    reasons.append("CORE_MANUAL_ENTRY_PAUSE")
+                reasons.extend(entry_health_objections(self.store, session, intent.symbol))
+                proof = self.store.latest_proof()
+                if proof.account != account_snapshot.account or not proof.cash_complete:
+                    reasons.append("CORE_CURRENT_CASH_OR_ACCOUNT_UNCERTIFIED")
+                actual = tuple(sorted((p.symbol, p.quantity) for p in positions if p.quantity != 0))
+                if actual != tuple(sorted(proof.actual_quantities)):
+                    reasons.append("CORE_INHERITED_EXPOSURE_CHANGED")
+                if any(p.symbol == intent.symbol and p.quantity != 0 for p in positions):
+                    reasons.append("CORE_SYMBOL_ALREADY_HELD")
+                links = [r for r in self.store.links() if r["intent_id"] == intent.intent_id]
+                if not links:
+                    reasons.append("CORE_ENTRY_HANDOFF_MISSING")
+                else:
+                    from quantbot.paper_core.contracts import Decision
+
+                    decision = self.store.read("core_decisions", links[0]["decision_id"], Decision)
+                    notional = intent.quantity * decision.price
+                    account = account_snapshot.account
+                    if (
+                        notional > account.equity * Decimal("0.005")
+                        or notional * Decimal("0.01") > account.equity * Decimal("0.0025")
+                        or notional > account.cash
+                        or notional > account.buying_power * Decimal("0.95")
+                    ):
+                        reasons.append("CORE_FIXED_RISK_ENVELOPE")
+            elif purpose is OrderPurpose.STRATEGY_EXIT:
+                if self.store.config.evidence_lane == "BROKER_PAPER":
+                    from quantbot.paper_core.send_guard import owned_exit_objections
+
+                    reasons.extend(owned_exit_objections(self.store, session, intent))
+                reasons.extend(_risk_reducing_exit_reasons(intent, positions))
+                if any(
+                    _competing_exit(p, intent) for p in repo.list_unresolved_order_intents()
+                ) or any(
+                    o.symbol == intent.symbol
+                    and o.side is intent.side
+                    and o.client_order_id != intent.client_order_id
+                    for o in open_orders
+                ):
+                    reasons.append("EXIT_REDUCING_ORDER_PENDING")
+            else:
+                reasons.append("CORE_UNSUPPORTED_ORDER_PURPOSE")
+        if not getattr(self.store, "runtime_submission_enabled", False):
+            reasons.append("CORE_SUBMISSION_DISABLED")
+        if not market_eligible:
+            reasons.append("MARKET_NOT_ELIGIBLE")
+        if not account_snapshot.order_entry_allowed:
+            reasons.append("BROKER_ORDER_ENTRY_DISABLED")
+        if account_snapshot.restrictions:
+            reasons.append("BROKER_ACCOUNT_RESTRICTED")
+        return OrderGateDecision(
+            purpose=purpose,
+            allowed=not reasons,
+            reasons=tuple(dict.fromkeys(reasons)),
+            broker_label=safety.broker_label,
+            environment_label=safety.environment_label,
+        )
 
 
 def initialize_fixture(
@@ -82,7 +247,7 @@ def initialize_fixture(
     return proof
 
 
-def coordinator(store: CoreStore, broker: SyntheticBroker) -> ExecutionCoordinator:
+def fixture_coordinator(store: CoreStore, broker: SyntheticBroker) -> ExecutionCoordinator:
     require_synthetic(store, broker)
     # Nonsecret placeholders satisfy the retained coordinator's credential-completeness contract.
     settings = Settings(

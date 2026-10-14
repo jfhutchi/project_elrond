@@ -1,0 +1,2 @@
+# Exact content-addressed preparation bytes must survive checkout.
+* -text

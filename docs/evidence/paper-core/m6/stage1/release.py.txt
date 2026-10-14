@@ -1,0 +1,354 @@
+"""Nonsecret deterministic preparation; startup never commissions or migrates."""
+
+from __future__ import annotations
+
+import hashlib
+import importlib.metadata
+import json
+import sqlite3
+import sys
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Literal, Self
+
+from pydantic import Field, model_validator
+
+from quantbot.brokers.base import BrokerModel
+from quantbot.paper_core.contracts import CoreConfig, ModelArtifact
+from quantbot.paper_core.operational_costs import PaperCostContract
+from quantbot.research.manifest import content_id
+from quantbot.storage.schema import SCHEMA_VERSION
+
+PAPER_ENDPOINT: Literal["https://paper-api.alpaca.markets"] = "https://paper-api.alpaca.markets"
+
+
+class RuntimeConfig(BrokerModel):
+    version: Literal["paper-core-runtime-v1"] = "paper-core-runtime-v1"
+    repository: str
+    store_path: str
+    store_identity: str
+    expected_account_hash: str
+    endpoint: Literal["https://paper-api.alpaca.markets"] = PAPER_ENDPOINT
+    environment_file_reference: str | None = None
+    core: CoreConfig
+    initial_model: ModelArtifact = Field(
+        default_factory=lambda: ModelArtifact(feature_version="five-minute-price-alpha-v1")
+    )
+    holdout_source: str
+    learning_origin: datetime
+    learning_dataset: str = "ALPACA_PAPER_OWNED"
+    canonical_datasets: tuple[str, ...] = ()
+    activation_policy: Literal["REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V2"] = (
+        "REVIEW_EACH_CANDIDATE"
+    )
+    submission_enabled: bool = False
+    cost_contract: PaperCostContract | None = None
+    guardian_poll_seconds: float = Field(default=15, gt=0, le=15)
+    outcomes_poll_seconds: float = Field(default=15, gt=0, le=15)
+    entry_poll_seconds: float = Field(default=15, gt=0, le=15)
+
+    @model_validator(mode="after")
+    def fixed_authority(self) -> Self:
+        if self.core.release_id != "UNBOUND_PREPARED_RELEASE":
+            raise ValueError("prepared core release must be explicitly unbound")
+        for value in (self.repository, self.store_path, self.holdout_source):
+            if not Path(value).is_absolute():
+                raise ValueError("runtime paths must be absolute")
+        if (
+            self.environment_file_reference
+            and not Path(self.environment_file_reference).is_absolute()
+        ):
+            raise ValueError("environment reference must be absolute")
+        if self.core.clock_profile != "PAPER_TIME_V2":
+            raise ValueError("supported runtime requires PAPER_TIME_V2")
+        if self.core.evidence_lane == "BROKER_PAPER" and not self.canonical_datasets:
+            raise ValueError("operational underlying canonical dataset identity required")
+        if self.initial_model.mode != "COLLECT" or self.initial_model.fixture_authority:
+            raise ValueError("initial runtime requires explicit bounded COLLECT")
+        if len(self.expected_account_hash) != 64:
+            raise ValueError("exact account digest required")
+        if self.cost_contract is not None and (
+            hashlib.sha256(self.cost_contract.account_id.encode()).hexdigest()
+            != self.expected_account_hash
+            or self.core.symbol not in self.cost_contract.symbols
+        ):
+            raise ValueError("cost contract account/symbol mismatch")
+        return self
+
+    @property
+    def id(self) -> str:
+        return content_id(self)
+
+
+class PreparedRelease(BrokerModel):
+    config: RuntimeConfig
+    schema_version: int
+    executable_pins: tuple[tuple[str, str], ...]
+    interpreter: str
+    interpreter_sha256: str
+    python_version: str
+    distributions: tuple[tuple[str, str, str], ...]
+    base_runtime_pins: tuple[tuple[str, str], ...]
+
+    @property
+    def id(self) -> str:
+        return content_id(self)
+
+
+def file_hash(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def installed_distribution_pins() -> tuple[tuple[str, str, str], ...]:
+    pins = []
+    for dist in importlib.metadata.distributions():
+        name = str(dist.metadata["Name"]).lower()
+        records = []
+        for entry in sorted(dist.files or (), key=str):
+            path = Path(str(dist.locate_file(entry)))
+            if path.is_file() and path.suffix != ".pyc":
+                records.append((str(entry), file_hash(path)))
+        pins.append((name, dist.version, content_id(records)))
+    return tuple(sorted(pins))
+
+
+def prepare_release(config: RuntimeConfig) -> PreparedRelease:
+    root = Path(config.repository)
+    files = list((root / "src").rglob("*.py"))
+    files += [root / "uv.lock", root / "pyproject.toml"]
+    files += [
+        root / "deploy/omen" / name
+        for name in ("start-paper-core.ps1", "windows-job.ps1", "service-host.cs", "process-job.cs")
+    ]
+    pins = tuple(sorted((p.relative_to(root).as_posix(), file_hash(p)) for p in files))
+    return PreparedRelease(
+        config=config,
+        schema_version=SCHEMA_VERSION,
+        executable_pins=pins,
+        interpreter=str(Path(sys.executable).resolve()),
+        interpreter_sha256=file_hash(Path(sys.executable)),
+        python_version=sys.version,
+        distributions=installed_distribution_pins(),
+        base_runtime_pins=tuple(
+            (str(path), file_hash(path))
+            for path in (
+                Path(sys.base_prefix) / "python.exe",
+                Path(sys.base_prefix) / "python311.dll",
+            )
+            if path.is_file()
+        ),
+    )
+
+
+def verify_release(release: PreparedRelease) -> dict[str, Any]:
+    reasons = []
+    root = Path(release.config.repository).resolve()
+    declared = {name for name, _ in release.executable_pins}
+    expected = {p.relative_to(root).as_posix() for p in (root / "src").rglob("*.py")}
+    expected.update({"uv.lock", "pyproject.toml"})
+    expected.update(
+        "deploy/omen/" + name
+        for name in ("start-paper-core.ps1", "windows-job.ps1", "service-host.cs", "process-job.cs")
+    )
+    if declared != expected or len(declared) != len(release.executable_pins):
+        reasons.append("EXECUTABLE_INVENTORY_MISMATCH")
+    for name, digest in release.executable_pins:
+        path = (root / name).resolve()
+        if not path.is_relative_to(root) or not path.is_file() or file_hash(path) != digest:
+            reasons.append("EXECUTABLE_PIN_MISMATCH:" + name)
+    if (
+        str(Path(sys.executable).resolve()) != release.interpreter
+        or file_hash(Path(sys.executable)) != release.interpreter_sha256
+        or sys.version != release.python_version
+    ):
+        reasons.append("INTERPRETER_MISMATCH")
+    if installed_distribution_pins() != release.distributions:
+        reasons.append("INSTALLED_DISTRIBUTIONS_MISMATCH")
+    for name, digest in release.base_runtime_pins:
+        if not Path(name).is_file() or file_hash(Path(name)) != digest:
+            reasons.append("BASE_RUNTIME_MISMATCH")
+    if release.schema_version != SCHEMA_VERSION:
+        reasons.append("SCHEMA_BUILD_MISMATCH")
+    return {
+        "release_id": release.id,
+        "verified_at": datetime.now(UTC).isoformat(),
+        "state": "PREPARED" if not reasons else "REFUSED",
+        "objections": reasons,
+        "operational_commission": "NOT_PERFORMED",
+        "broker_state": "NOT_PROBED",
+    }
+
+
+def readonly_connection(path: Path) -> sqlite3.Connection:
+    if not path.is_absolute() or not path.is_file():
+        raise ValueError("existing absolute store required")
+    connection = sqlite3.connect(path.as_uri() + "?mode=ro", uri=True)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA query_only=ON")
+    connection.execute("BEGIN")
+    try:
+        row = connection.execute("SELECT version,store_identity FROM schema_version").fetchone()
+        if row is None or row["version"] != SCHEMA_VERSION:
+            connection.close()
+            raise ValueError("unsupported read-only schema")
+    except sqlite3.Error as error:
+        connection.close()
+        raise ValueError("unsupported read-only schema") from error
+    return connection
+
+
+def read_status(path: Path) -> dict[str, Any]:
+    with readonly_connection(path) as connection:
+        status: dict[str, Any] = {
+            "schema": dict(connection.execute("SELECT * FROM schema_version").fetchone()),
+            "broker_state": "NOT_PROBED",
+            "roles": {},
+            "recorded_stop": dict(connection.execute("SELECT * FROM kill_switch_state").fetchone()),
+        }
+        rows = [
+            json.loads(r[0])
+            for r in connection.execute(
+                "SELECT h.payload FROM core_role_heartbeats h "
+                "JOIN core_role_current c ON h.id=c.heartbeat_id"
+            )
+        ]
+        for role in ("trader", "guardian", "outcomes"):
+            selected = [r for r in rows if r["role"] == role]
+            status["roles"][role] = max(selected, key=lambda r: r["recorded_at"], default=None)
+        status["active_model"] = [
+            dict(r) for r in connection.execute("SELECT * FROM core_active_model")
+        ]
+        status["commissions"] = [
+            json.loads(r[0])
+            for r in connection.execute("SELECT payload FROM core_runtime_commissions")
+        ]
+        return status
+
+
+def read_export(path: Path, decision_id: str) -> dict[str, Any]:
+    """One selected immutable economic graph, using only read-only indexed/reference joins."""
+    with readonly_connection(path) as connection:
+
+        def document(name: str, identity: str | None) -> dict[str, Any] | None:
+            if not identity:
+                return None
+            row = connection.execute(
+                f'SELECT payload FROM "{name}" WHERE id=?', (identity,)
+            ).fetchone()
+            return json.loads(row[0]) if row else None
+
+        def matching(name: str, field: str, identities: list[str]) -> list[dict[str, Any]]:
+            if not identities:
+                return []
+            marks = ",".join("?" for _ in identities)
+            rows = connection.execute(
+                f'SELECT id,payload FROM "{name}" WHERE '
+                f"json_extract(payload,'$.{field}') IN ({marks}) ORDER BY id",
+                tuple(identities),
+            )
+            return [dict(id=r["id"], document=json.loads(r["payload"])) for r in rows]
+
+        decision = document("core_decisions", decision_id)
+        if decision is None:
+            raise ValueError("selected decision missing")
+        links = [
+            dict(r)
+            for r in connection.execute(
+                "SELECT * FROM core_intent_links WHERE decision_id=? ORDER BY intent_id",
+                (decision_id,),
+            )
+        ]
+        intents = []
+        orders = []
+        fills: list[dict[str, Any]] = []
+        order_events: list[dict[str, Any]] = []
+        for link in links:
+            row = connection.execute(
+                "SELECT * FROM order_intents WHERE intent_id=?", (link["intent_id"],)
+            ).fetchone()
+            if row is None:
+                continue
+            intent = dict(row)
+            intents.append(intent)
+            order = connection.execute(
+                "SELECT * FROM broker_orders WHERE client_order_id=?", (intent["client_order_id"],)
+            ).fetchone()
+            order_events.extend(
+                dict(r)
+                for r in connection.execute(
+                    "SELECT * FROM order_events WHERE intent_id=? ORDER BY occurred_at",
+                    (intent["intent_id"],),
+                )
+            )
+            if order:
+                orders.append(dict(order))
+                fills.extend(
+                    dict(r)
+                    for r in connection.execute(
+                        "SELECT * FROM fills WHERE broker_order_id=? ORDER BY fill_id",
+                        (order["broker_order_id"],),
+                    )
+                )
+        outcomes = matching("core_outcome_revisions", "lot_id", [decision_id])
+        costs = matching("core_cost_items", "fill_id", [f["fill_id"] for f in fills])
+        plans = {
+            r["protection_id"]: document("core_protection_plans", r["protection_id"]) for r in links
+        }
+        references = {ref for r in outcomes for ref in r["document"]["source_refs"]}
+        guardian_ids = set()
+        for event in order_events:
+            detail = json.loads(event["detail_json"])
+            if detail.get("guardian_receipt_id"):
+                guardian_ids.add(detail["guardian_receipt_id"])
+        guardian_ids.update(
+            ref for ref in references if document("core_guardian_receipts", ref) is not None
+        )
+        reconciliation_ids = {decision["inventory_id"]}
+        reconciliation_ids.update(r["document"]["reconciliation_id"] for r in outcomes)
+        activation = document("core_activations", decision.get("activation_id"))
+        receipt = document("core_learning_runs", decision["learning_receipt_id"])
+        authority = document(
+            "core_activation_authorities", activation.get("authority_id") if activation else None
+        )
+        trial = None
+        if receipt and receipt.get("trial_charge_id"):
+            row = connection.execute(
+                "SELECT * FROM search_runs WHERE search_id=?", (receipt["trial_charge_id"],)
+            ).fetchone()
+            trial = dict(row) if row else None
+        return {
+            "scope": "SELECTED_DECISION_READ_ONLY_SNAPSHOT",
+            "broker_state": "NOT_PROBED",
+            "schema": dict(connection.execute("SELECT * FROM schema_version").fetchone()),
+            "decision_id": decision_id,
+            "decision": decision,
+            "observation": document("core_observations", decision["observation_id"]),
+            "model": document("core_models", decision["model_id"]),
+            "activation": activation,
+            "activation_authority": authority,
+            "learning_receipt": receipt,
+            "trial_charge": trial,
+            "time_evidence": document("core_time_evidence", decision.get("time_evidence_id")),
+            "links": links,
+            "intents": intents,
+            "orders": orders,
+            "fills": fills,
+            "order_events": order_events,
+            "protection_plans": plans,
+            "guardian_receipts": {
+                identity: document("core_guardian_receipts", identity)
+                for identity in sorted(guardian_ids)
+            },
+            "reconciliation_proofs": {
+                identity: document("core_reconciliation_proofs", identity)
+                for identity in sorted(reconciliation_ids)
+            },
+            "broker_sources": matching(
+                "core_broker_event_sources",
+                "client_order_id",
+                [i["client_order_id"] for i in intents],
+            ),
+            "cost_revisions": costs,
+            "outcome_revisions": outcomes,
+            "current_outcome": document("core_round_trips", decision_id),
+        }

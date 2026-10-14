@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from quantbot.domain import BrokerOrder, Fill, IntentState, OrderIntent, OrderSide
 from quantbot.execution.coordinator import _ack_terminal_target, _assert_ack_matches_intent
 from quantbot.execution.recovery import is_open_order
+from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
 from quantbot.paper_core.contracts import (
     BrokerEvent,
     CycleReceipt,
@@ -28,7 +29,7 @@ from quantbot.paper_core.contracts import (
     RoundTrip,
 )
 from quantbot.paper_core.costs import actual_fee, current_costs, record_cost
-from quantbot.paper_core.runtime import require_synthetic
+from quantbot.paper_core.runtime import require_runtime_broker
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, put, table
 from quantbot.research.manifest import canonical_result_json, content_id
@@ -498,6 +499,28 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         and r.generation == plan.generation
         and r.recorded_at_utc <= min(f.occurred_at for f in buys) < r.valid_until
     ]
+    if store.config.evidence_lane == "BROKER_PAPER":
+        # Provider occurrence timestamps and host receipt timestamps have distinct domains.
+        # The locked send receipt proves the independent guardian preceded the actual POST.
+        authorizations = [
+            e
+            for e in repo.list_order_events(intent_id=entry["intent_id"])
+            if e.event_type == "CORE_LOCKED_SEND_AUTHORIZED"
+            and e.detail.get("decision_id") == decision.id
+            and e.detail.get("protection_id") == plan.id
+            and e.detail.get("contract") == "core-final-send-v1"
+        ]
+        handoffs = [
+            r
+            for r in receipts
+            if any(
+                a.detail.get("guardian_receipt_id") == r.id
+                and r.owner == plan.owner
+                and r.generation == plan.generation
+                and r.recorded_at_utc <= a.occurred_at < r.valid_until
+                for a in authorizations
+            )
+        ]
     if not handoffs:
         raise OutcomeIncomplete("PRESEND_GUARDIAN_HANDOFF_UNAVAILABLE")
     handoff = min(handoffs, key=lambda r: (r.recorded_at_utc, r.id))
@@ -563,7 +586,9 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         entry_notional=sum((f.quantity * f.price for f in buys), Decimal(0)),
         source_start=source_start or min(f.occurred_at for f in buys),
         dataset=(
-            "LOCAL_SIM_REAL_DATA"
+            "ALPACA_PAPER_OWNED"
+            if store.config.evidence_lane == "BROKER_PAPER"
+            else "LOCAL_SIM_REAL_DATA"
             if store.config.evidence_lane == "LOCAL_SIM_REAL_DATA"
             else "EXPLICIT_SYNTHETIC"
         )
@@ -644,9 +669,11 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
     )
 
 
-async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleReceipt:
+async def recover_intents(
+    store: CoreStore, broker: SyntheticBroker | AlpacaCoreBroker
+) -> CycleReceipt:
     """Read the original client IDs, import evidence, and never POST an unknown intent."""
-    require_synthetic(store, broker)
+    require_runtime_broker(store, broker)
     from quantbot.paper_core.send_guard import retire_stale_entries
 
     reasons = [
@@ -656,6 +683,31 @@ async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleRec
         intents = [
             StorageRepository(session).get_order_intent(link["intent_id"]) for link in store.links()
         ]
+    if isinstance(broker, AlpacaCoreBroker):
+        operational_events = await broker.owned_events(store)
+        import_broker_events(store, operational_events)
+        broker.accept_activity_cursor(store)
+        with store.database.transaction() as session:
+            repo = StorageRepository(session)
+            for intent in intents:
+                assert intent is not None
+                if repo.get_broker_order_by_client_order_id(intent.client_order_id) is None:
+                    if intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
+                        if intent.state is IntentState.SUBMITTING:
+                            repo.transition_order_intent(
+                                intent.intent_id,
+                                IntentState.SUBMISSION_UNKNOWN,
+                                expected_current=IntentState.SUBMITTING,
+                            )
+                        reasons.append("SUBMISSION_UNKNOWN:" + intent.intent_id)
+        receipt = CycleReceipt(
+            recorded_at_utc=broker.now,
+            evidence_lane=store.config.evidence_lane,
+            release_id=store.config.release_id,
+            reasons=tuple(reasons),
+        )
+        store.record("core_cycle_receipts", receipt)
+        return receipt
     events = []
     fills = await broker.get_fills()
     watermark = await broker.get_activity_watermark()

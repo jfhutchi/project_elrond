@@ -1,0 +1,217 @@
+{
+  "authority": "READ_ONLY_PREPARATION",
+  "cross_store_atomic": false,
+  "no_application_migration": true,
+  "output": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9",
+  "stores": [
+    {
+      "role": "operational",
+      "source": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+      "started_at": "2026-10-14T17:17:37.461597+00:00",
+      "completed_at": "2026-10-14T17:17:40.075688+00:00",
+      "source_journal_mode": "wal",
+      "table_names": [
+        "account_snapshots",
+        "alembic_version",
+        "anomaly_dependence_contexts",
+        "anomaly_regime_contexts",
+        "artifact_evidence",
+        "artifact_test_registrations",
+        "bars",
+        "broker_orders",
+        "budget_spend",
+        "capacity_assessments",
+        "catalyst_assessments",
+        "component_heartbeats",
+        "counterfactual_outcomes",
+        "equity_snapshots",
+        "fills",
+        "hypotheses",
+        "hypothesis_data_windows",
+        "incidents",
+        "ingestion_cursors",
+        "ingestion_events",
+        "ingestion_runs",
+        "ingestion_sources",
+        "instrument_symbols",
+        "instruments",
+        "kill_switch_state",
+        "learner_datasets",
+        "learner_evaluations",
+        "learner_model_versions",
+        "learner_outcomes",
+        "learner_predictions",
+        "literature_searches",
+        "market_anomaly_events",
+        "market_regime_snapshots",
+        "order_events",
+        "order_intents",
+        "position_protection_action_evaluations",
+        "position_protection_actions",
+        "position_protection_cycles",
+        "position_protection_evaluations",
+        "positions",
+        "power_assessments",
+        "promotion_events",
+        "promotion_state",
+        "qualification_days",
+        "reconciliation_diffs",
+        "reconciliation_runs",
+        "rejected_candidates",
+        "rejection_reasons",
+        "research_proposals",
+        "research_records",
+        "research_relationships",
+        "research_task_events",
+        "research_tasks",
+        "runs",
+        "runtime_deployments",
+        "schema_version",
+        "search_runs",
+        "session_observations",
+        "signals",
+        "strategy_deployments",
+        "veto_policy_versions"
+      ],
+      "copies": [
+        {
+          "path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\operational.db",
+          "integrity": [
+            "ok"
+          ],
+          "bytes": 85598208,
+          "sha256": "b08a57121854102ecf86b33d166f539f47fd22f9b1c896fbc5fb512cf0455372"
+        },
+        {
+          "path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\operational-restored.db",
+          "integrity": [
+            "ok"
+          ],
+          "bytes": 85598208,
+          "sha256": "b08a57121854102ecf86b33d166f539f47fd22f9b1c896fbc5fb512cf0455372"
+        }
+      ]
+    },
+    {
+      "role": "learner",
+      "source": "D:\\Elrond\\learner\\state\\learner.db",
+      "started_at": "2026-10-14T17:17:40.075688+00:00",
+      "completed_at": "2026-10-14T17:17:40.330660+00:00",
+      "source_journal_mode": "wal",
+      "table_names": [
+        "account_snapshots",
+        "alembic_version",
+        "anomaly_dependence_contexts",
+        "anomaly_regime_contexts",
+        "artifact_evidence",
+        "artifact_test_registrations",
+        "bars",
+        "broker_orders",
+        "budget_spend",
+        "capacity_assessments",
+        "catalyst_assessments",
+        "component_heartbeats",
+        "counterfactual_outcomes",
+        "equity_snapshots",
+        "fills",
+        "hypotheses",
+        "hypothesis_data_windows",
+        "incidents",
+        "ingestion_cursors",
+        "ingestion_events",
+        "ingestion_runs",
+        "ingestion_sources",
+        "instrument_symbols",
+        "instruments",
+        "kill_switch_state",
+        "learner_datasets",
+        "learner_evaluations",
+        "learner_model_versions",
+        "learner_outcomes",
+        "learner_predictions",
+        "literature_searches",
+        "market_anomaly_events",
+        "market_regime_snapshots",
+        "order_events",
+        "order_intents",
+        "position_protection_action_evaluations",
+        "position_protection_actions",
+        "position_protection_cycles",
+        "position_protection_evaluations",
+        "positions",
+        "power_assessments",
+        "promotion_events",
+        "promotion_state",
+        "qualification_days",
+        "reconciliation_diffs",
+        "reconciliation_runs",
+        "rejected_candidates",
+        "rejection_reasons",
+        "research_proposals",
+        "research_records",
+        "research_relationships",
+        "research_task_events",
+        "research_tasks",
+        "runs",
+        "runtime_deployments",
+        "schema_version",
+        "search_runs",
+        "session_observations",
+        "signals",
+        "strategy_deployments",
+        "veto_policy_versions"
+      ],
+      "copies": [
+        {
+          "path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\learner.db",
+          "integrity": [
+            "ok"
+          ],
+          "bytes": 23494656,
+          "sha256": "dbe6fe86215b63b5ded14cce207a9a79390987c6a04e8fc1702a8ec4e30924f1"
+        },
+        {
+          "path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\learner-restored.db",
+          "integrity": [
+            "ok"
+          ],
+          "bytes": 23494656,
+          "sha256": "dbe6fe86215b63b5ded14cce207a9a79390987c6a04e8fc1702a8ec4e30924f1"
+        }
+      ]
+    },
+    {
+      "role": "experiment",
+      "source": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db",
+      "started_at": "2026-10-14T17:17:40.330660+00:00",
+      "completed_at": "2026-10-14T17:17:41.169766+00:00",
+      "source_journal_mode": "delete",
+      "table_names": [
+        "conflicts",
+        "events",
+        "leases",
+        "metadata",
+        "outbox",
+        "states"
+      ],
+      "copies": [
+        {
+          "path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\experiment.db",
+          "integrity": [
+            "ok"
+          ],
+          "bytes": 74436608,
+          "sha256": "33c9aa2a8a15324b6664b94e13ba596c1cab61be90fffa02d5cdf42f2e9b6ed6"
+        },
+        {
+          "path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\experiment-restored.db",
+          "integrity": [
+            "ok"
+          ],
+          "bytes": 74436608,
+          "sha256": "33c9aa2a8a15324b6664b94e13ba596c1cab61be90fffa02d5cdf42f2e9b6ed6"
+        }
+      ]
+    }
+  ]
+}

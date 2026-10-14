@@ -1,0 +1,50 @@
+[
+  {
+    "stage": "stage1",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-__pjhcko\\pytest\\test_actual_three_role_process0\\guardian0.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/stage1-process-guardian0.txt",
+    "sha256": "6ae177bbc70cb2c454fc1875e33c756e82da39f81c809f91186427b6418a3146"
+  },
+  {
+    "stage": "stage1",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-__pjhcko\\pytest\\test_actual_three_role_process0\\guardian3.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/stage1-process-guardian3.txt",
+    "sha256": "c7d04ba64dfde0ddcea64b43e1d5a58ed40110efcf07de303203df6b774ace15"
+  },
+  {
+    "stage": "stage1",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-__pjhcko\\pytest\\test_actual_three_role_process0\\outcomes1.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/stage1-process-outcomes1.txt",
+    "sha256": "26c52653e4f431148f98043680c9004c6a1f0039b2143ee8111698ad8d513ef4"
+  },
+  {
+    "stage": "stage1",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-__pjhcko\\pytest\\test_actual_three_role_process0\\trader2.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/stage1-process-trader2.txt",
+    "sha256": "88e4741930e242aa79a714fa630f2f213b210a6b5ae81c66adc19e8c24aacb45"
+  },
+  {
+    "stage": "final",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-u1i97niy\\pytest\\test_actual_three_role_process0\\guardian0.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/final-process-guardian0.txt",
+    "sha256": "d493c491506e0f3c832ac02fcabff633f37481ea6f5428660e96aefcefddb91a"
+  },
+  {
+    "stage": "final",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-u1i97niy\\pytest\\test_actual_three_role_process0\\guardian3.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/final-process-guardian3.txt",
+    "sha256": "541940563c01e2d04e913c941c116d45ebd6c374e2d133647645a6afca55477c"
+  },
+  {
+    "stage": "final",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-u1i97niy\\pytest\\test_actual_three_role_process0\\outcomes1.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/final-process-outcomes1.txt",
+    "sha256": "0e0693774672221dd3329199818240909804b024e39e501277a7fb3273302b49"
+  },
+  {
+    "stage": "final",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-u1i97niy\\pytest\\test_actual_three_role_process0\\trader2.txt",
+    "archive": "docs/evidence/paper-core/m6/logs/final-process-trader2.txt",
+    "sha256": "1d984535d3e1a2ba57ca427c283143a274fa31b39e6c860bc5ad35b73f1df73c"
+  }
+]

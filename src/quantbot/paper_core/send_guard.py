@@ -43,7 +43,7 @@ def definitively_unsent(repository: StorageRepository, intent_id: str) -> bool:
 def final_send_objections(
     store: CoreStore, intent: OrderIntent, purpose: OrderPurpose, *, clock: Callable[[], datetime]
 ) -> tuple[str, ...]:
-    if purpose is not OrderPurpose.ENTRY:
+    if purpose is not OrderPurpose.ENTRY and store.config.evidence_lane != "BROKER_PAPER":
         return ()
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
@@ -59,8 +59,19 @@ def final_send_in_session(
     clock: Callable[[], datetime],
 ) -> tuple[str, ...]:
     """Validate authority using the coordinator's locked send-state transaction."""
+    from quantbot.paper_core.authority import guardian_objections, runtime_objections
+
+    runtime_reasons: tuple[str, ...] = ()
+    if store.config.evidence_lane == "BROKER_PAPER":
+        runtime_reasons = runtime_objections(store, session, entry=purpose is OrderPurpose.ENTRY)
+        if not getattr(store, "runtime_submission_enabled", False):
+            runtime_reasons = (*runtime_reasons, "CORE_SUBMISSION_DISABLED")
+        if purpose is OrderPurpose.ENTRY and not store.runtime_entry_enabled:
+            runtime_reasons = (*runtime_reasons, "CORE_ENTRY_DISABLED")
     if purpose is not OrderPurpose.ENTRY:
-        return ()
+        if store.config.evidence_lane == "BROKER_PAPER":
+            runtime_reasons = (*runtime_reasons, *owned_exit_objections(store, session, intent))
+        return runtime_reasons
     repo = StorageRepository(session)
     stored = repo.get_order_intent(intent.intent_id)
     links = table("core_intent_links")
@@ -103,7 +114,10 @@ def final_send_in_session(
     receipt = max(receipts, key=lambda r: (r.recorded_at_utc, r.id), default=None)
     # Sample after durable reads and writer-lock acquisition, never the caller's decision time.
     now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
-    reasons: list[str] = []
+    reasons: list[str] = list(runtime_reasons)
+    reasons.extend(
+        guardian_objections(store, session, now=now, receipt_id=receipt.id if receipt else None)
+    )
     from quantbot.paper_core.activation import decision_model_objections
 
     reasons.extend(decision_model_objections(store, session, decision))
@@ -204,7 +218,88 @@ def final_send_in_session(
                 "guardian_receipt_id": None if receipt is None else receipt.id,
             },
         )
+    elif store.config.evidence_lane == "BROKER_PAPER":
+        repo.record_order_event(
+            "core-send-authorized-" + content_id({"intent": intent.intent_id}),
+            event_type="CORE_LOCKED_SEND_AUTHORIZED",
+            occurred_at=now,
+            intent_id=intent.intent_id,
+            detail={
+                "decision_id": decision.id,
+                "protection_id": plan.id,
+                "guardian_receipt_id": receipt.id if receipt else None,
+                "config_id": store.config_id,
+                "process_epoch": store.clocks.process_id,
+                "contract": "core-final-send-v1",
+            },
+        )
     return tuple(reasons)
+
+
+def owned_exit_objections(
+    store: CoreStore, session: Session, intent: OrderIntent
+) -> tuple[str, ...]:
+    from decimal import Decimal
+
+    from quantbot.domain import OrderSide
+
+    repo = StorageRepository(session)
+    links = table("core_intent_links")
+    link = (
+        session.execute(
+            select(links).where(links.c.intent_id == intent.intent_id, links.c.role == "EXIT")
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if link is None:
+        return ("CORE_EXIT_HANDOFF_MISSING",)
+    plan = store.read("core_protection_plans", link["protection_id"], ProtectionPlan)
+    entry = (
+        session.execute(
+            select(links).where(links.c.lot_id == link["lot_id"], links.c.role == "ENTRY")
+        )
+        .mappings()
+        .one_or_none()
+    )
+    if entry is None or intent.strategy_id != plan.owner or intent.side is not OrderSide.SELL:
+        return ("CORE_EXIT_OWNERSHIP_MISMATCH",)
+    original = repo.get_order_intent(entry["intent_id"])
+    if original is None or original.strategy_id != plan.owner or original.symbol != intent.symbol:
+        return ("CORE_EXIT_OWNERSHIP_MISMATCH",)
+    entry_order = repo.get_broker_order_by_client_order_id(original.client_order_id)
+    owned = (
+        Decimal(0)
+        if entry_order is None
+        else sum(
+            (f.quantity for f in repo.list_fills(broker_order_id=entry_order.broker_order_id)),
+            Decimal(0),
+        )
+    )
+    for exit_link in session.execute(
+        select(links).where(links.c.lot_id == link["lot_id"], links.c.role == "EXIT")
+    ).mappings():
+        exit_intent = repo.get_order_intent(exit_link["intent_id"])
+        if exit_intent is None:
+            return ("CORE_EXIT_OWNERSHIP_MISMATCH",)
+        order = repo.get_broker_order_by_client_order_id(exit_intent.client_order_id)
+        filled = (
+            Decimal(0)
+            if order is None
+            else sum(
+                (f.quantity for f in repo.list_fills(broker_order_id=order.broker_order_id)),
+                Decimal(0),
+            )
+        )
+        owned -= filled
+        if exit_intent.intent_id != intent.intent_id and exit_intent.state in {
+            IntentState.SUBMITTING,
+            IntentState.SUBMISSION_UNKNOWN,
+            IntentState.ORDER_CREATED,
+            IntentState.RISK_APPROVED,
+        }:
+            owned -= exit_intent.quantity - filled
+    return ("CORE_EXIT_OWNED_QUANTITY_UNAVAILABLE",) if intent.quantity > owned else ()
 
 
 def retire_stale_entries(store: CoreStore, *, clock: Callable[[], datetime]) -> tuple[str, ...]:

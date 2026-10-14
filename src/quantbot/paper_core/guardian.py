@@ -11,9 +11,10 @@ from sqlalchemy import select, text
 from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, BrokerTransportError
 from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType, TimeInForce
 from quantbot.execution.coordinator import OrderSubmissionBlocked
+from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
 from quantbot.paper_core.contracts import CycleReceipt, Decision, GuardianReceipt, ProtectionPlan
 from quantbot.paper_core.health import active_health, report
-from quantbot.paper_core.runtime import require_synthetic
+from quantbot.paper_core.runtime import require_runtime_broker
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, certify_inventory, latest_certification, table
 from quantbot.paper_core.time_evidence import (
@@ -28,8 +29,10 @@ from quantbot.risk import OrderPurpose
 from quantbot.storage import StateConflictError, StorageRepository
 
 
-async def synchronize(store: CoreStore, broker: SyntheticBroker, *, now: datetime) -> str:
-    require_synthetic(store, broker)
+async def synchronize(
+    store: CoreStore, broker: SyntheticBroker | AlpacaCoreBroker, *, now: datetime
+) -> str:
+    require_runtime_broker(store, broker)
     from quantbot.paper_core.outcomes import recover_intents
 
     if store.config.clock_profile == "PAPER_TIME_V2":
@@ -134,7 +137,28 @@ async def synchronize(store: CoreStore, broker: SyntheticBroker, *, now: datetim
 
 
 def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:
-    plans = store.documents("core_protection_plans")
+    if (
+        store.config.evidence_lane == "BROKER_PAPER"
+        or getattr(store, "runtime_role", None) is not None
+    ) and getattr(store, "runtime_role", None) != "guardian":
+        raise ValueError("only independent guardian runtime may acknowledge protection")
+    if store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER":
+        with store.database.transaction() as session:
+            links = table("core_intent_links")
+            active = session.execute(
+                select(links.c.protection_id).where(
+                    links.c.role == "ENTRY",
+                    links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
+                )
+            ).scalars()
+            plans = [
+                store.read("core_protection_plans", identity, ProtectionPlan).model_dump(
+                    mode="json"
+                )
+                for identity in active
+            ]
+    else:
+        plans = store.documents("core_protection_plans")
     receipt = GuardianReceipt(
         recorded_at_utc=now,
         evidence_lane=store.config.evidence_lane,
@@ -150,9 +174,9 @@ def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:
 
 
 async def guardian_cycle(
-    store: CoreStore, broker: SyntheticBroker, *, now: datetime
+    store: CoreStore, broker: SyntheticBroker | AlpacaCoreBroker, *, now: datetime
 ) -> CycleReceipt:
-    require_synthetic(store, broker)
+    require_runtime_broker(store, broker)
     acknowledge_handoffs(store, now=now)
     time_evidence = None
     reasons: tuple[str, ...] = ()
@@ -160,6 +184,7 @@ async def guardian_cycle(
     if store.config.clock_profile == "PAPER_TIME_V2":
         time_evidence = await acquire_time_evidence(broker, store.clocks)
         store.record("core_time_evidence", time_evidence)
+        store.runtime_time_evidence_id = time_evidence.id
         if evidence_objections(time_evidence, store.clocks):
             reasons = time_evidence.objections or evidence_objections(time_evidence, store.clocks)
             time_evidence = None
@@ -336,7 +361,7 @@ async def guardian_cycle(
                 exit_intent = OrderIntent(
                     intent_id="core-exit-" + digest,
                     client_order_id="qb-" + digest[:40],
-                    strategy_id=store.config.owner,
+                    strategy_id=plan.owner,
                     signal_date=now.date(),
                     symbol=intent.symbol,
                     side=OrderSide.SELL,

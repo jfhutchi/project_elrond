@@ -7,6 +7,7 @@ import math
 from datetime import datetime, timedelta
 from typing import Any, Literal, Self, cast
 
+from pydantic import SerializerFunctionWrapHandler, model_serializer
 from sqlalchemy import select, text, update
 from sqlalchemy.engine import CursorResult
 from sqlalchemy.orm import Session
@@ -20,8 +21,17 @@ from quantbot.storage import StateConflictError, StorageRepository
 
 
 class ActivationAuthority(BrokerModel):
+    runtime_commission_id: str | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_v34_authority(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if "runtime_commission_id" not in self.model_fields_set:
+            payload.pop("runtime_commission_id", None)
+        return payload
+
     config_id: str
-    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA"]
+    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA", "BROKER_PAPER"]
     candidate_id: str
     receipt_id: str
     expected_activation_id: str
@@ -54,6 +64,8 @@ class ActivationAuthority(BrokerModel):
         expected_activation_id: str,
         at: datetime,
     ) -> Self:
+        if store.config.evidence_lane == "BROKER_PAPER":
+            raise StateConflictError("FIXTURE_AUTHORITY_CANNOT_COMMISSION_PAPER")
         return cls(
             config_id=store.config_id,
             evidence_lane=store.config.evidence_lane,
@@ -68,7 +80,7 @@ class ActivationAuthority(BrokerModel):
 
 class Activation(BrokerModel):
     config_id: str
-    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA"]
+    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA", "BROKER_PAPER"]
     generation: int
     previous_activation_id: str | None
     previous_model_id: str | None
@@ -130,6 +142,12 @@ def active_in_session(
             or authority.receipt_id != event.receipt_id
         ):
             raise StateConflictError("ACTIVE_MODEL_AUTHORITY_INVALID")
+        if event.evidence_lane == "BROKER_PAPER":
+            from quantbot.paper_core.authority import commission_in_session
+
+            commission = commission_in_session(store, session)
+            if authority.runtime_commission_id != commission.id:
+                raise StateConflictError("ACTIVE_MODEL_RUNTIME_AUTHORITY_INVALID")
         receipt = _receipt(session, model, authority.receipt_id)
         if receipt.available_at is None or receipt.available_at > event.at:
             raise StateConflictError("ACTIVE_MODEL_RECEIPT_UNAVAILABLE")
@@ -182,6 +200,8 @@ def _write_event(session: Session, event: Activation) -> None:
 
 def initialize_fixture_model(store: CoreStore, model: ModelArtifact, *, at: datetime) -> Activation:
     """Explicit local bootstrap only; restart never calls this commissioning function."""
+    if store.config.evidence_lane == "BROKER_PAPER":
+        raise StateConflictError("FIXTURE_BOOTSTRAP_CANNOT_COMMISSION_PAPER")
     if model.estimator is not None or (model.mode == "PREDICT" and not model.fixture_authority):
         raise StateConflictError("BOOTSTRAP_REQUIRES_EXPLICIT_LOCAL_BASELINE")
     with store.database.transaction() as session:
@@ -207,7 +227,88 @@ def initialize_fixture_model(store: CoreStore, model: ModelArtifact, *, at: date
         return event
 
 
+def initialize_operational_model(
+    store: CoreStore, model: ModelArtifact, *, at: datetime
+) -> Activation:
+    from quantbot.paper_core.authority import commission_in_session
+
+    with store.database.transaction() as session:
+        session.execute(text("BEGIN IMMEDIATE"))
+        commission = commission_in_session(store, session)
+        if (
+            store.config.evidence_lane != "BROKER_PAPER"
+            or model.mode != "COLLECT"
+            or model.fixture_authority
+            or model.estimator is not None
+            or model.id != commission.initial_model_id
+            or at != commission.approved_at
+        ):
+            raise StateConflictError("INITIAL_MODEL_NOT_EXACTLY_COMMISSIONED")
+        if active_in_session(store, session) is not None:
+            raise StateConflictError("MODEL_ALREADY_COMMISSIONED")
+        put(session, "core_models", model.id, model)
+        event = Activation(
+            config_id=store.config_id,
+            evidence_lane="BROKER_PAPER",
+            generation=1,
+            previous_activation_id=None,
+            previous_model_id=None,
+            model_id=model.id,
+            model_digest=model.id,
+            receipt_id=None,
+            authority_id=None,
+            at=at,
+            action="INITIALIZE",
+            reason="EXPLICIT_OPERATIONAL_COLLECT_COMMISSION:" + commission.id,
+        )
+        _write_event(session, event)
+        return event
+
+
+def commission_operational_candidate(
+    store: CoreStore,
+    receipt: LearningReceipt,
+    *,
+    expected_activation_id: str,
+    at: datetime,
+    approval_reference: str | None = None,
+) -> ActivationAuthority:
+    from quantbot.paper_core.authority import commission_in_session
+
+    with store.database.transaction() as session:
+        session.execute(text("BEGIN IMMEDIATE"))
+        commission = commission_in_session(store, session)
+        if (
+            receipt.evidence_lane != "BROKER_PAPER"
+            or receipt.policy.evidence_lane != "BROKER_PAPER"
+        ):
+            raise StateConflictError("OPERATIONAL_RECEIPT_REQUIRED")
+        if (
+            receipt.status != "NO_CHANGE"
+            and commission.activation_policy != "DAILY_BOUNDED_V2"
+            and not approval_reference
+        ):
+            raise StateConflictError("AWAITING_EXACT_CANDIDATE_APPROVAL")
+        candidate = _document(session, "core_models", receipt.resulting_model_id, ModelArtifact)
+        _receipt(session, candidate, receipt.id)
+        authority = ActivationAuthority(
+            config_id=store.config_id,
+            evidence_lane="BROKER_PAPER",
+            candidate_id=candidate.id,
+            receipt_id=receipt.id,
+            expected_activation_id=expected_activation_id,
+            commissioned_at=at,
+            expires_at=at + timedelta(minutes=5),
+            reviewer=approval_reference or "COMMISSIONED_PROCEDURE:" + commission.id,
+            runtime_commission_id=commission.id,
+        )
+        put(session, "core_activation_authorities", authority.id, authority)
+        return authority
+
+
 def commission_fixture_authority(store: CoreStore, authority: ActivationAuthority) -> str:
+    if store.config.evidence_lane == "BROKER_PAPER":
+        raise StateConflictError("FIXTURE_AUTHORITY_CANNOT_COMMISSION_PAPER")
     if (
         authority.config_id != store.config_id
         or authority.evidence_lane != store.config.evidence_lane
@@ -327,6 +428,10 @@ def activate_model(
     authority: ActivationAuthority,
     at: datetime,
 ) -> Activation:
+    if store.config.evidence_lane == "BROKER_PAPER":
+        from quantbot.paper_core.canonical import refresh_canonical_metadata
+
+        refresh_canonical_metadata(store)
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
         approved = _document(
@@ -348,6 +453,27 @@ def activate_model(
             raise StateConflictError("ACTIVATION_AUTHORITY_INVALID")
         candidate: ModelArtifact = _document(session, "core_models", candidate_id, ModelArtifact)
         receipt = _receipt(session, candidate, authority.receipt_id)
+        if store.config.evidence_lane == "BROKER_PAPER" and receipt.status != "NO_CHANGE":
+            from datetime import date
+
+            from quantbot.paper_core.learning import _guard
+
+            ranges = session.execute(
+                select(table("core_outcome_revisions").c.payload).where(
+                    table("core_outcome_revisions").c.id.in_(receipt.final_input_ids)
+                )
+            ).scalars()
+            for encoded in ranges:
+                outcome = json.loads(encoded)
+                reason = _guard(
+                    session,
+                    receipt.policy.dataset,
+                    date.fromisoformat(outcome["source_start"][:10]),
+                    date.fromisoformat(outcome["source_end"][:10]),
+                    now=store.clocks.sample()[0].date(),
+                )
+                if reason:
+                    raise StateConflictError("ACTIVATION_CURRENT_CANONICAL_REFUSAL:" + reason)
         if (
             receipt.parent_model_id != parent.id
             or receipt.evidence_lane != authority.evidence_lane

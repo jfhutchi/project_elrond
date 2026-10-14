@@ -71,6 +71,39 @@ def _quarantined_lots(session: Session) -> set[str]:
 
 
 def _guard(session: Session, dataset: str, start: date, end: date, *, now: date) -> str | None:
+    snapshots = session.execute(
+        select(table("core_canonical_sources").c.payload).join(
+            table("core_canonical_current"),
+            table("core_canonical_current").c.source_id == table("core_canonical_sources").c.id,
+        )
+    ).scalars()
+    for encoded in snapshots:
+        source = json.loads(encoded)
+        identities = {observation_identity(d) for d in source["canonical_datasets"]}
+        # The executed-outcome cohort shares the input bars' canonical protection burden.
+        for hold in source["holdouts"]:
+            if (
+                observation_identity(hold["dataset"]) in identities
+                and start <= date.fromisoformat(hold["end_date"])
+                and date.fromisoformat(hold["start_date"]) <= end
+            ):
+                return "DECLARED_IMPORTED_CANONICAL_HOLDOUT"
+        for window in source["windows"]:
+            if (
+                observation_identity(window["dataset"]) in identities
+                and window["role"] in {"PROTECTED_EVALUATION", "FORWARD_PAPER"}
+                and start <= date.fromisoformat(window["end_date"])
+                and date.fromisoformat(window["start_date"]) <= end
+                and (
+                    window["state"] == "CONSUMED"
+                    or window["state"] == "RESERVED"
+                    and (
+                        window["reserved_until"] is None
+                        or date.fromisoformat(window["reserved_until"]) >= now
+                    )
+                )
+            ):
+                return "CANONICAL_IMPORTED_PROTECTED_OR_FORWARD_WINDOW"
     if HypothesisRegistry(session).blocking_protected_windows(
         dataset, start, end, now=now, include_forward_paper=True
     ):
@@ -474,6 +507,10 @@ def consider_learning(
     legacy_fixture_replay: bool = False,
 ) -> LearningReceipt:
     """Serialize admission and recover crashed fits with fresh process-lifetime evidence."""
+    if store.config.evidence_lane == "BROKER_PAPER":
+        from quantbot.paper_core.canonical import refresh_canonical_metadata
+
+        refresh_canonical_metadata(store)
     clock = execution_clock or store.clocks
     domain = getattr(clock, "execution_domain", "HOST_UTC")
     if not isinstance(domain, str) or not domain.strip():
@@ -851,6 +888,11 @@ def _consider_learning(
     metrics: dict[str, float] = {}
     sessions: tuple[SessionMetrics, ...] = ()
     try:
+        if store.config.evidence_lane == "BROKER_PAPER":
+            from quantbot.paper_core.canonical import refresh_canonical_metadata
+
+            canonical_id = refresh_canonical_metadata(store)
+            fields["source_refs"] = (*fields.get("source_refs", ()), canonical_id)
         with store.database.transaction() as session:
             session.execute(text("BEGIN IMMEDIATE"))
             # Recheck canonical holds at the actual data boundary, under the writer fence.

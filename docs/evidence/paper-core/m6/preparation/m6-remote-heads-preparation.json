@@ -1,0 +1,20 @@
+{
+  "observed_at": "2026-10-14T18:52:25.929487+00:00",
+  "read_only_command": "git ls-remote origin refs/heads/main refs/pull/287/head refs/pull/288/head",
+  "refs": {
+    "refs/heads/main": "b812c64270f190b0518322abb08b9a17dfa3f1c0",
+    "refs/pull/287/head": "8bb84cf9e035771189d700247b99eec281888b94",
+    "refs/pull/288/head": "a6f9eb36c4bd632157fff166907c7bd50f70ef15"
+  },
+  "merged_or_fetched": false,
+  "latest_root_refresh": {
+    "observed_at": "2026-10-14T20:24:16.300016+00:00",
+    "command": "git ls-remote origin refs/heads/main refs/pull/287/head refs/pull/288/head",
+    "refs": {
+      "refs/heads/main": "b812c64270f190b0518322abb08b9a17dfa3f1c0",
+      "refs/pull/287/head": "8bb84cf9e035771189d700247b99eec281888b94",
+      "refs/pull/288/head": "a6f9eb36c4bd632157fff166907c7bd50f70ef15"
+    },
+    "mutation": "none; no fetch merge or push"
+  }
+}

@@ -11,6 +11,7 @@ from sqlalchemy import select, text
 from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, BrokerTransportError
 from quantbot.domain import OrderIntent, OrderSide, OrderType, TimeInForce
 from quantbot.execution.coordinator import OrderSubmissionBlocked
+from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
 from quantbot.paper_core.contracts import (
     CoreConfig,
     Decision,
@@ -24,7 +25,7 @@ from quantbot.paper_core.contracts import (
 )
 from quantbot.paper_core.features import observation_objections
 from quantbot.paper_core.health import entry_health_objections, recover_health, report
-from quantbot.paper_core.runtime import coordinator, require_synthetic
+from quantbot.paper_core.runtime import coordinator, require_runtime_broker
 from quantbot.paper_core.send_guard import definitively_unsent
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, latest_certification, put, table
@@ -189,6 +190,8 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         put(session, "core_decisions", decision.id, decision)
         if decision.action != "BUY":
             return None
+        if not store.runtime_entry_enabled:
+            return None
         from quantbot.paper_core.activation import active_in_session, decision_model_objections
 
         if decision_model_objections(store, session, decision):
@@ -284,6 +287,14 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             GuardianReceipt.model_validate_json(p)
             for p in session.execute(select(table("core_guardian_receipts").c.payload)).scalars()
         ]
+        from quantbot.paper_core.authority import guardian_objections, runtime_objections
+
+        if store.config.evidence_lane == "BROKER_PAPER" and runtime_objections(
+            store, session, entry=True
+        ):
+            return None
+        if guardian_objections(store, session, now=decision.recorded_at_utc):
+            return None
         if not any(
             r.owner == plan.owner
             and r.generation == plan.generation
@@ -325,20 +336,21 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
 
 async def trader_cycle(
     store: CoreStore,
-    broker: SyntheticBroker,
+    broker: SyntheticBroker | AlpacaCoreBroker,
     observation: Observation,
     model: ModelArtifact,
     inventory: ReconciliationProof,
     *,
     now: datetime,
 ) -> Decision:
-    require_synthetic(store, broker)
+    require_runtime_broker(store, broker)
     time_evidence = None
     time_projection = None
     acquisition_reasons: tuple[str, ...] = ()
     if store.config.clock_profile == "PAPER_TIME_V2":
         time_evidence = await acquire_time_evidence(broker, store.clocks)
         store.record("core_time_evidence", time_evidence)
+        store.runtime_time_evidence_id = time_evidence.id
         acquisition_reasons = time_evidence.objections
         if not acquisition_reasons:
             from quantbot.paper_core.guardian import synchronize
@@ -372,7 +384,11 @@ async def trader_cycle(
         ) and not observation_objections(observation, dependency_freshness=True):
             from quantbot.paper_core.guardian import acknowledge_handoffs
 
-            acknowledge_handoffs(store, now=store.clocks.sample()[0])
+            if (
+                getattr(store, "runtime_role", None) is None
+                and store.config.evidence_lane != "BROKER_PAPER"
+            ):
+                acknowledge_handoffs(store, now=store.clocks.sample()[0])
             recover_health(store, inventory, now=store.clocks.sample()[0])
     record_observation(store, observation)
     previous = next(
@@ -435,6 +451,13 @@ async def trader_cycle(
         return decision
     entry = claim_entry(store, decision, plan)
     if entry is None:
+        return decision
+    if (
+        getattr(store, "runtime_role", None) is not None
+        or store.config.evidence_lane == "BROKER_PAPER"
+    ):
+        # The independent guardian must acknowledge this durable plan on its next poll.
+        # The runtime dispatcher resumes the same intent after that receipt is available.
         return decision
     from quantbot.paper_core.guardian import acknowledge_handoffs
 

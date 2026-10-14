@@ -16,7 +16,9 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 34
+from quantbot.storage.core_runtime_schema import runtime_tables
+
+SCHEMA_VERSION = 35
 
 metadata = MetaData(
     naming_convention={
@@ -1818,3 +1820,5 @@ _learning_tables = learning_tables(metadata)
 from quantbot.storage.core_activation_schema import activation_tables  # noqa: E402
 
 _activation_tables = activation_tables(metadata)
+
+runtime_tables(metadata)

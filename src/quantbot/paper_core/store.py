@@ -49,6 +49,12 @@ def latest_certification(session: Session) -> tuple[int, str] | None:
 
 
 class CoreStore:
+    runtime_time_evidence_id: str | None = None
+    runtime_role: str | None = None
+    runtime_submission_enabled: bool = False
+    runtime_entry_enabled: bool = True
+    runtime_settings: Any = None
+
     def __init__(
         self, database: Database, config: CoreConfig, *, clocks: Clocks | None = None
     ) -> None:
@@ -161,10 +167,31 @@ class CoreStore:
         }
         totals: dict[str, Decimal] = {}
         fills = repo.list_fills()
+        if self.config.evidence_lane == "BROKER_PAPER":
+            clients = {
+                intent.client_order_id
+                for i in links
+                if (intent := repo.get_order_intent(i)) is not None
+            }
+            fills = [
+                f
+                for f in fills
+                if (order := repo.get_broker_order(f.broker_order_id)) is not None
+                and order.client_order_id in clients
+            ]
         from quantbot.paper_core.costs import actual_fee, current_costs
 
         costs = current_costs(session, cutoff=datetime.max.replace(tzinfo=UTC))
         cash_complete = True
+        for row in session.execute(select(table("core_external_owner_events").c.payload)).scalars():
+            external = json.loads(row)
+            quantities[external["symbol"]] = quantities.get(
+                external["symbol"], Decimal(0)
+            ) + Decimal(external["quantity_delta"])
+            if external["net_cash"] is None:
+                cash_complete = False
+            else:
+                cash += Decimal(external["net_cash"])
         for fill in fills:
             order = repo.get_broker_order(fill.broker_order_id)
             assert order is not None

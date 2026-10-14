@@ -1,0 +1,496 @@
+{
+  "source": "dated restored WAL-aware backups; no fresh broker claim",
+  "queries": "read-only lifecycle/ownership metadata only",
+  "latest_protection_cycle": {
+    "cycle_id": "protection-6c5d1d316d24d5e83b8273baf45a5c46",
+    "observed_at": "2026-10-14T17:17:03.577452Z",
+    "completed_at": "2026-10-14T17:17:03.577452Z",
+    "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+    "strategy_version": "1.2.0",
+    "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+    "policy_version": "position-protection-v2",
+    "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+    "outcome": "HEALTHY",
+    "reason": "",
+    "position_count": 9,
+    "evaluated_count": 9,
+    "unprotected_count": 0,
+    "exit_required_count": 0
+  },
+  "latest_protection_evaluations": [
+    {
+      "symbol": "DBC",
+      "quantity": "1.462583",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "EEM",
+      "quantity": "0.726321",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "EFA",
+      "quantity": "0.463951",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "IWM",
+      "quantity": "0.169669",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "QQQ",
+      "quantity": "0.069596",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "SPY",
+      "quantity": "0.065269",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "XLE",
+      "quantity": "0.771962",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "XLK",
+      "quantity": "0.26607",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    },
+    {
+      "symbol": "XLV",
+      "quantity": "0.299132",
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "strategy_version": "1.2.0",
+      "configuration_hash": "309894d8d8a5296edd29a713cf1cbad8df84c4dc46cae5472e802baddc810c51",
+      "policy_version": "position-protection-v2",
+      "policy_hash": "c83578519cce7061079c8dfc4ddc518569ba21f4be9cf46465004066afa1f5ad",
+      "reconciled": 1,
+      "outcome": "NO_ACTION",
+      "rule": "NONE",
+      "reason": "",
+      "protected": 1,
+      "evaluated_at": "2026-10-14T17:17:03.577452Z"
+    }
+  ],
+  "intent_owners": [
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "DBC",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "DBC",
+      "side": "BUY",
+      "state": "REJECTED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "EEM",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "EFA",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "IWM",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "QQQ",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "SPY",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "XLE",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "learner-8f63b39e84e429b31f4ee511e1e76ecf7f4bc7d218b421e96e7b5596a6f5aa97",
+      "symbol": "XLF",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "learner-8f63b39e84e429b31f4ee511e1e76ecf7f4bc7d218b421e96e7b5596a6f5aa97",
+      "symbol": "XLF",
+      "side": "SELL",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "learner-f422d5e5ece9783cc48305a085c34bc79100e877903b2f97407c0bd2c00d9933",
+      "symbol": "XLF",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "learner-f422d5e5ece9783cc48305a085c34bc79100e877903b2f97407c0bd2c00d9933",
+      "symbol": "XLF",
+      "side": "SELL",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "XLI",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "XLI",
+      "side": "SELL",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "learner-8f63b39e84e429b31f4ee511e1e76ecf7f4bc7d218b421e96e7b5596a6f5aa97",
+      "symbol": "XLI",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "learner-8f63b39e84e429b31f4ee511e1e76ecf7f4bc7d218b421e96e7b5596a6f5aa97",
+      "symbol": "XLI",
+      "side": "SELL",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "XLK",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    },
+    {
+      "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+      "symbol": "XLV",
+      "side": "BUY",
+      "state": "FILLED",
+      "count": 1
+    }
+  ],
+  "experiment_lot_metadata": [
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "ENTRY_DECLARED",
+      "owner": null,
+      "count": 1,
+      "latest_recorded_at": "2026-10-08T18:15:45.619840+00:00"
+    },
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "FILL",
+      "owner": "DEADLINE",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T12:54:53.240246+00:00"
+    },
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "FILL",
+      "owner": "ENTRY",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T12:54:53.240246+00:00"
+    },
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "ORDER_LINK",
+      "owner": "DEADLINE",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T12:54:53.240246+00:00"
+    },
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "ORDER_LINK",
+      "owner": "ENTRY",
+      "count": 1,
+      "latest_recorded_at": "2026-10-08T18:15:45.619840+00:00"
+    },
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "ORDER_TERMINAL",
+      "owner": null,
+      "count": 2,
+      "latest_recorded_at": "2026-10-09T12:54:53.240246+00:00"
+    },
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "PROTECTION_BOUND",
+      "owner": null,
+      "count": 161,
+      "latest_recorded_at": "2026-10-09T12:54:53.240246+00:00"
+    },
+    {
+      "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+      "symbol": "XLF",
+      "event_kind": "RECONCILED_FLAT",
+      "owner": null,
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T12:54:53.240246+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "ENTRY_DECLARED",
+      "owner": null,
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T14:06:12.646646+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "FILL",
+      "owner": "DEADLINE",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T14:35:30.936641+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "FILL",
+      "owner": "ENTRY",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T14:08:22.749097+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "ORDER_LINK",
+      "owner": "DEADLINE",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T14:35:30.936641+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "ORDER_LINK",
+      "owner": "ENTRY",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T14:06:12.646646+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "ORDER_TERMINAL",
+      "owner": null,
+      "count": 2,
+      "latest_recorded_at": "2026-10-09T14:35:30.936641+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "PROTECTION_BOUND",
+      "owner": null,
+      "count": 156,
+      "latest_recorded_at": "2026-10-09T14:35:30.936641+00:00"
+    },
+    {
+      "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+      "symbol": "XLF",
+      "event_kind": "RECONCILED_FLAT",
+      "owner": null,
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T14:35:30.936641+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "ENTRY_DECLARED",
+      "owner": null,
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:16:33.929676+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "FILL",
+      "owner": "DEADLINE",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:45:32.473745+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "FILL",
+      "owner": "ENTRY",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:18:45.598546+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "ORDER_LINK",
+      "owner": "DEADLINE",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:45:32.473745+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "ORDER_LINK",
+      "owner": "ENTRY",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:16:33.929676+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "ORDER_TERMINAL",
+      "owner": null,
+      "count": 2,
+      "latest_recorded_at": "2026-10-09T15:45:32.473745+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "PROTECTION_BOUND",
+      "owner": null,
+      "count": 139,
+      "latest_recorded_at": "2026-10-09T15:45:32.473745+00:00"
+    },
+    {
+      "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+      "symbol": "XLI",
+      "event_kind": "RECONCILED_FLAT",
+      "owner": null,
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:45:32.473745+00:00"
+    },
+    {
+      "lot_id": "95d5fba95ad055ffdcd145d4ad2f6b9557ed8ce85b327bd34d1f01428437f0c6",
+      "symbol": "XLP",
+      "event_kind": "ENTRY_DECLARED",
+      "owner": null,
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:51:54.124981+00:00"
+    },
+    {
+      "lot_id": "95d5fba95ad055ffdcd145d4ad2f6b9557ed8ce85b327bd34d1f01428437f0c6",
+      "symbol": "XLP",
+      "event_kind": "ORDER_LINK",
+      "owner": "ENTRY",
+      "count": 1,
+      "latest_recorded_at": "2026-10-09T15:51:54.124981+00:00"
+    }
+  ],
+  "grants_ownership_transfer": false
+}

@@ -1,0 +1,292 @@
+{
+  "environment": "EXISTING_CREDENTIAL_STRIPPED_OFFLINE_CHECK_AND_UV_OFFLINE_HELPER",
+  "historical_log_only_commands": "Earlier setup/repair logs preserved without reconstructing unrecorded argument lists",
+  "commands": [
+    {
+      "stage": "v34-before-source",
+      "argv": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\check.py",
+        "tests/fixtures/capture_core_v34.py"
+      ],
+      "result": "1 passed in12.82s",
+      "command_sha256": "3aab694923c5501ae17b40cb8877cd4a144f9b9b8b74c0d289ac5a915ed7768e"
+    },
+    {
+      "stage": "frozen-affected-gate",
+      "argv": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\check.py",
+        "-s",
+        "tests/integration/paper_core",
+        "tests/fault/paper_core",
+        "tests/integration/test_storage_parity.py",
+        "tests/unit/test_migration_authority.py",
+        "tests/unit/test_storage.py",
+        "tests/unit/research/test_registry.py"
+      ],
+      "exit_code": 0,
+      "result": "409 passed,26 skipped in1187.96s",
+      "raw_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-__pjhcko\\result.txt",
+      "command_sha256": "981157c3434434c0fa848ceabf140b509aa863166deb92780b3c1331e3ae21f8"
+    },
+    {
+      "stage": "default-identity-red",
+      "argv": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\check.py",
+        "tests/integration/paper_core/test_release_recovery.py",
+        "-k",
+        "default_config"
+      ],
+      "exit_code": 1,
+      "result": "1 failed,10 deselected in3.41s",
+      "command_sha256": "fe990b060d36b424ae1a27950345f22946f43ee133eee0fca3737d570fbe82b5"
+    },
+    {
+      "stage": "default-fix-release-green",
+      "argv": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\check.py",
+        "-s",
+        "tests/integration/paper_core/test_release_recovery.py"
+      ],
+      "exit_code": 0,
+      "result": "11 passed in21.66s",
+      "raw_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-u1i97niy\\result.txt",
+      "command_sha256": "b730c6fb0be80066df35ec320c69e04a8a7c27af996a2ffb165cfb0f1bed98d7"
+    },
+    {
+      "stage": "stage1-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "ruff",
+        "check",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\ruff.txt",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "command_sha256": "808082d8f1fbf6a4530f570bde107ca6f5acd4521860d3043d95e8b56ff466ed"
+    },
+    {
+      "stage": "stage1-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "linux",
+        "src"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\mypy-linux.txt",
+      "log_sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d",
+      "command_sha256": "ffe2e75d6753d856e99cb0fa13718a3f62cbbd32b5bdbcb606dd6108517f67ac"
+    },
+    {
+      "stage": "stage1-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "win32",
+        "src"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\mypy-win32.txt",
+      "log_sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d",
+      "command_sha256": "150f4289d145572de1ef665bdf1bd393c4e743e06d58d9454f092f2ffbd77329"
+    },
+    {
+      "stage": "stage1-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "ruff",
+        "check",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\ruff-helpers.txt",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "command_sha256": "576a1a46bbb2a0aaf79b30ebe9c7381ecc9492b3c3b19506918caf5807cf1424"
+    },
+    {
+      "stage": "stage1-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "linux",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\mypy-linux-helpers.txt",
+      "log_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+      "command_sha256": "28f2a78298c27cea8acf69255f7e9ee73fa6aa35fec26d604603bb6f18bba71e"
+    },
+    {
+      "stage": "stage1-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "win32",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\mypy-win32-helpers.txt",
+      "log_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+      "command_sha256": "9739e803584a26d25ad4ff3ded2560d4f247be21a95b88cc82dda1a6ceffe0dc"
+    },
+    {
+      "stage": "final-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "ruff",
+        "check",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\default-fix-ruff.txt",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "command_sha256": "808082d8f1fbf6a4530f570bde107ca6f5acd4521860d3043d95e8b56ff466ed"
+    },
+    {
+      "stage": "final-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "linux",
+        "src"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\default-fix-mypy-linux.txt",
+      "log_sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d",
+      "command_sha256": "ffe2e75d6753d856e99cb0fa13718a3f62cbbd32b5bdbcb606dd6108517f67ac"
+    },
+    {
+      "stage": "final-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "win32",
+        "src"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\default-fix-mypy-win32.txt",
+      "log_sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d",
+      "command_sha256": "150f4289d145572de1ef665bdf1bd393c4e743e06d58d9454f092f2ffbd77329"
+    },
+    {
+      "stage": "final-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "ruff",
+        "check",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\default-fix-ruff-helpers.txt",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "command_sha256": "576a1a46bbb2a0aaf79b30ebe9c7381ecc9492b3c3b19506918caf5807cf1424"
+    },
+    {
+      "stage": "final-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "linux",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\default-fix-mypy-linux-helpers.txt",
+      "log_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+      "command_sha256": "28f2a78298c27cea8acf69255f7e9ee73fa6aa35fec26d604603bb6f18bba71e"
+    },
+    {
+      "stage": "final-exact-ci",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "win32",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\default-fix-mypy-win32-helpers.txt",
+      "log_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+      "command_sha256": "9739e803584a26d25ad4ff3ded2560d4f247be21a95b88cc82dda1a6ceffe0dc"
+    }
+  ],
+  "helpers": [
+    {
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\check.py",
+      "sha256": "8224b1b29a9da883f2bdac07226a53ad9fa4811236d8cb24b950229c398d5d14"
+    },
+    {
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\ci_m6.py",
+      "sha256": "abc3bc6077192f58820dad5b63f795b0c40fd13669ca4e317449641f1d5a33f4"
+    },
+    {
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\freeze_m6.py",
+      "sha256": "939c6c9668034f5cbaac8ac26afe6fa085de6342ad93b06ef329b0de3118810b"
+    },
+    {
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\prepare_package_m6.py",
+      "sha256": "a3100b456052298f5dc9e730427934fe0e302c486b1f275b289a44ba37cc32b0"
+    },
+    {
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\package_preparation_m6.py",
+      "sha256": "77a749e67826d38e1877d67df7569b16f99277ff9093b674125137b12e47bb6d"
+    },
+    {
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\package_logs_m6.py",
+      "sha256": "a607d72e95bb2714ac00417465039415a31af8c5c983f2f21cd3c1a9bbd79b86"
+    },
+    {
+      "path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\task_proposals_m6.py",
+      "sha256": "1e10bb4421585ddedf761a89a54152f7935416c11da573f5c1f67fef005a8ffe"
+    }
+  ]
+}

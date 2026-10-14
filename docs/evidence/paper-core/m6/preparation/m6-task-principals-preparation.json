@@ -1,0 +1,196 @@
+{
+  "observed_at": "2026-10-14T17:28:31.9943504Z",
+  "shell_user": "LEANNES-LAPTOP\\leepa",
+  "tasks": [
+    {
+      "name": "Elrond Adaptive Paper Shadow",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Disabled",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Alert Dispatcher",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Console",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Running",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Daemon",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Running",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond DIA Alerts",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Running",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond DIA Learner",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Disabled",
+      "executables": [
+        "D:/Elrond/state/service-host/1188bba2cb38de299aad0768/elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Five Minute Observations",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Ingestion",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Learner",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Observer",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Paper Daily Close",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Paper Deadline",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Running",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond PAPER Exploration",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Running",
+      "executables": [
+        "D:/Elrond/state/service-host/1188bba2cb38de299aad0768/elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Position Research",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Protection",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Running",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Report",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Research",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "Elrond Trade Learning Observer",
+      "user_id": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "state": "Ready",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    },
+    {
+      "name": "ElrondModelServer",
+      "user_id": "erlond",
+      "logon_type": "Password",
+      "run_level": "Limited",
+      "state": "Running",
+      "executables": [
+        "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe"
+      ]
+    }
+  ]
+}

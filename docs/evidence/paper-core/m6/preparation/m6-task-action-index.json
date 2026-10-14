@@ -1,0 +1,161 @@
+{
+  "observed_at": "2026-10-14T19:20:55.6915010Z",
+  "source": "existing archived task XML text, UTF-8 serialization of Export-ScheduledTask Unicode strings; XML declaration retains UTF-16, decode as UTF-8 text before XML parsing",
+  "tasks": [
+    {
+      "name": "Elrond Adaptive Paper Shadow",
+      "state": "Disabled",
+      "script_references": [
+        "'.venv\\Scripts\\python.exe",
+        "'python.exe"
+      ],
+      "source_xml_sha256": "9918d179ede7c081888e06354979b9ce03772ed438d3b01908977e8442e84d0c"
+    },
+    {
+      "name": "Elrond Alert Dispatcher",
+      "state": "Ready",
+      "script_references": [
+        "D:\\Elrond\\releases\\combined-paper-5c1db64\\deploy\\omen\\start-alert-dispatch.ps1"
+      ],
+      "source_xml_sha256": "fa077b8a026412fb5bcbbcefb51fec2a444b1db312c81247ddeddccc8cb7101f"
+    },
+    {
+      "name": "Elrond Console",
+      "state": "Running",
+      "script_references": [
+        "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\weekend-console-capture-release-b9e5e9f\\deploy\\omen\\start-service.ps1"
+      ],
+      "source_xml_sha256": "2df254324631cc75eed512d6c568ea7ff08b9096629c07f2018aa0fc05a6bec6"
+    },
+    {
+      "name": "Elrond Daemon",
+      "state": "Running",
+      "script_references": [
+        "D:\\Elrond\\releases\\combined-paper-5c1db64\\deploy\\omen\\start-service.ps1"
+      ],
+      "source_xml_sha256": "74938c7edaabcb0e067e54784d53297d007a982c9f1f1df3dc3175e75c8c593e"
+    },
+    {
+      "name": "Elrond DIA Alerts",
+      "state": "Ready",
+      "script_references": [
+        "D:\\Elrond\\releases\\combined-paper-5c1db64\\deploy\\omen\\start-alert-dispatch.ps1"
+      ],
+      "source_xml_sha256": "07854a4ab6e8a4e7b23f97c06d7eef19f979b39615b1ab382bfc29e5c16d248b"
+    },
+    {
+      "name": "Elrond DIA Learner",
+      "state": "Disabled",
+      "script_references": [
+        "'D:\\Elrond\\releases\\combined-paper-5c1db64\\.venv\\Scripts\\python.exe",
+        "'D:\\Elrond\\diagnostics\\b75c6b702c2bec9cd58ce0d5451064c1b4d518bd46a2a66a4f4bb6e13047a610\\paper_entry_diagnostics.py"
+      ],
+      "source_xml_sha256": "02a786fdf5f09872f5694f965cdac029f336a94d2d7d8dae685b4ae7991fde4e"
+    },
+    {
+      "name": "Elrond Five Minute Observations",
+      "state": "Ready",
+      "script_references": [
+        "'D:\\Elrond\\releases\\five-observer-054ed1a\\.venv\\Scripts\\python.exe"
+      ],
+      "source_xml_sha256": "a24a965063445e6bf56009143601b7b288a1e88cb039e0ec4b5d3a9e2f5ced20"
+    },
+    {
+      "name": "Elrond Ingestion",
+      "state": "Ready",
+      "script_references": [
+        "D:\\Elrond\\releases\\combined-paper-5c1db64\\deploy\\omen\\start-service.ps1"
+      ],
+      "source_xml_sha256": "14af5823bf2fa34dcd93a2deecae9de3fbd6de677b78f3428b3cd94a7d4a0089"
+    },
+    {
+      "name": "Elrond Learner",
+      "state": "Ready",
+      "script_references": [
+        "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\presend-release-b496109\\deploy\\omen\\start-learner.ps1"
+      ],
+      "source_xml_sha256": "5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc"
+    },
+    {
+      "name": "Elrond Observer",
+      "state": "Ready",
+      "script_references": [
+        "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\presend-release-b496109\\deploy\\omen\\start-monitor.ps1"
+      ],
+      "source_xml_sha256": "4909e1b5d610c859e379a7626c976a55f935981d6ec3457d681958cf568cecfd"
+    },
+    {
+      "name": "Elrond Paper Daily Close",
+      "state": "Ready",
+      "script_references": [
+        "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\rollout-weekend-console-capture-b9e5e9f\\start-close-reference.ps1"
+      ],
+      "source_xml_sha256": "d4864a9396f57e351fd376e665d83f857eb18c38b5e580d1af4041676e7d3c30"
+    },
+    {
+      "name": "Elrond Paper Deadline",
+      "state": "Running",
+      "script_references": [
+        "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\deadline-release-cb5556c\\deploy\\omen\\start-learner.ps1"
+      ],
+      "source_xml_sha256": "f65373d43d2ceae78a764102d1c8b673ee2df33a29b161cb3f9878fa10b14bb7"
+    },
+    {
+      "name": "Elrond PAPER Exploration",
+      "state": "Running",
+      "script_references": [
+        "'C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\presend-release-b496109\\.venv\\Scripts\\python.exe"
+      ],
+      "source_xml_sha256": "5c7c4d7a29a88ec1689d9d7f84e6c1b57ae585f9beeff613408b65d1c6c4cf2c"
+    },
+    {
+      "name": "Elrond Position Research",
+      "state": "Ready",
+      "script_references": [
+        "D:\\Elrond\\releases\\paper-news-4ee6e5f\\deploy\\omen\\start-position-research.ps1"
+      ],
+      "source_xml_sha256": "ca00634898bf17a7650879aecd57960ee388ea4b239e8d0d1423ad58d8cdc038"
+    },
+    {
+      "name": "Elrond Protection",
+      "state": "Running",
+      "script_references": [
+        "D:\\Elrond\\releases\\paper-binding-90490a3\\deploy\\omen\\start-service.ps1"
+      ],
+      "source_xml_sha256": "3f5527c3c75306ff3e43eb999152c0455f975e73757084b2bc247488d8425e55"
+    },
+    {
+      "name": "Elrond Report",
+      "state": "Ready",
+      "script_references": [
+        "D:\\Elrond\\releases\\paper-binding-90490a3\\deploy\\omen\\start-service.ps1"
+      ],
+      "source_xml_sha256": "c499dbf2c9d9c4bb704a340ee82c1e13286b46b1dbc431940deafd280695210c"
+    },
+    {
+      "name": "Elrond Research",
+      "state": "Ready",
+      "script_references": [
+        "D:\\Elrond\\releases\\paper-binding-90490a3\\deploy\\omen\\start-service.ps1"
+      ],
+      "source_xml_sha256": "ab8d2788c3a7221db23d45029045027098d6fb43d88384d2a30a244f8102dde7"
+    },
+    {
+      "name": "Elrond Trade Learning Observer",
+      "state": "Ready",
+      "script_references": [
+        "'D:\\Elrond\\releases\\combined-paper-5c1db64\\.venv\\Scripts\\python.exe"
+      ],
+      "source_xml_sha256": "e02581c69c2c18805ff13de0a5690f7cd992802512e6831720a0ba8f0f4e7a10"
+    },
+    {
+      "name": "ElrondModelServer",
+      "state": "Running",
+      "script_references": [
+        "C:\\Users\\leepa\\elrond-omen-runtime\\deploy\\omen\\start-model-server.ps1",
+        "D:\\Elrond\\tools\\ollama-v0.33.3\\ollama.exe"
+      ],
+      "source_xml_sha256": "9a255044887db7368d69f159b5ce068d05cdfc9b1da2fc7f481afb9b512af237"
+    }
+  ]
+}
