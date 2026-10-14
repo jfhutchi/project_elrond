@@ -1,0 +1,78 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+_____ test_provider_fill_without_fee_evidence_cannot_finalize_net_profit ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/elrond-review-20261013/execution-checks-acceptance-pr288/pytest/test_provider_fill_without_fee0')
+
+    def test_provider_fill_without_fee_evidence_cannot_finalize_net_profit(tmp_path):
+        fill = AlpacaPaperBrokerAdapter._fill_from_payload({
+            'activity_type': 'FILL', 'id': 'synthetic-fill', 'order_id': 'stop',
+            'symbol': 'SYN0', 'side': 'sell', 'qty': '1', 'price': '102',
+            'transaction_time': (OPEN + timedelta(seconds=5)).isoformat(),
+        })
+        journal = prepare(tmp_path, exit_fee=fill.fee)
+        outcome = lots().resolve_lot(journal, 'a' * 64, now=OPEN + timedelta(seconds=30))
+>       assert outcome.net_pnl is None, f'No provider fee evidence, yet finalized {outcome.net_pnl}'
+E       AssertionError: No provider fee evidence, yet finalized 1.90
+E       assert Decimal('1.90') is None
+E        +  where Decimal('1.90') = EconomicOutcome(lot_id='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', status='COMPLETE', reasons=...s=('exit-fill',), synthetic=True, resolved_at=datetime.datetime(2026, 10, 6, 13, 30, 30, tzinfo=datetime.timezone.utc)).net_pnl
+
+..\test_execution_audit_acceptance.py:27: AssertionError
+_____ test_repeated_unreconciled_observation_cannot_become_reconciliation _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/elrond-review-20261013/execution-checks-acceptance-pr288/pytest/test_repeated_unreconciled_obs0')
+
+    @pytest.mark.asyncio
+    async def test_repeated_unreconciled_observation_cannot_become_reconciliation(tmp_path):
+        with Database.create(tmp_path / 'synthetic.db') as db:
+            local = account().account.model_copy(update={'cash': Decimal('99925')})
+            actual = account().model_copy(update={
+                'account': account().account.model_copy(update={'cash': Decimal('99850')})})
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+                repo.save_strategy_deployment(IDENTITY)
+                repo.save_account_snapshot('synthetic-reconciled-baseline', local,
+                    (position('XLE', quantity='1', price='75'),),
+                    captured_at=NOW - timedelta(minutes=5))
+            subject = supervisor(db, FakeBroker(actual, (position('XLE', quantity='2', price='75'),)))
+            first = await subject.evaluate(now=NOW)
+            second = await subject.evaluate(now=NOW + timedelta(seconds=15))
+            assert first.unprotected_count == 1
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+                assert repo.list_fills() == []
+                assert repo.get_latest_reconciliation() is None
+>           assert second.unprotected_count == 1, 'Repeated broker read silently became reconciled'
+E           AssertionError: Repeated broker read silently became reconciled
+E           assert 0 == 1
+E            +  where 0 = ProtectionCycleResult(cycle_id='protection-b9728933969e9a5b0fa656df22a5b65e', observed_at=datetime.datetime(2026, 8, 3...'>, reason='PROTECTIVE_EXIT_REQUIRED', position_count=1, evaluated_count=1, unprotected_count=0, exit_required_count=1).unprotected_count
+
+..\test_execution_audit_acceptance.py:51: AssertionError
+_ test_unstable_quote_acquisition_pauses_entries_without_latching_global_stop _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/elrond-review-20261013/execution-checks-acceptance-pr288/pytest/test_unstable_quote_acquisitio0')
+
+    @pytest.mark.asyncio
+    async def test_unstable_quote_acquisition_pauses_entries_without_latching_global_stop(tmp_path):
+        from tests.fault.test_stable_snapshot_recovery import (
+            SequencedBroker, account as snapshot_account, positions, _prepare_database,
+        )
+        from tests.fault.test_paper_transient_acquisition import cycle
+        from quantbot.operations.kill_switch import KillSwitchController
+        with _prepare_database(tmp_path, snapshot_account(), positions()) as db:
+            broker = SequencedBroker(['2000.00', '2000.01', '2000.00', '2000.02'])
+            result = await cycle(db, tmp_path, broker, []).run(
+                'synthetic-unstable', started_at=NOW, trading_date=NOW.date())
+            assert result.orders_submitted == 0
+>           assert result.status == 'BLOCKED'
+E           AssertionError: assert 'HALTED' == 'BLOCKED'
+E
+E             - BLOCKED
+E             + HALTED
+
+..\test_execution_audit_acceptance.py:67: AssertionError
+=========================== short test summary info ===========================
+FAILED ::test_provider_fill_without_fee_evidence_cannot_finalize_net_profit
+FAILED ::test_repeated_unreconciled_observation_cannot_become_reconciliation
+FAILED ::test_unstable_quote_acquisition_pauses_entries_without_latching_global_stop
+3 failed in 2.19s

@@ -1,0 +1,9 @@
+{
+  "operational_db": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+  "learner_db": "D:\\Elrond\\learner\\state\\learner.db",
+  "experiment_db": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db",
+  "account_hash": "ca2610f8f4c50efeb889856dd17445944557b3cd2f2a9ed67b83d59de2a49d19",
+  "deployment_json": "D:\\Elrond\\learner\\deployment.json",
+  "runtime_metadata": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\m0\\host-metadata.json",
+  "entry_receipt": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\receipt.json"
+}

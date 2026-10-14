@@ -1,0 +1,97 @@
+[
+  {
+    "Name": "Elrond Adaptive Paper Shadow",
+    "State": "Disabled",
+    "Pins": ""
+  },
+  {
+    "Name": "Elrond Alert Dispatcher",
+    "State": "Ready",
+    "Pins": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+  },
+  {
+    "Name": "Elrond Console",
+    "State": "Running",
+    "Pins": "b9e5e9f4fe2e40169a76f7b22a8613f476666415"
+  },
+  {
+    "Name": "Elrond Daemon",
+    "State": "Running",
+    "Pins": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+  },
+  {
+    "Name": "Elrond DIA Alerts",
+    "State": "Ready",
+    "Pins": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+  },
+  {
+    "Name": "Elrond DIA Learner",
+    "State": "Disabled",
+    "Pins": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+  },
+  {
+    "Name": "Elrond Five Minute Observations",
+    "State": "Ready",
+    "Pins": ""
+  },
+  {
+    "Name": "Elrond Ingestion",
+    "State": "Ready",
+    "Pins": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+  },
+  {
+    "Name": "Elrond Learner",
+    "State": "Ready",
+    "Pins": "b496109563656df820c80b993db9bda4e793f13c"
+  },
+  {
+    "Name": "Elrond Observer",
+    "State": "Ready",
+    "Pins": "b496109563656df820c80b993db9bda4e793f13c"
+  },
+  {
+    "Name": "Elrond Paper Daily Close",
+    "State": "Ready",
+    "Pins": "b9e5e9f4fe2e40169a76f7b22a8613f476666415"
+  },
+  {
+    "Name": "Elrond Paper Deadline",
+    "State": "Running",
+    "Pins": "cb5556c6ad3fd2b0282bac3694ba66be63d72801"
+  },
+  {
+    "Name": "Elrond PAPER Exploration",
+    "State": "Running",
+    "Pins": ""
+  },
+  {
+    "Name": "Elrond Position Research",
+    "State": "Ready",
+    "Pins": "4ee6e5ff82355dfb2821f9f187406e661ae875ee"
+  },
+  {
+    "Name": "Elrond Protection",
+    "State": "Running",
+    "Pins": "90490a3aabae5c49c2381d97c322cf3ba2b4d045"
+  },
+  {
+    "Name": "Elrond Report",
+    "State": "Ready",
+    "Pins": "90490a3aabae5c49c2381d97c322cf3ba2b4d045"
+  },
+  {
+    "Name": "Elrond Research",
+    "State": "Ready",
+    "Pins": "90490a3aabae5c49c2381d97c322cf3ba2b4d045"
+  },
+  {
+    "Name": "Elrond Trade Learning Observer",
+    "State": "Ready",
+    "Pins": ""
+  },
+  {
+    "Name": "ElrondModelServer",
+    "State": "Running",
+    "Pins": ""
+  }
+]

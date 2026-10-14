@@ -1,0 +1,152 @@
+{
+  "observed_at": "2026-10-14T10:38:27.2412584Z",
+  "tasks": [
+    {
+      "name": "Elrond Adaptive Paper Shadow",
+      "state": "Disabled",
+      "release": ""
+    },
+    {
+      "name": "Elrond Alert Dispatcher",
+      "state": "Ready",
+      "release": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+    },
+    {
+      "name": "Elrond Console",
+      "state": "Running",
+      "release": "b9e5e9f4fe2e40169a76f7b22a8613f476666415"
+    },
+    {
+      "name": "Elrond Daemon",
+      "state": "Running",
+      "release": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+    },
+    {
+      "name": "Elrond DIA Alerts",
+      "state": "Ready",
+      "release": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+    },
+    {
+      "name": "Elrond DIA Learner",
+      "state": "Disabled",
+      "release": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+    },
+    {
+      "name": "Elrond Five Minute Observations",
+      "state": "Ready",
+      "release": ""
+    },
+    {
+      "name": "Elrond Ingestion",
+      "state": "Ready",
+      "release": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef"
+    },
+    {
+      "name": "Elrond Learner",
+      "state": "Ready",
+      "release": "b496109563656df820c80b993db9bda4e793f13c"
+    },
+    {
+      "name": "Elrond Observer",
+      "state": "Ready",
+      "release": "b496109563656df820c80b993db9bda4e793f13c"
+    },
+    {
+      "name": "Elrond Paper Daily Close",
+      "state": "Ready",
+      "release": "b9e5e9f4fe2e40169a76f7b22a8613f476666415"
+    },
+    {
+      "name": "Elrond Paper Deadline",
+      "state": "Running",
+      "release": "cb5556c6ad3fd2b0282bac3694ba66be63d72801"
+    },
+    {
+      "name": "Elrond PAPER Exploration",
+      "state": "Running",
+      "release": ""
+    },
+    {
+      "name": "Elrond Position Research",
+      "state": "Ready",
+      "release": "4ee6e5ff82355dfb2821f9f187406e661ae875ee"
+    },
+    {
+      "name": "Elrond Protection",
+      "state": "Running",
+      "release": "90490a3aabae5c49c2381d97c322cf3ba2b4d045"
+    },
+    {
+      "name": "Elrond Report",
+      "state": "Ready",
+      "release": "90490a3aabae5c49c2381d97c322cf3ba2b4d045"
+    },
+    {
+      "name": "Elrond Research",
+      "state": "Ready",
+      "release": "90490a3aabae5c49c2381d97c322cf3ba2b4d045"
+    },
+    {
+      "name": "Elrond Trade Learning Observer",
+      "state": "Ready",
+      "release": ""
+    },
+    {
+      "name": "ElrondModelServer",
+      "state": "Running",
+      "release": ""
+    }
+  ],
+  "processes": [
+    {
+      "pid": 1104,
+      "created_at": "2026-10-13T12:02:46.9813350Z",
+      "executable": "D:\\Elrond\\releases\\combined-paper-5c1db64\\.venv\\Scripts\\python.exe"
+    },
+    {
+      "pid": 2868,
+      "created_at": "2026-10-13T12:02:47.0819450Z",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe"
+    },
+    {
+      "pid": 7344,
+      "created_at": "2026-10-13T12:02:46.9813450Z",
+      "executable": "D:\\Elrond\\releases\\paper-binding-90490a3\\.venv\\Scripts\\python.exe"
+    },
+    {
+      "pid": 8512,
+      "created_at": "2026-10-13T13:31:05.2947480Z",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe"
+    },
+    {
+      "pid": 8996,
+      "created_at": "2026-10-13T13:31:05.2842260Z",
+      "executable": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\presend-release-b496109\\.venv\\Scripts\\python.exe"
+    },
+    {
+      "pid": 10368,
+      "created_at": "2026-10-13T12:02:47.0250570Z",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe"
+    },
+    {
+      "pid": 11372,
+      "created_at": "2026-10-13T12:02:47.0453170Z",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe"
+    },
+    {
+      "pid": 14112,
+      "created_at": "2026-10-13T12:02:47.0687270Z",
+      "executable": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\weekend-console-capture-release-b9e5e9f\\.venv\\Scripts\\python.exe"
+    },
+    {
+      "pid": 15560,
+      "created_at": "2026-10-13T12:02:47.0222670Z",
+      "executable": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\deadline-release-cb5556c\\.venv\\Scripts\\python.exe"
+    },
+    {
+      "pid": 17244,
+      "created_at": "2026-10-13T12:02:47.0250950Z",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe"
+    }
+  ]
+}

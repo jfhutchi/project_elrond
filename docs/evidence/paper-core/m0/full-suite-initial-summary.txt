@@ -1,0 +1,89 @@
+short test summary info ===========================
+SKIPPED [1] tests\integration\test_generated_experiment.py:185: generated code requires the OS-enforced sandbox; this must not pass without one
+SKIPPED [1] tests\integration\test_generated_experiment.py:384: generated code requires the OS-enforced sandbox; this must not pass without one
+SKIPPED [1] tests\integration\test_mining_sandboxed.py:73: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_mining_sandboxed.py:96: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_mining_sandboxed.py:133: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_model_runtime_live.py:55: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_model_runtime_live.py:70: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_model_runtime_live.py:91: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_model_runtime_live.py:106: set QUANTBOT_MODEL_ENDPOINT, QUANTBOT_MODEL_GENERATOR and QUANTBOT_MODEL_CRITIC and start the server to run this
+SKIPPED [1] tests\integration\test_sandbox_windows.py:199: the deployed runtime checkout is not present on this host
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:46: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:78: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:101: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:128: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:150: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:168: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [1] tests\integration\test_sandbox_wsl.py:185: no WSL distribution with unprivileged namespaces; this suite must not pass without one
+SKIPPED [2] tests\integration\test_storage_parity.py:161: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [4] tests\integration\test_storage_parity.py:200: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:207: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:232: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:257: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [10] tests\integration\test_storage_parity.py:399: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:417: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:424: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [1] tests\unit\forecasting\test_shadow_forecasting.py:358: platform does not support unprivileged symlinks
+SKIPPED [1] tests\unit\forecasting\test_shadow_forecasting.py:399: platform does not support unprivileged symlinks
+SKIPPED [1] tests\unit\operations\test_adaptive_rollout.py:113: Windows task wrapper checked on native Windows
+SKIPPED [1] tests\unit\operations\test_adaptive_rollout.py:157: Native PowerShell parser unavailable
+SKIPPED [8] tests\unit\operations\test_adaptive_rollout.py:203: Native Windows scheduled-task ownership contract
+SKIPPED [1] tests\unit\operations\test_adaptive_rollout.py:253: Native Windows rollback command contract
+SKIPPED [1] tests\unit\sandbox\test_backend_selection.py:126: the refusal under test is the non-Windows one
+SKIPPED [1] tests\unit\test_local_ci.py:320: requires native Windows PowerShell and uv
+SKIPPED [1] tests\unit\test_local_ci.py:385: requires native Windows PowerShell and uv
+ERROR tests/unit/test_windowless_service_host.py::test_host_is_a_gui_executable_and_child_has_no_console
+ERROR tests/unit/test_windowless_service_host.py::test_host_preserves_quoted_and_empty_arguments
+ERROR tests/unit/test_windowless_service_host.py::test_terminating_host_stops_powershell_and_its_descendant
+ERROR tests/unit/test_windowless_service_host.py::test_unwritable_log_refuses_before_starting_child
+ERROR tests/unit/test_windowless_service_host.py::test_log_failure_exits_deliberately_without_an_unhandled_callback_exception
+FAILED tests/integration/test_control_server.py::test_engaging_over_http_stops_trading
+FAILED tests/integration/test_control_server.py::test_clearing_over_http_runs_the_probes
+FAILED tests/integration/test_control_server.py::test_an_unauthorized_request_is_403_and_changes_nothing
+FAILED tests/integration/test_control_server.py::test_a_missing_token_header_is_refused_identically
+FAILED tests/integration/test_control_server.py::test_an_oversized_body_is_refused_without_being_read
+FAILED tests/integration/test_control_server.py::test_unknown_paths_are_404_and_not_routed
+FAILED tests/integration/test_control_server.py::test_the_control_page_is_served_and_carries_no_token
+FAILED tests/integration/test_sandbox_adversarial.py::test_a_runaway_allocation_is_terminated_by_the_memory_monitor
+FAILED tests/integration/test_sandbox_windows.py::test_the_child_receives_exactly_the_variables_the_backend_constructs
+FAILED tests/unit/forecasting/test_shadow_forecasting.py::test_subprocess_provider_stages_worker_and_scrubs_application_secrets
+FAILED tests/unit/learner/test_five_minute_launch.py::test_native_action_reports_missing_interpreter_as_failure
+FAILED tests/unit/node/test_capabilities.py::test_measure_reads_this_machine_and_stamps_measured_provenance
+FAILED tests/unit/operations/test_adaptive_native_command.py::test_native_shadow_bootstrap_keeps_policy_and_checks_pins[valid]
+FAILED tests/unit/operations/test_adaptive_native_command.py::test_native_shadow_bootstrap_keeps_policy_and_checks_pins[wrong-hash]
+FAILED tests/unit/operations/test_adaptive_native_command.py::test_native_shadow_bootstrap_keeps_policy_and_checks_pins[bad-home]
+FAILED tests/unit/operations/test_observer_tasks.py::test_monitor_plan_never_registers
+FAILED tests/unit/operations/test_observer_tasks.py::test_monitor_registration_is_independent_and_bounded
+FAILED tests/unit/operations/test_observer_tasks.py::test_dispatch_registration_reuses_existing_principal_and_is_bounded
+FAILED tests/unit/operations/test_observer_tasks.py::test_learner_update_refuses_unsafe_task_without_changes[Running]
+FAILED tests/unit/operations/test_observer_tasks.py::test_learner_update_refuses_unsafe_task_without_changes[unmanaged]
+FAILED tests/unit/operations/test_observer_tasks.py::test_learner_update_refuses_unsafe_task_without_changes[privileged]
+FAILED tests/unit/operations/test_observer_tasks.py::test_learner_plan_preserves_task_and_store
+FAILED tests/unit/operations/test_observer_tasks.py::test_apply_then_rollback_restores_only_action_and_metadata[True]
+FAILED tests/unit/operations/test_observer_tasks.py::test_apply_then_rollback_restores_only_action_and_metadata[False]
+FAILED tests/unit/operations/test_observer_tasks.py::test_failed_update_restores_original_without_starting_worker
+FAILED tests/unit/operations/test_observer_tasks.py::test_tick_race_is_refused_without_rewriting_running_task
+FAILED tests/unit/operations/test_observer_tasks.py::test_concurrent_action_drift_is_not_overwritten[False]
+FAILED tests/unit/operations/test_observer_tasks.py::test_concurrent_action_drift_is_not_overwritten[True]
+FAILED tests/unit/operations/test_observer_tasks.py::test_definition_drift_is_refused_and_left_disabled[apply-Principal.UserId]
+FAILED tests/unit/operations/test_observer_tasks.py::test_definition_drift_is_refused_and_left_disabled[apply-Triggers]
+FAILED tests/unit/operations/test_observer_tasks.py::test_definition_drift_is_refused_and_left_disabled[apply-Settings]
+FAILED tests/unit/operations/test_observer_tasks.py::test_definition_drift_is_refused_and_left_disabled[rollback-Principal.UserId]
+FAILED tests/unit/operations/test_observer_tasks.py::test_definition_drift_is_refused_and_left_disabled[rollback-Triggers]
+FAILED tests/unit/operations/test_observer_tasks.py::test_definition_drift_is_refused_and_left_disabled[rollback-Settings]
+FAILED tests/unit/operations/test_observer_tasks.py::test_monitor_wrapper_uses_owned_interpreter_and_check_arguments
+FAILED tests/unit/operations/test_observer_tasks.py::test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_python[deadline]
+FAILED tests/unit/operations/test_observer_tasks.py::test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_python[close]
+FAILED tests/unit/operations/test_observer_tasks.py::test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_python[initialize]
+FAILED tests/unit/operations/test_observer_tasks.py::test_dispatch_wrapper_checks_both_readonly_sources_with_owned_python
+FAILED tests/unit/operations/test_observer_tasks.py::test_dispatch_legacy_principal_needs_exact_description
+FAILED tests/unit/operations/test_service.py::test_service_wrapper_terminates_its_python_process_tree
+FAILED tests/unit/operations/test_service.py::test_windows_installer_registers_bounded_tasks_through_scheduler_doubles
+FAILED tests/unit/sandbox/test_runner_paths.py::test_the_memory_probe_actually_reads_a_number_on_this_platform
+FAILED tests/unit/test_model_service_launch.py::test_native_stderr_does_not_stop_model_task_and_broker_secrets_are_removed
+FAILED tests/unit/test_model_service_launch.py::test_a_native_server_failure_is_the_task_exit_code
+FAILED tests/unit/test_model_service_launch.py::test_terminating_the_task_wrapper_terminates_its_server_process
+FAILED tests/unit/test_placement.py::test_a_probe_of_an_unreachable_endpoint_records_the_failure_rather_than_raising
+FAILED tests/unit/test_placement.py::test_measuring_this_machine_produces_a_usable_profile
+48 failed, 4253 passed, 59 skipped, 1 warning, 5 errors in 1077.66s (0:17:57)
