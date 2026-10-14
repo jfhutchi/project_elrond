@@ -1,0 +1,31 @@
+{
+  "state": "PREPARED_WAITING_NOT_COMMISSIONED",
+  "repair_base": "6026f02fd2ca46c541f9e7c45117f4049ce102b0",
+  "old_release_id": "1e39ceb94155aaa746a879b69306ca3150a182c19d491a139cd81c8a1a58e302",
+  "new_release_id": "f0433941ffb9c059b9d7a4b53ab530622968734d1ac50332931180cf4370c5df",
+  "config_id": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "old_verification_on_repaired_source": {
+    "release_id": "1e39ceb94155aaa746a879b69306ca3150a182c19d491a139cd81c8a1a58e302",
+    "verified_at": "2026-10-14T22:17:48.364039+00:00",
+    "state": "REFUSED",
+    "objections": [
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/alpaca_adapter.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/operational_costs.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/outcomes.py"
+    ],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "new_verification": {
+    "release_id": "f0433941ffb9c059b9d7a4b53ab530622968734d1ac50332931180cf4370c5df",
+    "verified_at": "2026-10-14T22:17:47.339401+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "config_bytes_unchanged": true,
+  "executable_pins": 361,
+  "distributions": 46,
+  "operational_release_transfer": "NOT_PERFORMED_UNSUPPORTED_FOR_EXISTING_COMMISSION"
+}

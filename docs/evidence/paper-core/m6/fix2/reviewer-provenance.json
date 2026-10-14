@@ -1,0 +1,8 @@
+{
+  "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\m6-fix1-review-fee-race.py",
+  "source_sha256": "b115291a72a40d1745ae44ddd6572b1750857defa45d95c6dabab9f37ac720bc",
+  "raw_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-_n9_xij6\\result.txt",
+  "raw_log_sha256": "8b983e04b5a312590485b467a0e4d95274ea4e078c29b6ba1906037ad8090899",
+  "compressed_log_sha256": "03656f20a204074ce395adecdc30e151001043cf983c595126d139f4c2b9fe17",
+  "scope": "DIAGNOSTIC_ASSERTS_PRE_FIX_DEFECT_NOT_ACCEPTANCE"
+}

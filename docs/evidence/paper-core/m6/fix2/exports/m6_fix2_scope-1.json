@@ -1,0 +1,35 @@
+{
+  "different_scope": null,
+  "authoritative_cost_count": 0,
+  "refusals": [
+    {
+      "account_id": "synthetic-account",
+      "client_order_id": "qb-4fb002601afb7c361280de543c1802726657e59d",
+      "contract_id": "993c1e56e9e91d70aaa6437fdbbdd2879c51796e99553f40684ea688f9b4818f",
+      "cost_id": "90ed5cf6d6347a7a71753e092dc1e9dfb4f20fab964835c0f6901a223817f657",
+      "fill_id": "synthetic-fill-qb-4fb002601afb7c361280de543c1802726657e59d",
+      "first_conflict_at": "2026-10-14T14:30:00+00:00",
+      "first_conflict_source": "0bac76b8a522bdfdab995843c2c1c8ba41e207756349ae978a109b14709b61f3",
+      "kind": "CONTRACTUAL_ZERO_ADMISSION_REFUSED",
+      "reason": "EXACT_COST_CONTRACT_CONTRADICTED_AT_IMPORT",
+      "source_event_id": "44d2daa0c3d6bee2b5962639d40456092fab8961132582a18445dd60deac6e99"
+    },
+    {
+      "account_id": "synthetic-account",
+      "client_order_id": "qb-e236da596872e8980b271e708dcec0fbcc09d961",
+      "contract_id": "993c1e56e9e91d70aaa6437fdbbdd2879c51796e99553f40684ea688f9b4818f",
+      "cost_id": "f5e39517498c0be415d93e21f247ac9d4726a1f62d0245d2e4518d0878f4cf33",
+      "fill_id": "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961",
+      "first_conflict_at": "2026-10-14T14:30:00+00:00",
+      "first_conflict_source": "0bac76b8a522bdfdab995843c2c1c8ba41e207756349ae978a109b14709b61f3",
+      "kind": "CONTRACTUAL_ZERO_ADMISSION_REFUSED",
+      "reason": "EXACT_COST_CONTRACT_CONTRADICTED_AT_IMPORT",
+      "source_event_id": "61f7f4ba608551db7c46fc84551e19f731c693f1efdf9e3153d41b2c8144d9e2"
+    }
+  ],
+  "generated_cost_ids": [
+    "f5e39517498c0be415d93e21f247ac9d4726a1f62d0245d2e4518d0878f4cf33",
+    "90ed5cf6d6347a7a71753e092dc1e9dfb4f20fab964835c0f6901a223817f657"
+  ],
+  "scope": "EXPLICIT_SYNTHETIC_IMPORT_SEAM"
+}

@@ -270,7 +270,41 @@ def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[s
                         raise StateConflictError("cost has no exact owned fill")
                     if event.cost.recorded_at_utc != event.recorded_at_utc:
                         raise StateConflictError("cost availability does not match source receipt")
-                    record_cost(session, event.cost, fill)
+                    if not (
+                        event.cost.effective_start <= fill.occurred_at <= event.cost.effective_end
+                    ):
+                        raise StateConflictError("cost authority does not apply to fill time")
+                    from quantbot.paper_core.operational_costs import cost_contract_conflict_source
+
+                    contradiction = None
+                    if event.cost.source == "CONTRACTUAL_ZERO" and event.cost.document_id:
+                        contradiction = session.execute(
+                            select(table("core_source_cursors")).where(
+                                table("core_source_cursors").c.source_id
+                                == cost_contract_conflict_source(
+                                    event.account_id, event.cost.document_id
+                                )
+                            )
+                        ).mappings().one_or_none()
+                    if contradiction is None:
+                        record_cost(session, event.cost, fill)
+                    else:
+                        # Generation and import can straddle a fee poll in another role.
+                        # Keep the raw event below, but never grant its contradicted zero
+                        # current cost authority. Previously admitted zeros are backfilled.
+                        refusal = {
+                            "kind": "CONTRACTUAL_ZERO_ADMISSION_REFUSED",
+                            "account_id": event.account_id,
+                            "contract_id": event.cost.document_id,
+                            "source_event_id": identity,
+                            "cost_id": event.cost.id,
+                            "fill_id": fill.fill_id,
+                            "client_order_id": intent.client_order_id,
+                            "first_conflict_source": contradiction["event_id"],
+                            "first_conflict_at": contradiction["available_at"],
+                            "reason": "EXACT_COST_CONTRACT_CONTRADICTED_AT_IMPORT",
+                        }
+                        put(session, "core_provider_acquisitions", content_id(refusal), refusal)
                 if event.cash_activity:
                     activity = event.cash_activity
                     fills = repo.list_fills()

@@ -463,13 +463,9 @@ class AlpacaCoreBroker:
         if contract is None:
             return False
         cursor = table("core_source_cursors")
-        conflict_key = content_id(
-            {
-                "kind": "ALPACA_COST_CONTRACT_CONFLICT",
-                "contract": contract.id,
-                "account": self.account_id,
-            }
-        )
+        from quantbot.paper_core.operational_costs import cost_contract_conflict_source
+
+        conflict_key = cost_contract_conflict_source(self.account_id, contract.id)
         latch = (
             session.execute(select(cursor).where(cursor.c.source_id == conflict_key))
             .mappings()

@@ -1,0 +1,111 @@
+{
+  "status": {
+    "schema": {
+      "id": 1,
+      "version": 35,
+      "store_identity": "c0f77da0-fa17-4f58-b686-eac1f784d819"
+    },
+    "broker_state": "NOT_PROBED",
+    "roles": {
+      "trader": {
+        "config_id": "4f07e6bc040c8948fbc194e102b7ba48164a73a352a8ab5c46ef52234bebb49e",
+        "cycle_seconds": 0.01600000000325963,
+        "evidence_ids": [],
+        "first_blocker": "TIME_ACQUISITION_RETRYABLE",
+        "generation": 1,
+        "guardian_receipt_id": null,
+        "last_useful_progress": "2026-10-14T22:18:01.642999+00:00",
+        "objections": [
+          "TIME_ACQUISITION_RETRYABLE",
+          "TIME_SAMPLES_INCOMPLETE"
+        ],
+        "owner": "paper-core-synthetic",
+        "pid": 23076,
+        "process_epoch": "d11e0e95-f072-49af-ad49-77e413796c93",
+        "proof_age_seconds": 0.174126,
+        "recorded_at": "2026-10-14T22:18:01.642999+00:00",
+        "release_id": "05d6054ef2e361fdfaa4e7275462067398012a6ce82cbd9e129a6bd965a0a3c1",
+        "role": "trader",
+        "store_identity": "c0f77da0-fa17-4f58-b686-eac1f784d819",
+        "time_proof_age_seconds": 0.5469999999913853,
+        "valid_until": "2026-10-14T22:18:02.042999+00:00"
+      },
+      "guardian": {
+        "config_id": "4f07e6bc040c8948fbc194e102b7ba48164a73a352a8ab5c46ef52234bebb49e",
+        "cycle_seconds": 0.07800000000861473,
+        "evidence_ids": [
+          "c0e5f2fe8494edc86a843a56380066f5b6ea3c16cfce4fed0ec350cfb20df833"
+        ],
+        "first_blocker": null,
+        "generation": 1,
+        "guardian_receipt_id": "3108d41be17be733006bb7000b0528ab153ce3ca702aa1c05a8074f53176eb61",
+        "last_useful_progress": "2026-10-14T22:18:06.625224+00:00",
+        "objections": [],
+        "owner": "paper-core-synthetic",
+        "pid": 7760,
+        "process_epoch": "bbd60aad-06c4-4cd0-b869-7d3968519722",
+        "proof_age_seconds": 0.026891,
+        "recorded_at": "2026-10-14T22:18:06.625224+00:00",
+        "release_id": "05d6054ef2e361fdfaa4e7275462067398012a6ce82cbd9e129a6bd965a0a3c1",
+        "role": "guardian",
+        "store_identity": "c0f77da0-fa17-4f58-b686-eac1f784d819",
+        "time_proof_age_seconds": 0.046000000002095476,
+        "valid_until": "2026-10-14T22:18:07.025224+00:00"
+      },
+      "outcomes": {
+        "config_id": "4f07e6bc040c8948fbc194e102b7ba48164a73a352a8ab5c46ef52234bebb49e",
+        "cycle_seconds": 0.015000000013969839,
+        "evidence_ids": [],
+        "first_blocker": null,
+        "generation": 1,
+        "guardian_receipt_id": null,
+        "last_useful_progress": "2026-10-14T22:18:06.130915+00:00",
+        "objections": [],
+        "owner": "paper-core-synthetic",
+        "pid": 24716,
+        "process_epoch": "fbee2a0e-988a-4ac1-90ad-bc9add2ed039",
+        "proof_age_seconds": 3.424189,
+        "recorded_at": "2026-10-14T22:18:06.130915+00:00",
+        "release_id": "05d6054ef2e361fdfaa4e7275462067398012a6ce82cbd9e129a6bd965a0a3c1",
+        "role": "outcomes",
+        "store_identity": "c0f77da0-fa17-4f58-b686-eac1f784d819",
+        "time_proof_age_seconds": null,
+        "valid_until": "2026-10-14T22:18:06.530915+00:00"
+      }
+    },
+    "recorded_stop": {
+      "id": 1,
+      "engaged": 0,
+      "reason": "explicit synthetic fixture setup",
+      "updated_at": "2026-10-14T22:17:58.068644Z"
+    },
+    "active_model": [
+      {
+        "id": 1,
+        "activation_id": "ea994caf1fb47fae9976e66291df54e4632e32de7c3e4f08c6ce0a6167908193",
+        "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+        "generation": 1,
+        "receipt_id": null
+      }
+    ],
+    "commissions": []
+  },
+  "release_id": "05d6054ef2e361fdfaa4e7275462067398012a6ce82cbd9e129a6bd965a0a3c1",
+  "pids": [
+    14576,
+    23480,
+    24876,
+    24500
+  ],
+  "time_epochs": [
+    "97c7b2a9-0afb-4937-a0a3-7b1092f014f2",
+    "bbd60aad-06c4-4cd0-b869-7d3968519722",
+    "d11e0e95-f072-49af-ad49-77e413796c93",
+    "ec3361d4-0d9a-4a4b-b1ca-1dfb099ab759"
+  ],
+  "restarted_proof_objections": [
+    "TIME_ACQUISITION_RETRYABLE",
+    "TIME_SAMPLES_INCOMPLETE",
+    "TIME_PROCESS_CHANGED"
+  ]
+}

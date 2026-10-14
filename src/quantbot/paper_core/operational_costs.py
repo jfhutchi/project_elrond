@@ -16,6 +16,12 @@ def pending_cost_revision_source(account_id: str) -> str:
     return content_id({"kind": "OWNED_COST_CONTRACT_REVISIONS_PENDING", "account": account_id})
 
 
+def cost_contract_conflict_source(account_id: str, contract_id: str) -> str:
+    return content_id({
+        "kind": "ALPACA_COST_CONTRACT_CONFLICT", "contract": contract_id, "account": account_id
+    })
+
+
 class PaperCostComponent(BrokerModel):
     component: Literal["COMMISSION", "REGULATORY", "BORROW", "CLEARING", "OTHER"]
     document_id: str = Field(min_length=1)

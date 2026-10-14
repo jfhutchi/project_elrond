@@ -1,0 +1,66 @@
+[
+  {
+    "stage": "selector-setup",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-iw48ezkx\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/fix2/logs/selector-setup.txt.gz",
+    "raw_bytes": 25,
+    "raw_sha256": "e36f183f807965ffa3f4b0918bc8b5394d5c761e63349c1602d95beae81691e0",
+    "compressed_sha256": "10bfdae29192dd1c74aa64cde6bbcec8f5e45834f0380044dba43c176fd10ad3",
+    "result_lines": []
+  },
+  {
+    "stage": "unchanged-outcome-setup",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-kfco3n1e\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/fix2/logs/unchanged-outcome-setup.txt.gz",
+    "raw_bytes": 20743,
+    "raw_sha256": "d7c9f14837fca4fa2b2ed2e5244ba19dc80d66a5f60a5e64c4cb26752fb190cf",
+    "compressed_sha256": "753a136dbee3e542f652f9505dba6521fee16091002cab2983d36fbc48b8c5bd",
+    "result_lines": [
+      "2 failed, 2 passed in 4.47s"
+    ]
+  },
+  {
+    "stage": "delayed-zero-admission-red",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-rzt4pz8x\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/fix2/logs/delayed-zero-admission-red.txt.gz",
+    "raw_bytes": 30225,
+    "raw_sha256": "82314f8482f0758bc2329334ae60fcc840f7b2f93513065043a6f225c2a61b89",
+    "compressed_sha256": "c584a2262042b4516882791539e98e803fdf3be1245f92c3f3f7282e17f8d33d",
+    "result_lines": [
+      "2 failed, 2 passed in 4.52s"
+    ]
+  },
+  {
+    "stage": "learning-feature-contract-setup",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-h3m7vc0j\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/fix2/logs/learning-feature-contract-setup.txt.gz",
+    "raw_bytes": 32317,
+    "raw_sha256": "e2fed9f1eb74db40bbea4a8c9908df107d2e5814db3af2635912e4ff23b1bd8a",
+    "compressed_sha256": "0d079d1d441c803e0a38a3493156be5c4e9e0dce3451ef71a032dfae06e6999d",
+    "result_lines": [
+      "2 failed, 2 passed in 4.69s"
+    ]
+  },
+  {
+    "stage": "focused-green",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-k9c20_ln\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/fix2/logs/focused-green.txt.gz",
+    "raw_bytes": 41915,
+    "raw_sha256": "184ee9f61dd5b0b337d3bc3531c155110b4b996560e727ad3ab06422a471efd0",
+    "compressed_sha256": "0659fb5f52251a032dff442804f8a4d82cd3d46796ce735ab35b80b030587106",
+    "result_lines": [
+      "9 passed in 6.37s"
+    ]
+  },
+  {
+    "stage": "frozen-focused-gate",
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-m8vb5zhu\\result.txt",
+    "archive": "docs/evidence/paper-core/m6/fix2/logs/frozen-focused-gate.txt.gz",
+    "raw_bytes": 194604,
+    "raw_sha256": "b70949af08873fde99e49f0703fc4b1f66f6bf3525959eac03ab0fc9fb3b686b",
+    "compressed_sha256": "6970332de9559ca163eba3f840bc9aef400b922e36f023e672a5bde3de5597bc",
+    "result_lines": [
+      "75 passed in 86.95s (0:01:26)"
+    ]
+  }
+]

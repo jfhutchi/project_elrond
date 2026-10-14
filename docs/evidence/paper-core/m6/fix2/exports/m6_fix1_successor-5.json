@@ -1,0 +1,10 @@
+{
+  "change": "cash",
+  "phase": "claim",
+  "claimed": false,
+  "decision_id": "fb507b96ea1ea081ebdc48dae784ff2598188be0296864f147795dda05b60d19",
+  "original_proof_id": "e296d3af13ca679beb86eb8681d07a0ca96734b37e8fd60e5782cda2acd5b759",
+  "current_proof_id": "835b4f73742aa1913d42f097e66e9083a59f5a362ad0ffe5a6fe56eab243334b",
+  "ledger_before": "218aa9d5b39202e89777ffdd825d5b32efa343f5edd7cd9f1abf8ac4d70fa442",
+  "ledger_after": "99d011a11da74d1e0c802a06fefb9a294706d7e83964e545025bfa24cd774718"
+}
