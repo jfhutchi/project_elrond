@@ -114,6 +114,18 @@ class ReconciliationProof(Evidence):
     order_ids: tuple[str, ...] = ()
 
 
+class TimeProjection(BrokerModel):
+    """Immutable evaluation-time projection of a retained acquisition proof."""
+
+    evidence_id: str
+    process_id: str
+    wall_at: datetime
+    monotonic_at: float
+    provider_earliest: datetime
+    provider_latest: datetime
+    objections: tuple[str, ...]
+
+
 class Decision(Evidence):
     legacy_optional_fields = frozenset(
         {
@@ -122,12 +134,14 @@ class Decision(Evidence):
             "clock_process_id",
             "monotonic_anchor",
             "provider_deadline",
+            "time_projection",
         }
     )
     time_evidence_id: str | None = None
     clock_process_id: str | None = None
     monotonic_anchor: float | None = None
     provider_deadline: datetime | None = None
+    time_projection: TimeProjection | None = None
     observation_id: str
     policy_id: str
     model_id: str
@@ -146,10 +160,13 @@ class Decision(Evidence):
 
 
 class ProtectionPlan(Evidence):
-    legacy_optional_fields = frozenset({"clock_profile", "clock_process_id", "monotonic_anchor"})
+    legacy_optional_fields = frozenset(
+        {"clock_profile", "clock_process_id", "monotonic_anchor", "monotonic_expiry"}
+    )
     clock_profile: Literal["STRICT_V0", "PAPER_TIME_V2"] = "STRICT_V0"
     clock_process_id: str | None = None
     monotonic_anchor: float | None = None
+    monotonic_expiry: float | None = None
     decision_id: str
     owner: str
     generation: int
@@ -170,6 +187,21 @@ class ProtectionPlan(Evidence):
                 "clock_process_id": decision.clock_process_id,
                 "monotonic_anchor": decision.monotonic_anchor,
             }
+            if (
+                decision.time_projection is not None
+                and decision.monotonic_anchor is not None
+                and decision.provider_deadline is not None
+            ):
+                duration = max(
+                    0,
+                    min(
+                        1800,
+                        (
+                            decision.provider_deadline - decision.time_projection.provider_latest
+                        ).total_seconds(),
+                    ),
+                )
+                timing["monotonic_expiry"] = decision.monotonic_anchor + duration
         return cls(
             **timing,
             recorded_at_utc=decision.recorded_at_utc,

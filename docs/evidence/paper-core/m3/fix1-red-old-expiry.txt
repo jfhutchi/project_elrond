@@ -1,0 +1,30 @@
+F.                                                                       [100%]
+================================== FAILURES ===================================
+______ test_old_v2_plan_without_expiry_uses_conservative_provider_bound _______
+
+    def test_old_v2_plan_without_expiry_uses_conservative_provider_bound():
+        from quantbot.paper_core.contracts import ProtectionPlan
+        from quantbot.paper_core.time_evidence import exit_due
+    
+        plan = ProtectionPlan(
+            recorded_at_utc=NOW,
+            owner="synthetic",
+            generation=1,
+            inventory_generation=1,
+            decision_id="old-v32-owned",
+            stop_price=99,
+            deadline=NOW + timedelta(seconds=8.1),
+            clock_profile="PAPER_TIME_V2",
+            clock_process_id="original-process",
+            monotonic_anchor=100,
+        )
+        # With no original bracket supplied, +2s is the approved latest possible
+        # provider origin. 8.1 provider seconds minus that origin gives 6.1 elapsed.
+>       assert exit_due(plan, None, 6.1)
+E       AssertionError: assert False
+E        +  where False = <function exit_due at 0x0000022A4818BC40>(ProtectionPlan(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=da..., 100000, tzinfo=datetime.timezone.utc), exit_buffer_seconds=120, exit_quantity_rule='owned-filled-minus-owned-exited'), None, 6.1)
+
+tests\fault\paper_core\test_m3_review_repairs.py:243: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_old_v2_plan_without_expiry_uses_conservative_provider_bound
+1 failed, 1 passed, 10 deselected in 2.39s

@@ -15,7 +15,13 @@ from quantbot.brokers.base import (
     BrokerRequestError,
     BrokerTransportError,
 )
-from quantbot.paper_core.contracts import CoreConfig, Evidence, Observation, ProtectionPlan
+from quantbot.paper_core.contracts import (
+    CoreConfig,
+    Evidence,
+    Observation,
+    ProtectionPlan,
+    TimeProjection,
+)
 
 
 class Clocks(Protocol):
@@ -155,17 +161,35 @@ async def acquire_time_evidence(broker: TimeBroker, clocks: Clocks) -> TimeEvide
     )
 
 
-def evidence_objections(evidence: TimeEvidence, clocks: Clocks) -> tuple[str, ...]:
-    wall, mono = clocks.sample()
+def _projection_at(
+    evidence: TimeEvidence, *, wall: datetime, mono: float, process_id: str
+) -> TimeProjection:
     reasons = list(evidence.objections)
-    if clocks.process_id != evidence.process_id:
+    if process_id != evidence.process_id:
         reasons.append("TIME_PROCESS_CHANGED")
     age = mono - evidence.acquired_monotonic
     if age < 0 or age > 120:
         reasons.append("TIME_EVIDENCE_EXPIRED")
     if abs((wall - evidence.wall_anchor).total_seconds() - age) > 0.050000001:
         reasons.append("TIME_DISCONTINUITY")
-    return tuple(dict.fromkeys(reasons))
+    return TimeProjection(
+        evidence_id=evidence.id,
+        process_id=process_id,
+        wall_at=wall,
+        monotonic_at=mono,
+        provider_earliest=wall + timedelta(seconds=evidence.offset_lower),
+        provider_latest=wall + timedelta(seconds=evidence.offset_upper),
+        objections=tuple(dict.fromkeys(reasons)),
+    )
+
+
+def project_time_evidence(evidence: TimeEvidence, clocks: Clocks) -> TimeProjection:
+    wall, mono = clocks.sample()
+    return _projection_at(evidence, wall=wall, mono=mono, process_id=clocks.process_id)
+
+
+def evidence_objections(evidence: TimeEvidence, clocks: Clocks) -> tuple[str, ...]:
+    return project_time_evidence(evidence, clocks).objections
 
 
 def provider_interval(evidence: TimeEvidence, clocks: Clocks) -> tuple[datetime, datetime]:
@@ -176,15 +200,36 @@ def provider_interval(evidence: TimeEvidence, clocks: Clocks) -> tuple[datetime,
 
 
 def entry_time_objections(
-    observation: Observation, evidence: TimeEvidence, config: CoreConfig
+    observation: Observation,
+    evidence: TimeEvidence,
+    config: CoreConfig,
+    *,
+    projection: TimeProjection | None = None,
 ) -> tuple[str, ...]:
     """Check decision interval at observation receipt; live lifetime is checked at send."""
     reasons = list(evidence.objections)
+    if projection is not None:
+        if projection != _projection_at(
+            evidence,
+            wall=projection.wall_at,
+            mono=projection.monotonic_at,
+            process_id=projection.process_id,
+        ):
+            reasons.append("TIME_PROJECTION_INVALID")
+        reasons.extend(projection.objections)
     if not evidence.samples:
         return tuple(reasons or ["TIME_SAMPLES_INCOMPLETE"])
     p = evidence.samples[-1].provider
-    lower = evidence.wall_anchor + timedelta(seconds=evidence.offset_lower)
-    upper = evidence.wall_anchor + timedelta(seconds=evidence.offset_upper)
+    lower = (
+        projection.provider_earliest
+        if projection
+        else evidence.wall_anchor + timedelta(seconds=evidence.offset_lower)
+    )
+    upper = (
+        projection.provider_latest
+        if projection
+        else evidence.wall_anchor + timedelta(seconds=evidence.offset_upper)
+    )
     if p.account_id != config.account_id:
         reasons.append("TIME_ACCOUNT_MISMATCH")
     if lower < p.session_open or upper >= p.session_close - timedelta(seconds=120):
@@ -199,10 +244,22 @@ def entry_time_objections(
 def exit_due(
     plan: ProtectionPlan, evidence: TimeEvidence | None, elapsed_seconds: float | None
 ) -> bool:
-    if elapsed_seconds is not None and elapsed_seconds >= min(
-        1800, (plan.deadline - plan.recorded_at_utc).total_seconds()
-    ):
-        return True
+    if elapsed_seconds is not None:
+        if plan.monotonic_expiry is not None and plan.monotonic_anchor is not None:
+            if plan.monotonic_anchor + elapsed_seconds >= plan.monotonic_expiry:
+                return True
+        else:
+            # Old V2 payloads lack an explicit expiry. Convert the local audit
+            # origin to the latest possible provider origin under the approved
+            # +2s bound. Guardian uses the retained exact bracket when available.
+            origin = (
+                plan.recorded_at_utc + timedelta(seconds=2)
+                if plan.clock_profile == "PAPER_TIME_V2"
+                else plan.recorded_at_utc
+            )
+            duration = max(0, min(1800, (plan.deadline - origin).total_seconds()))
+            if elapsed_seconds >= duration:
+                return True
     # A valid interval overlapping the deadline triggers a quantity-gated exit.
     return bool(
         evidence

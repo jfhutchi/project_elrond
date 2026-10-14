@@ -108,6 +108,12 @@ def final_send_in_session(
         reasons.append("CORE_MANUAL_ENTRY_PAUSE")
     reasons.extend(entry_health_objections(store, session, decision.symbol))
     if store.config.clock_profile == "PAPER_TIME_V2":
+        if (
+            plan.clock_process_id == store.clocks.process_id
+            and plan.monotonic_expiry is not None
+            and store.clocks.sample()[1] >= plan.monotonic_expiry
+        ):
+            reasons.append("CORE_PROTECTION_DEADLINE_DUE")
         payload = session.execute(
             select(table("core_time_evidence").c.payload).where(
                 table("core_time_evidence").c.id == decision.time_evidence_id

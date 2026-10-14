@@ -1,0 +1,41 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________ test_final_send_cannot_outlive_monotonic_protection_expiry __________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-jsv36yjd/pytest/test_final_send_cannot_outlive0')
+
+    @pytest.mark.asyncio
+    async def test_final_send_cannot_outlive_monotonic_protection_expiry(tmp_path):
+        from quantbot.paper_core.send_guard import definitively_unsent
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StorageRepository
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = broker.get_positions
+        reads = 0
+    
+        async def last_fetch():
+            nonlocal reads
+            reads += 1
+            if reads == 4:
+                clocks.advance(8.08)
+                # A 40ms movement is inside the unchanged 50ms continuity bound.
+                # Provider-wall projection is just before close while holding
+                # duration has already reached the conservative monotonic expiry.
+                clocks.wall -= timedelta(seconds=0.04)
+                broker.now = clocks.wall
+            return await original()
+    
+        broker.get_positions = last_fetch
+        try:
+            clocks.advance(6 * 3600 - 120 - 10)
+            broker.offset = 1.9
+            await trader_cycle(store, broker, fresh(observation, clocks), model, proof, now=clocks.wall)
+>           assert not broker.posts
+E           AssertionError: assert not [OrderIntent(symbol='XLE', intent_id='core-entry-1d3c63482e19f8a690edc8b84885f612320fee8c6970e37ade9484689307eefc', cl...PROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 19, 57, 50, 20000, tzinfo=datetime.timezone.utc))]
+E            +  where [OrderIntent(symbol='XLE', intent_id='core-entry-1d3c63482e19f8a690edc8b84885f612320fee8c6970e37ade9484689307eefc', cl...PROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 19, 57, 50, 20000, tzinfo=datetime.timezone.utc))] = <tests.fixtures.core_m2.JournalBroker object at 0x000001A789AC2090>.posts
+
+tests\fault\paper_core\test_m3_review_repairs.py:392: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_final_send_cannot_outlive_monotonic_protection_expiry
+1 failed in 2.32s

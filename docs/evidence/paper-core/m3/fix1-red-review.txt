@@ -1,0 +1,307 @@
+FFFFF.FM3_FIX1:{"case":"close-monotonic-domain","elapsed":11.9,"offset":-1.9,"plan":{"clock_process_id":"m3-process-1","clock_profile":"PAPER_TIME_V2","deadline":"2026-10-14T19:58:00+00:00","decision_id":"9c1bf801baec522387fc45e78c2e988ad43f00ce8bb0d7a16e115cd08e93c245","evidence_lane":"SYNTHETIC_TEST","exit_buffer_seconds":120,"exit_quantity_rule":"owned-filled-minus-owned-exited","generation":1,"inventory_generation":2,"monotonic_anchor":21570.019999999997,"owner":"paper-core-synthetic","recorded_at_utc":"2026-10-14T19:57:50.020000+00:00","release_id":"m1-synthetic-fixture","schema_version":1,"source_refs":["9c1bf801baec522387fc45e78c2e988ad43f00ce8bb0d7a16e115cd08e93c245"],"stop_price":"99"},"posts":[{"client_order_id":"qb-0f5e57935b11d8743dc77b4a17f8de4725e93e64","created_at":"2026-10-14T19:57:50.020000+00:00","extended_hours":false,"intent_id":"core-entry-0f5e57935b11d8743dc77b4a17f8de4725e93e642111e8b38018d88769976c33","limit_price":null,"order_type":"MARKET","quantity":"5","side":"BUY","signal_date":"2026-10-14","state":"RISK_APPROVED","stop_price":null,"strategy_id":"paper-core-synthetic","symbol":"XLE","time_in_force":"DAY"},{"client_order_id":"qb-782940e27c272fb3a22086ffa7f855f31d6fa3f6","created_at":"2026-10-14T19:58:00.020000+00:00","extended_hours":false,"intent_id":"core-exit-782940e27c272fb3a22086ffa7f855f31d6fa3f64ac55e6f2d4b91357708da47","limit_price":null,"order_type":"MARKET","quantity":"5","side":"SELL","signal_date":"2026-10-14","state":"RISK_APPROVED","stop_price":null,"strategy_id":"paper-core-synthetic","symbol":"XLE","time_in_force":"DAY"}],"provider_now":"2026-10-14T19:58:00.020000+00:00","receipt":{"evidence_lane":"SYNTHETIC_TEST","exit_intent_ids":["core-exit-782940e27c272fb3a22086ffa7f855f31d6fa3f64ac55e6f2d4b91357708da47"],"proof_id":"7b1acce0c1e05bd47977de5357aa2b1dd4155390e608e77d07d6142cfcdb0f85","reasons":["TIME_ACQUISITION_RETRYABLE","TIME_SAMPLES_INCOMPLETE"],"recorded_at_utc":"2026-10-14T19:58:00.020000+00:00","release_id":"m1-synthetic-fixture","schema_version":1,"source_refs":[]}}
+.F.
+================================== FAILURES ===================================
+_ test_positive_inventory_latency_enters_with_reproducible_current_projection[0.001-0] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4p7gmoka/pytest/test_positive_inventory_latenc0')
+account_delay = 0.001, position_delay = 0
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("account_delay,position_delay", [(0.001, 0), (0, 0.001), (0.25, 0.25)])
+    async def test_positive_inventory_latency_enters_with_reproducible_current_projection(
+        tmp_path, account_delay, position_delay
+    ):
+        from quantbot.paper_core.contracts import ReconciliationProof
+        from quantbot.paper_core.time_evidence import TimeEvidence
+        from quantbot.paper_core.trader import evaluate_entry, trader_cycle
+        from quantbot.research.manifest import canonical_result_json
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        account, positions = broker.get_account, broker.get_positions
+    
+        async def delayed_account():
+            clocks.advance(account_delay)
+            broker.now = clocks.wall
+            return await account()
+    
+        async def delayed_positions():
+            clocks.advance(position_delay)
+            broker.now = clocks.wall
+            return await positions()
+    
+        broker.get_account, broker.get_positions = delayed_account, delayed_positions
+        try:
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+>           assert decision.action == "BUY" and len(broker.posts) == 1, decision.gates
+E           AssertionError: ('INVENTORY_STALE',)
+E           assert ('WAIT' == 'BUY'
+E             
+E             - BUY
+E             + WAIT)
+
+tests\fault\paper_core\test_m3_review_repairs.py:38: AssertionError
+_ test_positive_inventory_latency_enters_with_reproducible_current_projection[0-0.001] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4p7gmoka/pytest/test_positive_inventory_latenc1')
+account_delay = 0, position_delay = 0.001
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("account_delay,position_delay", [(0.001, 0), (0, 0.001), (0.25, 0.25)])
+    async def test_positive_inventory_latency_enters_with_reproducible_current_projection(
+        tmp_path, account_delay, position_delay
+    ):
+        from quantbot.paper_core.contracts import ReconciliationProof
+        from quantbot.paper_core.time_evidence import TimeEvidence
+        from quantbot.paper_core.trader import evaluate_entry, trader_cycle
+        from quantbot.research.manifest import canonical_result_json
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        account, positions = broker.get_account, broker.get_positions
+    
+        async def delayed_account():
+            clocks.advance(account_delay)
+            broker.now = clocks.wall
+            return await account()
+    
+        async def delayed_positions():
+            clocks.advance(position_delay)
+            broker.now = clocks.wall
+            return await positions()
+    
+        broker.get_account, broker.get_positions = delayed_account, delayed_positions
+        try:
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+>           assert decision.action == "BUY" and len(broker.posts) == 1, decision.gates
+E           AssertionError: ('INVENTORY_STALE',)
+E           assert ('WAIT' == 'BUY'
+E             
+E             - BUY
+E             + WAIT)
+
+tests\fault\paper_core\test_m3_review_repairs.py:38: AssertionError
+_ test_positive_inventory_latency_enters_with_reproducible_current_projection[0.25-0.25] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4p7gmoka/pytest/test_positive_inventory_latenc2')
+account_delay = 0.25, position_delay = 0.25
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("account_delay,position_delay", [(0.001, 0), (0, 0.001), (0.25, 0.25)])
+    async def test_positive_inventory_latency_enters_with_reproducible_current_projection(
+        tmp_path, account_delay, position_delay
+    ):
+        from quantbot.paper_core.contracts import ReconciliationProof
+        from quantbot.paper_core.time_evidence import TimeEvidence
+        from quantbot.paper_core.trader import evaluate_entry, trader_cycle
+        from quantbot.research.manifest import canonical_result_json
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        account, positions = broker.get_account, broker.get_positions
+    
+        async def delayed_account():
+            clocks.advance(account_delay)
+            broker.now = clocks.wall
+            return await account()
+    
+        async def delayed_positions():
+            clocks.advance(position_delay)
+            broker.now = clocks.wall
+            return await positions()
+    
+        broker.get_account, broker.get_positions = delayed_account, delayed_positions
+        try:
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+>           assert decision.action == "BUY" and len(broker.posts) == 1, decision.gates
+E           AssertionError: ('INVENTORY_STALE',)
+E           assert ('WAIT' == 'BUY'
+E             
+E             - BUY
+E             + WAIT)
+
+tests\fault\paper_core\test_m3_review_repairs.py:38: AssertionError
+_ test_current_projection_never_revives_expired_discontinuous_or_future_evidence[expired] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4p7gmoka/pytest/test_current_projection_never_0')
+fault = 'expired'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", ["expired", "wall-jump", "future-observation"])
+    async def test_current_projection_never_revives_expired_discontinuous_or_future_evidence(
+        tmp_path, fault
+    ):
+        from quantbot.paper_core import guardian
+        from quantbot.paper_core.trader import trader_cycle
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = guardian.synchronize
+    
+        async def delayed(store, broker, *, now):
+            result = await original(store, broker, now=now)
+            if fault == "expired":
+                clocks.advance(121)
+            if fault == "wall-jump":
+                clocks.wall += timedelta(seconds=0.051)
+            return result
+    
+        # A completed acquisition followed by a stalled caller tests proof lifetime,
+        # rather than misclassifying a >5s acquisition as a complete proof.
+        from unittest.mock import patch
+    
+        try:
+            if fault == "future-observation":
+                observation = observation.model_copy(
+                    update={
+                        "source_end": NOW + timedelta(seconds=1),
+                        "available_at": NOW + timedelta(seconds=1),
+                    }
+                )
+            with patch.object(guardian, "synchronize", delayed):
+                refused = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            expected = {
+                "expired": "TIME_EVIDENCE_EXPIRED",
+                "wall-jump": "TIME_DISCONTINUITY",
+                "future-observation": "NONCAUSAL_OBSERVATION",
+            }[fault]
+>           assert refused.action == "WAIT" and expected in refused.gates and not broker.posts
+E           AssertionError: assert ('BUY' == 'WAIT'
+E             
+E             - WAIT
+E             + BUY)
+
+tests\fault\paper_core\test_m3_review_repairs.py:112: AssertionError
+_ test_current_projection_never_revives_expired_discontinuous_or_future_evidence[wall-jump] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4p7gmoka/pytest/test_current_projection_never_1')
+fault = 'wall-jump'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", ["expired", "wall-jump", "future-observation"])
+    async def test_current_projection_never_revives_expired_discontinuous_or_future_evidence(
+        tmp_path, fault
+    ):
+        from quantbot.paper_core import guardian
+        from quantbot.paper_core.trader import trader_cycle
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = guardian.synchronize
+    
+        async def delayed(store, broker, *, now):
+            result = await original(store, broker, now=now)
+            if fault == "expired":
+                clocks.advance(121)
+            if fault == "wall-jump":
+                clocks.wall += timedelta(seconds=0.051)
+            return result
+    
+        # A completed acquisition followed by a stalled caller tests proof lifetime,
+        # rather than misclassifying a >5s acquisition as a complete proof.
+        from unittest.mock import patch
+    
+        try:
+            if fault == "future-observation":
+                observation = observation.model_copy(
+                    update={
+                        "source_end": NOW + timedelta(seconds=1),
+                        "available_at": NOW + timedelta(seconds=1),
+                    }
+                )
+            with patch.object(guardian, "synchronize", delayed):
+                refused = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            expected = {
+                "expired": "TIME_EVIDENCE_EXPIRED",
+                "wall-jump": "TIME_DISCONTINUITY",
+                "future-observation": "NONCAUSAL_OBSERVATION",
+            }[fault]
+>           assert refused.action == "WAIT" and expected in refused.gates and not broker.posts
+E           AssertionError: assert ('BUY' == 'WAIT'
+E             
+E             - WAIT
+E             + BUY)
+
+tests\fault\paper_core\test_m3_review_repairs.py:112: AssertionError
+_ test_close_clipped_monotonic_exit_during_time_outage_uses_matching_domains[1.9-8.2] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4p7gmoka/pytest/test_close_clipped_monotonic_e0')
+offset = 1.9, elapsed = 8.2
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,elapsed", [(1.9, 8.2), (-1.9, 11.9)])
+    async def test_close_clipped_monotonic_exit_during_time_outage_uses_matching_domains(
+        tmp_path, offset, elapsed
+    ):
+        from quantbot.paper_core.contracts import ProtectionPlan
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.research.manifest import canonical_result_json
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            clocks.advance(6 * 3600 - 120 - 10)
+            broker.offset = offset
+            observation = fresh(observation, clocks).model_copy(
+                update={"source_end": clocks.wall - timedelta(seconds=2), "available_at": clocks.wall}
+            )
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            assert len(broker.posts) == 1, decision.gates
+            plan = store.read(
+                "core_protection_plans", store.links()[0]["protection_id"], ProtectionPlan
+            )
+            assert plan.deadline == observation.session_close - timedelta(seconds=120)
+            broker.clock_fault = TimeoutError("synthetic reviewed clock outage")
+            clocks.advance(elapsed)
+            broker.now = clocks.wall + timedelta(seconds=offset)
+            receipt = await guardian_cycle(store, broker, now=broker.now)
+>           assert receipt.exit_intent_ids and len(broker.posts) == 2
+E           AssertionError: assert (())
+E            +  where () = CycleReceipt(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...ON_RETRYABLE', 'TIME_SAMPLES_INCOMPLETE'), proof_id='f2580b49fec5e4ea036cdecf6e824abdde81d83e098c2f5133c58084edf24e2f').exit_intent_ids
+
+tests\fault\paper_core\test_m3_review_repairs.py:144: AssertionError
+_____ test_retained_closed_wait_cannot_hide_dependent_integrity_incident ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4p7gmoka/pytest/test_retained_closed_wait_cann0')
+
+    @pytest.mark.asyncio
+    async def test_retained_closed_wait_cannot_hide_dependent_integrity_incident(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.research.manifest import canonical_result_json
+        from quantbot.storage import StorageRepository
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            clocks.advance(7 * 3600)
+            first = await trader_cycle(
+                store, broker, fresh(observation, clocks), model, proof, now=clocks.wall
+            )
+            assert first.action == "WAIT" and "TIME_SESSION_BOUNDARY" in first.gates
+            with db.transaction() as session:
+                StorageRepository(session).create_incident(
+                    "review-dependent-account-conflict",
+                    severity="ERROR",
+                    kind="CORE_EVIDENCE_CONFLICT",
+                    message="synthetic unresolved account authority",
+                    occurred_at=broker.now,
+                    detail={
+                        "account_scope": True,
+                        "lot_ids": [],
+                        "disputed_authorities": ["CASH", "OWNERSHIP"],
+                    },
+                )
+            clocks.advance(1)
+            second = await trader_cycle(
+                store, broker, fresh(observation, clocks, sequence=3), model, proof, now=clocks.wall
+            )
+>           assert second.gates[0] == "CORE_EVIDENCE_QUARANTINED"
+E           AssertionError: assert 'TIME_SESSION_BOUNDARY' == 'CORE_EVIDENCE_QUARANTINED'
+E             
+E             - CORE_EVIDENCE_QUARANTINED
+E             + TIME_SESSION_BOUNDARY
+
+tests\fault\paper_core\test_m3_review_repairs.py:194: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_positive_inventory_latency_enters_with_reproducible_current_projection[0.001-0]
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_positive_inventory_latency_enters_with_reproducible_current_projection[0-0.001]
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_positive_inventory_latency_enters_with_reproducible_current_projection[0.25-0.25]
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_current_projection_never_revives_expired_discontinuous_or_future_evidence[expired]
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_current_projection_never_revives_expired_discontinuous_or_future_evidence[wall-jump]
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_close_clipped_monotonic_exit_during_time_outage_uses_matching_domains[1.9-8.2]
+FAILED tests/fault/paper_core/test_m3_review_repairs.py::test_retained_closed_wait_cannot_hide_dependent_integrity_incident
+7 failed, 3 passed in 5.90s

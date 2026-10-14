@@ -1,5 +1,13 @@
 # M3 local synthetic implementation submission
 
+## Repair round 1 submitted for scoped re-review
+
+Repair base: `6d796a62925145c35909225f34d9574264ce64ec`. The independent review's two P1s and P2 are repaired; owner acceptance is pending. The new frozen affected gate passes **424 tests, 26 skipped, zero failures**, 200.31 seconds, exit0. Six exact CI gates pass on the same source. [Repair validation](fix1-validation.json), [complete gate log](fix1-green-affected.txt), [CI results](fix1-ci-results.json), [repair witnesses](fix1-repair-traces.json) and [updated joined timeline](fix1-joined-timeline.json) are separate from the original submission below.
+
+Healthy positive account/position latency now produces a stored, independently validated evaluation projection after acquisition. Claim re-evaluation reproduces that immutable projection while live timing is checked again; original acquisition proof is unchanged. New protection plans persist conservative monotonic expiry from matching provider/monotonic domains, including close-clipped deadlines under either skew direction. Old v32 timing payload IDs remain unchanged; old plans use their original provider bracket without being rewritten. The final send transaction also consumes the new expiry, retaining precise definitive-unsent refusal and the M2 state fence. Unified priority puts dependent integrity incidents ahead of retained ordinary waits while preserving all objections and manual pause priority.
+
+The 16 focused regressions include ordinary latency, expired/discontinuous/future proof refusal, exact close-expiry boundaries during clock outage, old v32 compatibility and final-send expiry. Original expected-red failures and intermediate green results remain in [repair log index](fix1-logs.json). No root-owned review/planning file was edited or included in the repair commit. Synthetic, process-simulation, PostgreSQL, scheduling and learning limitations below remain unchanged.
+
 Accepted predecessor: `e7b1eae28c0e5e6e49173facda55ad9345e3a86a`, including accepted M2 source `800e67bf5d15e3cf1d878b46f50775dc0bdf6f82`. M3 awaits independent review and the owner's acceptance decision. This package does not authorize commissioning or claim whole-project completion.
 
 Final frozen affected run: **408 passed, 26 skipped, zero failures**, 191.20 seconds, exit 0. [Validation](validation.json) pins the exact command and 20 changed source/test/fixture hashes. [Complete log](green-affected.txt) is copied byte-for-byte from the isolated offline runner. All six exact CI commands passed; [CI metadata](ci-results.json) pins their commands, exits and logs. Both platform checks covered 337 source files and 3 CI helper files.

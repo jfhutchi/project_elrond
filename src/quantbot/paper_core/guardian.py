@@ -11,12 +11,13 @@ from sqlalchemy import select, text
 from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, BrokerTransportError
 from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType, TimeInForce
 from quantbot.execution.coordinator import OrderSubmissionBlocked
-from quantbot.paper_core.contracts import CycleReceipt, GuardianReceipt, ProtectionPlan
+from quantbot.paper_core.contracts import CycleReceipt, Decision, GuardianReceipt, ProtectionPlan
 from quantbot.paper_core.health import active_health, report
 from quantbot.paper_core.runtime import require_synthetic
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, certify_inventory, latest_certification, table
 from quantbot.paper_core.time_evidence import (
+    TimeEvidence,
     acquire_time_evidence,
     evidence_objections,
     exit_due,
@@ -227,6 +228,27 @@ async def guardian_cycle(
             if time_evidence is not None and evidence_objections(time_evidence, store.clocks):
                 time_evidence = None
             due = exit_due(plan, time_evidence, elapsed)
+            if elapsed is not None and plan.monotonic_expiry is None:
+                # Old immutable V2 plans predate persisted monotonic expiry. Use
+                # their original provider bracket at the matching monotonic origin.
+                decision = store.read("core_decisions", plan.decision_id, Decision)
+                if decision.time_evidence_id is not None:
+                    origin = store.read(
+                        "core_time_evidence", decision.time_evidence_id, TimeEvidence
+                    )
+                    if (
+                        origin.process_id == plan.clock_process_id
+                        and plan.monotonic_anchor is not None
+                    ):
+                        provider_origin = origin.wall_anchor + timedelta(
+                            seconds=origin.offset_upper
+                            + plan.monotonic_anchor
+                            - origin.acquired_monotonic
+                        )
+                        duration = max(
+                            0, min(1800, (plan.deadline - provider_origin).total_seconds())
+                        )
+                        due = elapsed >= duration or exit_due(plan, time_evidence, None)
             if time_evidence is not None:
                 # Project fresh provider time after every awaited acquisition. An
                 # independent guardian never compares the trader's monotonic epoch.

@@ -1,0 +1,66 @@
+[
+  {
+    "log": "fix1-red-review.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-4p7gmoka\\result.txt",
+    "sha256": "e11cacc56672d3d94f90213fb90dc506d252d7269dc89f980f5b1d0d1471bcd5",
+    "summary": [
+      "7 failed, 3 passed in 5.90s"
+    ]
+  },
+  {
+    "log": "fix1-green-first.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-b4otpgch\\result.txt",
+    "sha256": "d6eb219c57a3e1241b5d66015414d67307546c8d4506d315eb99e3e1a08d57ef",
+    "summary": [
+      "10 passed in 5.98s"
+    ]
+  },
+  {
+    "log": "fix1-red-old-expiry.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-vtrj50o8\\result.txt",
+    "sha256": "d34f00dd8f352db0915d23ce61ca99c47b56dc6238b19f23f42374985c742dfe",
+    "summary": [
+      "1 failed, 1 passed, 10 deselected in 2.39s"
+    ]
+  },
+  {
+    "log": "fix1-green-adjacent.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-4yp9elrl\\result.txt",
+    "sha256": "b3ebf71ae7e63ae6c8ee591f4923b8166b040196792744847feccf971d45f01e",
+    "summary": [
+      "45 passed in 24.82s"
+    ]
+  },
+  {
+    "log": "fix1-green-boundaries.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-yc0jgjn8\\result.txt",
+    "sha256": "35cdf87e3d8ba90b1aa825ab513c18e5459770efa65a4f585027211df6183f57",
+    "summary": [
+      "15 passed in 7.76s"
+    ]
+  },
+  {
+    "log": "fix1-red-final-expiry.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-jsv36yjd\\result.txt",
+    "sha256": "fe5829d668c70336186daa6b0cfd07770d0ae531b3d07b3a7eeb5216717b3f3a",
+    "summary": [
+      "1 failed in 2.32s"
+    ]
+  },
+  {
+    "log": "fix1-green-focused.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-9dcuey74\\result.txt",
+    "sha256": "28a26e2933b0eeafc5d83d01005e380d2716ab91a0431b5ff124cda491fcd803",
+    "summary": [
+      "16 passed in 8.25s"
+    ]
+  },
+  {
+    "log": "fix1-green-affected.txt",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-5ghn4h1t\\result.txt",
+    "sha256": "2f00b00481689a264b41f0bd7e4039c7aea1bec23b6f279016a5cbf6fc19fe31",
+    "summary": [
+      "424 passed, 26 skipped in 200.31s (0:03:20)"
+    ]
+  }
+]

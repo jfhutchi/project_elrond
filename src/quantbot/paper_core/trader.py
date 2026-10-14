@@ -19,6 +19,7 @@ from quantbot.paper_core.contracts import (
     Observation,
     ProtectionPlan,
     ReconciliationProof,
+    TimeProjection,
 )
 from quantbot.paper_core.features import observation_objections
 from quantbot.paper_core.health import entry_health_objections, recover_health, report
@@ -30,6 +31,7 @@ from quantbot.paper_core.time_evidence import (
     TimeEvidence,
     acquire_time_evidence,
     entry_time_objections,
+    project_time_evidence,
 )
 from quantbot.research.manifest import canonical_result_json, content_id
 from quantbot.risk import DrawdownState, OrderPurpose, PortfolioVetoDecision
@@ -47,6 +49,7 @@ def evaluate_entry(
     inventory: ReconciliationProof,
     *,
     time_evidence: TimeEvidence | None = None,
+    time_projection: TimeProjection | None = None,
 ) -> Decision:
     objections = list(
         observation_objections(
@@ -57,7 +60,9 @@ def evaluate_entry(
         objections.extend(
             ("TIME_EVIDENCE_MISSING",)
             if time_evidence is None
-            else entry_time_objections(observation, time_evidence, config)
+            else entry_time_objections(
+                observation, time_evidence, config, projection=time_projection
+            )
         )
     if observation.symbol != config.symbol or model.feature_version != observation.feature_version:
         objections.append("CONTRACT_MISMATCH")
@@ -71,7 +76,11 @@ def evaluate_entry(
     ):
         objections.append("INVENTORY_UNCERTIFIED")
     evaluated_at = (
-        time_evidence.wall_anchor if time_evidence is not None else observation.recorded_at_utc
+        time_projection.wall_at
+        if time_projection is not None
+        else time_evidence.wall_anchor
+        if time_evidence is not None
+        else observation.recorded_at_utc
     )
     if not 0 <= (evaluated_at - inventory.recorded_at_utc).total_seconds() <= 120:
         objections.append("INVENTORY_STALE")
@@ -95,12 +104,21 @@ def evaluate_entry(
         timing = {
             "time_evidence_id": time_evidence.id,
             "clock_process_id": time_evidence.process_id,
-            "monotonic_anchor": time_evidence.acquired_monotonic,
+            "monotonic_anchor": time_projection.monotonic_at
+            if time_projection
+            else time_evidence.acquired_monotonic,
             "provider_deadline": min(
-                time_evidence.wall_anchor + timedelta(seconds=time_evidence.offset_lower + 1800),
+                (
+                    time_projection.provider_earliest
+                    if time_projection
+                    else time_evidence.wall_anchor + timedelta(seconds=time_evidence.offset_lower)
+                )
+                + timedelta(seconds=1800),
                 observation.session_close - timedelta(seconds=120),
             ),
         }
+        if time_projection is not None:
+            timing["time_projection"] = time_projection
     return Decision(
         **timing,
         recorded_at_utc=evaluated_at,
@@ -182,10 +200,18 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             )
             from quantbot.paper_core.time_evidence import evidence_objections
 
-            if evidence_objections(time_evidence, store.clocks):
+            live_projection = project_time_evidence(time_evidence, store.clocks)
+            if evidence_objections(time_evidence, store.clocks) or entry_time_objections(
+                observed, time_evidence, store.config, projection=live_projection
+            ):
                 return None
         if decision != evaluate_entry(
-            store.config, observed, ModelArtifact(), certified, time_evidence=time_evidence
+            store.config,
+            observed,
+            ModelArtifact(),
+            certified,
+            time_evidence=time_evidence,
+            time_projection=decision.time_projection,
         ):
             raise ValueError("decision does not match certified inputs and fixed risk envelope")
         if plan != ProtectionPlan.for_decision(decision, store.config):
@@ -263,6 +289,7 @@ async def trader_cycle(
 ) -> Decision:
     require_synthetic(store, broker)
     time_evidence = None
+    time_projection = None
     acquisition_reasons: tuple[str, ...] = ()
     if store.config.clock_profile == "PAPER_TIME_V2":
         time_evidence = await acquire_time_evidence(broker, store.clocks)
@@ -280,6 +307,10 @@ async def trader_cycle(
                 acquisition_reasons = ("INVENTORY_PROTOCOL_INVALID",)
             except StateConflictError as error:
                 acquisition_reasons = (str(error),)
+        time_projection = project_time_evidence(time_evidence, store.clocks)
+        acquisition_reasons = tuple(
+            dict.fromkeys((*acquisition_reasons, *time_projection.objections))
+        )
         if acquisition_reasons:
             report(
                 store,
@@ -292,7 +323,7 @@ async def trader_cycle(
                 evidence_ids=(time_evidence.id, inventory.id),
             )
         elif not entry_time_objections(
-            observation, time_evidence, store.config
+            observation, time_evidence, store.config, projection=time_projection
         ) and not observation_objections(observation, dependency_freshness=True):
             from quantbot.paper_core.guardian import acknowledge_handoffs
 
@@ -310,7 +341,12 @@ async def trader_cycle(
     if previous is not None:
         return store.read("core_decisions", previous["decision_id"], Decision)
     decision = evaluate_entry(
-        store.config, observation, model, inventory, time_evidence=time_evidence
+        store.config,
+        observation,
+        model,
+        inventory,
+        time_evidence=time_evidence,
+        time_projection=time_projection,
     )
     with store.database.transaction() as session:
         reasons = tuple(

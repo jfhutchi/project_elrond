@@ -90,15 +90,15 @@ def report(
 
 
 def entry_health_objections(store: CoreStore, session: Session, symbol: str) -> tuple[str, ...]:
-    reasons = []
+    reasons: list[tuple[int, str]] = []
     if StorageRepository(session).get_kill_switch_state().engaged:
-        reasons.append("CORE_MANUAL_ENTRY_PAUSE")
+        reasons.append((0, "CORE_MANUAL_ENTRY_PAUSE"))
     priority = {
-        "INTEGRITY_FAILURE": 0,
+        "INTEGRITY_FAILURE": 1,
         "MANUAL_PAUSE": 0,
-        "PROTOCOL_FAILURE": 1,
-        "RETRYABLE_FAILURE": 2,
-        "TEMPORARY_WAIT": 3,
+        "PROTOCOL_FAILURE": 2,
+        "RETRYABLE_FAILURE": 3,
+        "TEMPORARY_WAIT": 4,
     }
     for event in sorted(active_health(session), key=lambda h: priority[h.state]):
         if event.role in {"TRADER", "GUARDIAN"} and (
@@ -107,20 +107,20 @@ def entry_health_objections(store: CoreStore, session: Session, symbol: str) -> 
             or event.scope == "SYMBOL"
             and event.scope_id == symbol
         ):
-            reasons.extend(event.objections)
+            reasons.extend((priority[event.state], objection) for objection in event.objections)
     repo = StorageRepository(session)
     for incident in repo.list_incidents(unresolved_only=True):
         if incident.kind != "CORE_EVIDENCE_CONFLICT":
             continue
         lots = incident.detail.get("lot_ids")
         if incident.detail.get("account_scope") or not isinstance(lots, list) or not lots:
-            reasons.append("CORE_EVIDENCE_QUARANTINED")
+            reasons.append((1, "CORE_EVIDENCE_QUARANTINED"))
             continue
         authorities = incident.detail.get("disputed_authorities")
         if authorities != ["OUTCOME"] and not (
             authorities == ["CASH"] and independent_cash_available(store, session)
         ):
-            reasons.append("CORE_EVIDENCE_QUARANTINED")
+            reasons.append((1, "CORE_EVIDENCE_QUARANTINED"))
         # An unrelated completed outcome cannot revoke current independently proven cash.
         for link in session.execute(select(table("core_intent_links"))).mappings():
             if link["role"] != "ENTRY" or link["lot_id"] not in lots:
@@ -132,8 +132,8 @@ def entry_health_objections(store: CoreStore, session: Session, symbol: str) -> 
             ).first()
             intent = repo.get_order_intent(link["intent_id"])
             if not completed and intent and intent.symbol == symbol:
-                reasons.append("CORE_EVIDENCE_QUARANTINED")
-    return tuple(dict.fromkeys(reasons))
+                reasons.append((1, "CORE_EVIDENCE_QUARANTINED"))
+    return tuple(dict.fromkeys(reason for _, reason in sorted(reasons, key=lambda item: item[0])))
 
 
 def independent_cash_available(store: CoreStore, session: Session) -> bool:
