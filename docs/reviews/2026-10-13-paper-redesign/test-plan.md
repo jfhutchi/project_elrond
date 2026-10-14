@@ -82,8 +82,11 @@ Each row specifies a named assertion and owner. Implement it in the exact test f
 | T03 M3 | Wall jump forward/backward; monotonic steady; restart | Invalidate affected proof, no negative/extended hold; reacquire after restart |
 | T04 M3 | Open/close/expiry uncertainty overlap, DST, half-day session | Conservative entry wait; earliest-safe due exit; actual calendar, no assumed 390-minute day |
 | T05 M3 | Broker mark old/unknown as-of but received now | No fabricated current mark or price-stop authority; independent deadline path remains |
+| T06 M3 | Healthy nonzero account/position acquisition latency after time proof | Current validated evaluation accepts the newly certified inventory; immutable acquisition evidence is not refreshed; genuinely expired/discontinuous evidence still refuses |
+| T07 M3 | Positive/negative skew, close-buffer-clipped deadline, then clock outage | Monotonic expiry is derived from matching time domains and never extends the conservative provider deadline |
 | A01 M3 | 429, timeout, unavailable service, changing snapshot marks, then healthy | Scoped wait/retry, no manual reset; fresh proof + newly evaluated decision resumes |
 | A02 M3 | Genuine cash/unowned inventory/conflicting fill/manual pause | Relevant authority quarantined/manual pause retained; no identical-read self-clear; unaffected trustworthy outcomes continue |
+| A03 M3 | Retained closed-session health wait plus unresolved dependent source integrity incident | First blocker identifies integrity ahead of ordinary waits; every objection and original evidence remains available |
 | L01 M4 | Protected/canonical consumed window canary, future label, late receipt | Refuse before estimator input access; no look-ahead or recycled holdout claims |
 | L02 M4 | 29 training episodes, insufficient days, incomplete costs, duplicate consideration | Justified NO_CHANGE with exact IDs; no fit/trial on repeated no-op; prior=result |
 | L03 M4 | 30/10 episodic train/validation over 5+5 sessions, balanced feature-linked ±20 bps | Real deterministic coefficient update, finite clipped prediction, recorded baseline/validation and single permanent trial |

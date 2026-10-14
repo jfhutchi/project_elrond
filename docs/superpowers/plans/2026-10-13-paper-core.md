@@ -12,11 +12,11 @@
 
 ## Global constraints
 
-- Status: **M0–M2 ACCEPTED; M3 READY**. M4–M6 not started. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
+- Status: **M0–M3 ACCEPTED; M4 READY**. M4–M6 not started. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
 - PAPER only; no LIVE path, paid CI, new credentials/services, OS resync/security/policy changes, forced trades, holdings reset, deleted history, silent stop clearance, or untested protection removal.
 - Existing limits remain: one new position, 50 bps of equity per position, 25 bps maximum entry risk, 100 bps stop, 30-minute horizon, ≥120 s session-exit buffer, 500 bps buying-power reserve. Existing tighter portfolio controls win.
-- Relative skew bound remains **±2 s**. Proposed replacement `PAPER_TIME_V2` keeps 5 s acquisition, 120 s maximum evidence age and initial 50 ms continuity bound. Its changed health/authority semantics require specific review; do not silently substitute it for STRICT_V0/RELATIVE_V1.
-- Proposed new ridge policy uses alpha=1, seed=0, prediction clip ±100 bps, at most one 30 s fit/session, 30 training episodes/≥5 sessions, 10 later validation episodes/≥5 sessions, ≥30 min embargo, last 60 eligible sessions. These are new defaults, not existing authorization. Use the canonical holdout and permanent trial registry.
+- Relative skew bound remains **±2 s**. The locally approved `PAPER_TIME_V2` implementation keeps 5 s acquisition, 120 s maximum evidence age and initial 50 ms continuity bound. Exact operational commissioning remains part of M6 review; do not silently substitute it for an existing runtime's STRICT_V0/RELATIVE_V1 profile.
+- The locally approved ridge policy uses alpha=1, seed=0, prediction clip ±100 bps, at most one 30 s fit/session, 30 training episodes/≥5 sessions, 10 later validation episodes/≥5 sessions, ≥30 min embargo, last 60 eligible sessions. Implementation approval does not commission operational model use or unattended activation. Use the canonical holdout and permanent trial registry.
 - Preserve source/time/cost/evidence-lane provenance. Unknown fees never become zero. Simulated results never become broker-PAPER acceptance. A passed unit suite does not complete a milestone.
 - User refinement: no automatic global PAPER kill switch for ordinary clock/data/provider/acquisition faults. Use scoped waits with automatic fresh-evidence recovery; keep protection and trustworthy outcomes/learning running. Manual pause remains explicit; genuine contradictions quarantine only necessary authority/evidence.
 - Current workspace is old (`9f5ece9`), current main audited at `b812c64`, PR287 at `8bb84cf`, PR288 at `a6f9eb3`. At execution, resolve heads and docs again; create an isolated branch from reviewed main. Do not build from the old workspace branch or silently inherit unrelated work.
@@ -33,8 +33,8 @@ After each milestone a reviewer who did not implement it reviews both diff and i
 | M0 | User approves design/plan | Reproducible read-only release/ownership/blocker inventory and legacy trade trace | ACCEPTED |
 | M1 | M0 accepted | Thin synthetic observation → guarded intent → owned fill → independent exit → flat round trip; protection baseline repair | ACCEPTED |
 | M2 | M1 accepted | Cost provenance and restart-safe uncertain/partial-order/outcome processing | ACCEPTED |
-| M3 | M2 accepted; clock contract reviewed | Scoped recovery/timing and per-symbol eligibility; outcome/protection progress during entry failure | READY |
-| M4 | M2 accepted; learning envelope reviewed | Real bounded outcome-driven parameter fitting and explicit NO_CHANGE, in shadow | NOT STARTED |
+| M3 | M2 accepted; clock contract reviewed | Scoped recovery/timing and per-symbol eligibility; outcome/protection progress during entry failure | ACCEPTED |
+| M4 | M2 accepted; learning envelope reviewed | Real bounded outcome-driven parameter fitting and explicit NO_CHANGE, in shadow | READY |
 | M5 | M3 + M4 accepted | Atomic model activation and later decision witness; synthetic whole loop; real-data local simulation | NOT STARTED |
 | M6 | M5 accepted; concrete rollout review | Frozen release handover and a naturally eligible broker-PAPER whole-loop evidence bundle | NOT STARTED |
 
@@ -145,6 +145,8 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 ## M3 — Sol implementation brief: scoped recovery, timing and useful health
 
+**Acceptance:** Independent reviewer and integration owner ACCEPT source `1730b658f1a67132525abdfaab40547f0a3e624c`. [Evidence](../../evidence/paper-core/m3/README.md) and [review](../../evidence/paper-core/m3/review.md) retain the initial findings and repairs. Final affected gate: **424 passed, 26 skipped**, six CI gates passed. The eight-stage synthetic timeline proves scoped refusal/recovery with independent owned exits and two costed outcomes; healthy fetch latency, conservative close-buffer expiry, integrity-first blockers and populated prior-schema identity replay are verified. Actual M3 OS-process timing restart, operational guardian readiness, retry scheduling, provider commissioning and PostgreSQL execution remain explicit M6/infrastructure limits. No runtime behavior was changed.
+
 **Scope:** Replace blanket stops for acquisition uncertainty with scoped states, remove unrelated-symbol entry coupling, and implement the explicitly reviewed timing contract in both entry and guardian. Preserve genuine contradictions/manual pauses. This milestone may follow M2 independently of M4, but its execution still requires the owner's next-ready handoff.
 
 **Relevant code:** PR288 `operations/paper_clock.py`, `execution/snapshot_capture.py`, `execution/recovery.py`, `operations/cycle.py`, `learner/paper_runner.py`, `paper_deadlines.py`, `exploration_launch.py:249,348`, `market_data/calendar.py`, `five_minute.py`. Read the saved host time query and proposed V2 contract; passing PR288 tests is not approval to silently deploy its health predicate.
@@ -156,10 +158,10 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 **Acceptance:** ±2.000 s boundary honored both directions; ±2.001 s rejected. Two samples must advance, agree and finish in ≤5 s; proof expires after 120 s and on process restart/clock discontinuity. Boundary overlap waits for entry and does not extend owned holding time. Windows status text does not grant or fabricate UTC accuracy. Changing marks or 429/timeout pauses affected entries; fresh complete proof recovers without operator reset or global switch mutation. True unowned quantity/cash contradiction remains quarantined until explicitly resolved by proof, not another identical snapshot. One missing roster symbol blocks only decisions that actually depend on it; missing SPY still blocks features requiring SPY. Guardian and trustworthy outcome/learning work continue through each entry refusal. Old broker marks cannot become current by stamping receipt time; independent deadline exits remain available.
 
 - [x] User authorized implementation of the reviewed changes on October 14, 2026. Implement and test the specified V2 contract locally; exact operational commissioning remains subject to the M6 artifact review. No OS resync or policy change is authorized.
-- [ ] Add and run the three named test files with exact boundary/race assertions, including the existing expected-red unstable-acquisition case.
-- [ ] Implement classification and shared timing evidence; retain historical stop records and distinguish manual/integrity pauses from new retryable waits.
-- [ ] Run an integrated sequence: valid entry, provider timeout, stale unrelated symbol, market close, wall jump, recovery; show zero unauthorized POSTs, continued exit/outcome progress and fresh-evidence-only resumption.
-- [ ] Export first-blocker timelines and test logs; independent review then plan update.
+- [x] Add and run the three named test files with exact boundary/race assertions and an equivalent new-core unstable-acquisition case; the original PR288-dependent audit probe remains historical evidence.
+- [x] Implement classification and shared timing evidence; retain historical stop records and distinguish manual/integrity pauses from new retryable waits.
+- [x] Run an integrated sequence: valid entry, provider timeout, stale unrelated symbol, market close, wall jump, recovery; show zero unauthorized POSTs, continued exit/outcome progress and fresh-evidence-only resumption.
+- [x] Export first-blocker timelines and test logs; independent review then plan update.
 
 **Migration/rollback:** No existing stop automatically changes class or clears. Historical stops need separate reason attribution/recovery review at rollout. New health states only apply to new events. Old clock profile remains selectable for rollback with matching entry/guardian config; never mix profiles. No w32tm write, task, registry, access or script-policy action.
 

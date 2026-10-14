@@ -1,0 +1,34 @@
+deadline 2026-10-14 19:58:00+00:00 provider_now 2026-10-14 19:58:00.120000+00:00 elapsed 8.200000000000728 posts 1 reasons ('TIME_ACQUISITION_RETRYABLE', 'TIME_SAMPLES_INCOMPLETE')
+F
+================================== FAILURES ===================================
+___________ test_positive_offset_close_deadline_during_clock_outage ___________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-oif49h7h/pytest/test_positive_offset_close_dea0')
+
+    @pytest.mark.asyncio
+    async def test_positive_offset_close_deadline_during_clock_outage(tmp_path):
+        from datetime import timedelta
+        from tests.fixtures.core_m3 import fresh
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.contracts import ProtectionPlan
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            clocks.advance(6*3600 - 120 - 10)
+            broker.offset = 1.9
+            decision = await trader_cycle(store, broker, fresh(observation, clocks), model, proof, now=clocks.wall)
+            assert len(broker.posts) == 1, decision.gates
+            plan = store.read('core_protection_plans', store.links()[0]['protection_id'], ProtectionPlan)
+            broker.clock_fault = TimeoutError('synthetic clock outage')
+            clocks.advance(8.2)
+            broker.now = clocks.wall + timedelta(seconds=1.9)
+            receipt = await guardian_cycle(store, broker, now=broker.now)
+            print('deadline', plan.deadline, 'provider_now', broker.now, 'elapsed', clocks.mono-plan.monotonic_anchor, 'posts', len(broker.posts), 'reasons', receipt.reasons)
+>           assert len(broker.posts) == 2
+E           AssertionError: assert 1 == 2
+E            +  where 1 = len([OrderIntent(symbol='XLE', intent_id='core-entry-1d3c63482e19f8a690edc8b84885f612320fee8c6970e37ade9484689307eefc', cl...PROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 19, 57, 50, 20000, tzinfo=datetime.timezone.utc))])
+E            +    where [OrderIntent(symbol='XLE', intent_id='core-entry-1d3c63482e19f8a690edc8b84885f612320fee8c6970e37ade9484689307eefc', cl...PROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 19, 57, 50, 20000, tzinfo=datetime.timezone.utc))] = <tests.fixtures.core_m2.JournalBroker object at 0x0000023A6127C6D0>.posts
+
+..\..\..\..\AppData\Local\Temp\m3-review-83d86309cc3d406092f0bb91d42e6696\test_m3_positive_inventory_latency.py:44: AssertionError
+=========================== short test summary info ===========================
+FAILED ::test_positive_offset_close_deadline_during_clock_outage - AssertionE...
+1 failed in 2.75s

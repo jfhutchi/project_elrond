@@ -1,4 +1,4 @@
-# M3 local synthetic implementation submission
+# M3 accepted local synthetic implementation
 
 ## Repair round 1 submitted for scoped re-review
 
@@ -8,7 +8,7 @@ Healthy positive account/position latency now produces a stored, independently v
 
 The 16 focused regressions include ordinary latency, expired/discontinuous/future proof refusal, exact close-expiry boundaries during clock outage, old v32 compatibility and final-send expiry. Original expected-red failures and intermediate green results remain in [repair log index](fix1-logs.json). No root-owned review/planning file was edited or included in the repair commit. Synthetic, process-simulation, PostgreSQL, scheduling and learning limitations below remain unchanged.
 
-Accepted predecessor: `e7b1eae28c0e5e6e49173facda55ad9345e3a86a`, including accepted M2 source `800e67bf5d15e3cf1d878b46f50775dc0bdf6f82`. M3 awaits independent review and the owner's acceptance decision. This package does not authorize commissioning or claim whole-project completion.
+Accepted predecessor: `e7b1eae28c0e5e6e49173facda55ad9345e3a86a`, including accepted M2 source `800e67bf5d15e3cf1d878b46f50775dc0bdf6f82`. The independent reviewer and integration owner accept final M3 source `1730b658f1a67132525abdfaab40547f0a3e624c`; [review](review.md) records the three findings and their verified repairs. Final repair validation is **424 passed, 26 skipped**, with all six CI gates passing. Earlier counts below remain separately attributed. This package does not authorize commissioning or claim whole-project completion.
 
 Final frozen affected run: **408 passed, 26 skipped, zero failures**, 191.20 seconds, exit 0. [Validation](validation.json) pins the exact command and 20 changed source/test/fixture hashes. [Complete log](green-affected.txt) is copied byte-for-byte from the isolated offline runner. All six exact CI commands passed; [CI metadata](ci-results.json) pins their commands, exits and logs. Both platform checks covered 337 source files and 3 CI helper files.
 

@@ -113,11 +113,13 @@ During provider outage, local supervision can keep trying but cannot guarantee e
 
 ## Timing contract: preserve ±2 seconds; change only through review
 
-**Proposed `PAPER_TIME_V2`; requires specific approval before implementation/activation.** This retains the approved two-second relative-skew bound. It replaces PR288's exact Windows source/error/poll predicate as trading authority with decision-specific timing evidence. Until approved and verified, retain the current contract/refusals. No OS change is part of this design.
+**`PAPER_TIME_V2` was approved for isolated implementation on October 14, 2026; exact operational commissioning remains subject to M6 review.** This retains the approved two-second relative-skew bound. It replaces PR288's exact Windows source/error/poll predicate as trading authority with decision-specific timing evidence. Existing runtimes retain their current contract/refusals until commissioned handover. No OS change is part of this design.
 
 For a raw provider timestamp `p` acquired between local wall samples `w0,w1` and monotonic samples `m0,m1`, retain offset interval `[p-w1, p-w0]`. Require two advancing broker samples within a total acquisition budget of **5 s**, mutually consistent intervals wholly inside **[-2 s,+2 s]**, unchanged account/provider/session identity, and wall-versus-monotonic continuity. Keep the existing **50 ms** discontinuity boundary initially; any alternative is a separately versioned change. Timestamp resolution is recorded; this interval is relative-clock evidence, not a certificate of UTC accuracy.
 
 Use monotonic elapsed time for transport timeouts, backoff, watchdogs, within-process evidence age, holding duration and expiry. Clock evidence lasts at most **120 s**, with the stricter bound of the consuming decision. Persist raw UTC audit fields and boot/process ID; monotonic values are never compared across restart. Restart invalidates cached proofs and reestablishes broker chronology before entries.
+
+After awaited inventory acquisition, evaluate against a current validated projection of the original time proof. Persist that projection with the decision so claim validation is reproducible; never replace the original acquisition timestamps or refresh an old observation/mark. Compute conservative monotonic protection expiry from provider-domain bounds and a matching monotonic anchor, including when the session close buffer shortens the hold. Do not subtract local-wall audit time from a provider-domain deadline. The final send consumes the same expiry inside its transactional authority check.
 
 For each consuming decision, derive conservative earliest/latest provider time from fresh proof:
 
@@ -141,7 +143,7 @@ For a fully closed long lot, `gross_cash_pnl = sum(exit_qty*exit_price) - sum(en
 
 Fill-price returns already include paid spread and realized execution-price effects. Implementation shortfall versus the decision reference is a diagnostic, not another deduction from actual P&L. A separate incremental stress for unmodeled latency/impact is allowed only in the modeled field, explicitly identifying what is additional. Late costs update the current outcome revision exactly once and trigger learning reconsideration without adding another trade sample. Prior learning receipts remain immutable.
 
-Alpaca describes PAPER as simulated execution and lists omissions such as market impact, latency slippage and queue position ([provider specification](https://docs.alpaca.markets/us/v1.4.2/docs/paper-trading)). Broker-PAPER fills prove broker integration, not live execution quality or real-world profitability. The audit did not establish a contractual zero for all fee components.
+Alpaca describes PAPER as simulated execution and lists omissions such as market impact, latency slippage and queue position ([provider specification](https://docs.alpaca.markets/us/v1.4.2/docs/paper-trading)). Broker-PAPER fills prove broker integration, not live execution quality or real-world profitability. The audit did not establish a contractual zero for all fee components. The [supplemental provider-cost check](../../reviews/2026-10-13-paper-redesign/provider-paper-costs.md) records later documentation evidence and its applicability limits for M6.
 
 ## A real, bounded learning loop
 
@@ -149,7 +151,7 @@ Choose **one small regularized outcome predictor** for the new core. Reuse the e
 
 Train from certified, fee-complete owned round trips only. Untraded observations remain recorded but have no invented executed outcome. Results are conditional on the declared collection/entry policy; do not claim unbiased returns for unselected opportunities. Partition incompatible selection/exit contracts; previous market-label models remain diagnostic baselines, not initial coefficients disguised as experience. This sacrifices sample volume for a directly attributable trade-learning path. A separate all-opportunity fixed-horizon predictor is a later optional project, not an MVP dependency.
 
-**Proposed versioned learning envelope (new defaults, not existing approvals):**
+**Versioned learning envelope approved for isolated implementation on October 14, 2026; operational model use and unattended activation remain separately commissioned:**
 
 - At most one candidate fit per completed session, permanently charged before fitting; 30 s fit subprocess budget and one worker.
 - Minimum 30 certified training episodes spanning ≥5 sessions, followed by ≥10 validation episodes spanning ≥5 later sessions. Use the most recent 60 eligible sessions; deterministic chronological selection. Purge intersecting feature/holding windows, with at least 30 minutes embargo; validation inputs never train that candidate. Canonical protected ranges are excluded before reading; development validation is consumed and can never become a newly claimed untouched holdout.
