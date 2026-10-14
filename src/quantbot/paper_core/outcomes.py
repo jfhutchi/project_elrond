@@ -537,6 +537,7 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     previous = max(revisions, key=lambda r: r.revision, default=None)
     return RoundTrip(
         recorded_at_utc=as_of,
+        evidence_lane=store.config.evidence_lane,
         release_id=store.config.release_id,
         source_refs=sources,
         lot_id=lot_id,
@@ -561,7 +562,13 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         policy_id=decision.policy_id,
         entry_notional=sum((f.quantity * f.price for f in buys), Decimal(0)),
         source_start=source_start or min(f.occurred_at for f in buys),
-        dataset="EXPLICIT_SYNTHETIC" if source_start else "LEGACY_WINDOW_UNAVAILABLE",
+        dataset=(
+            "LOCAL_SIM_REAL_DATA"
+            if store.config.evidence_lane == "LOCAL_SIM_REAL_DATA"
+            else "EXPLICIT_SYNTHETIC"
+        )
+        if source_start
+        else "LEGACY_WINDOW_UNAVAILABLE",
         source_end=max(f.occurred_at for f in sells),
         available_at=as_of,
     )
@@ -628,7 +635,13 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
             else:
                 session.execute(pointer.insert().values(lot_id=lot, **fields))
             outcomes.append(trip)
-    return OutcomeBatch(recorded_at_utc=cutoff, outcomes=tuple(outcomes), reasons=tuple(reasons))
+    return OutcomeBatch(
+        recorded_at_utc=cutoff,
+        evidence_lane=store.config.evidence_lane,
+        release_id=store.config.release_id,
+        outcomes=tuple(outcomes),
+        reasons=tuple(reasons),
+    )
 
 
 async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleReceipt:
@@ -668,8 +681,11 @@ async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleRec
         events.append(
             BrokerEvent(
                 recorded_at_utc=broker.now,
+                evidence_lane=store.config.evidence_lane,
+                release_id=store.config.release_id,
                 occurred_at=broker.now,
                 account_id=store.config.account_id,
+                provider=broker.provider,
                 endpoint="synthetic/order-and-complete-activities",
                 event_id=(
                     content_id(order)
@@ -688,8 +704,11 @@ async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleRec
             events.append(
                 BrokerEvent(
                     recorded_at_utc=broker.now,
+                    evidence_lane=store.config.evidence_lane,
+                    release_id=store.config.release_id,
                     occurred_at=fill.occurred_at,
                     account_id=store.config.account_id,
+                    provider=broker.provider,
                     endpoint="synthetic/activities",
                     event_id=fill.fill_id,
                     raw_digest=content_id(fill),
@@ -698,6 +717,11 @@ async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleRec
                 )
             )
     import_broker_events(store, tuple(events))
-    receipt = CycleReceipt(recorded_at_utc=broker.now, reasons=tuple(reasons))
+    receipt = CycleReceipt(
+        recorded_at_utc=broker.now,
+        evidence_lane=store.config.evidence_lane,
+        reasons=tuple(reasons),
+        release_id=store.config.release_id,
+    )
     store.record("core_cycle_receipts", receipt)
     return receipt

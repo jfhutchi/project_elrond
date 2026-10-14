@@ -66,6 +66,8 @@ def report(
         store,
         Health(
             recorded_at_utc=now,
+            evidence_lane=store.config.evidence_lane,
+            release_id=store.config.release_id,
             role=role,
             scope=scope,
             scope_id=scope_id or store.config.symbol,
@@ -207,6 +209,8 @@ def recover_health(store: CoreStore, proof: ReconciliationProof, *, now: datetim
             store,
             Health(
                 recorded_at_utc=now,
+                evidence_lane=store.config.evidence_lane,
+                release_id=store.config.release_id,
                 role="TRADER",
                 scope="SYMBOL",
                 scope_id=store.config.symbol,

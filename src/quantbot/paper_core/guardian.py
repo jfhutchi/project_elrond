@@ -137,6 +137,8 @@ def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:
     plans = store.documents("core_protection_plans")
     receipt = GuardianReceipt(
         recorded_at_utc=now,
+        evidence_lane=store.config.evidence_lane,
+        release_id=store.config.release_id,
         owner=store.config.owner,
         generation=store.config.generation,
         valid_until=now + timedelta(seconds=120),
@@ -166,7 +168,12 @@ async def guardian_cycle(
     except StateConflictError:
         reasons = (*reasons, "INVENTORY_MISMATCH")
         if store.config.clock_profile != "PAPER_TIME_V2":
-            receipt = CycleReceipt(recorded_at_utc=now, reasons=reasons)
+            receipt = CycleReceipt(
+                recorded_at_utc=now,
+                evidence_lane=store.config.evidence_lane,
+                reasons=reasons,
+                release_id=store.config.release_id,
+            )
             store.record("core_cycle_receipts", receipt)
             return receipt
     except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError):
@@ -409,7 +416,12 @@ async def guardian_cycle(
         now = broker.now
     process_outcomes(store, cutoff=now)
     receipt = CycleReceipt(
-        recorded_at_utc=now, exit_intent_ids=tuple(exits), proof_id=proof_id, reasons=reasons
+        recorded_at_utc=now,
+        evidence_lane=store.config.evidence_lane,
+        release_id=store.config.release_id,
+        exit_intent_ids=tuple(exits),
+        proof_id=proof_id,
+        reasons=reasons,
     )
     store.record("core_cycle_receipts", receipt)
     return receipt

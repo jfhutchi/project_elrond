@@ -1,0 +1,16 @@
+{
+  "source_commit": "fbdfca23f74bec146d19c630f001786c1123b2a6",
+  "fixture": "tests\\fixtures\\core_v33_m4.json.gz",
+  "sha256": "36143b91a458d8f19d2420dab27cd76f6de255c54312d8ca3e2b8fd0e2ba89e2",
+  "bytes": 372761,
+  "schema": 33,
+  "tables": 88,
+  "costed_round_trips": 40,
+  "capture_before_contract_schema_changes": true,
+  "capture_origin_log": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-6ao9nzk3/result.txt",
+  "original_capture_test_path": "tests/integration/paper_core/test_m5_capture.py",
+  "archived_recipe": "docs/evidence/paper-core/m5/capture-v33-helper.py",
+  "recipe_copy_path_destination_adjustment": true,
+  "candidate_id": "dd95585f6be642a56f27890d1b2700aa3555d0102526d49ebade31c91bfda027",
+  "receipt_id": "df341b28d9a324b27a0f61745484f5eaffff4d8fc804def0ee80ec8c7e353a64"
+}

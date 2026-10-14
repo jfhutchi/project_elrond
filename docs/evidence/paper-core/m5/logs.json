@@ -1,0 +1,432 @@
+[
+  {
+    "label": "accepted-v33-capture",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-6ao9nzk3\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\accepted-v33-capture.txt.gz",
+    "raw_sha256": "43ec5ba66401962d1a585a5be7a030301f7b1ccbb59d96ac98f12e2d8031d2bc",
+    "packaged_sha256": "c47704a089372a87718fecfee95b5f8a8f27bc8db499af85725b8fce7ff0d3ec",
+    "raw_bytes": 407,
+    "summary": [
+      "1 passed in 225.23s (0:03:45)"
+    ]
+  },
+  {
+    "label": "red-missing-activation",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-w9bbdmvb\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-missing-activation.txt.gz",
+    "raw_sha256": "155cdc60f0c3f842dc4a3e938c64b30c8492395b4031b685ce593b4a6f590ada",
+    "packaged_sha256": "9a23eb915468a769c9812dcb4abc2810fdf240b264b23f79580151e97bc4b7cd",
+    "raw_bytes": 947,
+    "summary": [
+      "1 failed in 0.85s"
+    ]
+  },
+  {
+    "label": "red-fixture-fk-setup",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-_c4ne41b\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-fixture-fk-setup.txt.gz",
+    "raw_sha256": "5870ae5fcc3bd11e97cfaa1705b8fab6dce85405431c52e9d3816ccce6ff4e0c",
+    "packaged_sha256": "e50cb19e71095fb7a76b1c18eb542aff01c53ad3f895019c1ff796d213c971b1",
+    "raw_bytes": 9671,
+    "summary": [
+      "1 failed in 2.47s"
+    ]
+  },
+  {
+    "label": "red-missing-atomic-schema",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-r_jtkrub\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-missing-atomic-schema.txt.gz",
+    "raw_sha256": "8b0bef66c14b09ac8ab9d4f27ef392daa46dbac22f2338490e0f9b0fa552ae51",
+    "packaged_sha256": "a746e2d78e002ba7721323985005d1eca08d269b00bd3a8e17825e0f70cf7446",
+    "raw_bytes": 1980,
+    "summary": [
+      "1 failed in 2.39s"
+    ]
+  },
+  {
+    "label": "error-schema-naming",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-0npx5_jy\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\error-schema-naming.txt.gz",
+    "raw_sha256": "fd1f78f47b048eb24dc4913987bf90b59bcbef851a1fe7748faa39087eb5209c",
+    "packaged_sha256": "5be701c10a54533916b0da635ea3ddd5f24224cc947fc09137b173a5d61e5c39",
+    "raw_bytes": 3601,
+    "summary": [
+      "1 error in 1.92s"
+    ]
+  },
+  {
+    "label": "red-reserve-health-fence",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qav4hdg8\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-reserve-health-fence.txt.gz",
+    "raw_sha256": "f51facac7b7a6ae6a8b506bc6a110a2f14cbb35afcb98069d6f1136bfe199588",
+    "packaged_sha256": "db4425482bdda329207647aea89ff48c6bc357061a8e33160db27913c3fe0c3a",
+    "raw_bytes": 2504,
+    "summary": [
+      "1 failed in 7.25s"
+    ]
+  },
+  {
+    "label": "red-reserve-health-followup",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-d4lfi5qm\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-reserve-health-followup.txt.gz",
+    "raw_sha256": "7ef1cdbc799e39ea905e7d9526850cebf0cf67eb68123ace41ed1f04aab03ee6",
+    "packaged_sha256": "e17b92905e14f9afbd5fcec270ceea99d0a8dc9eba1734df4c4db5f89eefb81e",
+    "raw_bytes": 2555,
+    "summary": [
+      "1 failed in 7.13s"
+    ]
+  },
+  {
+    "label": "error-temporal-condition-edit",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-ywqcug7i\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\error-temporal-condition-edit.txt.gz",
+    "raw_sha256": "33665f66e7ebbb2525ed988cfbeeff78182c4d36f0698c77b30f9c2318b22e22",
+    "packaged_sha256": "00b8bac7d0bbf01c1a2411ba9c0930dd3b7bdd4f01ac9786613679359edd7ae5",
+    "raw_bytes": 2555,
+    "summary": [
+      "1 failed in 6.89s"
+    ]
+  },
+  {
+    "label": "focused-initial-activation",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-8j4tis09\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-initial-activation.txt.gz",
+    "raw_sha256": "9a9f1a32535427f8eabac9cb52cb9a267723791351d9273b40f1d21c1fdf32c1",
+    "packaged_sha256": "ff4f8a43f2ce49e456a4b38a7dfcb7963a906fe7c36d898cac0b17eb8e87b510",
+    "raw_bytes": 3162065,
+    "summary": [
+      "8 passed in 18.84s"
+    ]
+  },
+  {
+    "label": "red-missing-local-reader",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-z1oe3dga\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-missing-local-reader.txt.gz",
+    "raw_sha256": "33ba8790cea8925e733ea8b28a074fb810546e9793bc372eb745d14ff386f496",
+    "packaged_sha256": "bb36e9ecf3b419ef41ec821b2a2698fb714590e38a7458f1d8d073c4fdf93401",
+    "raw_bytes": 1000,
+    "summary": [
+      "1 failed in 0.72s"
+    ]
+  },
+  {
+    "label": "red-no-xle-in-source-roster",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-8wt2sy4g\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-no-xle-in-source-roster.txt.gz",
+    "raw_sha256": "90b3f1ccbab2a8c5f6e7d5fa7e27cac9833fcdcb3e28594199b53184345a88df",
+    "packaged_sha256": "798dc1e505ab86d4fe888fab54dfc5e18e8e29b21b2e696a19fca1a1b5408bef",
+    "raw_bytes": 4265,
+    "summary": [
+      "1 failed, 2 passed in 3.11s"
+    ]
+  },
+  {
+    "label": "focused-local-day-guard",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-w7eytvlu\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-local-day-guard.txt.gz",
+    "raw_sha256": "3e064496b66a00727912d53001a0b477f46fb8b9a77322b456eb9802af9e0a6a",
+    "packaged_sha256": "13d7e13be084f0ad1542eaaf0555830595371ca88322ff7dac06d79d3a437bdb",
+    "raw_bytes": 116213,
+    "summary": [
+      "3 passed in 5.31s"
+    ]
+  },
+  {
+    "label": "focused-main-closure",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-ylkkyg6u\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-main-closure.txt.gz",
+    "raw_sha256": "71d70b416373e948a654b01f2ff1d0489ae94ea506084b569167c3bdbd642042",
+    "packaged_sha256": "d6de6f9e22e77cc4038ad031be572604b6a73026ca611631c400946e1a6914d9",
+    "raw_bytes": 3288125,
+    "summary": [
+      "1 passed in 31.34s"
+    ]
+  },
+  {
+    "label": "focused-crash-edges",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-yyk2yqmg\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-crash-edges.txt.gz",
+    "raw_sha256": "0fca77b03305e90862ba5f9cb77e4e9c37a1358979fd08b0f8a4e9ba92f52b39",
+    "packaged_sha256": "3040e0902a77469937150c99c6f8e2bfa520eab113ac07e4598fa25327cb56a7",
+    "raw_bytes": 102,
+    "summary": [
+      "15 passed in 33.52s"
+    ]
+  },
+  {
+    "label": "red-unrelated-global-range-veto",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-53ioay8o\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-unrelated-global-range-veto.txt.gz",
+    "raw_sha256": "a2da95d598168d27b01b5fe832cd004ee3bf07690bf82efd4f837217d8d9f051",
+    "packaged_sha256": "1e7665565f835314f36b0d325b9922f5c0adee421e43b6e0b562f8151074d5fa",
+    "raw_bytes": 4057,
+    "summary": [
+      "1 failed, 2 passed in 3.04s"
+    ]
+  },
+  {
+    "label": "focused-canonical-locator",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qhfqkol4\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-canonical-locator.txt.gz",
+    "raw_sha256": "132ea4a54fab050a2b8a784ad9a3f2b78601ff391deae7517865653b96e43b6c",
+    "packaged_sha256": "be52f03ca91fb3ea65003c056a34efe61e97c4efd504e828f1105dac908f4e68",
+    "raw_bytes": 119132,
+    "summary": [
+      "3 passed in 7.59s"
+    ]
+  },
+  {
+    "label": "red-migration-row-order-assertion",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-c1gfeht3\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-migration-row-order-assertion.txt.gz",
+    "raw_sha256": "5360d7abfed9a94cd378b0aee0c66c20b4763cb424e7698c8ebb7a3d74dd1d04",
+    "packaged_sha256": "a16015c4e7e222f53fc53e2cc4816c376b8f410e4179bd407acdc0f78828ad1e",
+    "raw_bytes": 5228,
+    "summary": [
+      "1 failed in 3.56s"
+    ]
+  },
+  {
+    "label": "focused-v33-replay",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-p1k0269n\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-v33-replay.txt.gz",
+    "raw_sha256": "492cf6477ce5432983be836224368565c5da79f48f8fa0028e26905228a0283c",
+    "packaged_sha256": "e735e58893a2bcd70437e413a5740ea96e99fc1c236208f2580c42cb1ec776cb",
+    "raw_bytes": 259,
+    "summary": [
+      "1 passed in 3.80s"
+    ]
+  },
+  {
+    "label": "red-capacity-stale-session",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-t9d_xuyk\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-capacity-stale-session.txt.gz",
+    "raw_sha256": "ebce6bc6576d4e112f6b8f7ae2ff887191579180111a9afef6ec8d9d44a97c53",
+    "packaged_sha256": "ea7cc98d299a1db392f174c5a0d3b8c21c8ed6cec31a00a0e91b5a6b0cacd88c",
+    "raw_bytes": 2973,
+    "summary": [
+      "1 failed in 435.10s (0:07:15)"
+    ]
+  },
+  {
+    "label": "red-invalid-metrics-accepted",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-av8i7r46\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-invalid-metrics-accepted.txt.gz",
+    "raw_sha256": "9b77f029e492559858005dc5cb9ba8e5d0fca6de9d75d27eb40683f9587dc581",
+    "packaged_sha256": "61ce8689b90afefe150ce93f96280891be23339797466a62153b7735854a3245",
+    "raw_bytes": 2422,
+    "summary": [
+      "1 failed, 2 passed in 3.57s"
+    ]
+  },
+  {
+    "label": "green-fixed-metrics",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-vjkhyk3m\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\green-fixed-metrics.txt.gz",
+    "raw_sha256": "c9fbc4de7feafdce23007224a4c7a4a51dad87800dc7b0af53512cf8fcfcc025",
+    "packaged_sha256": "d32fe9ddd80c38a767d2a5a16e6e68481b024f04eb708978d6a950b4aeeb4746",
+    "raw_bytes": 100,
+    "summary": [
+      "4 passed in 4.12s"
+    ]
+  },
+  {
+    "label": "focused-aba-final-send",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-y5jyirgv\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-aba-final-send.txt.gz",
+    "raw_sha256": "90e01e3226f7d41c6d6440dd07736273c6e70c3458dffc906625eacdfbc5c0a9",
+    "packaged_sha256": "5894cd42689d3047b8047c0227277fbab881adb86ec4570bc985ca859e5239bd",
+    "raw_bytes": 102,
+    "summary": [
+      "21 passed in 47.63s"
+    ]
+  },
+  {
+    "label": "focused-local-refusals",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-e3udoxqw\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-local-refusals.txt.gz",
+    "raw_sha256": "d5769ebd3a32434ab25f90f0321c2e0751a8a316769d21e8b40f3722412d0d00",
+    "packaged_sha256": "e3c78487f325f460c0fb848d8a5b13002588234abf77691fc60a71b858d560aa",
+    "raw_bytes": 100,
+    "summary": [
+      "6 passed in 8.98s"
+    ]
+  },
+  {
+    "label": "red-local-release-binding",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-hoe93f39\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-local-release-binding.txt.gz",
+    "raw_sha256": "e5a51f6dd0fdbb430a018903305e873e21bf1a0a3d00ca8a3675e23ec13a7046",
+    "packaged_sha256": "1bf72a390d7bba61990cf5f9184542a77006ef82143018cbc161646d5ea97626",
+    "raw_bytes": 3301586,
+    "summary": [
+      "1 failed, 28 passed in 81.61s (0:01:21)"
+    ]
+  },
+  {
+    "label": "red-canonical-charge",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-dyoy675u\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-canonical-charge.txt.gz",
+    "raw_sha256": "f15c11a348186f53881a9a707a434b71db63516fcb257a176199ef934807d062",
+    "packaged_sha256": "b43605644cf4d1f164c0a2e68a78bc0deab1c94856fd925e3129f111993c3148",
+    "raw_bytes": 1923,
+    "summary": [
+      "1 failed in 2.51s"
+    ]
+  },
+  {
+    "label": "green-canonical-charge",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-rw130ufa\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\green-canonical-charge.txt.gz",
+    "raw_sha256": "c0452f7639244a870579ae9544c1c91a236256a4bed9c3ba4e86e5bc0d549d15",
+    "packaged_sha256": "e93cbe4465ba746400ec9196b25ab6083a2018fc646beec077697a1734600b56",
+    "raw_bytes": 100,
+    "summary": [
+      "2 passed in 2.71s"
+    ]
+  },
+  {
+    "label": "error-release-constructor-syntax",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-jb4m1_zb\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\error-release-constructor-syntax.txt.gz",
+    "raw_sha256": "2258ad5397a626d5f334e125587716531e0fbed42d3af2b0a70c4ed050a04458",
+    "packaged_sha256": "c45817c3312ff3e784a207cf27ac61fa5271594b77bb7030cf56e60720e5f050",
+    "raw_bytes": 3007,
+    "summary": [
+      "1 failed, 2 passed in 2.82s"
+    ]
+  },
+  {
+    "label": "error-local-policy-extra-field",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-m5ffk_ki\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\error-local-policy-extra-field.txt.gz",
+    "raw_sha256": "4f68ddbb943472cf5d8dc1f872f27c0c5a7de80e961d0364275ba1964ac3671e",
+    "packaged_sha256": "166afdac1a5289d7ddfba01b316cdfa2b82365688d03b0010ed040d9c00e8b57",
+    "raw_bytes": 11610,
+    "summary": [
+      "1 failed, 2 passed in 6.77s"
+    ]
+  },
+  {
+    "label": "focused-final-local",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-a2qnla21\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-final-local.txt.gz",
+    "raw_sha256": "df1eaf785a7b2de0d019fe09675ae6c1a28c8b23bafdba905825155e7c03f2a0",
+    "packaged_sha256": "85f06d7db00397d385d20dcdf7088fa0f7bdea4b48ec0889c8650c794a8a697d",
+    "raw_bytes": 100,
+    "summary": [
+      "6 passed in 9.13s"
+    ]
+  },
+  {
+    "label": "red-missing-predict-feature",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-3g3_m5rn\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-missing-predict-feature.txt.gz",
+    "raw_sha256": "cfe9fd0ef3468e6e187cc9844a3c662949879c9571148a5fdc7c190b28a078ee",
+    "packaged_sha256": "ffde972be74f3c720110c77523d9baeb8132ec8442621083afa4b1b6eac95076",
+    "raw_bytes": 2880,
+    "summary": [
+      "1 failed in 7.18s"
+    ]
+  },
+  {
+    "label": "green-missing-predict-feature",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-l33rj0lo\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\green-missing-predict-feature.txt.gz",
+    "raw_sha256": "6e95b55b756d369997af8516f24c1da857f66eabea68e769d1bbbb353e3bc81a",
+    "packaged_sha256": "ad37a6f25ce0882d5a409e856269a7e25216b81463c25880cf286daa554e0e9e",
+    "raw_bytes": 100,
+    "summary": [
+      "1 passed in 6.95s"
+    ]
+  },
+  {
+    "label": "red-double-outcome-emission-assertion",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-v2qnzsvb\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-double-outcome-emission-assertion.txt.gz",
+    "raw_sha256": "2991c5dcd0b44665a659d080ba590f4ced35c93dbcc479cdb581d6576ebbb801",
+    "packaged_sha256": "a57f4909eed297bd852e2acbeff5c6bf261168d069d152e942ec66d85865b61c",
+    "raw_bytes": 128928,
+    "summary": [
+      "1 failed, 31 passed in 96.93s (0:01:36)"
+    ]
+  },
+  {
+    "label": "focused-final-main-migration",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-azhvrnxg\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\focused-final-main-migration.txt.gz",
+    "raw_sha256": "82a6da4df254fdc76c6d2772e231a1cd46d0a3b4ce62f1ac31a4ac4c75549f99",
+    "packaged_sha256": "5354a98bf79730c6c30bdba1d5cc9afe40c966360c33a3527523abf3e2b18e72",
+    "raw_bytes": 5701727,
+    "summary": [
+      "2 passed in 38.40s"
+    ]
+  },
+  {
+    "label": "failed-full-affected-gate",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-in82iv30\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\failed-full-affected-gate.txt.gz",
+    "raw_sha256": "69939f89464bf35379275c923268193acc1f040bf41168a6d196b1d4625284c2",
+    "packaged_sha256": "0be7314fbe1e5acd6e70ada65dbf1934a18af232f4627bdfb04a060ee7c56d91",
+    "raw_bytes": 7058698,
+    "summary": [
+      "2 failed, 386 passed, 26 skipped in 1015.88s"
+    ],
+    "source_pins": "failed-gate-source-pins.json"
+  },
+  {
+    "label": "test-only-repair-two-test-recheck",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-rg4fvlnq\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\test-only-repair-two-test-recheck.txt.gz",
+    "raw_sha256": "4877f53b35171be31f2837a09a5b7a60e6a5363633776f5f513f62ba236f890a",
+    "packaged_sha256": "718b0871706e314deba755b9b8fa21f507e6278c8af0202a2dfc373f765e6410",
+    "raw_bytes": 168076347,
+    "summary": [
+      "2 passed in 772.82s (0:12:52)\r"
+    ]
+  },
+  {
+    "label": "boundary-canary-setup-and-first-red",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-leakxmgc\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\boundary-canary-setup-and-first-red.txt.gz",
+    "raw_sha256": "4f15b524df6e9c48933302846d8b89cdbaaa96896648020197e1bd05a64b5bce",
+    "packaged_sha256": "a8754284ec3c52a8f0bf36d9405de84cadd706b8367e792936b799a96e34b597",
+    "raw_bytes": 7892,
+    "summary": [
+      "2 failed in 16.05s\r"
+    ]
+  },
+  {
+    "label": "red-terminal-status-incomplete-submission",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-iyvq_s0w\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\red-terminal-status-incomplete-submission.txt.gz",
+    "raw_sha256": "45c5914917eb88e88007c27e6ee455d281225e04c430a2dbc1f08b49813b2035",
+    "packaged_sha256": "a6f4c9a55e619ff4301871d643bb26ec1e796761904ec8ec097ce929aacdee71",
+    "raw_bytes": 9377,
+    "summary": [
+      "2 failed in 15.49s\r"
+    ]
+  },
+  {
+    "label": "green-terminal-status-cutoff-recovery",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-n7jxdmxh\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\green-terminal-status-cutoff-recovery.txt.gz",
+    "raw_sha256": "dd3ebcc59ae68ace8eef08b7d274c7ead61a4d85e3ee59f59a0cc7dda174a891",
+    "packaged_sha256": "cef6a5ff4b921e2609b5ff9f471efed59157a103b691de8990d6aa9bfa6fb235",
+    "raw_bytes": 24,
+    "summary": [
+      "2 passed in 22.94s\r"
+    ]
+  },
+  {
+    "label": "final-boundary-scoped-gate",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-es0d3y55\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\final-boundary-scoped-gate.txt.gz",
+    "raw_sha256": "ef2e476240953e1c9612d56e7430303c1dbd722c2beed5dbf531cc2918663fee",
+    "packaged_sha256": "3382287e044a038dfbfd7a16278ffda40cc2742f40b0d2cd4361be6d1c472337",
+    "raw_bytes": 5701765,
+    "summary": [
+      "28 passed in 137.11s (0:02:17)\r"
+    ]
+  }
+]

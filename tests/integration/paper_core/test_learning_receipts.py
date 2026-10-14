@@ -54,6 +54,9 @@ async def test_actual_costed_episodes_fit_and_export(tmp_path, monkeypatch):
         )
         with db.transaction() as session:
             assert HypothesisRegistry(session).learner_trials_spent() == 1
+        # Reach the later cutoff in the declared execution domain; otherwise
+        # the accepted future-cutoff guard must refuse before budget admission.
+        clock.advance(1)
         repeat = consider_learning(
             store,
             policy,

@@ -237,6 +237,7 @@ class CoreStore:
             )
         return ReconciliationProof(
             recorded_at_utc=now,
+            evidence_lane=self.config.evidence_lane,
             release_id=self.config.release_id,
             source_refs=fill_ids,
             account=account,
@@ -271,7 +272,7 @@ class CoreStore:
         ]
         return {
             "schema_version": SCHEMA_VERSION,
-            "evidence_lane": "SYNTHETIC_TEST",
+            "evidence_lane": self.config.evidence_lane,
             "config": self.config.model_dump(mode="json"),
             "decision_id": decision_id,
             "decision": decision,
@@ -404,6 +405,6 @@ def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
             started_at=proof.recorded_at_utc,
             completed_at=proof.recorded_at_utc,
             diffs=(),
-            summary={"core_proof_id": proof.id, "lane": "SYNTHETIC_TEST"},
+            summary={"core_proof_id": proof.id, "lane": store.config.evidence_lane},
         )
         return proof.generation

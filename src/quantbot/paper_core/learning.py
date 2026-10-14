@@ -438,7 +438,11 @@ def _complete(fields: dict[str, Any], clock: Clocks, domain: str) -> bool:
     now = _execution_now(clock)
     fields.setdefault("started_at", now)
     original_domain = fields.get("execution_clock_domain")
-    fields.update(recorded_at_utc=now, completed_at=now, completion_clock_domain=domain)
+    fields.update(
+        recorded_at_utc=now,
+        completed_at=now,
+        completion_clock_domain=domain,
+    )
     fields.setdefault("execution_clock_domain", domain)
     fields.setdefault("fit_started_at", None)
     # Old reservations lack execution/start evidence. Recovery starts a new
@@ -586,7 +590,11 @@ def _refusal_receipt(
                     )
                 ).scalar_one()
             )
-        fields: dict[str, Any] = {"started_at": started_at}
+        fields: dict[str, Any] = {
+            "started_at": started_at,
+            "evidence_lane": policy.evidence_lane,
+            "release_id": store.config.release_id,
+        }
         if reason != "LEARNING_WORKER_BUSY" and calendar is not None:
             fields["calendar_id"] = calendar.id
         _complete(fields, clock, domain)
@@ -714,6 +722,8 @@ def _consider_learning(
         split = content_id({"training": training_ids, "validation": validation_ids})
         fields: dict[str, Any] = dict(
             recorded_at_utc=started_at,
+            evidence_lane=policy.evidence_lane,
+            release_id=store.config.release_id,
             started_at=started_at,
             execution_clock_domain=domain,
             run_id=run_id,

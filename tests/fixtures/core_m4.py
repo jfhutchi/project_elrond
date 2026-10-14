@@ -73,8 +73,11 @@ async def episodes(path, count=40):
     trips, joins = [], []
     try:
         for i in range(count):
-            session_index = i // 6 if i < 30 else 5 + (i - 30) // 2
-            offset = i % 6 if i < 30 else (i - 30) % 2
+            # M5's separate capacity fixture has four later episodes per session;
+            # the accepted default forty-episode witness keeps its exact schedule.
+            later_per_session = 4 if count == 50 else 2
+            session_index = i // 6 if i < 30 else 5 + (i - 30) // later_per_session
+            offset = i % 6 if i < 30 else (i - 30) % later_per_session
             now = sessions[session_index] + timedelta(minutes=35 + offset * 65)
             sign = 1 if i % 2 == 0 else -1
             broker.now = now

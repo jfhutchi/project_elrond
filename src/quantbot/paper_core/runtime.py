@@ -19,7 +19,14 @@ from quantbot.storage import StorageRepository
 
 
 def require_synthetic(store: CoreStore, broker: SyntheticBroker) -> None:
-    if not isinstance(broker, SyntheticBroker) or broker.account_id != store.config.account_id:
+    from quantbot.paper_core.local_simulation import LocalSimulationBroker
+
+    matches_lane = (
+        isinstance(broker, LocalSimulationBroker)
+        if store.config.evidence_lane == "LOCAL_SIM_REAL_DATA"
+        else isinstance(broker, SyntheticBroker) and not isinstance(broker, LocalSimulationBroker)
+    )
+    if not matches_lane or broker.account_id != store.config.account_id:
         raise ValueError("M1 permits only an explicit matching synthetic broker")
 
 
@@ -31,7 +38,9 @@ def initialize_fixture(
         "account": broker.snapshot().account.model_dump(mode="json"),
         "quantities": tuple(sorted((s, q) for s, q in broker.quantities.items() if q != 0)),
         "positions": broker.position_snapshot(),
-        "source": "EXPLICIT_SYNTHETIC_INITIAL_STATE",
+        "source": "LOCAL_SIMULATION_INITIAL_STATE"
+        if store.config.evidence_lane == "LOCAL_SIM_REAL_DATA"
+        else "EXPLICIT_SYNTHETIC_INITIAL_STATE",
     }
     with store.database.transaction() as session:
         if session.execute(select(table("core_fixture_baselines").c.id)).first() is not None:
@@ -63,6 +72,8 @@ def initialize_fixture(
         "core_guardian_receipts",
         GuardianReceipt(
             recorded_at_utc=now,
+            evidence_lane=store.config.evidence_lane,
+            release_id=store.config.release_id,
             owner=store.config.owner,
             generation=store.config.generation,
             valid_until=now + timedelta(seconds=120),

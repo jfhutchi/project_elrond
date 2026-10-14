@@ -103,7 +103,10 @@ def final_send_in_session(
     receipt = max(receipts, key=lambda r: (r.recorded_at_utc, r.id), default=None)
     # Sample after durable reads and writer-lock acquisition, never the caller's decision time.
     now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
-    reasons = []
+    reasons: list[str] = []
+    from quantbot.paper_core.activation import decision_model_objections
+
+    reasons.extend(decision_model_objections(store, session, decision))
     if repo.get_kill_switch_state().engaged:
         reasons.append("CORE_MANUAL_ENTRY_PAUSE")
     reasons.extend(entry_health_objections(store, session, decision.symbol))

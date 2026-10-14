@@ -1,0 +1,65 @@
+[
+  {
+    "marker": "M5_ACTIVATION:",
+    "path": "docs\\evidence\\paper-core\\m5\\joined-activation.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-in82iv30\\result.txt",
+    "raw_sha256": "fbc5c95ea05b599e0beb576979f0276d871cd4db67aa3d95ecdc7eb3a824b644",
+    "gzip_sha256": "f562bac2fdb97a25fe3fa388e1b308b30ab866e67749a7c1ee7f2990557f46fd",
+    "raw_bytes": 5701450,
+    "phase": "frozen-final-gate-marker-valid-even-if-other-tests-fail"
+  },
+  {
+    "marker": "M5_V33_REPLAY:",
+    "path": "docs\\evidence\\paper-core\\m5\\populated-v33-replay.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-in82iv30\\result.txt",
+    "raw_sha256": "9baddfe1b5868d22e25a2cec684ede651c7a4816462a64d4ef1c60fb21434b87",
+    "gzip_sha256": "f2f440ae5afb2e589d33b8b2cd9843a3f29af9a6f114007d5f33c9c5b8390e6f",
+    "raw_bytes": 221,
+    "phase": "frozen-final-gate-marker-valid-even-if-other-tests-fail"
+  },
+  {
+    "marker": "M5_REAL_SIM:",
+    "path": "docs\\evidence\\paper-core\\m5\\real-data-local-simulation.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-in82iv30\\result.txt",
+    "raw_sha256": "61bff587ed47aa5960a275dc15bdc62168f4006d322dd225227f6f2a0bdc4dba",
+    "gzip_sha256": "e8f69c91852aac9c6d2a73c62c8f7cd13f9c6639f2ccbb0f05a210c66f218eca",
+    "raw_bytes": 119712,
+    "phase": "frozen-final-gate-marker-valid-even-if-other-tests-fail"
+  },
+  {
+    "marker": "M5_CAPACITY_PROGRESS:",
+    "path": "docs\\evidence\\paper-core\\m5\\capacity-progress.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-rg4fvlnq\\result.txt",
+    "raw_sha256": "d7b20cf9d8f10decc76612f8dc3a0b9392b7f180314437117ca755299ac367a9",
+    "gzip_sha256": "ad1d3563d8fe1ad40c2864bb9f58143edb45b80570671bf20f95b37dec569c04",
+    "raw_bytes": 232,
+    "phase": "pre-boundary-repair-passing-test-only-recheck"
+  },
+  {
+    "marker": "M5_CAPACITY:",
+    "path": "docs\\evidence\\paper-core\\m5\\capacity-full-loop.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-rg4fvlnq\\result.txt",
+    "raw_sha256": "719a1eefcd6e20745fa7ea9b2bb1a4cb2704eee343b5b40d11dbab5c486a618c",
+    "gzip_sha256": "8031d394e55c457fa4d35fba3dee4ad5da70d2dd902a348268fc29ac38b9d078",
+    "raw_bytes": 3383281,
+    "phase": "pre-boundary-repair-passing-test-only-recheck"
+  },
+  {
+    "marker": "M5_ACTIVATION:",
+    "path": "docs\\evidence\\paper-core\\m5\\final-boundary-joined-activation.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-es0d3y55\\result.txt",
+    "raw_sha256": "fbc5c95ea05b599e0beb576979f0276d871cd4db67aa3d95ecdc7eb3a824b644",
+    "gzip_sha256": "f562bac2fdb97a25fe3fa388e1b308b30ab866e67749a7c1ee7f2990557f46fd",
+    "raw_bytes": 5701450,
+    "phase": "final-canonical-terminal-boundary-repair"
+  },
+  {
+    "marker": "M5_V33_REPLAY:",
+    "path": "docs\\evidence\\paper-core\\m5\\final-boundary-populated-v33-replay.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-es0d3y55\\result.txt",
+    "raw_sha256": "9baddfe1b5868d22e25a2cec684ede651c7a4816462a64d4ef1c60fb21434b87",
+    "gzip_sha256": "f2f440ae5afb2e589d33b8b2cd9843a3f29af9a6f114007d5f33c9c5b8390e6f",
+    "raw_bytes": 221,
+    "phase": "final-canonical-terminal-boundary-repair"
+  }
+]

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select, text
 
@@ -50,6 +51,7 @@ def evaluate_entry(
     *,
     time_evidence: TimeEvidence | None = None,
     time_projection: TimeProjection | None = None,
+    activation: object | None = None,
 ) -> Decision:
     objections = list(
         observation_objections(
@@ -66,8 +68,27 @@ def evaluate_entry(
         )
     if observation.symbol != config.symbol or model.feature_version != observation.feature_version:
         objections.append("CONTRACT_MISMATCH")
+    from quantbot.paper_core.activation import Activation
+
+    selection = activation if isinstance(activation, Activation) else None
+    prediction = None
     if model.mode != "COLLECT":
-        objections.append("SHADOW_MODEL_NOT_ACTIVATED")
+        if (
+            selection is None
+            or selection.model_id != model.id
+            or selection.model_digest != model.id
+        ):
+            objections.append("SHADOW_MODEL_NOT_ACTIVATED")
+        else:
+            from quantbot.paper_core.learning import predict_bps
+
+            try:
+                prediction = predict_bps(model, (dict(observation.features),))[0]
+            except (KeyError, ValueError, OverflowError):
+                objections.append("PREDICT_FEATURES_INVALID")
+            else:
+                if prediction <= 10:
+                    objections.append("PREDICT_NET_RESERVE")
     if (
         inventory.account.account_id != config.account_id
         or inventory.expected_quantities != inventory.actual_quantities
@@ -101,7 +122,17 @@ def evaluate_entry(
         objections.append("BUYING_POWER_RESERVE")
     if observation.recorded_at_utc >= observation.session_close - timedelta(seconds=120):
         objections.append("SESSION_EXIT_BUFFER")
-    timing = {}
+    timing: dict[str, Any] = {}
+    if selection is not None:
+        timing.update(
+            activation_id=selection.id,
+            model_generation=selection.generation,
+            model_digest=model.id,
+            prediction_bps=prediction,
+            model_mode=model.mode,
+        )
+        if evaluated_at < selection.at:
+            objections.append("CORE_MODEL_UNAVAILABLE_AT_DECISION")
     if config.clock_profile == "PAPER_TIME_V2" and time_evidence is not None:
         timing = {
             "time_evidence_id": time_evidence.id,
@@ -124,13 +155,16 @@ def evaluate_entry(
     return Decision(
         **timing,
         recorded_at_utc=evaluated_at,
+        evidence_lane=config.evidence_lane,
         release_id=config.release_id,
         source_refs=(observation.id, model.id, inventory.id)
         + ((time_evidence.id,) if time_evidence else ()),
         observation_id=observation.id,
         policy_id=config.policy_id,
         model_id=model.id,
-        learning_receipt_id=model.learning_receipt_id,
+        learning_receipt_id=selection.receipt_id
+        if selection and selection.receipt_id
+        else model.learning_receipt_id,
         config_id=content_id(config),
         inventory_id=inventory.id,
         inventory_generation=inventory.generation,
@@ -152,6 +186,11 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         put(session, "core_decisions", decision.id, decision)
         if decision.action != "BUY":
             return None
+        from quantbot.paper_core.activation import active_in_session, decision_model_objections
+
+        if decision_model_objections(store, session, decision):
+            return None
+        selection = active_in_session(store, session)
         repo = StorageRepository(session)
         if entry_health_objections(store, session, decision.symbol):
             return None
@@ -210,10 +249,11 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         if decision != evaluate_entry(
             store.config,
             observed,
-            ModelArtifact(feature_version=observed.feature_version),
+            selection[0] if selection else ModelArtifact(feature_version=observed.feature_version),
             certified,
             time_evidence=time_evidence,
             time_projection=decision.time_projection,
+            activation=selection[1] if selection else None,
         ):
             raise ValueError("decision does not match certified inputs and fixed risk envelope")
         if plan != ProtectionPlan.for_decision(decision, store.config):
@@ -342,6 +382,17 @@ async def trader_cycle(
     )
     if previous is not None:
         return store.read("core_decisions", previous["decision_id"], Decision)
+    from quantbot.paper_core.activation import active_in_session
+
+    model_reasons: tuple[str, ...] = ()
+    selection = None
+    try:
+        with store.database.transaction() as session:
+            selection = active_in_session(store, session)
+    except (ValueError, StateConflictError):
+        model_reasons = ("CORE_MODEL_BINDING_INVALID",)
+    if selection is not None:
+        model = selection[0]
     decision = evaluate_entry(
         store.config,
         observation,
@@ -349,6 +400,7 @@ async def trader_cycle(
         inventory,
         time_evidence=time_evidence,
         time_projection=time_projection,
+        activation=selection[1] if selection else None,
     )
     with store.database.transaction() as session:
         reasons = tuple(
@@ -357,12 +409,13 @@ async def trader_cycle(
                     *entry_health_objections(store, session, observation.symbol),
                     *decision.gates,
                     *acquisition_reasons,
+                    *model_reasons,
                 )
             )
         )
     if reasons:
         decision = decision.model_copy(update={"action": "WAIT", "gates": reasons})
-        if not acquisition_reasons:
+        if not acquisition_reasons and reasons != ("PREDICT_NET_RESERVE",):
             report(
                 store,
                 role="TRADER",

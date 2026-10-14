@@ -28,7 +28,7 @@ class CoreConfig(BrokerModel):
     policy_id: str = "collect-owned-30m-stop100-v1"
     owner: str = "paper-core-synthetic"
     generation: Literal[1] = 1
-    evidence_lane: Literal["SYNTHETIC_TEST"] = "SYNTHETIC_TEST"
+    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA"] = "SYNTHETIC_TEST"
     max_positions: Literal[1] = 1
     position_bps: Literal[50] = 50
     entry_risk_bps: Literal[25] = 25
@@ -50,7 +50,7 @@ class Evidence(BrokerModel):
     legacy_optional_fields: ClassVar[frozenset[str]] = frozenset()
     schema_version: Literal[1] = 1
     release_id: str = "m1-synthetic-fixture"
-    evidence_lane: Literal["SYNTHETIC_TEST"] = "SYNTHETIC_TEST"
+    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA"] = "SYNTHETIC_TEST"
     recorded_at_utc: datetime
     source_refs: tuple[str, ...] = ()
 
@@ -70,11 +70,12 @@ class Evidence(BrokerModel):
 
 
 class Observation(Evidence):
-    legacy_optional_fields = frozenset({"time_evidence_id", "session_open"})
+    legacy_optional_fields = frozenset({"time_evidence_id", "session_open", "capture_received_at"})
+    capture_received_at: datetime | None = None
     time_evidence_id: str | None = None
     session_open: datetime | None = None
     symbol: str
-    feed: Literal["EXPLICIT_SYNTHETIC"] = "EXPLICIT_SYNTHETIC"
+    feed: Literal["EXPLICIT_SYNTHETIC", "LOCAL_SIM_REAL_DATA"] = "EXPLICIT_SYNTHETIC"
     source_start: datetime
     source_end: datetime
     available_at: datetime
@@ -198,6 +199,11 @@ class Decision(Evidence):
             "monotonic_anchor",
             "provider_deadline",
             "time_projection",
+            "activation_id",
+            "model_generation",
+            "model_digest",
+            "prediction_bps",
+            "model_mode",
         }
     )
     time_evidence_id: str | None = None
@@ -205,6 +211,11 @@ class Decision(Evidence):
     monotonic_anchor: float | None = None
     provider_deadline: datetime | None = None
     time_projection: TimeProjection | None = None
+    activation_id: str | None = None
+    model_generation: int | None = None
+    model_digest: str | None = None
+    prediction_bps: Annotated[float, Field(allow_inf_nan=False)] | None = None
+    model_mode: Literal["COLLECT", "PREDICT"] | None = None
     observation_id: str
     policy_id: str
     model_id: str
@@ -268,6 +279,7 @@ class ProtectionPlan(Evidence):
         return cls(
             **timing,
             recorded_at_utc=decision.recorded_at_utc,
+            evidence_lane=config.evidence_lane,
             release_id=config.release_id,
             source_refs=(decision.id,),
             decision_id=decision.id,
@@ -396,7 +408,7 @@ class CashActivity(Evidence):
 class BrokerEvent(Evidence):
     event_id: str = Field(min_length=1)
     raw_digest: str = Field(min_length=1)
-    provider: Literal["EXPLICIT_SYNTHETIC"] = "EXPLICIT_SYNTHETIC"
+    provider: Literal["EXPLICIT_SYNTHETIC", "LOCAL_SIM_REAL_DATA"] = "EXPLICIT_SYNTHETIC"
     account_id: str
     endpoint: str = Field(min_length=1)
     client_order_id: str
@@ -442,7 +454,7 @@ class LearningPolicy(BrokerModel):
     parent_model: ModelArtifact = Field(default_factory=ModelArtifact)
     policy_id: str = "collect-owned-30m-stop100-v1"
     dataset: str = "EXPLICIT_SYNTHETIC"
-    evidence_lane: Literal["SYNTHETIC_TEST"] = "SYNTHETIC_TEST"
+    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA"] = "SYNTHETIC_TEST"
     feature_version: Literal["five-minute-price-alpha-v1"] = "five-minute-price-alpha-v1"
     target_contract: Literal["owned-executed-net-return-v1"] = "owned-executed-net-return-v1"
     exit_contract: Literal["owned-30m-stop100-v1"] = "owned-30m-stop100-v1"
@@ -514,7 +526,9 @@ class LearningCalendar(BrokerModel):
     """Explicit synthetic contiguous exchange calendar; runtime acquisition belongs to M6."""
 
     sequence: XNYSSessionSequence
-    authority: Literal["EXPLICIT_SYNTHETIC_XNYS_V1"] = "EXPLICIT_SYNTHETIC_XNYS_V1"
+    authority: Literal["EXPLICIT_SYNTHETIC_XNYS_V1", "LOCAL_ARCHIVED_XNYS_V1"] = (
+        "EXPLICIT_SYNTHETIC_XNYS_V1"
+    )
 
     @property
     def id(self) -> str:
