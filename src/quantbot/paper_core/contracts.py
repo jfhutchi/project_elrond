@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, ClassVar, Literal, Self
 
@@ -10,6 +10,8 @@ from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, mod
 
 from quantbot.brokers.base import BrokerModel
 from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, Position
+from quantbot.learner.estimators import FittedEstimator
+from quantbot.learner.five_minute import FEATURE_NAMES
 from quantbot.research.manifest import content_id
 
 Money = Annotated[Decimal, Field(allow_inf_nan=False)]
@@ -78,7 +80,9 @@ class Observation(Evidence):
     raw_data_digest: str = Field(min_length=1)
     price: Positive
     features: tuple[tuple[str, float], ...]
-    feature_version: Literal["synthetic-causal-v1"] = "synthetic-causal-v1"
+    feature_version: Literal["synthetic-causal-v1", "five-minute-price-alpha-v1"] = (
+        "synthetic-causal-v1"
+    )
     dependencies: tuple[str, ...]
     dependency_available_at: tuple[datetime | None, ...]
     sequence: int = Field(ge=1)
@@ -86,12 +90,70 @@ class Observation(Evidence):
 
 
 class ModelArtifact(BrokerModel):
-    mode: Literal["COLLECT"] = "COLLECT"
-    description: Literal["nonpredictive baseline; no fitted model"] = (
-        "nonpredictive baseline; no fitted model"
+    mode: Literal["COLLECT", "PREDICT"] = "COLLECT"
+    description: str = "nonpredictive baseline; no fitted model"
+    feature_version: Literal["synthetic-causal-v1", "five-minute-price-alpha-v1"] = (
+        "synthetic-causal-v1"
     )
-    feature_version: Literal["synthetic-causal-v1"] = "synthetic-causal-v1"
-    learning_receipt_id: Literal["M1_NO_LEARNING"] = "M1_NO_LEARNING"
+    learning_receipt_id: str = "M1_NO_LEARNING"
+    estimator: FittedEstimator | None = None
+    target_contract: Literal["owned-executed-net-return-v1"] | None = None
+    policy_id: str | None = None
+    parent_model_id: str | None = None
+    input_ids: tuple[str, ...] = ()
+    fixture_authority: str | None = None
+    constant_bps: Annotated[float, Field(allow_inf_nan=False)] | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_collect_payload(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        additions = {
+            "estimator",
+            "target_contract",
+            "policy_id",
+            "parent_model_id",
+            "input_ids",
+            "fixture_authority",
+            "constant_bps",
+        }
+        for field in additions - self.model_fields_set:
+            payload.pop(field, None)
+        return payload
+
+    @model_validator(mode="after")
+    def predictive_contract(self) -> Self:
+        if self.mode == "COLLECT":
+            if self.estimator is not None or self.constant_bps is not None:
+                raise ValueError("COLLECT remains nonpredictive")
+        elif self.estimator is None and not (
+            self.fixture_authority and self.constant_bps is not None
+        ):
+            raise ValueError("PREDICT needs immutable parameters or explicit fixture authority")
+        elif self.feature_version != "five-minute-price-alpha-v1" or not self.target_contract:
+            raise ValueError(
+                "predictive artifact requires exact feature and owned target contracts"
+            )
+        if self.estimator is not None and (
+            self.estimator.feature_names != FEATURE_NAMES
+            or self.estimator.family != "ridge"
+            or self.estimator.alpha != 1
+            or self.estimator.seed != 0
+        ):
+            raise ValueError("model parameters violate fixed ridge envelope")
+        return self
+
+    @classmethod
+    def fixture_constant(cls, bps: float) -> Self:
+        return cls(
+            mode="PREDICT",
+            description="explicit synthetic constant incumbent",
+            feature_version="five-minute-price-alpha-v1",
+            constant_bps=bps,
+            target_contract="owned-executed-net-return-v1",
+            policy_id="collect-owned-30m-stop100-v1",
+            fixture_authority="M4_SYNTHETIC_NEGATIVE_INCUMBENT",
+            learning_receipt_id="M4_FIXTURE_INCUMBENT",
+        )
 
     @property
     def id(self) -> str:
@@ -365,6 +427,75 @@ class BrokerEvent(Evidence):
 class OutcomeBatch(Evidence):
     outcomes: tuple[RoundTrip, ...] = ()
     reasons: tuple[str, ...] = ()
+
+
+class LearningEpisode(BrokerModel):
+    """Guarded immutable join; historical RoundTrip documents are never expanded."""
+
+    outcome: RoundTrip
+    observation: Observation
+    session: date
+
+
+class LearningPolicy(BrokerModel):
+    parent_model: ModelArtifact = Field(default_factory=ModelArtifact)
+    policy_id: str = "collect-owned-30m-stop100-v1"
+    dataset: str = "EXPLICIT_SYNTHETIC"
+    evidence_lane: Literal["SYNTHETIC_TEST"] = "SYNTHETIC_TEST"
+    feature_version: Literal["five-minute-price-alpha-v1"] = "five-minute-price-alpha-v1"
+    target_contract: Literal["owned-executed-net-return-v1"] = "owned-executed-net-return-v1"
+    exit_contract: Literal["owned-30m-stop100-v1"] = "owned-30m-stop100-v1"
+    family: Literal["ridge"] = "ridge"
+    alpha: Literal[1] = 1
+    seed: Literal[0] = 0
+    clip_bps: Literal[100] = 100
+    fit_timeout_seconds: Literal[30] = 30
+    max_sessions: Literal[60] = 60
+    min_training: Literal[30] = 30
+    min_training_sessions: Literal[5] = 5
+    min_validation: Literal[10] = 10
+    min_validation_sessions: Literal[5] = 5
+    embargo_minutes: Literal[30] = 30
+    min_improvement: Annotated[float, Field(ge=0.05, le=0.05)] = 0.05
+    fits_per_session: Literal[1] = 1
+
+    @property
+    def id(self) -> str:
+        return content_id(self)
+
+
+class SessionMetrics(BrokerModel):
+    session: date
+    outcome_ids: tuple[str, ...]
+    actual_bps: tuple[float, ...]
+    candidate_bps: tuple[float, ...]
+    incumbent_bps: tuple[float, ...]
+    constant_bps: tuple[float, ...]
+    candidate_mse: float
+    incumbent_mse: float
+    constant_mse: float
+
+
+class LearningReceipt(Evidence):
+    run_id: str
+    cutoff: datetime
+    parent_model_id: str
+    resulting_model_id: str
+    candidate_model_id: str | None = None
+    policy: LearningPolicy
+    considered_ids: tuple[str, ...]
+    exclusions: tuple[tuple[str, str], ...]
+    training_ids: tuple[str, ...] = ()
+    validation_ids: tuple[str, ...] = ()
+    input_export_id: str | None = None
+    split_digest: str
+    trial_charge_id: str | None = None
+    status: Literal["NO_CHANGE", "FIT_FAILED", "CANDIDATE_REJECTED", "AWAITING_ACTIVATION"]
+    reason: str
+    validation_absent_reason: str | None = None
+    metrics: tuple[tuple[str, float], ...] = ()
+    session_metrics: tuple[SessionMetrics, ...] = ()
+    activation_at: None = None
 
 
 class Health(Evidence):

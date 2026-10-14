@@ -1,0 +1,173 @@
+{
+  "green-27-boundaries.txt": {
+    "raw_sha256": "c4e8db8611db7c23bdc0b56f78f7104827de77e5fa7bcb254ae710515875fb32",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-9rjse05z/result.txt",
+    "raw_bytes": 101,
+    "file": "green-27-boundaries.txt"
+  },
+  "green-affected.txt": {
+    "raw_sha256": "35ddfa749f6f9fa790a5e58ec8809ae32659afc8da393d17a4ec0f0db1002174",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-_pvuhiat/result.txt",
+    "raw_bytes": 40964599,
+    "file": "green-affected.txt.gz",
+    "compressed_sha256": "2df865a4c3e9bff1308e6f161b37055a1f27406f203dc2d0a976f4407e7e1240"
+  },
+  "green-session-window.txt": {
+    "raw_sha256": "719902afd500c4e190d32ea2aab2ef8a92ca6d70a48a45e026e874200a866f5a",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-ndngg052/result.txt",
+    "raw_bytes": 100,
+    "file": "green-session-window.txt"
+  },
+  "green-v32-replay.txt": {
+    "raw_sha256": "eb36e165dcb7b9a82f511b3e0a69f04ec2ab81eaacf34c4937c60fff3a7d1f3a",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-a4dz00h0/result.txt",
+    "raw_bytes": 100,
+    "file": "green-v32-replay.txt"
+  },
+  "initial-mypy-linux-helpers.txt": {
+    "raw_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+    "original": null,
+    "raw_bytes": 44,
+    "file": "initial-mypy-linux-helpers.txt"
+  },
+  "initial-mypy-linux.txt": {
+    "raw_sha256": "d70fa934f5a524b1c973feae4086f9aadbb518fff6536027b7180683854eefd3",
+    "original": null,
+    "raw_bytes": 46,
+    "file": "initial-mypy-linux.txt"
+  },
+  "initial-mypy-win32-helpers.txt": {
+    "raw_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+    "original": null,
+    "raw_bytes": 44,
+    "file": "initial-mypy-win32-helpers.txt"
+  },
+  "initial-mypy-win32.txt": {
+    "raw_sha256": "d70fa934f5a524b1c973feae4086f9aadbb518fff6536027b7180683854eefd3",
+    "original": null,
+    "raw_bytes": 46,
+    "file": "initial-mypy-win32.txt"
+  },
+  "initial-numerical-green.txt": {
+    "raw_sha256": "425c52bf671acd89de0758575dba53ef9c2c428c40c7c7e9c22f236ab7a04525",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-mtqx3w9r/result.txt",
+    "raw_bytes": 35041140,
+    "file": "initial-numerical-green.txt.gz",
+    "compressed_sha256": "c9e6b7877d04f77ec5421581bb7e0b885f7733ac0a7eff29e831814814a860ea"
+  },
+  "initial-ruff-helpers.txt": {
+    "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "original": null,
+    "raw_bytes": 19,
+    "file": "initial-ruff-helpers.txt"
+  },
+  "initial-ruff.txt": {
+    "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "original": null,
+    "raw_bytes": 19,
+    "file": "initial-ruff.txt"
+  },
+  "intermediate-collect-claim.txt": {
+    "raw_sha256": "6e3a86d1248b47a8d69be7fd193ac5397ea0bdd8adc689c6b0bb78ee5a8441e7",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-fmt943d8/result.txt",
+    "raw_bytes": 11166,
+    "file": "intermediate-collect-claim.txt"
+  },
+  "intermediate-feature-contract.txt": {
+    "raw_sha256": "5bd222e5c581f3a68d4945816b05e882bc328bca6389fabd5d2e5229cdd575e9",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-nq_qkkx2/result.txt",
+    "raw_bytes": 8646,
+    "file": "intermediate-feature-contract.txt"
+  },
+  "intermediate-focused-processes.txt": {
+    "raw_sha256": "52a2c1de8aadd54266b675be0a4d4edbc0daca8b60c11a10897ca91f8fa33eb1",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-j1__3ylb/result.txt",
+    "raw_bytes": 39813327,
+    "file": "intermediate-focused-processes.txt.gz",
+    "compressed_sha256": "d893f98d83b0a0138fe63751557610ada3f04ebea75d1a86c6907a99277cd4d4"
+  },
+  "intermediate-migration-reference.txt": {
+    "raw_sha256": "6102f857e7c1df5ad3f4aa43ced328a82088613692b69188b060399c272f8521",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-yikfez33/result.txt",
+    "raw_bytes": 14462,
+    "file": "intermediate-migration-reference.txt"
+  },
+  "intermediate-novelty-fixture.txt": {
+    "raw_sha256": "d9697002e29750aadf385d9be4dee22a1ce384e15cbc6498fdc6f5be2c24252f",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-v44y2ghv/result.txt",
+    "raw_bytes": 7478,
+    "file": "intermediate-novelty-fixture.txt"
+  },
+  "intermediate-unique-names.txt": {
+    "raw_sha256": "53d1a7b89fcbd6c27a375a65fc7b187bfc76a80c52d2c32a803af5c3a4edc618",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-kpfkp0li/result.txt",
+    "raw_bytes": 4058,
+    "file": "intermediate-unique-names.txt"
+  },
+  "mypy-linux-helpers.txt": {
+    "raw_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+    "original": null,
+    "raw_bytes": 44,
+    "file": "mypy-linux-helpers.txt"
+  },
+  "mypy-linux.txt": {
+    "raw_sha256": "d70fa934f5a524b1c973feae4086f9aadbb518fff6536027b7180683854eefd3",
+    "original": null,
+    "raw_bytes": 46,
+    "file": "mypy-linux.txt"
+  },
+  "mypy-win32-helpers.txt": {
+    "raw_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+    "original": null,
+    "raw_bytes": 44,
+    "file": "mypy-win32-helpers.txt"
+  },
+  "mypy-win32.txt": {
+    "raw_sha256": "d70fa934f5a524b1c973feae4086f9aadbb518fff6536027b7180683854eefd3",
+    "original": null,
+    "raw_bytes": 46,
+    "file": "mypy-win32.txt"
+  },
+  "red-head-registration.txt": {
+    "raw_sha256": "1bf62a227c442a1d38624cd078cfd164cc436bfaf1d2fc56949a46b6faf30db2",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-51atchks/result.txt",
+    "raw_bytes": 1326,
+    "file": "red-head-registration.txt"
+  },
+  "red-interfaces.txt": {
+    "raw_sha256": "1d47b1868ea6f75bdb2eae1fe7a8d5bd6d137cd260b63bfe156b126d342981a2",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-9yp5xl2f/result.txt",
+    "raw_bytes": 13751,
+    "file": "red-interfaces.txt"
+  },
+  "red-shadow-refusal.txt": {
+    "raw_sha256": "59296fd15e2f6aa5308daf83dc8817a6547b9b3062107a9595852c9009dcd825",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-031w_31z/result.txt",
+    "raw_bytes": 1637,
+    "file": "red-shadow-refusal.txt"
+  },
+  "red-zero-baseline.txt": {
+    "raw_sha256": "6cd654bcc933f6b27f73023bff6678b73732385a64c631699101e91363b23f14",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-0cowc3sr/result.txt",
+    "raw_bytes": 872,
+    "file": "red-zero-baseline.txt"
+  },
+  "ruff-helpers.txt": {
+    "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "original": null,
+    "raw_bytes": 19,
+    "file": "ruff-helpers.txt"
+  },
+  "ruff.txt": {
+    "raw_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "original": null,
+    "raw_bytes": 19,
+    "file": "ruff.txt"
+  },
+  "v32-capture.txt": {
+    "raw_sha256": "5378af03fa0e63d4befe5cfc5daa463827a95b5de2c142588d5cf50e5887a011",
+    "original": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-oq6ixue7/result.txt",
+    "raw_bytes": 100,
+    "file": "v32-capture.txt"
+  }
+}

@@ -66,6 +66,8 @@ def evaluate_entry(
         )
     if observation.symbol != config.symbol or model.feature_version != observation.feature_version:
         objections.append("CONTRACT_MISMATCH")
+    if model.mode != "COLLECT":
+        objections.append("SHADOW_MODEL_NOT_ACTIVATED")
     if (
         inventory.account.account_id != config.account_id
         or inventory.expected_quantities != inventory.actual_quantities
@@ -208,7 +210,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         if decision != evaluate_entry(
             store.config,
             observed,
-            ModelArtifact(),
+            ModelArtifact(feature_version=observed.feature_version),
             certified,
             time_evidence=time_evidence,
             time_projection=decision.time_projection,

@@ -16,7 +16,7 @@ from quantbot.paper_core.contracts import CoreConfig, Evidence, Observation, Rec
 from quantbot.paper_core.time_evidence import Clocks, SystemClocks
 from quantbot.research.manifest import canonical_result_json, content_id
 from quantbot.storage import Database, StateConflictError, StorageRepository
-from quantbot.storage.schema import metadata
+from quantbot.storage.schema import SCHEMA_VERSION, metadata
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -270,7 +270,7 @@ class CoreStore:
             r for r in self.documents("core_round_trips") if r["decision_id"] == decision_id
         ]
         return {
-            "schema_version": 32,
+            "schema_version": SCHEMA_VERSION,
             "evidence_lane": "SYNTHETIC_TEST",
             "config": self.config.model_dump(mode="json"),
             "decision_id": decision_id,

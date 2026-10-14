@@ -1,0 +1,32 @@
+{
+  "joined-update": {
+    "file": "joined-update.json.gz",
+    "raw_sha256": "1f6ab04bdb27af97ec97829c11090ee7411bb9573e3b240c5300e602a5d89253",
+    "compressed_sha256": "91322737e7c0249b1cf4e5c5981fbe4d6d89aa83aa868ae0b719cfc8a0176940",
+    "raw_bytes": 33882450
+  },
+  "joined-no-change": {
+    "file": "joined-no-change.json.gz",
+    "raw_sha256": "09b4eb0ba06eb5712149285a2ae060bada992f321d3095ebd02d046f0cfb3890",
+    "compressed_sha256": "d21f8b4556ea4e471ad9f870fa7f3521d0f59ec970720d24805c051ce3f9f467",
+    "raw_bytes": 74169
+  },
+  "fit-failed": {
+    "file": "fit-failed.json.gz",
+    "raw_sha256": "c46501fe9434b886e14c780177819339a99551c818233af78aa5475a5f2008b7",
+    "compressed_sha256": "576b90ee4d03b3bd6f31866e30892cf268f7233d4e883d1937f580b14113fb3d",
+    "raw_bytes": 7176
+  },
+  "process-recovery": {
+    "file": "process-recovery.json.gz",
+    "raw_sha256": "c771ebb8f0831d223d34047f4f8f65b858afa12d0c1ad55248960858194cb062",
+    "compressed_sha256": "386dddea864aaf2597d638992cae1654440be36f21a049aac3dfaa8f7c21fef2",
+    "raw_bytes": 4631352
+  },
+  "cost-correction": {
+    "file": "cost-correction.json.gz",
+    "raw_sha256": "e87f2146a4deb588021e296676e20cfa84d22217365a0ac27739081415ed30f3",
+    "compressed_sha256": "16df3b031146fc15b770bc5d7fbfd7d6cf86645727fadf4b54f0589491d893ee",
+    "raw_bytes": 11188
+  }
+}

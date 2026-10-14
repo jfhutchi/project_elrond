@@ -1,0 +1,23 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+___________ test_shadow_predictive_artifact_cannot_authorize_entry ____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-031w_31z/pytest/test_shadow_predictive_artifac0')
+
+    def test_shadow_predictive_artifact_cannot_authorize_entry(tmp_path):
+        from tests.fixtures.core_m2 import prepare
+        from quantbot.paper_core.contracts import ModelArtifact
+        from quantbot.paper_core.trader import evaluate_entry
+    
+        db, store, broker, proof, observation, _ = prepare(tmp_path)
+        try:
+            observation = observation.model_copy(update={"feature_version": "five-minute-price-alpha-v1"})
+            decision = evaluate_entry(store.config, observation, ModelArtifact.fixture_constant(-20), proof)
+>           assert "SHADOW_MODEL_NOT_ACTIVATED" in decision.gates
+E           AssertionError: assert 'SHADOW_MODEL_NOT_ACTIVATED' in ()
+E            +  where () = Decision(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=datetime..., 0, tzinfo=datetime.timezone.utc), source_start=datetime.datetime(2026, 10, 14, 13, 55, tzinfo=datetime.timezone.utc)).gates
+
+tests\fault\paper_core\test_learning_boundaries.py:15: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_shadow_predictive_artifact_cannot_authorize_entry
+1 failed in 2.62s

@@ -1,0 +1,12 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________ test_zero_baseline_error_is_not_a_five_percent_improvement __________
+
+    def test_zero_baseline_error_is_not_a_five_percent_improvement():
+>       from quantbot.paper_core.learning import _passes_validation
+E       ImportError: cannot import name '_passes_validation' from 'quantbot.paper_core.learning' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\learning.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:243: ImportError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_zero_baseline_error_is_not_a_five_percent_improvement
+1 failed in 1.81s

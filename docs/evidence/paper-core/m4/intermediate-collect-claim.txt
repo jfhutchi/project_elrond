@@ -1,0 +1,207 @@
+FF............
+================================== FAILURES ===================================
+_________________ test_actual_costed_episodes_fit_and_export __________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-fmt943d8/pytest/test_actual_costed_episodes_fi0')
+
+    @pytest.mark.asyncio
+    async def test_actual_costed_episodes_fit_and_export(tmp_path):
+        from quantbot.paper_core.contracts import LearningPolicy, ModelArtifact
+        from quantbot.paper_core.learning import consider_learning, predict_bps
+        from quantbot.research.registry import HypothesisRegistry
+    
+>       db, store, broker, parent, trips, joins = await episodes(tmp_path)
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_learning_receipts.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\fixtures\core_m4.py:54: in episodes
+    decision = await trader_cycle(store, broker, observation, collect, proof, now=now)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\paper_core\trader.py:378: in trader_cycle
+    entry = claim_entry(store, decision, plan)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x0000010F3370A710>
+decision = Decision(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=datetime..., 0, tzinfo=datetime.timezone.utc), source_start=datetime.datetime(2026, 10, 14, 13, 30, tzinfo=datetime.timezone.utc))
+plan = ProtectionPlan(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=da..., 14, 35, tzinfo=datetime.timezone.utc), exit_buffer_seconds=120, exit_quantity_rule='owned-filled-minus-owned-exited')
+
+    def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> EntryIntent | None:
+        links = table("core_intent_links")
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            put(session, "core_decisions", decision.id, decision)
+            if decision.action != "BUY":
+                return None
+            repo = StorageRepository(session)
+            if entry_health_objections(store, session, decision.symbol):
+                return None
+            if repo.get_kill_switch_state().engaged:
+                return None
+            certs = table("core_inventory_certifications")
+            latest = session.execute(
+                select(certs.c.proof_id).order_by(certs.c.generation.desc()).limit(1)
+            ).scalar_one()
+            certification = latest_certification(session)
+            revoked = table("core_cash_authority_revocations")
+            if (
+                certification is None
+                or certification[1] != latest
+                or session.execute(
+                    select(revoked.c.snapshot_id).where(
+                        revoked.c.snapshot_id == "core-certified-" + latest
+                    )
+                ).first()
+                or decision.inventory_id != latest
+                or decision.config_id != store.config_id
+            ):
+                return None
+            observed = Observation.model_validate_json(
+                session.execute(
+                    select(table("core_observations").c.payload).where(
+                        table("core_observations").c.id == decision.observation_id
+                    )
+                ).scalar_one()
+            )
+            certified = ReconciliationProof.model_validate_json(
+                session.execute(
+                    select(table("core_reconciliation_proofs").c.payload).where(
+                        table("core_reconciliation_proofs").c.id == latest
+                    )
+                ).scalar_one()
+            )
+            if not store.cash_authority_current(session, certified):
+                return None
+            time_evidence = None
+            if decision.time_evidence_id:
+                time_evidence = TimeEvidence.model_validate_json(
+                    session.execute(
+                        select(table("core_time_evidence").c.payload).where(
+                            table("core_time_evidence").c.id == decision.time_evidence_id
+                        )
+                    ).scalar_one()
+                )
+                from quantbot.paper_core.time_evidence import evidence_objections
+    
+                live_projection = project_time_evidence(time_evidence, store.clocks)
+                if evidence_objections(time_evidence, store.clocks) or entry_time_objections(
+                    observed, time_evidence, store.config, projection=live_projection
+                ):
+                    return None
+            if decision != evaluate_entry(
+                store.config,
+                observed,
+                ModelArtifact(),
+                certified,
+                time_evidence=time_evidence,
+                time_projection=decision.time_projection,
+            ):
+>               raise ValueError("decision does not match certified inputs and fixed risk envelope")
+E               ValueError: decision does not match certified inputs and fixed risk envelope
+
+src\quantbot\paper_core\trader.py:216: ValueError
+___________________________ test_truthful_no_change ___________________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-fmt943d8/pytest/test_truthful_no_change0')
+
+    @pytest.mark.asyncio
+    async def test_truthful_no_change(tmp_path):
+        from quantbot.paper_core.contracts import LearningPolicy
+        from quantbot.paper_core.learning import consider_learning
+    
+>       db, store, broker, parent, trips, joins = await episodes(tmp_path, 2)
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_learning_receipts.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\fixtures\core_m4.py:54: in episodes
+    decision = await trader_cycle(store, broker, observation, collect, proof, now=now)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\paper_core\trader.py:378: in trader_cycle
+    entry = claim_entry(store, decision, plan)
+            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x0000010F33BCA850>
+decision = Decision(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=datetime..., 0, tzinfo=datetime.timezone.utc), source_start=datetime.datetime(2026, 10, 14, 13, 30, tzinfo=datetime.timezone.utc))
+plan = ProtectionPlan(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=da..., 14, 35, tzinfo=datetime.timezone.utc), exit_buffer_seconds=120, exit_quantity_rule='owned-filled-minus-owned-exited')
+
+    def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> EntryIntent | None:
+        links = table("core_intent_links")
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            put(session, "core_decisions", decision.id, decision)
+            if decision.action != "BUY":
+                return None
+            repo = StorageRepository(session)
+            if entry_health_objections(store, session, decision.symbol):
+                return None
+            if repo.get_kill_switch_state().engaged:
+                return None
+            certs = table("core_inventory_certifications")
+            latest = session.execute(
+                select(certs.c.proof_id).order_by(certs.c.generation.desc()).limit(1)
+            ).scalar_one()
+            certification = latest_certification(session)
+            revoked = table("core_cash_authority_revocations")
+            if (
+                certification is None
+                or certification[1] != latest
+                or session.execute(
+                    select(revoked.c.snapshot_id).where(
+                        revoked.c.snapshot_id == "core-certified-" + latest
+                    )
+                ).first()
+                or decision.inventory_id != latest
+                or decision.config_id != store.config_id
+            ):
+                return None
+            observed = Observation.model_validate_json(
+                session.execute(
+                    select(table("core_observations").c.payload).where(
+                        table("core_observations").c.id == decision.observation_id
+                    )
+                ).scalar_one()
+            )
+            certified = ReconciliationProof.model_validate_json(
+                session.execute(
+                    select(table("core_reconciliation_proofs").c.payload).where(
+                        table("core_reconciliation_proofs").c.id == latest
+                    )
+                ).scalar_one()
+            )
+            if not store.cash_authority_current(session, certified):
+                return None
+            time_evidence = None
+            if decision.time_evidence_id:
+                time_evidence = TimeEvidence.model_validate_json(
+                    session.execute(
+                        select(table("core_time_evidence").c.payload).where(
+                            table("core_time_evidence").c.id == decision.time_evidence_id
+                        )
+                    ).scalar_one()
+                )
+                from quantbot.paper_core.time_evidence import evidence_objections
+    
+                live_projection = project_time_evidence(time_evidence, store.clocks)
+                if evidence_objections(time_evidence, store.clocks) or entry_time_objections(
+                    observed, time_evidence, store.config, projection=live_projection
+                ):
+                    return None
+            if decision != evaluate_entry(
+                store.config,
+                observed,
+                ModelArtifact(),
+                certified,
+                time_evidence=time_evidence,
+                time_projection=decision.time_projection,
+            ):
+>               raise ValueError("decision does not match certified inputs and fixed risk envelope")
+E               ValueError: decision does not match certified inputs and fixed risk envelope
+
+src\quantbot\paper_core\trader.py:216: ValueError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_learning_receipts.py::test_actual_costed_episodes_fit_and_export
+FAILED tests/integration/paper_core/test_learning_receipts.py::test_truthful_no_change
+2 failed, 12 passed in 3.37s

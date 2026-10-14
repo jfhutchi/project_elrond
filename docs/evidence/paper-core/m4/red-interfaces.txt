@@ -1,0 +1,206 @@
+FFFFFFFFFFFFFF                                                           [100%]
+================================== FAILURES ===================================
+_________________ test_actual_costed_episodes_fit_and_export __________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-9yp5xl2f/pytest/test_actual_costed_episodes_fi0')
+
+    @pytest.mark.asyncio
+    async def test_actual_costed_episodes_fit_and_export(tmp_path):
+>       from quantbot.paper_core.contracts import LearningPolicy, ModelArtifact
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\integration\paper_core\test_learning_receipts.py:12: ImportError
+___________________________ test_truthful_no_change ___________________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-9yp5xl2f/pytest/test_truthful_no_change0')
+
+    @pytest.mark.asyncio
+    async def test_truthful_no_change(tmp_path):
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\integration\paper_core\test_learning_receipts.py:42: ImportError
+_______________________ test_envelope_is_fixed[alpha-2] _______________________
+
+field = 'alpha', value = 2
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+_______________________ test_envelope_is_fixed[seed-1] ________________________
+
+field = 'seed', value = 1
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+____________________ test_envelope_is_fixed[clip_bps-101] _____________________
+
+field = 'clip_bps', value = 101
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+_______________ test_envelope_is_fixed[fit_timeout_seconds-31] ________________
+
+field = 'fit_timeout_seconds', value = 31
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+___________________ test_envelope_is_fixed[max_sessions-61] ___________________
+
+field = 'max_sessions', value = 61
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+___________________ test_envelope_is_fixed[min_training-29] ___________________
+
+field = 'min_training', value = 29
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+_______________ test_envelope_is_fixed[min_training_sessions-4] _______________
+
+field = 'min_training_sessions', value = 4
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+__________________ test_envelope_is_fixed[min_validation-9] ___________________
+
+field = 'min_validation', value = 9
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+______________ test_envelope_is_fixed[min_validation_sessions-4] ______________
+
+field = 'min_validation_sessions', value = 4
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+_________________ test_envelope_is_fixed[embargo_minutes-29] __________________
+
+field = 'embargo_minutes', value = 29
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+________________ test_envelope_is_fixed[min_improvement-0.04] _________________
+
+field = 'min_improvement', value = 0.04
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+_________________ test_envelope_is_fixed[fits_per_session-2] __________________
+
+field = 'fits_per_session', value = 2
+
+    @pytest.mark.parametrize("field,value", [("alpha", 2), ("seed", 1), ("clip_bps", 101),
+        ("fit_timeout_seconds", 31), ("max_sessions", 61), ("min_training", 29),
+        ("min_training_sessions", 4), ("min_validation", 9), ("min_validation_sessions", 4),
+        ("embargo_minutes", 29), ("min_improvement", .04), ("fits_per_session", 2)])
+    def test_envelope_is_fixed(field, value):
+        from pydantic import ValidationError
+>       from quantbot.paper_core.contracts import LearningPolicy
+E       ImportError: cannot import name 'LearningPolicy' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_learning_boundaries.py:12: ImportError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_learning_receipts.py::test_actual_costed_episodes_fit_and_export
+FAILED tests/integration/paper_core/test_learning_receipts.py::test_truthful_no_change
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[alpha-2]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[seed-1]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[clip_bps-101]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[fit_timeout_seconds-31]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[max_sessions-61]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_training-29]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_training_sessions-4]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_validation-9]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_validation_sessions-4]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[embargo_minutes-29]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_improvement-0.04]
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[fits_per_session-2]
+14 failed in 1.86s
