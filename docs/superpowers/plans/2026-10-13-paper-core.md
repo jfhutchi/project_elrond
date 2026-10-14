@@ -12,11 +12,11 @@
 
 ## Global constraints
 
-- Status: **M0–M3 ACCEPTED; M4 READY**. M4–M6 not started. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
+- Status: **M0–M4 ACCEPTED**. M5 is the next ready milestone; M6 awaits M5 and concrete rollout review. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
 - PAPER only; no LIVE path, paid CI, new credentials/services, OS resync/security/policy changes, forced trades, holdings reset, deleted history, silent stop clearance, or untested protection removal.
 - Existing limits remain: one new position, 50 bps of equity per position, 25 bps maximum entry risk, 100 bps stop, 30-minute horizon, ≥120 s session-exit buffer, 500 bps buying-power reserve. Existing tighter portfolio controls win.
 - Relative skew bound remains **±2 s**. The locally approved `PAPER_TIME_V2` implementation keeps 5 s acquisition, 120 s maximum evidence age and initial 50 ms continuity bound. Exact operational commissioning remains part of M6 review; do not silently substitute it for an existing runtime's STRICT_V0/RELATIVE_V1 profile.
-- The locally approved ridge policy uses alpha=1, seed=0, prediction clip ±100 bps, at most one 30 s fit/session, 30 training episodes/≥5 sessions, 10 later validation episodes/≥5 sessions, ≥30 min embargo, last 60 eligible sessions. Implementation approval does not commission operational model use or unattended activation. Use the canonical holdout and permanent trial registry.
+- The locally approved ridge policy uses alpha=1, seed=0, prediction clip ±100 bps, at most one 30 s candidate procedure/session, an initial 30 training episodes/≥5 sessions and 10 later scored episodes/≥5 sessions, and ≥30 min embargo. The October 14 user amendment requires daily consideration after ten completed exchange sessions, final fitting on all eligible history and fixed 2× weight on the latest ten sessions; no 60-session cap. Five chronological expanding folds validate the procedure before the all-history refit. Implementation approval does not commission operational model use or unattended activation. Use the canonical holdout and permanent trial registry.
 - Preserve source/time/cost/evidence-lane provenance. Unknown fees never become zero. Simulated results never become broker-PAPER acceptance. A passed unit suite does not complete a milestone.
 - User refinement: no automatic global PAPER kill switch for ordinary clock/data/provider/acquisition faults. Use scoped waits with automatic fresh-evidence recovery; keep protection and trustworthy outcomes/learning running. Manual pause remains explicit; genuine contradictions quarantine only necessary authority/evidence.
 - Current workspace is old (`9f5ece9`), current main audited at `b812c64`, PR287 at `8bb84cf`, PR288 at `a6f9eb3`. At execution, resolve heads and docs again; create an isolated branch from reviewed main. Do not build from the old workspace branch or silently inherit unrelated work.
@@ -34,7 +34,7 @@ After each milestone a reviewer who did not implement it reviews both diff and i
 | M1 | M0 accepted | Thin synthetic observation → guarded intent → owned fill → independent exit → flat round trip; protection baseline repair | ACCEPTED |
 | M2 | M1 accepted | Cost provenance and restart-safe uncertain/partial-order/outcome processing | ACCEPTED |
 | M3 | M2 accepted; clock contract reviewed | Scoped recovery/timing and per-symbol eligibility; outcome/protection progress during entry failure | ACCEPTED |
-| M4 | M2 accepted; learning envelope reviewed | Real bounded outcome-driven parameter fitting and explicit NO_CHANGE, in shadow | READY |
+| M4 | M2 accepted; learning envelope reviewed | Real bounded outcome-driven parameter fitting and explicit NO_CHANGE, in shadow | ACCEPTED |
 | M5 | M3 + M4 accepted | Atomic model activation and later decision witness; synthetic whole loop; real-data local simulation | NOT STARTED |
 | M6 | M5 accepted; concrete rollout review | Frozen release handover and a naturally eligible broker-PAPER whole-loop evidence bundle | NOT STARTED |
 
@@ -167,7 +167,11 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 ## M4 — Sol implementation brief: bounded learning from costed trades
 
+**Acceptance:** Source `579e0a352549c61edf08039a5c2934ce480755ab` independently ACCEPTED after temporal and future-cutoff repairs. [Review](../../evidence/paper-core/m4/review.md), [amended integrated evidence](../../evidence/paper-core/m4/fix1/README.md), and [focused cutoff repair](../../evidence/paper-core/m4/fix2/README.md) retain distinct verification runs:691 passed/26 PostgreSQL skips at52ec, then61 focused passes at579e; six exact CI checks pass. The full40-trade join validates five chronological folds then all40 refit; late corrections, later42-outcome recovery and quiet-session NO_CHANGE are demonstrated. Root and reviewer independently verified arithmetic/provenance. Candidate activation remains null; comparator-document duplication is a nonblocking deferred minor for whole-branch review.
+
 **Scope:** Implement actual numerical updates in shadow from M2 fee-complete outcomes under the proposed fixed `owned-executed-net-return-v1` contract. No model activation or broker authority. Design/learning-envelope approval is prerequisite. A failure/no-op must produce a truthful receipt.
+
+**October 14 user amendment (binding):** Consider learning daily after ten completed trading sessions. Final training uses all eligible history with fixed 2× weight on the latest ten completed exchange sessions and 1× older history, normalized to mean 1; remove the old 60-session cap. Validate the fixed procedure through five past-only expanding folds, then refit all eligible history after gates pass. Fold-specific historical outcome revisions and contemporaneous incumbent predictions prevent leakage; current parent remains lineage, not a retrospective comparator. Exact contracts, minimum sample/session floors and final-refit versus procedure-score distinction are in the updated specification. One permanently charged procedure and one 30-second child budget per completed session remain. The existing fixed-split evidence stays immutable; add new versioned evidence. Complete the two independent temporal review repairs before the final combined regression gate.
 
 **Relevant code:** `learner/estimators.py`, canonical training/holdout/trial gates in `experiment_research.py`, `experiment_adaptation.py`, `experiment_contract.py`, `research/registry.py`; M2 outcome revisions. Reuse deterministic ridge implementation, not the entire experiment scheduler. Old fixed-horizon market-label targets must never be mixed with executed-exit targets.
 
@@ -177,11 +181,11 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 **Definition of done:** Numerical coefficients change for the registered synthetic positive/negative feature signal. Exact replay yields same artifact. With <30 training episodes, fewer sessions, missing costs, protected data, incompatible policy or reused input, record deterministic NO_CHANGE or a named refusal without fitting. Fit failure consumes one trial and preserves parent. Late fee revisions do not add a sample; old model retains its old input references and next consideration cites the corrected revision. Every update or justified NO_CHANGE records parent=result/new model, input IDs, validation or explicit reason absent, and null activation time. Sim/real/synthetic data cannot enter another lane's training.
 
-- [ ] Add tests for all fixed numeric envelope values and a canary protected row that must never reach the estimator.
-- [ ] Run `python -m pytest tests/integration/paper_core/test_learning_receipts.py tests/fault/paper_core/test_learning_boundaries.py -q`; save red assertions.
-- [ ] Implement fixed deterministic fitting and failure receipts; no tuning loop, regime search or automatic risk change.
-- [ ] Produce two integrated M2→M4 bundles: a real parameter update from synthetic costed trades and a justified NO_CHANGE. Include prior/resulting coefficient values and validation split evidence.
-- [ ] Review target semantics, selection bias and leakage independently; commit and update plan before activation work.
+- [x] Add tests for all fixed numeric envelope values and a canary protected row that must never reach the estimator.
+- [x] Run `python -m pytest tests/integration/paper_core/test_learning_receipts.py tests/fault/paper_core/test_learning_boundaries.py -q`; save red assertions.
+- [x] Implement fixed deterministic fitting and failure receipts; no tuning loop, regime search or automatic risk change.
+- [x] Produce two integrated M2→M4 bundles: a real parameter update from synthetic costed trades and a justified NO_CHANGE. Include prior/resulting coefficient values and validation split evidence.
+- [x] Review target semantics, selection bias and leakage independently; commit and update plan before activation work.
 
 **Migration/rollback:** Legacy data is compatible only through explicit target/policy/cost contracts. Do not train from copied DB counts, unknown fee zeros or existing market-label artifacts as if they were executed outcomes. Fitting is shadow only; rollback leaves parent and immutable failed/candidate records intact.
 
@@ -195,7 +199,7 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 **Interfaces:** `activate_model(store, *, expected_model_id: str, candidate_id: str, authority: ActivationAuthority, at: datetime) -> Activation`; `read_active_model(store) -> ModelArtifact`; `rollback_model(store, *, expected_model_id: str, target_id: str, reason: str, at: datetime) -> Activation`; `export_loop_evidence(store, *, decision_id: str) -> EvidenceBundle`. Activation atomically binds pointer/event/digest and fences claims; never changes open-lot exit ownership or historical model attribution.
 
-**Acceptance:** Use 30 train/10 later validation synthetic round trips across 5+5 sessions, balanced ±20 bps target linked to a causal feature, incumbent −20 bps. Ridge beats constant/incumbent and its positive-feature prediction exceeds the 10 bps modeled reserve. The **same later observation and gate state** abstains with incumbent and buys with candidate after real activation code. Assert used artifact digest and receipt ID, not merely registry existence. A competing activation, crash at every commit edge, wrong digest, stale approval, or unresolved submission cannot expose an unapproved model. NO_CHANGE preserves pointer and decision behavior. Rollback retains all subsequent fill/learning history.
+**Acceptance:** Use the amended M4 procedure: 30 initial training/10 later scored synthetic round trips across 5+5 sessions, balanced ±20 bps target linked to a causal feature, explicit fixture comparator −20 bps, and final refit on all 40 outcomes after past-only fold validation. The final artifact's positive-feature prediction exceeds the 10 bps modeled reserve. The **same later observation and gate state** abstains with incumbent and buys with candidate after real activation code. Assert used artifact digest, actual qualifying procedure receipt and completion/availability, not merely registry existence or an in-sample refit score. A competing activation, crash at every commit edge, wrong digest, stale approval, or unresolved submission cannot expose an unapproved model. NO_CHANGE preserves pointer and decision behavior. Rollback retains all subsequent fill/learning history.
 
 - [ ] Write and run the named synthetic activation/race tests; require the existing production decision function in both before/after comparisons.
 - [ ] Implement atomic activation, acknowledgement, restart selection and reviewed compatibility lineage. No auto-activation without a commissioned authority envelope.
