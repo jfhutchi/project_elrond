@@ -287,6 +287,8 @@ async def test_actual_protection_action_is_owned_and_economically_attributed(
                 quantity=1,
                 price=90,
                 fee=Decimal(".20"),
+                fee_source="BROKER_REPORTED",
+                fee_reference="synthetic-protective-fee-fixture",
                 occurred_at=NOW + timedelta(minutes=2),
             )
         )

@@ -295,18 +295,17 @@ async def test_protocol_error_after_send_attempt_does_not_free_slot(tmp_path):
 async def test_refusal_before_error_commit_latches_against_clock_reversed_retry(
     tmp_path, monkeypatch
 ):
-    from quantbot.execution import ExecutionCoordinator
     from quantbot.paper_core.send_guard import final_send_objections
 
     db, store, broker, proof, observation, model = prepare(tmp_path)
-    original = ExecutionCoordinator._transition
+    original = StorageRepository.transition_order_intent
 
-    def crash_before_error(self, intent_id, target, expected):
+    def crash_before_error(self, intent_id, target, *, expected_current):
         if target is IntentState.ERROR:
             raise RuntimeError("crash before ERROR commit")
-        return original(self, intent_id, target, expected)
+        return original(self, intent_id, target, expected_current=expected_current)
 
-    monkeypatch.setattr(ExecutionCoordinator, "_transition", crash_before_error)
+    monkeypatch.setattr(StorageRepository, "transition_order_intent", crash_before_error)
     try:
         delay_final_fetch(broker, "get_account", at=NOW + timedelta(minutes=31))
         with pytest.raises(RuntimeError, match="ERROR commit"):
@@ -323,8 +322,10 @@ async def test_refusal_before_error_commit_latches_against_clock_reversed_retry(
                         if e.event_type == "CORE_ENTRY_SEND_REFUSED"
                     ]
                 )
-                == 1
+                == 0
             )
+        # Retained standalone guard can still leave its precise latch before ERROR.
+        assert final_send_objections(store, intent, OrderPurpose.ENTRY, clock=lambda: broker.now)
         broker.now = NOW
         assert final_send_objections(
             store, intent, OrderPurpose.ENTRY, clock=lambda: broker.now

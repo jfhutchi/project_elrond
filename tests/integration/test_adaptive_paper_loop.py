@@ -146,6 +146,8 @@ async def test_shadow_forecast_simulated_fill_independent_exit_outcome_and_fresh
                 quantity=intent.quantity,
                 price=price,
                 fee=Decimal(".10"),
+                fee_source="BROKER_REPORTED",
+                fee_reference="synthetic-complete-fee-fixture",
                 occurred_at=broker.now,
             )
         )

@@ -85,6 +85,33 @@ def _adopt(repo: StorageRepository, intent: OrderIntent, order: BrokerOrder) -> 
         repo.transition_order_intent(intent.intent_id, target, expected_current=intent.state)
 
 
+class _EvidenceRejected(StateConflictError):
+    """Exact conflicting bindings survive atomic business rollback for audit scope."""
+
+    def __init__(self, reason: str, clients: tuple[str, ...], source_ids: tuple[str, ...]):
+        super().__init__(reason)
+        self.clients = clients
+        self.source_ids = source_ids
+
+
+def _implicated_clients(repo: StorageRepository, event: BrokerEvent) -> tuple[str, ...]:
+    clients = {event.client_order_id}
+    fills = [event.fill] if event.fill is not None else []
+    if event.cost is not None:
+        fill = repo.get_fill(event.cost.fill_id)
+        if fill is not None:
+            fills.append(fill)
+    for fill in fills:
+        order = repo.get_broker_order(fill.broker_order_id)
+        if order is not None:
+            clients.add(order.client_order_id)
+    if event.order is not None:
+        old_order = repo.get_broker_order(event.order.broker_order_id)
+        if old_order is not None:
+            clients.add(old_order.client_order_id)
+    return tuple(sorted(clients))
+
+
 def import_broker_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[str, ...]:
     try:
         return _import_events(store, events)
@@ -105,7 +132,7 @@ def import_broker_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> t
         identity = content_id({"events": events, "reason": str(error)})
         with store.database.transaction() as session:
             repo = StorageRepository(session)
-            clients = {event.client_order_id for event in events}
+            clients = set(error.clients) if isinstance(error, _EvidenceRejected) else set()
             lot_ids = []
             for link in session.execute(select(table("core_intent_links"))).mappings():
                 intent = repo.get_order_intent(link["intent_id"])
@@ -119,6 +146,10 @@ def import_broker_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> t
                 occurred_at=max(e.recorded_at_utc for e in events),
                 detail={
                     "source_events": [e.model_dump(mode="json") for e in events],
+                    "implicated_client_order_ids": sorted(clients),
+                    "implicated_source_ids": list(error.source_ids)
+                    if isinstance(error, _EvidenceRejected)
+                    else [],
                     "lot_ids": sorted(set(lot_ids)),
                     "evidence_lane": store.config.evidence_lane,
                 },
@@ -155,131 +186,159 @@ def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[s
         ordered = sorted(events, key=lambda e: 0 if e.order else 1 if e.fill else 2)
         for supplied in ordered:
             event = BrokerEvent.model_validate(supplied.model_dump())
-            if (
-                event.account_id != store.config.account_id
-                or event.evidence_lane != store.config.evidence_lane
-                or event.release_id != store.config.release_id
-                or event.correction_of is not None
-            ):
-                raise StateConflictError("source binding or correction authority mismatch")
-            identity = _source_id(event)
-            sources = table("core_broker_event_sources")
-            previous = session.execute(
-                select(sources.c.payload).where(sources.c.id == identity)
-            ).scalar_one_or_none()
-            if previous is not None:
-                old = BrokerEvent.model_validate_json(previous)
-                if _semantic(old) != _semantic(event):
-                    raise StateConflictError("conflicting source event replay")
-                continue
-            intent = next(
-                (
-                    i
-                    for i in (repo.get_order_intent(identity) for identity in links)
-                    if i is not None and i.client_order_id == event.client_order_id
-                ),
-                None,
-            )
-            if intent is None or intent.intent_id not in links:
-                raise StateConflictError("event has no accepted owned intent")
-            if event.order:
-                _adopt(repo, intent, event.order)
-            if event.fill:
-                order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+            try:
                 if (
-                    order is None
-                    or event.fill.broker_order_id != order.broker_order_id
-                    or event.fill.symbol != intent.symbol
-                    or event.fill.side is not intent.side
-                    or event.fill.occurred_at < order.submitted_at
+                    event.account_id != store.config.account_id
+                    or event.evidence_lane != store.config.evidence_lane
+                    or event.release_id != store.config.release_id
+                    or event.correction_of is not None
                 ):
-                    raise StateConflictError("fill ownership/chronology mismatch")
-                repo.record_fill(event.fill)
-            if event.cost:
-                fill = repo.get_fill(event.cost.fill_id)
-                order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
-                if fill is None or order is None or fill.broker_order_id != order.broker_order_id:
-                    raise StateConflictError("cost has no exact owned fill")
-                if event.cost.recorded_at_utc != event.recorded_at_utc:
-                    raise StateConflictError("cost availability does not match source receipt")
-                record_cost(session, event.cost, fill)
-            if event.cash_activity:
-                activity = event.cash_activity
-                fills = repo.list_fills()
-                movements = dict(activity.movements)
-                if (
-                    not activity.complete
-                    or activity.account_id != store.config.account_id
-                    or activity.evidence_lane != store.config.evidence_lane
-                    or activity.release_id != store.config.release_id
-                    or len(movements) != len(activity.movements)
-                    or set(movements) != {f.fill_id for f in fills}
-                    or len(activity.activity_ids) != len(fills)
-                    or len(set(activity.activity_ids)) != len(activity.activity_ids)
-                    or activity.watermark > activity.recorded_at_utc
-                    or any(activity.watermark < f.occurred_at for f in fills)
-                    or activity.recorded_at_utc != event.recorded_at_utc
-                ):
-                    raise StateConflictError(
-                        "cash activity complete ownership watermark unavailable"
-                    )
-                for fill in fills:
-                    gross = fill.quantity * fill.price
-                    amount = movements[fill.fill_id]
-                    if (fill.side is OrderSide.BUY and amount > -gross) or (
-                        fill.side is OrderSide.SELL and (amount > gross or amount < 0)
-                    ):
-                        raise StateConflictError(
-                            "cash movement contradicts fill direction/notional"
+                    raise StateConflictError("source binding or correction authority mismatch")
+                identity = _source_id(event)
+                sources = table("core_broker_event_sources")
+                previous = session.execute(
+                    select(sources.c.payload).where(sources.c.id == identity)
+                ).scalar_one_or_none()
+                if previous is not None:
+                    old = BrokerEvent.model_validate_json(previous)
+                    if _semantic(old) != _semantic(event):
+                        raise _EvidenceRejected(
+                            "conflicting source event replay",
+                            tuple(
+                                sorted(
+                                    set(_implicated_clients(repo, event))
+                                    | set(_implicated_clients(repo, old))
+                                )
+                            ),
+                            (identity,),
                         )
-                existing = session.execute(
-                    select(table("core_cash_activities").c.payload)
-                ).scalars()
-                for encoded in existing:
-                    from quantbot.paper_core.contracts import CashActivity
-
-                    old_activity = CashActivity.model_validate_json(encoded)
+                    continue
+                intent = next(
+                    (
+                        i
+                        for i in (repo.get_order_intent(identity) for identity in links)
+                        if i is not None and i.client_order_id == event.client_order_id
+                    ),
+                    None,
+                )
+                if intent is None or intent.intent_id not in links:
+                    raise StateConflictError("event has no accepted owned intent")
+                if event.order:
+                    _adopt(repo, intent, event.order)
+                if event.fill:
+                    order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
                     if (
-                        dict(old_activity.movements).keys() == movements.keys()
-                        and old_activity.movements != activity.movements
+                        order is None
+                        or event.fill.broker_order_id != order.broker_order_id
+                        or event.fill.symbol != intent.symbol
+                        or event.fill.side is not intent.side
+                        or event.fill.occurred_at < order.submitted_at
+                    ):
+                        raise StateConflictError("fill ownership/chronology mismatch")
+                    repo.record_fill(event.fill)
+                if event.cost:
+                    fill = repo.get_fill(event.cost.fill_id)
+                    order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+                    if (
+                        fill is None
+                        or order is None
+                        or fill.broker_order_id != order.broker_order_id
+                    ):
+                        raise StateConflictError("cost has no exact owned fill")
+                    if event.cost.recorded_at_utc != event.recorded_at_utc:
+                        raise StateConflictError("cost availability does not match source receipt")
+                    record_cost(session, event.cost, fill)
+                if event.cash_activity:
+                    activity = event.cash_activity
+                    fills = repo.list_fills()
+                    movements = dict(activity.movements)
+                    if (
+                        not activity.complete
+                        or activity.account_id != store.config.account_id
+                        or activity.evidence_lane != store.config.evidence_lane
+                        or activity.release_id != store.config.release_id
+                        or len(movements) != len(activity.movements)
+                        or set(movements) != {f.fill_id for f in fills}
+                        or len(activity.activity_ids) != len(fills)
+                        or len(set(activity.activity_ids)) != len(activity.activity_ids)
+                        or activity.watermark > activity.recorded_at_utc
+                        or any(activity.watermark < f.occurred_at for f in fills)
+                        or activity.recorded_at_utc != event.recorded_at_utc
                     ):
                         raise StateConflictError(
-                            "conflicting cash activity; explicit correction required"
+                            "cash activity complete ownership watermark unavailable"
                         )
-                put(session, "core_cash_activities", activity.id, activity)
-            put(session, "core_broker_event_sources", identity, event)
-            cursor = table("core_source_cursors")
-            source = content_id(
-                {
-                    "provider": event.provider,
-                    "account": event.account_id,
-                    "endpoint": event.endpoint,
-                }
-            )
-            current = session.execute(
-                select(cursor.c.available_at).where(cursor.c.source_id == source)
-            ).scalar_one_or_none()
-            available = encode_utc(event.recorded_at_utc)
-            if current is None:
-                session.execute(
-                    cursor.insert().values(
-                        source_id=source, available_at=available, event_id=identity
+                    for fill in fills:
+                        gross = fill.quantity * fill.price
+                        amount = movements[fill.fill_id]
+                        if (fill.side is OrderSide.BUY and amount > -gross) or (
+                            fill.side is OrderSide.SELL and (amount > gross or amount < 0)
+                        ):
+                            raise StateConflictError(
+                                "cash movement contradicts fill direction/notional"
+                            )
+                    existing = session.execute(
+                        select(table("core_cash_activities").c.payload)
+                    ).scalars()
+                    for encoded in existing:
+                        from quantbot.paper_core.contracts import CashActivity
+
+                        old_activity = CashActivity.model_validate_json(encoded)
+                        if (
+                            dict(old_activity.movements).keys() == movements.keys()
+                            and old_activity.movements != activity.movements
+                        ):
+                            raise StateConflictError(
+                                "conflicting cash activity; explicit correction required"
+                            )
+                    put(session, "core_cash_activities", activity.id, activity)
+                put(session, "core_broker_event_sources", identity, event)
+                cursor = table("core_source_cursors")
+                source = content_id(
+                    {
+                        "provider": event.provider,
+                        "account": event.account_id,
+                        "endpoint": event.endpoint,
+                    }
+                )
+                current = session.execute(
+                    select(cursor.c.available_at).where(cursor.c.source_id == source)
+                ).scalar_one_or_none()
+                available = encode_utc(event.recorded_at_utc)
+                if current is None:
+                    session.execute(
+                        cursor.insert().values(
+                            source_id=source, available_at=available, event_id=identity
+                        )
                     )
-                )
-            elif available > current:
-                session.execute(
-                    update(cursor)
-                    .where(cursor.c.source_id == source)
-                    .values(available_at=available, event_id=identity)
-                )
-            imported.append(identity)
+                elif available > current:
+                    session.execute(
+                        update(cursor)
+                        .where(cursor.c.source_id == source)
+                        .values(available_at=available, event_id=identity)
+                    )
+                imported.append(identity)
+            except _EvidenceRejected:
+                raise
+            except StateConflictError as error:
+                raise _EvidenceRejected(
+                    str(error), _implicated_clients(repo, event), (_source_id(event),)
+                ) from error
         for order in repo.list_broker_orders():
             total = sum(
                 (f.quantity for f in repo.list_fills(broker_order_id=order.broker_order_id)),
                 Decimal(0),
             )
             if total > order.filled_quantity:
-                raise StateConflictError("canonical fills exceed broker acknowledged quantity")
+                raise _EvidenceRejected(
+                    "canonical fills exceed broker acknowledged quantity",
+                    (order.client_order_id,),
+                    tuple(
+                        _source_id(e) for e in events if e.client_order_id == order.client_order_id
+                    ),
+                )
+        if imported:
+            store.revoke_stale_cash(session, source_ids=tuple(imported))
     return tuple(imported)
 
 
@@ -553,7 +612,11 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
 async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleReceipt:
     """Read the original client IDs, import evidence, and never POST an unknown intent."""
     require_synthetic(store, broker)
-    reasons = []
+    from quantbot.paper_core.send_guard import retire_stale_entries
+
+    reasons = [
+        "STALE_UNSENT_REFUSED:" + i for i in retire_stale_entries(store, clock=lambda: broker.now)
+    ]
     with store.database.transaction() as session:
         intents = [
             StorageRepository(session).get_order_intent(link["intent_id"]) for link in store.links()

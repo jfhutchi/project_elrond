@@ -389,6 +389,8 @@ def test_the_panels_render_exactly_what_the_database_holds(
     """
     populate(ledger)
     page = render(ledger, monkeypatch)
+    assert "COSTS_PENDING" in page
+    assert "net unavailable" in page
 
     assert len(_rows(page, "panel-hypotheses")) == 1
     assert len(_rows(page, "panel-records")) == 2

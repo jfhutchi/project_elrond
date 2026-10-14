@@ -7,6 +7,7 @@ from collections.abc import Callable
 
 from pydantic import Field
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from quantbot.brokers import (
     BrokerAccountSnapshot,
@@ -172,12 +173,15 @@ class ExecutionCoordinator:
         *,
         submission_policy: SubmissionPolicy | None = None,
         final_send_check: Callable[[OrderIntent, OrderPurpose], tuple[str, ...]] | None = None,
+        transactional_send_check: Callable[[Session, OrderIntent, OrderPurpose], tuple[str, ...]]
+        | None = None,
     ) -> None:
         self._database = database
         self._broker = broker
         self._settings = settings
         self._submission_policy = submission_policy or SubmissionPolicy()
         self._final_send_check = final_send_check
+        self._transactional_send_check = transactional_send_check
 
     def _gate(
         self,
@@ -574,15 +578,30 @@ class ExecutionCoordinator:
                 fresh_gate = fresh_gate.model_copy(
                     update={"allowed": False, "reasons": (*fresh_gate.reasons, *objections)}
                 )
-        if not fresh_gate.allowed:
+        if self._transactional_send_check is not None:
+            # This hook and send-state CAS share the same durable writer fence. No
+            # provider await occurs under the lock, and only this coordinator POSTs.
+            with self._database.transaction() as session:
+                session.execute(text("BEGIN IMMEDIATE"))
+                objections = self._transactional_send_check(session, intent, purpose)
+                if objections:
+                    fresh_gate = fresh_gate.model_copy(
+                        update={"allowed": False, "reasons": (*fresh_gate.reasons, *objections)}
+                    )
+                submitting = StorageRepository(session).transition_order_intent(
+                    intent.intent_id,
+                    IntentState.SUBMITTING if fresh_gate.allowed else IntentState.ERROR,
+                    expected_current=IntentState.ORDER_CREATED,
+                )
+            if not fresh_gate.allowed:
+                raise OrderSubmissionBlocked(fresh_gate)
+        elif not fresh_gate.allowed:
             self._transition(intent.intent_id, IntentState.ERROR, IntentState.ORDER_CREATED)
             raise OrderSubmissionBlocked(fresh_gate)
-
-        submitting = self._transition(
-            intent.intent_id,
-            IntentState.SUBMITTING,
-            IntentState.ORDER_CREATED,
-        )
+        else:
+            submitting = self._transition(
+                intent.intent_id, IntentState.SUBMITTING, IntentState.ORDER_CREATED
+            )
         broker_intent = intent.model_copy(update={"state": IntentState.RISK_APPROVED})
         retries = 0
         recovered = False

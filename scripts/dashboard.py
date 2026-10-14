@@ -29,7 +29,6 @@ import httpx
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from quantbot.reporting import analyze_fills
 from quantbot.research.budget import Resource
 from quantbot.research.capacity import capacity_inventory
 from quantbot.research.dashboard import Alert, BudgetPanel, attention, luck_bar_at
@@ -111,7 +110,9 @@ def _durable() -> dict[str, object]:
         # left to search from" date is the same one the rest of this page was rendered against.
         research = _research(session, as_of=datetime.now(UTC).date())
     database.close()
-    analysis = analyze_fills(fills)
+    from quantbot.reporting.performance import analyze_gross_cycles
+
+    completed = analyze_gross_cycles(fills)
     return {
         "available": True,
         "runs": runs,
@@ -122,7 +123,8 @@ def _durable() -> dict[str, object]:
         "incidents": incidents,
         "signals": signals,
         "equity": equity,
-        "completed": analysis.completed_trades,
+        "completed": completed,
+        "costs_pending": any(f.fee is None or f.fee_source == "UNKNOWN" for f in fills),
         **research,
     }
 
@@ -873,8 +875,11 @@ def build(out: Path) -> None:
                 check.level.value,
                 check.reached,
                 "; ".join(
-                    [*check.evidence, *check.blocking,
-                     *(f"not assessed: {item}" for item in check.unassessed)]
+                    [
+                        *check.evidence,
+                        *check.blocking,
+                        *(f"not assessed: {item}" for item in check.unassessed),
+                    ]
                 ),
             )
             for check in milestone.checks
@@ -921,11 +926,18 @@ def build(out: Path) -> None:
     alert_rows = "".join(_alert_row(a) for a in alerts) or _empty(2, "Nothing needs you")
 
     trades_per_day = len(completed) / max(len(runs), 1)
-    wins = sum(1 for t in completed if float(t.net_pnl) > 0)
-    win_rate = (wins / len(completed) * 100) if completed else None
+    wins = sum(1 for t in completed if t.net_pnl is not None and float(t.net_pnl) > 0)
+    win_rate = (
+        (wins / len(completed) * 100)
+        if completed and all(t.net_pnl is not None for t in completed)
+        else None
+    )
 
     generated = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S UTC")
     win_note = f"win rate {win_rate:.0f}%" if win_rate is not None else "none closed yet"
+    if durable.get("costs_pending"):
+        gross = sum((t.gross_pnl for t in completed), Decimal(0))
+        win_note = f"gross P&amp;L {gross:.2f}; COSTS_PENDING — net unavailable"
 
     # A doctype and a charset, both load-bearing rather than boilerplate.
     #

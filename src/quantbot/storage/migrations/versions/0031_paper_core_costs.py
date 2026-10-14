@@ -3,8 +3,8 @@
 import json
 from collections.abc import Sequence
 
-from alembic import op
-from sqlalchemy import Column, MetaData, String, Table, Text, text
+from alembic import context, op
+from sqlalchemy import Column, MetaData, String, Table, Text, inspect, text
 
 from quantbot.research.manifest import content_id
 from quantbot.storage.core_cost_schema import cost_tables
@@ -17,10 +17,19 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     # Rebuild only to permit actual NULL; leave every historical numeric byte intact.
+    existing = (
+        set()
+        if context.is_offline_mode()
+        else {c["name"] for c in inspect(op.get_bind()).get_columns("fills")}
+    )
     with op.batch_alter_table("fills") as batch:
         batch.alter_column("fee", existing_type=Text(), nullable=True)
-        batch.add_column(Column("fee_source", String(32), nullable=False, server_default="UNKNOWN"))
-        batch.add_column(Column("fee_reference", Text()))
+        if "fee_source" not in existing:
+            batch.add_column(
+                Column("fee_source", String(32), nullable=False, server_default="UNKNOWN")
+            )
+        if "fee_reference" not in existing:
+            batch.add_column(Column("fee_reference", Text()))
     metadata = MetaData(
         naming_convention={
             "ix": "ix_%(table_name)s_%(column_0_name)s",
@@ -37,7 +46,34 @@ def upgrade() -> None:
     # Preserve the immutable v30 outcome before its current pointer can advance.
     # IDs are derived from the original canonical JSON, not expanded new models.
     connection = op.get_bind()
-    for lot_id, payload in connection.execute(text("SELECT id,payload FROM core_round_trips")):
+    if context.is_offline_mode():
+        # v30 writes canonical JSON bytes. PostgreSQL's built-in SHA256 preserves
+        # their content IDs without Python reads from the offline mock connection.
+        op.execute(
+            text(
+                "INSERT INTO core_outcome_revisions (id,payload) SELECT "
+                "encode(sha256(convert_to(payload,'UTF8')),'hex'),payload FROM core_round_trips"
+            )
+        )
+        op.execute(
+            text(
+                "INSERT INTO core_outcome_index (lot_id,outcome_id,available_at,"
+                "source_start,source_end,dataset,policy_id,evidence_lane,status) SELECT r.id,"
+                "encode(sha256(convert_to(r.payload,'UTF8')),'hex'),"
+                "r.payload::jsonb->>'recorded_at_utc',o.payload::jsonb->>'source_start',"
+                "r.payload::jsonb->>'recorded_at_utc','EXPLICIT_SYNTHETIC',"
+                "d.payload::jsonb->>'policy_id',r.payload::jsonb->>'evidence_lane','COSTS_PENDING' "
+                "FROM core_round_trips r JOIN core_decisions d "
+                "ON d.id=r.payload::jsonb->>'decision_id' JOIN core_observations o "
+                "ON o.id=d.payload::jsonb->>'observation_id'"
+            )
+        )
+    rows = (
+        ()
+        if context.is_offline_mode()
+        else connection.execute(text("SELECT id,payload FROM core_round_trips"))
+    )
+    for lot_id, payload in rows:
         trip = json.loads(payload)
         outcome_id = content_id(trip)
         connection.execute(

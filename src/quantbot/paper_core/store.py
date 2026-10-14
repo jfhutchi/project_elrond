@@ -89,7 +89,52 @@ class CoreStore:
                 )
             ).first():
                 raise StateConflictError("CASH_AUTHORITY_REVOKED_RECONCILIATION_REQUIRED")
-        return self.read("core_reconciliation_proofs", identity, ReconciliationProof)
+            proof = ReconciliationProof.model_validate_json(
+                session.execute(
+                    select(table("core_reconciliation_proofs").c.payload).where(
+                        table("core_reconciliation_proofs").c.id == identity
+                    )
+                ).scalar_one()
+            )
+            if proof.cash_complete and not self.cash_authority_current(session, proof):
+                raise StateConflictError("CASH_AUTHORITY_STALE_RECONCILIATION_REQUIRED")
+            return proof
+
+    def cash_authority_current(self, session: Session, proof: ReconciliationProof) -> bool:
+        quantities, cash, fills = self.ledger(session)
+        return (
+            proof.cash_complete
+            and cash is not None
+            and proof.expected_cash == cash
+            and proof.account.cash == cash
+            and set(proof.fill_ids) == set(fills)
+            and dict(proof.expected_quantities) == {s: q for s, q in quantities.items() if q != 0}
+        )
+
+    def revoke_stale_cash(self, session: Session, *, source_ids: tuple[str, ...]) -> None:
+        """Revocation and accepted ledger changes share one business transaction."""
+        revoked = table("core_cash_authority_revocations")
+        for row in session.execute(select(table("core_inventory_certifications"))).mappings():
+            if session.execute(
+                select(revoked.c.snapshot_id).where(revoked.c.snapshot_id == row["snapshot_id"])
+            ).first():
+                continue
+            proof = ReconciliationProof.model_validate_json(
+                session.execute(
+                    select(table("core_reconciliation_proofs").c.payload).where(
+                        table("core_reconciliation_proofs").c.id == row["proof_id"]
+                    )
+                ).scalar_one()
+            )
+            if not self.cash_authority_current(session, proof):
+                session.execute(
+                    revoked.insert().values(
+                        snapshot_id=row["snapshot_id"],
+                        reason=canonical_result_json(
+                            {"reason": "CURRENT_LEDGER_CHANGED", "source_ids": source_ids}
+                        ),
+                    )
+                )
 
     def links(self) -> list[dict[str, Any]]:
         with self.database.transaction() as session:

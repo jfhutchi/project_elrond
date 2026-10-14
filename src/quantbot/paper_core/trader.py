@@ -135,6 +135,8 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
                 )
             ).scalar_one()
         )
+        if not store.cash_authority_current(session, certified):
+            return None
         if decision != evaluate_entry(store.config, observed, ModelArtifact(), certified):
             raise ValueError("decision does not match certified inputs and fixed risk envelope")
         if plan != ProtectionPlan.for_decision(decision, store.config):
