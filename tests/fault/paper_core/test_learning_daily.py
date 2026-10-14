@@ -537,3 +537,155 @@ def test_new_conflict_at_data_boundary_refuses_without_hydration(tmp_path, monke
         assert receipt.trial_charge_id is not None
     finally:
         db.close()
+
+
+def test_future_cutoff_refuses_before_materialization_fit_and_charge(tmp_path, monkeypatch):
+    from sqlalchemy import select
+    from tests.fixtures.core_m4 import learning_calendar
+
+    from quantbot.paper_core import learning
+    from quantbot.paper_core.store import table
+    from quantbot.research.registry import HypothesisRegistry
+
+    db, store, policy, executed_at, _ = daily_inputs(tmp_path)
+    calendar = learning_calendar()
+    requested = calendar.sequence.sessions[-1].close_at
+    clock = ExecutionClock(executed_at)
+    touched = []
+
+    def forbidden(*args, **kwargs):
+        touched.append(True)
+        raise AssertionError("FUTURE_CUTOFF_DATA_OR_FIT_ACCESSED")
+
+    monkeypatch.setattr(learning, "_materialize", forbidden)
+    monkeypatch.setattr(learning, "_fit_subprocess", forbidden)
+    try:
+        receipt = consider_learning(
+            store, policy, cutoff=requested, calendar=calendar, execution_clock=clock
+        )
+        assert (
+            receipt.status == "NO_CHANGE"
+            and receipt.reason == "FUTURE_CUTOFF_BEYOND_EXECUTION_TIME"
+        ), receipt.reason
+        assert not touched
+        assert receipt.cutoff == requested > executed_at
+        assert (
+            receipt.recorded_at_utc == receipt.completed_at == receipt.available_at == executed_at
+        )
+        assert receipt.parent_model_id == receipt.resulting_model_id == policy.parent_model.id
+        assert receipt.trial_charge_id is None and receipt.activation_at is None
+        clock.advance(60)
+        assert (
+            consider_learning(
+                store, policy, cutoff=requested, calendar=calendar, execution_clock=clock
+            )
+            == receipt
+        )
+        with db.transaction() as session:
+            assert HypothesisRegistry(session).learner_trials_spent() == 0
+            assert not session.execute(select(table("core_learning_inputs"))).all()
+        print("M4_FIX2_FUTURE_REFUSAL:" + receipt.model_dump_json())
+    finally:
+        db.close()
+
+
+def test_future_refusal_recovers_at_equal_execution_cutoff_without_rewriting_receipt(tmp_path):
+    from sqlalchemy import select
+    from tests.fixtures.core_m4 import learning_calendar
+
+    from quantbot.paper_core.contracts import LearningReceipt
+    from quantbot.paper_core.store import table
+    from quantbot.research.registry import HypothesisRegistry
+
+    db, store, policy, executed_at, _ = daily_inputs(tmp_path)
+    calendar = learning_calendar()
+    requested = calendar.sequence.sessions[-1].close_at
+    clock = ExecutionClock(executed_at)
+    try:
+        refusal = consider_learning(
+            store, policy, cutoff=requested, calendar=calendar, execution_clock=clock
+        )
+        assert refusal.reason == "FUTURE_CUTOFF_BEYOND_EXECUTION_TIME"
+        clock.advance((requested - clock.at).total_seconds())
+        accepted = consider_learning(
+            store, policy, cutoff=requested, calendar=calendar, execution_clock=clock
+        )
+        assert accepted.status == "AWAITING_ACTIVATION", accepted.reason
+        assert accepted.run_id != refusal.run_id and accepted.id != refusal.id
+        assert accepted.cutoff == accepted.available_at == requested
+        assert accepted.calendar_id == refusal.calendar_id == calendar.id
+        assert len(accepted.final_input_ids) == 40
+        assert (
+            accepted.final_raw_weights.count(1) == 18 and accepted.final_raw_weights.count(2) == 22
+        )
+        assert store.read("core_learning_runs", refusal.id, LearningReceipt) == refusal
+        assert (
+            consider_learning(
+                store, policy, cutoff=requested, calendar=calendar, execution_clock=clock
+            )
+            == accepted
+        )
+        with db.transaction() as session:
+            assert HypothesisRegistry(session).learner_trials_spent() == 1
+            assert len(session.execute(select(table("core_learning_attempts"))).all()) == 1
+        print(
+            "M4_FIX2_EQUAL_RECOVERY:"
+            + __import__("json").dumps(
+                {
+                    "refusal": refusal.model_dump(mode="json"),
+                    "accepted": accepted.model_dump(mode="json"),
+                    "calendar": calendar.model_dump(mode="json"),
+                },
+                sort_keys=True,
+            )
+        )
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize("historical", [False, True])
+def test_equal_and_historical_cutoffs_keep_completed_calendar_weights(tmp_path, historical):
+    import json
+    from pathlib import Path
+
+    from tests.fixtures.core_m4 import learning_calendar
+
+    from quantbot.paper_core.contracts import ModelArtifact
+
+    db, store, policy, cutoff, _ = daily_inputs(tmp_path)
+    calendar = learning_calendar()
+    clock = ExecutionClock(calendar.sequence.sessions[-1].close_at if historical else cutoff)
+    try:
+        receipt = consider_learning(
+            store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+        )
+        assert receipt.status == "AWAITING_ACTIVATION", receipt.reason
+        assert receipt.final_raw_weights == (2,) * 40
+        assert receipt.completed_session == calendar.sequence.sessions[9].session_date
+        assert receipt.available_at == clock.at
+        frozen = json.loads(
+            (
+                Path(__file__).parents[3] / "docs/evidence/paper-core/m4/fix1/summary.json"
+            ).read_text()
+        )
+        assert receipt.resulting_model_id == ModelArtifact.model_validate(frozen["candidate"]).id
+        assert receipt.input_export_id == frozen["input_export_id"]
+        assert (
+            consider_learning(
+                store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
+            )
+            == receipt
+        )
+        print(
+            "M4_FIX2_ORDINARY:"
+            + __import__("json").dumps(
+                {
+                    "historical": historical,
+                    "receipt": receipt.model_dump(mode="json"),
+                    "calendar": calendar.model_dump(mode="json"),
+                },
+                sort_keys=True,
+            )
+        )
+    finally:
+        db.close()

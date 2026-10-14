@@ -297,3 +297,49 @@ pins and CI hashes remained unchanged during lossless evidence packaging.
 Independent re-review is the remaining owner acceptance step. No activation,
 M5/runtime work, operational database or process/service/security changes,
 broker-network calls, deployment, push or merge are part of this source commit.
+
+## Repair round 2: future cutoff recency
+
+The same independent reviewer closed both original temporal findings at52ec2a3,
+but found one P2 in the amended policy: final recency used caller cutoff while
+admission clipped completed calendar to execution time. A future cutoff could
+age past outcomes using still-uncompleted sessions. Root authorized this single
+repair from52ec2a3beecc54bfef8d0a7e0589ccf915b38f3b; the nonblocking duplicate
+comparator-payload P3 is deferred to whole-branch review, without normalization
+or performance work here.
+
+Modern requests with cutoff>authoritative execution admission time now return
+`NO_CHANGE/FUTURE_CUTOFF_BEYOND_EXECUTION_TIME` before feature/target
+materialization, any fit or permanent charge. The receipt retains requested
+cutoff and actual declared completion/availability. The existing immutable busy
+receipt construction is generalized for refusals while retaining its original
+identity for ordinary busy/legacy callers. Future refusals have an explicit
+separate identity namespace, so repeats stay immutable while a later valid
+consideration at the identical matured cutoff can proceed without rewriting
+that refusal. Normal equal/historical cutoffs, numerical procedure, calendar,
+models, old receipt IDs, legacy semantics and fixed budgets are unchanged.
+
+Behavioral red:2failed/2passed in11.37s, raw log
+C:/Users/leepa/AppData/Local/Temp/paper-core-check-df5zys6j/result.txt.
+The canary exposed materialization and spent charge; the second future request
+fitted instead of refusing. Focused green:4passed in11.29s at
+paper-core-check-33_xa2zc/result.txt. Final authorized gate over exactly the daily,
+temporal and boundary learning-fault files: **61passed in43.66s**, exit0, raw
+C:/Users/leepa/AppData/Local/Temp/paper-core-check-l14p6jmp/result.txt. Six exact
+CI commands passed (341source files on both platforms and the three CI helpers);
+commands/hashes remain in fix2/ci-results.json. Tests are not mypy targets.
+No32target or whole-repository pytest repeat was performed.
+
+Only learning.py and test_learning_daily.py changed;18other frozen fix1 raw pins
+match exactly. Equality/historical controls preserve the exact fix1 candidate
+and immutable input-export digests with40raw2weights. Future refusal retains
+October30cutoff withOctober27availability and0trials; maturation to exact
+October30 permits a distinct valid run,1trial and correctly18old1/22recent2raw
+weights, preserving the earlier refusal. All activation timestamps remain null.
+Root independently checked those typed receipts,20pins and sixCI logs/hashes.
+Four complete marker exports and three original red/green logs are packaged
+losslessly under docs/evidence/paper-core/m4/fix2, with raw/compressed byte hashes
+and lengths. Original/fix1 evidence is unchanged. Scoped synthetic source replay
+is labeled; no new primary execution acceptance claim is made for this repair.
+Independent scoped re-review is the remaining owner step. No M5/runtime work or
+operating-state, credential/network, deployment, push or merge actions occurred.

@@ -1,0 +1,23 @@
+{
+  "red": {
+    "file": "red.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-df5zys6j\\result.txt",
+    "raw_sha256": "c8499e176f4476cc5c5ce0d6c1c2b194c85662eb3cd55a404c3e3a94a9569bba",
+    "raw_bytes": 106063,
+    "compressed_sha256": "f169700d9eab4d9d05b84db82a1a5996d12aa370b76b4dc01ae9c7dd78eac508"
+  },
+  "focused-green": {
+    "file": "focused-green.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-33_xa2zc\\result.txt",
+    "raw_sha256": "a4139fabca8247b310bc6b669603bce2d3013ed6b2beded04f59897177d89e47",
+    "raw_bytes": 163450,
+    "compressed_sha256": "e7218818b411a8b5deddd002b2ba955f37451087f85ae0c89c3a4c1aa48797d6"
+  },
+  "green-fault": {
+    "file": "green-fault.txt.gz",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-l14p6jmp\\result.txt",
+    "raw_sha256": "262d32be9b899ae4d7f546f9b7d482d024cec514d0f1466a977a6aefd6ab6a1f",
+    "raw_bytes": 437613,
+    "compressed_sha256": "6530928fb59bf687435eb368f7410a26f75cddcaec35af2634e812f43fb9b6b8"
+  }
+}

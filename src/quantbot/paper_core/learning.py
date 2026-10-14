@@ -476,19 +476,30 @@ def consider_learning(
         raise ValueError("execution clock needs a declared domain")
     started_at = _execution_now(clock)
     cutoff = decode_utc(encode_utc(cutoff))
+    if policy.procedure_version and cutoff > started_at:
+        return _refusal_receipt(
+            store,
+            policy,
+            cutoff,
+            clock,
+            domain,
+            started_at,
+            reason="FUTURE_CUTOFF_BEYOND_EXECUTION_TIME",
+            calendar=calendar,
+        )
     assert store.database.path is not None
     scratch_root = store.database.path.parent / (store.database.path.name + ".learning-scratch")
     admission = SingleWriterLock(scratch_root / "admission.lock")
     try:
         admission.acquire()
     except AlreadyLockedError:
-        return _busy_receipt(store, policy, cutoff, clock, domain, started_at)
+        return _refusal_receipt(store, policy, cutoff, clock, domain, started_at)
     try:
         worker = SingleWriterLock(scratch_root / "worker.lock")
         try:
             worker.acquire()
         except AlreadyLockedError:
-            return _busy_receipt(store, policy, cutoff, clock, domain, started_at)
+            return _refusal_receipt(store, policy, cutoff, clock, domain, started_at)
         try:
             # While holding both locks, cancel a pre-lock orphan before it can fit.
             # A currently fitting orphan owns worker.lock and cannot reach this branch.
@@ -535,22 +546,33 @@ def consider_learning(
         admission.release()
 
 
-def _busy_receipt(
+def _refusal_receipt(
     store: CoreStore,
     policy: LearningPolicy,
     cutoff: datetime,
     clock: Clocks,
     domain: str,
     started_at: datetime,
+    *,
+    reason: str = "LEARNING_WORKER_BUSY",
+    calendar: LearningCalendar | None = None,
 ) -> LearningReceipt:
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
         _, exclusions, considered = _select(
             session, policy, cutoff, execution_now=_execution_now(clock)
         )
-        run_id = content_id(
-            {"busy": True, "policy": policy, "cutoff": cutoff, "inputs": considered}
-        )
+        identity: dict[str, Any] = {
+            "busy": True,
+            "policy": policy,
+            "cutoff": cutoff,
+            "inputs": considered,
+        }
+        if reason != "LEARNING_WORKER_BUSY":
+            # Refusal must replay while future, without memoizing the later valid
+            # consideration once fresh execution time reaches the same cutoff.
+            identity.update(refusal_reason=reason, calendar=calendar.id if calendar else None)
+        run_id = content_id(identity)
         existing = session.execute(
             select(table("core_learning_considerations").c.receipt_id).where(
                 table("core_learning_considerations").c.run_id == run_id
@@ -565,6 +587,8 @@ def _busy_receipt(
                 ).scalar_one()
             )
         fields: dict[str, Any] = {"started_at": started_at}
+        if reason != "LEARNING_WORKER_BUSY" and calendar is not None:
+            fields["calendar_id"] = calendar.id
         _complete(fields, clock, domain)
         receipt = LearningReceipt(
             **fields,
@@ -577,8 +601,8 @@ def _busy_receipt(
             exclusions=tuple(exclusions),
             split_digest=content_id({}),
             status="NO_CHANGE",
-            reason="LEARNING_WORKER_BUSY",
-            validation_absent_reason="LEARNING_WORKER_BUSY",
+            reason=reason,
+            validation_absent_reason=reason,
         )
         put(session, "core_models", policy.parent_model.id, policy.parent_model)
         return _save_receipt(session, receipt)
