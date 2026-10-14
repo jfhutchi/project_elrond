@@ -1,0 +1,47 @@
+{
+  "head": "bcc0f11841c08952c1e273bc9190b8a204e6e4c0",
+  "artifact_index_sha256": "2d6e41bcd6d465700792921ed99ca90ea2e526f4e1b743960ae3e761bb06d443",
+  "records_working_and_git": 77,
+  "logs_raw_compressed_original": 6,
+  "process_archives": 7,
+  "exports_semantically_joined": 37,
+  "source_pins": 399,
+  "ci_checks": 6,
+  "auxiliary_line_ending_normalization": [
+    {
+      "path": ".superpowers\\sdd\\2026-10-13-paper-core\\m6-report.md",
+      "working_sha256": "4ff2ec57dc2d001a20afbb458a1f7b3b848e1130b1d3545294038aa5bb676a1e",
+      "git_sha256": "ccc2639bb1959b2f76dc88e34e47cd0f659ee836f96d1b1be8a772d268ba9eeb"
+    },
+    {
+      "path": ".superpowers\\sdd\\2026-10-13-paper-core\\ci_m6_fix2.py",
+      "working_sha256": "3528798f1dd001eec056e9a49e9bc15c85be9fa010cee519c265a15b297206a1",
+      "git_sha256": "37169d6fde0b8777262932d1c8c988eab0a536ecfd3ecfc6850ad28a5f8a4c3d"
+    },
+    {
+      "path": ".superpowers\\sdd\\2026-10-13-paper-core\\freeze_m6_fix2.py",
+      "working_sha256": "a7c375b9ec13c0392bb8d8d8e9dcc68c19dcc632da69957f0e402afd3d3a7a5c",
+      "git_sha256": "ad5370ee0ddaf4eaae0b227aef7d90d4e010280339d98b18555bd9543be67b4b"
+    },
+    {
+      "path": ".superpowers\\sdd\\2026-10-13-paper-core\\prepare_package_m6_fix2.py",
+      "working_sha256": "3fbde388c08e980d6fb813f0e25d5d4263de9c6c1aa0d7f9d58cba60f61dd13d",
+      "git_sha256": "f38349e135967b9926c5e0206320fb139e691ae05991afb5e8f9c780079a9e10"
+    },
+    {
+      "path": ".superpowers\\sdd\\2026-10-13-paper-core\\task_proposals_m6_fix2.py",
+      "working_sha256": "692e1354f60f4425c42e08f454d71c6bf9ccb9109e53bc37fee256647d677831",
+      "git_sha256": "62d4d13d8fd99e0443fd1f07da3a72e42bcda248670f0f6035be369989b21877"
+    },
+    {
+      "path": ".superpowers\\sdd\\2026-10-13-paper-core\\package_m6_fix2.py",
+      "working_sha256": "b4797759059bda464c170e5a9bee49557e6a06dde28b8add44c7635331cf4e06",
+      "git_sha256": "ad60e2f32b6d9f8424d2636d021fda611a6542c9ae58bbb758ed8a817519928a"
+    },
+    {
+      "path": ".superpowers\\sdd\\2026-10-13-paper-core\\finalize_m6_fix2.py",
+      "working_sha256": "827a9209a63c87602f393575b51f9cdee559a99ea75a3055ddfb4abad260eeda",
+      "git_sha256": "4b9f2ab3624db65c91ce9c6e076bda0fa8270c4007fb24c3a098df465542f908"
+    }
+  ]
+}

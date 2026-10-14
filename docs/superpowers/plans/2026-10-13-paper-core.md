@@ -12,7 +12,7 @@
 
 ## Global constraints
 
-- Status: **M0–M5 ACCEPTED**. M6 preparation is ready; operational rollout still requires the concrete release review. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
+- Status: **M0–M5 ACCEPTED**. M6 preparation has passed independent task review; whole-branch review and operational rollout review remain outstanding. Implementation approval covers isolated code and tests, including timing and learning contracts; it does not authorize deployment, operational model activation, OS resync or clearing existing stops.
 - PAPER only; no LIVE path, paid CI, new credentials/services, OS resync/security/policy changes, forced trades, holdings reset, deleted history, silent stop clearance, or untested protection removal.
 - Existing limits remain: one new position, 50 bps of equity per position, 25 bps maximum entry risk, 100 bps stop, 30-minute horizon, ≥120 s session-exit buffer, 500 bps buying-power reserve. Existing tighter portfolio controls win.
 - Relative skew bound remains **±2 s**. The locally approved `PAPER_TIME_V2` implementation keeps 5 s acquisition, 120 s maximum evidence age and initial 50 ms continuity bound. Exact operational commissioning remains part of M6 review; do not silently substitute it for an existing runtime's STRICT_V0/RELATIVE_V1 profile.
@@ -36,7 +36,7 @@ After each milestone a reviewer who did not implement it reviews both diff and i
 | M3 | M2 accepted; clock contract reviewed | Scoped recovery/timing and per-symbol eligibility; outcome/protection progress during entry failure | ACCEPTED |
 | M4 | M2 accepted; learning envelope reviewed | Real bounded outcome-driven parameter fitting and explicit NO_CHANGE, in shadow | ACCEPTED |
 | M5 | M3 + M4 accepted | Atomic model activation and later decision witness; synthetic whole loop; real-data local simulation | ACCEPTED |
-| M6 | M5 accepted; concrete rollout review | Frozen release handover and a naturally eligible broker-PAPER whole-loop evidence bundle | PREPARATION READY |
+| M6 | M5 accepted; concrete rollout review | Frozen release handover and a naturally eligible broker-PAPER whole-loop evidence bundle | PREPARATION ACCEPTED; operational WAITING |
 
 M3 and M4 can be **developed independently after M2** against frozen contracts, but the owner hands off only one milestone at a time unless the user changes that workflow. Within a ready milestone, fixture construction, source review and documentation can run independently with separate ownership; shared contracts/schema, production rollout and activation are sequential. No parallel broker writers. M6 is not ready merely because M5 unit tests pass.
 
@@ -213,6 +213,8 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 ## M6 — Sol implementation brief: commission one reproducible PAPER runtime
 
+**Preparation acceptance:** Independent reviewer and integration owner ACCEPT source `bcc0f11841c08952c1e273bc9190b8a204e6e4c0`; [review](../../evidence/paper-core/m6/review.md), [current proposal](../../evidence/paper-core/m6/fix2/README.md). Final repair gate75passed86.95s and sixCI; prior409/26,11 and115 phases remain separate. Actual independent flat-start entry/guardian exit is synthetic, ownedflat with truthful unknown costs. Remaining preparation/operational items below are explicit; whole-branch review still precedes delivery for rollout approval.
+
 **Scope:** Prepare and review an exact release, backup/rollback package and handover; then perform only the approved rollout. Verify a **naturally eligible** broker-PAPER round trip separately. This brief is not approval to execute rollout now.
 
 **Relevant code:** `deploy/omen/service-host.cs`, `start-service.ps1`, `start-learner.ps1`, `setup-windows.ps1`, `operations/service.py`, current task inventory, M0 exporter, M1–M5 core. Existing standard account, credentials and security permissions remain unchanged. Check actual runtime identity; this review's shell access is not proof of service-token access.
@@ -223,8 +225,9 @@ Isolated branch `codex/paper-core-m0` starts at refreshed main `b812c64270f190b0
 
 **Required preparation before rollout review:**
 
-- [ ] Resolve fresh main/PR heads and conflicts; pin exact code, frozen lock, interpreter, installed dependencies, schema/config/model/clock/learning authority. Validate clean release and applicable local CI offline; do not trigger paid hosted CI.
-- [ ] Online-back up authoritative stores and canonical holdout/trial data, archive nonsecret task XML/config, integrity-check and restore to a new temporary path. Document prior compatible binary and forward-only recovery if schema rollback is unsafe.
+- [x] Resolve fresh main/PR heads and conflicts; pin exact code, frozen lock, interpreter, installed dependencies, schema/config/model/clock/learning authority. Validate clean release and applicable local CI offline; do not trigger paid hosted CI.
+- [x] Dated read-only online backups of authoritative stores/canonical metadata, nonsecret task XML/config archives, integrity checks and restore to new temporary paths are complete. Refresh before any approved handover.
+- [ ] Whole-branch review must verify usable forward recovery: schema35 cannot downgrade; later executable transition and fenced-entry resume are currently unsupported.
 - [ ] Run a startup/restart under existing permitted service identity/policy with **submission disabled**; demonstrate manifest, current time-proof availability, store access, first blocker and independent guardian/outcome scheduling. If permissions are unavailable, report the exact blocker; do not elevate or change policy.
 - [ ] Present exact rollout and rollback commands, release identity, migration result, inherited/open/unknown-order ownership map, proposed role/task changes, selected initial model and authority to the user. Await required rollout/model/clock-contract review; no generic yes substitutes for missing exact artifacts.
 
