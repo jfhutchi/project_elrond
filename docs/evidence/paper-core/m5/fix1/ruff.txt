@@ -1,0 +1,12 @@
+E501 Line too long (101 > 100)
+   --> tests\integration\paper_core\test_learning_changes_decision.py:99:101
+    |
+ 97 |         assert decision.model_id == decision.model_digest == model.id
+ 98 |         assert decision.model_mode == model.mode
+ 99 |         assert decision.learning_receipt_id == (receipt.id if receipt else model.learning_receipt_id)
+    |                                                                                                     ^
+100 |         if receipt:
+101 |             assert decision.prediction_bps == pytest.approx(19.900497512437546)
+    |
+
+Found 1 error.

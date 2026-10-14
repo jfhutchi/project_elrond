@@ -134,22 +134,25 @@ def evaluate_entry(
         if evaluated_at < selection.at:
             objections.append("CORE_MODEL_UNAVAILABLE_AT_DECISION")
     if config.clock_profile == "PAPER_TIME_V2" and time_evidence is not None:
-        timing = {
-            "time_evidence_id": time_evidence.id,
-            "clock_process_id": time_evidence.process_id,
-            "monotonic_anchor": time_projection.monotonic_at
-            if time_projection
-            else time_evidence.acquired_monotonic,
-            "provider_deadline": min(
-                (
-                    time_projection.provider_earliest
-                    if time_projection
-                    else time_evidence.wall_anchor + timedelta(seconds=time_evidence.offset_lower)
-                )
-                + timedelta(seconds=1800),
-                observation.session_close - timedelta(seconds=120),
-            ),
-        }
+        timing.update(
+            {
+                "time_evidence_id": time_evidence.id,
+                "clock_process_id": time_evidence.process_id,
+                "monotonic_anchor": time_projection.monotonic_at
+                if time_projection
+                else time_evidence.acquired_monotonic,
+                "provider_deadline": min(
+                    (
+                        time_projection.provider_earliest
+                        if time_projection
+                        else time_evidence.wall_anchor
+                        + timedelta(seconds=time_evidence.offset_lower)
+                    )
+                    + timedelta(seconds=1800),
+                    observation.session_close - timedelta(seconds=120),
+                ),
+            }
+        )
         if time_projection is not None:
             timing["time_projection"] = time_projection
     return Decision(

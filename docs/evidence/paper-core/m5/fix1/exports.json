@@ -1,0 +1,42 @@
+[
+  {
+    "marker": "M5_V2_BINDING:",
+    "kind": "initialized",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\v2-binding-initialized.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s0cfe_1c\\result.txt",
+    "raw_sha256": "cc1cf05e9416ee3ae60e14830c7f0cdd96fc3e1b9cdc5cc935c0329860293bce",
+    "gzip_sha256": "564b68a0764748992cd8b5d08658f65d58446fa0170e9b3fe5525237aecaaf95",
+    "raw_bytes": 9008,
+    "phase": "final-M5-fix1-scoped-gate"
+  },
+  {
+    "marker": "M5_V2_BINDING:",
+    "kind": "learned",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\v2-binding-learned.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s0cfe_1c\\result.txt",
+    "raw_sha256": "7820bac5362319fd6a5ab4d43d774b533521191e8e1ba5abb627b9eebdeaca97",
+    "gzip_sha256": "fae62b895d4d4b35106d1d84464bacd0f13ada98e3fa20220eb8315c1a0de857",
+    "raw_bytes": 80692,
+    "phase": "final-M5-fix1-scoped-gate"
+  },
+  {
+    "marker": "M5_ACTIVATION:",
+    "kind": null,
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\joined-activation.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s0cfe_1c\\result.txt",
+    "raw_sha256": "fbc5c95ea05b599e0beb576979f0276d871cd4db67aa3d95ecdc7eb3a824b644",
+    "gzip_sha256": "f562bac2fdb97a25fe3fa388e1b308b30ab866e67749a7c1ee7f2990557f46fd",
+    "raw_bytes": 5701450,
+    "phase": "final-M5-fix1-scoped-gate"
+  },
+  {
+    "marker": "M5_V33_REPLAY:",
+    "kind": null,
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\populated-v33-replay.json.gz",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s0cfe_1c\\result.txt",
+    "raw_sha256": "9baddfe1b5868d22e25a2cec684ede651c7a4816462a64d4ef1c60fb21434b87",
+    "gzip_sha256": "f2f440ae5afb2e589d33b8b2cd9843a3f29af9a6f114007d5f33c9c5b8390e6f",
+    "raw_bytes": 221,
+    "phase": "final-M5-fix1-scoped-gate"
+  }
+]

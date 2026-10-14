@@ -1,6 +1,6 @@
 # M5 implementation report
 
-Status: M5 implemented and scoped verification passed; ready for independent owner review. Accepted base: `fbdfca23f74bec146d19c630f001786c1123b2a6` on `codex/paper-core-m0` in the existing managed worktree. No M6 implementation was started.
+Status: independent M5 review required one blocking V2 binding repair; fix1 implemented and scoped verification passed, ready for the same reviewer's scoped re-review. Original c83d93f evidence remains preserved. Accepted base: `fbdfca23f74bec146d19c630f001786c1123b2a6` on `codex/paper-core-m0` in the existing managed worktree. No M6 implementation was started.
 
 ## Delivered behavior
 
@@ -31,3 +31,13 @@ Rollback appends a new activation generation selecting a reviewed ancestor and p
 Source inventory is the 25 final pinned paths: activation/local simulation/contracts/trader/claim-send/runtime/guardian/outcomes/health/learning/store/storage schema/database/v34 migration; owned tests/fixture capture/crash helper, the three-line retained learning-receipt execution-clock repair and the minimal test-only 50-count scheduling extension to `core_m4.py`. Root retains authoritative plan/spec/ledger/review ownership and its unstaged plan edit. Independent review remains the next owner action after the owned verified commit.
 
 The final source repair is limited to `_boundary(session, cutoff=at)` for activation/rollback, using accepted canonical terminal-evidence verification and unresolved-lifecycle refusal. It does not change fit/protection/capacity generation contracts. Root explicitly scoped its recheck to full activation_races plus learning_changes_decision and exactCI, excluding another broad388-case or50-capacity repeat. `logs.json` now contains39 distinct raw histories, and `exports.json` contains7 phase-labeled exports. Original/pre-boundary/final pins remain distinct.
+
+## M5 fix1 — reviewed V2 integration repair
+
+Independent review of `c83d93faeb1c16a711c307f3b55e81b223e3e9bb` found that PAPER_TIME_V2 replaced the timing dictionary after model metadata was inserted. A BUY lost its activation ID/generation/digest/mode/prediction, so the production claim refused it as stale. Owned initialized and learned V2 canaries reproduced this failure before source repair (2 failed in7.79s). The production fix only merges the V2 fields with `timing.update`; all existing timing expressions and bounds remain.
+
+New integrated cases retain initialized COLLECT sentinel/no-prediction and exact learned candidate/qualifying receipt under real two-sample V2 acquisition and projection. The production claim, handoff and coordinator locked final-send succeed with exactly one synthetic POST each. The learned case then proves V2 ABA refusal for stale claim and final-send. `M5_V2_BINDING` contains the exact observation/config/inventory/time/model/receipt/event joins and resulting intent/protection/order/fill/send verdict. Accepted40 fixture inputs were imported unchanged; no40/50 generation or operational commissioning occurred.
+
+Final agreed four-file gate: full activation_races, learning_changes_decision, test_timing and test_m3_review_repairs; **61 passed in167.64s**, exit0, raw `C:/Users/leepa/AppData/Local/Temp/paper-core-check-s0cfe_1c/result.txt`. All six exactCI commands passed in the final rerun. Earlier setup assertions and a one-character Ruff line-length failure remain distinct in `docs/evidence/paper-core/m5/fix1`. An owner-approved formatting-only assertion wrap has exact archived preformat bytes, preformat pins and independent AST equivalence; it did not trigger a duplicate four-file run.
+
+Fix1 final25pins change exactly `src/quantbot/paper_core/trader.py` (SHA256 e837989e4a6f4f493eea71b5a6deb3855275241bae3435a07d2707563dc570d7) and `tests/integration/paper_core/test_learning_changes_decision.py` (0af08ae005eabbbba45653e95b078b08fd0a5e977da06aa8d832682382c05d7a). All23 other source/test/fixture/helper pins are unchanged. Six raw-log histories and four frozen exports are indexed under fix1. Parent39log/7export evidence and all original pins remain unchanged. No schema/compatibility/activation/capacity behavior was broadened; same independent reviewer performs the scoped re-review after the focused verified repair commit. Root plan/review edits remain unstaged.

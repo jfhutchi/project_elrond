@@ -1,0 +1,12 @@
+{
+  "source_path": "tests\\integration\\paper_core\\test_learning_changes_decision.py",
+  "before_source_sha256": "e5de18776dedde15303d77590628f4acec1bf3cbbcf30db8793bc92876fd0bed",
+  "after_source_sha256": "0af08ae005eabbbba45653e95b078b08fd0a5e977da06aa8d832682382c05d7a",
+  "before_bytes": 23102,
+  "after_bytes": 23124,
+  "preformat_evidence": "docs/evidence/paper-core/m5/fix1/preformat-test.py.gz",
+  "ast_dump_include_attributes": false,
+  "ast_dump_sha256": "d3ab0c003b90f3cbfaf128463bcc6f7271a8060659359340ef739b6f5dfa662d",
+  "equivalent": true,
+  "change": "Parenthesized101-character assertion wrapped onto3lines; no token/value changes"
+}

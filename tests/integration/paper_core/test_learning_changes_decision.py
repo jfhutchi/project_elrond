@@ -8,6 +8,207 @@ import pytest
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("kind", ["initialized", "learned"])
+async def test_v2_time_and_model_binding_reaches_claim_and_locked_send(tmp_path, monkeypatch, kind):
+    from sqlalchemy import select, update
+    from tests.fixtures.core_m3 import Clocks, prepare
+    from tests.fixtures.core_m5 import accepted
+
+    from quantbot.paper_core import activation, runtime
+    from quantbot.paper_core.contracts import ProtectionPlan, ReconciliationProof
+    from quantbot.paper_core.send_guard import final_send_objections
+    from quantbot.paper_core.store import CoreStore, table
+    from quantbot.paper_core.time_evidence import BrokerTime, TimeEvidence
+    from quantbot.paper_core.trader import claim_entry, trader_cycle
+    from quantbot.research.manifest import canonical_result_json, content_id
+    from quantbot.risk import OrderPurpose
+    from quantbot.storage import StorageRepository
+
+    receipt = authority = None
+    if kind == "initialized":
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        parent = model
+        event = activation.initialize_fixture_model(store, model, at=clocks.wall)
+    else:
+        db, original, broker, parent, model, receipt, observation = accepted(tmp_path)
+        clocks = Clocks()
+        clocks.wall = broker.now
+        config = original.config.model_copy(update={"clock_profile": "PAPER_TIME_V2"})
+        # Explicit disposable-fixture timing commissioning, never a runtime config migration.
+        # Preserve every accepted historical trade/model/receipt payload and ID.
+        with db.transaction() as session:
+            session.execute(
+                update(table("core_identities")).values(
+                    id=content_id(config), payload=canonical_result_json(config)
+                )
+            )
+        store = CoreStore(db, config, clocks=clocks)
+        observation = observation.model_copy(
+            update={"session_open": clocks.wall - timedelta(hours=1)}
+        )
+
+        async def get_clock():
+            clocks.advance(0.01)
+            broker.now = clocks.wall
+            return BrokerTime(
+                timestamp=clocks.wall,
+                account_id=broker.account_id,
+                provider=broker.provider,
+                session_id=clocks.wall.date().isoformat(),
+                session_open=observation.session_open,
+                session_close=observation.session_close,
+                resolution_seconds=0.001,
+            )
+
+        broker.get_clock = get_clock
+        genesis = activation.initialize_fixture_model(store, parent, at=clocks.wall)
+        authority = activation.ActivationAuthority.fixture(
+            store,
+            candidate_id=model.id,
+            receipt_id=receipt.id,
+            expected_activation_id=genesis.id,
+            at=clocks.wall,
+        )
+        activation.commission_fixture_authority(store, authority)
+        event = activation.activate_model(
+            store,
+            expected_model_id=parent.id,
+            candidate_id=model.id,
+            authority=authority,
+            at=clocks.wall,
+        )
+        proof = store.latest_proof()
+    locked_sends = []
+    original_check = runtime.final_send_in_session
+
+    def capture_locked_send(bound_store, session, intent, purpose, *, clock):
+        objections = original_check(bound_store, session, intent, purpose, clock=clock)
+        locked_sends.append(
+            {"intent_id": intent.intent_id, "purpose": purpose.value, "objections": objections}
+        )
+        return objections
+
+    monkeypatch.setattr(runtime, "final_send_in_session", capture_locked_send)
+    try:
+        decision = await trader_cycle(store, broker, observation, parent, proof, now=clocks.wall)
+        assert decision.action == "BUY" and not decision.gates, decision.gates
+        assert decision.activation_id == event.id
+        assert decision.model_generation == event.generation
+        assert decision.model_id == decision.model_digest == model.id
+        assert decision.model_mode == model.mode
+        assert decision.learning_receipt_id == (
+            receipt.id if receipt else model.learning_receipt_id
+        )
+        if receipt:
+            assert decision.prediction_bps == pytest.approx(19.900497512437546)
+        else:
+            assert decision.prediction_bps is None  # COLLECT has no predictive estimate.
+        time = store.read("core_time_evidence", decision.time_evidence_id, TimeEvidence)
+        assert len(time.samples) == 2 and not time.objections
+        assert decision.time_projection.evidence_id == time.id
+        assert decision.time_projection.process_id == decision.clock_process_id == clocks.process_id
+        assert decision.monotonic_anchor == decision.time_projection.monotonic_at
+        assert decision.recorded_at_utc == decision.time_projection.wall_at
+        assert decision.provider_deadline == min(
+            decision.time_projection.provider_earliest + timedelta(seconds=1800),
+            observation.session_close - timedelta(seconds=120),
+        )
+        assert len(broker.posts) == 1 and locked_sends
+        assert all(not send["objections"] for send in locked_sends)
+        link = next(row for row in store.links() if row["decision_id"] == decision.id)
+        plan = store.read("core_protection_plans", link["protection_id"], ProtectionPlan)
+        assert plan.clock_profile == "PAPER_TIME_V2"
+        assert plan.clock_process_id == decision.clock_process_id
+        assert plan.deadline == decision.provider_deadline
+        horizon = min(
+            1800,
+            (decision.provider_deadline - decision.time_projection.provider_latest).total_seconds(),
+        )
+        assert plan.monotonic_expiry == decision.monotonic_anchor + max(0, horizon)
+        assert plan.monotonic_expiry <= decision.monotonic_anchor + 1800
+        inventory = store.read(
+            "core_reconciliation_proofs", decision.inventory_id, ReconciliationProof
+        )
+        with db.transaction() as session:
+            repo = StorageRepository(session)
+            intent = repo.get_order_intent(link["intent_id"])
+            order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+            fills = repo.list_fills(broker_order_id=order.broker_order_id)
+            assert not activation.decision_model_objections(store, session, decision)
+            mapping = [
+                dict(row)
+                for row in session.execute(select(table("core_learning_considerations"))).mappings()
+                if receipt and row["run_id"] == receipt.run_id
+            ]
+        aba = None
+        if receipt:
+            back = activation.rollback_model(
+                store,
+                expected_model_id=model.id,
+                target_id=parent.id,
+                expected_activation_id=event.id,
+                reason="V2 ABA fixture",
+                at=clocks.wall,
+            )
+            fresh = activation.ActivationAuthority.fixture(
+                store,
+                candidate_id=model.id,
+                receipt_id=receipt.id,
+                expected_activation_id=back.id,
+                at=clocks.wall,
+            )
+            activation.commission_fixture_authority(store, fresh)
+            current = activation.activate_model(
+                store,
+                expected_model_id=parent.id,
+                candidate_id=model.id,
+                authority=fresh,
+                at=clocks.wall,
+            )
+            assert current.model_id == decision.model_id and current.id != decision.activation_id
+            assert claim_entry(store, decision, plan) is None
+            stale_send = final_send_objections(
+                store, intent, OrderPurpose.ENTRY, clock=lambda: clocks.wall
+            )
+            assert "CORE_MODEL_SELECTION_STALE" in stale_send
+            assert len(broker.posts) == 1
+            aba = {
+                "rollback": back.model_dump(mode="json"),
+                "current": current.model_dump(mode="json"),
+                "send_refusal": stale_send,
+            }
+        print(
+            "M5_V2_BINDING:"
+            + json.dumps(
+                {
+                    "kind": kind,
+                    "lane": store.config.evidence_lane,
+                    "config": store.config.model_dump(mode="json"),
+                    "observation": observation.model_dump(mode="json"),
+                    "inventory": inventory.model_dump(mode="json"),
+                    "decision": decision.model_dump(mode="json"),
+                    "time_evidence": time.model_dump(mode="json"),
+                    "activation": event.model_dump(mode="json"),
+                    "authority": authority.model_dump(mode="json") if authority else None,
+                    "model": model.model_dump(mode="json"),
+                    "receipt": receipt.model_dump(mode="json") if receipt else None,
+                    "run_receipt_mapping": mapping,
+                    "entry_link": link,
+                    "intent": intent.model_dump(mode="json"),
+                    "order": order.model_dump(mode="json"),
+                    "fills": [fill.model_dump(mode="json") for fill in fills],
+                    "protection_plan": plan.model_dump(mode="json"),
+                    "locked_final_send": locked_sends,
+                    "posts": len(broker.posts),
+                    "aba": aba,
+                }
+            )
+        )
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
 async def test_accepted_daily_refit_changes_same_later_observation(tmp_path):
     from tests.fixtures.core_m5 import accepted
 
