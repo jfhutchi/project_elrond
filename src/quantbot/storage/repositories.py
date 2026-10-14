@@ -1583,11 +1583,18 @@ class StorageRepository:
             self._session.execute(positions.insert(), position_payloads)
         return True
 
-    def get_latest_account_snapshot(self, account_id: str) -> AccountSnapshotRecord | None:
+    def get_latest_account_snapshot(
+        self, account_id: str, *, certified_only: bool = False,
+    ) -> AccountSnapshotRecord | None:
+        from quantbot.storage.schema import metadata
+        certifications = metadata.tables["core_inventory_certifications"]
+        statement = select(account_snapshots).where(account_snapshots.c.account_id == account_id)
+        if certified_only:
+            statement = statement.where(account_snapshots.c.snapshot_id.in_(
+                select(certifications.c.snapshot_id)))
         row = (
             self._session.execute(
-                select(account_snapshots)
-                .where(account_snapshots.c.account_id == account_id)
+                statement
                 .order_by(account_snapshots.c.captured_at.desc())
                 .limit(1)
             )

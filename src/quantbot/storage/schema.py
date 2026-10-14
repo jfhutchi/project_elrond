@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 29
+SCHEMA_VERSION = 30
 
 metadata = MetaData(
     naming_convention={
@@ -1794,3 +1794,9 @@ Index(
     runtime_deployments.c.observed_at,
 )
 Index("ix_runtime_deployments_commit", runtime_deployments.c.git_commit)
+
+
+# M1 additions share the existing operational metadata/outbox.
+from quantbot.storage.core_schema import core_tables  # noqa: E402
+
+_core_tables = core_tables(metadata)

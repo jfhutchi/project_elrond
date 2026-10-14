@@ -29,7 +29,7 @@ from quantbot.storage import (
     MigrationRequiredError,
     UnsupportedSchemaVersionError,
 )
-from quantbot.storage.database import REVISION_FOR_SCHEMA_VERSION, encode_utc
+from quantbot.storage.database import encode_utc
 from quantbot.storage.schema import SCHEMA_VERSION, kill_switch_state
 from tests.unit.test_storage import NOW
 
@@ -227,9 +227,7 @@ def test_migration_from_0026_replaces_path_hashes_with_one_persisted_lineage_uui
     raw = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
     try:
         schema_rows = raw.execute("SELECT store_identity FROM schema_version").fetchall()
-        deployment_rows = raw.execute(
-            "SELECT store_identity FROM runtime_deployments"
-        ).fetchall()
+        deployment_rows = raw.execute("SELECT store_identity FROM runtime_deployments").fetchall()
         deployment_columns = {
             str(row[1]) for row in raw.execute("PRAGMA table_info(runtime_deployments)")
         }
@@ -247,13 +245,26 @@ def test_migration_from_0026_replaces_path_hashes_with_one_persisted_lineage_uui
         migrated_again.close()
 
 
+def create_historical_v29(path: Path) -> str:
+    """Pin downgrade regression fixtures below v30's independent no-evidence-loss refusal."""
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    try:
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), "0029")
+            return str(
+                connection.exec_driver_sql("SELECT store_identity FROM schema_version").scalar_one()
+            )
+    finally:
+        engine.dispose()
+
+
 def test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes(
     tmp_path: Path,
 ) -> None:
     path = tmp_path / "deployment.db"
-    database = Database.create(path)
-    identity = database.store_identity
-    with database.engine.begin() as connection:
+    identity = create_historical_v29(path)
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    with engine.begin() as connection:
         connection.exec_driver_sql(
             """
             INSERT INTO runtime_deployments (
@@ -273,12 +284,12 @@ def test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes(
                 "Windows",
                 "PAPER",
                 identity,
-                SCHEMA_VERSION,
+                29,
                 "2026-09-02T20:00:00Z",
                 "2026-09-02T21:00:00Z",
             ),
         )
-    database.close()
+    engine.dispose()
 
     engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
     config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
@@ -345,7 +356,7 @@ def test_a_rolled_back_chained_downgrade_through_0028_leaves_the_proposal_table_
     after the version write makes this test fail, which is the point of it.
     """
     path = tmp_path / "chained.db"
-    Database.create(path).close()
+    create_historical_v29(path)
     before = fingerprint(path)
 
     engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
@@ -368,7 +379,7 @@ def test_a_rolled_back_chained_downgrade_through_0028_leaves_the_proposal_table_
         raw.close()
     assert "research_proposals" in tables, "the rollback left the store without the 0028 table"
     assert "learner_predictions" in tables, "rollback lost the learner prediction ledger"
-    assert marker(path) == (SCHEMA_VERSION, REVISION_FOR_SCHEMA_VERSION[SCHEMA_VERSION])
+    assert marker(path) == (29, "0029")
     assert fingerprint(path) == before
 
 

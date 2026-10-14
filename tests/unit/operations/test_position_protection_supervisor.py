@@ -121,15 +121,23 @@ def seed_local(
     *,
     equity: str = "100000",
 ) -> None:
+    # Affirmatively commissioned synthetic inventory; raw legacy snapshots are unproven.
+    from quantbot.paper_core.contracts import CoreConfig
+    from quantbot.paper_core.runtime import initialize_fixture
+    from quantbot.paper_core.simulation import SyntheticBroker
+    from quantbot.paper_core.store import CoreStore
+
+    initial = account(equity).account
+    broker = SyntheticBroker(
+        account_id=ACCOUNT_ID,
+        now=NOW - timedelta(minutes=5),
+        initial_account=initial,
+        initial_positions=positions,
+    )
+    store = CoreStore(database, CoreConfig(account_id=ACCOUNT_ID, symbol="XLE"))
+    initialize_fixture(store, broker, now=NOW - timedelta(minutes=5))
     with database.transaction() as session:
-        repository = StorageRepository(session)
-        repository.save_strategy_deployment(IDENTITY)
-        repository.save_account_snapshot(
-            "local-snapshot",
-            account(equity).account,
-            positions,
-            captured_at=NOW - timedelta(minutes=5),
-        )
+        StorageRepository(session).save_strategy_deployment(IDENTITY)
 
 
 def supervisor(database: Database, broker: FakeBroker) -> PositionProtectionSupervisor:

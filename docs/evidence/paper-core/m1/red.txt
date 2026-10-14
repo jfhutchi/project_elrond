@@ -1,0 +1,99 @@
+FFFFFFF                                                                  [100%]
+================================== FAILURES ===================================
+_ test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending[deadline] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hupfnp2i/pytest/test_observation_to_guardian_e0')
+trigger = 'deadline'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("trigger", ["deadline", "stop"])
+    async def test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending(tmp_path, trigger):
+>       from quantbot.paper_core.guardian import guardian_cycle
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.guardian'
+
+tests\integration\paper_core\test_thin_loop.py:35: ModuleNotFoundError
+_ test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending[stop] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hupfnp2i/pytest/test_observation_to_guardian_e1')
+trigger = 'stop'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("trigger", ["deadline", "stop"])
+    async def test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending(tmp_path, trigger):
+>       from quantbot.paper_core.guardian import guardian_cycle
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.guardian'
+
+tests\integration\paper_core\test_thin_loop.py:35: ModuleNotFoundError
+____ test_duplicate_observation_has_one_entry_post_and_immutable_decision _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hupfnp2i/pytest/test_duplicate_observation_has0')
+
+    @pytest.mark.asyncio
+    async def test_duplicate_observation_has_one_entry_post_and_immutable_decision(tmp_path):
+>       from quantbot.paper_core.trader import trader_cycle
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.trader'
+
+tests\integration\paper_core\test_thin_loop.py:75: ModuleNotFoundError
+_________ test_manual_pause_after_decision_before_claim_prevents_post _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hupfnp2i/pytest/test_manual_pause_after_decisi0')
+
+    @pytest.mark.asyncio
+    async def test_manual_pause_after_decision_before_claim_prevents_post(tmp_path):
+>       from quantbot.paper_core.contracts import ProtectionPlan
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.contracts'
+
+tests\integration\paper_core\test_thin_loop.py:88: ModuleNotFoundError
+________ test_pause_arriving_during_final_account_fetch_prevents_post _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hupfnp2i/pytest/test_pause_arriving_during_fin0')
+
+    @pytest.mark.asyncio
+    async def test_pause_arriving_during_final_account_fetch_prevents_post(tmp_path):
+        from quantbot.execution import OrderSubmissionBlocked
+>       from quantbot.paper_core.trader import trader_cycle
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.trader'
+
+tests\integration\paper_core\test_thin_loop.py:105: ModuleNotFoundError
+________ test_unowned_quantity_never_certifies_by_repetition_or_exits _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hupfnp2i/pytest/test_unowned_quantity_never_ce0')
+
+    @pytest.mark.asyncio
+    async def test_unowned_quantity_never_certifies_by_repetition_or_exits(tmp_path):
+>       from quantbot.paper_core.guardian import guardian_cycle
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.guardian'
+
+tests\integration\paper_core\test_thin_loop.py:127: ModuleNotFoundError
+______________ test_two_pass_quantity_mismatch_stays_unprotected ______________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hupfnp2i/pytest/test_two_pass_quantity_mismatc0')
+
+    @pytest.mark.asyncio
+    async def test_two_pass_quantity_mismatch_stays_unprotected(tmp_path):
+        with Database.create(tmp_path / "authority.db") as db:
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+                repo.save_strategy_deployment(IDENTITY)
+                repo.save_account_snapshot("baseline", account().account,
+                    (position("XLE", quantity="1", price="75"),),
+                    captured_at=NOW - timedelta(minutes=5))
+            subject = supervisor(db, FakeBroker(account(), (position("XLE", quantity="2", price="75"),)))
+            first = await subject.evaluate(now=NOW)
+            second = await subject.evaluate(now=NOW + timedelta(seconds=15))
+            assert first.unprotected_count == 1
+>           assert second.unprotected_count == 1, "raw observation was promoted to baseline"
+E           AssertionError: raw observation was promoted to baseline
+E           assert 0 == 1
+E            +  where 0 = ProtectionCycleResult(cycle_id='protection-b9728933969e9a5b0fa656df22a5b65e', observed_at=datetime.datetime(2026, 8, 3...'>, reason='PROTECTIVE_EXIT_REQUIRED', position_count=1, evaluated_count=1, unprotected_count=0, exit_required_count=1).unprotected_count
+
+tests\fault\paper_core\test_protection_authority.py:25: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_thin_loop.py::test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending[deadline]
+FAILED tests/integration/paper_core/test_thin_loop.py::test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending[stop]
+FAILED tests/integration/paper_core/test_thin_loop.py::test_duplicate_observation_has_one_entry_post_and_immutable_decision
+FAILED tests/integration/paper_core/test_thin_loop.py::test_manual_pause_after_decision_before_claim_prevents_post
+FAILED tests/integration/paper_core/test_thin_loop.py::test_pause_arriving_during_final_account_fetch_prevents_post
+FAILED tests/integration/paper_core/test_thin_loop.py::test_unowned_quantity_never_certifies_by_repetition_or_exits
+FAILED tests/fault/paper_core/test_protection_authority.py::test_two_pass_quantity_mismatch_stays_unprotected
+7 failed in 2.49s
