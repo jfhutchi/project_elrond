@@ -4,7 +4,7 @@ import json
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
-from quantbot.domain import Account, Position
+from quantbot.domain import Account, BrokerOrder, Fill, Position
 from quantbot.learner.five_minute import FEATURE_NAMES
 from quantbot.paper_core.contracts import LearningCalendar, Observation
 from quantbot.paper_core.simulation import SyntheticBroker
@@ -33,6 +33,16 @@ class ProcessBroker(SyntheticBroker):
 
     def refresh_fixture(self, store):
         self.now = store.clocks.sample()[0]
+        journal = store.database.path.parent / "process-provider-journal.json"
+        if journal.exists():
+            state = json.loads(journal.read_text())
+            self.orders = {k: BrokerOrder.model_validate(v) for k, v in state["orders"].items()}
+            self.fills = [Fill.model_validate(v) for v in state["fills"]]
+            self.quantities = {k: Decimal(v) for k, v in state["quantities"].items()}
+            self.basis = {k: Decimal(v) for k, v in state["basis"].items()}
+            self.cash = Decimal(state["cash"])
+            self.set_mark(store.config.symbol, Decimal(100), as_of=self.now)
+            return
         with store.database.transaction() as session:
             repo = StorageRepository(session)
             self.orders = {o.client_order_id: o for o in repo.list_broker_orders()}
@@ -89,8 +99,37 @@ class ProcessBroker(SyntheticBroker):
         )
 
     async def submit_order(self, intent):
+        import os
+
+        with (self.store.database.path.parent / "process-posts.jsonl").open("a") as stream:
+            stream.write(
+                json.dumps(
+                    {
+                        "pid": os.getpid(),
+                        "role": self.store.runtime_role,
+                        "client_order_id": intent.client_order_id,
+                        "side": intent.side.value,
+                    }
+                )
+                + "\n"
+            )
         self.now = self.store.clocks.sample()[0]
-        return await super().submit_order(intent)
+        order = await super().submit_order(intent)
+        journal = self.store.database.path.parent / "process-provider-journal.json"
+        staged = journal.with_suffix(".new")
+        staged.write_text(
+            json.dumps(
+                {
+                    "orders": {k: o.model_dump(mode="json") for k, o in self.orders.items()},
+                    "fills": [f.model_dump(mode="json") for f in self.fills],
+                    "quantities": {k: str(v) for k, v in self.quantities.items()},
+                    "basis": {k: str(v) for k, v in self.basis.items()},
+                    "cash": str(self.cash),
+                }
+            )
+        )
+        staged.replace(journal)
+        return order
 
     async def learning_calendar(self):
         dates = [self.session_open - timedelta(days=days) for days in (3, 2, 1)]

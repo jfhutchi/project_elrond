@@ -1,0 +1,200 @@
+{
+  "before": {
+    "schema_version": 1,
+    "release_id": "m1-synthetic-fixture",
+    "evidence_lane": "SYNTHETIC_TEST",
+    "recorded_at_utc": "2026-10-14T14:30:00Z",
+    "source_refs": [
+      "3ea10c90a7680d3f0bf2e813bb61600a736505d03e6b2bb182d0a0b755b70814",
+      "473e632dbb2be68496b18a30675295c92626ae73ccee2316d5c24f3658474580",
+      "5ce387fff4bb4cda7074a42b65a5180e14c6f9640e31013d6fdcab218b64fe74",
+      "64032e1b0406264b7b4298b8838f684508208dad87fe3eeb002463978bdbc4bb",
+      "a209877049ceddc9ecc1682e3aa9d2ced01a8d5d262d2874a372f3a3353bd966",
+      "c4dc843c7013978c45cf5e2ecea20b78a82c7bb4d11e6e117d7298f70df4123b",
+      "fc0ed4140e23030565bd69bc882bfb11f2599a3da62c69e7ad0cce150572d700",
+      "synthetic-fill-qb-4fb002601afb7c361280de543c1802726657e59d",
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "lot_id": "fb507b96ea1ea081ebdc48dae784ff2598188be0296864f147795dda05b60d19",
+    "decision_id": "fb507b96ea1ea081ebdc48dae784ff2598188be0296864f147795dda05b60d19",
+    "entry_fill_ids": [
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "exit_fill_ids": [
+      "synthetic-fill-qb-4fb002601afb7c361280de543c1802726657e59d"
+    ],
+    "terminal_order_ids": [
+      "synthetic-qb-4fb002601afb7c361280de543c1802726657e59d",
+      "synthetic-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "protection_id": "473e632dbb2be68496b18a30675295c92626ae73ccee2316d5c24f3658474580",
+    "reconciliation_id": "fc0ed4140e23030565bd69bc882bfb11f2599a3da62c69e7ad0cce150572d700",
+    "open_quantity": "0",
+    "gross_pnl": "10",
+    "net_pnl": "10",
+    "status": "COMPLETE",
+    "cost_reason": "PROVEN_ACTUAL_FEES",
+    "cost_item_ids": [
+      "5ce387fff4bb4cda7074a42b65a5180e14c6f9640e31013d6fdcab218b64fe74",
+      "a209877049ceddc9ecc1682e3aa9d2ced01a8d5d262d2874a372f3a3353bd966"
+    ],
+    "actual_fees": "0",
+    "modeled_costs": null,
+    "modeled_net_pnl": null,
+    "source_state_hash": "d40375dbc07b6c5c6878922c50a1a47ff31bf068529ab7fb33ae296fde5c7f57",
+    "revision": 2,
+    "supersedes": "832bd18a93a9761d174e477d3fd773799743b39a72e8a4681e259e94d7e031f2",
+    "entry_notional": "500",
+    "policy_id": "collect-owned-30m-stop100-v1",
+    "dataset": "EXPLICIT_SYNTHETIC",
+    "source_start": "2026-10-14T13:55:00Z",
+    "source_end": "2026-10-14T14:30:00Z",
+    "available_at": "2026-10-14T14:30:00Z"
+  },
+  "after": {
+    "schema_version": 1,
+    "release_id": "m1-synthetic-fixture",
+    "evidence_lane": "SYNTHETIC_TEST",
+    "recorded_at_utc": "2026-10-17T14:00:00Z",
+    "source_refs": [
+      "3ea10c90a7680d3f0bf2e813bb61600a736505d03e6b2bb182d0a0b755b70814",
+      "473e632dbb2be68496b18a30675295c92626ae73ccee2316d5c24f3658474580",
+      "64032e1b0406264b7b4298b8838f684508208dad87fe3eeb002463978bdbc4bb",
+      "6ab232b371073918aff604039fa4c52fa09ed62da2ef641463ac96e6b210db12",
+      "7d5f50ee9f189972988921da8117b021b5932a341cf1cca11001d1d5ef1b4f28",
+      "c4dc843c7013978c45cf5e2ecea20b78a82c7bb4d11e6e117d7298f70df4123b",
+      "fc0ed4140e23030565bd69bc882bfb11f2599a3da62c69e7ad0cce150572d700",
+      "synthetic-fill-qb-4fb002601afb7c361280de543c1802726657e59d",
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "lot_id": "fb507b96ea1ea081ebdc48dae784ff2598188be0296864f147795dda05b60d19",
+    "decision_id": "fb507b96ea1ea081ebdc48dae784ff2598188be0296864f147795dda05b60d19",
+    "entry_fill_ids": [
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "exit_fill_ids": [
+      "synthetic-fill-qb-4fb002601afb7c361280de543c1802726657e59d"
+    ],
+    "terminal_order_ids": [
+      "synthetic-qb-4fb002601afb7c361280de543c1802726657e59d",
+      "synthetic-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "protection_id": "473e632dbb2be68496b18a30675295c92626ae73ccee2316d5c24f3658474580",
+    "reconciliation_id": "fc0ed4140e23030565bd69bc882bfb11f2599a3da62c69e7ad0cce150572d700",
+    "open_quantity": "0",
+    "gross_pnl": "10",
+    "net_pnl": null,
+    "status": "COSTS_PENDING",
+    "cost_reason": "FEE_UNAVAILABLE",
+    "cost_item_ids": [
+      "6ab232b371073918aff604039fa4c52fa09ed62da2ef641463ac96e6b210db12",
+      "7d5f50ee9f189972988921da8117b021b5932a341cf1cca11001d1d5ef1b4f28"
+    ],
+    "actual_fees": null,
+    "modeled_costs": null,
+    "modeled_net_pnl": null,
+    "source_state_hash": "2c43c34da107a4566d2392250da41589a6c6d662f94bfffda9e1945745808ab5",
+    "revision": 3,
+    "supersedes": "5ba0b4d1cc119f093fd6493ff7f0c635d98e44b24574909fd4e541d4f2e16a9e",
+    "entry_notional": "500",
+    "policy_id": "collect-owned-30m-stop100-v1",
+    "dataset": "EXPLICIT_SYNTHETIC",
+    "source_start": "2026-10-14T13:55:00Z",
+    "source_end": "2026-10-14T14:30:00Z",
+    "available_at": "2026-10-17T14:00:00Z"
+  },
+  "first_cost": {
+    "schema_version": 1,
+    "release_id": "m1-synthetic-fixture",
+    "evidence_lane": "BROKER_PAPER",
+    "recorded_at_utc": "2026-10-17T14:00:00Z",
+    "source_refs": [
+      "5209cba41b4d451326b123be040103df97664889172ffd3efc744f69b3c28af8"
+    ],
+    "fill_id": "synthetic-fill-qb-4fb002601afb7c361280de543c1802726657e59d",
+    "component": "FEE",
+    "amount": null,
+    "currency": "USD",
+    "source": "UNKNOWN",
+    "document_id": null,
+    "effective_start": "2026-10-14T14:00:00Z",
+    "effective_end": "2026-10-15T14:00:00Z",
+    "allocation_rule": "EXACT_FILL",
+    "revision": 2,
+    "supersedes": "5ce387fff4bb4cda7074a42b65a5180e14c6f9640e31013d6fdcab218b64fe74"
+  },
+  "second_cost": {
+    "schema_version": 1,
+    "release_id": "m1-synthetic-fixture",
+    "evidence_lane": "BROKER_PAPER",
+    "recorded_at_utc": "2026-10-17T14:00:00Z",
+    "source_refs": [
+      "5209cba41b4d451326b123be040103df97664889172ffd3efc744f69b3c28af8"
+    ],
+    "fill_id": "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961",
+    "component": "FEE",
+    "amount": null,
+    "currency": "USD",
+    "source": "UNKNOWN",
+    "document_id": null,
+    "effective_start": "2026-10-14T14:00:00Z",
+    "effective_end": "2026-10-15T14:00:00Z",
+    "allocation_rule": "EXACT_FILL",
+    "revision": 2,
+    "supersedes": "a209877049ceddc9ecc1682e3aa9d2ced01a8d5d262d2874a372f3a3353bd966"
+  },
+  "provider_calls": [
+    [
+      "GET",
+      "https://paper-api.alpaca.markets/v2/account/activities",
+      {
+        "after": "2026-10-15T13:59:59Z",
+        "until": "2026-10-17T14:00:00Z",
+        "direction": "asc",
+        "page_size": "100"
+      }
+    ],
+    [
+      "GET",
+      "https://paper-api.alpaca.markets/v2/account/activities",
+      {
+        "after": "2026-10-15T14:00:00Z",
+        "until": "2026-10-17T14:00:00Z",
+        "direction": "asc",
+        "page_size": "100"
+      }
+    ],
+    [
+      "GET",
+      "https://paper-api.alpaca.markets/v2/account/activities",
+      {
+        "after": "2026-10-15T14:00:00Z",
+        "until": "2026-10-17T14:00:00Z",
+        "direction": "asc",
+        "page_size": "100"
+      }
+    ],
+    [
+      "GET",
+      "https://paper-api.alpaca.markets/v2/account/activities",
+      {
+        "after": "2026-10-15T14:00:00Z",
+        "until": "2026-10-17T14:00:00Z",
+        "direction": "asc",
+        "page_size": "100"
+      }
+    ],
+    [
+      "GET",
+      "https://paper-api.alpaca.markets/v2/account/activities",
+      {
+        "after": "2026-10-15T14:00:00Z",
+        "until": "2026-10-17T14:00:00Z",
+        "direction": "asc",
+        "page_size": "100"
+      }
+    ]
+  ],
+  "precise_cash_time": true,
+  "scope": "MOCK_ONLY_NOT_ACTUAL_BROKER_AUTHORITY"
+}

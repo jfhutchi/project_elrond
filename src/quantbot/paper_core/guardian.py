@@ -151,14 +151,14 @@ def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:
                     links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
                 )
             ).scalars()
-            plans = [
-                store.read("core_protection_plans", identity, ProtectionPlan).model_dump(
-                    mode="json"
-                )
-                for identity in active
-            ]
+            protection_ids = []
+            for identity in active:
+                plan = store.read("core_protection_plans", identity, ProtectionPlan)
+                if plan.id != identity:
+                    raise ValueError("PROTECTION_PLAN_ID_MISMATCH")
+                protection_ids.append(plan.id)
     else:
-        plans = store.documents("core_protection_plans")
+        protection_ids = [content_id(p) for p in store.documents("core_protection_plans")]
     receipt = GuardianReceipt(
         recorded_at_utc=now,
         evidence_lane=store.config.evidence_lane,
@@ -166,8 +166,8 @@ def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:
         owner=store.config.owner,
         generation=store.config.generation,
         valid_until=now + timedelta(seconds=120),
-        protection_ids=tuple(content_id(p) for p in plans),
-        source_refs=tuple(content_id(p) for p in plans),
+        protection_ids=tuple(protection_ids),
+        source_refs=tuple(protection_ids),
     )
     store.record("core_guardian_receipts", receipt)
     return receipt

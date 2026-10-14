@@ -1,0 +1,44 @@
+[
+  {
+    "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qzvxoj3o\\pytest\\test_actual_three_role_process0\\process-posts.jsonl",
+    "path": "docs/evidence/paper-core/m6/fix1/logs/process-test_actual_three_role_process0-process-posts.jsonl.gz",
+    "raw_sha256": "66d0d5f5fb430001b15bd51a8561795a16319ecc2e5b1f68c801cfb1a9850c07",
+    "compressed_sha256": "11ddc838680a3a2ac307069f643277712f319ab1c92413bd7c10fb8336ff2568"
+  },
+  {
+    "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qzvxoj3o\\pytest\\test_actual_three_role_process0\\process-provider-journal.json",
+    "path": "docs/evidence/paper-core/m6/fix1/logs/process-test_actual_three_role_process0-process-provider-journal.json.gz",
+    "raw_sha256": "13bcf1e2ea1f2e05e4135d2a0898563705577ce9cba6d23e078cb11f7855ba15",
+    "compressed_sha256": "ee2eb7785415738a0ebf6709573bb6ff18d6cb37dfd0ed1f9379142e3a7e9662"
+  },
+  {
+    "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qzvxoj3o\\pytest\\test_flat_runtime_independent_0\\flat-guardian.txt",
+    "path": "docs/evidence/paper-core/m6/fix1/logs/process-test_flat_runtime_independent_0-flat-guardian.txt.gz",
+    "raw_sha256": "56f2027d8c06d5e70a11aae645d1e302cde93b0fc6cf394ed452aa687bbd4fdc",
+    "compressed_sha256": "38172cb871dfb717bb217f723204bd72bf68bce2a7b6fbf23d251ff644775dde"
+  },
+  {
+    "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qzvxoj3o\\pytest\\test_flat_runtime_independent_0\\flat-outcomes.txt",
+    "path": "docs/evidence/paper-core/m6/fix1/logs/process-test_flat_runtime_independent_0-flat-outcomes.txt.gz",
+    "raw_sha256": "986fa600dd5fb3384898aa8283b3da7571a62063c353e1b6d65c639b7e6ab958",
+    "compressed_sha256": "7e92e31d0e9cc86c0ba93f9db19a8823eb610232516199fbe8c74ba7d6a1c25d"
+  },
+  {
+    "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qzvxoj3o\\pytest\\test_flat_runtime_independent_0\\flat-trader.txt",
+    "path": "docs/evidence/paper-core/m6/fix1/logs/process-test_flat_runtime_independent_0-flat-trader.txt.gz",
+    "raw_sha256": "2c864862780f36cf62f6fb4671614c4eeb74d33de934912e16e2333e9d8e3267",
+    "compressed_sha256": "28277f310f9fa97b2eeaed3c8c50183877fe8a781b1bf41c6bf1e8515c02d8d1"
+  },
+  {
+    "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qzvxoj3o\\pytest\\test_flat_runtime_independent_0\\process-posts.jsonl",
+    "path": "docs/evidence/paper-core/m6/fix1/logs/process-test_flat_runtime_independent_0-process-posts.jsonl.gz",
+    "raw_sha256": "91a2a325bfb82321491beedc9db127bc7f9aacfb2650a039e51470bf299b62da",
+    "compressed_sha256": "9a51af4b81ecbc0d920c399d292a5511165c31d4066574cb3f0a3ecb0e9e65b8"
+  },
+  {
+    "source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-qzvxoj3o\\pytest\\test_flat_runtime_independent_0\\process-provider-journal.json",
+    "path": "docs/evidence/paper-core/m6/fix1/logs/process-test_flat_runtime_independent_0-process-provider-journal.json.gz",
+    "raw_sha256": "f849ebb948e7435c893b4c74caf7973533647b4ea407b94e965df8c115a1860f",
+    "compressed_sha256": "e712b8892fb5fd78ad8ca7382eeb2db081e7af88b7d26dad4b9d4b263f4e22d4"
+  }
+]

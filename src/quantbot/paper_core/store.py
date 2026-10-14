@@ -262,7 +262,9 @@ class CoreStore:
             orders = tuple(
                 o.broker_order_id for o in StorageRepository(session).list_broker_orders()
             )
+            ledger_state_id = self.ledger_state_id(session)
         return ReconciliationProof(
+            ledger_state_id=ledger_state_id,
             recorded_at_utc=now,
             evidence_lane=self.config.evidence_lane,
             release_id=self.config.release_id,
@@ -279,6 +281,54 @@ class CoreStore:
             complete=complete,
             order_ids=orders,
             positions=positions,
+        )
+
+    def ledger_state_id(self, session: Session) -> str:
+        """Stable economics only; polling receipts and market marks grant no authority."""
+        from quantbot.paper_core.contracts import CashActivity
+        from quantbot.paper_core.costs import current_costs
+
+        repo = StorageRepository(session)
+        external = [
+            {
+                key: json.loads(payload).get(key)
+                for key in (
+                    "event_id",
+                    "account_id",
+                    "owner",
+                    "symbol",
+                    "quantity_delta",
+                    "net_cash",
+                    "order_id",
+                    "occurred_at",
+                    "activity_type",
+                )
+            }
+            for payload in session.execute(
+                select(table("core_external_owner_events").c.payload)
+            ).scalars()
+        ]
+        cash_movements = {
+            content_id((a.account_id, a.movements, a.activity_ids, a.complete))
+            for payload in session.execute(
+                select(table("core_cash_activities").c.payload)
+            ).scalars()
+            for a in (CashActivity.model_validate_json(payload),)
+        }
+        actual_costs = current_costs(session, cutoff=datetime.max.replace(tzinfo=UTC))
+        return content_id(
+            {
+                "orders": sorted(
+                    (o.model_dump(exclude={"submitted_at"}) for o in repo.list_broker_orders()),
+                    key=canonical_result_json,
+                ),
+                "fills": repo.list_fills(),
+                "external": sorted(external, key=canonical_result_json),
+                "cash_movements": sorted(cash_movements),
+                "actual_cost_revisions": sorted(
+                    item.id for item in actual_costs.values() if item.source != "MODELED"
+                ),
+            }
         )
 
     def export_loop(self, decision_id: str) -> dict[str, Any]:
@@ -348,6 +398,10 @@ def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
             != tuple(o.broker_order_id for o in StorageRepository(session).list_broker_orders())
             or proof.release_id != store.config.release_id
             or proof.fill_ids != fills
+            or (
+                proof.ledger_state_id is not None
+                and proof.ledger_state_id != store.ledger_state_id(session)
+            )
             or proof.expected_cash != cash
             or proof.cash_complete != (cash is not None)
             or (cash is not None and proof.account.cash != cash)

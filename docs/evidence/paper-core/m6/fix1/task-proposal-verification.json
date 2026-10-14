@@ -1,0 +1,38 @@
+[
+  {
+    "path": "docs/evidence/paper-core/m6/fix1/task-proposal-guardian.xml",
+    "sha256": "01d603587bccbaa9525937a13612d9a6fc6e7d9c3a8cf4c59d763f5e9fafc2b1",
+    "verified_static_only": true,
+    "role": "guardian",
+    "enabled": false,
+    "triggers": 0,
+    "execution_time_limit": "PT0S",
+    "run_level": "LeastPrivilege",
+    "submission_disabled": true,
+    "registered_or_started": false
+  },
+  {
+    "path": "docs/evidence/paper-core/m6/fix1/task-proposal-outcomes.xml",
+    "sha256": "13f4706e0a0690d7db5ca46efeacd5770406fdce00d9d56d9183f88ef022a0ad",
+    "verified_static_only": true,
+    "role": "outcomes",
+    "enabled": false,
+    "triggers": 0,
+    "execution_time_limit": "PT0S",
+    "run_level": "LeastPrivilege",
+    "submission_disabled": true,
+    "registered_or_started": false
+  },
+  {
+    "path": "docs/evidence/paper-core/m6/fix1/task-proposal-trader.xml",
+    "sha256": "3fab7afbb0fd63ef0255d4ac3c0a37e42b960fa128229b3b5850aba105ee1b3b",
+    "verified_static_only": true,
+    "role": "trader",
+    "enabled": false,
+    "triggers": 0,
+    "execution_time_limit": "PT0S",
+    "run_level": "LeastPrivilege",
+    "submission_disabled": true,
+    "registered_or_started": false
+  }
+]

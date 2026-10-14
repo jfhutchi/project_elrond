@@ -1,0 +1,65 @@
+import sys
+sys.path.insert(0, r'C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond')
+import asyncio
+import os
+from datetime import timedelta
+from tests.integration.paper_core.test_release_recovery import make_process_release
+from tests.fixtures.core_m6 import broker as fixture_broker
+from quantbot.paper_core.authority import RoleHeartbeat, publish_heartbeat
+from quantbot.paper_core.guardian import guardian_cycle, acknowledge_handoffs
+from quantbot.paper_core.roles import dispatch_entries
+from quantbot.paper_core.trader import trader_cycle
+from quantbot.storage import StorageRepository
+
+
+def test_ordered_independent_guardian_handshake(tmp_path):
+    db, store, config, *_ = make_process_release(tmp_path)
+    broker = fixture_broker(store, config)
+    def attest(canonical=False):
+        now = store.clocks.sample()[0]
+        receipt = acknowledge_handoffs(store, now=now)
+        if canonical:
+            ids = tuple(link['protection_id'] for link in store.links())
+            receipt = receipt.model_copy(update={'protection_ids':ids, 'source_refs':ids})
+            store.record('core_guardian_receipts', receipt)
+        print('ACK_IDS', {'links': store.links(), 'protection_ids': receipt.protection_ids})
+        publish_heartbeat(store, RoleHeartbeat(role='guardian', release_id=store.config.release_id,
+            config_id=store.config_id, store_identity=db.store_identity, owner=store.config.owner,
+            generation=store.config.generation, process_epoch='isolated-other-guardian-epoch',
+            pid=os.getpid()+100000, recorded_at=now, valid_until=now+timedelta(seconds=30),
+            last_useful_progress=now, objections=(), evidence_ids=(receipt.id,),
+            proof_age_seconds=0.0, guardian_receipt_id=receipt.id))
+    async def ordered():
+        store.runtime_role='guardian'
+        await guardian_cycle(store, broker, now=store.clocks.sample()[0])
+        attest()
+        store.runtime_role='trader'
+        store.runtime_submission_enabled=True
+        decision = await trader_cycle(store, broker, await broker.observation(), config.initial_model,
+            store.latest_proof(), now=store.clocks.sample()[0])
+        assert decision.action=='BUY' and len(store.links())==1
+        decision_proof = decision.inventory_id
+        store.runtime_role='guardian'
+        await guardian_cycle(store, broker, now=store.clocks.sample()[0])
+        attest()
+        fresh_proof = store.latest_proof().id
+        store.runtime_role='trader'
+        reasons = await dispatch_entries(store, broker)
+        with db.transaction() as session:
+            repo = StorageRepository(session)
+            events = repo.list_order_events(intent_id=store.links()[0]['intent_id'])
+        print('HANDSHAKE_REPRO', {'decision_proof':decision_proof, 'latest_proof':fresh_proof,
+            'dispatch_reasons':reasons, 'posts':len(broker.posts),
+            'events':[(e.event_type,e.detail) for e in events]})
+        assert decision_proof != fresh_proof
+        assert 'CORE_INDEPENDENT_GUARDIAN_NOT_READY' in reasons
+        assert not broker.posts
+        store.runtime_role='guardian'
+        attest(canonical=True)
+        store.runtime_role='trader'
+        second = await dispatch_entries(store, broker)
+        print('AFTER_CANONICAL_RECEIPT_FIXTURE', {'reasons':second, 'posts':len(broker.posts)})
+        assert 'CORE_CASH_AUTHORITY_UNAVAILABLE' in second
+        assert not broker.posts
+    try: asyncio.run(ordered())
+    finally: db.close()

@@ -167,7 +167,8 @@ class ModelArtifact(BrokerModel):
 
 
 class ReconciliationProof(Evidence):
-    legacy_optional_fields = frozenset({"cash_complete"})
+    legacy_optional_fields = frozenset({"cash_complete", "ledger_state_id"})
+    ledger_state_id: str | None = None
     account: Account
     baseline_id: str
     generation: int = Field(ge=1)

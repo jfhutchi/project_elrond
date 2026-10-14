@@ -1,0 +1,10 @@
+{
+  "change": "expired_guardian",
+  "phase": "claim",
+  "claimed": false,
+  "decision_id": "fb507b96ea1ea081ebdc48dae784ff2598188be0296864f147795dda05b60d19",
+  "original_proof_id": "e296d3af13ca679beb86eb8681d07a0ca96734b37e8fd60e5782cda2acd5b759",
+  "current_proof_id": "afbd60a30789873e7eeed0ed531278d3a0fe132981a90d97e55db2b837c12d51",
+  "ledger_before": "218aa9d5b39202e89777ffdd825d5b32efa343f5edd7cd9f1abf8ac4d70fa442",
+  "ledger_after": "218aa9d5b39202e89777ffdd825d5b32efa343f5edd7cd9f1abf8ac4d70fa442"
+}

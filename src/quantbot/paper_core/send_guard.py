@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -21,6 +22,88 @@ from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
 
 REFUSAL = "CORE_ENTRY_SEND_REFUSED"
+
+
+def compatible_successor(
+    store: CoreStore,
+    session: Session,
+    decision: Decision,
+    current: ReconciliationProof,
+    intent: OrderIntent | None,
+    *,
+    now: datetime,
+) -> bool:
+    """Accept a certified refresh, never a different economic ledger or risk envelope."""
+    if current.ledger_state_id is not None and current.ledger_state_id != store.ledger_state_id(
+        session
+    ):
+        return False
+    if decision.inventory_id == current.id:
+        return True
+    if store.runtime_role is None and store.config.evidence_lane != "BROKER_PAPER":
+        return False
+    encoded = session.execute(
+        select(table("core_reconciliation_proofs").c.payload).where(
+            table("core_reconciliation_proofs").c.id == decision.inventory_id
+        )
+    ).scalar_one_or_none()
+    if encoded is None:
+        return False
+    original = ReconciliationProof.model_validate_json(encoded)
+    certified = session.execute(
+        select(table("core_inventory_certifications").c.generation).where(
+            table("core_inventory_certifications").c.proof_id == original.id
+        )
+    ).scalar_one_or_none()
+
+    def basis(proof: ReconciliationProof) -> list[tuple[str, Decimal, Decimal]]:
+        return sorted((p.symbol, p.quantity, p.average_entry_price) for p in proof.positions)
+
+    return (
+        original.id == decision.inventory_id
+        and certified == original.generation == decision.inventory_generation
+        and original.complete
+        and original.cash_complete
+        and current.complete
+        and original.ledger_state_id is not None
+        and original.ledger_state_id == current.ledger_state_id == store.ledger_state_id(session)
+        and original.generation < current.generation
+        and original.recorded_at_utc <= current.recorded_at_utc <= now
+        and (now - current.recorded_at_utc).total_seconds() <= 120
+        and original.account.account_id == current.account.account_id == store.config.account_id
+        and original.account.currency == current.account.currency
+        and original.account.cash == current.account.cash
+        and original.baseline_id == current.baseline_id
+        and original.release_id == current.release_id == store.config.release_id
+        and original.evidence_lane == current.evidence_lane == store.config.evidence_lane
+        and original.fill_ids == current.fill_ids
+        and original.order_ids == current.order_ids
+        and original.expected_quantities == current.expected_quantities
+        and original.actual_quantities == current.actual_quantities
+        and original.expected_cash == current.expected_cash
+        and basis(original) == basis(current)
+        and store.cash_authority_current(session, original)
+        and not session.execute(
+            select(table("core_cash_authority_revocations").c.snapshot_id).where(
+                table("core_cash_authority_revocations").c.snapshot_id
+                == "core-certified-" + original.id
+            )
+        ).first()
+        and not any(
+            intent is None or i.intent_id != intent.intent_id
+            for i in StorageRepository(session).list_unresolved_order_intents()
+        )
+    )
+
+
+def current_risk_allowed(proof: ReconciliationProof, *, quantity: Decimal, price: Decimal) -> bool:
+    notional = quantity * price
+    return (
+        notional <= proof.account.equity * Decimal("0.005")
+        and notional * Decimal("0.01") <= proof.account.equity * Decimal("0.0025")
+        and notional <= proof.account.cash
+        and notional <= proof.account.buying_power * Decimal("0.95")
+    )
 
 
 def definitively_unsent(repository: StorageRepository, intent_id: str) -> bool:
@@ -168,7 +251,7 @@ def final_send_in_session(
         or proof.expected_cash is None
         or proof.account.cash != proof.expected_cash
         or not store.cash_authority_current(session, proof)
-        or decision.inventory_id != proof.id
+        or not compatible_successor(store, session, decision, proof, intent, now=now)
         or session.execute(
             select(table("core_cash_authority_revocations").c.snapshot_id).where(
                 table("core_cash_authority_revocations").c.snapshot_id
@@ -177,6 +260,11 @@ def final_send_in_session(
         ).first()
     ):
         reasons.append("CORE_CASH_AUTHORITY_UNAVAILABLE")
+    if proof is not None and (
+        store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER"
+    ):
+        if not current_risk_allowed(proof, quantity=intent.quantity, price=decision.price):
+            reasons.append("CORE_FIXED_RISK_ENVELOPE")
     if (
         stored.state is not IntentState.ORDER_CREATED
         or intent.state is not IntentState.ORDER_CREATED

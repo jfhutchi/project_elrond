@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select, text, update
+from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter
@@ -19,17 +20,19 @@ from quantbot.market_data.base import AdjustmentMode, BarQuery, MarketDataFeed
 from quantbot.market_data.calendar import AlpacaMarketCalendar, session_sequence
 from quantbot.paper_core.contracts import BrokerEvent, CostItem, LearningCalendar, Observation
 from quantbot.paper_core.costs import current_costs
+from quantbot.paper_core.operational_costs import pending_cost_revision_source
 from quantbot.paper_core.release import RuntimeConfig
 from quantbot.paper_core.store import CoreStore, put, table
 from quantbot.paper_core.time_evidence import BrokerTime, Clocks
 from quantbot.research.manifest import canonical_result_json, content_id
-from quantbot.storage import StateConflictError
+from quantbot.storage import StateConflictError, StorageRepository
 
 
 class AlpacaCoreBroker:
     provider = "alpaca"
     environment = "PAPER"
     endpoint = "https://paper-api.alpaca.markets"
+    cost_revision_batch_size = 128
 
     def __init__(
         self,
@@ -47,7 +50,7 @@ class AlpacaCoreBroker:
         self.config, self.clocks, self.account_id = config, clocks, account_id
         self._marks: dict[str, tuple[Decimal, datetime]] = {}
         self.store: CoreStore | None = None
-        self.pending_progress: tuple[str, str, str | None] | None = None
+        self.pending_progress: tuple[str, str, str | None, str | None] | None = None
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.adapter, name)
@@ -277,20 +280,18 @@ class AlpacaCoreBroker:
         }
         with store.database.transaction() as session:
             session.execute(text("BEGIN IMMEDIATE"))
+            repo = StorageRepository(session)
+            costs = current_costs(session, cutoff=self.now)
+            contract_conflicted = self._revise_conflicted_contract(
+                store, session, document, progress, costs, events
+            )
             document_id = content_id(document)
             put(session, "core_provider_acquisitions", document_id, document)
             self.pending_progress = (
                 until.isoformat(),
                 document_id,
                 progress["watermark"] if progress else None,
-            )
-            repo = StorageRepository(session)
-            costs = current_costs(session, cutoff=self.now)
-            conflicting_fee = any(
-                r.get("activity_type") in {"FEE", "CFEE"}
-                and "net_amount" in r
-                and Decimal(str(r["net_amount"])) != 0
-                for r in rows
+                progress["document_id"] if progress else None,
             )
             for raw in rows:
                 if raw.get("activity_type") == "FILL":
@@ -307,6 +308,24 @@ class AlpacaCoreBroker:
                 occurred = datetime.fromisoformat(str(creation).replace("Z", "+00:00"))
                 if occurred.tzinfo is None:
                     # A date-only activity cannot establish the intraday baseline boundary.
+                    if raw["activity_type"] in {"FEE", "CFEE"}:
+                        self.record_external(
+                            session,
+                            dict(
+                                event_id=str(raw["id"]),
+                                symbol="",
+                                owner="ACCOUNT_NONTRADE",
+                                quantity_delta="0",
+                                net_cash=None,
+                                source_document=document_id,
+                                account_id=self.account_id,
+                                occurred_at=None,
+                                raw_creation=creation,
+                                activity_type=str(raw["activity_type"]),
+                                cash_authority_reason="NONTRADE_CASH_BASELINE_BOUNDARY_UNVERIFIED",
+                            ),
+                        )
+                        continue
                     raise BrokerProtocolError("NONTRADE_CASH_BASELINE_BOUNDARY_UNVERIFIED")
                 if occurred > commission.approved_at:
                     self.record_external(
@@ -377,40 +396,6 @@ class AlpacaCoreBroker:
                         )
                     continue
                 if self.config.cost_contract is not None:
-                    previous_cost = costs.get((fill.fill_id, "FEE"))
-                    if (
-                        conflicting_fee
-                        and previous_cost is not None
-                        and previous_cost.source == "CONTRACTUAL_ZERO"
-                    ):
-                        unknown_item = CostItem(
-                            recorded_at_utc=self.now,
-                            evidence_lane="BROKER_PAPER",
-                            release_id=store.config.release_id,
-                            fill_id=fill.fill_id,
-                            source="UNKNOWN",
-                            effective_start=previous_cost.effective_start,
-                            effective_end=previous_cost.effective_end,
-                            revision=previous_cost.revision + 1,
-                            supersedes=previous_cost.id,
-                            source_refs=(document_id,),
-                        )
-                        events.append(
-                            BrokerEvent(
-                                recorded_at_utc=self.now,
-                                occurred_at=self.now,
-                                evidence_lane="BROKER_PAPER",
-                                release_id=store.config.release_id,
-                                account_id=self.account_id,
-                                provider="alpaca",
-                                endpoint=self.endpoint + "/conflicting-fee",
-                                client_order_id=core_order.client_order_id if core_order else "",
-                                event_id=unknown_item.id,
-                                raw_digest=content_id(unknown_item),
-                                cost=unknown_item,
-                            )
-                        )
-                        continue
                     item = self.config.cost_contract.fee(
                         fill,
                         account_id=self.account_id,
@@ -418,7 +403,7 @@ class AlpacaCoreBroker:
                         release_id=store.config.release_id,
                     )
                     if (
-                        not conflicting_fee
+                        not contract_conflicted
                         and item is not None
                         and (fill.fill_id, "FEE") not in costs
                     ):
@@ -464,17 +449,295 @@ class AlpacaCoreBroker:
             return
         put(session, "core_external_owner_events", identity, external)
 
+    def _revise_conflicted_contract(
+        self,
+        store: CoreStore,
+        session: Session,
+        document: dict[str, Any],
+        progress: Any,
+        costs: dict[tuple[str, str], CostItem],
+        events: list[BrokerEvent],
+    ) -> bool:
+        """A fee contradicts its exact contract, irrespective of the FILL overlap."""
+        contract = self.config.cost_contract
+        if contract is None:
+            return False
+        cursor = table("core_source_cursors")
+        conflict_key = content_id(
+            {
+                "kind": "ALPACA_COST_CONTRACT_CONFLICT",
+                "contract": contract.id,
+                "account": self.account_id,
+            }
+        )
+        latch = (
+            session.execute(select(cursor).where(cursor.c.source_id == conflict_key))
+            .mappings()
+            .one_or_none()
+        )
+        observed_conflict = any(
+            r.get("activity_type") in {"FEE", "CFEE"}
+            and "net_amount" in r
+            and Decimal(str(r["net_amount"])) != 0
+            for r in document["rows"]
+        )
+        if not observed_conflict and latch is None:
+            return False
+        previous_doc = (
+            {}
+            if progress is None
+            else json.loads(
+                session.execute(
+                    select(table("core_provider_acquisitions").c.payload).where(
+                        table("core_provider_acquisitions").c.id == progress["document_id"]
+                    )
+                ).scalar_one()
+            )
+        )
+        first_doc = (
+            None
+            if latch is None
+            else json.loads(
+                session.execute(
+                    select(table("core_provider_acquisitions").c.payload).where(
+                        table("core_provider_acquisitions").c.id == latch["event_id"]
+                    )
+                ).scalar_one()
+            )
+        )
+        first_seen = self.now if latch is None else datetime.fromisoformat(latch["available_at"])
+        high = (
+            session.execute(select(func.max(table("core_cost_items").c.id))).scalar_one() or ""
+            if first_doc is None
+            else first_doc["fee_scan_high"]
+        )
+        after = (
+            previous_doc.get("fee_scan_after", "")
+            if previous_doc.get("cost_conflict_contract_id") == contract.id
+            else ""
+        )
+        original_costs = (
+            select(table("core_cost_items"))
+            .where(
+                table("core_cost_items").c.id <= high,
+                func.json_extract(table("core_cost_items").c.payload, "$.source")
+                == "CONTRACTUAL_ZERO",
+                func.json_extract(table("core_cost_items").c.payload, "$.document_id")
+                == contract.id,
+                func.json_extract(table("core_cost_items").c.payload, "$.component") == "FEE",
+            )
+            .order_by(table("core_cost_items").c.id)
+        )
+        batch = (
+            session.execute(
+                original_costs.where(table("core_cost_items").c.id > after).limit(
+                    self.cost_revision_batch_size
+                )
+            )
+            .mappings()
+            .all()
+        )
+        scan_after = str(batch[-1]["id"]) if batch else after
+        complete = scan_after >= high or not batch
+        repo = StorageRepository(session)
+        outcome_after = (
+            previous_doc.get("fee_outcome_scan_after", "")
+            if previous_doc.get("cost_conflict_contract_id") == contract.id
+            else ""
+        )
+        outcome_complete = False
+        if complete:
+            checked = (
+                session.execute(
+                    original_costs.where(table("core_cost_items").c.id > outcome_after).limit(
+                        self.cost_revision_batch_size
+                    )
+                )
+                .mappings()
+                .all()
+            )
+            waiting = False
+            for row in checked:
+                old = CostItem.model_validate_json(row["payload"])
+                current = costs.get((old.fill_id, "FEE"))
+                fill = repo.get_fill(old.fill_id)
+                order = None if fill is None else repo.get_broker_order(fill.broker_order_id)
+                owned_lot = (
+                    None
+                    if order is None
+                    else session.execute(
+                        select(table("core_intent_links").c.lot_id)
+                        .join(
+                            table("order_intents"),
+                            table("order_intents").c.intent_id
+                            == table("core_intent_links").c.intent_id,
+                        )
+                        .where(table("order_intents").c.client_order_id == order.client_order_id)
+                    ).scalar_one_or_none()
+                )
+                applicable = (
+                    fill is not None
+                    and contract.fee(
+                        fill,
+                        account_id=self.account_id,
+                        at=first_seen,
+                        release_id=store.config.release_id,
+                    )
+                    is not None
+                    and owned_lot is not None
+                )
+                if applicable:
+                    payload = session.execute(
+                        select(table("core_outcome_revisions").c.payload)
+                        .join(
+                            table("core_outcome_index"),
+                            table("core_outcome_index").c.outcome_id
+                            == table("core_outcome_revisions").c.id,
+                        )
+                        .where(table("core_outcome_index").c.lot_id == owned_lot)
+                    ).scalar_one_or_none()
+                    outcome = None if payload is None else json.loads(payload)
+                    waiting = (
+                        current is None
+                        or current.id == old.id
+                        or (
+                            outcome is not None
+                            and (
+                                current.id not in outcome["cost_item_ids"]
+                                or (
+                                    current.source == "UNKNOWN"
+                                    and (
+                                        outcome["status"] != "COSTS_PENDING"
+                                        or outcome["actual_fees"] is not None
+                                        or outcome["net_pnl"] is not None
+                                    )
+                                )
+                            )
+                        )
+                    )
+                    if waiting:
+                        break
+                outcome_after = str(row["id"])
+            outcome_complete = not waiting and (outcome_after >= high or not checked)
+        document.update(
+            cost_conflict_contract_id=contract.id,
+            fee_scan_high=high,
+            fee_scan_after=scan_after,
+            fee_scan_complete=complete,
+            fee_outcome_scan_after=outcome_after,
+            fee_outcome_scan_complete=outcome_complete,
+        )
+        document_id = content_id(document)
+        put(session, "core_provider_acquisitions", document_id, document)
+        if latch is None:
+            session.execute(
+                cursor.insert().values(
+                    source_id=conflict_key,
+                    available_at=first_seen.isoformat(),
+                    event_id=document_id,
+                )
+            )
+        first_source = document_id if latch is None else str(latch["event_id"])
+        pending = pending_cost_revision_source(self.account_id)
+        if (
+            batch
+            and session.execute(
+                select(cursor.c.source_id).where(cursor.c.source_id == pending)
+            ).first()
+            is None
+        ):
+            session.execute(
+                cursor.insert().values(
+                    source_id=pending, available_at=first_seen.isoformat(), event_id=first_source
+                )
+            )
+        for row in batch:
+            previous = CostItem.model_validate_json(row["payload"])
+            current = costs.get((previous.fill_id, "FEE"))
+            if (
+                previous.id != row["id"]
+                or previous.component != "FEE"
+                or previous.source != "CONTRACTUAL_ZERO"
+                or previous.document_id != contract.id
+                or current is None
+                or current.id != previous.id
+            ):
+                continue
+            fill = repo.get_fill(previous.fill_id)
+            order = None if fill is None else repo.get_broker_order(fill.broker_order_id)
+            if (
+                fill is None
+                or order is None
+                or contract.fee(
+                    fill,
+                    account_id=self.account_id,
+                    at=first_seen,
+                    release_id=store.config.release_id,
+                )
+                is None
+            ):
+                continue
+            owned = session.execute(
+                select(table("core_intent_links").c.intent_id)
+                .join(
+                    table("order_intents"),
+                    table("order_intents").c.intent_id == table("core_intent_links").c.intent_id,
+                )
+                .where(table("order_intents").c.client_order_id == order.client_order_id)
+            ).first()
+            if owned is None:
+                continue
+            unknown = CostItem(
+                recorded_at_utc=first_seen,
+                evidence_lane="BROKER_PAPER",
+                release_id=store.config.release_id,
+                fill_id=fill.fill_id,
+                source="UNKNOWN",
+                effective_start=previous.effective_start,
+                effective_end=previous.effective_end,
+                revision=previous.revision + 1,
+                supersedes=previous.id,
+                source_refs=(first_source,),
+            )
+            events.append(
+                BrokerEvent(
+                    recorded_at_utc=first_seen,
+                    occurred_at=first_seen,
+                    evidence_lane="BROKER_PAPER",
+                    release_id=store.config.release_id,
+                    account_id=self.account_id,
+                    provider="alpaca",
+                    endpoint=self.endpoint + "/conflicting-fee",
+                    client_order_id=order.client_order_id,
+                    event_id=unknown.id,
+                    raw_digest=content_id(unknown),
+                    cost=unknown,
+                )
+            )
+        return True
+
     def accept_activity_cursor(self, store: CoreStore) -> None:
         if self.pending_progress is None:
             return
-        watermark, document_id, previous = self.pending_progress
+        watermark, document_id, previous, previous_document = self.pending_progress
         with store.database.transaction() as session:
             session.execute(text("BEGIN IMMEDIATE"))
             progress = table("core_provider_progress")
+            document = json.loads(
+                session.execute(
+                    select(table("core_provider_acquisitions").c.payload).where(
+                        table("core_provider_acquisitions").c.id == document_id
+                    )
+                ).scalar_one()
+            )
             actual = session.execute(
-                select(progress.c.watermark).where(progress.c.account_id == self.account_id)
-            ).scalar_one_or_none()
-            if actual == previous:
+                select(progress.c.watermark, progress.c.document_id).where(
+                    progress.c.account_id == self.account_id
+                )
+            ).one_or_none()
+            if (None if actual is None else tuple(actual)) == (
+                None if previous is None else (previous, previous_document)
+            ):
                 values = dict(watermark=watermark, document_id=document_id)
                 if actual is None:
                     session.execute(progress.insert().values(account_id=self.account_id, **values))
@@ -483,5 +746,14 @@ class AlpacaCoreBroker:
                         update(progress)
                         .where(progress.c.account_id == self.account_id)
                         .values(**values)
+                    )
+                if document.get("fee_scan_complete") and document.get("fee_outcome_scan_complete"):
+                    session.execute(
+                        table("core_source_cursors")
+                        .delete()
+                        .where(
+                            table("core_source_cursors").c.source_id
+                            == pending_cost_revision_source(self.account_id)
+                        )
                     )
         self.pending_progress = None

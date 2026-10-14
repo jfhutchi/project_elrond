@@ -86,7 +86,13 @@ def test_populated_v34_migration_preserves_ids_omissions_claim_and_owner(tmp_pat
     from sqlalchemy import create_engine
 
     from quantbot.paper_core.activation import ActivationAuthority, active_in_session
-    from quantbot.paper_core.contracts import CoreConfig, Decision, ModelArtifact, ProtectionPlan
+    from quantbot.paper_core.contracts import (
+        CoreConfig,
+        Decision,
+        ModelArtifact,
+        ProtectionPlan,
+        ReconciliationProof,
+    )
     from quantbot.paper_core.store import CoreStore
     from quantbot.storage import Database, MigrationRequiredError
 
@@ -126,9 +132,12 @@ def test_populated_v34_migration_preserves_ids_omissions_claim_and_owner(tmp_pat
             ("core_models", ModelArtifact),
             ("core_protection_plans", ProtectionPlan),
             ("core_activation_authorities", ActivationAuthority),
+            ("core_reconciliation_proofs", ReconciliationProof),
         ):
             for row in fixture[name]:
                 assert kind.model_validate_json(row["payload"]).id == row["id"]
+                if kind is ReconciliationProof:
+                    assert kind.model_validate_json(row["payload"]).ledger_state_id is None
         with db.engine.connect() as connection:
             for name, rows in fixture.items():
                 if name in {"schema_version", "alembic_version"}:
@@ -452,4 +461,378 @@ with Database(Path(sys.argv[1])) as db:
             log.close()
         for file in tmp_path.glob("*.txt"):
             print("M6_PROCESS_LOG:" + file.name + ":" + file.read_text(errors="replace"))
+        db.close()
+
+
+def test_flat_runtime_independent_guardian_ack_submits_once_and_protects(tmp_path):
+    import time
+    from decimal import Decimal
+
+    from quantbot.paper_core.release import read_export
+
+    db, store, config, release, config_path, manifest_path = make_process_release(tmp_path)
+    assert not store.links()
+    (tmp_path / "session-close.json").write_text(
+        json.dumps((store.clocks.sample()[0] + timedelta(seconds=128)).isoformat())
+    )
+    processes, streams = [], []
+
+    def start(role, cycles):
+        stream = (tmp_path / ("flat-" + role + ".txt")).open("w")
+        process = subprocess.Popen(
+            [
+                sys.executable,
+                "-B",
+                "-m",
+                "quantbot.paper_core",
+                "--config",
+                str(config_path),
+                "--manifest",
+                str(manifest_path),
+                "--role",
+                role,
+                "--cycles",
+                str(cycles),
+                "--fixture-driver",
+                "tests.fixtures.core_m6:broker",
+            ],
+            stdout=stream,
+            stderr=subprocess.STDOUT,
+            cwd=Path(config.repository),
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
+        processes.append(process)
+        streams.append(stream)
+        return process
+
+    try:
+        start("guardian", 70)
+        start("outcomes", 75)
+        deadline = time.monotonic() + 10
+        while "guardian" not in runtime.read_status(db.path)["roles"]:
+            assert time.monotonic() < deadline
+            time.sleep(0.05)
+        start("trader", 20)
+        for process in processes:
+            process.wait(timeout=60)
+            assert process.returncode == 0
+        for stream in streams:
+            stream.close()
+        posts_file = tmp_path / "process-posts.jsonl"
+        posts = (
+            [json.loads(s) for s in posts_file.read_text().splitlines()]
+            if posts_file.exists()
+            else []
+        )
+        assert sum(p["side"] == "BUY" for p in posts) == 1, posts
+        assert sum(p["side"] == "SELL" for p in posts) == 1, posts
+        entry = next(link for link in store.links() if link["role"] == "ENTRY")
+        joined = read_export(db.path, entry["decision_id"])
+        assert Decimal(joined["current_outcome"]["open_quantity"]) == 0
+        assert len(joined["fills"]) == 2
+        assert any(
+            entry["protection_id"] in r["protection_ids"]
+            for r in joined["guardian_receipts"].values()
+        )
+        status = runtime.read_status(db.path)
+        assert len({r["pid"] for r in status["roles"].values()}) == 3
+        assert posts[0]["pid"] == status["roles"]["trader"]["pid"]
+        assert posts[1]["pid"] == status["roles"]["guardian"]["pid"]
+        print(
+            "M6_FIX1_FLAT_HANDSHAKE:"
+            + json.dumps(
+                {
+                    "release_id": release.id,
+                    "posts": posts,
+                    "actual_role_status": status,
+                    "joined": joined,
+                }
+            )
+        )
+    finally:
+        for process in processes:
+            if process.poll() is None:
+                process.terminate()
+                process.wait(timeout=10)
+        for stream in streams:
+            stream.close()
+        db.close()
+
+
+@pytest.mark.parametrize(
+    "change",
+    [
+        "refresh",
+        "marks",
+        "low_bp",
+        "low_equity",
+        "cash",
+        "quantity",
+        "order",
+        "reservation",
+        "revoked",
+        "expired_decision",
+        "expired_plan",
+        "expired_guardian",
+    ],
+)
+@pytest.mark.parametrize("phase", ["claim", "send"])
+def test_runtime_locked_claim_accepts_only_safe_successor(tmp_path, change, phase):
+    import os
+    from decimal import Decimal
+    from types import SimpleNamespace
+
+    from tests.fixtures.core_m2 import NOW, prepare
+
+    from quantbot.domain import (
+        BrokerOrder,
+        IntentState,
+        OrderIntent,
+        OrderSide,
+        OrderType,
+        TimeInForce,
+    )
+    from quantbot.paper_core.authority import RoleHeartbeat, publish_heartbeat
+    from quantbot.paper_core.contracts import ProtectionPlan
+    from quantbot.paper_core.guardian import acknowledge_handoffs
+    from quantbot.paper_core.store import certify_inventory, put, table
+    from quantbot.paper_core.trader import claim_entry, evaluate_entry, record_observation
+    from quantbot.storage import StorageRepository
+
+    db, store, broker, original, observation, model = prepare(tmp_path)
+    try:
+        if change == "expired_plan":
+            observation = observation.model_copy(
+                update={"session_close": NOW + timedelta(seconds=121)}
+            )
+        decision = evaluate_entry(store.config, observation, model, original)
+        assert decision.action == "BUY"
+        plan = ProtectionPlan.for_decision(decision, store.config)
+        record_observation(store, observation)
+        earlier_claim = None
+        if phase == "send":
+            at = NOW + timedelta(milliseconds=1)
+            store.clocks = SimpleNamespace(
+                sample=lambda: (at, 1.0), process_id="deterministic-trader"
+            )
+            store.runtime_role = "guardian"
+            initial_receipt = acknowledge_handoffs(store, now=at)
+            publish_heartbeat(
+                store,
+                RoleHeartbeat(
+                    role="guardian",
+                    release_id=store.config.release_id,
+                    config_id=store.config_id,
+                    store_identity=db.store_identity,
+                    owner=store.config.owner,
+                    generation=store.config.generation,
+                    process_epoch="deterministic-other-guardian",
+                    pid=os.getpid() + 100000,
+                    recorded_at=at,
+                    valid_until=at + timedelta(seconds=10),
+                    last_useful_progress=at,
+                    objections=(),
+                    evidence_ids=(initial_receipt.id,),
+                    proof_age_seconds=0,
+                    guardian_receipt_id=initial_receipt.id,
+                ),
+            )
+            store.runtime_role = "trader"
+            earlier_claim = claim_entry(store, decision, plan)
+            assert earlier_claim is not None
+            with db.transaction() as session:
+                StorageRepository(session).transition_order_intent(
+                    earlier_claim.intent.intent_id,
+                    IntentState.ORDER_CREATED,
+                    expected_current=IntentState.RISK_APPROVED,
+                )
+        now = NOW + timedelta(
+            seconds=120 if change == "expired_decision" else 2 if change == "expired_plan" else 1
+        )
+        store.clocks = SimpleNamespace(sample=lambda: (now, 1.0), process_id="deterministic-trader")
+        if change == "marks":
+            broker.set_mark("SPY", Decimal(120), as_of=now)
+        if change in {"cash", "quantity"}:
+            with db.transaction() as session:
+                put(
+                    session,
+                    "core_external_owner_events",
+                    "explicit-economic-change",
+                    {
+                        "event_id": "explicit-economic-change",
+                        "symbol": "SPY" if change == "quantity" else "",
+                        "owner": "FIXTURE_LEGACY",
+                        "quantity_delta": "1" if change == "quantity" else "0",
+                        "net_cash": "-1" if change == "cash" else "0",
+                        "account_id": broker.account_id,
+                    },
+                )
+            if change == "cash":
+                broker.cash -= 1
+            else:
+                broker.quantities["SPY"] += 1
+        if change in {"order", "reservation"}:
+            extra = OrderIntent(
+                intent_id="extra",
+                client_order_id="extra-client",
+                strategy_id="FIXTURE_LEGACY",
+                signal_date=NOW.date(),
+                symbol="SPY",
+                side=OrderSide.BUY,
+                order_type=OrderType.MARKET,
+                time_in_force=TimeInForce.DAY,
+                quantity=1,
+                created_at=now,
+            )
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+                repo.create_order_intent(extra)
+                if change == "order":
+                    repo.save_broker_order(
+                        BrokerOrder(
+                            broker_order_id="extra-order",
+                            client_order_id=extra.client_order_id,
+                            symbol=extra.symbol,
+                            side=extra.side,
+                            order_type=extra.order_type,
+                            time_in_force=extra.time_in_force,
+                            quantity=1,
+                            filled_quantity=0,
+                            status="cancelled",
+                            submitted_at=now,
+                        )
+                    )
+                    repo.transition_order_intent(
+                        extra.intent_id,
+                        IntentState.ORDER_CREATED,
+                        expected_current=IntentState.RISK_APPROVED,
+                    )
+                    repo.transition_order_intent(
+                        extra.intent_id,
+                        IntentState.SUBMITTING,
+                        expected_current=IntentState.ORDER_CREATED,
+                    )
+                    repo.transition_order_intent(
+                        extra.intent_id,
+                        IntentState.BROKER_ACCEPTED,
+                        expected_current=IntentState.SUBMITTING,
+                    )
+                    repo.transition_order_intent(
+                        extra.intent_id,
+                        IntentState.CANCELLED,
+                        expected_current=IntentState.BROKER_ACCEPTED,
+                    )
+        account = broker.snapshot().account
+        if change == "low_bp":
+            account = account.model_copy(update={"buying_power": Decimal(100)})
+        if change == "low_equity":
+            account = account.model_copy(update={"equity": Decimal(1000)})
+        fresh = store.proof(
+            account,
+            tuple(sorted(broker.quantities.items())),
+            now=now,
+            positions=broker.position_snapshot(),
+            acquisition_id="fresh-poll-does-not-change-economics",
+        )
+        certify_inventory(store, fresh)
+        if change == "revoked":
+            with db.transaction() as session:
+                session.execute(
+                    table("core_cash_authority_revocations")
+                    .insert()
+                    .values(
+                        snapshot_id="core-certified-" + original.id,
+                        reason="EXPLICIT_OLD_AUTHORITY_REVOKED",
+                    )
+                )
+        store.runtime_role = "guardian"
+        receipt = acknowledge_handoffs(store, now=now)
+        publish_heartbeat(
+            store,
+            RoleHeartbeat(
+                role="guardian",
+                release_id=store.config.release_id,
+                config_id=store.config_id,
+                store_identity=db.store_identity,
+                owner=store.config.owner,
+                generation=store.config.generation,
+                process_epoch="deterministic-other-guardian",
+                pid=os.getpid() + 100000,
+                recorded_at=now,
+                valid_until=now if change == "expired_guardian" else now + timedelta(seconds=10),
+                last_useful_progress=now,
+                objections=(),
+                evidence_ids=(receipt.id,),
+                proof_age_seconds=0,
+                guardian_receipt_id=receipt.id,
+            ),
+        )
+        store.runtime_role = "trader"
+        claimed = None if phase == "send" else claim_entry(store, decision, plan)
+        if phase == "send":
+            from quantbot.paper_core.send_guard import final_send_objections
+            from quantbot.risk import OrderPurpose
+
+            with db.transaction() as session:
+                selected = StorageRepository(session).get_order_intent(
+                    earlier_claim.intent.intent_id
+                )
+            objections = final_send_objections(
+                store, selected, OrderPurpose.ENTRY, clock=lambda: now
+            )
+            assert (not objections) == (change in {"refresh", "marks"}), objections
+        else:
+            assert (claimed is not None) == (change in {"refresh", "marks"})
+        assert not broker.posts
+        if claimed is not None:
+            assert claimed.decision_id == decision.id and claimed.protection_id == plan.id
+            from quantbot.paper_core.send_guard import final_send_objections
+            from quantbot.risk import OrderPurpose
+
+            store.runtime_role = "guardian"
+            receipt = acknowledge_handoffs(store, now=now)
+            publish_heartbeat(
+                store,
+                RoleHeartbeat(
+                    role="guardian",
+                    release_id=store.config.release_id,
+                    config_id=store.config_id,
+                    store_identity=db.store_identity,
+                    owner=store.config.owner,
+                    generation=store.config.generation,
+                    process_epoch="deterministic-other-guardian",
+                    pid=os.getpid() + 100000,
+                    recorded_at=now,
+                    valid_until=now + timedelta(seconds=10),
+                    last_useful_progress=now,
+                    objections=(),
+                    evidence_ids=(receipt.id,),
+                    proof_age_seconds=0,
+                    guardian_receipt_id=receipt.id,
+                ),
+            )
+            with db.transaction() as session:
+                intent = StorageRepository(session).transition_order_intent(
+                    claimed.intent.intent_id,
+                    IntentState.ORDER_CREATED,
+                    expected_current=IntentState.RISK_APPROVED,
+                )
+            store.runtime_role = "trader"
+            assert final_send_objections(store, intent, OrderPurpose.ENTRY, clock=lambda: now) == ()
+        print(
+            "M6_FIX1_SUCCESSOR:"
+            + json.dumps(
+                {
+                    "change": change,
+                    "phase": phase,
+                    "claimed": claimed is not None,
+                    "decision_id": decision.id,
+                    "original_proof_id": original.id,
+                    "current_proof_id": fresh.id,
+                    "ledger_before": original.ledger_state_id,
+                    "ledger_after": fresh.ledger_state_id,
+                }
+            )
+        )
+    finally:
         db.close()

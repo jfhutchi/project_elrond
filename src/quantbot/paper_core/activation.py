@@ -453,6 +453,16 @@ def activate_model(
             raise StateConflictError("ACTIVATION_AUTHORITY_INVALID")
         candidate: ModelArtifact = _document(session, "core_models", candidate_id, ModelArtifact)
         receipt = _receipt(session, candidate, authority.receipt_id)
+        if store.config.evidence_lane == "BROKER_PAPER":
+            from quantbot.paper_core.operational_costs import pending_cost_revision_source
+
+            if session.execute(
+                select(table("core_source_cursors").c.source_id).where(
+                    table("core_source_cursors").c.source_id
+                    == pending_cost_revision_source(store.config.account_id)
+                )
+            ).first():
+                raise StateConflictError("ACTIVATION_CURRENT_COST_REVISIONS_PENDING")
         if store.config.evidence_lane == "BROKER_PAPER" and receipt.status != "NO_CHANGE":
             from datetime import date
 

@@ -71,6 +71,21 @@ def _quarantined_lots(session: Session) -> set[str]:
 
 
 def _guard(session: Session, dataset: str, start: date, end: date, *, now: date) -> str | None:
+    from quantbot.paper_core.operational_costs import pending_cost_revision_source
+
+    account_id = session.execute(
+        select(func.json_extract(table("core_identities").c.payload, "$.account_id"))
+    ).scalar_one_or_none()
+    if (
+        account_id is not None
+        and session.execute(
+            select(table("core_source_cursors").c.source_id).where(
+                table("core_source_cursors").c.source_id
+                == pending_cost_revision_source(str(account_id))
+            )
+        ).first()
+    ):
+        return "COST_CONTRACT_CONFLICT_REVISIONS_PENDING"
     snapshots = session.execute(
         select(table("core_canonical_sources").c.payload).join(
             table("core_canonical_current"),

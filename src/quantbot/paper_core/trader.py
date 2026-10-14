@@ -216,7 +216,6 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
                     revoked.c.snapshot_id == "core-certified-" + latest
                 )
             ).first()
-            or decision.inventory_id != latest
             or decision.config_id != store.config_id
         ):
             return None
@@ -236,6 +235,24 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         )
         if not store.cash_authority_current(session, certified):
             return None
+        from quantbot.paper_core.send_guard import compatible_successor, current_risk_allowed
+
+        if not compatible_successor(
+            store, session, decision, certified, None, now=store.clocks.sample()[0]
+        ):
+            return None
+        if store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER":
+            if not current_risk_allowed(
+                certified, quantity=decision.quantity, price=decision.price
+            ):
+                return None
+        original = ReconciliationProof.model_validate_json(
+            session.execute(
+                select(table("core_reconciliation_proofs").c.payload).where(
+                    table("core_reconciliation_proofs").c.id == decision.inventory_id
+                )
+            ).scalar_one()
+        )
         time_evidence = None
         if decision.time_evidence_id:
             time_evidence = TimeEvidence.model_validate_json(
@@ -256,7 +273,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             store.config,
             observed,
             selection[0] if selection else ModelArtifact(feature_version=observed.feature_version),
-            certified,
+            original,
             time_evidence=time_evidence,
             time_projection=decision.time_projection,
             activation=selection[1] if selection else None,
@@ -293,12 +310,23 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             store, session, entry=True
         ):
             return None
-        if guardian_objections(store, session, now=decision.recorded_at_utc):
+        readiness_at = (
+            store.clocks.sample()[0]
+            if store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER"
+            else decision.recorded_at_utc
+        )
+        if (store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER") and (
+            not decision.recorded_at_utc <= readiness_at < decision.valid_until
+            or not plan.recorded_at_utc <= readiness_at < plan.deadline
+            or readiness_at >= decision.session_close - timedelta(seconds=plan.exit_buffer_seconds)
+        ):
+            return None
+        if guardian_objections(store, session, now=readiness_at):
             return None
         if not any(
             r.owner == plan.owner
             and r.generation == plan.generation
-            and r.recorded_at_utc <= decision.recorded_at_utc <= r.valid_until
+            and r.recorded_at_utc <= readiness_at < r.valid_until
             for r in receipts
         ):
             return None
