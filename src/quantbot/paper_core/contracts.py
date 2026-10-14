@@ -33,6 +33,14 @@ class CoreConfig(BrokerModel):
     horizon_minutes: Literal[30] = 30
     exit_buffer_seconds: Literal[120] = 120
     buying_power_reserve_bps: Literal[500] = 500
+    clock_profile: Literal["STRICT_V0", "PAPER_TIME_V2"] = "STRICT_V0"
+
+    @model_serializer(mode="wrap")
+    def preserve_v31_config(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if "clock_profile" not in self.model_fields_set:
+            payload.pop("clock_profile", None)
+        return payload
 
 
 class Evidence(BrokerModel):
@@ -59,6 +67,9 @@ class Evidence(BrokerModel):
 
 
 class Observation(Evidence):
+    legacy_optional_fields = frozenset({"time_evidence_id", "session_open"})
+    time_evidence_id: str | None = None
+    session_open: datetime | None = None
     symbol: str
     feed: Literal["EXPLICIT_SYNTHETIC"] = "EXPLICIT_SYNTHETIC"
     source_start: datetime
@@ -69,7 +80,7 @@ class Observation(Evidence):
     features: tuple[tuple[str, float], ...]
     feature_version: Literal["synthetic-causal-v1"] = "synthetic-causal-v1"
     dependencies: tuple[str, ...]
-    dependency_available_at: tuple[datetime, ...]
+    dependency_available_at: tuple[datetime | None, ...]
     sequence: int = Field(ge=1)
     session_close: datetime
 
@@ -104,7 +115,19 @@ class ReconciliationProof(Evidence):
 
 
 class Decision(Evidence):
-    legacy_optional_fields = frozenset({"source_start"})
+    legacy_optional_fields = frozenset(
+        {
+            "source_start",
+            "time_evidence_id",
+            "clock_process_id",
+            "monotonic_anchor",
+            "provider_deadline",
+        }
+    )
+    time_evidence_id: str | None = None
+    clock_process_id: str | None = None
+    monotonic_anchor: float | None = None
+    provider_deadline: datetime | None = None
     observation_id: str
     policy_id: str
     model_id: str
@@ -123,6 +146,10 @@ class Decision(Evidence):
 
 
 class ProtectionPlan(Evidence):
+    legacy_optional_fields = frozenset({"clock_profile", "clock_process_id", "monotonic_anchor"})
+    clock_profile: Literal["STRICT_V0", "PAPER_TIME_V2"] = "STRICT_V0"
+    clock_process_id: str | None = None
+    monotonic_anchor: float | None = None
     decision_id: str
     owner: str
     generation: int
@@ -136,7 +163,15 @@ class ProtectionPlan(Evidence):
 
     @classmethod
     def for_decision(cls, decision: Decision, config: CoreConfig) -> Self:
+        timing: dict[str, Any] = {}
+        if config.clock_profile == "PAPER_TIME_V2":
+            timing = {
+                "clock_profile": config.clock_profile,
+                "clock_process_id": decision.clock_process_id,
+                "monotonic_anchor": decision.monotonic_anchor,
+            }
         return cls(
+            **timing,
             recorded_at_utc=decision.recorded_at_utc,
             release_id=config.release_id,
             source_refs=(decision.id,),
@@ -145,7 +180,8 @@ class ProtectionPlan(Evidence):
             generation=config.generation,
             inventory_generation=decision.inventory_generation,
             stop_price=decision.price * Decimal("0.99"),
-            deadline=min(
+            deadline=decision.provider_deadline
+            or min(
                 decision.recorded_at_utc + timedelta(minutes=30),
                 decision.session_close - timedelta(seconds=120),
             ),
@@ -297,3 +333,32 @@ class BrokerEvent(Evidence):
 class OutcomeBatch(Evidence):
     outcomes: tuple[RoundTrip, ...] = ()
     reasons: tuple[str, ...] = ()
+
+
+class Health(Evidence):
+    role: Literal["TRADER", "GUARDIAN", "OUTCOMES"]
+    scope: Literal["ACCOUNT", "SYMBOL", "LOT", "LEARNING"]
+    scope_id: str
+    state: Literal[
+        "READY",
+        "TEMPORARY_WAIT",
+        "RETRYABLE_FAILURE",
+        "PROTOCOL_FAILURE",
+        "MANUAL_PAUSE",
+        "INTEGRITY_FAILURE",
+    ]
+    objections: tuple[str, ...]
+    first_blocker: str | None
+    first_seen: datetime
+    last_seen: datetime
+    evidence_ids: tuple[str, ...] = ()
+    evidence_age_seconds: float | None = None
+    last_useful_progress: datetime | None = None
+    next_retry: datetime | None = None
+    recovery_requirements: tuple[str, ...] = ()
+    recovered_from: tuple[str, ...] = ()
+    new_proof_id: str | None = None
+    sequence: int = 0
+    failed_generation: int = 0
+    protection_blocked: bool = False
+    escalated: bool = False

@@ -13,7 +13,9 @@ from quantbot.paper_core.contracts import (
     ProtectionPlan,
     ReconciliationProof,
 )
+from quantbot.paper_core.health import entry_health_objections
 from quantbot.paper_core.store import CoreStore, latest_certification, table
+from quantbot.paper_core.time_evidence import TimeEvidence, evidence_objections, provider_interval
 from quantbot.research.manifest import content_id
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
@@ -100,12 +102,31 @@ def final_send_in_session(
     ]
     receipt = max(receipts, key=lambda r: (r.recorded_at_utc, r.id), default=None)
     # Sample after durable reads and writer-lock acquisition, never the caller's decision time.
-    now = clock()
+    now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
     reasons = []
     if repo.get_kill_switch_state().engaged:
         reasons.append("CORE_MANUAL_ENTRY_PAUSE")
-    if any(i.kind == "CORE_EVIDENCE_CONFLICT" for i in repo.list_incidents(unresolved_only=True)):
-        reasons.append("CORE_EVIDENCE_QUARANTINED")
+    reasons.extend(entry_health_objections(store, session, decision.symbol))
+    if store.config.clock_profile == "PAPER_TIME_V2":
+        payload = session.execute(
+            select(table("core_time_evidence").c.payload).where(
+                table("core_time_evidence").c.id == decision.time_evidence_id
+            )
+        ).scalar_one_or_none()
+        if payload is None or plan.clock_profile != store.config.clock_profile:
+            reasons.append("TIME_EVIDENCE_MISSING")
+        else:
+            evidence = TimeEvidence.model_validate_json(payload)
+            reasons.extend(evidence_objections(evidence, store.clocks))
+            earliest, latest_time = provider_interval(evidence, store.clocks)
+            if latest_time >= decision.valid_until:
+                reasons.append("TIME_OBSERVATION_BOUNDARY")
+            if latest_time >= plan.deadline:
+                reasons.append("CORE_PROTECTION_DEADLINE_DUE")
+            if latest_time >= decision.session_close - timedelta(seconds=120):
+                reasons.append("TIME_SESSION_BOUNDARY")
+            if evidence.samples and earliest < evidence.samples[-1].provider.session_open:
+                reasons.append("TIME_SESSION_BOUNDARY")
     latest = latest_certification(session)
     proof = (
         None

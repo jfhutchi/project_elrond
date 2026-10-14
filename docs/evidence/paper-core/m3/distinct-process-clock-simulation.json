@@ -1,0 +1,8 @@
+[
+  {
+    "trader_process": "m3-process-1",
+    "guardian_process": "independent-guardian-process",
+    "guardian_monotonic": 9999999.02,
+    "posts": 2
+  }
+]

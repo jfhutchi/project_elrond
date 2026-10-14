@@ -157,6 +157,22 @@ def import_broker_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> t
                     if isinstance(error, _EvidenceRejected)
                     else [],
                     "lot_ids": sorted(set(lot_ids)),
+                    "account_scope": any(e.account_id != store.config.account_id for e in events),
+                    "disputed_authorities": sorted(
+                        {
+                            authority
+                            for e in events
+                            if isinstance(error, _EvidenceRejected)
+                            and _source_id(e) in error.source_ids
+                            for authority in (
+                                ("OUTCOME",)
+                                if e.cost is not None and e.cost.source == "MODELED"
+                                else ("CASH",)
+                                if e.cost is not None or e.cash_activity is not None
+                                else ("CASH", "OWNERSHIP")
+                            )
+                        }
+                    ),
                     "evidence_lane": store.config.evidence_lane,
                 },
             )

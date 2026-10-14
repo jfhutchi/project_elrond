@@ -4,9 +4,13 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from quantbot.brokers import BrokerAccountSnapshot
 from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, OrderSide, Position
+
+if TYPE_CHECKING:
+    from quantbot.paper_core.time_evidence import BrokerTime
 
 
 class SyntheticBroker:
@@ -85,6 +89,11 @@ class SyntheticBroker:
 
     async def get_account(self) -> BrokerAccountSnapshot:
         return self.snapshot()
+
+    async def get_clock(self) -> BrokerTime:
+        from quantbot.brokers.base import BrokerProtocolError
+
+        raise BrokerProtocolError("synthetic fixture requires an explicit advancing provider clock")
 
     def position_snapshot(self) -> tuple[Position, ...]:
         return tuple(

@@ -7,7 +7,9 @@ from decimal import Decimal
 
 from sqlalchemy import select, text
 
+from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, BrokerTransportError
 from quantbot.domain import OrderIntent, OrderSide, OrderType, TimeInForce
+from quantbot.execution.coordinator import OrderSubmissionBlocked
 from quantbot.paper_core.contracts import (
     CoreConfig,
     Decision,
@@ -19,13 +21,19 @@ from quantbot.paper_core.contracts import (
     ReconciliationProof,
 )
 from quantbot.paper_core.features import observation_objections
+from quantbot.paper_core.health import entry_health_objections, recover_health, report
 from quantbot.paper_core.runtime import coordinator, require_synthetic
 from quantbot.paper_core.send_guard import definitively_unsent
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, latest_certification, put, table
+from quantbot.paper_core.time_evidence import (
+    TimeEvidence,
+    acquire_time_evidence,
+    entry_time_objections,
+)
 from quantbot.research.manifest import canonical_result_json, content_id
 from quantbot.risk import DrawdownState, OrderPurpose, PortfolioVetoDecision
-from quantbot.storage import StorageRepository
+from quantbot.storage import StateConflictError, StorageRepository
 
 
 def record_observation(store: CoreStore, observation: Observation) -> str:
@@ -37,8 +45,20 @@ def evaluate_entry(
     observation: Observation,
     model: ModelArtifact,
     inventory: ReconciliationProof,
+    *,
+    time_evidence: TimeEvidence | None = None,
 ) -> Decision:
-    objections = list(observation_objections(observation))
+    objections = list(
+        observation_objections(
+            observation, dependency_freshness=config.clock_profile == "PAPER_TIME_V2"
+        )
+    )
+    if config.clock_profile == "PAPER_TIME_V2":
+        objections.extend(
+            ("TIME_EVIDENCE_MISSING",)
+            if time_evidence is None
+            else entry_time_objections(observation, time_evidence, config)
+        )
     if observation.symbol != config.symbol or model.feature_version != observation.feature_version:
         objections.append("CONTRACT_MISMATCH")
     if (
@@ -50,7 +70,10 @@ def evaluate_entry(
         or inventory.account.cash != inventory.expected_cash
     ):
         objections.append("INVENTORY_UNCERTIFIED")
-    if not 0 <= (observation.recorded_at_utc - inventory.recorded_at_utc).total_seconds() <= 120:
+    evaluated_at = (
+        time_evidence.wall_anchor if time_evidence is not None else observation.recorded_at_utc
+    )
+    if not 0 <= (evaluated_at - inventory.recorded_at_utc).total_seconds() <= 120:
         objections.append("INVENTORY_STALE")
     if dict(inventory.actual_quantities).get(observation.symbol, Decimal(0)) != 0:
         objections.append("SYMBOL_ALREADY_HELD")
@@ -67,10 +90,23 @@ def evaluate_entry(
         objections.append("BUYING_POWER_RESERVE")
     if observation.recorded_at_utc >= observation.session_close - timedelta(seconds=120):
         objections.append("SESSION_EXIT_BUFFER")
+    timing = {}
+    if config.clock_profile == "PAPER_TIME_V2" and time_evidence is not None:
+        timing = {
+            "time_evidence_id": time_evidence.id,
+            "clock_process_id": time_evidence.process_id,
+            "monotonic_anchor": time_evidence.acquired_monotonic,
+            "provider_deadline": min(
+                time_evidence.wall_anchor + timedelta(seconds=time_evidence.offset_lower + 1800),
+                observation.session_close - timedelta(seconds=120),
+            ),
+        }
     return Decision(
-        recorded_at_utc=observation.recorded_at_utc,
+        **timing,
+        recorded_at_utc=evaluated_at,
         release_id=config.release_id,
-        source_refs=(observation.id, model.id, inventory.id),
+        source_refs=(observation.id, model.id, inventory.id)
+        + ((time_evidence.id,) if time_evidence else ()),
         observation_id=observation.id,
         policy_id=config.policy_id,
         model_id=model.id,
@@ -97,9 +133,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         if decision.action != "BUY":
             return None
         repo = StorageRepository(session)
-        if any(
-            i.kind == "CORE_EVIDENCE_CONFLICT" for i in repo.list_incidents(unresolved_only=True)
-        ):
+        if entry_health_objections(store, session, decision.symbol):
             return None
         if repo.get_kill_switch_state().engaged:
             return None
@@ -137,7 +171,22 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         )
         if not store.cash_authority_current(session, certified):
             return None
-        if decision != evaluate_entry(store.config, observed, ModelArtifact(), certified):
+        time_evidence = None
+        if decision.time_evidence_id:
+            time_evidence = TimeEvidence.model_validate_json(
+                session.execute(
+                    select(table("core_time_evidence").c.payload).where(
+                        table("core_time_evidence").c.id == decision.time_evidence_id
+                    )
+                ).scalar_one()
+            )
+            from quantbot.paper_core.time_evidence import evidence_objections
+
+            if evidence_objections(time_evidence, store.clocks):
+                return None
+        if decision != evaluate_entry(
+            store.config, observed, ModelArtifact(), certified, time_evidence=time_evidence
+        ):
             raise ValueError("decision does not match certified inputs and fixed risk envelope")
         if plan != ProtectionPlan.for_decision(decision, store.config):
             raise ValueError("protection plan does not match fixed authority")
@@ -213,6 +262,42 @@ async def trader_cycle(
     now: datetime,
 ) -> Decision:
     require_synthetic(store, broker)
+    time_evidence = None
+    acquisition_reasons: tuple[str, ...] = ()
+    if store.config.clock_profile == "PAPER_TIME_V2":
+        time_evidence = await acquire_time_evidence(broker, store.clocks)
+        store.record("core_time_evidence", time_evidence)
+        acquisition_reasons = time_evidence.objections
+        if not acquisition_reasons:
+            from quantbot.paper_core.guardian import synchronize
+
+            try:
+                await synchronize(store, broker, now=store.clocks.sample()[0])
+                inventory = store.latest_proof()
+            except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError):
+                acquisition_reasons = ("INVENTORY_ACQUISITION_RETRYABLE",)
+            except (ValueError, BrokerProtocolError):
+                acquisition_reasons = ("INVENTORY_PROTOCOL_INVALID",)
+            except StateConflictError as error:
+                acquisition_reasons = (str(error),)
+        if acquisition_reasons:
+            report(
+                store,
+                role="TRADER",
+                state="PROTOCOL_FAILURE"
+                if any("PROTOCOL_INVALID" in r for r in acquisition_reasons)
+                else "RETRYABLE_FAILURE",
+                reasons=acquisition_reasons,
+                now=store.clocks.sample()[0],
+                evidence_ids=(time_evidence.id, inventory.id),
+            )
+        elif not entry_time_objections(
+            observation, time_evidence, store.config
+        ) and not observation_objections(observation, dependency_freshness=True):
+            from quantbot.paper_core.guardian import acknowledge_handoffs
+
+            acknowledge_handoffs(store, now=store.clocks.sample()[0])
+            recover_health(store, inventory, now=store.clocks.sample()[0])
     record_observation(store, observation)
     previous = next(
         (
@@ -224,8 +309,33 @@ async def trader_cycle(
     )
     if previous is not None:
         return store.read("core_decisions", previous["decision_id"], Decision)
-    decision = evaluate_entry(store.config, observation, model, inventory)
+    decision = evaluate_entry(
+        store.config, observation, model, inventory, time_evidence=time_evidence
+    )
+    with store.database.transaction() as session:
+        reasons = tuple(
+            dict.fromkeys(
+                (
+                    *entry_health_objections(store, session, observation.symbol),
+                    *decision.gates,
+                    *acquisition_reasons,
+                )
+            )
+        )
+    if reasons:
+        decision = decision.model_copy(update={"action": "WAIT", "gates": reasons})
+        if not acquisition_reasons:
+            report(
+                store,
+                role="TRADER",
+                state="TEMPORARY_WAIT",
+                reasons=reasons,
+                now=store.clocks.sample()[0] if time_evidence else now,
+                evidence_ids=(observation.id, inventory.id),
+            )
     plan = ProtectionPlan.for_decision(decision, store.config)
+    if time_evidence is not None:
+        now = store.clocks.sample()[0]
     if now < decision.recorded_at_utc or now >= decision.valid_until:
         store.record("core_decisions", decision)
         return decision
@@ -252,15 +362,60 @@ async def trader_cycle(
         evaluated=(),
         rejections=(),
     )
-    await coordinator(store, broker).submit_durable(
-        entry.intent,
-        purpose=OrderPurpose.ENTRY,
-        market_eligible=True,
-        drawdown=drawdown,
-        risk_approved=True,
-        vetoes=vetoes,
-    )
+    try:
+        await coordinator(store, broker).submit_durable(
+            entry.intent,
+            purpose=OrderPurpose.ENTRY,
+            market_eligible=True,
+            drawdown=drawdown,
+            risk_approved=True,
+            vetoes=vetoes,
+        )
+    except OrderSubmissionBlocked:
+        if store.config.clock_profile != "PAPER_TIME_V2":
+            raise
+        report(
+            store,
+            role="TRADER",
+            state="TEMPORARY_WAIT",
+            reasons=("FINAL_SEND_REFUSED",),
+            now=store.clocks.sample()[0],
+            evidence_ids=(decision.id, inventory.id),
+        )
+        return decision
+    except (
+        TimeoutError,
+        OSError,
+        BrokerRequestError,
+        BrokerTransportError,
+        BrokerProtocolError,
+    ) as error:
+        if store.config.clock_profile != "PAPER_TIME_V2":
+            raise
+        report(
+            store,
+            role="TRADER",
+            state="PROTOCOL_FAILURE"
+            if isinstance(error, BrokerProtocolError)
+            else "RETRYABLE_FAILURE",
+            reasons=("ENTRY_PROVIDER_RETRY_PENDING",),
+            now=store.clocks.sample()[0],
+            evidence_ids=(decision.id, inventory.id),
+        )
+        return decision
     from quantbot.paper_core.guardian import synchronize
 
-    await synchronize(store, broker, now=broker.now)
+    try:
+        await synchronize(store, broker, now=broker.now)
+    except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError, StateConflictError):
+        if store.config.clock_profile != "PAPER_TIME_V2":
+            raise
+        report(
+            store,
+            role="TRADER",
+            state="RETRYABLE_FAILURE",
+            reasons=("POST_ENTRY_RECONCILIATION_WAIT",),
+            now=store.clocks.sample()[0],
+            evidence_ids=(decision.id,),
+        )
     return decision

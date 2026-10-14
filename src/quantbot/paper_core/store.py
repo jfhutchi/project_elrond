@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from quantbot.domain import Account, OrderSide, Position, ReconciliationStatus
 from quantbot.paper_core.contracts import CoreConfig, Evidence, Observation, ReconciliationProof
+from quantbot.paper_core.time_evidence import Clocks, SystemClocks
 from quantbot.research.manifest import canonical_result_json, content_id
 from quantbot.storage import Database, StateConflictError, StorageRepository
 from quantbot.storage.schema import metadata
@@ -48,9 +49,12 @@ def latest_certification(session: Session) -> tuple[int, str] | None:
 
 
 class CoreStore:
-    def __init__(self, database: Database, config: CoreConfig) -> None:
+    def __init__(
+        self, database: Database, config: CoreConfig, *, clocks: Clocks | None = None
+    ) -> None:
         self.database = database
         self.config = config
+        self.clocks = clocks or SystemClocks()
         self.config_id = content_id(config)
         with database.transaction() as session:
             existing = session.execute(select(table("core_identities").c.id)).scalars().all()
@@ -266,7 +270,7 @@ class CoreStore:
             r for r in self.documents("core_round_trips") if r["decision_id"] == decision_id
         ]
         return {
-            "schema_version": 31,
+            "schema_version": 32,
             "evidence_lane": "SYNTHETIC_TEST",
             "config": self.config.model_dump(mode="json"),
             "decision_id": decision_id,

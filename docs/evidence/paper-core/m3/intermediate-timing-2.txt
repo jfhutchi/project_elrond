@@ -1,0 +1,132 @@
+..........FF...                                                          [100%]
+================================== FAILURES ===================================
+_ test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-godrw8ji/pytest/test_delayed_final_fetch_inval0')
+
+    @pytest.mark.asyncio
+    async def test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.send_guard import definitively_unsent
+        from quantbot.storage import StorageRepository
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = broker.get_position
+        async def delay(symbol):
+            clocks.advance(121)
+            broker.now = clocks.wall
+            return await original(symbol)
+        broker.get_position = delay
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+>           assert broker.posts == []
+E           AssertionError: assert [OrderIntent(...imezone.utc))] == []
+E             
+E             Left contains one more item: OrderIntent(symbol='XLE', intent_id='core-entry-3634fce9ce922183a462dcce306f22b7b2dd6147bad8ee28c66bd602c79ffc31', cli..._APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, 0, 20000, tzinfo=datetime.timezone.utc))
+E             Use -v to get more diff
+
+tests\fault\paper_core\test_timing.py:108: AssertionError
+____ test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-godrw8ji/pytest/test_wall_jump_and_stale_mark_0')
+
+    @pytest.mark.asyncio
+    async def test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.guardian import guardian_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            broker.set_mark("XLE", 98, as_of=clocks.wall - timedelta(minutes=10))
+            clocks.advance(1799)
+            clocks.wall -= timedelta(hours=1)
+            broker.now = clocks.wall
+>           assert not (await guardian_cycle(store, broker, now=broker.now)).exit_intent_ids
+                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_timing.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\guardian.py:104: in guardian_cycle
+    proof_id = await synchronize(store, broker, now=now)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\paper_core\guardian.py:27: in synchronize
+    await recover_intents(store, broker)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x00000155455B2150>
+broker = <tests.fixtures.core_m2.JournalBroker object at 0x000001554514BF10>
+
+    async def recover_intents(store: CoreStore, broker: SyntheticBroker) -> CycleReceipt:
+        """Read the original client IDs, import evidence, and never POST an unknown intent."""
+        require_synthetic(store, broker)
+        from quantbot.paper_core.send_guard import retire_stale_entries
+    
+        reasons = [
+            "STALE_UNSENT_REFUSED:" + i for i in retire_stale_entries(store, clock=lambda: broker.now)
+        ]
+        with store.database.transaction() as session:
+            intents = [
+                StorageRepository(session).get_order_intent(link["intent_id"]) for link in store.links()
+            ]
+        events = []
+        fills = await broker.get_fills()
+        watermark = await broker.get_activity_watermark()
+        for intent in intents:
+            assert intent is not None
+            order = await broker.get_order_by_client_id(intent.client_order_id, expected=intent)
+            if order is None:
+                if intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
+                    with store.database.transaction() as session:
+                        current = StorageRepository(session).get_order_intent(intent.intent_id)
+                        assert current is not None
+                        if current.state is IntentState.SUBMITTING:
+                            StorageRepository(session).transition_order_intent(
+                                intent.intent_id,
+                                IntentState.SUBMISSION_UNKNOWN,
+                                expected_current=IntentState.SUBMITTING,
+                            )
+                    reasons.append("SUBMISSION_UNKNOWN:" + intent.intent_id)
+                continue
+            owned_fills = tuple(f for f in fills if f.broker_order_id == order.broker_order_id)
+            # Synthetic get_fills returns a complete, durable journal. Real provider
+            # pagination/cancel watermark authority is deliberately not inferred here.
+            events.append(
+                BrokerEvent(
+                    recorded_at_utc=broker.now,
+                    occurred_at=broker.now,
+                    account_id=store.config.account_id,
+                    endpoint="synthetic/order-and-complete-activities",
+                    event_id=(
+                        content_id(order)
+                        if watermark is not None
+                        else content_id({"order": order, "activity_complete": False})
+                    ),
+                    raw_digest=content_id(order),
+                    client_order_id=intent.client_order_id,
+                    order=order,
+                    activity_complete=watermark is not None,
+                    activity_watermark=watermark,
+                    activity_fill_ids=tuple(f.fill_id for f in owned_fills),
+                )
+            )
+            for fill in owned_fills:
+                events.append(
+>                   BrokerEvent(
+                        recorded_at_utc=broker.now,
+                        occurred_at=fill.occurred_at,
+                        account_id=store.config.account_id,
+                        endpoint="synthetic/activities",
+                        event_id=fill.fill_id,
+                        raw_digest=content_id(fill),
+                        client_order_id=intent.client_order_id,
+                        fill=fill,
+                    )
+                )
+E               pydantic_core._pydantic_core.ValidationError: 1 validation error for BrokerEvent
+E                 Value error, event cannot be received before occurrence [type=value_error, input_value={'recorded_at_utc': datet...N', fee_reference=None)}, input_type=dict]
+E                   For further information visit https://errors.pydantic.dev/2.13/v/value_error
+
+src\quantbot\paper_core\outcomes.py:673: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_timing.py::test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent
+FAILED tests/fault/paper_core/test_timing.py::test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline
+2 failed, 13 passed in 8.56s

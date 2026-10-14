@@ -1,0 +1,84 @@
+F...F                                                                    [100%]
+================================== FAILURES ===================================
+_____________ test_skew_boundary_controls_actual_entry[-2.0-True] _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-0gjbhmch/pytest/test_skew_boundary_controls_ac0')
+offset = -2.0, allowed = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)]
+    )
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            broker.offset = offset
+    
+            # Instantaneous transport for exact +/-2.000 boundary, still advancing samples.
+            async def sample():
+                from quantbot.paper_core.time_evidence import BrokerTime
+    
+                broker.now = clocks.wall
+                return BrokerTime(
+                    timestamp=clocks.wall + timedelta(seconds=offset),
+                    account_id=broker.account_id,
+                    provider=broker.provider,
+                    session_id="2026-10-14",
+                    session_open=observation.recorded_at_utc - timedelta(hours=1),
+                    session_close=observation.session_close,
+                    resolution_seconds=0.001,
+                )
+    
+            broker.get_clock = sample
+            original = clocks.sample
+            calls = 0
+    
+            def advancing():
+                nonlocal calls
+                calls += 1
+                if calls == 4:
+                    clocks.advance(0.01)
+                return original()
+    
+            clocks.sample = advancing
+            observation = observation.model_copy(
+                update={"source_end": observation.source_end - timedelta(seconds=5)}
+            )
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            assert bool(broker.posts) is allowed, decision.gates
+            if allowed:
+                from quantbot.paper_core.contracts import ProtectionPlan
+                plan = store.read("core_protection_plans", store.links()[0]["protection_id"], ProtectionPlan)
+>               assert plan.deadline <= decision.recorded_at_utc+timedelta(seconds=1800+offset)
+E               AssertionError: assert datetime.datetime(2026, 10, 14, 14, 30, 0, 10000, tzinfo=datetime.timezone.utc) <= (datetime.datetime(2026, 10, 14, 14, 0, 0, 10000, tzinfo=datetime.timezone.utc) + datetime.timedelta(seconds=1798))
+E                +  where datetime.datetime(2026, 10, 14, 14, 30, 0, 10000, tzinfo=datetime.timezone.utc) = ProtectionPlan(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=da...0, 10000, tzinfo=datetime.timezone.utc), exit_buffer_seconds=120, exit_quantity_rule='owned-filled-minus-owned-exited').deadline
+E                +  and   datetime.datetime(2026, 10, 14, 14, 0, 0, 10000, tzinfo=datetime.timezone.utc) = Decision(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=datetime..., 0, tzinfo=datetime.timezone.utc), source_start=datetime.datetime(2026, 10, 14, 13, 55, tzinfo=datetime.timezone.utc)).recorded_at_utc
+E                +  and   datetime.timedelta(seconds=1798) = timedelta(seconds=(1800 + -2.0))
+
+tests\fault\paper_core\test_timing.py:55: AssertionError
+_ test_uncertain_interval_overlapping_close_waits_for_entry_and_is_due_for_exit _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-0gjbhmch/pytest/test_uncertain_interval_overla0')
+
+    @pytest.mark.asyncio
+    async def test_uncertain_interval_overlapping_close_waits_for_entry_and_is_due_for_exit(tmp_path):
+        from quantbot.paper_core.time_evidence import acquire_time_evidence, entry_time_objections, exit_due
+        from quantbot.paper_core.contracts import ProtectionPlan
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            clocks.advance(6*3600-120-.015)
+            evidence = await acquire_time_evidence(broker, clocks)
+            observed = fresh(observation, clocks)
+            assert "TIME_SESSION_BOUNDARY" in entry_time_objections(observed, evidence, store.config)
+>           plan = ProtectionPlan(recorded_at_utc=NOW, decision_id="owned-fixture", owner=store.config.owner,
+                                                  ^^^
+                generation=1, inventory_generation=1, stop_price=99, deadline=NOW+timedelta(hours=6, seconds=-120))
+E               NameError: name 'NOW' is not defined
+
+tests\fault\paper_core\test_timing.py:183: NameError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[-2.0-True]
+FAILED tests/fault/paper_core/test_timing.py::test_uncertain_interval_overlapping_close_waits_for_entry_and_is_due_for_exit
+2 failed, 3 passed, 8 deselected in 4.12s

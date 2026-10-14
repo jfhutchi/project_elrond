@@ -5,13 +5,16 @@ import math
 from quantbot.paper_core.contracts import Observation
 
 
-def observation_objections(observation: Observation) -> tuple[str, ...]:
+def observation_objections(
+    observation: Observation, *, dependency_freshness: bool = False
+) -> tuple[str, ...]:
     reasons = []
     now = observation.recorded_at_utc
     if not observation.source_start < observation.source_end <= observation.available_at <= now:
         reasons.append("NONCAUSAL_OBSERVATION")
     if len(observation.dependencies) != len(observation.dependency_available_at) or any(
-        t > now for t in observation.dependency_available_at
+        t is None or t > now or (dependency_freshness and (now - t).total_seconds() > 120)
+        for t in observation.dependency_available_at
     ):
         reasons.append("DEPENDENCY_UNAVAILABLE")
     if (

@@ -1,0 +1,43 @@
+F
+================================== FAILURES ===================================
+_____________ test_skew_boundary_controls_actual_entry[-2.0-True] _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-kx2xy5sy/pytest/test_skew_boundary_controls_ac0')
+offset = -2.0, allowed = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)])
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            broker.offset = offset
+            # Instantaneous transport for exact +/-2.000 boundary, still advancing samples.
+            async def sample():
+                from quantbot.paper_core.time_evidence import BrokerTime
+                return BrokerTime(timestamp=clocks.wall + timedelta(seconds=offset), account_id=broker.account_id,
+                    provider=broker.provider, session_id="2026-10-14", session_open=observation.recorded_at_utc - timedelta(hours=1),
+                    session_close=observation.session_close, resolution_seconds=.001)
+            broker.get_clock = sample
+            original = clocks.sample
+            calls = 0
+            def advancing():
+                nonlocal calls
+                calls += 1
+                if calls == 4:
+                    clocks.advance(.01)
+                return original()
+            clocks.sample = advancing
+            observation = observation.model_copy(update={"source_end": observation.source_end-timedelta(seconds=5)})
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+>           assert bool(broker.posts) is allowed, decision.gates
+E           AssertionError: ('INVENTORY_STALE',)
+E           assert False is True
+E            +  where False = bool([])
+E            +    where [] = <tests.fixtures.core_m2.JournalBroker object at 0x000002963F8D2550>.posts
+
+tests\fault\paper_core\test_timing.py:35: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[-2.0-True]
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 2.29s

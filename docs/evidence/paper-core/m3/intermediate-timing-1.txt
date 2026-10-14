@@ -1,0 +1,210 @@
+FF........FFFF.                                                          [100%]
+================================== FAILURES ===================================
+_____________ test_skew_boundary_controls_actual_entry[-2.0-True] _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-96z4zba_/pytest/test_skew_boundary_controls_ac0')
+offset = -2.0, allowed = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)])
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            broker.offset = offset
+            # Instantaneous transport for exact +/-2.000 boundary, still advancing samples.
+            async def sample():
+                from quantbot.paper_core.time_evidence import BrokerTime
+                return BrokerTime(timestamp=clocks.wall + timedelta(seconds=offset), account_id=broker.account_id,
+                    provider=broker.provider, session_id="2026-10-14", session_open=observation.recorded_at_utc - timedelta(hours=1),
+                    session_close=observation.session_close, resolution_seconds=.001)
+            broker.get_clock = sample
+            original = clocks.sample
+            calls = 0
+            def advancing():
+                nonlocal calls
+                calls += 1
+                if calls == 4:
+                    clocks.advance(.01)
+                return original()
+            clocks.sample = advancing
+            observation = observation.model_copy(update={"source_end": observation.source_end-timedelta(seconds=5)})
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+>           assert bool(broker.posts) is allowed
+E           assert False is True
+E            +  where False = bool([])
+E            +    where [] = <tests.fixtures.core_m2.JournalBroker object at 0x00000266524AF590>.posts
+
+tests\fault\paper_core\test_timing.py:35: AssertionError
+_____________ test_skew_boundary_controls_actual_entry[2.0-True] ______________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-96z4zba_/pytest/test_skew_boundary_controls_ac1')
+offset = 2.0, allowed = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)])
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            broker.offset = offset
+            # Instantaneous transport for exact +/-2.000 boundary, still advancing samples.
+            async def sample():
+                from quantbot.paper_core.time_evidence import BrokerTime
+                return BrokerTime(timestamp=clocks.wall + timedelta(seconds=offset), account_id=broker.account_id,
+                    provider=broker.provider, session_id="2026-10-14", session_open=observation.recorded_at_utc - timedelta(hours=1),
+                    session_close=observation.session_close, resolution_seconds=.001)
+            broker.get_clock = sample
+            original = clocks.sample
+            calls = 0
+            def advancing():
+                nonlocal calls
+                calls += 1
+                if calls == 4:
+                    clocks.advance(.01)
+                return original()
+            clocks.sample = advancing
+            observation = observation.model_copy(update={"source_end": observation.source_end-timedelta(seconds=5)})
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+>           assert bool(broker.posts) is allowed
+E           assert False is True
+E            +  where False = bool([])
+E            +    where [] = <tests.fixtures.core_m2.JournalBroker object at 0x0000026658569C10>.posts
+
+tests\fault\paper_core\test_timing.py:35: AssertionError
+_ test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-96z4zba_/pytest/test_delayed_final_fetch_inval0')
+
+    @pytest.mark.asyncio
+    async def test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.send_guard import definitively_unsent
+        from quantbot.storage import StorageRepository
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = broker.get_position
+        async def delay(symbol):
+            clocks.advance(121)
+            broker.now = clocks.wall
+            return await original(symbol)
+        broker.get_position = delay
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            assert broker.posts == []
+            with db.transaction() as session:
+>               assert definitively_unsent(StorageRepository(session), store.links()[0]["intent_id"])
+                                                                       ^^^^^^^^^^^^^^^^
+E               IndexError: list index out of range
+
+tests\fault\paper_core\test_timing.py:109: IndexError
+____ test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-96z4zba_/pytest/test_wall_jump_and_stale_mark_0')
+
+    @pytest.mark.asyncio
+    async def test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.guardian import guardian_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            broker.set_mark("XLE", 98, as_of=clocks.wall - timedelta(minutes=10))
+            clocks.advance(1799)
+            clocks.wall -= timedelta(hours=1)
+            broker.now = clocks.wall
+            assert not (await guardian_cycle(store, broker, now=broker.now)).exit_intent_ids
+            clocks.advance(1)
+            broker.now = clocks.wall
+>           assert (await guardian_cycle(store, broker, now=broker.now)).exit_intent_ids
+E           AssertionError: assert ()
+E            +  where () = CycleReceipt(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...e_refs=(), exit_intent_ids=(), reasons=(), proof_id='9a18a9a9701ac83ff8ff72e2841f3d608d42b95315ab92944f4f6fcd4dd51e88').exit_intent_ids
+
+tests\fault\paper_core\test_timing.py:131: AssertionError
+_ test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[timeout] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-96z4zba_/pytest/test_acquisition_wait_does_not0')
+failure = 'timeout'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["timeout", "changing_marks"])
+    async def test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes(tmp_path, failure):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StorageRepository
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = broker.get_account
+        calls = 0
+        async def unstable():
+            nonlocal calls
+            calls += 1
+            if failure == "timeout":
+                raise TimeoutError("synthetic provider timeout")
+            value = await original()
+            return value.model_copy(update={"account": value.account.model_copy(update={"equity": Decimal(100000 + calls)})})
+        broker.get_account = unstable
+        try:
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            assert decision.action == "WAIT" and broker.posts == []
+            with db.transaction() as session:
+                assert not StorageRepository(session).get_kill_switch_state().engaged
+            failed = store.documents("core_health_events")
+            assert any(h["state"] == "RETRYABLE_FAILURE" for h in failed)
+            clocks.advance(400)
+            await trader_cycle(store, broker, fresh(observation, clocks), model, proof, now=clocks.wall)
+            assert all(h["state"] != "INTEGRITY_FAILURE" for h in store.documents("core_health_events"))
+            broker.get_account = original
+            clocks.advance(1)
+            await trader_cycle(store, broker, fresh(observation, clocks, sequence=3), model, proof, now=clocks.wall)
+>           assert len(broker.posts) == 1
+E           assert 0 == 1
+E            +  where 0 = len([])
+E            +    where [] = <tests.fixtures.core_m2.JournalBroker object at 0x00000266573FA3D0>.posts
+
+tests\fault\paper_core\test_transient_recovery.py:40: AssertionError
+_ test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[changing_marks] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-96z4zba_/pytest/test_acquisition_wait_does_not1')
+failure = 'changing_marks'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["timeout", "changing_marks"])
+    async def test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes(tmp_path, failure):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StorageRepository
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = broker.get_account
+        calls = 0
+        async def unstable():
+            nonlocal calls
+            calls += 1
+            if failure == "timeout":
+                raise TimeoutError("synthetic provider timeout")
+            value = await original()
+            return value.model_copy(update={"account": value.account.model_copy(update={"equity": Decimal(100000 + calls)})})
+        broker.get_account = unstable
+        try:
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            assert decision.action == "WAIT" and broker.posts == []
+            with db.transaction() as session:
+                assert not StorageRepository(session).get_kill_switch_state().engaged
+            failed = store.documents("core_health_events")
+            assert any(h["state"] == "RETRYABLE_FAILURE" for h in failed)
+            clocks.advance(400)
+            await trader_cycle(store, broker, fresh(observation, clocks), model, proof, now=clocks.wall)
+            assert all(h["state"] != "INTEGRITY_FAILURE" for h in store.documents("core_health_events"))
+            broker.get_account = original
+            clocks.advance(1)
+            await trader_cycle(store, broker, fresh(observation, clocks, sequence=3), model, proof, now=clocks.wall)
+>           assert len(broker.posts) == 1
+E           assert 0 == 1
+E            +  where 0 = len([])
+E            +    where [] = <tests.fixtures.core_m2.JournalBroker object at 0x0000026658A76310>.posts
+
+tests\fault\paper_core\test_transient_recovery.py:40: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[-2.0-True]
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[2.0-True]
+FAILED tests/fault/paper_core/test_timing.py::test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent
+FAILED tests/fault/paper_core/test_timing.py::test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[timeout]
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[changing_marks]
+6 failed, 9 passed in 8.11s

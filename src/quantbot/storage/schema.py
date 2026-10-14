@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 31
+SCHEMA_VERSION = 32
 
 metadata = MetaData(
     naming_convention={
@@ -1806,3 +1806,7 @@ _core_tables = core_tables(metadata)
 from quantbot.storage.core_cost_schema import cost_tables  # noqa: E402
 
 _cost_tables = cost_tables(metadata)
+
+from quantbot.storage.core_health_schema import health_tables  # noqa: E402
+
+_health_tables = health_tables(metadata)

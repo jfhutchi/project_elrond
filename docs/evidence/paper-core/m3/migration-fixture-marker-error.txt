@@ -1,0 +1,199 @@
+.F                                                                       [100%]
+================================== FAILURES ===================================
+_ test_populated_accepted_v31_migration_preserves_payload_ids_and_claim_replay _
+
+self = <sqlalchemy.engine.base.Connection object at 0x000002337CDF0150>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000002337CD9FED0>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000002337E5DE790>
+statement = 'INSERT INTO schema_version (id,store_identity,version) VALUES (?,?,?)'
+parameters = [(1, 'efca8c55-0ca0-43b4-8af6-dd26022d4659', 31)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000002337CD9FED0>
+cursor = <sqlite3.Cursor object at 0x000002337E922940>
+statement = 'INSERT INTO schema_version (id,store_identity,version) VALUES (?,?,?)'
+parameters = (1, 'efca8c55-0ca0-43b4-8af6-dd26022d4659', 31)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000002337E5DE790>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: UNIQUE constraint failed: schema_version.id
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-faykeua4/pytest/test_populated_accepted_v31_mi0')
+
+    @pytest.mark.asyncio
+    async def test_populated_accepted_v31_migration_preserves_payload_ids_and_claim_replay(tmp_path):
+        from quantbot.storage import Database
+        from quantbot.paper_core.contracts import CoreConfig, Decision, Observation, ProtectionPlan, RoundTrip
+        from quantbot.paper_core.store import CoreStore, table
+        fixture = json.loads((Path(__file__).parents[2]/"fixtures/core_v31_m2.json").read_text())
+        from sqlalchemy import create_engine
+        engine = create_engine("sqlite:///"+str(tmp_path/"v31.db"))
+        from alembic import command
+        with engine.begin() as connection:
+            command.upgrade(Database._alembic_config(connection), "0031")
+            for name, rows in fixture.items():
+                if name == "kill_switch_state":
+                    connection.exec_driver_sql("DELETE FROM kill_switch_state")
+                for row in rows:
+                    keys = tuple(row)
+>                   connection.exec_driver_sql(f"INSERT INTO {name} ({','.join(keys)}) VALUES ({','.join('?' for _ in keys)})", tuple(row[k] for k in keys))
+
+tests\integration\paper_core\test_scoped_progress.py:144: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1781: in exec_driver_sql
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x000002337CD9FED0>
+cursor = <sqlite3.Cursor object at 0x000002337E922940>
+statement = 'INSERT INTO schema_version (id,store_identity,version) VALUES (?,?,?)'
+parameters = (1, 'efca8c55-0ca0-43b4-8af6-dd26022d4659', 31)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x000002337E5DE790>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) UNIQUE constraint failed: schema_version.id
+E       [SQL: INSERT INTO schema_version (id,store_identity,version) VALUES (?,?,?)]
+E       [parameters: (1, 'efca8c55-0ca0-43b4-8af6-dd26022d4659', 31)]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_scoped_progress.py::test_populated_accepted_v31_migration_preserves_payload_ids_and_claim_replay
+1 failed, 1 passed, 3 deselected in 2.93s

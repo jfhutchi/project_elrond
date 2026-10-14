@@ -1,0 +1,266 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_ test_separate_guardian_projects_clock_past_deadline_after_awaited_acquisition _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-9x15w88c/pytest/test_separate_guardian_project0')
+
+    @pytest.mark.asyncio
+    async def test_separate_guardian_projects_clock_past_deadline_after_awaited_acquisition(tmp_path):
+        from tests.fixtures.core_m2 import NOW
+        from tests.fixtures.core_m3 import Clocks
+    
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.paper_core.time_evidence import BrokerTime
+        from quantbot.paper_core.trader import trader_cycle
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            independent = Clocks()
+            independent.process_id = "guardian-independent-deadline"
+            independent.wall = NOW + timedelta(seconds=1798)
+            independent.mono = 9999999
+    
+            async def sample():
+                independent.advance(0.01)
+                broker.now = independent.wall
+                return BrokerTime(
+                    timestamp=broker.now,
+                    account_id=broker.account_id,
+                    provider=broker.provider,
+                    session_id="2026-10-14",
+                    session_open=NOW - timedelta(hours=1),
+                    session_close=observation.session_close,
+                    resolution_seconds=0.001,
+                )
+    
+            broker.get_clock = sample
+            original = broker.get_account
+            first = True
+    
+            async def delayed():
+                nonlocal first
+                if first:
+                    independent.advance(3)
+                    broker.now = independent.wall
+                    first = False
+                return await original()
+    
+            broker.get_account = delayed
+            peer = CoreStore(db, store.config, clocks=independent)
+>           assert (await guardian_cycle(peer, broker, now=independent.wall)).exit_intent_ids
+E           AssertionError: assert ()
+E            +  where () = CycleReceipt(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...e_refs=(), exit_intent_ids=(), reasons=(), proof_id='291f96d46a995b5179599cec25dc7be5244dcb130296c4bff67b15a8ef00a3e4').exit_intent_ids
+
+tests\fault\paper_core\test_health_authority.py:151: AssertionError
+_____ test_legacy_post_entry_preserves_original_reconciliation_exception ______
+
+args = (<quantbot.paper_core.store.CoreStore object at 0x00000168BB7F4B50>, <tests.fixtures.core_m2.JournalBroker object at 0x00000168BB7E5710>)
+kwargs = {'now': datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc)}
+
+    async def conflict(*args, **kwargs):
+>       raise StateConflictError("synthetic legacy reconciliation conflict")
+E       quantbot.storage.repositories.StateConflictError: synthetic legacy reconciliation conflict
+
+tests\fault\paper_core\test_health_authority.py:169: StateConflictError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-9x15w88c/pytest/test_legacy_post_entry_preserv0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000168BB84D0D0>
+
+    @pytest.mark.asyncio
+    async def test_legacy_post_entry_preserves_original_reconciliation_exception(tmp_path, monkeypatch):
+        from tests.fixtures.core_m2 import NOW
+        from tests.fixtures.core_m2 import prepare as legacy_prepare
+    
+        from quantbot.paper_core import guardian
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StateConflictError
+    
+        db, store, broker, proof, observation, model = legacy_prepare(tmp_path)
+    
+        async def conflict(*args, **kwargs):
+            raise StateConflictError("synthetic legacy reconciliation conflict")
+    
+        monkeypatch.setattr(guardian, "synchronize", conflict)
+        try:
+            with pytest.raises(StateConflictError, match="legacy reconciliation"):
+>               await trader_cycle(store, broker, observation, model, proof, now=NOW)
+
+tests\fault\paper_core\test_health_authority.py:174: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x00000168BB7F4B50>
+broker = <tests.fixtures.core_m2.JournalBroker object at 0x00000168BB7E5710>
+observation = Observation(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=datet...tetime.timezone.utc),), sequence=1, session_close=datetime.datetime(2026, 10, 14, 20, 0, tzinfo=datetime.timezone.utc))
+model = ModelArtifact(mode='COLLECT', description='nonpredictive baseline; no fitted model', feature_version='synthetic-causal-v1', learning_receipt_id='M1_NO_LEARNING')
+inventory = ReconciliationProof(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_u...=Decimal('100000'), cash_complete=True, acquisition_id='explicit-synthetic-initial-state', complete=True, order_ids=())
+now = datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc)
+
+    async def trader_cycle(
+        store: CoreStore,
+        broker: SyntheticBroker,
+        observation: Observation,
+        model: ModelArtifact,
+        inventory: ReconciliationProof,
+        *,
+        now: datetime,
+    ) -> Decision:
+        require_synthetic(store, broker)
+        time_evidence = None
+        acquisition_reasons: tuple[str, ...] = ()
+        if store.config.clock_profile == "PAPER_TIME_V2":
+            time_evidence = await acquire_time_evidence(broker, store.clocks)
+            store.record("core_time_evidence", time_evidence)
+            acquisition_reasons = time_evidence.objections
+            if not acquisition_reasons:
+                from quantbot.paper_core.guardian import synchronize
+                from quantbot.storage import StateConflictError
+    
+                try:
+                    await synchronize(store, broker, now=store.clocks.sample()[0])
+                    inventory = store.latest_proof()
+                except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError):
+                    acquisition_reasons = ("INVENTORY_ACQUISITION_RETRYABLE",)
+                except (ValueError, BrokerProtocolError):
+                    acquisition_reasons = ("INVENTORY_PROTOCOL_INVALID",)
+                except StateConflictError as error:
+                    acquisition_reasons = (str(error),)
+            if acquisition_reasons:
+                report(
+                    store,
+                    role="TRADER",
+                    state="PROTOCOL_FAILURE"
+                    if any("PROTOCOL_INVALID" in r for r in acquisition_reasons)
+                    else "RETRYABLE_FAILURE",
+                    reasons=acquisition_reasons,
+                    now=store.clocks.sample()[0],
+                    evidence_ids=(time_evidence.id, inventory.id),
+                )
+            elif not entry_time_objections(
+                observation, time_evidence, store.config
+            ) and not observation_objections(observation):
+                from quantbot.paper_core.guardian import acknowledge_handoffs
+    
+                acknowledge_handoffs(store, now=store.clocks.sample()[0])
+                recover_health(store, inventory, now=store.clocks.sample()[0])
+        record_observation(store, observation)
+        previous = next(
+            (
+                link
+                for link in store.links()
+                if link["role"] == "ENTRY" and link["observation_id"] == observation.id
+            ),
+            None,
+        )
+        if previous is not None:
+            return store.read("core_decisions", previous["decision_id"], Decision)
+        decision = evaluate_entry(
+            store.config, observation, model, inventory, time_evidence=time_evidence
+        )
+        with store.database.transaction() as session:
+            reasons = tuple(
+                dict.fromkeys(
+                    (
+                        *entry_health_objections(store, session, observation.symbol),
+                        *decision.gates,
+                        *acquisition_reasons,
+                    )
+                )
+            )
+        if reasons:
+            decision = decision.model_copy(update={"action": "WAIT", "gates": reasons})
+            if not acquisition_reasons:
+                report(
+                    store,
+                    role="TRADER",
+                    state="TEMPORARY_WAIT",
+                    reasons=reasons,
+                    now=store.clocks.sample()[0] if time_evidence else now,
+                    evidence_ids=(observation.id, inventory.id),
+                )
+        plan = ProtectionPlan.for_decision(decision, store.config)
+        if time_evidence is not None:
+            now = store.clocks.sample()[0]
+        if now < decision.recorded_at_utc or now >= decision.valid_until:
+            store.record("core_decisions", decision)
+            return decision
+        entry = claim_entry(store, decision, plan)
+        if entry is None:
+            return decision
+        from quantbot.paper_core.guardian import acknowledge_handoffs
+    
+        acknowledge_handoffs(store, now=now)
+        # Synthetic fixture has explicit fixed drawdown and veto assumptions. These do not attest
+        # production market/concentration readiness and cannot flow to a real broker.
+        drawdown = DrawdownState(
+            current_equity=inventory.account.equity,
+            high_water_equity=inventory.account.equity,
+            drawdown_fraction=Decimal(0),
+            new_risk_multiplier=Decimal(1),
+            entry_halted=False,
+            liquidation_required=False,
+        )
+        vetoes = PortfolioVetoDecision(
+            symbol=decision.symbol,
+            policy_version=1,
+            rule_parameters_hash="EXPLICIT_SYNTHETIC_ASSUMPTIONS",
+            evaluated=(),
+            rejections=(),
+        )
+        try:
+            await coordinator(store, broker).submit_durable(
+                entry.intent,
+                purpose=OrderPurpose.ENTRY,
+                market_eligible=True,
+                drawdown=drawdown,
+                risk_approved=True,
+                vetoes=vetoes,
+            )
+        except OrderSubmissionBlocked:
+            if store.config.clock_profile != "PAPER_TIME_V2":
+                raise
+            report(
+                store,
+                role="TRADER",
+                state="TEMPORARY_WAIT",
+                reasons=("FINAL_SEND_REFUSED",),
+                now=store.clocks.sample()[0],
+                evidence_ids=(decision.id, inventory.id),
+            )
+            return decision
+        except (
+            TimeoutError,
+            OSError,
+            BrokerRequestError,
+            BrokerTransportError,
+            BrokerProtocolError,
+        ) as error:
+            if store.config.clock_profile != "PAPER_TIME_V2":
+                raise
+            report(
+                store,
+                role="TRADER",
+                state="PROTOCOL_FAILURE"
+                if isinstance(error, BrokerProtocolError)
+                else "RETRYABLE_FAILURE",
+                reasons=("ENTRY_PROVIDER_RETRY_PENDING",),
+                now=store.clocks.sample()[0],
+                evidence_ids=(decision.id, inventory.id),
+            )
+            return decision
+        from quantbot.paper_core.guardian import synchronize
+    
+        try:
+            await synchronize(store, broker, now=broker.now)
+>       except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError, StateConflictError):
+                                                                                 ^^^^^^^^^^^^^^^^^^
+E       UnboundLocalError: cannot access local variable 'StateConflictError' where it is not associated with a value
+
+src\quantbot\paper_core\trader.py:407: UnboundLocalError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_health_authority.py::test_separate_guardian_projects_clock_past_deadline_after_awaited_acquisition
+FAILED tests/fault/paper_core/test_health_authority.py::test_legacy_post_entry_preserves_original_reconciliation_exception
+2 failed, 2 deselected in 2.72s
