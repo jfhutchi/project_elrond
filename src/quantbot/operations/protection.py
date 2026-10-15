@@ -947,7 +947,12 @@ class PositionProtectionDaemonRunner:
 
                 delay_seconds = (clock.next_open - current).total_seconds()
                 if delay_seconds <= 0:
-                    raise ValueError("broker market clock does not provide a future open")
+                    # A request can straddle the opening boundary: the response still
+                    # says closed, but its next_open has passed by the local receipt.
+                    # Re-read without treating that clock as permission to evaluate.
+                    self.metrics.increment("quantbot_position_protection_clock_retries_total")
+                    await self.sleeper(Decimal("5"))
+                    continue
                 await self.sleeper(Decimal(str(delay_seconds)))
         return PositionProtectionDaemonResult(
             cycles_completed=completed,
