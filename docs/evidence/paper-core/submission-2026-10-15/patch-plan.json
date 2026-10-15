@@ -1,0 +1,43 @@
+{
+  "old_release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+  "new_release_id": "aaa40bdbc8f49b8f63ad736740cbffb0fc00f9d14f96e344e0aba4d68c6d78d0",
+  "config_unchanged": true,
+  "dependencies_unchanged": true,
+  "changes": [
+    {
+      "path": "src/quantbot/execution/coordinator.py",
+      "old_sha256": "179937272d5b4c2f26410ad3fe24762323e86303b2a55f3cb2156f776ef54b03",
+      "new_sha256": "1d21826b0e42a290700f200c920128a413e969a96fb49b3dda0d0977389e9135"
+    },
+    {
+      "path": "src/quantbot/paper_core/alpaca_adapter.py",
+      "old_sha256": "9f2556ef79be5c4701c6da54f357bda18b0e69ab969590ba1945bb00dd403ff9",
+      "new_sha256": "ab8e45a98ac9a67b9981d2faa21451806893c555ddbac00034dc872cbb2f8099"
+    },
+    {
+      "path": "src/quantbot/paper_core/funds.py",
+      "old_sha256": "3350d9b71ba8b6e1c971eac8e666df2ac91da43c59e857ebbce475cb6e287340",
+      "new_sha256": "9c12d9a335b4d714e6dcda8288d3ea68db9dac7548c3c9f642699817d5aeda51"
+    },
+    {
+      "path": "src/quantbot/paper_core/guardian.py",
+      "old_sha256": "39d557b56b028c28bd55dcdf1fbfdb4b8d3a35ecb29b6ebf4d18efbd35acbb49",
+      "new_sha256": "f8b8731f38cc36b230719f75f84691741a8dd20d2947787256637d323bca3063"
+    },
+    {
+      "path": "src/quantbot/paper_core/outcomes.py",
+      "old_sha256": "2a19928caecfc68097eed991130d99ec557b780f0f7fe7c2feeab723b49e415c",
+      "new_sha256": "4a45f46fffa1b435aed7622aec9d81b3080560abc748e26a5a23b5263d2f3201"
+    },
+    {
+      "path": "src/quantbot/paper_core/runtime.py",
+      "old_sha256": "8dc2d7e2377b8814dee055930fd20a532d8d83ba297c98dc226cb3e85c14b736",
+      "new_sha256": "b42629b28812cf87f723c92b47c9b40c4d2f45c0de41dfca7f1644da56195b48"
+    },
+    {
+      "path": "src/quantbot/paper_core/send_guard.py",
+      "old_sha256": "bc3337dc4ad3ee8c7258d257fd287a0c3602e94764690dbedae0c28ac853c7f6",
+      "new_sha256": "e724bcd8ce7cb46a1fa7053c5162c0206d6e2f3696efb8626717e7eeecdf18f0"
+    }
+  ]
+}

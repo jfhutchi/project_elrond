@@ -1,6 +1,6 @@
 # The research subsystem
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
 
 ## Current core and retained research boundaries
 
@@ -41,7 +41,7 @@ signals first, otherwise exploratory stock rotation, with six durable daily rese
 and one concurrent lot. It adds `BROKER_PAPER_BALANCE_V1` for bounded sizing from fresh
 source-bound current funds without certifying incomplete historical cash. Quantity,
 identity, source, ledger-generation and integrity controls remain. This economic change
-needs its own initial commission from COLLECT. It is merged to main in PR #290 and locally installed, but not commissioned;
+needs its own initial commission from COLLECT. It is merged to main in PR #290 and commissioned locally with the submission readiness repair;
 The successor is implemented and locally tested, including the combined trading-to-learning witness. The older measured prepared configuration remains XLE-bound.
 
 How Elrond decides what counts as evidence, and the mechanisms that stop it being talked into

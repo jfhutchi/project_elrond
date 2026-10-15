@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-15T17:12:28.999694+00:00",
+  "fence_id": "06b1a32410c6b51124284c616ab76074603abfa009ab561e43310c885561b635",
+  "commission_id": "df1a8d06519c329f7131a588b94bdda8b49d3107990ea1842de0356630f2db8f",
+  "activation_id": "8a55b0fe12b60c6af3de9a3667fad661e2870d698e96eca0f1096bb4b2c34412",
+  "binding_id": "fff80eb0933dbe2611f31bf51c3f748a7b6c93f17d08570ba58142fbfff94d65",
+  "prior_stop": {
+    "id": 1,
+    "engaged": 0,
+    "reason": "stop",
+    "updated_at": "2026-10-14T01:17:42.473747Z"
+  }
+}

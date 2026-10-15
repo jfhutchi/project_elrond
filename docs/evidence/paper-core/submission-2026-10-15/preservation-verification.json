@@ -1,0 +1,7 @@
+{
+  "core_identities": true,
+  "core_runtime_commissions": true,
+  "core_fixture_baselines": true,
+  "core_active_model": true,
+  "kill_switch_state": true
+}
