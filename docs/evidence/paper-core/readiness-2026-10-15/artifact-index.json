@@ -20,6 +20,10 @@
     "sha256": "19273248b963f9f657bd4f370bf05edc3fab393a907895c41caf766dd04274e8"
   },
   {
+    "file": "clock-diagnosis.json",
+    "sha256": "2ed496e611c1fe952312a3cb4f3d22b9a6c146642ecf8ef1c2c1e8b374216937"
+  },
+  {
     "file": "continuation-failure.json",
     "sha256": "b799c51364fa757f7cf125a3e988f3520c5fb9c48e19f67635510f77f3a6004b"
   },
@@ -41,7 +45,7 @@
   },
   {
     "file": "README.md",
-    "sha256": "0fed12435ddbee6f4b25f4c5ddbd7dda0ddc108620caa7508d8d9ca43cacfc57"
+    "sha256": "e4f8f9baa6753a2cf02f8d702ca15567e05cda5fdb200bf2b7c14833843824be"
   },
   {
     "file": "reconcile_original.py.txt",

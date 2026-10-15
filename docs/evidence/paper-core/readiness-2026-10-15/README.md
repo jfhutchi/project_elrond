@@ -53,3 +53,10 @@ and a healthy deadline heartbeat, then rerun fresh readiness before enabling tra
 Do not change the computer clock manually, relax the deadline gate or reuse old acquisition
 approval. The recorded retry window expires at noon Eastern; any later attempt needs a
 new explicitly bounded window and fresh evidence.
+
+Subsequent clock investigation found a fixed 32,768-second polling interval (about 9h6m),
+one configured server, and an October12 DNS resolution failure for that server. Prior-boot
+operational records show successful synchronization earlier on October15. The 10:48 Eastern
+reboot is followed by unsynchronized status. Direct NTP probes currently reach the server.
+The existing Windows ForceSynchronizeTime task also denies this token access. These findings
+support missed resynchronization/infrequent correction, rather than proving a hardware defect.
