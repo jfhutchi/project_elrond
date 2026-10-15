@@ -34,6 +34,7 @@ def prepare(tmp_path, *, inherited=None, predictive=False):
 def cohort(*, at=NOW, unavailable=()):
     from quantbot.paper_core.contracts import ObservationCohort
 
+    session_anchor = at.replace(hour=NOW.hour, minute=NOW.minute, second=0, microsecond=0)
     observations = tuple(
         Observation(
             symbol=symbol,
@@ -47,16 +48,16 @@ def cohort(*, at=NOW, unavailable=()):
             dependencies=("SPY",),
             dependency_available_at=(at,),
             sequence=int(at.timestamp() // 300),
-            session_open=NOW - timedelta(minutes=30),
-            session_close=NOW + timedelta(hours=6),
+            session_open=session_anchor - timedelta(minutes=30),
+            session_close=session_anchor + timedelta(hours=6),
         )
         for symbol in ("AAPL", "MSFT", "NVDA")
         if symbol not in dict(unavailable)
     )
     return ObservationCohort(
         source_end=at,
-        session_open=NOW - timedelta(minutes=30),
-        session_close=NOW + timedelta(hours=6),
+        session_open=session_anchor - timedelta(minutes=30),
+        session_close=session_anchor + timedelta(hours=6),
         observations=observations,
         unavailable=unavailable,
     )
@@ -80,43 +81,63 @@ def test_universe_rejects_unsupported_duplicates_and_benchmark(symbols):
         CoreConfig(account_id="paper", symbol="XLE", symbols=symbols)
 
 
-def test_signal_beats_weak_even_when_only_qualifying_stock_was_used(tmp_path, monkeypatch):
-    from quantbot.paper_core.selection import evaluate_cohort
+def fitted_signal_inputs(active, values):
+    """Real ridge fit and prediction inputs; no prediction/fit/activation function is replaced."""
+    from quantbot.learner.estimators import fit_estimator
+    from quantbot.learner.five_minute import FEATURE_NAMES
 
-    db, store, broker, proof, model, active = prepare(tmp_path, predictive=True)
-    model = model.model_copy(update={"feature_version": "synthetic-causal-v1"})
-    active = active.model_copy(update={"model_id": model.id, "model_digest": model.id})
-
-    def predictions(model, rows):
-        return [rows[0]["return"] * 1000]
-
-    monkeypatch.setattr("quantbot.paper_core.learning.predict_bps", predictions)
+    estimator = fit_estimator(
+        tuple((value, *([0.0] * (len(FEATURE_NAMES) - 1))) for value in (-0.01, -0.01, 0.01, 0.01)),
+        (-12.5, -12.5, 12.5, 12.5),
+        FEATURE_NAMES,
+    )
+    model = ModelArtifact(
+        mode="PREDICT",
+        estimator=estimator,
+        feature_version="five-minute-price-alpha-v1",
+        target_contract="owned-executed-net-return-v1",
+        policy_id="collect-owned-30m-stop100-v1",
+    )
+    # Pure evaluation accepts explicit immutable authority inputs. This does not commission a store.
+    activation = active.model_copy(update={"model_id": model.id, "model_digest": model.id})
     captured = cohort()
     captured = captured.model_copy(
         update={
             "observations": tuple(
-                o.model_copy(update={"features": (("return", value),)})
-                for o, value in zip(captured.observations, (0.001, 0.025, -0.004), strict=True)
+                o.model_copy(
+                    update={
+                        "feature_version": model.feature_version,
+                        "features": tuple(
+                            zip(
+                                FEATURE_NAMES,
+                                (value, *([0.0] * (len(FEATURE_NAMES) - 1))),
+                                strict=True,
+                            )
+                        ),
+                    }
+                )
+                for o, value in zip(captured.observations, values, strict=True)
             )
         }
     )
+    return model, activation, captured
+
+
+def test_signal_beats_weak_even_when_only_qualifying_stock_was_used(tmp_path):
+    from quantbot.paper_core.selection import evaluate_cohort
+
+    db, store, broker, proof, model, active = prepare(tmp_path)
+    model, active, captured = fitted_signal_inputs(active, (0.001, 0.025, -0.004))
     try:
         chosen = evaluate_cohort(store.config, captured, model, proof, activation=active)
         assert chosen.symbol == "MSFT" and chosen.selection.kind == "SIGNAL"
-        assert chosen.prediction_bps == 25
+        assert chosen.prediction_bps == pytest.approx(25)
         diverse = evaluate_cohort(
             store.config, captured, model, proof, activation=active, session_counts=(("MSFT", 1),)
         )
         assert diverse.symbol == "MSFT" and diverse.selection.kind == "SIGNAL"
-        assert diverse.prediction_bps == 25
-        repeated = captured.model_copy(
-            update={
-                "observations": tuple(
-                    o.model_copy(update={"features": (("return", value),)})
-                    for o, value in zip(captured.observations, (0.011, 0.025, 0.02), strict=True)
-                )
-            }
-        )
+        assert diverse.prediction_bps == pytest.approx(25)
+        model, active, repeated = fitted_signal_inputs(active, (0.011, 0.025, 0.02))
         fair = evaluate_cohort(
             store.config,
             repeated,
@@ -125,7 +146,135 @@ def test_signal_beats_weak_even_when_only_qualifying_stock_was_used(tmp_path, mo
             activation=active,
             session_counts=(("AAPL", 1), ("MSFT", 2), ("NVDA", 1)),
         )
-        assert fair.symbol == "NVDA" and fair.prediction_bps == 20
+        assert fair.symbol == "NVDA" and fair.prediction_bps == pytest.approx(20)
+    finally:
+        db.close()
+
+
+@pytest.mark.parametrize(
+    "values,daily,prior,expected",
+    [
+        ((0.025, 0.011, -0.004), (), (("AAPL", 10),), "AAPL"),
+        ((0.025, 0.011, -0.004), (("AAPL", 1), ("MSFT", 2)), (("AAPL", 10),), "AAPL"),
+        ((0.025, 0.011, -0.004), (("AAPL", 1), ("MSFT", 1)), (("AAPL", 10),), "AAPL"),
+        ((0.025, 0.025, -0.004), (), (("AAPL", 10),), "MSFT"),
+        ((0.025, 0.025, -0.004), (), (("AAPL", 2), ("MSFT", 2)), "AAPL"),
+    ],
+)
+def test_signal_rank_is_today_count_prediction_prior_count_then_universe(
+    tmp_path,
+    values,
+    daily,
+    prior,
+    expected,
+):
+    from quantbot.paper_core.selection import evaluate_cohort
+
+    db, store, broker, proof, model, active = prepare(tmp_path)
+    try:
+        model, active, captured = fitted_signal_inputs(active, values)
+        decision = evaluate_cohort(
+            store.config,
+            captured,
+            model,
+            proof,
+            activation=active,
+            session_counts=daily,
+            prior_counts=prior,
+        )
+        assert decision.symbol == expected
+        assert decision.selection.kind == "SIGNAL" and decision.action == "BUY"
+        assert decision.prediction_bps == pytest.approx(25)
+    finally:
+        db.close()
+
+
+def test_exploration_today_count_precedes_prior_history(tmp_path):
+    from quantbot.paper_core.selection import evaluate_cohort
+
+    db, store, broker, proof, model, active = prepare(tmp_path)
+    try:
+        decision = evaluate_cohort(
+            store.config,
+            cohort(),
+            model,
+            proof,
+            activation=active,
+            session_counts=(("AAPL", 1), ("MSFT", 2), ("NVDA", 2)),
+            prior_counts=(("AAPL", 10),),
+        )
+        assert decision.symbol == "AAPL" and decision.selection.kind == "EXPLORATION"
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_cross_day_exploration_resets_today_usage_and_retains_prior_rotation(tmp_path):
+    from quantbot.paper_core.contracts import BrokerEvent, CostItem
+    from quantbot.paper_core.guardian import guardian_cycle, synchronize
+    from quantbot.paper_core.outcomes import import_broker_events
+    from quantbot.paper_core.trader import trader_cycle
+
+    db, store, broker, proof, model, active = prepare(tmp_path)
+    try:
+        observed = []
+        for day, offset in ((0, 0), (0, 1), *((1, i) for i in range(6))):
+            broker.now = NOW + timedelta(days=day, minutes=5 * offset)
+            for symbol in store.config.entry_symbols:
+                broker.set_mark(symbol, Decimal(100), as_of=broker.now)
+            await synchronize(store, broker, now=broker.now)
+            await guardian_cycle(store, broker, now=broker.now)
+            captured = cohort(
+                at=broker.now,
+                unavailable=((("MSFT", "MISSING"), ("NVDA", "MISSING")) if day == 0 else ()),
+            )
+            decision = await trader_cycle(
+                store, broker, captured, model, store.latest_proof(), now=broker.now
+            )
+            assert decision.action == "BUY"
+            observed.append(decision.symbol)
+            if day == 1 and offset == 0:
+                assert decision.selection.session_counts == ()
+                assert decision.selection.prior_counts == (("AAPL", 2),)
+            broker.set_mark(decision.symbol, Decimal(98), as_of=broker.now)
+            await guardian_cycle(store, broker, now=broker.now)
+            # Explicit provider fee fixtures apply to only this pair of actual synthetic fills.
+            fees = []
+            for fill in broker.fills[-2:]:
+                order = next(
+                    o for o in broker.orders.values() if o.broker_order_id == fill.broker_order_id
+                )
+                cost = CostItem(
+                    recorded_at_utc=broker.now,
+                    fill_id=fill.fill_id,
+                    amount=Decimal(0),
+                    source="BROKER_REPORTED",
+                    document_id="cross-day-provider-fee",
+                    effective_start=fill.occurred_at,
+                    effective_end=fill.occurred_at + timedelta(minutes=1),
+                )
+                fees.append(
+                    BrokerEvent(
+                        recorded_at_utc=broker.now,
+                        occurred_at=broker.now,
+                        account_id=store.config.account_id,
+                        provider=broker.provider,
+                        endpoint="synthetic/fees",
+                        event_id=cost.id,
+                        raw_digest=cost.id,
+                        client_order_id=order.client_order_id,
+                        cost=cost,
+                    )
+                )
+            import_broker_events(store, tuple(fees))
+            await synchronize(store, broker, now=broker.now)
+            if day == 0 and offset == 1:
+                config, path = store.config, db.path
+                db.close()
+                db = Database(path)
+                store = CoreStore(db, config)
+        assert observed == ["AAPL", "AAPL", "MSFT", "NVDA", "AAPL", "MSFT", "NVDA", "AAPL"]
+        assert len(broker.posts) == 16
     finally:
         db.close()
 

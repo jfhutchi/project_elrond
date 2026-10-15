@@ -164,27 +164,30 @@ def evaluate_cohort(
             exclusions[symbol] = reasons
     eligible = [s for s in config.entry_symbols if s in members and s not in exclusions]
     daily, prior = dict(session_counts), dict(prior_counts)
-    unused = [s for s in eligible if not daily.get(s, 0)]
-    tier = unused or eligible
     predictions = {s: d.prediction_bps for s, d in members.items() if d.prediction_bps is not None}
     strong = [s for s in eligible if s in predictions and predictions[s] > 10]
 
-    def fairness(symbol: str) -> tuple[int, int]:
-        return daily.get(symbol, 0) + prior.get(symbol, 0), config.entry_symbols.index(symbol)
-
     if strong:
-        strong = [s for s in strong if not daily.get(s, 0)] or strong
         chosen = min(
             strong,
             key=lambda s: (
-                fairness(s)[0],
+                daily.get(s, 0),
                 -predictions[s],
+                prior.get(s, 0),
                 config.entry_symbols.index(s),
             ),
         )
         kind = "SIGNAL"
-    elif tier:
-        chosen, kind = min(tier, key=fairness), "EXPLORATION"
+    elif eligible:
+        chosen = min(
+            eligible,
+            key=lambda s: (
+                daily.get(s, 0),
+                prior.get(s, 0),
+                config.entry_symbols.index(s),
+            ),
+        )
+        kind = "EXPLORATION"
     else:
         # Keep an actual observed member as the WAIT anchor, with every exclusion retained.
         if not members:
