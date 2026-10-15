@@ -170,9 +170,7 @@ def independent_cash_available(store: CoreStore, session: Session) -> bool:
 
 def universe_health_objections(store: CoreStore, session: Session) -> tuple[str, ...]:
     """Entry readiness requires at least one healthy member; claims check its exact scope."""
-    scoped = [
-        entry_health_objections(store, session, symbol) for symbol in store.config.entry_symbols
-    ]
+    scoped = [entry_health_objections(store, session, symbol) for symbol in store.entry_symbols]
     if any(not reasons for reasons in scoped):
         return ()
     return tuple(dict.fromkeys(reason for reasons in scoped for reason in reasons))

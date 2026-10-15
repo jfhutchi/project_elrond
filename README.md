@@ -24,6 +24,13 @@ learning from both wins and losses. It permits six durable reservations per exch
 with one concurrent core lot. Its V3 target is actual executed gross return; a separate
 current-funds policy preserves continued entry capacity without inventing fee or cash history.
 
+The approved [whole-share amendment](docs/superpowers/specs/2026-10-15-whole-share-fallback-design.md)
+adds F, T, PFE, VZ, HPQ, SOFI and UBER to the original stock pool. It keeps fractional
+orders when supported; otherwise it permits an exact one-share minimum only when cash,
+buying power and the existing loss budget cover it. Fresh eligibility is checked again
+before submission. The amendment preserves trade history, model state and daily limits;
+it does not sell inherited holdings to raise cash.
+
 **The successor is implemented, reviewed and merged to main. Its installed trader is not yet commissioned.**
 The integrated witness collects ten sessions of wins and losses,
 fits and activates V3, then selects a qualifying signal and a negative-prediction exploratory

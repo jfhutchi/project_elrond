@@ -49,6 +49,7 @@ def parser() -> argparse.ArgumentParser:
             "fence",
             "rollback-model",
             "transition-release",
+            "transition-entry-policy",
             "resume",
         ),
     )
@@ -311,7 +312,14 @@ def main() -> None:
                     }
                 )
             )
-    elif args.command in {"commission", "fence", "rollback-model", "transition-release", "resume"}:
+    elif args.command in {
+        "commission",
+        "fence",
+        "rollback-model",
+        "transition-release",
+        "transition-entry-policy",
+        "resume",
+    }:
         if args.approval_document is None or not args.approval_document.is_absolute():
             raise ValueError("explicit exact approved nonsecret document required")
         document = json.loads(args.approval_document.read_text(encoding="utf-8"))
@@ -324,7 +332,7 @@ def main() -> None:
             core = CoreConfig.model_validate(recorded["economic_configs"][0])
             executable_id = recorded["executable_binding"]["release"]
             executable_id = PreparedRelease.model_validate(executable_id).id
-            if args.command != "transition-release":
+            if args.command not in {"transition-release", "transition-entry-policy"}:
                 commissioned_core(release, recorded)
         with Database(Path(config.store_path)) as db:
             store = CoreStore(db, core, runtime_release_id=executable_id)
@@ -343,6 +351,10 @@ def main() -> None:
                 from quantbot.paper_core.authority import transition_release
 
                 print(transition_release(store, release, document))
+            elif args.command == "transition-entry-policy":
+                from quantbot.paper_core.authority import transition_entry_policy
+
+                print(transition_entry_policy(store, release, document))
             elif args.command == "resume":
                 from quantbot.paper_core.authority import resume_entries
 

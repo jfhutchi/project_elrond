@@ -21,7 +21,16 @@ members do not suppress healthy candidates. Claim and final send replay cohort s
 Enforce six durable reservations per verified exchange session and one concurrent core lot.
 Completed and possible-send/unknown reservations count; only definitive pre-send proof releases
 one. A semantic bar boundary does not change with acquisition time, symbol, model or release.
-Retain 0.5% position value, 0.25% entry risk, 1% stop, 30-minute horizon and existing buffers.
+Retain the base 0.5% position value, 0.25% entry risk, 1% stop, 30-minute horizon and buffers.
+The approved optional `WHOLE_SHARE_FALLBACK_V1` adds F, T, PFE, VZ, HPQ, SOFI and UBER.
+Use fractions when explicitly supported; otherwise floor to whole shares with a minimum
+of exactly one. Only this minimum may exceed the notional cap; it must still fit current
+cash, 95% of buying power and the unchanged planned-loss budget. Ordinary amendment sizing
+uses 99% of the normal allocation as equity-mark headroom. Recheck typed eligibility at
+actual send, refuse capability changes, and retain receipt provenance. Unknown is not false.
+The explicit flat/fenced entry-policy transition preserves base economics, old ownership,
+models, daily counts and all compatible history. Do not re-commission or reset a store to
+apply it. See the [design](../superpowers/specs/2026-10-15-whole-share-fallback-design.md).
 Six reservations do not guarantee six fills. Guardian marks follow owned symbols; protection/
 outcomes continue after the cap or a failed fit. Do not liquidate inherited holdings for capacity.
 

@@ -13,6 +13,11 @@ from quantbot.paper_core.contracts import (
     ProtectionPlan,
     ReconciliationProof,
 )
+from quantbot.paper_core.entry_policy import (
+    AssetEligibility,
+    decision_entry_authority,
+    entry_risk_allowed,
+)
 from quantbot.paper_core.funds import entry_inventory_objections
 from quantbot.paper_core.health import entry_health_objections
 from quantbot.paper_core.store import CoreStore, latest_certification, table
@@ -31,6 +36,7 @@ def record_pre_send_refusal(
     reasons: tuple[str, ...],
     *,
     clock: Callable[[], datetime],
+    evidence_ids: tuple[str, ...] = (),
 ) -> None:
     """Latch a known pre-POST refusal in the same transaction as its ERROR state."""
     if purpose is not OrderPurpose.ENTRY:
@@ -53,6 +59,7 @@ def record_pre_send_refusal(
             is None,
             "state_at_refusal": stored.state.value,
             "source": "coordinator-pre-post-gate",
+            **({"evidence_ids": evidence_ids} if evidence_ids else {}),
         },
     )
 
@@ -130,13 +137,15 @@ def compatible_successor(
     )
 
 
-def current_risk_allowed(proof: ReconciliationProof, *, quantity: Decimal, price: Decimal) -> bool:
-    notional = quantity * price
-    return (
-        notional <= proof.account.equity * Decimal("0.005")
-        and notional * Decimal("0.01") <= proof.account.equity * Decimal("0.0025")
-        and notional <= proof.account.cash
-        and notional <= proof.account.buying_power * Decimal("0.95")
+def current_risk_allowed(
+    proof: ReconciliationProof,
+    *,
+    quantity: Decimal,
+    price: Decimal,
+    minimum_whole_share: bool = False,
+) -> bool:
+    return entry_risk_allowed(
+        proof.account, quantity, price, minimum_whole_share=minimum_whole_share
     )
 
 
@@ -174,6 +183,7 @@ def final_send_in_session(
     purpose: OrderPurpose,
     *,
     clock: Callable[[], datetime],
+    asset_eligibility: Callable[[], AssetEligibility | None] | None = None,
 ) -> tuple[str, ...]:
     """Validate authority using the coordinator's locked send-state transaction."""
     from quantbot.paper_core.authority import guardian_objections, runtime_objections
@@ -212,6 +222,14 @@ def final_send_in_session(
             )
         ).scalar_one()
     )
+    current_asset = asset_eligibility() if asset_eligibility else None
+    policy_reasons, minimum_share = decision_entry_authority(
+        store, session, decision, now=clock(), fresh=current_asset, require_fresh=True
+    )
+    if current_asset is not None:
+        from quantbot.paper_core.store import put
+
+        put(session, "core_provider_acquisitions", current_asset.id, current_asset)
     plan = ProtectionPlan.model_validate_json(
         session.execute(
             select(table("core_protection_plans").c.payload).where(
@@ -296,7 +314,9 @@ def final_send_in_session(
     if proof is not None and (
         store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER"
     ):
-        if not current_risk_allowed(proof, quantity=intent.quantity, price=decision.price):
+        if not current_risk_allowed(
+            proof, quantity=intent.quantity, price=decision.price, minimum_whole_share=minimum_share
+        ):
             reasons.append("CORE_FIXED_RISK_ENVELOPE")
     if (
         stored.state is not IntentState.ORDER_CREATED
@@ -319,6 +339,7 @@ def final_send_in_session(
         reasons.append("CORE_SESSION_EXIT_BUFFER_DUE")
     if receipt is None or not receipt.recorded_at_utc <= now < receipt.valid_until:
         reasons.append("CORE_GUARDIAN_RECEIPT_EXPIRED")
+    reasons.extend(policy_reasons)
     if reasons:
         definitive = (
             stored.state is IntentState.ORDER_CREATED
@@ -337,6 +358,14 @@ def final_send_in_session(
                 "decision_id": decision.id,
                 "protection_id": plan.id,
                 "guardian_receipt_id": None if receipt is None else receipt.id,
+                **(
+                    {
+                        "entry_policy_id": decision.entry_policy_id,
+                        "evidence_ids": (current_asset.id, decision.entry_policy_id),
+                    }
+                    if current_asset is not None and decision.entry_policy_id
+                    else {}
+                ),
             },
         )
     elif store.config.evidence_lane == "BROKER_PAPER":
@@ -352,6 +381,14 @@ def final_send_in_session(
                 "config_id": store.config_id,
                 "process_epoch": store.clocks.process_id,
                 "contract": "core-final-send-v1",
+                **(
+                    {
+                        "entry_policy_id": decision.entry_policy_id,
+                        "asset_eligibility_id": current_asset.id if current_asset else None,
+                    }
+                    if decision.entry_policy_id
+                    else {}
+                ),
             },
         )
     return tuple(reasons)

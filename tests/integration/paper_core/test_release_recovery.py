@@ -306,7 +306,7 @@ def test_actual_three_role_processes_restart_fence_and_continue_outcomes(tmp_pat
             store.latest_proof(),
             now=store.clocks.sample()[0],
         )
-        assert seeded.posts and decision.action == "BUY"
+        assert seeded.posts and decision.action == "BUY", decision.gates
         return decision
 
     owned = asyncio.run(seed_owned())

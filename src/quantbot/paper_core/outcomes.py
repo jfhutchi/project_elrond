@@ -627,6 +627,7 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         source_refs=sources,
         lot_id=lot_id,
         decision_id=decision.id,
+        **({"entry_policy_id": decision.entry_policy_id} if decision.entry_policy_id else {}),
         entry_fill_ids=tuple(sorted(f.fill_id for f in buys)),
         exit_fill_ids=tuple(sorted(f.fill_id for f in sells)),
         terminal_order_ids=tuple(sorted(terminal_ids)),

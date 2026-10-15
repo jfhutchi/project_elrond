@@ -11,10 +11,11 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from quantbot.brokers.base import BrokerModel
 from quantbot.paper_core.contracts import CoreConfig, ModelArtifact
+from quantbot.paper_core.entry_policy import EntryPolicy
 from quantbot.paper_core.operational_costs import PaperCostContract
 from quantbot.research.manifest import content_id
 from quantbot.storage.schema import SCHEMA_VERSION
@@ -31,6 +32,7 @@ class RuntimeConfig(BrokerModel):
     endpoint: Literal["https://paper-api.alpaca.markets"] = PAPER_ENDPOINT
     environment_file_reference: str | None = None
     core: CoreConfig
+    entry_policy: EntryPolicy | None = None
     initial_model: ModelArtifact = Field(
         default_factory=lambda: ModelArtifact(feature_version="five-minute-price-alpha-v1")
     )
@@ -46,6 +48,19 @@ class RuntimeConfig(BrokerModel):
     guardian_poll_seconds: float = Field(default=15.0, gt=0, le=15)
     outcomes_poll_seconds: float = Field(default=15.0, gt=0, le=15)
     entry_poll_seconds: float = Field(default=15.0, gt=0, le=15)
+
+    @model_serializer(mode="wrap")
+    def preserve_pre_amendment_config(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if "entry_policy" not in self.model_fields_set:
+            payload.pop("entry_policy", None)
+        return payload
+
+    @property
+    def entry_symbols(self) -> tuple[str, ...]:
+        return self.entry_policy.symbols if self.entry_policy else self.core.entry_symbols
 
     @model_validator(mode="after")
     def fixed_authority(self) -> Self:
@@ -68,6 +83,14 @@ class RuntimeConfig(BrokerModel):
             raise ValueError("environment reference must be absolute")
         if self.core.clock_profile != "PAPER_TIME_V2":
             raise ValueError("supported runtime requires PAPER_TIME_V2")
+        if self.entry_policy is not None and (
+            self.core.selection_policy != "SIGNAL_OR_EXPLORE_V1"
+            or self.core.evidence_lane != "BROKER_PAPER"
+            or not set(self.core.entry_symbols) <= set(self.entry_policy.symbols)
+        ):
+            raise ValueError(
+                "entry amendment requires PAPER hybrid and preserves original universe"
+            )
         if self.core.evidence_lane == "BROKER_PAPER" and not self.canonical_datasets:
             raise ValueError("operational underlying canonical dataset identity required")
         if self.initial_model.mode != "COLLECT" or self.initial_model.fixture_authority:
@@ -77,7 +100,7 @@ class RuntimeConfig(BrokerModel):
         if self.cost_contract is not None and (
             hashlib.sha256(self.cost_contract.account_id.encode()).hexdigest()
             != self.expected_account_hash
-            or not set(self.core.entry_symbols) <= set(self.cost_contract.symbols)
+            or not set(self.entry_symbols) <= set(self.cost_contract.symbols)
         ):
             raise ValueError("cost contract account/symbol mismatch")
         return self

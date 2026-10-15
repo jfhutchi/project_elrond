@@ -61,6 +61,23 @@ Real-money trading remains disabled and unauthorized.
 
 ## Daily signals and exploration
 
+The optional approved `WHOLE_SHARE_FALLBACK_V1` entry policy retains the original ten
+stocks and adds F, T, PFE, VZ, HPQ, SOFI and UBER. Fractional orders remain preferred when
+the provider explicitly supports them. Otherwise, round down to whole shares and permit
+an exact one-share minimum, provided current cash, 95% of buying power and the existing
+25 bps planned-loss budget cover it at the unchanged 1% stop. Missing or malformed asset
+eligibility remains unverified. A fresh pre-send capability change refuses the old intent;
+only a later decision may resize it. Ordinary sizing targets 99% of the 0.5% allocation to
+leave room for equity marks; the one-share minimum is the only exception to that notional
+cap. It does not authorize two shares over the cap, short selling or selling inherited lots.
+
+This amendment has its own immutable identity on observations, decisions and outcomes.
+An explicit fenced, flat `transition-entry-policy` changes only this part of runtime
+configuration; ordinary `transition-release` still requires identical configuration.
+Base commission, model, history, daily reservation counts and learning origin survive the
+amendment. An audited transition back to the prior policy also requires flat, unambiguous
+inventory. See the [approved design](superpowers/specs/2026-10-15-whole-share-fallback-design.md).
+
 The successor's `SIGNAL_OR_EXPLORE_V1` preserves `MODEL_ONLY_V1` as the legacy selection
 mode. Its candidate universe is AAPL, MSFT, AMZN, GOOGL, META, NVDA, JPM, JNJ, XOM and PG;
 SPY supplies benchmark features and is not an entry member. Broker eligibility is measured,
@@ -83,7 +100,8 @@ pre-send proof releases one. A semantic boundary is independent of acquisition t
 model or executable release, preventing duplicate claims after restart. Protection and
 outcomes continue after the cap. Six reservations are not a promise of six broker fills.
 
-The envelope retains 0.5% equity position value, 0.25% entry risk, a 1% stop, a 30-minute
+The base envelope retains 0.5% equity position value (with the optional exact-one-share
+exception described above), 0.25% entry risk, a 1% stop, a 30-minute
 horizon, at least a 120-second close buffer and the existing buying-power reserve. A failed
 or rejected fit does not stop exploration. Genuine market, data, authority or broker blockers
 remain visible and retryable; inherited positions are not liquidated to create capacity.

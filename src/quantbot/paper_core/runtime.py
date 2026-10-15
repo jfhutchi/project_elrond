@@ -1,7 +1,6 @@
 """Fixture initialization only. Operational launcher and model activation are later milestones."""
 
 from datetime import datetime, timedelta
-from decimal import Decimal
 from functools import partial
 from typing import cast
 
@@ -14,6 +13,10 @@ from quantbot.domain import BrokerOrder, OrderIntent, Position
 from quantbot.execution import ExecutionCoordinator
 from quantbot.execution.coordinator import SubmissionPolicy
 from quantbot.paper_core.contracts import GuardianReceipt, ReconciliationProof
+from quantbot.paper_core.entry_policy import (
+    decision_entry_authority,
+    entry_risk_allowed,
+)
 from quantbot.paper_core.funds import (
     entry_inventory_objections,
     paper_balance_policy,
@@ -81,17 +84,37 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
 
     def __init__(self, store: CoreStore, broker: BrokerAdapter, settings: Settings) -> None:
         self.store = store
+        self._entry_asset = None
         super().__init__(
             store.database,
             broker,
             settings,
             submission_policy=SubmissionPolicy(max_not_found_retries=0),
             transactional_send_check=partial(
-                final_send_in_session, store, clock=lambda: store.clocks.sample()[0]
+                final_send_in_session,
+                store,
+                clock=lambda: store.clocks.sample()[0],
+                asset_eligibility=lambda: self._entry_asset,
             ),
-            transactional_send_refusal=partial(
-                record_pre_send_refusal, clock=lambda: store.clocks.sample()[0]
-            ),
+            transactional_send_refusal=self._record_send_refusal,
+        )
+
+    async def _acquire_send_constraints(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
+        if purpose is OrderPurpose.ENTRY and self.store.entry_policy is not None:
+            self._entry_asset = await self._broker.entry_asset_eligibility(intent.symbol)
+
+    def _record_send_refusal(self, session, intent, purpose, reasons) -> None:
+        evidence_ids = ()
+        if self._entry_asset is not None:
+            put(session, "core_provider_acquisitions", self._entry_asset.id, self._entry_asset)
+            evidence_ids = (self._entry_asset.id, self._entry_asset.entry_policy_id)
+        record_pre_send_refusal(
+            session,
+            intent,
+            purpose,
+            reasons,
+            clock=lambda: self.store.clocks.sample()[0],
+            evidence_ids=evidence_ids,
         )
 
     def _adopt(self, intent: OrderIntent, order: BrokerOrder) -> OrderIntent:
@@ -179,13 +202,18 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                     from quantbot.paper_core.contracts import Decision
 
                     decision = self.store.read("core_decisions", links[0]["decision_id"], Decision)
-                    notional = intent.quantity * decision.price
+                    policy_reasons, minimum_share = decision_entry_authority(
+                        self.store,
+                        session,
+                        decision,
+                        now=self.store.clocks.sample()[0],
+                        fresh=self._entry_asset,
+                        require_fresh=self._entry_asset is not None,
+                    )
+                    reasons.extend(policy_reasons)
                     account = account_snapshot.account
-                    if (
-                        notional > account.equity * Decimal("0.005")
-                        or notional * Decimal("0.01") > account.equity * Decimal("0.0025")
-                        or notional > account.cash
-                        or notional > account.buying_power * Decimal("0.95")
+                    if not entry_risk_allowed(
+                        account, intent.quantity, decision.price, minimum_whole_share=minimum_share
                     ):
                         reasons.append("CORE_FIXED_RISK_ENVELOPE")
             elif purpose is OrderPurpose.STRATEGY_EXIT:

@@ -27,6 +27,7 @@ from quantbot.paper_core.contracts import (
     ObservationCohort,
 )
 from quantbot.paper_core.costs import current_costs
+from quantbot.paper_core.entry_policy import AssetEligibility
 from quantbot.paper_core.operational_costs import pending_cost_revision_source
 from quantbot.paper_core.release import RuntimeConfig
 from quantbot.paper_core.store import CoreStore, put, table
@@ -105,7 +106,36 @@ class AlpacaCoreBroker:
         return captured.observations[0]
 
     async def observation_cohort(self) -> ObservationCohort:
-        return await self._acquire_cohort(self.config.core.entry_symbols, verify_assets=True)
+        return await self._acquire_cohort(self.config.entry_symbols, verify_assets=True)
+
+    async def entry_asset_eligibility(self, symbol: str) -> AssetEligibility:
+        policy = self.config.entry_policy
+        if policy is None or symbol not in policy.symbols:
+            raise ValueError("ASSET_ELIGIBILITY_POLICY_MISMATCH")
+        payload = _object_payload(
+            await self.adapter._request("GET", "/v2/assets/" + quote(symbol, safe=""))
+        )
+        if (
+            payload.get("symbol") != symbol
+            or payload.get("class") != "us_equity"
+            or payload.get("status") != "active"
+            or payload.get("tradable") is not True
+            or type(payload.get("fractionable")) is not bool
+        ):
+            raise ValueError("ASSET_ELIGIBILITY_INVALID")
+        return AssetEligibility(
+            symbol=symbol,
+            fractionable=payload["fractionable"],
+            observed_at=self.now,
+            raw_digest=content_id(payload),
+            entry_policy_id=policy.id,
+        )
+
+    async def _policy_asset_result(self, symbol: str) -> tuple[str | None, AssetEligibility | None]:
+        try:
+            return None, await self.entry_asset_eligibility(symbol)
+        except (ValueError, OSError, TimeoutError, RuntimeError) as error:
+            return "ASSET_ELIGIBILITY_UNAVAILABLE:" + type(error).__name__, None
 
     async def _asset_objection(self, symbol: str) -> str | None:
         try:
@@ -151,9 +181,19 @@ class AlpacaCoreBroker:
         session = next(s for s in sessions if s.open_at <= end < s.close_at)
         restrictions = (
             await asyncio.gather(*(self._asset_objection(s) for s in symbols))
-            if verify_assets
+            if verify_assets and self.config.entry_policy is None
             else [None] * len(symbols)
         )
+        asset_receipts: dict[str, AssetEligibility] = {}
+        if self.config.entry_policy is not None:
+            results = await asyncio.gather(*(self._policy_asset_result(s) for s in symbols))
+            restrictions = [reason for reason, _ in results]
+            asset_receipts = {
+                s: receipt
+                for s, (_, receipt) in zip(symbols, results, strict=True)
+                if receipt is not None
+            }
+            received = self.now
         observations = []
         unavailable = []
         for symbol, restriction in zip(symbols, restrictions, strict=True):
@@ -204,6 +244,11 @@ class AlpacaCoreBroker:
                     sequence=int(end.timestamp() // 300),
                     session_open=session.open_at,
                     session_close=session.close_at,
+                    **(
+                        {"asset_eligibility": asset_receipts[symbol]}
+                        if symbol in asset_receipts
+                        else {}
+                    ),
                 )
             )
         return ObservationCohort(

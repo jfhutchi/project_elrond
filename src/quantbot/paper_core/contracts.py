@@ -13,6 +13,7 @@ from quantbot.brokers.base import BrokerModel
 from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, Position
 from quantbot.learner.estimators import FittedEstimator
 from quantbot.learner.five_minute import FEATURE_NAMES
+from quantbot.paper_core.entry_policy import AssetEligibility
 from quantbot.research.manifest import content_id
 from quantbot.strategy import XNYSSessionSequence
 
@@ -99,7 +100,10 @@ class Evidence(BrokerModel):
 
 
 class Observation(Evidence):
-    legacy_optional_fields = frozenset({"time_evidence_id", "session_open", "capture_received_at"})
+    legacy_optional_fields = frozenset(
+        {"time_evidence_id", "session_open", "capture_received_at", "asset_eligibility"}
+    )
+    asset_eligibility: AssetEligibility | None = None
     capture_received_at: datetime | None = None
     time_evidence_id: str | None = None
     session_open: datetime | None = None
@@ -258,6 +262,7 @@ class Decision(Evidence):
             "prediction_bps",
             "model_mode",
             "selection",
+            "entry_policy_id",
         }
     )
     time_evidence_id: str | None = None
@@ -271,6 +276,7 @@ class Decision(Evidence):
     prediction_bps: Annotated[float, Field(allow_inf_nan=False)] | None = None
     model_mode: Literal["COLLECT", "PREDICT"] | None = None
     selection: SelectionEvidence | None = None
+    entry_policy_id: str | None = None
     observation_id: str
     policy_id: str
     model_id: str
@@ -385,9 +391,11 @@ class RoundTrip(Evidence):
             "source_start",
             "source_end",
             "available_at",
+            "entry_policy_id",
         }
     )
     lot_id: str
+    entry_policy_id: str | None = None
     decision_id: str
     entry_fill_ids: tuple[str, ...]
     exit_fill_ids: tuple[str, ...]

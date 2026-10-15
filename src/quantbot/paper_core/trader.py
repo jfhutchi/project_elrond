@@ -24,6 +24,14 @@ from quantbot.paper_core.contracts import (
     ReconciliationProof,
     TimeProjection,
 )
+from quantbot.paper_core.entry_policy import (
+    EntryPolicy,
+    decision_entry_authority,
+    eligibility_objections,
+    entry_policy_in_session,
+    entry_quantity,
+    symbols,
+)
 from quantbot.paper_core.features import observation_objections
 from quantbot.paper_core.funds import entry_inventory_objections, structural_funds_allowed
 from quantbot.paper_core.health import entry_health_objections, recover_health, report
@@ -56,6 +64,7 @@ def evaluate_entry(
     time_projection: TimeProjection | None = None,
     activation: object | None = None,
     _cohort_member: bool = False,
+    entry_policy: EntryPolicy | None = None,
 ) -> Decision:
     objections = list(
         observation_objections(
@@ -81,7 +90,7 @@ def evaluate_entry(
     ):
         objections.append("TIME_CALENDAR_MISMATCH")
     if (
-        observation.symbol not in (config.entry_symbols if hybrid else (config.symbol,))
+        observation.symbol not in (symbols(config, entry_policy) if hybrid else (config.symbol,))
         or model.feature_version != observation.feature_version
     ):
         objections.append("CONTRACT_MISMATCH")
@@ -126,8 +135,19 @@ def evaluate_entry(
         objections.append("INVENTORY_STALE")
     if dict(inventory.actual_quantities).get(observation.symbol, Decimal(0)) != 0:
         objections.append("SYMBOL_ALREADY_HELD")
-    notional = inventory.account.equity * Decimal("0.005")
-    quantity = (notional / observation.price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN")
+    eligibility = observation.asset_eligibility
+    if entry_policy is not None:
+        objections.extend(
+            eligibility_objections(
+                eligibility, symbol=observation.symbol, now=evaluated_at, policy_id=entry_policy.id
+            )
+        )
+    quantity = entry_quantity(
+        inventory.account,
+        observation.price,
+        policy=entry_policy,
+        fractionable=eligibility.fractionable if eligibility else None,
+    )
     if quantity <= 0 or quantity * observation.price * Decimal(
         "0.01"
     ) > inventory.account.equity * Decimal("0.0025"):
@@ -140,6 +160,8 @@ def evaluate_entry(
     if observation.recorded_at_utc >= observation.session_close - timedelta(seconds=120):
         objections.append("SESSION_EXIT_BUFFER")
     timing: dict[str, Any] = {}
+    if entry_policy is not None:
+        timing["entry_policy_id"] = entry_policy.id
     if selection is not None:
         timing.update(
             activation_id=selection.id,
@@ -178,7 +200,8 @@ def evaluate_entry(
         evidence_lane=config.evidence_lane,
         release_id=config.release_id,
         source_refs=(observation.id, model.id, inventory.id)
-        + ((time_evidence.id,) if time_evidence else ()),
+        + ((time_evidence.id,) if time_evidence else ())
+        + ((entry_policy.id,) if entry_policy else ()),
         observation_id=observation.id,
         policy_id=config.policy_id,
         model_id=model.id,
@@ -207,6 +230,12 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         if decision.action != "BUY":
             return None
         if not store.runtime_entry_enabled:
+            return None
+        entry_policy = entry_policy_in_session(store, session)
+        policy_reasons, minimum_share = decision_entry_authority(
+            store, session, decision, now=store.clocks.sample()[0]
+        )
+        if policy_reasons:
             return None
         from quantbot.paper_core.activation import active_in_session, decision_model_objections
 
@@ -271,7 +300,10 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             return None
         if store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER":
             if not current_risk_allowed(
-                certified, quantity=decision.quantity, price=decision.price
+                certified,
+                quantity=decision.quantity,
+                price=decision.price,
+                minimum_whole_share=minimum_share,
             ):
                 return None
         original = ReconciliationProof.model_validate_json(
@@ -301,6 +333,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             time_evidence=time_evidence,
             time_projection=decision.time_projection,
             activation=selection[1] if selection else None,
+            entry_policy=entry_policy,
         )
         model = (
             selection[0] if selection else ModelArtifact(feature_version=observed.feature_version)
@@ -337,7 +370,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
                 prior_counts=prior,
                 health_reasons={
                     s: entry_health_objections(store, session, s)
-                    for s in store.config.entry_symbols
+                    for s in symbols(store.config, entry_policy)
                 },
                 **authority,
             )
@@ -547,15 +580,14 @@ async def trader_cycle(
         time_evidence=time_evidence,
         time_projection=time_projection,
         activation=selection[1] if selection else None,
+        entry_policy=store.entry_policy,
     )
     if cohort is not None:
         from quantbot.paper_core.selection import evaluate_cohort, reservation_state
 
         with store.database.transaction() as session:
             daily, prior, _ = reservation_state(store, session, cohort)
-            health = {
-                s: entry_health_objections(store, session, s) for s in store.config.entry_symbols
-            }
+            health = {s: entry_health_objections(store, session, s) for s in store.entry_symbols}
         decision = evaluate_cohort(
             store.config,
             cohort,

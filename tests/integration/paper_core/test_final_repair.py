@@ -629,6 +629,18 @@ def paper_mock(store, release):
     async def owned_events(current):
         synthetic.now = current.clocks.sample()[0]
         for supplied in fee_events(current, synthetic):
+            # This provider uses a current-time commission, unlike the dated M2 fixture.
+            # Bind its offline fee authority to the actual synthetic fill's interval.
+            fill = next(f for f in synthetic.fills if f.fill_id == supplied.cost.fill_id)
+            cost = supplied.cost.model_copy(
+                update={
+                    "effective_start": fill.occurred_at - timedelta(days=1),
+                    "effective_end": fill.occurred_at + timedelta(days=1),
+                }
+            )
+            supplied = supplied.model_copy(
+                update={"cost": cost, "event_id": cost.id, "raw_digest": cost.id}
+            )
             broker.fixture_fee_events.setdefault(supplied.cost.fill_id, supplied)
         return tuple(
             e.model_copy(

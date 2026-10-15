@@ -39,6 +39,17 @@ does not justify invented trades. Daily consideration is required by the baselin
 insufficient or unreliable evidence may still produce `NO_CHANGE`. Do not promise a fill or
 progressively better performance on every day.
 
+The operator approved affordable stocks and an exact one-share minimum when fractions are
+unsupported, keeping the existing loss budget. `WHOLE_SHARE_FALLBACK_V1` adds F, T, PFE,
+VZ, HPQ, SOFI and UBER to the original ten. Fractions remain preferred; unknown eligibility
+refuses. One whole share may exceed the ordinary 0.5% notional cap only when cash, 95% of
+buying power and the existing 25 bps planned-loss ceiling cover it at the unchanged 1% stop.
+Ordinary sizing leaves 1% of its target as equity-mark headroom. Use the explicit audited
+flat/fenced entry-policy transition and fresh per-send eligibility receipts. Preserve the
+base commission/model/history and cross-amendment daily counts. Do not reset learning,
+sell inherited holdings for cash, short sell or reinterpret unknown fees as zero.
+See the [approved amendment](docs/superpowers/specs/2026-10-15-whole-share-fallback-design.md).
+
 The [accepted baseline design](docs/superpowers/specs/2026-10-13-paper-core-design.md) and
 [handover](docs/evidence/paper-core/handover.md) distinguish implemented contracts from deployment
 authority. Read the [current Omen evidence](docs/evidence/paper-core/omen-deployment/README.md)

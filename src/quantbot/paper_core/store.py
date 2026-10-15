@@ -91,6 +91,19 @@ class CoreStore:
             put(session, name, value.id, value)
         return value.id
 
+    @property
+    def entry_policy(self):
+        from quantbot.paper_core.entry_policy import entry_policy_in_session
+
+        with self.database.transaction() as session:
+            return entry_policy_in_session(self, session)
+
+    @property
+    def entry_symbols(self) -> tuple[str, ...]:
+        from quantbot.paper_core.entry_policy import symbols
+
+        return symbols(self.config, self.entry_policy)
+
     def documents(self, name: str) -> list[dict[str, Any]]:
         with self.database.transaction() as session:
             rows = session.execute(

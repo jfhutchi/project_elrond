@@ -151,7 +151,7 @@ class FundsProvider(ProviderFixture):
         )
 
 
-async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider):
+async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider, entry_policy=None):
     clocks = Clocks()
     clocks.wall = datetime(2026, 10, 14, 14, 0, 3, tzinfo=UTC)
     provider = provider_factory(clocks)
@@ -176,6 +176,7 @@ async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider):
         canonical_datasets=("us-equities-daily",),
         learning_origin=clocks.wall - timedelta(days=1),
         activation_policy="DAILY_BOUNDED_V3" if hybrid else "DAILY_BOUNDED_V2",
+        **({"entry_policy": entry_policy} if entry_policy is not None else {}),
     )
     release = prepare_release(config)
 
@@ -310,6 +311,7 @@ async def candidate(store, broker, proof=None):
         session_counts=daily,
         prior_counts=prior,
         health_reasons={},
+        **({"entry_policy": store.entry_policy} if store.entry_policy is not None else {}),
         activation=active,
         time_evidence=evidence,
         time_projection=project_time_evidence(evidence, store.clocks),
