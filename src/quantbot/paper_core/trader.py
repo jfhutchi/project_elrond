@@ -356,7 +356,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         )
         from quantbot.paper_core.work import dirty
 
-        dirty(session, (decision.id,), available_at=decision.recorded_at_utc)
+        dirty(session, (decision.id,), available_at=decision.recorded_at_utc, _initial_claim=True)
         return wrapper
 
 

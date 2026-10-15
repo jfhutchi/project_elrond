@@ -1,0 +1,183 @@
+[
+  {
+    "legacy_missing_watermark": "normal",
+    "lot": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+    "before": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 19,
+      "processed_version": 15,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_old_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 19,
+      "processed_version": 15,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_current_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 19,
+      "processed_version": 19,
+      "attempted_at": "2026-10-14T14:30:01Z"
+    },
+    "original": "4cbb2d66e4edb8f0be4310c8470bb29751db9ee84aecd03907316bb990ebb3df",
+    "corrected": "be3944b9891278e401ea50022c6c30dd481e8911e534cd8db5653e477baa65a6",
+    "corrected_fees": "0.2",
+    "selected": [
+      "be3944b9891278e401ea50022c6c30dd481e8911e534cd8db5653e477baa65a6"
+    ],
+    "fresh_claim_and_replay_verified": true,
+    "restart": true,
+    "historical_no_rollback": true
+  },
+  {
+    "legacy_missing_watermark": "missing_watermark",
+    "lot": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+    "before": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 19,
+      "processed_version": 15,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_old_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 20,
+      "processed_version": 15,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_current_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 20,
+      "processed_version": 20,
+      "attempted_at": "2026-10-14T14:30:02Z"
+    },
+    "original": "4cbb2d66e4edb8f0be4310c8470bb29751db9ee84aecd03907316bb990ebb3df",
+    "corrected": "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5",
+    "corrected_fees": "0.2",
+    "selected": [
+      "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5"
+    ],
+    "fresh_claim_and_replay_verified": false,
+    "restart": true,
+    "historical_no_rollback": true
+  },
+  {
+    "legacy_missing_watermark": "missing_work",
+    "lot": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+    "before": null,
+    "after_old_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 1,
+      "processed_version": 0,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_current_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 1,
+      "processed_version": 1,
+      "attempted_at": "2026-10-14T14:30:02Z"
+    },
+    "original": "4cbb2d66e4edb8f0be4310c8470bb29751db9ee84aecd03907316bb990ebb3df",
+    "corrected": "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5",
+    "corrected_fees": "0.2",
+    "selected": [
+      "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5"
+    ],
+    "fresh_claim_and_replay_verified": false,
+    "restart": true,
+    "historical_no_rollback": true
+  },
+  {
+    "legacy_missing_watermark": "missing_work_then_older_notification",
+    "lot": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+    "before": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 1,
+      "processed_version": 0,
+      "attempted_at": ""
+    },
+    "after_old_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 1,
+      "processed_version": 0,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_current_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 1,
+      "processed_version": 1,
+      "attempted_at": "2026-10-14T14:30:02Z"
+    },
+    "original": "4cbb2d66e4edb8f0be4310c8470bb29751db9ee84aecd03907316bb990ebb3df",
+    "corrected": "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5",
+    "corrected_fees": "0.2",
+    "selected": [
+      "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5"
+    ],
+    "fresh_claim_and_replay_verified": false,
+    "restart": true,
+    "historical_no_rollback": true
+  },
+  {
+    "legacy_missing_watermark": "preacknowledged",
+    "lot": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+    "before": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 19,
+      "processed_version": 19,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_old_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 20,
+      "processed_version": 19,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_current_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 20,
+      "processed_version": 20,
+      "attempted_at": "2026-10-14T14:30:02Z"
+    },
+    "original": "4cbb2d66e4edb8f0be4310c8470bb29751db9ee84aecd03907316bb990ebb3df",
+    "corrected": "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5",
+    "corrected_fees": "0.2",
+    "selected": [
+      "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5"
+    ],
+    "fresh_claim_and_replay_verified": false,
+    "restart": true,
+    "historical_no_rollback": true
+  },
+  {
+    "legacy_missing_watermark": "preacknowledged_then_older_notification",
+    "lot": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+    "before": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 20,
+      "processed_version": 19,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_old_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 20,
+      "processed_version": 19,
+      "attempted_at": "2026-10-14T14:30:00Z"
+    },
+    "after_current_cutoff": {
+      "lot_id": "6039e683c8ff9d773d27ab1771eb28b6d85aa9d2771b5efe402a29c3203a4133",
+      "version": 20,
+      "processed_version": 20,
+      "attempted_at": "2026-10-14T14:30:02Z"
+    },
+    "original": "4cbb2d66e4edb8f0be4310c8470bb29751db9ee84aecd03907316bb990ebb3df",
+    "corrected": "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5",
+    "corrected_fees": "0.2",
+    "selected": [
+      "32f194051b3826a946a88c0119eaa1cba711d65d0335007f43bb3d0411ef2ff5"
+    ],
+    "fresh_claim_and_replay_verified": false,
+    "restart": true,
+    "historical_no_rollback": true
+  }
+]

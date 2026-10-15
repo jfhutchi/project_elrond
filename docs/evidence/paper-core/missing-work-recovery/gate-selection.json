@@ -1,0 +1,19 @@
+{
+  "command": [
+    ".venv/Scripts/python.exe",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    "-s",
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+    "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing"
+  ],
+  "selection": [
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+    "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing"
+  ],
+  "scope": "Missing-work+watermark older-notification recovery, actual fresh-claim and replay control, all prior cutoff controls plus same3R1 idle/healthy-dirty-learning/CAS controls. No larger suite.",
+  "expected_tests": 10
+}

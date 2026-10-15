@@ -1,0 +1,45 @@
+{
+  "release_id": "2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7",
+  "approval_reference": "REQUIRES_EXPLICIT_ROLLOUT_APPROVAL_REFERENCE",
+  "fenced_writer_evidence_ids": [
+    "REQUIRES_FRESH_VERIFIED_LEGACY_ENTRY_WRITER_FENCE_AND_PROCESS_TREE_EVIDENCE"
+  ],
+  "legacy_owners": [
+    [
+      "DBC",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "EEM",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "EFA",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "IWM",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "QQQ",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "SPY",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "XLE",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "XLK",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ],
+    [
+      "XLV",
+      "adaptive-momentum-v1-309894d8d8a5296e"
+    ]
+  ]
+}

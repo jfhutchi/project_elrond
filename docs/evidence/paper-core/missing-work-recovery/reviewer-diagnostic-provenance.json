@@ -1,0 +1,10 @@
+{
+  "source_base": "fa7a1fb561ccd113e6d47d017c12bd1d89713426",
+  "source_archive": "../residual-cutoff/frozen-source.zip",
+  "source_pins_sha256": "0f2e071f5f44f3bcfe3f9425235d2de4a3672801400c9bb965b12d5f6da35eca",
+  "scratch": "reviewer-missing-work-arrival-test.py",
+  "scratch_sha256": "fbceeb2b663d66343267e71476bc6d6608fdd4fecf7d727ae980705b63cba191",
+  "invariant_red_raw_sha256": "2012cfb702d84e6ba9ad1ce632475303a4ed7100b8c61358e2a71c64a397550e",
+  "characterization_raw_sha256": "f2db960a4896b7408710bda5fdbf9b7d6e5c6ec364f0b3d04cf04738698812ba",
+  "characterization_meaning": "PASS demonstrates original bug, not repaired product success"
+}

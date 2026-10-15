@@ -24,18 +24,46 @@ from quantbot.storage import Database
         "normal",
         "missing_watermark",
         "missing_work",
+        "missing_work_then_older_notification",
         "preacknowledged",
         "preacknowledged_then_older_notification",
     ],
 )
 async def test_cutoff_before_late_fee_notification_before_lock_stays_pending(
-    tmp_path, legacy_missing_watermark
+    tmp_path, legacy_missing_watermark, monkeypatch
 ):
     db, store, broker, proof, observation, _ = prepare(tmp_path)
     model = ModelArtifact(feature_version="five-minute-price-alpha-v1")
     observation = observation.model_copy(update={"feature_version": model.feature_version})
+    initial_notifications = []
+    replay_checked = False
+    if legacy_missing_watermark == "normal":
+        from quantbot.paper_core import trader, work
+
+        original_dirty, original_claim = work.dirty, trader.claim_entry
+
+        def observed_dirty(*args, **kwargs):
+            if kwargs.get("_initial_claim"):
+                initial_notifications.append(True)
+            return original_dirty(*args, **kwargs)
+
+        def claim_then_replay(*args, **kwargs):
+            nonlocal replay_checked
+            claimed = original_claim(*args, **kwargs)
+            assert claimed is not None
+            # Same inputs, before any send/economic change: the existing ENTRY
+            # observation exits before new creation and cannot initialize coverage.
+            assert original_claim(*args, **kwargs) is None
+            assert initial_notifications == [True]
+            replay_checked = True
+            return claimed
+
+        monkeypatch.setattr(work, "dirty", observed_dirty)
+        monkeypatch.setattr(trader, "claim_entry", claim_then_replay)
     try:
         decision = await trader_cycle(store, broker, observation, model, proof, now=NOW)
+        if legacy_missing_watermark == "normal":
+            assert replay_checked and initial_notifications == [True]
         broker.now = NOW + timedelta(minutes=30)
         await guardian_cycle(store, broker, now=broker.now)
         zero = fee_events(store, broker)
@@ -65,7 +93,7 @@ async def test_cutoff_before_late_fee_notification_before_lock_stays_pending(
                     )
                 )
 
-        if legacy_missing_watermark == "missing_work":
+        if legacy_missing_watermark.startswith("missing_work"):
             with db.transaction() as session:
                 session.execute(
                     delete(table("core_outcome_work")).where(
@@ -80,7 +108,7 @@ async def test_cutoff_before_late_fee_notification_before_lock_stays_pending(
                     .values(processed_version=table("core_outcome_work").c.version)
                 )
 
-        if legacy_missing_watermark == "preacknowledged_then_older_notification":
+        if legacy_missing_watermark.endswith("then_older_notification"):
             from quantbot.paper_core.work import dirty
 
             with db.transaction() as session:
@@ -157,6 +185,7 @@ async def test_cutoff_before_late_fee_notification_before_lock_stays_pending(
                     corrected=corrected.id,
                     corrected_fees=str(corrected.actual_fees),
                     selected=[r["outcome_id"] for r in selected],
+                    fresh_claim_and_replay_verified=replay_checked,
                     restart=True,
                     historical_no_rollback=True,
                 )

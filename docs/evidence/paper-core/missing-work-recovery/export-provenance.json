@@ -1,0 +1,74 @@
+[
+  {
+    "path": "exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 1,
+    "raw_json_sha256": "6fd47af51333ddb703958d32d76fa47f6785e8949e60c9a3df72033ba8f0dfdb",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  },
+  {
+    "path": "exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 1,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 2,
+    "raw_json_sha256": "2496f85f4099fa5138734b9452bb114bc39bad08b3a8c489b40b04834f655378",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  },
+  {
+    "path": "exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 2,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 3,
+    "raw_json_sha256": "193738118a52365b1af95acead81e0ef98a1a5a8f10e0bd4f5e87526f0fb3edf",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  },
+  {
+    "path": "exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 3,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 4,
+    "raw_json_sha256": "a18114e51f5640692142643adf25ad30b48074c72c3d1f94f587f62b6369e0ea",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  },
+  {
+    "path": "exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 4,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 5,
+    "raw_json_sha256": "47c18e8de30754c3f67841b8b92fd15da1499ee43a3df07f5642756b07d72e7b",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  },
+  {
+    "path": "exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 5,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 6,
+    "raw_json_sha256": "324e98e38854e27ba421596011da3877e722cbbb2b9a77e946afc72836e6ee1c",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  },
+  {
+    "path": "exports/residual_archived_corpus.json",
+    "marker": "RESIDUAL_ARCHIVED_CORPUS",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 7,
+    "raw_json_sha256": "5eb8b527ca2ddebf6201d4a0b29d4b87cc21296057d3b789cd59cedf49b3b9dc",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  },
+  {
+    "path": "exports/final_retained_history.json",
+    "marker": "FINAL_RETAINED_HISTORY",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 8,
+    "raw_json_sha256": "f71903a0cbc605acbd94a9123bd3ff89db2557b70a995ef204b9e354882f4f90",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c"
+  }
+]

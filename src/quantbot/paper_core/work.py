@@ -64,7 +64,13 @@ def indexed(session: Session, name: str, *, reference: str | None = None) -> Sel
     return query.where(index.c.reference == reference) if reference is not None else query
 
 
-def dirty(session: Session, lots: Iterable[str], *, available_at: datetime | None = None) -> None:
+def dirty(
+    session: Session,
+    lots: Iterable[str],
+    *,
+    available_at: datetime | None = None,
+    _initial_claim: bool = False,
+) -> None:
     work, index = table("core_outcome_work"), table("core_document_index")
     for lot in set(lots):
         previous = (
@@ -78,7 +84,9 @@ def dirty(session: Session, lots: Iterable[str], *, available_at: datetime | Non
         version = 1 if previous is None else previous["version"] + 1
         known = available_at is not None and (
             previous is None
-            or watermark is not None
+            and _initial_claim
+            or previous is not None
+            and watermark is not None
             and watermark["reference"] == str(previous["version"])
         )
         times = [available_at] if available_at is not None else []

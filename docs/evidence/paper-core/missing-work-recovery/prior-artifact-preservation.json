@@ -1,0 +1,29 @@
+[
+  {
+    "bundle": "residual-cutoff",
+    "records": 84,
+    "index_sha256": "40dc3ce35409d1126326c12d911bd617f19af2a7e779bb948da9351c9cb3b09f",
+    "working_and_base_equal": true
+  },
+  {
+    "bundle": "final-repair",
+    "records": 180,
+    "index_sha256": "b0bd69622d92daf98229af180e66aff6eaf8d2b56b80efbb59db0499280bef93",
+    "working_and_base_equal": true
+  },
+  {
+    "bundle": "m6",
+    "records": 123,
+    "unchanged": true
+  },
+  {
+    "bundle": "m6/fix1",
+    "records": 83,
+    "unchanged": true
+  },
+  {
+    "bundle": "m6/fix2",
+    "records": 77,
+    "unchanged": true
+  }
+]
