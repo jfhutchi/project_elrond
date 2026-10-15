@@ -46,5 +46,6 @@ research/stocks.db
 .local-ci/
 .test-temp/
 
-# Per-plan native execution ledger and verification artifacts.
+# Local agent scratch, execution ledgers and temporary verification artifacts.
+# Publish reviewed handover evidence under docs/evidence, not this working directory.
 .superpowers/
