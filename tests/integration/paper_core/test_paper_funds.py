@@ -151,7 +151,9 @@ class FundsProvider(ProviderFixture):
         )
 
 
-async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider, entry_policy=None):
+async def prepare(
+    tmp_path, *, hybrid=True, provider_factory=FundsProvider, entry_policy=None, legacy_owners=()
+):
     clocks = Clocks()
     clocks.wall = datetime(2026, 10, 14, 14, 0, 3, tzinfo=UTC)
     provider = provider_factory(clocks)
@@ -202,7 +204,7 @@ async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider, entr
             release_id=release.id,
             approval_reference="OFFLINE_PROVIDER_PROTOCOL_FIXTURE",
             fenced_writer_evidence_ids=["ISOLATED_TEST_DATABASE"],
-            legacy_owners=[],
+            legacy_owners=list(legacy_owners),
         ),
     )
     store = CoreStore(db, derived_core(release, "paper"), clocks=clocks)

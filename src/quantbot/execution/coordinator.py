@@ -443,8 +443,10 @@ class ExecutionCoordinator:
         )
 
     async def reconcile_durable(self, intent: OrderIntent) -> SubmissionResult:
-        """Refresh an accepted durable order without creating a new broker mutation."""
+        """Look up a possible or accepted send without creating a broker mutation."""
         stored = self._stored_intent(intent)
+        if stored.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
+            return await self._recover_persisted_submission(stored)
         if stored.state not in {
             IntentState.BROKER_ACCEPTED,
             IntentState.PARTIALLY_FILLED,

@@ -40,7 +40,9 @@ from quantbot.operations.metrics import OperationalMetrics
 from quantbot.risk import OrderPurpose
 from quantbot.risk.protection import (
     ProtectionDecision,
+    ProtectionOutcome,
     ProtectionPolicy,
+    ProtectionRule,
     evaluate_position,
 )
 from quantbot.storage import Database, SingleWriterLock, StorageRepository
@@ -198,6 +200,7 @@ class PositionProtectionSupervisor:
     metrics: OperationalMetrics
     submitter: ProtectionSubmitter | None = None
     policy: ProtectionPolicy = field(default_factory=ProtectionPolicy)
+    clock: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
 
     def __post_init__(self) -> None:
         if not self.expected_account_id.strip():
@@ -265,7 +268,9 @@ class PositionProtectionSupervisor:
 
         with self.database.transaction() as session:
             repository = StorageRepository(session)
-            local_snapshot = repository.get_latest_account_snapshot(account_id, certified_only=True)
+            local_snapshot = repository.get_latest_account_snapshot(
+                account_id, position_certified_only=True
+            )
             snapshots = repository.list_account_snapshots(account_id=account_id)
             high_water = max(
                 (snapshot.account.equity for snapshot in snapshots),
@@ -282,8 +287,33 @@ class PositionProtectionSupervisor:
             encoded_high_water=high_water,
         )
         decisions: list[tuple[Position, ProtectionDecision, bool]] = []
+        delegated_evidence: dict[str, tuple[str, ...]] = {}
         for position in broker_positions:
             reconciled = _positions_agree(local_by_symbol.get(position.symbol), position)
+            from quantbot.paper_core.protection_bridge import core_position_protection
+
+            with self.database.transaction() as session:
+                reserved, delegated, evidence = core_position_protection(
+                    session, account_id=account_id, position=position, now=self.clock()
+                )
+            if reserved:
+                delegated = delegated and reconciled
+                decision = ProtectionDecision(
+                    symbol=position.symbol,
+                    outcome=(
+                        ProtectionOutcome.NO_ACTION
+                        if delegated else ProtectionOutcome.BLOCKED_STATE
+                    ),
+                    rule=ProtectionRule.NONE,
+                    reason=(
+                        "CORE_GUARDIAN_OWNS_EXIT" if delegated
+                        else "CORE_GUARDIAN_AUTHORITY_UNAVAILABLE"
+                    ),
+                    observed_at=moment, price=position.market_price,
+                )
+                delegated_evidence[position.symbol] = evidence
+                decisions.append((position, decision, reconciled))
+                continue
             decision = evaluate_position(
                 position,
                 policy=self.policy,
@@ -332,6 +362,7 @@ class PositionProtectionSupervisor:
                     None if local_snapshot is None else local_snapshot.snapshot_id
                 ),
                 "broker_snapshot_id": broker_snapshot_id,
+                "core_delegation_evidence": delegated_evidence,
             },
             broker_snapshot=account_snapshot,
             broker_positions=broker_positions,
@@ -526,6 +557,10 @@ class PositionProtectionSupervisor:
                 for position, decision, reconciled in decisions:
                     if not decision.requires_exit:
                         continue
+                    from quantbot.paper_core.protection_bridge import core_reserves_symbol
+
+                    if core_reserves_symbol(session, position.symbol):
+                        continue  # Never create a competing retained-owner exit.
                     evaluation_id = _evaluation_id(result.cycle_id, position.symbol)
                     active = (
                         session.execute(
@@ -758,6 +793,19 @@ class PositionProtectionSupervisor:
                 continue
             with self.database.transaction() as session:
                 intent = StorageRepository(session).get_order_intent(str(row["intent_id"]))
+                from quantbot.paper_core.protection_bridge import core_reserves_symbol
+
+                core_reserved = bool(intent and core_reserves_symbol(session, intent.symbol))
+            if core_reserved:
+                self._record_action_incident(
+                    cycle_id=cycle_id, action_id=action_id, kind="CORE_EXIT_OWNER_CONFLICT",
+                    moment=moment, detail={"intent_id": str(row["intent_id"])},
+                )
+                if intent.state not in {
+                    IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN,
+                    IntentState.BROKER_ACCEPTED, IntentState.PARTIALLY_FILLED,
+                }:
+                    continue  # A new retained-owner POST cannot acquire a core lot.
             if intent is None:
                 self._set_action_status(
                     action_id,
@@ -777,7 +825,7 @@ class PositionProtectionSupervisor:
             if current_status in {"FILLED_UNVERIFIED", "COMPLETED", "FAILED"}:
                 self._set_action_status(action_id, status=current_status, moment=moment)
                 continue
-            reconciling_working_order = current_status == "WORKING"
+            reconciling_working_order = current_status == "WORKING" or core_reserved
             try:
                 if reconciling_working_order:
                     await self.submitter.reconcile_durable(intent)

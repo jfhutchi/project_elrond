@@ -544,8 +544,10 @@ async def test_a_crash_in_submitting_adopts_the_broker_order_without_resubmittin
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("lookup_only", [False, True])
 async def test_a_restart_in_submission_unknown_is_lookup_only_and_adopts_the_order(
     tmp_path: Path,
+    lookup_only: bool,
 ) -> None:
     database = Database.create(tmp_path / "resume-explicit-unknown.db")
     _mark_ready(database)
@@ -571,13 +573,16 @@ async def test_a_restart_in_submission_unknown_is_lookup_only_and_adopts_the_ord
     broker = RecoveryBroker(database, found=_accepted(intent))
     coordinator = ExecutionCoordinator(database, cast(BrokerAdapter, broker), _settings())
 
-    result = await coordinator.submit_durable(
-        intent,
-        purpose=OrderPurpose.STRATEGY_EXIT,
-        market_eligible=True,
-        drawdown=None,
-        risk_approved=None,
-    )
+    if lookup_only:
+        result = await coordinator.reconcile_durable(intent)
+    else:
+        result = await coordinator.submit_durable(
+            intent,
+            purpose=OrderPurpose.STRATEGY_EXIT,
+            market_eligible=True,
+            drawdown=None,
+            risk_approved=None,
+        )
 
     assert broker.lookups == [intent.client_order_id]
     assert broker.submitted == []
@@ -737,9 +742,7 @@ def test_concurrent_prepared_exits_across_database_handles_have_one_owner(tmp_pa
                     return await super().get_open_orders()
 
             broker = ConcurrentBroker(connection)
-            coordinator = ExecutionCoordinator(
-                connection, cast(BrokerAdapter, broker), _settings()
-            )
+            coordinator = ExecutionCoordinator(connection, cast(BrokerAdapter, broker), _settings())
             try:
                 asyncio.run(
                     coordinator.submit_durable(

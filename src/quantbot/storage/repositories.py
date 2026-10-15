@@ -1591,10 +1591,23 @@ class StorageRepository:
 
     def get_latest_account_snapshot(
         self, account_id: str, *, certified_only: bool = False,
+        position_certified_only: bool = False,
     ) -> AccountSnapshotRecord | None:
         from quantbot.storage.schema import metadata
         certifications = metadata.tables["core_inventory_certifications"]
         statement = select(account_snapshots).where(account_snapshots.c.account_id == account_id)
+        if certified_only and position_certified_only:
+            raise ValueError("cash and position certification modes are distinct")
+        if position_certified_only:
+            from sqlalchemy import union_all
+            quantities = metadata.tables["core_quantity_certifications"]
+            current = union_all(
+                select(certifications.c.generation, certifications.c.snapshot_id),
+                select(quantities.c.generation, quantities.c.snapshot_id),
+            ).subquery()
+            statement = statement.where(account_snapshots.c.snapshot_id == (
+                select(current.c.snapshot_id).order_by(current.c.generation.desc()).limit(1)
+            ).scalar_subquery())
         if certified_only:
             statement = statement.where(account_snapshots.c.snapshot_id.in_(
                 select(certifications.c.snapshot_id)),

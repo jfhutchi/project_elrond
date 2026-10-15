@@ -4,6 +4,19 @@
 
 ## PAPER core guardian and inherited positions
 
+The retained supervisor reads the latest certified **position** generation across full and
+quantity-only core proofs. Cash-certified readers keep their separate stricter contract.
+An owned fill can therefore leave historical cash and fees unknown without disabling checks
+on unchanged inherited quantities and basis. Raw broker snapshots grant no certification.
+
+Core-owned symbols remain reserved to their original guardian. Retained Protection records
+delegation only when the exact current binding, commission, quantity/basis, plan and fresh
+independent guardian heartbeat/receipt agree. Missing or stale authority is visibly blocked;
+it never grants the retained owner an exit. Check ownership again before preparing or
+dispatching an action. A previously possible send keeps GET-only recovery through its
+original client ID; it cannot become a fresh competing exit. Evidence records the delegation
+IDs. These checks do not grant entry, cash or fee authority.
+
 The [PAPER core](paper-core.md) has a separate guardian process that acknowledges durable
 protection plans before new-core entry submission, tracks incremental fills, recovers
 uncertain orders with their original IDs and submits owned risk-reducing exits. Trader
