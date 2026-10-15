@@ -1,5 +1,9 @@
 [
   {
+    "file": ".gitattributes",
+    "sha256": "705fd4d6451a31d36b3df7de96f83f30ac976c9b4a6d1e51671d8e2f33e2d0da"
+  },
+  {
     "file": "continue-deployment.ps1.txt",
     "sha256": "d1c8971f129a679360af55d7af0bbf71e37d0d9d059f45101b6b2fabe6b231ef"
   },
