@@ -48,7 +48,12 @@ def claim_objections(store: CoreStore, decision: Decision | None = None) -> tupl
             reasons.append("CORE_MANUAL_ENTRY_PAUSE:" + repo.get_kill_switch_state().reason)
         from quantbot.paper_core.health import entry_health_objections
 
-        reasons.extend(entry_health_objections(store, session, store.config.symbol))
+        if decision is not None:
+            reasons.extend(entry_health_objections(store, session, decision.symbol))
+        else:
+            from quantbot.paper_core.health import universe_health_objections
+
+            reasons.extend(universe_health_objections(store, session))
         for link in store.links():
             if link["role"] != "ENTRY":
                 continue
@@ -77,6 +82,27 @@ def claim_objections(store: CoreStore, decision: Decision | None = None) -> tupl
     if decision is not None:
         reasons.extend(decision.gates)
     return tuple(dict.fromkeys(reasons))
+
+
+def owned_open_symbols(store: CoreStore) -> tuple[str, ...]:
+    """Refresh marks for filled owned lots, including symbols outside today's universe."""
+    with store.database.transaction() as session:
+        repo = StorageRepository(session)
+        links = table("core_intent_links")
+        symbols = set()
+        for link in session.execute(
+            select(links).where(
+                links.c.role == "ENTRY",
+                links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
+            )
+        ).mappings():
+            intent = repo.get_order_intent(link["intent_id"])
+            order = (
+                repo.get_broker_order_by_client_order_id(intent.client_order_id) if intent else None
+            )
+            if intent and order and repo.list_fills(broker_order_id=order.broker_order_id):
+                symbols.add(intent.symbol)
+    return tuple(sorted(symbols))
 
 
 async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
@@ -188,10 +214,20 @@ async def daily_consideration(
         known = set(previous.considered_ids) | {identity for identity, _ in previous.exclusions}
         if previous.completed_session == completed[-1].session_date and revisions <= known:
             return ("CONSIDERED_SESSION:" + completed[-1].session_date.isoformat(), previous.reason)
+    gross = store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
     policy = LearningPolicy(
+        procedure_version=(
+            "daily-paper-exploration-walk-forward-v3"
+            if gross
+            else "daily-all-history-walk-forward-v2"
+        ),
+        target_contract=(
+            "owned-executed-paper-gross-return-v1" if gross else "owned-executed-net-return-v1"
+        ),
         parent_model=parent,
         evidence_lane=store.config.evidence_lane,
         dataset=config.learning_dataset,
+        policy_id=store.config.policy_id,
     )
     receipt = await asyncio.to_thread(
         consider_learning,
@@ -202,9 +238,8 @@ async def daily_consideration(
         calendar=calendar,
     )
     if store.config.evidence_lane == "BROKER_PAPER":
-        if (
-            receipt.status == "AWAITING_ACTIVATION"
-            and config.activation_policy != "DAILY_BOUNDED_V2"
+        if receipt.status == "AWAITING_ACTIVATION" and config.activation_policy != (
+            "DAILY_BOUNDED_V3" if gross else "DAILY_BOUNDED_V2"
         ):
             return ("AWAITING_EXACT_CANDIDATE_APPROVAL",)
         if receipt.status in {"NO_CHANGE", "AWAITING_ACTIVATION"}:
@@ -265,11 +300,12 @@ async def run_role(
                     refresh(store)
                 if role == "guardian":
                     if isinstance(broker, AlpacaCoreBroker):
-                        try:
-                            async with asyncio.timeout(5):
-                                await broker.refresh_mark(store.config.symbol)
-                        except Exception:
-                            pass  # Deadline/ownership recovery remains scheduled.
+                        for symbol in owned_open_symbols(store):
+                            try:
+                                async with asyncio.timeout(5):
+                                    await broker.refresh_mark(symbol)
+                            except Exception:
+                                pass  # Deadline/ownership recovery remains scheduled.
                     receipt = await guardian_cycle(store, broker, now=store.clocks.sample()[0])
                     guardian_receipt = acknowledge_handoffs(store, now=store.clocks.sample()[0]).id
                     reasons, evidence_ids = receipt.reasons, (receipt.id,)
@@ -316,7 +352,11 @@ async def run_role(
                     if boundary != last_boundary:
                         pending_candidate = None
                         async with asyncio.timeout(5):
-                            observation = await broker.observation()
+                            observation = (
+                                await broker.observation_cohort()
+                                if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+                                else await broker.observation()
+                            )
                         model = activation.read_active_model(store)
                         decision = await trader_cycle(
                             store,

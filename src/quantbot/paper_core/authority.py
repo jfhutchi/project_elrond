@@ -32,7 +32,7 @@ class RuntimeCommission(BrokerModel):
     approved_at: datetime
     approval_reference: str = Field(min_length=1)
     initial_model_id: str
-    activation_policy: Literal["REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V2"]
+    activation_policy: Literal["REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V2", "DAILY_BOUNDED_V3"]
     learning_origin: datetime
     legacy_owners: tuple[tuple[str, str], ...]
     baseline_source_ids: tuple[str, ...] = Field(min_length=1)
@@ -124,7 +124,14 @@ def commission_in_session(store: CoreStore, session: Session) -> RuntimeCommissi
     commission = RuntimeCommission.model_validate_json(rows[0]["payload"])
     executable = executable_in_session(session)
     if (
-        commission.id != rows[0]["id"]
+        commission.activation_policy
+        not in {
+            "REVIEW_EACH_CANDIDATE",
+            "DAILY_BOUNDED_V3"
+            if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+            else "DAILY_BOUNDED_V2",
+        }
+        or commission.id != rows[0]["id"]
         or commission.config_id != store.config_id
         or commission.release_id != store.config.release_id
         or commission.account_id != store.config.account_id
@@ -412,7 +419,6 @@ def transition_release(
 def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
     """Fresh independent readiness authorizes only an explicit exact-current entry fence."""
     from quantbot.paper_core.activation import _boundary, active_in_session
-    from quantbot.paper_core.health import entry_health_objections
     from quantbot.paper_core.time_evidence import TimeEvidence
     from quantbot.paper_core.work import current_receipts
     from quantbot.storage import StorageRepository
@@ -461,10 +467,11 @@ def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
         ):
             raise StateConflictError("RESUME_FRESH_GUARDIAN_REQUIRED")
         proof = store.latest_proof()
+        from quantbot.paper_core.funds import entry_inventory_objections
+
         if (
             proof.id != approval.get("proof_id")
-            or not proof.complete
-            or not proof.cash_complete
+            or entry_inventory_objections(store, session, proof, now=now)
             or proof.ledger_state_id != store.ledger_state_id(session)
             or not 0 <= (now - proof.recorded_at_utc).total_seconds() <= 120
         ):
@@ -491,7 +498,9 @@ def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
             < time_proof.samples[-1].provider.session_open
         ):
             raise StateConflictError("RESUME_FRESH_TIME_REQUIRED")
-        if entry_health_objections(store, session, store.config.symbol):
+        from quantbot.paper_core.health import universe_health_objections
+
+        if universe_health_objections(store, session):
             raise StateConflictError("RESUME_MANUAL_STOP_OR_QUARANTINE")
         _boundary(session, cutoff=now)
         evidence_id = content_id(approval)

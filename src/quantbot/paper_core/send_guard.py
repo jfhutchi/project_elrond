@@ -13,6 +13,7 @@ from quantbot.paper_core.contracts import (
     ProtectionPlan,
     ReconciliationProof,
 )
+from quantbot.paper_core.funds import entry_inventory_objections
 from quantbot.paper_core.health import entry_health_objections
 from quantbot.paper_core.store import CoreStore, latest_certification, table
 from quantbot.paper_core.time_evidence import TimeEvidence, evidence_objections, provider_interval
@@ -33,8 +34,11 @@ def compatible_successor(
     now: datetime,
 ) -> bool:
     """Accept a certified refresh, never a different economic ledger or risk envelope."""
-    if current.ledger_state_id is not None and current.ledger_state_id != store.ledger_state_id(
-        session
+    if entry_inventory_objections(store, session, current, now=now):
+        return False
+    if any(
+        intent is None or pending.intent_id != intent.intent_id
+        for pending in StorageRepository(session).list_unresolved_order_intents()
     ):
         return False
     if decision.inventory_id == current.id:
@@ -49,10 +53,13 @@ def compatible_successor(
     if encoded is None:
         return False
     original = ReconciliationProof.model_validate_json(encoded)
+    certs = table(
+        "core_inventory_certifications"
+        if original.cash_complete
+        else "core_quantity_certifications"
+    )
     certified = session.execute(
-        select(table("core_inventory_certifications").c.generation).where(
-            table("core_inventory_certifications").c.proof_id == original.id
-        )
+        select(certs.c.generation).where(certs.c.proof_id == original.id)
     ).scalar_one_or_none()
 
     def basis(proof: ReconciliationProof) -> list[tuple[str, Decimal, Decimal]]:
@@ -62,7 +69,7 @@ def compatible_successor(
         original.id == decision.inventory_id
         and certified == original.generation == decision.inventory_generation
         and original.complete
-        and original.cash_complete
+        and not entry_inventory_objections(store, session, original, now=now, latest=False)
         and current.complete
         and original.ledger_state_id is not None
         and original.ledger_state_id == current.ledger_state_id == store.ledger_state_id(session)
@@ -81,17 +88,12 @@ def compatible_successor(
         and original.actual_quantities == current.actual_quantities
         and original.expected_cash == current.expected_cash
         and basis(original) == basis(current)
-        and store.cash_authority_current(session, original)
         and not session.execute(
             select(table("core_cash_authority_revocations").c.snapshot_id).where(
                 table("core_cash_authority_revocations").c.snapshot_id
                 == "core-certified-" + original.id
             )
         ).first()
-        and not any(
-            intent is None or i.intent_id != intent.intent_id
-            for i in StorageRepository(session).list_unresolved_order_intents()
-        )
     )
 
 
@@ -196,6 +198,9 @@ def final_send_in_session(
     # Sample after durable reads and writer-lock acquisition, never the caller's decision time.
     now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
     reasons: list[str] = list(runtime_reasons)
+    from quantbot.paper_core.selection import reservation_objections
+
+    reasons.extend(reservation_objections(store, session, decision, intent_id=intent.intent_id))
     reasons.extend(
         guardian_objections(store, session, now=now, receipt_id=receipt.id if receipt else None)
     )
@@ -245,10 +250,7 @@ def final_send_in_session(
     )
     if (
         proof is None
-        or not proof.cash_complete
-        or proof.expected_cash is None
-        or proof.account.cash != proof.expected_cash
-        or not store.cash_authority_current(session, proof)
+        or entry_inventory_objections(store, session, proof, now=now)
         or not compatible_successor(store, session, decision, proof, intent, now=now)
         or session.execute(
             select(table("core_cash_authority_revocations").c.snapshot_id).where(

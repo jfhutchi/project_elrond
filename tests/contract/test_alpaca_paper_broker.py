@@ -488,6 +488,27 @@ async def test_reads_retry_rate_limits_and_server_errors_but_not_client_errors()
 
 
 @pytest.mark.asyncio
+async def test_activity_queries_preserve_fractional_utc_bounds() -> None:
+    transport = ScriptedBrokerTransport([response(200, []), response(200, [])])
+    broker = adapter(transport)
+    after = datetime(2026, 8, 31, 20, 0, 0, 100200, tzinfo=UTC)
+    until = datetime(2026, 8, 31, 20, 0, 0, 900800, tzinfo=UTC)
+
+    assert await broker.get_performance_activities(after=after, until=until) == ()
+    assert await broker.get_fills(after=after) == ()
+
+    assert transport.calls[0]["params"] == {
+        "after": "2026-08-31T20:00:00.100200Z",
+        "until": "2026-08-31T20:00:00.900800Z",
+        "direction": "asc",
+        "page_size": "100",
+    }
+    fill_params = transport.calls[1]["params"]
+    assert isinstance(fill_params, dict)
+    assert fill_params["after"] == "2026-08-31T20:00:00.100200Z"
+
+
+@pytest.mark.asyncio
 async def test_orders_fills_and_pagination_are_broker_authoritative() -> None:
     order = intent()
     open_payload = order_payload(order, status="partially_filled", filled_qty="1")

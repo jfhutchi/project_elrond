@@ -17,10 +17,10 @@ async def test_reconciliation_generation_race_is_retryable_not_integrity(tmp_pat
     db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
     original = guardian.certify_inventory
 
-    def competing_certification(store, proof):
+    def competing_certification(store, proof, *, session=None):
         peer = proof.model_copy(update={"acquisition_id": "competing-valid-generation"})
-        certify_inventory(store, peer)
-        return original(store, proof)
+        certify_inventory(store, peer, session=session)
+        return original(store, proof, session=session)
 
     monkeypatch.setattr(guardian, "certify_inventory", competing_certification)
     try:

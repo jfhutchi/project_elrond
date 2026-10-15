@@ -125,7 +125,7 @@ def _timestamp(payload: Mapping[str, object], field: str) -> datetime:
 def _utc_parameter(value: datetime) -> str:
     if value.tzinfo is None or value.utcoffset() is None:
         raise ValueError("timestamp must be timezone-aware")
-    return value.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
+    return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 def _canonical_decimal(value: Decimal) -> str:

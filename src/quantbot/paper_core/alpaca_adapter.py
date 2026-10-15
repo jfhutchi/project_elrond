@@ -7,18 +7,25 @@ import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
+from urllib.parse import quote
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
-from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter
+from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter, _object_payload
 from quantbot.brokers.base import BrokerProtocolError
 from quantbot.domain import OrderSide
 from quantbot.learner.five_minute import FEATURE_NAMES, build_features
 from quantbot.market_data.alpaca import AlpacaMarketDataClient
 from quantbot.market_data.base import AdjustmentMode, BarQuery, MarketDataFeed
 from quantbot.market_data.calendar import AlpacaMarketCalendar, session_sequence
-from quantbot.paper_core.contracts import BrokerEvent, CostItem, LearningCalendar, Observation
+from quantbot.paper_core.contracts import (
+    BrokerEvent,
+    CostItem,
+    LearningCalendar,
+    Observation,
+    ObservationCohort,
+)
 from quantbot.paper_core.costs import current_costs
 from quantbot.paper_core.operational_costs import pending_cost_revision_source
 from quantbot.paper_core.release import RuntimeConfig
@@ -92,6 +99,35 @@ class AlpacaCoreBroker:
         )
 
     async def observation(self) -> Observation:
+        captured = await self._acquire_cohort((self.config.core.symbol,), verify_assets=False)
+        if not captured.observations:
+            raise ValueError("FRESH_COMPLETE_BAR_UNAVAILABLE")
+        return captured.observations[0]
+
+    async def observation_cohort(self) -> ObservationCohort:
+        return await self._acquire_cohort(self.config.core.entry_symbols, verify_assets=True)
+
+    async def _asset_objection(self, symbol: str) -> str | None:
+        try:
+            payload = _object_payload(
+                await self.adapter._request("GET", "/v2/assets/" + quote(symbol, safe=""))
+            )
+        except (ValueError, OSError, TimeoutError, RuntimeError) as error:
+            return "ASSET_ELIGIBILITY_UNAVAILABLE:" + type(error).__name__
+        if payload.get("symbol") != symbol or payload.get("class") != "us_equity":
+            return "ASSET_CONTRACT_MISMATCH"
+        if payload.get("status") != "active" or payload.get("tradable") is not True:
+            return "ASSET_NOT_TRADABLE"
+        if payload.get("fractionable") is not True:
+            return "ASSET_NOT_FRACTIONABLE"
+        return None
+
+    async def _acquire_cohort(
+        self,
+        symbols: tuple[str, ...],
+        *,
+        verify_assets: bool,
+    ) -> ObservationCohort:
         now = self.now
         clock = await self.adapter.get_market_clock()
         if not clock.is_open:
@@ -102,53 +138,80 @@ class AlpacaCoreBroker:
         sequence = session_sequence(sessions)
         end = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 5)
         query = BarQuery(
-            symbols=tuple(sorted({self.config.core.symbol, "SPY"})),
+            symbols=tuple(sorted({*symbols, "SPY"})),
             start=end - timedelta(minutes=40),
             end=end - timedelta(microseconds=1),
             timeframe="5Min",
             feed=MarketDataFeed.IEX,
             adjustment=AdjustmentMode.ALL,
-            limit=100,
+            limit=max(100, 8 * (len(symbols) + 1)),
         )
         batch = await self.market.get_historical_bars(query)
         received = self.now
-        rows = build_features(
-            batch.bars,
-            sequence,
-            decision_at=received,
-            receipt_at=received,
-            symbols=(self.config.core.symbol,),
-            source_snapshot_hash=content_id(batch),
+        session = next(s for s in sessions if s.open_at <= end < s.close_at)
+        restrictions = (
+            await asyncio.gather(*(self._asset_objection(s) for s in symbols))
+            if verify_assets
+            else [None] * len(symbols)
         )
-        matching = [r for r in rows if r.feature_at == end]
-        if not matching:
-            raise ValueError("FRESH_COMPLETE_BAR_UNAVAILABLE")
-        row = matching[-1]
-        latest = max(
-            (b for b in batch.bars if b.symbol == self.config.core.symbol),
-            key=lambda b: b.timestamp,
-        )
-        self._marks[self.config.core.symbol] = (latest.close, end)
-        session = next(s for s in sessions if s.session_date == now.date())
-        return Observation(
-            recorded_at_utc=received,
-            evidence_lane="BROKER_PAPER",
-            release_id=self.store.config.release_id if self.store else self.config.core.release_id,
-            symbol=self.config.core.symbol,
-            feed="alpaca",
-            source_start=end - timedelta(minutes=35),
+        observations = []
+        unavailable = []
+        for symbol, restriction in zip(symbols, restrictions, strict=True):
+            if restriction:
+                unavailable.append((symbol, restriction))
+                continue
+            try:
+                rows = build_features(
+                    tuple(b for b in batch.bars if b.symbol in {symbol, "SPY"}),
+                    sequence,
+                    decision_at=received,
+                    receipt_at=received,
+                    symbols=(symbol,),
+                    source_snapshot_hash=content_id(batch),
+                )
+                matching = [r for r in rows if r.feature_at == end]
+                if not matching:
+                    unavailable.append((symbol, "FRESH_COMPLETE_BAR_UNAVAILABLE"))
+                    continue
+                row = matching[-1]
+                latest = max(
+                    (b for b in batch.bars if b.symbol == symbol and b.timestamp < end),
+                    key=lambda b: b.timestamp,
+                )
+            except ValueError:
+                unavailable.append((symbol, "FEATURE_INPUT_INVALID"))
+                continue
+            self._marks[symbol] = (latest.close, end)
+            observations.append(
+                Observation(
+                    recorded_at_utc=received,
+                    evidence_lane="BROKER_PAPER",
+                    release_id=self.store.config.release_id
+                    if self.store
+                    else self.config.core.release_id,
+                    symbol=symbol,
+                    feed="alpaca",
+                    source_start=end - timedelta(minutes=35),
+                    source_end=end,
+                    available_at=received,
+                    capture_received_at=received,
+                    price=latest.close,
+                    raw_data_digest=content_id(batch),
+                    feature_version="five-minute-price-alpha-v1",
+                    features=tuple(zip(FEATURE_NAMES, row.values, strict=True)),
+                    dependencies=("SPY",),
+                    dependency_available_at=(received,),
+                    sequence=int(end.timestamp() // 300),
+                    session_open=session.open_at,
+                    session_close=session.close_at,
+                )
+            )
+        return ObservationCohort(
             source_end=end,
-            available_at=received,
-            capture_received_at=received,
-            price=latest.close,
-            raw_data_digest=content_id(batch),
-            feature_version="five-minute-price-alpha-v1",
-            features=tuple(zip(FEATURE_NAMES, row.values, strict=True)),
-            dependencies=("SPY",),
-            dependency_available_at=(received,),
-            sequence=int(end.timestamp() // 300),
             session_open=session.open_at,
             session_close=session.close_at,
+            observations=tuple(observations),
+            unavailable=tuple(unavailable),
         )
 
     async def refresh_mark(self, symbol: str) -> None:
@@ -217,6 +280,7 @@ class AlpacaCoreBroker:
                 self.adapter._fill_from_payload(r) for r in rows if r.get("activity_type") == "FILL"
             )
             events = []
+            pending_owned_orders = []
             for intent in intents:
                 assert intent is not None
                 first = await self.adapter.get_order_by_client_id(
@@ -233,6 +297,10 @@ class AlpacaCoreBroker:
                     and sum((f.quantity for f in owned), Decimal(0)) == (first.filled_quantity)
                     and all(f.occurred_at <= until for f in owned)
                 )
+                if first == second and (
+                    sum((f.quantity for f in owned), Decimal(0)) < first.filled_quantity
+                ):
+                    pending_owned_orders.append(first)
                 at = self.now
                 events.append(
                     BrokerEvent(
@@ -274,6 +342,7 @@ class AlpacaCoreBroker:
             "after": after,
             "until": until,
             "rows": rows,
+            "pending_owned_orders": tuple(pending_owned_orders),
             "cost_authority": "UNKNOWN_ALL_IN_COMPONENTS",
             "cash_authority": "NOT_CERTIFIED",
             "release_id": store.config.release_id,

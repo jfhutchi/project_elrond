@@ -19,11 +19,13 @@ from quantbot.paper_core.contracts import (
     EntryIntent,
     ModelArtifact,
     Observation,
+    ObservationCohort,
     ProtectionPlan,
     ReconciliationProof,
     TimeProjection,
 )
 from quantbot.paper_core.features import observation_objections
+from quantbot.paper_core.funds import entry_inventory_objections, structural_funds_allowed
 from quantbot.paper_core.health import entry_health_objections, recover_health, report
 from quantbot.paper_core.runtime import coordinator, require_runtime_broker
 from quantbot.paper_core.send_guard import definitively_unsent
@@ -53,6 +55,7 @@ def evaluate_entry(
     time_evidence: TimeEvidence | None = None,
     time_projection: TimeProjection | None = None,
     activation: object | None = None,
+    _cohort_member: bool = False,
 ) -> Decision:
     objections = list(
         observation_objections(
@@ -67,11 +70,26 @@ def evaluate_entry(
                 observation, time_evidence, config, projection=time_projection
             )
         )
-    if observation.symbol != config.symbol or model.feature_version != observation.feature_version:
+    hybrid = config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+    if hybrid and not _cohort_member:
+        objections.append("SELECTION_COHORT_REQUIRED")
+    if (
+        hybrid
+        and time_evidence is not None
+        and time_evidence.samples
+        and (observation.session_open != time_evidence.samples[-1].provider.session_open)
+    ):
+        objections.append("TIME_CALENDAR_MISMATCH")
+    if (
+        observation.symbol not in (config.entry_symbols if hybrid else (config.symbol,))
+        or model.feature_version != observation.feature_version
+    ):
         objections.append("CONTRACT_MISMATCH")
     from quantbot.paper_core.activation import Activation
 
     selection = activation if isinstance(activation, Activation) else None
+    if hybrid and selection is None:
+        objections.append("CORE_MODEL_UNCOMMISSIONED")
     prediction = None
     if model.mode != "COLLECT":
         if (
@@ -88,15 +106,13 @@ def evaluate_entry(
             except (KeyError, ValueError, OverflowError):
                 objections.append("PREDICT_FEATURES_INVALID")
             else:
-                if prediction <= 10:
+                if prediction <= 10 and not hybrid:
                     objections.append("PREDICT_NET_RESERVE")
     if (
         inventory.account.account_id != config.account_id
         or inventory.expected_quantities != inventory.actual_quantities
         or not inventory.complete
-        or not inventory.cash_complete
-        or inventory.expected_cash is None
-        or inventory.account.cash != inventory.expected_cash
+        or not structural_funds_allowed(config, inventory)
     ):
         objections.append("INVENTORY_UNCERTIFIED")
     evaluated_at = (
@@ -196,24 +212,27 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
 
         if decision_model_objections(store, session, decision):
             return None
+        from quantbot.paper_core.selection import (
+            evaluate_cohort,
+            reservation_objections,
+            reservation_state,
+        )
+
+        if reservation_objections(store, session, decision):
+            return None
         selection = active_in_session(store, session)
         repo = StorageRepository(session)
         if entry_health_objections(store, session, decision.symbol):
             return None
         if repo.get_kill_switch_state().engaged:
             return None
-        certs = table("core_inventory_certifications")
-        latest = session.execute(
-            select(certs.c.proof_id).order_by(certs.c.generation.desc()).limit(1)
-        ).scalar_one()
         certification = latest_certification(session)
         revoked = table("core_cash_authority_revocations")
         if (
             certification is None
-            or certification[1] != latest
             or session.execute(
                 select(revoked.c.snapshot_id).where(
-                    revoked.c.snapshot_id == "core-certified-" + latest
+                    revoked.c.snapshot_id == "core-certified-" + certification[1]
                 )
             ).first()
             or decision.config_id != store.config_id
@@ -229,11 +248,20 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         certified = ReconciliationProof.model_validate_json(
             session.execute(
                 select(table("core_reconciliation_proofs").c.payload).where(
-                    table("core_reconciliation_proofs").c.id == latest
+                    table("core_reconciliation_proofs").c.id == certification[1]
                 )
             ).scalar_one()
         )
-        if not store.cash_authority_current(session, certified):
+        if entry_inventory_objections(
+            store,
+            session,
+            certified,
+            now=(
+                store.clocks.sample()[0]
+                if store.config.evidence_lane == "BROKER_PAPER"
+                else decision.recorded_at_utc
+            ),
+        ):
             return None
         from quantbot.paper_core.send_guard import compatible_successor, current_risk_allowed
 
@@ -269,15 +297,59 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
                 observed, time_evidence, store.config, projection=live_projection
             ):
                 return None
-        if decision != evaluate_entry(
-            store.config,
-            observed,
-            selection[0] if selection else ModelArtifact(feature_version=observed.feature_version),
-            original,
+        authority: dict[str, Any] = dict(
             time_evidence=time_evidence,
             time_projection=decision.time_projection,
             activation=selection[1] if selection else None,
-        ):
+        )
+        model = (
+            selection[0] if selection else ModelArtifact(feature_version=observed.feature_version)
+        )
+        if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1":
+            if decision.selection is None:
+                return None
+            cohort = decision.selection.cohort
+            from quantbot.paper_core.selection import cohort_document
+
+            document = cohort_document(store, cohort)
+            captured = session.execute(
+                select(table("core_provider_acquisitions").c.payload).where(
+                    table("core_provider_acquisitions").c.id == content_id(document)
+                )
+            ).scalar_one_or_none()
+            if captured != canonical_result_json(document):
+                raise ValueError("selection does not match a captured cohort")
+            for member in cohort.observations:
+                payload = session.execute(
+                    select(table("core_observations").c.payload).where(
+                        table("core_observations").c.id == member.id
+                    )
+                ).scalar_one_or_none()
+                if payload is None or Observation.model_validate_json(payload) != member:
+                    raise ValueError("selection observation is not captured")
+            daily, prior, _ = reservation_state(store, session, cohort)
+            replay = evaluate_cohort(
+                store.config,
+                cohort,
+                model,
+                original,
+                session_counts=daily,
+                prior_counts=prior,
+                health_reasons={
+                    s: entry_health_objections(store, session, s)
+                    for s in store.config.entry_symbols
+                },
+                **authority,
+            )
+        else:
+            replay = evaluate_entry(
+                store.config,
+                observed,
+                model,
+                original,
+                **authority,
+            )
+        if decision != replay:
             raise ValueError("decision does not match certified inputs and fixed risk envelope")
         if plan != ProtectionPlan.for_decision(decision, store.config):
             raise ValueError("protection plan does not match fixed authority")
@@ -327,7 +399,11 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             return None
         if observed.id != decision.observation_id:
             raise ValueError("observation digest mismatch")
-        digest = content_id({"binding": store.config_id, "observation": decision.observation_id})
+        digest = (
+            content_id({"boundary": decision.selection.boundary_id, "decision": decision.id})
+            if decision.selection is not None
+            else content_id({"binding": store.config_id, "observation": decision.observation_id})
+        )
         intent = OrderIntent(
             intent_id="core-entry-" + digest,
             client_order_id="qb-" + digest[:40],
@@ -363,13 +439,23 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
 async def trader_cycle(
     store: CoreStore,
     broker: SyntheticBroker | AlpacaCoreBroker,
-    observation: Observation,
+    observation: Observation | ObservationCohort,
     model: ModelArtifact,
     inventory: ReconciliationProof,
     *,
     now: datetime,
 ) -> Decision:
     require_runtime_broker(store, broker)
+    cohort = observation if isinstance(observation, ObservationCohort) else None
+    if cohort is not None:
+        from quantbot.paper_core.selection import record_cohort, validate_cohort
+
+        validate_cohort(store.config, cohort)
+        record_cohort(store, cohort)
+        if not cohort.observations:
+            raise ValueError("NO_ELIGIBLE_COHORT_MEMBERS:" + repr(cohort.unavailable))
+        observation = cohort.observations[0]
+    assert isinstance(observation, Observation)
     time_evidence = None
     time_projection = None
     acquisition_reasons: tuple[str, ...] = ()
@@ -411,10 +497,15 @@ async def trader_cycle(
                 reasons=acquisition_reasons,
                 now=store.clocks.sample()[0],
                 evidence_ids=(time_evidence.id, inventory.id),
+                scope="ACCOUNT" if cohort else "SYMBOL",
+                scope_id=store.config.account_id if cohort else observation.symbol,
             )
-        elif not entry_time_objections(
-            observation, time_evidence, store.config, projection=time_projection
-        ) and not observation_objections(observation, dependency_freshness=True):
+        elif cohort is not None or (
+            not entry_time_objections(
+                observation, time_evidence, store.config, projection=time_projection
+            )
+            and not observation_objections(observation, dependency_freshness=True)
+        ):
             from quantbot.paper_core.guardian import acknowledge_handoffs
 
             if (
@@ -422,8 +513,15 @@ async def trader_cycle(
                 and store.config.evidence_lane != "BROKER_PAPER"
             ):
                 acknowledge_handoffs(store, now=store.clocks.sample()[0])
-            recover_health(store, inventory, now=store.clocks.sample()[0])
-    record_observation(store, observation)
+            for member in cohort.observations if cohort else (observation,):
+                if not entry_time_objections(
+                    member, time_evidence, store.config, projection=time_projection
+                ) and not observation_objections(member, dependency_freshness=True):
+                    recover_health(
+                        store, inventory, now=store.clocks.sample()[0], symbol=member.symbol
+                    )
+    if cohort is None:
+        record_observation(store, observation)
     previous = next(
         (
             link
@@ -445,15 +543,38 @@ async def trader_cycle(
         model_reasons = ("CORE_MODEL_BINDING_INVALID",)
     if selection is not None:
         model = selection[0]
-    decision = evaluate_entry(
-        store.config,
-        observation,
-        model,
-        inventory,
+    authority: dict[str, Any] = dict(
         time_evidence=time_evidence,
         time_projection=time_projection,
         activation=selection[1] if selection else None,
     )
+    if cohort is not None:
+        from quantbot.paper_core.selection import evaluate_cohort, reservation_state
+
+        with store.database.transaction() as session:
+            daily, prior, _ = reservation_state(store, session, cohort)
+            health = {
+                s: entry_health_objections(store, session, s) for s in store.config.entry_symbols
+            }
+        decision = evaluate_cohort(
+            store.config,
+            cohort,
+            model,
+            inventory,
+            session_counts=daily,
+            prior_counts=prior,
+            health_reasons=health,
+            **authority,
+        )
+        observation = next(o for o in cohort.observations if o.id == decision.observation_id)
+    else:
+        decision = evaluate_entry(
+            store.config,
+            observation,
+            model,
+            inventory,
+            **authority,
+        )
     with store.database.transaction() as session:
         reasons = tuple(
             dict.fromkeys(
@@ -475,6 +596,7 @@ async def trader_cycle(
                 reasons=reasons,
                 now=store.clocks.sample()[0] if time_evidence else now,
                 evidence_ids=(observation.id, inventory.id),
+                scope_id=observation.symbol,
             )
     plan = ProtectionPlan.for_decision(decision, store.config)
     if time_evidence is not None:
@@ -531,6 +653,7 @@ async def trader_cycle(
             reasons=("FINAL_SEND_REFUSED",),
             now=store.clocks.sample()[0],
             evidence_ids=(decision.id, inventory.id),
+            scope_id=observation.symbol,
         )
         return decision
     except (
@@ -551,6 +674,7 @@ async def trader_cycle(
             reasons=("ENTRY_PROVIDER_RETRY_PENDING",),
             now=store.clocks.sample()[0],
             evidence_ids=(decision.id, inventory.id),
+            scope_id=observation.symbol,
         )
         return decision
     from quantbot.paper_core.guardian import synchronize
@@ -567,5 +691,6 @@ async def trader_cycle(
             reasons=("POST_ENTRY_RECONCILIATION_WAIT",),
             now=store.clocks.sample()[0],
             evidence_ids=(decision.id,),
+            scope_id=observation.symbol,
         )
     return decision

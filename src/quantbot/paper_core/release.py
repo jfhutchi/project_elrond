@@ -38,7 +38,7 @@ class RuntimeConfig(BrokerModel):
     learning_origin: datetime
     learning_dataset: str = "ALPACA_PAPER_OWNED"
     canonical_datasets: tuple[str, ...] = ()
-    activation_policy: Literal["REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V2"] = (
+    activation_policy: Literal["REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V2", "DAILY_BOUNDED_V3"] = (
         "REVIEW_EACH_CANDIDATE"
     )
     submission_enabled: bool = False
@@ -49,6 +49,13 @@ class RuntimeConfig(BrokerModel):
 
     @model_validator(mode="after")
     def fixed_authority(self) -> Self:
+        expected_activation = (
+            "DAILY_BOUNDED_V3"
+            if self.core.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+            else "DAILY_BOUNDED_V2"
+        )
+        if self.activation_policy not in {"REVIEW_EACH_CANDIDATE", expected_activation}:
+            raise ValueError("activation envelope does not match selection policy")
         if self.core.release_id != "UNBOUND_PREPARED_RELEASE":
             raise ValueError("prepared core release must be explicitly unbound")
         for value in (self.repository, self.store_path, self.holdout_source):
@@ -70,7 +77,7 @@ class RuntimeConfig(BrokerModel):
         if self.cost_contract is not None and (
             hashlib.sha256(self.cost_contract.account_id.encode()).hexdigest()
             != self.expected_account_hash
-            or self.core.symbol not in self.cost_contract.symbols
+            or not set(self.core.entry_symbols) <= set(self.cost_contract.symbols)
         ):
             raise ValueError("cost contract account/symbol mismatch")
         return self
