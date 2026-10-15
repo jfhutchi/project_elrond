@@ -1,0 +1,56 @@
+[
+  {
+    "path": "stage1/exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 0,
+    "source_log": "stage1/covering-gate.txt.gz",
+    "source_line": 1,
+    "raw_json_sha256": "59345b6bbb97b6d7b3a8dd69d5506df7c9d8cffab0a6ba87ed33a89c0d458bd8",
+    "source_pins_sha256": "48a3934ee73a6cbbc7ce3233e7f219361734ce7050b986c35eb9471310bcb5ae"
+  },
+  {
+    "path": "stage1/exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 1,
+    "source_log": "stage1/covering-gate.txt.gz",
+    "source_line": 2,
+    "raw_json_sha256": "97d293bfb35500844823a5fb7c0eeb944343280db84abd910f9a3e8389d8e69e",
+    "source_pins_sha256": "48a3934ee73a6cbbc7ce3233e7f219361734ce7050b986c35eb9471310bcb5ae"
+  },
+  {
+    "path": "stage1/exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 2,
+    "source_log": "stage1/covering-gate.txt.gz",
+    "source_line": 3,
+    "raw_json_sha256": "f102cb8498f97d9c640b73d155c51176a124d1431edcc55e059f1758f4ec5658",
+    "source_pins_sha256": "48a3934ee73a6cbbc7ce3233e7f219361734ce7050b986c35eb9471310bcb5ae"
+  },
+  {
+    "path": "stage1/exports/residual_cutoff_recovery.json",
+    "marker": "RESIDUAL_CUTOFF_RECOVERY",
+    "occurrence": 3,
+    "source_log": "stage1/covering-gate.txt.gz",
+    "source_line": 4,
+    "raw_json_sha256": "4ca215cd730765582a22e9c38905b0fadf93588e18957d0000f97c05ba620f45",
+    "source_pins_sha256": "48a3934ee73a6cbbc7ce3233e7f219361734ce7050b986c35eb9471310bcb5ae"
+  },
+  {
+    "path": "stage1/exports/residual_archived_corpus.json",
+    "marker": "RESIDUAL_ARCHIVED_CORPUS",
+    "occurrence": 0,
+    "source_log": "stage1/covering-gate.txt.gz",
+    "source_line": 5,
+    "raw_json_sha256": "5eb8b527ca2ddebf6201d4a0b29d4b87cc21296057d3b789cd59cedf49b3b9dc",
+    "source_pins_sha256": "48a3934ee73a6cbbc7ce3233e7f219361734ce7050b986c35eb9471310bcb5ae"
+  },
+  {
+    "path": "stage1/exports/final_retained_history.json",
+    "marker": "FINAL_RETAINED_HISTORY",
+    "occurrence": 0,
+    "source_log": "stage1/covering-gate.txt.gz",
+    "source_line": 6,
+    "raw_json_sha256": "f71903a0cbc605acbd94a9123bd3ff89db2557b70a995ef204b9e354882f4f90",
+    "source_pins_sha256": "48a3934ee73a6cbbc7ce3233e7f219361734ce7050b986c35eb9471310bcb5ae"
+  }
+]

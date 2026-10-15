@@ -139,7 +139,9 @@ class CoreStore:
             and dict(proof.expected_quantities) == {s: q for s, q in quantities.items() if q != 0}
         )
 
-    def revoke_stale_cash(self, session: Session, *, source_ids: tuple[str, ...]) -> None:
+    def revoke_stale_cash(
+        self, session: Session, *, source_ids: tuple[str, ...], available_at: datetime
+    ) -> None:
         """Revocation and accepted ledger changes share one business transaction."""
         revoked = table("core_cash_authority_revocations")
         certifications = table("core_inventory_certifications")
@@ -174,7 +176,7 @@ class CoreStore:
                 )
                 from quantbot.paper_core.work import revoked_proof
 
-                revoked_proof(session, row["proof_id"])
+                revoked_proof(session, row["proof_id"], available_at=available_at)
 
     def links(self) -> list[dict[str, Any]]:
         with self.database.transaction() as session:
@@ -524,7 +526,11 @@ def certify_inventory(
                 )
                 from quantbot.paper_core.work import revoked_proof
 
-                revoked_proof(session, snapshot.removeprefix("core-certified-"))
+                revoked_proof(
+                    session,
+                    snapshot.removeprefix("core-certified-"),
+                    available_at=proof.recorded_at_utc,
+                )
             return proof.generation
         repo.save_reconciliation(
             "core-" + proof.id,

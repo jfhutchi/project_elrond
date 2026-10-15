@@ -1,0 +1,11 @@
+[
+  {
+    "idle_queries": 1,
+    "idle_writer_locks": 0,
+    "passive_receipts_added": 25,
+    "old_lot": "954f52485e95e2d2d4441756bb4d7aaf0f5760552e70bf5dbdbf081bd276ac40",
+    "original_outcome": "ef02ae2eeeeff4218a1f6937ad452b477a60ed5489f3da333ac1409a521540fb",
+    "corrected_outcome": "fbdf8ac06397d899886a46bca2e385c6ff491d23156e7b25fabcec41f4e31370",
+    "lost_dirty": false
+  }
+]

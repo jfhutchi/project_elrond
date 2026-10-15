@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, select, text
+from sqlalchemy import and_, func, or_, select, text, union_all
 from sqlalchemy.orm import Session
 
 from quantbot.paper_core.contracts import (
@@ -237,9 +237,36 @@ def _select(
     )
     quarantined = _quarantined_lots(session)
     work = table("core_outcome_work")
+    from quantbot.paper_core.work import NOTIFICATIONS
+
+    index, notifications = (
+        table("core_outcome_index"),
+        table("core_document_index").alias("notifications"),
+    )
+    # Dirty existing work is pending regardless of origin. Missing runtime coverage
+    # applies only to owned ENTRY lots that bounded outcome recovery can reconcile;
+    # archived immutable learning corpora have no runtime notification journal.
+    owned = select(table("core_intent_links").c.lot_id).where(
+        table("core_intent_links").c.role == "ENTRY"
+    )
+    missing = (
+        select(index.c.lot_id)
+        .outerjoin(work, work.c.lot_id == index.c.lot_id)
+        .outerjoin(
+            notifications,
+            and_(notifications.c.kind == NOTIFICATIONS, notifications.c.id == index.c.lot_id),
+        )
+        .where(
+            index.c.lot_id.in_(owned),
+            or_(work.c.version.is_(None), notifications.c.id.is_(None)),
+        )
+    )
     pending = set(
         session.execute(
-            select(work.c.lot_id).where(work.c.version > work.c.processed_version)
+            union_all(
+                select(work.c.lot_id).where(work.c.version > work.c.processed_version),
+                missing,
+            )
         ).scalars()
     )
     considered = tuple(sorted(str(r["outcome_id"]) for r in metadata))

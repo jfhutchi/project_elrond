@@ -217,6 +217,10 @@ def test_dirty_historical_authority_is_not_daily_learning_input(tmp_path):
 
     db, store, broker, parent, *_ = accepted(tmp_path)
     try:
+        # Raw historical evidence begins without the new coverage projection.
+        # Use ordinary bounded recovery before asserting healthy learning readiness.
+        for _ in range(5):
+            outcomes.process_outcomes(store, cutoff=broker.now)
         with db.transaction() as session:
             policy = LearningPolicy(parent_model=parent)
             before, _, _ = _select(session, policy, broker.now, execution_now=broker.now)

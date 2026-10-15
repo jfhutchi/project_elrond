@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import or_, select, text, update
+from sqlalchemy import and_, literal, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from quantbot.domain import BrokerOrder, Fill, IntentState, OrderIntent, OrderSide
@@ -185,7 +185,7 @@ def import_broker_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> t
                 )
                 from quantbot.paper_core.work import dirty
 
-                dirty(session, lot_ids)
+                dirty(session, lot_ids, available_at=max(e.recorded_at_utc for e in events))
         raise
 
 
@@ -201,6 +201,7 @@ def quarantined_lots(session: Session) -> set[str]:
 def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[str, ...]:
     """Commit canonical events, fees and source cursors together; conflicting replay rolls back."""
     imported: list[str] = []
+    imported_at: list[datetime] = []
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
         repo = StorageRepository(session)
@@ -381,6 +382,7 @@ def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[s
                         .values(available_at=available, event_id=identity)
                     )
                 imported.append(identity)
+                imported_at.append(event.recorded_at_utc)
             except _EvidenceRejected:
                 raise
             except StateConflictError as error:
@@ -401,7 +403,9 @@ def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[s
                     ),
                 )
         if imported:
-            store.revoke_stale_cash(session, source_ids=tuple(imported))
+            store.revoke_stale_cash(
+                session, source_ids=tuple(imported), available_at=max(imported_at)
+            )
     return tuple(imported)
 
 
@@ -665,14 +669,27 @@ def reconcile_round_trip(store: CoreStore, lot_id: str, *, as_of: datetime) -> R
 def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
     outcomes, reasons = [], []
     links, work = table("core_intent_links"), table("core_outcome_work")
+    from quantbot.paper_core.work import NOTIFICATIONS
+
+    notifications = table("core_document_index").alias("notifications")
     with store.database.transaction() as session:
         lots = list(
             session.execute(
                 select(links.c.lot_id)
                 .outerjoin(work, links.c.lot_id == work.c.lot_id)
+                .outerjoin(
+                    notifications,
+                    and_(
+                        notifications.c.kind == NOTIFICATIONS, notifications.c.id == links.c.lot_id
+                    ),
+                )
                 .where(
                     links.c.role == "ENTRY",
-                    or_(work.c.version.is_(None), work.c.version > work.c.processed_version),
+                    or_(
+                        work.c.version.is_(None),
+                        work.c.version > work.c.processed_version,
+                        notifications.c.id.is_(None),
+                    ),
                 )
                 .order_by(work.c.attempted_at, links.c.lot_id)
                 .limit(16)
@@ -681,14 +698,25 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
     for lot in lots:
         with store.database.transaction() as session:
             session.execute(text("BEGIN IMMEDIATE"))
-            from quantbot.paper_core.work import dirty
+            from quantbot.paper_core.work import covered_version, dirty
 
             version = session.execute(
                 select(work.c.version).where(work.c.lot_id == lot)
             ).scalar_one_or_none()
-            if version is None:
-                dirty(session, (lot,))
-                version = 1
+            missing_watermark = (
+                session.execute(
+                    select(notifications.c.id).where(
+                        notifications.c.kind == NOTIFICATIONS, notifications.c.id == lot
+                    )
+                ).scalar_one_or_none()
+                is None
+            )
+            if version is None or missing_watermark:
+                # Pre-repair work, including an already-lost acknowledgement, has
+                # unknown coverage. Never substitute the caller's cutoff for evidence.
+                dirty(session, (lot,), available_at=None)
+                version = 1 if version is None else version + 1
+            covered = covered_version(session, lot, version, cutoff, store.config.account_id)
             session.execute(
                 update(work).where(work.c.lot_id == lot).values(attempted_at=encode_utc(cutoff))
             )
@@ -716,7 +744,7 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
                 )
                 session.execute(
                     update(work)
-                    .where(work.c.lot_id == lot, work.c.version == version)
+                    .where(work.c.lot_id == lot, work.c.version == version, literal(covered))
                     .values(processed_version=version)
                 )
                 continue
@@ -756,7 +784,7 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
             outcomes.append(trip)
             session.execute(
                 update(work)
-                .where(work.c.lot_id == lot, work.c.version == version)
+                .where(work.c.lot_id == lot, work.c.version == version, literal(covered))
                 .values(processed_version=version)
             )
     return OutcomeBatch(

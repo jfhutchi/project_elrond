@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Iterable
+from datetime import datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -10,6 +11,9 @@ from sqlalchemy.sql import Select
 
 from quantbot.paper_core.contracts import CashActivity, GuardianReceipt
 from quantbot.paper_core.store import table
+from quantbot.storage.database import decode_utc, encode_utc
+
+NOTIFICATIONS = "core_outcome_notifications"
 
 DOCUMENT_REFERENCES = {
     "core_broker_event_sources": "client_order_id",
@@ -60,18 +64,126 @@ def indexed(session: Session, name: str, *, reference: str | None = None) -> Sel
     return query.where(index.c.reference == reference) if reference is not None else query
 
 
-def dirty(session: Session, lots: Iterable[str]) -> None:
-    work = table("core_outcome_work")
+def dirty(session: Session, lots: Iterable[str], *, available_at: datetime | None = None) -> None:
+    work, index = table("core_outcome_work"), table("core_document_index")
     for lot in set(lots):
-        version = session.execute(
-            select(work.c.version).where(work.c.lot_id == lot)
-        ).scalar_one_or_none()
-        if version is None:
+        previous = (
+            session.execute(select(work).where(work.c.lot_id == lot)).mappings().one_or_none()
+        )
+        watermark = (
+            session.execute(select(index).where(index.c.kind == NOTIFICATIONS, index.c.id == lot))
+            .mappings()
+            .one_or_none()
+        )
+        version = 1 if previous is None else previous["version"] + 1
+        known = available_at is not None and (
+            previous is None
+            or watermark is not None
+            and watermark["reference"] == str(previous["version"])
+        )
+        times = [available_at] if available_at is not None else []
+        if watermark is not None and watermark["available_at"]:
+            times.append(decode_utc(watermark["available_at"]))
+        values = dict(
+            reference=str(version) if known else "unknown:" + str(version),
+            available_at=encode_utc(max(times)) if times else "",
+        )
+        if watermark is None:
+            session.execute(index.insert().values(kind=NOTIFICATIONS, id=lot, **values))
+        else:
+            session.execute(
+                update(index)
+                .where(index.c.kind == NOTIFICATIONS, index.c.id == lot)
+                .values(**values)
+            )
+        if previous is None:
             session.execute(
                 work.insert().values(lot_id=lot, version=1, processed_version=0, attempted_at="")
             )
         else:
-            session.execute(update(work).where(work.c.lot_id == lot).values(version=version + 1))
+            session.execute(update(work).where(work.c.lot_id == lot).values(version=version))
+
+
+def covered_version(
+    session: Session, lot: str, version: int, cutoff: datetime, account: str
+) -> bool:
+    """A historical poll cannot acknowledge later evidence, even before its lock."""
+    index = table("core_document_index")
+    watermark = (
+        session.execute(select(index).where(index.c.kind == NOTIFICATIONS, index.c.id == lot))
+        .mappings()
+        .one_or_none()
+    )
+    if watermark is None or watermark["reference"] != str(version):
+        # Cold v36 compatibility only: no repeated payload/history reconstruction.
+        links, intents, orders, fills = (
+            table(n) for n in ("core_intent_links", "order_intents", "broker_orders", "fills")
+        )
+        clients = (
+            select(intents.c.client_order_id)
+            .join(links, links.c.intent_id == intents.c.intent_id)
+            .where(links.c.lot_id == lot)
+        )
+        owned_fills = (
+            select(fills.c.fill_id)
+            .join(orders, orders.c.broker_order_id == fills.c.broker_order_id)
+            .where(orders.c.client_order_id.in_(clients))
+        )
+        times = []
+        for kind, refs in (
+            ("core_broker_event_sources", clients),
+            ("core_cost_items", owned_fills),
+        ):
+            stamp = session.execute(
+                select(index.c.available_at)
+                .where(index.c.kind == kind, index.c.reference.in_(refs))
+                .order_by(index.c.available_at.desc())
+                .limit(1)
+            ).scalar_one_or_none()
+            if stamp:
+                times.append(decode_utc(stamp).replace(microsecond=0) + timedelta(seconds=1))
+        stamp = session.execute(
+            select(index.c.available_at)
+            .where(index.c.kind == "core_reconciliation_proofs", index.c.reference == account)
+            .order_by(index.c.available_at.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        if stamp:
+            times.append(decode_utc(stamp).replace(microsecond=0) + timedelta(seconds=1))
+        receipts, pointer = table("core_guardian_receipts"), table("core_guardian_current")
+        payload = session.execute(
+            select(receipts.c.payload).join(pointer, pointer.c.receipt_id == receipts.c.id)
+        ).scalar_one_or_none()
+        if payload:
+            # The publication pointer is maximum serialized UTC timestamp, not insertion order.
+            times.append(
+                decode_utc(json.loads(payload)["recorded_at_utc"]).replace(microsecond=0)
+                + timedelta(seconds=1)
+            )
+        decisions = table("core_decisions")
+        stamps = session.execute(
+            select(func.json_extract(decisions.c.payload, "$.recorded_at_utc")).where(
+                decisions.c.id == lot
+            )
+        ).scalars()
+        times.extend(decode_utc(stamp) for stamp in stamps if stamp)
+        if watermark is not None and watermark["available_at"]:
+            times.append(decode_utc(watermark["available_at"]))
+        if not times:
+            return False  # Missing provenance never silently grants acknowledgement.
+        values = dict(reference=str(version), available_at=encode_utc(max(times)))
+        if watermark is None:
+            session.execute(index.insert().values(kind=NOTIFICATIONS, id=lot, **values))
+        else:
+            session.execute(
+                update(index)
+                .where(index.c.kind == NOTIFICATIONS, index.c.id == lot)
+                .values(**values)
+            )
+        return decode_utc(values["available_at"]) <= cutoff
+    return bool(
+        watermark and watermark["available_at"] and decode_utc(watermark["available_at"]) <= cutoff
+    )
 
 
 def pending(session: Session) -> list[str]:
@@ -109,9 +221,9 @@ def notify_document(session: Session, name: str, identity: str, payload: str) ->
             ).scalar_one()
             if data["recorded_at_utc"] >= json.loads(old)["recorded_at_utc"]:
                 session.execute(update(current).values(receipt_id=identity))
-        dirty(session, pending(session))
+        dirty(session, pending(session), available_at=decode_utc(data["recorded_at_utc"]))
     elif name == "core_reconciliation_proofs":
-        dirty(session, pending(session))
+        dirty(session, pending(session), available_at=decode_utc(data["recorded_at_utc"]))
     else:
         links, intents = table("core_intent_links"), table("order_intents")
         query = select(links.c.lot_id).join(intents, links.c.intent_id == intents.c.intent_id)
@@ -124,7 +236,11 @@ def notify_document(session: Session, name: str, identity: str, payload: str) ->
             )
         else:
             query = query.where(intents.c.client_order_id == data["client_order_id"])
-        dirty(session, session.execute(query).scalars())
+        dirty(
+            session,
+            session.execute(query).scalars(),
+            available_at=decode_utc(data["recorded_at_utc"]),
+        )
 
 
 def current_receipts(session: Session, *, plan_id: str | None = None) -> list[GuardianReceipt]:
@@ -181,8 +297,8 @@ def historical_receipts(session: Session, plan_id: str) -> list[GuardianReceipt]
     return [GuardianReceipt.model_validate_json(p) for p in rows]
 
 
-def revoked_proof(session: Session, proof_id: str) -> None:
+def revoked_proof(session: Session, proof_id: str, *, available_at: datetime | None = None) -> None:
     trips = table("core_round_trips")
     query = indexed(session, "core_round_trips", reference=proof_id).with_only_columns(trips.c.id)
-    dirty(session, session.execute(query).scalars())
-    dirty(session, pending(session))
+    dirty(session, session.execute(query).scalars(), available_at=available_at)
+    dirty(session, pending(session), available_at=available_at)

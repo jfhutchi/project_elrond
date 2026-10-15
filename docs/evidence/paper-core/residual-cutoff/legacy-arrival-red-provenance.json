@@ -1,0 +1,14 @@
+{
+  "source_pins": "stage1/source-pins.json",
+  "production_code": "Exact stage1 code, before known-predicate correction",
+  "test_source": "legacy-arrival-red-test.py",
+  "test_sha256": "9466698600eb6b31d78bb62200ee87aef8997d70996bcbae400060fc609c0641",
+  "command": [
+    ".venv/Scripts/python.exe",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    "tests\\integration\\paper_core\\test_outcome_cutoff_recovery.py",
+    "-k",
+    "preacknowledged_then_older_notification"
+  ],
+  "result": "1 failed,5 deselected in 3.28s; processed20 incorrectly acknowledged20 at old cutoff"
+}
