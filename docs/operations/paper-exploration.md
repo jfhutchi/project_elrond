@@ -1,11 +1,11 @@
 # Outcome-first PAPER exploration
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](../evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](../evidence/paper-core/submission-2026-10-15/README.md).
 
 ## Approved hybrid successor
 
 The [daily PAPER specification](../superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-extends the merged [PAPER core](../paper-core.md). It is merged to main in PR #290 and locally installed, but not commissioned:
+extends the merged [PAPER core](../paper-core.md). It is merged to main in PR #290 and commissioned locally with the submission readiness repair:
 The successor is implemented and locally tested, including the combined trading-to-learning witness. [Handover](../evidence/paper-core/handover.md) records integration/preparation
 status; the measured staged package remains the older XLE release.
 

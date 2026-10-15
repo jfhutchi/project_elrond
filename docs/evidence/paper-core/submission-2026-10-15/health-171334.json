@@ -1,0 +1,171 @@
+{
+  "at": "2026-10-15T17:13:34.464926+00:00",
+  "release_id": "aaa40bdbc8f49b8f63ad736740cbffb0fc00f9d14f96e344e0aba4d68c6d78d0",
+  "runtime_action": "FENCE_ENTRY",
+  "runtime_event_id": "06b1a32410c6b51124284c616ab76074603abfa009ab561e43310c885561b635",
+  "heartbeats": {
+    "outcomes": {
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "cycle_seconds": 0.2180000000007567,
+      "evidence_ids": [],
+      "first_blocker": null,
+      "generation": 1,
+      "guardian_receipt_id": null,
+      "last_useful_progress": "2026-10-15T17:13:30.945915+00:00",
+      "objections": [],
+      "owner": "paper-core",
+      "pid": 22716,
+      "process_epoch": "3708fde1-1640-439b-b959-e4bb9caae453",
+      "proof_age_seconds": 14.787672,
+      "recorded_at": "2026-10-15T17:13:30.945915+00:00",
+      "release_id": "aaa40bdbc8f49b8f63ad736740cbffb0fc00f9d14f96e344e0aba4d68c6d78d0",
+      "role": "outcomes",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "time_proof_age_seconds": null,
+      "valid_until": "2026-10-15T17:14:00.945915+00:00"
+    },
+    "guardian": {
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "cycle_seconds": 0.5310000000008586,
+      "evidence_ids": [
+        "3191aa2c98305af977fda4772c7e47eac1b502ca4b833cee876db545bfa43344",
+        "e7b830570275825a3d6e570bf6ce1a4309fb8b0323866db04ce510852790900a"
+      ],
+      "first_blocker": null,
+      "generation": 1,
+      "guardian_receipt_id": "882f2fc712e3528553f1bb5d0a767c3177b7e15d1c824fd99e89e17043543ab9",
+      "last_useful_progress": "2026-10-15T17:13:31.258200+00:00",
+      "objections": [],
+      "owner": "paper-core",
+      "pid": 11780,
+      "process_epoch": "673aaf07-e3ca-4313-955a-73ae1a233a1d",
+      "proof_age_seconds": 0.081923,
+      "recorded_at": "2026-10-15T17:13:31.258200+00:00",
+      "release_id": "aaa40bdbc8f49b8f63ad736740cbffb0fc00f9d14f96e344e0aba4d68c6d78d0",
+      "role": "guardian",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "time_proof_age_seconds": 0.31300000000010186,
+      "valid_until": "2026-10-15T17:14:01.258200+00:00"
+    },
+    "trader": {
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "cycle_seconds": 1.4529999999995198,
+      "evidence_ids": [
+        "f618ebe2e70d0d526f57a9d5219cd8d02083fe6f3f89c41c499d1d0eff2db854"
+      ],
+      "first_blocker": "CORE_ENTRY_SLOT_RESERVED:core-entry-605c087ca600b455d6c15311a2d247e3d4d03889a26630ed81f162d29d6fe3a7",
+      "generation": 1,
+      "guardian_receipt_id": null,
+      "last_useful_progress": "2026-10-15T17:04:51.063652+00:00",
+      "objections": [
+        "CORE_ENTRY_SLOT_RESERVED:core-entry-605c087ca600b455d6c15311a2d247e3d4d03889a26630ed81f162d29d6fe3a7",
+        "NO_ELIGIBLE_COHORT_MEMBERS:(('AAPL', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('MSFT', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('AMZN', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('GOOGL', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('META', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('NVDA', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('JPM', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('JNJ', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('XOM', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('PG', 'FRESH_COMPLETE_BAR_UNAVAILABLE'))"
+      ],
+      "owner": "paper-core",
+      "pid": 16104,
+      "process_epoch": "ef7f21ee-310f-4a62-94c2-7c3412863800",
+      "proof_age_seconds": null,
+      "recorded_at": "2026-10-15T17:12:22.300282+00:00",
+      "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+      "role": "trader",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "time_proof_age_seconds": 733.6409999999996,
+      "valid_until": "2026-10-15T17:12:52.300282+00:00"
+    }
+  },
+  "entries": [
+    {
+      "intent_id": "core-entry-605c087ca600b455d6c15311a2d247e3d4d03889a26630ed81f162d29d6fe3a7",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007201",
+      "state": "ERROR",
+      "created_at": "2026-10-15T16:25:06.519237Z"
+    },
+    {
+      "intent_id": "core-entry-70676fcd94c8c92d587b7a575d3be66203a88d2ceb9ffbe6996c21fc9a180624",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007208",
+      "state": "ERROR",
+      "created_at": "2026-10-15T16:20:06.666279Z"
+    },
+    {
+      "intent_id": "core-entry-a53a6763076b33e4edff212e99ccc7f40039af425af3abca83d34778659b9682",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007215",
+      "state": "ERROR",
+      "created_at": "2026-10-15T16:15:06.392187Z"
+    },
+    {
+      "intent_id": "core-entry-892feae90a92d46490af3c37cfa852d410e9a27555bbfa3d8adffc5687856f54",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.00721",
+      "state": "ERROR",
+      "created_at": "2026-10-15T16:10:05.937332Z"
+    },
+    {
+      "intent_id": "core-entry-baef371f5af6a0fb5a1cf82def62a0e1eeb5c0ce7e8e767a0b9ce04b007542e7",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007221",
+      "state": "ERROR",
+      "created_at": "2026-10-15T15:55:05.466301Z"
+    },
+    {
+      "intent_id": "core-entry-8e92503cfe1b2c13527fce741d4697c74a84cbe9bff44ad803ed6e605fb6153e",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007208",
+      "state": "ERROR",
+      "created_at": "2026-10-15T15:50:05.457996Z"
+    },
+    {
+      "intent_id": "core-entry-444a2a58fd16b537825011acfb7ee70e9255080be661110bffd57f259bb7040e",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007215",
+      "state": "ERROR",
+      "created_at": "2026-10-15T15:35:05.050242Z"
+    },
+    {
+      "intent_id": "core-entry-f8bf64dcd90e84d40c4ecf4f13cf5db17445c1ee2da57417d510d0a8d0ed9995",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007214",
+      "state": "ERROR",
+      "created_at": "2026-10-15T15:25:04.512301Z"
+    }
+  ],
+  "core_fills": [],
+  "counts": {
+    "core_round_trips": 0,
+    "core_learning_runs": 0,
+    "core_learning_attempts": 0,
+    "core_learning_inputs": 0
+  },
+  "stop": {
+    "id": 1,
+    "engaged": 0,
+    "reason": "stop",
+    "updated_at": "2026-10-14T01:17:42.473747Z"
+  },
+  "active_model": [
+    {
+      "id": 1,
+      "activation_id": "8a55b0fe12b60c6af3de9a3667fad661e2870d698e96eca0f1096bb4b2c34412",
+      "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+      "generation": 1,
+      "receipt_id": null
+    }
+  ],
+  "proof": {
+    "generation": 355,
+    "recorded_at_utc": "2026-10-15T17:13:31.176277+00:00",
+    "complete": true,
+    "cash_complete": true,
+    "funds_authority": "BROKER_PAPER_BALANCE_V1"
+  }
+}

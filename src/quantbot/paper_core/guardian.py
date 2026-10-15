@@ -19,7 +19,12 @@ from quantbot.paper_core.contracts import (
     ProtectionPlan,
     ReconciliationProof,
 )
-from quantbot.paper_core.funds import PaperFundsEvidence, paper_balance_policy
+from quantbot.paper_core.funds import (
+    PaperFundsEvidence,
+    paper_balance_policy,
+    stable_account_reads,
+    stable_position_reads,
+)
 from quantbot.paper_core.health import active_health, report
 from quantbot.paper_core.runtime import require_runtime_broker
 from quantbot.paper_core.simulation import SyntheticBroker
@@ -185,10 +190,11 @@ async def synchronize(
                     BrokerProtocolError,
                 ):
                     pass
-        if (
-            store.clocks.sample()[1] - start > 5
-            or account != second_account
-            or positions != second_positions
+        if store.clocks.sample()[1] - start > 5 or (
+            not stable_account_reads(account, second_account)
+            or not stable_position_reads(positions, second_positions)
+            if funds_capture
+            else account != second_account or positions != second_positions
         ):
             report(
                 store,
@@ -298,9 +304,13 @@ async def synchronize(
                 store, proof, capture_started=capture_started, now=now
             ):
                 report(
-                    store, role="GUARDIAN", state="RETRYABLE_FAILURE",
-                    reasons=("OWNED_FILL_ACTIVITY_PENDING",), now=now,
-                    scope="ACCOUNT", scope_id=store.config.account_id,
+                    store,
+                    role="GUARDIAN",
+                    state="RETRYABLE_FAILURE",
+                    reasons=("OWNED_FILL_ACTIVITY_PENDING",),
+                    now=now,
+                    scope="ACCOUNT",
+                    scope_id=store.config.account_id,
                     evidence_ids=(proof.id,),
                 )
                 raise TimeoutError("OWNED_FILL_ACTIVITY_PENDING") from None

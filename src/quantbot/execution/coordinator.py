@@ -175,6 +175,10 @@ class ExecutionCoordinator:
         final_send_check: Callable[[OrderIntent, OrderPurpose], tuple[str, ...]] | None = None,
         transactional_send_check: Callable[[Session, OrderIntent, OrderPurpose], tuple[str, ...]]
         | None = None,
+        transactional_send_refusal: Callable[
+            [Session, OrderIntent, OrderPurpose, tuple[str, ...]], None
+        ]
+        | None = None,
     ) -> None:
         self._database = database
         self._broker = broker
@@ -182,6 +186,7 @@ class ExecutionCoordinator:
         self._submission_policy = submission_policy or SubmissionPolicy()
         self._final_send_check = final_send_check
         self._transactional_send_check = transactional_send_check
+        self._transactional_send_refusal = transactional_send_refusal
 
     def _gate(
         self,
@@ -583,11 +588,17 @@ class ExecutionCoordinator:
             # provider await occurs under the lock, and only this coordinator POSTs.
             with self._database.transaction() as session:
                 session.execute(text("BEGIN IMMEDIATE"))
-                objections = self._transactional_send_check(session, intent, purpose)
+                objections = (
+                    self._transactional_send_check(session, intent, purpose)
+                    if fresh_gate.allowed
+                    else ()
+                )
                 if objections:
                     fresh_gate = fresh_gate.model_copy(
                         update={"allowed": False, "reasons": (*fresh_gate.reasons, *objections)}
                     )
+                if not fresh_gate.allowed and self._transactional_send_refusal is not None:
+                    self._transactional_send_refusal(session, intent, purpose, fresh_gate.reasons)
                 submitting = StorageRepository(session).transition_order_intent(
                     intent.intent_id,
                     IntentState.SUBMITTING if fresh_gate.allowed else IntentState.ERROR,

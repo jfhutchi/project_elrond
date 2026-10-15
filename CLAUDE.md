@@ -1,6 +1,6 @@
 # Project Elrond — Persistent Development Goal
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](docs/evidence/paper-core/submission-2026-10-15/README.md).
 
 Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` paper-trading system into an autonomous quantitative research and trading platform whose ultimate purpose is to discover, validate, and eventually exploit durable market edges that can compound real capital.
 
@@ -15,10 +15,12 @@ not a trading health dependency. See [dashboard access](docs/dashboard-access.md
 ## Primary Mission
 
 **Current delivery priority (October 15, 2026 EDT):** operate the merged daily hybrid PAPER
-core and preserve its measured handover. PRs #289, #290 and #291 are merged. Both operating
+core and preserve its measured handover. PRs #289–#292 are merged. Both operating
 and learner stores are schema 36. The original IWM exit filled and is reconciled. Unchanged
-core release0734974b was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks.
-Read the [readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md) before
+core release0734974b was commissioned at 11:05 Eastern. The same-config submission repair
+now runs as executable aaa40bdbc8f4. Guardian/outcomes readiness and inherited protection
+pass. Entries are resumed, but IEX bars are stale and no new core fill or learning run is
+verified. Read the [submission repair](docs/evidence/paper-core/submission-2026-10-15/README.md) before
 acting. Do not rerun migrations, enable old entry tasks, clear explicit stops, or rebuild
 completed implementation. Older staging records remain dated evidence rather than current state.
 

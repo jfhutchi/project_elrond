@@ -1,6 +1,6 @@
 # PAPER core: baseline, approved successor and acceptance
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
 
 The merged baseline replaces the operational path incrementally with three independent roles:
 **trader**, **guardian**, and **outcomes with daily learning**. It retains the existing broker,
@@ -16,10 +16,11 @@ it selects an exploratory entry. V3 learns from actual gross outcomes, including
 losses, while preserving unknown fees and net P&L. A separate versioned current-funds policy
 allows bounded entries without claiming that incomplete historical cash has been reconciled.
 
-**The successor is merged in PR #290 and installed locally, but not commissioned.**
-Its actual Windows task-identity verifier passed. The original IWM exit must reconcile before
-commissioning; fresh guardian certification and inherited protection must then pass before
-starting the trader. Both stores are now schema 36 and compatible retained services are running.
+**The successor is commissioned and the submission readiness repair is running locally.**
+The original IWM exit filled and was reconciled. Both stores are schema 36. Guardian/outcomes
+readiness and inherited protection pass; entries are resumed. Fresh IEX bars are currently
+unavailable, so a new core submission/fill and learning run remain unverified. See the
+[current submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
 The integrated witness covers ten sessions of mixed gross outcomes,
 real V3 fitting/activation and later signal/exploration decisions. The dated prepared baseline
 remains XLE-bound. Use the [handover](evidence/paper-core/handover.md) for rollout status.

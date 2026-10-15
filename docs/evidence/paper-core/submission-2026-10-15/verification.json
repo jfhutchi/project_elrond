@@ -1,0 +1,32 @@
+{
+  "source_commit": "3de4fff606a6943d6f0f069b4c796fec4ad9c273",
+  "results": [
+    {
+      "command": "pytest tests/integration/paper_core/test_submission_readiness.py tests/integration/paper_core/test_paper_funds.py tests/fault/paper_core/test_final_send_authority.py -q --tb=short",
+      "passed": 57,
+      "seconds": 151.57,
+      "note": "Three initial readiness tests; before two additional crash/ambiguity tests and adapter lookup assertion."
+    },
+    {
+      "command": "pytest tests/integration/paper_core/test_submission_readiness.py tests/fault/paper_core/test_final_send_authority.py -q --tb=short",
+      "passed": 19,
+      "seconds": 23.13,
+      "note": "Final five readiness tests and fourteen final-send tests; overlaps preceding suite."
+    },
+    {
+      "command": "pytest tests/unit/paper_core/test_market_mark_stability.py -q --tb=short",
+      "passed": 10,
+      "seconds": 1.42
+    },
+    {
+      "command": "ruff check changed source and test files",
+      "result": "All checks passed"
+    },
+    {
+      "command": "git diff --check",
+      "result": "passed"
+    }
+  ],
+  "review": "Independent reviewer reported no remaining substantive blocker before maintenance; runtime acceptance remains separate.",
+  "paid_ci_triggered": false
+}

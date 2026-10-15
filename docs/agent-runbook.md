@@ -1,6 +1,6 @@
 # QuantBot Agent Runbook
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
 
 ## Current handoff — October 14, 2026
 
@@ -36,7 +36,7 @@ normalized within each fit. Past-only validation, immutable outcome revisions, p
 data and permanent trial accounting remain mandatory. `NO_CHANGE` is honest progress;
 there is no daily-improvement guarantee or automatic LIVE transition. The
 [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-is merged to main in PR #290 and locally installed, but not commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. The measured prepared release remains
+is merged to main in PR #290 and commissioned locally with the submission readiness repair. The successor is implemented and locally tested, including the combined trading-to-learning witness. The measured prepared release remains
 the older XLE package; it does not verify successor behavior.
 
 The successor prefers any qualifying activated signal above 10 bps, otherwise records

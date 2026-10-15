@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-15T17:12:44.181327+00:00",
+  "intent_id": "core-entry-605c087ca600b455d6c15311a2d247e3d4d03889a26630ed81f162d29d6fe3a7",
+  "account_verified": true,
+  "exact_client_absent_twice": true,
+  "symbol_position_absent": true,
+  "symbol_fill_since_intent_absent": true,
+  "transport": "PAPER_GET_ONLY",
+  "activities_digest": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "fence_id": "06b1a32410c6b51124284c616ab76074603abfa009ab561e43310c885561b635"
+}

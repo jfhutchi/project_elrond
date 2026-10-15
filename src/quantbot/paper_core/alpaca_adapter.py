@@ -270,7 +270,13 @@ class AlpacaCoreBroker:
                     )
                 )
             ).scalars()
-            intents = [repo.get_order_intent(identity) for identity in relevant]
+            from quantbot.paper_core.send_guard import definitively_unsent
+
+            intents = [
+                repo.get_order_intent(identity)
+                for identity in relevant
+                if not definitively_unsent(repo, identity)
+            ]
         # Replay overlaps creation dates to retain late fees. No empty-day zero inference.
         until = min(self.now, cursor + timedelta(hours=6))
         after = max(commission.approved_at - timedelta(days=2), cursor - timedelta(days=2))

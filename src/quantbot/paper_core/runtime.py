@@ -14,9 +14,13 @@ from quantbot.domain import BrokerOrder, OrderIntent, Position
 from quantbot.execution import ExecutionCoordinator
 from quantbot.execution.coordinator import SubmissionPolicy
 from quantbot.paper_core.contracts import GuardianReceipt, ReconciliationProof
-from quantbot.paper_core.funds import entry_inventory_objections, paper_balance_policy
+from quantbot.paper_core.funds import (
+    entry_inventory_objections,
+    paper_balance_policy,
+    same_spending_authority,
+)
 from quantbot.paper_core.release import prepare_release, read_status, verify_release
-from quantbot.paper_core.send_guard import final_send_in_session
+from quantbot.paper_core.send_guard import final_send_in_session, record_pre_send_refusal
 from quantbot.paper_core.simulation import SyntheticBroker
 from quantbot.paper_core.store import CoreStore, certify_inventory, put, table
 from quantbot.research.manifest import content_id
@@ -85,6 +89,9 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
             transactional_send_check=partial(
                 final_send_in_session, store, clock=lambda: store.clocks.sample()[0]
             ),
+            transactional_send_refusal=partial(
+                record_pre_send_refusal, clock=lambda: store.clocks.sample()[0]
+            ),
         )
 
     def _adopt(self, intent: OrderIntent, order: BrokerOrder) -> OrderIntent:
@@ -144,7 +151,13 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                     reasons.append("CORE_MANUAL_ENTRY_PAUSE")
                 reasons.extend(entry_health_objections(self.store, session, intent.symbol))
                 proof = self.store.latest_proof()
-                if proof.account != account_snapshot.account or entry_inventory_objections(
+                # Equity is a market mark. Cash and spending authority must still
+                # match certification; the current equity risk limits are checked below.
+                current_account = account_snapshot.account
+                certified_account = proof.account
+                if not same_spending_authority(
+                    certified_account, current_account
+                ) or entry_inventory_objections(
                     self.store, session, proof, now=self.store.clocks.sample()[0]
                 ):
                     reasons.append("CORE_CURRENT_CASH_OR_ACCOUNT_UNCERTIFIED")

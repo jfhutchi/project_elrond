@@ -1,6 +1,6 @@
 # Position protection
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
 
 ## PAPER core guardian and inherited positions
 
@@ -15,7 +15,7 @@ The [approved hybrid successor](superpowers/specs/2026-10-14-daily-paper-explora
 requires health checks and guardian price refresh for the selected/actually owned symbol,
 including owned lots no longer in the candidate universe. Reaching six daily entry
 reservations, a failed fit or unavailable entry-funds permission cannot disable protection
-or outcomes. The successor is merged in PR #290 and locally installed, but not commissioned; this is its protection contract,
+or outcomes. The successor is merged in PR #290 and commissioned locally with the submission readiness repair; this is its protection contract,
 not evidence that the staged tasks have run it.
 
 The [current rollout](evidence/paper-core/omen-deployment/README.md) has not started the

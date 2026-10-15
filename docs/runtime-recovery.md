@@ -1,6 +1,6 @@
 # Recover runtime truth before deployment (#190)
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
 
 ## PAPER core transition
 
@@ -12,7 +12,7 @@ rehearsal and successful exact-release verifier do not establish trading readine
 
 That evidence belongs to the older XLE package. The
 [approved hybrid/V3/current-funds successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-is merged in PR #290 and locally installed, but not commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. Use its own prepared manifest/configuration and retained integrated
+is merged in PR #290 and commissioned locally with the submission readiness repair. The successor is implemented and locally tested, including the combined trading-to-learning witness. Use its own prepared manifest/configuration and retained integrated
 verification. It is an economic change, not an executable-only compatibility transition:
 do not reopen a commissioned store with a new config identity or reinterpret its net model
 as gross. Initial successor commission starts with target-neutral COLLECT and explicit

@@ -1,8 +1,17 @@
 # QuantBot status: current pointers and historical snapshot
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](docs/evidence/paper-core/submission-2026-10-15/README.md).
 
-## Current orientation — October 14, 2026 EDT
+## Current orientation — October 15, 2026 EDT
+
+PRs #289–#292 are merged. The original IWM exit filled and was reconciled; both stores are
+schema36 and the hybrid core is commissioned. The reviewed submission repair is locally
+installed as executable aaa40bdbc8f4 with unchanged economic configuration and history.
+Guardian/outcomes readiness and inherited protection pass. Entries are resumed, but stale
+IEX market data prevents fresh cohort construction. No new core fill, round trip or learning
+run is verified. See the submission evidence above for current pins and measured state.
+
+## Preserved orientation — October 14, 2026 EDT
 
 The three-role [PAPER core](docs/paper-core.md) implementation merged in
 [PR #289](https://github.com/jfhutchi/project_elrond/pull/289) on October 15 at 01:50 UTC.
@@ -29,7 +38,7 @@ authorizes bounded sizing from fresh broker balances without inventing historica
 
 The successor is implemented, reviewed and merged to main, with an actual
 ten-session collection/fit/activation witness followed by signal and exploratory entries.
-It is merged to main in PR #290 and locally installed, but not commissioned. The earlier measured package remains the older
+It is merged to main in PR #290 and commissioned locally with the submission readiness repair. The earlier measured package remains the older
 XLE configuration; current test/review and candidate-preparation evidence is kept separately.
 No deployed daily fit or profit improvement is claimed.
 

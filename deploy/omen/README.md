@@ -1,6 +1,6 @@
 # Native Windows PAPER runtime on the HP Omen
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](../../docs/evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](../../docs/evidence/paper-core/submission-2026-10-15/README.md).
 
 ## Earlier installation capture — October 15 at 06:23 Eastern
 

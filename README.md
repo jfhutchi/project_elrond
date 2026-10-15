@@ -1,6 +1,6 @@
 # Project Elrond
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md).
+> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](docs/evidence/paper-core/submission-2026-10-15/README.md).
 
 An autonomous quantitative research and PAPER trading platform that tries hard not to fool itself.
 
@@ -12,9 +12,11 @@ trustworthy outcome processing remain independent of entry and learning failures
 
 The local upgrade includes both schema-36 migrations, the obsolete-writer fence, the paper desk,
 and repaired retained services. The original IWM exit filled and was reconciled using actual
-broker evidence. The unchanged core is commissioned. guardian, outcomes and trader are active after fresh independent progress and protection checks.
-See the [readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md)
-for measured state, verification, source pins and local evidence paths.
+broker evidence. The core commission is preserved and the submission readiness fixes are
+installed. Guardian and outcomes are healthy; the enabled trader currently waits for fresh
+IEX market data. New fills and daily fits are not yet verified. See the
+[submission repair](docs/evidence/paper-core/submission-2026-10-15/README.md) for measured
+state, verification, source pins and local evidence paths.
 
 The [approved successor policy](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 uses qualifying model signals first and otherwise makes exploratory PAPER entries across stocks,

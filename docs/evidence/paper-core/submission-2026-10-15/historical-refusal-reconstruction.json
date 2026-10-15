@@ -1,0 +1,25 @@
+{
+  "at": "2026-10-15T17:12:44.181327+00:00",
+  "intent_id": "core-entry-605c087ca600b455d6c15311a2d247e3d4d03889a26630ed81f162d29d6fe3a7",
+  "event_id": "core-send-refused-641deb680fdd4c0357f607087dd8e331cf92a240f7cdcd4d1296d7f01fe6ef20",
+  "reconstruction": {
+    "guard_contract": "core-final-send-v1",
+    "definitively_unsent": true,
+    "state_at_refusal": "ORDER_CREATED",
+    "reasons": [
+      "CORE_CURRENT_CASH_OR_ACCOUNT_UNCERTIFIED"
+    ],
+    "source": "AUDITED_HISTORICAL_PREPOST_RECONSTRUCTION",
+    "intent_id": "core-entry-605c087ca600b455d6c15311a2d247e3d4d03889a26630ed81f162d29d6fe3a7",
+    "source_commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+    "source_release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+    "authorization_event_id": "core-send-authorized-641deb680fdd4c0357f607087dd8e331cf92a240f7cdcd4d1296d7f01fe6ef20",
+    "authorization_sha256": "34b0dd9bd1a35f169a25d5ce307317e5021cd51ff70e73ac63782772b187017b",
+    "heartbeat_id": "24e84824a14d9b8f9e65660278da3e27d4e32ad224e64e514a7687336381de99",
+    "process_epoch": "ef7f21ee-310f-4a62-94c2-7c3412863800",
+    "approval_reference": "USER_FIX_SUBMISSION_READINESS_20261015"
+  },
+  "broker_probe_id": "b6e5e39a28478c1c2c541c5119313c9e60aeed5b4a21045022aee1c481bbf1f5",
+  "state_preserved": "ERROR",
+  "original_client_preserved": true
+}
