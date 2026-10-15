@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from quantbot.domain import Position
-from quantbot.paper_core.authority import RoleHeartbeat, RuntimeCommission
+from quantbot.paper_core.authority import RoleHeartbeat, RuntimeCommission, executable_in_session
 from quantbot.storage import StorageRepository
 from quantbot.storage.schema import metadata
 
@@ -48,6 +48,17 @@ def read_overview(session: Session, *, account_id: str | None, now: datetime) ->
         commission = RuntimeCommission.model_validate_json(payloads[0])
         if commission.account_id != account_id:
             return base.model_copy(update={"core_phase": "Account mismatch"})
+        binding = executable_in_session(session)
+        if binding and binding.commission_id != commission.id:
+            return base.model_copy(update={"core_phase": "Evidence unavailable"})
+        if (
+            binding is None
+            and session.execute(
+                select(metadata.tables["core_runtime_config_history"].c.id).limit(1)
+            ).first()
+        ):
+            return base.model_copy(update={"core_phase": "Evidence unavailable"})
+        release_id = binding.release.id if binding else commission.release_id
         current = metadata.tables["core_role_current"]
         heartbeats = metadata.tables["core_role_heartbeats"]
         records = {
@@ -71,8 +82,17 @@ def read_overview(session: Session, *, account_id: str | None, now: datetime) ->
             or heartbeat.store_identity != commission.store_identity
             or heartbeat.owner != commission.owner
             or heartbeat.generation != commission.generation
+            or heartbeat.release_id != release_id
         ):
-            heartbeat = None
+            roles.append(
+                RoleStatus(
+                    role=role,
+                    status="Unverified",
+                    recorded_at=heartbeat.recorded_at,
+                    reason="Heartbeat does not match the commissioned runtime",
+                )
+            )
+            continue
         if heartbeat is None:
             roles.append(RoleStatus(role=role, status="Not started"))
             continue

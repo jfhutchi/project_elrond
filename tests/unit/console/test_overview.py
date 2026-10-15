@@ -3,6 +3,7 @@
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
+import pytest
 from fastapi.testclient import TestClient
 
 from quantbot.console.app import create_app
@@ -78,8 +79,17 @@ def test_inventory_does_not_fall_back_to_an_unconfigured_account(tmp_path, monke
         assert panel["positions"] is None
 
 
-def test_core_heartbeat_does_not_expose_account_identifiers_in_provider_errors(
-    tmp_path, monkeypatch
+@pytest.mark.parametrize(
+    "release,bound,status",
+    [
+        ("release", False, "Waiting"),
+        ("unapproved", False, "Unverified"),
+        ("maintained", True, "Waiting"),
+        ("release", True, "Unverified"),
+    ],
+)
+def test_core_heartbeat_does_not_expose_identity_or_report_an_unapproved_release(
+    tmp_path, monkeypatch, release, bound, status
 ):
     from quantbot.paper_core.authority import RoleHeartbeat, RuntimeCommission
     from quantbot.storage.schema import metadata
@@ -104,9 +114,53 @@ def test_core_heartbeat_does_not_expose_account_identifiers_in_provider_errors(
         baseline_source_ids=("source",),
         canonical_metadata_id="a" * 64,
     )
+    binding = None
+    if bound:
+        import hashlib
+        from quantbot.paper_core.authority import ExecutableBinding
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import PreparedRelease, RuntimeConfig
+
+        config = RuntimeConfig(
+            repository=str(tmp_path),
+            store_path=str(tmp_path / "console.db"),
+            store_identity="store",
+            expected_account_hash=hashlib.sha256(account.encode()).hexdigest(),
+            core=CoreConfig(
+                account_id=account,
+                symbol="AAPL",
+                clock_profile="PAPER_TIME_V2",
+                release_id="UNBOUND_PREPARED_RELEASE",
+            ),
+            holdout_source=str(tmp_path / "canonical.db"),
+            learning_origin=now,
+        )
+        prepared = PreparedRelease(
+            config=config,
+            schema_version=36,
+            executable_pins=(),
+            interpreter=str(tmp_path / "python"),
+            interpreter_sha256="a" * 64,
+            python_version="fixture",
+            distributions=(),
+            base_runtime_pins=(),
+        )
+        binding = ExecutableBinding(
+            commission_id=commission.id,
+            sequence=2,
+            previous_id="previous",
+            release=prepared,
+            approved_at=now,
+            approval_reference="test-only",
+            fence_id="fence",
+            activation_id="activation",
+            evidence_ids=("source",),
+        )
+        if release == "maintained":
+            release = prepared.id
     heartbeat = RoleHeartbeat(
         role="guardian",
-        release_id="release",
+        release_id=release,
         config_id="config",
         store_identity="store",
         owner="paper-core",
@@ -123,6 +177,17 @@ def test_core_heartbeat_does_not_expose_account_identifiers_in_provider_errors(
     )
     with Database.create(tmp_path / "console.db") as database:
         with database.transaction() as session:
+            if binding:
+                session.execute(
+                    metadata.tables["core_runtime_config_history"]
+                    .insert()
+                    .values(id=binding.id, payload=binding.model_dump_json())
+                )
+                session.execute(
+                    metadata.tables["core_runtime_current"]
+                    .insert()
+                    .values(id="current", document_id=binding.id)
+                )
             session.execute(
                 metadata.tables["core_runtime_commissions"]
                 .insert()
@@ -142,4 +207,4 @@ def test_core_heartbeat_does_not_expose_account_identifiers_in_provider_errors(
         response = client.get("/api/state")
         assert account not in response.text
         assert account not in client.get("/").text
-        assert response.json()["overview"]["roles"][1]["status"] == "Waiting"
+        assert response.json()["overview"]["roles"][1]["status"] == status

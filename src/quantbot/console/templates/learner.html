@@ -138,19 +138,19 @@
 <p class="quiet">Matched holding windows: {{ first.start[:10] }} to {{ first.end[:10] }} ·
   {{ first.periods }} nonoverlapping periods · 5 bps slippage each side · zero commissions.</p>
 {% set chart = learner.chart %}
-{% set colors = ['#62a0ff', '#e3a24a', '#ce91ff', '#60c8b4', '#e47e8b'] %}
+{% set colors = ['#275f96', '#8c5a13', '#714d9a', '#27796a', '#a33f55'] %}
 <div class="card">
   <div class="k">Value of $100 in the saved simulation</div>
   <svg viewBox="0 0 780 270" role="img" aria-label="Historical portfolio equity, normalized to 100 dollars" style="width:100%;max-height:310px">
-    <line x1="50" y1="20" x2="750" y2="20" stroke="#2a323d"/>
-    <line x1="50" y1="240" x2="750" y2="240" stroke="#2a323d"/>
-    <text x="0" y="25" fill="#9aa7b4" font-size="12">{{ '%.1f'|format(chart.high) }}</text>
-    <text x="0" y="240" fill="#9aa7b4" font-size="12">{{ '%.1f'|format(chart.low) }}</text>
+    <line x1="50" y1="20" x2="750" y2="20" stroke="#cdd3cd"/>
+    <line x1="50" y1="240" x2="750" y2="240" stroke="#cdd3cd"/>
+    <text x="0" y="25" fill="#5c6861" font-size="12">{{ '%.1f'|format(chart.high) }}</text>
+    <text x="0" y="240" fill="#5c6861" font-size="12">{{ '%.1f'|format(chart.low) }}</text>
     {% for curve in chart.curves %}
     <polyline points="{{ curve.points }}" fill="none" stroke="{{ colors[loop.index0] }}" stroke-width="2.4" {% if loop.index0 == 2 %}stroke-dasharray="6 4"{% endif %}><title>{{ curve.name }}</title></polyline>
     {% endfor %}
-    <text x="50" y="264" fill="#9aa7b4" font-size="12">{{ first.start[:10] }}</text>
-    <text x="675" y="264" fill="#9aa7b4" font-size="12">{{ first.end[:10] }}</text>
+    <text x="50" y="264" fill="#5c6861" font-size="12">{{ first.start[:10] }}</text>
+    <text x="675" y="264" fill="#5c6861" font-size="12">{{ first.end[:10] }}</text>
   </svg>
   <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:.8rem">
     {% for row in learner.performance %}<span style="color:{{ colors[loop.index0] }}">● {{ row.name }}</span>{% endfor %}
