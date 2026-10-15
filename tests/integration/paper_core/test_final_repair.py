@@ -23,7 +23,7 @@ from quantbot.paper_core.store import CoreStore, table
 from quantbot.storage import Database, StateConflictError
 
 
-def commissioned(tmp_path, *, commit=True, isolated_repository=False):
+def commissioned(tmp_path, *, commit=True, isolated_repository=False, gross=False):
     from quantbot.domain import Account
     from quantbot.paper_core.simulation import SyntheticBroker
 
@@ -53,11 +53,16 @@ def commissioned(tmp_path, *, commit=True, isolated_repository=False):
             evidence_lane="BROKER_PAPER",
             release_id="UNBOUND_PREPARED_RELEASE",
             clock_profile="PAPER_TIME_V2",
+            **(
+                {"selection_policy": "SIGNAL_OR_EXPLORE_V1", "symbols": ("AAPL", "MSFT")}
+                if gross
+                else {}
+            ),
         ),
         holdout_source=str(source),
         canonical_datasets=("us-equities-daily",),
         learning_origin=datetime.now(UTC) - timedelta(days=1),
-        activation_policy="DAILY_BOUNDED_V2",
+        activation_policy="DAILY_BOUNDED_V3" if gross else "DAILY_BOUNDED_V2",
     )
     release = prepare_release(config)
     broker = SyntheticBroker(

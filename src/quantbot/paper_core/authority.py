@@ -32,7 +32,7 @@ class RuntimeCommission(BrokerModel):
     approved_at: datetime
     approval_reference: str = Field(min_length=1)
     initial_model_id: str
-    activation_policy: Literal["REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V2"]
+    activation_policy: Literal["REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V2", "DAILY_BOUNDED_V3"]
     learning_origin: datetime
     legacy_owners: tuple[tuple[str, str], ...]
     baseline_source_ids: tuple[str, ...] = Field(min_length=1)
@@ -124,7 +124,14 @@ def commission_in_session(store: CoreStore, session: Session) -> RuntimeCommissi
     commission = RuntimeCommission.model_validate_json(rows[0]["payload"])
     executable = executable_in_session(session)
     if (
-        commission.id != rows[0]["id"]
+        commission.activation_policy
+        not in {
+            "REVIEW_EACH_CANDIDATE",
+            "DAILY_BOUNDED_V3"
+            if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+            else "DAILY_BOUNDED_V2",
+        }
+        or commission.id != rows[0]["id"]
         or commission.config_id != store.config_id
         or commission.release_id != store.config.release_id
         or commission.account_id != store.config.account_id

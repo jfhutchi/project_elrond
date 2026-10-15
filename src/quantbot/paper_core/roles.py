@@ -214,7 +214,16 @@ async def daily_consideration(
         known = set(previous.considered_ids) | {identity for identity, _ in previous.exclusions}
         if previous.completed_session == completed[-1].session_date and revisions <= known:
             return ("CONSIDERED_SESSION:" + completed[-1].session_date.isoformat(), previous.reason)
+    gross = store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
     policy = LearningPolicy(
+        procedure_version=(
+            "daily-paper-exploration-walk-forward-v3"
+            if gross
+            else "daily-all-history-walk-forward-v2"
+        ),
+        target_contract=(
+            "owned-executed-paper-gross-return-v1" if gross else "owned-executed-net-return-v1"
+        ),
         parent_model=parent,
         evidence_lane=store.config.evidence_lane,
         dataset=config.learning_dataset,
@@ -229,9 +238,8 @@ async def daily_consideration(
         calendar=calendar,
     )
     if store.config.evidence_lane == "BROKER_PAPER":
-        if (
-            receipt.status == "AWAITING_ACTIVATION"
-            and config.activation_policy != "DAILY_BOUNDED_V2"
+        if receipt.status == "AWAITING_ACTIVATION" and config.activation_policy != (
+            "DAILY_BOUNDED_V3" if gross else "DAILY_BOUNDED_V2"
         ):
             return ("AWAITING_EXACT_CANDIDATE_APPROVAL",)
         if receipt.status in {"NO_CHANGE", "AWAITING_ACTIVATION"}:

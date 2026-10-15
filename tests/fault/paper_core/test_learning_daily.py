@@ -11,11 +11,19 @@ from quantbot.paper_core.learning import consider_learning
 from quantbot.strategy import XNYSSession, XNYSSessionSequence
 
 
-def daily_inputs(tmp_path):
+def daily_inputs(tmp_path, *, gross=False):
     db, store, old, cutoff = replay_inputs(tmp_path)
     policy = old.model_copy(
         update={"procedure_version": "daily-all-history-walk-forward-v2", "max_sessions": None}
     )
+    if gross:
+        from quantbot.paper_core.contracts import LearningPolicy, ModelArtifact
+
+        policy = LearningPolicy(
+            parent_model=ModelArtifact(feature_version="five-minute-price-alpha-v1"),
+            target_contract="owned-executed-paper-gross-return-v1",
+            procedure_version="daily-paper-exploration-walk-forward-v3",
+        )
     from sqlalchemy import select
 
     from quantbot.paper_core.contracts import Observation
@@ -228,7 +236,8 @@ def test_quiet_completed_session_is_unchanged_without_second_charge(tmp_path, mo
 
 
 @pytest.mark.parametrize(
-    "variant", ["valid", "fit-future", "valid-no-change", "ack-future", "ack-wrong-model"]
+    "variant",
+    ["valid", "fit-future", "valid-no-change", "ack-future", "ack-wrong-model", "target-mismatch"],
 )
 def test_exact_historical_predictive_availability_and_acknowledgement(tmp_path, variant):
     from sqlalchemy import select
@@ -311,7 +320,15 @@ def test_exact_historical_predictive_availability_and_acknowledgement(tmp_path, 
             )
             put(session, "core_decisions", decision.id, decision)
             row["lot_id"] = decision.id
-            if variant in ("valid", "valid-no-change"):
+            if variant == "target-mismatch":
+                with pytest.raises(ValueError, match="INCOMPATIBLE_HISTORICAL_TARGET"):
+                    learning._historical_comparator(
+                        session,
+                        row,
+                        ExecutionClock.execution_domain,
+                        "owned-executed-paper-gross-return-v1",
+                    )
+            elif variant in ("valid", "valid-no-change"):
                 result = learning._historical_comparator(
                     session, row, ExecutionClock.execution_domain
                 )
@@ -332,13 +349,16 @@ def test_exact_historical_predictive_availability_and_acknowledgement(tmp_path, 
         db.close()
 
 
-def test_old_history_beyond_sixty_sessions_affects_weighted_fit_and_quiet_holiday_recency(tmp_path):
+@pytest.mark.parametrize("gross", [False, True])
+def test_old_history_beyond_sixty_sessions_affects_weighted_fit_and_quiet_holiday_recency(
+    tmp_path, gross
+):
     from datetime import UTC, datetime
 
     from quantbot.paper_core import learning
     from quantbot.paper_core.learning_procedure import raw_weights
 
-    db, store, policy, cutoff, _ = daily_inputs(tmp_path)
+    db, store, policy, cutoff, _ = daily_inputs(tmp_path, gross=gross)
     # Explicit synthetic session list: includes quiet sessions, skips Labor Day and weekends.
     months = {
         7: (30, 31),
@@ -388,6 +408,7 @@ def test_old_history_beyond_sixty_sessions_affects_weighted_fit_and_quiet_holida
                         "source_end": original.outcome.source_end + delta,
                         "available_at": original.outcome.available_at + delta,
                         "net_pnl": -original.outcome.net_pnl,
+                        "gross_pnl": -original.outcome.gross_pnl,
                     }
                 ),
             }
@@ -432,8 +453,9 @@ def test_old_history_beyond_sixty_sessions_affects_weighted_fit_and_quiet_holida
 
 
 @pytest.mark.parametrize("role", ["PROTECTED_EVALUATION", "FORWARD_PAPER", "DECLARED"])
+@pytest.mark.parametrize("gross", [False, True])
 def test_daily_holdout_canary_covers_folds_and_final_without_materialization(
-    tmp_path, monkeypatch, role
+    tmp_path, monkeypatch, role, gross
 ):
     import json
 
@@ -443,7 +465,7 @@ def test_daily_holdout_canary_covers_folds_and_final_without_materialization(
     from quantbot.research.registry import DataRole, HypothesisRegistry
     from quantbot.storage.schema import learner_datasets
 
-    db, store, policy, cutoff, calendar = daily_inputs(tmp_path)
+    db, store, policy, cutoff, calendar = daily_inputs(tmp_path, gross=gross)
     clock = ExecutionClock(cutoff + timedelta(days=2))
     try:
         with db.transaction() as session:
@@ -539,7 +561,8 @@ def test_new_conflict_at_data_boundary_refuses_without_hydration(tmp_path, monke
         db.close()
 
 
-def test_future_cutoff_refuses_before_materialization_fit_and_charge(tmp_path, monkeypatch):
+@pytest.mark.parametrize("gross", [False, True])
+def test_future_cutoff_refuses_before_materialization_fit_and_charge(tmp_path, monkeypatch, gross):
     from sqlalchemy import select
     from tests.fixtures.core_m4 import learning_calendar
 
@@ -547,7 +570,7 @@ def test_future_cutoff_refuses_before_materialization_fit_and_charge(tmp_path, m
     from quantbot.paper_core.store import table
     from quantbot.research.registry import HypothesisRegistry
 
-    db, store, policy, executed_at, _ = daily_inputs(tmp_path)
+    db, store, policy, executed_at, _ = daily_inputs(tmp_path, gross=gross)
     calendar = learning_calendar()
     requested = calendar.sequence.sessions[-1].close_at
     clock = ExecutionClock(executed_at)

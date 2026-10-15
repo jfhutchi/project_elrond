@@ -35,14 +35,38 @@ def predict_bps(model: ModelArtifact, features: Sequence[Mapping[str, float]]) -
     return tuple(max(-100.0, min(100.0, v)) for v in values)
 
 
-def _target(episode: LearningEpisode) -> float:
+def _target(
+    episode: LearningEpisode, target_contract: str = "owned-executed-net-return-v1"
+) -> float:
     trip = episode.outcome
-    if trip.status != "COMPLETE" or trip.net_pnl is None or trip.entry_notional <= 0:
-        raise ValueError("UNKNOWN_COSTS_OR_NOTIONAL")
-    value = float(trip.net_pnl / trip.entry_notional * 10000)
+    if target_contract == "owned-executed-net-return-v1":
+        if trip.status != "COMPLETE" or trip.net_pnl is None or trip.entry_notional <= 0:
+            raise ValueError("UNKNOWN_COSTS_OR_NOTIONAL")
+        pnl = trip.net_pnl
+    elif target_contract == "owned-executed-paper-gross-return-v1":
+        if (
+            (
+                trip.status != "COMPLETE"
+                and not (trip.status == "COSTS_PENDING" and trip.cost_reason == "FEE_UNAVAILABLE")
+            )
+            or trip.entry_notional <= 0
+            or not trip.reconciliation_id
+        ):
+            raise ValueError("INCOMPLETE_GROSS_TARGET_OR_NOTIONAL")
+        pnl = trip.gross_pnl
+    else:
+        raise ValueError("UNSUPPORTED_TARGET_CONTRACT")
+    value = float(pnl / trip.entry_notional * 10000)
     if not math.isfinite(value):
         raise ValueError("NONFINITE_EXECUTED_RETURN")
     return value
+
+
+def _compatible_parent(parent: ModelArtifact, target_contract: str, policy_id: str) -> None:
+    if parent.mode == "PREDICT" and (
+        parent.target_contract != target_contract or parent.policy_id != policy_id
+    ):
+        raise ValueError("INCOMPATIBLE_INCUMBENT")
 
 
 def fit_candidate(
@@ -56,6 +80,7 @@ def fit_candidate(
     """Fit only the immutable guarded join, never fixed-horizon market labels."""
     if not outcomes:
         raise ValueError("EMPTY_TRAINING")
+    _compatible_parent(parent, policy.target_contract, policy.policy_id)
     for episode in outcomes:
         trip, obs = episode.outcome, episode.observation
         if (
@@ -75,7 +100,7 @@ def fit_candidate(
             raise ValueError("INCOMPATIBLE_OR_NONCAUSAL_INPUT")
     estimator = fit_estimator(
         tuple(tuple(v for _, v in e.observation.features) for e in outcomes),
-        tuple(_target(e) for e in outcomes),
+        tuple(_target(e, policy.target_contract) for e in outcomes),
         FEATURE_NAMES,
         family=policy.family,
         alpha=policy.alpha,
@@ -84,7 +109,11 @@ def fit_candidate(
     )
     return ModelArtifact(
         mode="PREDICT",
-        description="shadow owned after-cost ridge candidate",
+        description=(
+            "shadow owned before-fee ridge candidate"
+            if policy.target_contract == "owned-executed-paper-gross-return-v1"
+            else "shadow owned after-cost ridge candidate"
+        ),
         feature_version=policy.feature_version,
         estimator=estimator,
         target_contract=policy.target_contract,
@@ -103,7 +132,9 @@ def _validation(
     candidate: ModelArtifact, parent: ModelArtifact, validation: tuple[LearningEpisode, ...]
 ) -> tuple[dict[str, float], tuple[SessionMetrics, ...]]:
     features = tuple(dict(e.observation.features) for e in validation)
-    actual = tuple(_target(e) for e in validation)
+    assert candidate.target_contract is not None and candidate.policy_id is not None
+    _compatible_parent(parent, candidate.target_contract, candidate.policy_id)
+    actual = tuple(_target(e, candidate.target_contract) for e in validation)
     predicted, incumbent = predict_bps(candidate, features), predict_bps(parent, features)
     assert candidate.estimator is not None
     # Constant is training mean, frozen before later validation is opened.
@@ -185,6 +216,17 @@ def run_procedure(
     all_incumbent: list[float] = []
     all_constant: list[float] = []
     for fold in folds:
+        if policy.procedure_version == "daily-paper-exploration-walk-forward-v3" and any(
+            e.session != fold.session
+            or e.observation.source_start < fold.cutoff
+            or e.observation.available_at > cutoff
+            or e.outcome.available_at is None
+            or e.outcome.available_at > cutoff
+            or e.outcome.source_end is None
+            or e.outcome.source_end > e.outcome.available_at
+            for e in fold.validation
+        ):
+            raise ValueError("NONCAUSAL_VALIDATION_FOLD")
         if (
             not fold.training
             or not fold.validation
@@ -207,10 +249,12 @@ def run_procedure(
         artifact = fit_candidate(
             fold.training, parent, policy, run_id=run_id, sample_weights=weights
         )
-        actual = tuple(_target(e) for e in fold.validation)
+        actual = tuple(_target(e, policy.target_contract) for e in fold.validation)
         values = predict_bps(artifact, tuple(dict(e.observation.features) for e in fold.validation))
         assert artifact.estimator is not None
         constant = (max(-100.0, min(100.0, artifact.estimator.intercept)),) * len(actual)
+        for model in fold.historical_models:
+            _compatible_parent(model, policy.target_contract, policy.policy_id)
         historical = tuple(
             predict_bps(model, (dict(episode.observation.features),))[0]
             for model, episode in zip(fold.historical_models, fold.validation, strict=True)

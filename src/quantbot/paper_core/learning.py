@@ -188,6 +188,7 @@ def _revision_metadata(session: Session, cutoff: datetime) -> list[dict[str, Any
             "evidence_lane",
             "status",
             "revision",
+            "cost_reason",
         )
     ]
     metadata = [
@@ -300,7 +301,11 @@ def _select(
             reason = "UNAVAILABLE_AT_CUTOFF"
         elif available > execution_now or end > execution_now:
             reason = "UNAVAILABLE_AT_EXECUTION"
-        elif row["status"] != "COMPLETE":
+        elif row["status"] != "COMPLETE" and not (
+            policy.target_contract == "owned-executed-paper-gross-return-v1"
+            and row["status"] == "COSTS_PENDING"
+            and row.get("cost_reason") == "FEE_UNAVAILABLE"
+        ):
             reason = "COSTS_PENDING"
         elif session_close > min(cutoff, execution_now):
             reason = "SESSION_NOT_COMPLETED"
@@ -323,7 +328,11 @@ def _select(
         reason = None
         if row["session"] not in days:
             reason = "OUTSIDE_LAST_60_SESSIONS"
-        elif selected and row["start"] < selected[-1]["end"]:
+        elif (
+            policy.procedure_version != "daily-paper-exploration-walk-forward-v3"
+            and selected
+            and row["start"] < selected[-1]["end"]
+        ):
             reason = "INTERSECTING_FEATURE_HOLDING_WINDOW"
         if reason:
             excluded.append((str(row["outcome_id"]), reason))
@@ -363,7 +372,10 @@ def _materialize(session: Session, rows: list[dict[str, Any]]) -> tuple[Learning
 
 
 def _historical_comparator(
-    session: Session, row: dict[str, Any], domain: str
+    session: Session,
+    row: dict[str, Any],
+    domain: str,
+    target_contract: str = "owned-executed-net-return-v1",
 ) -> tuple[
     ModelArtifact, datetime | None, str | None, str | None, datetime | None, str | None, str | None
 ]:
@@ -407,6 +419,9 @@ def _historical_comparator(
     ):
         raise ValueError("INVALID_HISTORICAL_PREDICTIVE_MODEL")
 
+    if model.target_contract != target_contract:
+        raise ValueError("INCOMPATIBLE_HISTORICAL_TARGET")
+
     def resolve(identity: str) -> LearningReceipt:
         pointer = table("core_learning_considerations")
         receipt_id = (
@@ -435,6 +450,8 @@ def _historical_comparator(
         or receipt.resulting_model_id != model.id
         or receipt.status != "AWAITING_ACTIVATION"
         or receipt.policy.procedure_version is None
+        or receipt.policy.target_contract != target_contract
+        or receipt.policy.policy_id != model.policy_id
     ):
         raise ValueError("HISTORICAL_MODEL_UNAVAILABLE_AT_DECISION")
     ack = resolve(decision.learning_receipt_id)
@@ -448,6 +465,8 @@ def _historical_comparator(
         ack.available_at is None
         or ack.available_at > decision.recorded_at_utc
         or ack.execution_clock_domain != domain
+        or ack.policy.target_contract != target_contract
+        or ack.policy.policy_id != model.policy_id
     ):
         raise ValueError("HISTORICAL_ACKNOWLEDGEMENT_UNAVAILABLE_AT_DECISION")
     return (
@@ -902,7 +921,7 @@ def _consider_learning(
             search_runs.insert().values(
                 search_id=charge,
                 actor="paper-core-shadow-trial-charge",
-                actor_version="owned-executed-net-return-v1",
+                actor_version=policy.target_contract,
                 candidates_evaluated=1,
                 dataset=policy.dataset,
                 start_date=min(r["start"] for r in rows).date().isoformat(),
@@ -919,6 +938,15 @@ def _consider_learning(
                         "fit_completed_at": None,
                         "run_id": run_id,
                         "split_digest": split,
+                        **(
+                            {
+                                "procedure_version": policy.procedure_version,
+                                "target_contract": policy.target_contract,
+                                "policy_id": policy.policy_id,
+                            }
+                            if policy.procedure_version == "daily-paper-exploration-walk-forward-v3"
+                            else {}
+                        ),
                     }
                 ),
             )
@@ -982,7 +1010,10 @@ def _consider_learning(
                 assert calendar is not None
                 folds = []
                 for day, fold_cutoff, train, scored in fold_rows:
-                    historical = [_historical_comparator(session, r, domain) for r in scored]
+                    historical = [
+                        _historical_comparator(session, r, domain, policy.target_contract)
+                        for r in scored
+                    ]
                     folds.append(
                         LearningFold(
                             session=day,

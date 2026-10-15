@@ -39,12 +39,14 @@ class ActivationAuthority(BrokerModel):
     expires_at: datetime
     reviewer: str
     feature_version: Literal["five-minute-price-alpha-v1"] = "five-minute-price-alpha-v1"
-    target_contract: Literal["owned-executed-net-return-v1"] = "owned-executed-net-return-v1"
+    target_contract: Literal[
+        "owned-executed-net-return-v1", "owned-executed-paper-gross-return-v1"
+    ] = "owned-executed-net-return-v1"
     exit_contract: Literal["owned-30m-stop100-v1"] = "owned-30m-stop100-v1"
-    policy_id: Literal["collect-owned-30m-stop100-v1"] = "collect-owned-30m-stop100-v1"
-    procedure_version: Literal["daily-all-history-walk-forward-v2"] = (
-        "daily-all-history-walk-forward-v2"
-    )
+    policy_id: str = "collect-owned-30m-stop100-v1"
+    procedure_version: Literal[
+        "daily-all-history-walk-forward-v2", "daily-paper-exploration-walk-forward-v3"
+    ] = "daily-all-history-walk-forward-v2"
     selection_transition: Literal["BOUNDED_COLLECT_TO_PREDICT"] = "BOUNDED_COLLECT_TO_PREDICT"
     risk_contract: Literal["positions1-position50-risk25-stop100-horizon30-reserve10-v1"] = (
         "positions1-position50-risk25-stop100-horizon30-reserve10-v1"
@@ -149,6 +151,9 @@ def active_in_session(
             if authority.runtime_commission_id != commission.id:
                 raise StateConflictError("ACTIVE_MODEL_RUNTIME_AUTHORITY_INVALID")
         receipt = _receipt(session, model, authority.receipt_id)
+        _authority_contract(receipt, model, authority)
+        if event.evidence_lane == "BROKER_PAPER":
+            _operational_policy(store, receipt, commission.activation_policy)
         if receipt.available_at is None or receipt.available_at > event.at:
             raise StateConflictError("ACTIVE_MODEL_RECEIPT_UNAVAILABLE")
     elif event.action != "INITIALIZE" and event.action != "ROLLBACK":
@@ -296,14 +301,21 @@ def commission_operational_candidate(
             or receipt.policy.evidence_lane != "BROKER_PAPER"
         ):
             raise StateConflictError("OPERATIONAL_RECEIPT_REQUIRED")
+        _operational_policy(store, receipt, commission.activation_policy)
+        expected_envelope = (
+            "DAILY_BOUNDED_V3"
+            if receipt.policy.procedure_version == "daily-paper-exploration-walk-forward-v3"
+            else "DAILY_BOUNDED_V2"
+        )
         if (
             receipt.status != "NO_CHANGE"
-            and commission.activation_policy != "DAILY_BOUNDED_V2"
+            and commission.activation_policy != expected_envelope
             and not approval_reference
         ):
             raise StateConflictError("AWAITING_EXACT_CANDIDATE_APPROVAL")
         candidate = _document(session, "core_models", receipt.resulting_model_id, ModelArtifact)
         _receipt(session, candidate, receipt.id)
+        assert receipt.policy.procedure_version is not None
         authority = ActivationAuthority(
             config_id=store.config_id,
             evidence_lane="BROKER_PAPER",
@@ -314,6 +326,9 @@ def commission_operational_candidate(
             expires_at=at + timedelta(minutes=5),
             reviewer=approval_reference or "COMMISSIONED_PROCEDURE:" + commission.id,
             runtime_commission_id=commission.id,
+            policy_id=receipt.policy.policy_id,
+            target_contract=receipt.policy.target_contract,
+            procedure_version=receipt.policy.procedure_version,
         )
         put(session, "core_activation_authorities", authority.id, authority)
         return authority
@@ -369,13 +384,19 @@ def _receipt(session: Session, model: ModelArtifact, identity: str) -> LearningR
         or receipt.resulting_model_id != model.id
         or receipt.candidate_model_id != model.id
         or model.learning_receipt_id != receipt.run_id
-        or receipt.policy.procedure_version != "daily-all-history-walk-forward-v2"
+        or receipt.policy.procedure_version
+        not in {"daily-all-history-walk-forward-v2", "daily-paper-exploration-walk-forward-v3"}
         or len(receipt.fold_results) != 5
         or receipt.final_input_ids != model.input_ids
         or receipt.trial_charge_id is None
         or model.estimator is None
     ):
         raise StateConflictError("ACTIVATION_CANDIDATE_NOT_QUALIFIED")
+    if model.mode == "PREDICT" and (
+        model.target_contract != receipt.policy.target_contract
+        or model.policy_id != receipt.policy.policy_id
+    ):
+        raise StateConflictError("ACTIVATION_TARGET_OR_POLICY_MISMATCH")
     if receipt.status == "AWAITING_ACTIVATION":
         metrics = dict(receipt.metrics)
         required = {
@@ -422,15 +443,60 @@ def _receipt(session: Session, model: ModelArtifact, identity: str) -> LearningR
             or charge is None
             or charge["configuration_hash"] != receipt.policy.id
             or charge["actor"] != "paper-core-shadow-trial-charge"
-            or charge["actor_version"] != "owned-executed-net-return-v1"
+            or charge["actor_version"] != receipt.policy.target_contract
             or charge["candidates_evaluated"] != 1
             or json.loads(charge["detail_json"]).get("run_id") != receipt.run_id
             or json.loads(charge["detail_json"]).get("event") != "PERMANENT_TRIAL_CHARGE"
+            or receipt.policy.procedure_version == "daily-paper-exploration-walk-forward-v3"
+            and any(
+                json.loads(charge["detail_json"]).get(key) != value
+                for key, value in (
+                    ("procedure_version", receipt.policy.procedure_version),
+                    ("target_contract", receipt.policy.target_contract),
+                    ("policy_id", receipt.policy.policy_id),
+                )
+            )
             or export_payload is None
             or content_id(json.loads(export_payload)) != receipt.input_export_id
         ):
             raise StateConflictError("ACTIVATION_FIXED_VALIDATION_NOT_PASSED")
     return receipt
+
+
+def _authority_contract(
+    receipt: LearningReceipt, model: ModelArtifact, authority: ActivationAuthority
+) -> None:
+    if (
+        receipt.policy.target_contract != authority.target_contract
+        or receipt.policy.procedure_version != authority.procedure_version
+        or receipt.policy.policy_id != authority.policy_id
+        or receipt.policy.feature_version != authority.feature_version
+        or receipt.policy.exit_contract != authority.exit_contract
+        or model.mode == "PREDICT"
+        and (
+            model.target_contract != authority.target_contract
+            or model.policy_id != authority.policy_id
+        )
+    ):
+        raise StateConflictError("ACTIVATION_RECEIPT_OR_CONTRACT_INVALID")
+
+
+def _operational_policy(store: CoreStore, receipt: LearningReceipt, envelope: str) -> None:
+    gross = store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+    if (
+        receipt.policy.policy_id != store.config.policy_id
+        or receipt.policy.procedure_version
+        != (
+            "daily-paper-exploration-walk-forward-v3"
+            if gross
+            else "daily-all-history-walk-forward-v2"
+        )
+        or receipt.policy.target_contract
+        != ("owned-executed-paper-gross-return-v1" if gross else "owned-executed-net-return-v1")
+        or envelope
+        not in {"REVIEW_EACH_CANDIDATE", "DAILY_BOUNDED_V3" if gross else "DAILY_BOUNDED_V2"}
+    ):
+        raise StateConflictError("ACTIVATION_COMMISSION_CONTRACT_MISMATCH")
 
 
 def activate_model(
@@ -466,6 +532,19 @@ def activate_model(
             raise StateConflictError("ACTIVATION_AUTHORITY_INVALID")
         candidate: ModelArtifact = _document(session, "core_models", candidate_id, ModelArtifact)
         receipt = _receipt(session, candidate, authority.receipt_id)
+        _authority_contract(receipt, candidate, authority)
+        if parent.mode == "PREDICT" and (
+            parent.target_contract != receipt.policy.target_contract
+            or parent.policy_id != receipt.policy.policy_id
+        ):
+            raise StateConflictError("ACTIVATION_INCUMBENT_CONTRACT_MISMATCH")
+        if store.config.evidence_lane == "BROKER_PAPER":
+            from quantbot.paper_core.authority import commission_in_session
+
+            commission = commission_in_session(store, session)
+            _operational_policy(store, receipt, commission.activation_policy)
+            if authority.runtime_commission_id != commission.id:
+                raise StateConflictError("ACTIVATION_RUNTIME_AUTHORITY_INVALID")
         if store.config.evidence_lane == "BROKER_PAPER":
             from quantbot.paper_core.operational_costs import pending_cost_revision_source
 
