@@ -21,7 +21,7 @@ Add `SIGNAL_OR_EXPLORE_V1` beside the unchanged legacy `MODEL_ONLY_V1` selection
 At each completed five-minute boundary, when the global core entry slot is available:
 
 1. Acquire a bounded causal cohort for the configured universe plus benchmark. A missing or unavailable symbol has an explicit reason and does not suppress healthy members. Each observation uses actual received data/times, one completed boundary and the correct symbol.
-2. Exclude inherited-held symbols, invalid/stale data, scoped quarantine, or other genuine entry failures. Preserve account/store/PAPER identity, guardian readiness, inventory/cash certification, deadline and unknown-send checks.
+2. Exclude inherited-held symbols, invalid/stale data, scoped quarantine, or other genuine entry failures. Preserve account/store/PAPER identity, guardian readiness, quantity certification and the versioned entry-funds authority below, deadline and unknown-send checks.
 3. Search the entire eligible cohort for valid activated predictions strictly above the existing 10-basis-point hurdle. Any qualifying signal takes priority over exploration, including a previously used stock when unused stocks have only weak signals. This is a numeric selection threshold, not a calibrated probability of profit.
 4. Rank qualifying signals by current-session reservation count ascending, prediction descending, prior-session reservation count ascending, then configured-universe order. This favors unused stocks, then stronger signals within the same daily-use tier; historical usage only breaks equal-signal ties. Repeats remain allowed when no unused signal qualifies.
 5. Only when no eligible signal qualifies, rank exploration candidates by current-session reservation count ascending, prior-session reservation count ascending, then configured-universe order. Historical counts rotate experience across days instead of restarting at the same first stocks. Preserve the selected stock's real zero/negative prediction; label the decision `EXPLORATION`, rather than inventing a positive score. COLLECT produces exploration. An invalid model/activation is an authority failure, not a weak signal.
@@ -39,6 +39,18 @@ Within the existing writer transaction, reject duplicate boundaries, count all s
 Existing durable links and immutable decision evidence may supply this query; no new schema is required merely to add a counter. Keep queries bounded to the owner/session where possible. Do not rewrite old migration definitions, historical IDs or older decision payloads.
 
 The six-entry cap is a bounded daily experience policy, not a guarantee of six fills under unavailable market/broker conditions. Independent guardian/outcomes processing continues after the cap is reached. No old position is reset or liquidated to manufacture room.
+
+## Current funds and incomplete fee accounting
+
+The real adapter does not provide an independent fill-net-cash ledger. Unknown fill fees therefore leave exact ledger cash incomplete; gross learning alone would still allow the first trade and block later entries. For `SIGNAL_OR_EXPLORE_V1`, add explicit `BROKER_PAPER_BALANCE_V1` authority for current funds used to size bounded PAPER entries. Preserve legacy `MODEL_ONLY_V1` exact-cash requirements.
+
+Keep quantity certification, exact account/store/owner/config/commission binding and current ledger generation. A marked proof must link to immutable typed evidence from bounded, stable broker account/position reads with current open-order coverage. Actual current cash and buying power authorize sizing; they do not certify reconstructed historical cash. Retain `expected_cash=None`, `cash_complete=False`, unknown actual fees and null net P&L. Do not invent an independent cash activity, a balancing residual, or a RECONCILED status.
+
+Persist source-bound evidence under the same transaction as the quantity proof. Validate its identity, source, stable capture within five seconds, age at most 120 seconds, account restrictions and current ledger at claim, execution gate and locked send, as well as health recovery/resume. Use the actual commissioned PAPER adapter; fixture authority is explicitly synthetic and cannot authorize broker PAPER. Require no competing or unexplained broker open order for a new entry. Protection and outcomes must continue without entry-funds permission.
+
+Preserve position/basis mismatches, known cash discrepancies, disputed-source incidents, unknown sends, manual stops, guardian/time freshness, daily limits and current risk sizing: 0.5% equity, cash availability and the existing buying-power reserve. A balance receipt cannot clear an integrity incident or resurrect a revoked exact-cash certificate. A changed source, ledger generation or account balance between evaluation and submission requires fresh authority; no network request belongs inside the send transaction. Existing quantity certificates and acquisition storage suffice; no new schema is needed.
+
+The decisive witness must execute successive entries with normal adapter-shaped account/fill responses, no independent cash-activity records, and unchanged unknown fees/net. Older strict mode must still refuse the same fee-incomplete state. This explicitly changes PAPER entry authority; it does not establish fee completeness or real-capital readiness.
 
 ## Daily learning v3
 
@@ -70,4 +82,4 @@ Keep the fixed PAPER endpoint and verified account, inherited owner IDs, origina
 - Ten-session mixed-outcome fixture exercises real bounded fitting, past-only folds, all-history final inputs and recent weights. Within-training overlap is retained; future labels, fold-crossing leakage and protected/correction-pending rows remain excluded.
 - Existing final-send, protection, activation-race, restart, temporal-learning and holdout tests remain passing. Synthetic acceptance is not reported as an actual broker lifecycle.
 
-References: [baseline design](2026-10-13-paper-core-design.md), [current handover](../../evidence/paper-core/handover.md), [Alpaca paper simulation scope](https://docs.alpaca.markets/us/v1.4.2/docs/paper-trading).
+References: [baseline design](2026-10-13-paper-core-design.md), [current handover](../../evidence/paper-core/handover.md), [Alpaca paper simulation scope](https://docs.alpaca.markets/us/v1.4.2/docs/paper-trading), [account activity fields](https://docs.alpaca.markets/us/docs/account-activities), [account funds and restrictions](https://docs.alpaca.markets/us/docs/account-plans).
