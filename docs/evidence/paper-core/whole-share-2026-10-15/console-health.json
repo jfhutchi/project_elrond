@@ -1,0 +1,86 @@
+{
+  "at": "2026-10-15T19:39:56.891460+00:00",
+  "status": 200,
+  "overview": {
+    "snapshot_at": "2026-10-15T19:39:45.030344Z",
+    "positions": [
+      {
+        "symbol": "DBC",
+        "quantity": "1.462583",
+        "market_price": "33.25",
+        "market_value": "48.630885",
+        "average_entry_price": "33.18"
+      },
+      {
+        "symbol": "EEM",
+        "quantity": "0.726321",
+        "market_price": "63.8821",
+        "market_value": "46.398911",
+        "average_entry_price": "68.63"
+      },
+      {
+        "symbol": "EFA",
+        "quantity": "0.463951",
+        "market_price": "103.64",
+        "market_value": "48.083882",
+        "average_entry_price": "107.27"
+      },
+      {
+        "symbol": "QQQ",
+        "quantity": "0.069596",
+        "market_price": "728.76",
+        "market_value": "50.718781",
+        "average_entry_price": "716.17"
+      },
+      {
+        "symbol": "SPY",
+        "quantity": "0.065269",
+        "market_price": "772.3099",
+        "market_value": "50.407895",
+        "average_entry_price": "764.08"
+      },
+      {
+        "symbol": "XLE",
+        "quantity": "0.771962",
+        "market_price": "66.275",
+        "market_value": "51.161782",
+        "average_entry_price": "65.56"
+      },
+      {
+        "symbol": "XLK",
+        "quantity": "0.26607",
+        "market_price": "189.29",
+        "market_value": "50.36439",
+        "average_entry_price": "187.53"
+      },
+      {
+        "symbol": "XLV",
+        "quantity": "0.299132",
+        "market_price": "177.829",
+        "market_value": "53.194344",
+        "average_entry_price": "167.31"
+      }
+    ],
+    "core_phase": "Commissioned",
+    "roles": [
+      {
+        "role": "trader",
+        "status": "Waiting",
+        "recorded_at": "2026-10-15T19:39:42.391196Z",
+        "reason": "A readiness check is waiting"
+      },
+      {
+        "role": "guardian",
+        "status": "Reporting",
+        "recorded_at": "2026-10-15T19:39:45.124806Z",
+        "reason": null
+      },
+      {
+        "role": "outcomes",
+        "status": "Reporting",
+        "recorded_at": "2026-10-15T19:39:44.785552Z",
+        "reason": null
+      }
+    ]
+  }
+}

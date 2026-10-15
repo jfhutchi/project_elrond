@@ -1,6 +1,6 @@
 # Counterfactual operator report
 
-> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
+> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](evidence/paper-core/whole-share-2026-10-15/README.md).
 
 > **Hypothetical research scope.** These retained reports are separate from the [PAPER core](paper-core.md) executed-outcome learner. Counterfactual returns and untraded observations never become broker fills or owned labels. V2 requires actual cost completeness; the [approved V3 successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md) uses established executed gross outcomes and permits only a fee-unavailable gap in an otherwise closed, owned, reconciled lot. Fees stay unknown and net stays null. The successor is merged in PR #290 and commissioned locally with the submission readiness repair; this report grants no execution/model authority or evidence of daily hybrid stock trading.
 

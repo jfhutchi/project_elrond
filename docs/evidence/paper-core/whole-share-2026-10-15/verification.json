@@ -1,0 +1,45 @@
+{
+  "at": "2026-10-15T19:44:42.724876+00:00",
+  "implementation_commit": "381787e28a7f02843c6f1df233934e9b58e065ee",
+  "protection_commit": "383c54867d1643e3d591762f14db266054c54cad",
+  "primary_gate": {
+    "passed": 144,
+    "seconds": 309.85,
+    "log": "final-regression.txt"
+  },
+  "protection_execution_gate": {
+    "passed": 66,
+    "seconds": 52.66,
+    "log": "bridge-final-tests.txt"
+  },
+  "supplemental": [
+    {
+      "passed": 42,
+      "failed": 1,
+      "note": "Console/release gate; the timing-sensitive process test failed seeding, then passed both instrumented and plain standalone reruns (final plain13.61s)."
+    },
+    {
+      "passed": 47,
+      "seconds": 136.86,
+      "note": "Final-repair and whole-share tests before main144-test gate; overlapping, not additive."
+    }
+  ],
+  "lint": "Changed source/test Ruff checks passed",
+  "types": "New entry-policy and protection-bridge modules passed mypy with silent dependency imports",
+  "review": "Independent review approved both changes after stale-binding, recovery and acquisition-time findings were resolved.",
+  "paid_ci_triggered": false,
+  "manual_provider_orders": false,
+  "final_frozen_core_gate": {
+    "passed": 78,
+    "seconds": 218.42,
+    "log": "final-frozen-core.txt",
+    "source_commit": "383c54867d1643e3d591762f14db266054c54cad"
+  },
+  "cohort_correction_gate": {
+    "passed": 35,
+    "seconds": 41.36,
+    "log": "cohort-repair-tests.txt",
+    "source_commit": "59c5ca5ae919e9e2f87f1718d72f6c8286928776",
+    "note": "Full trader cycle regression observed RED before the one-line expanded-universe fix; native entry/submission clamps preserved throughout correction."
+  }
+}

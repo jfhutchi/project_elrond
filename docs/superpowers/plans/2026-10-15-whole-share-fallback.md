@@ -33,9 +33,9 @@ test `tests/unit/paper_core/test_whole_share_policy.py`.
 Interfaces: EntryPolicy, AssetEligibility, entry_quantity(account, price, policy, fractionable),
 entry_risk_allowed(account, quantity, price, minimum_whole_share=False).
 
-- [ ] Write/run failing cases for one-share minima, flooring, cash/BP/risk refusal and old hashes.
-- [ ] Add immutable optional contracts, preserving absent-field serialization.
-- [ ] Run scoped tests and commit after integrated caller checks.
+- [x] Write/run failing cases for one-share minima, flooring, cash/BP/risk refusal and old hashes.
+- [x] Add immutable optional contracts, preserving absent-field serialization.
+- [x] Run scoped tests and commit after integrated caller checks.
 
 ### 2. Cohort, claim and actual send
 
@@ -44,25 +44,29 @@ send_guard.py and execution/coordinator.py; integration `test_whole_share_entrie
 Interfaces: current entry policy/effective symbols, optional policy IDs on decisions,
 fresh pre-send eligibility acquisition and locked eligibility receipt validation.
 
-- [ ] Write/run RED whole-share integration and changed/unknown eligibility cases.
-- [ ] Reuse existing selection/reservation and owned-exit paths with the explicit amendment.
-- [ ] Prove fractional/whole entries, exact exit ownership, atomic refusal and unknown-send retention.
-- [ ] Run current funds/selection/final-send regressions and lint changed files.
+- [x] Write/run RED whole-share integration and changed/unknown eligibility cases.
+- [x] Reuse existing selection/reservation and owned-exit paths with the explicit amendment.
+- [x] Prove fractional/whole entries, exact exit ownership, atomic refusal and unknown-send retention.
+- [x] Run current funds/selection/final-send regressions and lint changed files.
 
 ### 3. Explicit policy amendment authority
 
 Files: authority.py, __main__.py; integration amendment tests alongside existing final-repair tests.
 Interface: transition_entry_policy(store, successor, approval), distinct binding kind and CLI command.
 
-- [ ] Write/run RED exact-config and open/ambiguous-lot refusal tests.
-- [ ] Add guarded amendment CAS; keep ordinary code-only transition equality unchanged.
-- [ ] Verify historical model/config/commission/stop/rows and legacy hashes are preserved.
+- [x] Write/run RED exact-config and open/ambiguous-lot refusal tests.
+- [x] Add guarded amendment CAS; keep ordinary code-only transition equality unchanged.
+- [x] Verify historical model/config/commission/stop/rows and legacy hashes are preserved.
 
 ### 4. Review, deployment and handover
 
-- [ ] Obtain independent review and resolve substantive findings with regression tests.
-- [ ] Stage exact native successor and compatible console reader; verify source/dependency pins.
-- [ ] Fence entries; preserve/wait for old owned exits; verify backups and old writer absence.
-- [ ] Apply explicit amendment, start guardian/outcomes, verify fresh readiness and resume.
-- [ ] Verify real broker behavior, protection and learning status without inventing outcomes.
-- [ ] Update operational guidance/evidence, push and open a PR; no paid CI or automatic merge.
+- [x] Obtain independent review and resolve substantive findings with regression tests.
+- [x] Stage exact native successor and compatible console reader; verify source/dependency pins.
+- [x] Fence entries; preserve/wait for old owned exits; verify backups and old writer absence.
+- [x] Apply explicit amendment, start guardian/outcomes, verify fresh readiness and resume.
+- [x] Verify real broker behavior, protection and learning status without inventing outcomes.
+- [x] Update operational guidance/evidence, push and open a PR; no paid CI or automatic merge.
+
+## Execution evidence
+
+The implementation and three independent review passes are recorded in the [October15 handover](../../evidence/paper-core/whole-share-2026-10-15/README.md). The first real AAPL lot closed before the flat amendment. Two obsolete guardian inventory waits were recovered using the existing proof-based API; explicit stops were untouched. Native validation caught and repaired the expanded-cohort call before any amended entry could submit. The amended runtime remains enabled; the full30-minute feature horizon prevents late-session entries. Real nonfractionable fills and ten-session learning remain separately measured acceptance limits.

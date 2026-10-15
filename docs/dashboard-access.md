@@ -9,10 +9,12 @@ The overview reads only the configured account without exposing its identifier. 
 missing inventory from a known flat account. Heartbeats must match the current executable
 binding before appearing as reporting. Existing same-origin controls and gates are unchanged.
 
-The console runs from its own pinned native checkout. Its availability is not a dependency
-for the pending core handover; task and process provenance remain checked. The trading
-release, configuration and original pending exit are unchanged. See the [UI handover
-evidence](evidence/paper-core/dashboard-2026-10-15/README.md).
+The console runs from its own clean pinned native checkout and understands the approved
+entry-policy binding. Its availability is not a trading dependency. Current trader, guardian
+and outcomes heartbeats match the new native release; the first AAPL round trip is recorded.
+See the [current handover](evidence/paper-core/whole-share-2026-10-15/README.md) for native
+pins and measured trading/learning status. The [UI evidence](evidence/paper-core/dashboard-2026-10-15/README.md)
+retains the earlier design capture.
 
 The dated access observations below remain historical.
 

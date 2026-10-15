@@ -1,0 +1,35 @@
+{
+  "at": "2026-10-15T19:38:47.551220+00:00",
+  "release_id": "a93b508b76f318a030fb1813f8f0a06eae98cd919fadddcefa65df574bfce61e",
+  "contract": "EXISTING_RECOVER_HEALTH_WITH_NEW_CERTIFIED_INVENTORY",
+  "fence_id": "985137d0c50d7e952db1dcabf07210802f4148fa98c2e2055903fb4846fe5faa",
+  "proof_id": "6a30906bf0362dc18c12d9b8ce013af158ea4143723f6a5a05b020b6227b7cd4",
+  "guardian_heartbeat_id": "d1ec9627316aab9d5d5e0341ca8219c225df87b22186f57c5c777a1862e2175b",
+  "time_evidence_ids": [
+    "b6d5b3e41ee6d5c56136eb5e3443823a7e0b29328e2f951162e0887129b6c098"
+  ],
+  "recovered_events": [
+    {
+      "id": "a2172a21039ddc2ec0119bfd39e37fe3da8bedb649a3cfd4f6a94ed010a4e37d",
+      "role": "GUARDIAN",
+      "scope": "SYMBOL",
+      "state": "RETRYABLE_FAILURE",
+      "objections": [
+        "INVENTORY_ACQUISITION_RETRYABLE"
+      ]
+    },
+    {
+      "id": "cd0eae180439bf10cf88a75d35852e79072b606b42f5d9abf8cb2191ea6ae7d8",
+      "role": "GUARDIAN",
+      "scope": "ACCOUNT",
+      "state": "RETRYABLE_FAILURE",
+      "objections": [
+        "OWNED_FILL_ACTIVITY_PENDING"
+      ]
+    }
+  ],
+  "remaining_active_health": 0,
+  "manual_stop_unchanged": true,
+  "flat_owned_core": true,
+  "fresh_bars_not_asserted": true
+}

@@ -1,0 +1,41 @@
+{
+  "at": "2026-10-15T19:38:51.116338+00:00",
+  "tables": {
+    "schema_version": {
+      "unchanged": true,
+      "count": 1
+    },
+    "core_runtime_commissions": {
+      "unchanged": true,
+      "count": 1
+    },
+    "core_active_model": {
+      "unchanged": true,
+      "count": 1
+    },
+    "kill_switch_state": {
+      "unchanged": true,
+      "count": 1
+    },
+    "core_models": {
+      "unchanged": true,
+      "count": 1
+    },
+    "core_activations": {
+      "unchanged": true,
+      "count": 1
+    },
+    "core_learning_runs": {
+      "unchanged": true,
+      "count": 0
+    },
+    "core_learning_inputs": {
+      "unchanged": true,
+      "count": 0
+    },
+    "core_learning_attempts": {
+      "unchanged": true,
+      "count": 0
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "old_release_id": "172810ad8e4170e19e66235be3980b78cf9d56956d5ec4677127b5d2586256de",
+  "new_release_id": "a93b508b76f318a030fb1813f8f0a06eae98cd919fadddcefa65df574bfce61e",
+  "source_commit": "59c5ca5ae919e9e2f87f1718d72f6c8286928776",
+  "config_unchanged": true,
+  "entry_policy_unchanged": true,
+  "path": "src/quantbot/paper_core/trader.py",
+  "old_sha256": "fedb22a66a23a6f2eb9e5c69ab135186c7a1ababbb5c8660fefb4da17bc4a466",
+  "new_sha256": "9920bd8d0a79d0278b77cac5b62c2e875be5f19d3499a875737c62bbf3a55d4e"
+}

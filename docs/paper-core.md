@@ -1,6 +1,6 @@
 # PAPER core: baseline, approved successor and acceptance
 
-> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
+> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](evidence/paper-core/whole-share-2026-10-15/README.md).
 
 The merged baseline replaces the operational path incrementally with three independent roles:
 **trader**, **guardian**, and **outcomes with daily learning**. It retains the existing broker,
@@ -16,11 +16,7 @@ it selects an exploratory entry. V3 learns from actual gross outcomes, including
 losses, while preserving unknown fees and net P&L. A separate versioned current-funds policy
 allows bounded entries without claiming that incomplete historical cash has been reconciled.
 
-**The successor is commissioned and the submission readiness repair is running locally.**
-The original IWM exit filled and was reconciled. Both stores are schema 36. Guardian/outcomes
-readiness and inherited protection pass; entries are resumed. Fresh IEX bars are currently
-unavailable, so a new core submission/fill and learning run remain unverified. See the
-[current submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
+**The hybrid core is commissioned and the approved entry amendment is active locally.** The first AAPL round trip is verified and the original IWM exit remains reconciled. Both stores are schema36. Fees/net remain unknown, and learning remains in the ten-session warmup. See the [current handover](evidence/paper-core/whole-share-2026-10-15/README.md) for native pins, source branches and remaining acceptance limits.
 The integrated witness covers ten sessions of mixed gross outcomes,
 real V3 fitting/activation and later signal/exploration decisions. The dated prepared baseline
 remains XLE-bound. Use the [handover](evidence/paper-core/handover.md) for rollout status.

@@ -1,0 +1,42 @@
+{
+  "schema_version": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "f5a7599b60ba9ed5a8ff09c2dcd875d41f94dd4b8a0458b390839175affb3829"
+  },
+  "core_identities": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "453347e41b3bedca68821930dab37d7b71fc67b5bcfac4c02d806d2b72e212b4"
+  },
+  "core_fixture_baselines": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "abc70021340492660900a88444f24cc1612951249a3f2a798f40a8cd4d344acd"
+  },
+  "core_runtime_commissions": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "ed8f7a40e5e6e0100a130cbf70d1ebf040857e02b1c3af2e4a943a1af37ead6f"
+  },
+  "core_active_model": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "8c344af982bdcb371d42352d7c0d123ca05aefaf85473172c01f34062d4c2007"
+  },
+  "core_models": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "a31e65f68ec6fa77db23d82f0e1ecf934baf34c447be793f219039c32c19f5f8"
+  },
+  "core_activations": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "7fa1a797c716cd8b87ed6249a053b7535dc9d81edd3b1676440057f9226154a8"
+  },
+  "kill_switch_state": {
+    "unchanged": true,
+    "rows": 1,
+    "sha256": "8e6bdbac1dde54afee7bbc41f430e05de0171afdaaf9198455d93e60166ddc26"
+  }
+}

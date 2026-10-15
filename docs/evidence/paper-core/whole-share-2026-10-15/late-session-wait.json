@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-15T19:41:19.744200+00:00",
+  "cutoff": "2026-10-15T19:40:00+00:00",
+  "provider_session_close": "2026-10-15T20:00:00+00:00",
+  "full_horizon_target": "2026-10-15T20:10:00+00:00",
+  "symbols_with_eight_bars": 18,
+  "full_horizon_crosses_close": true,
+  "entry_wait": "FULL_30_MINUTE_FEATURE_HORIZON_DOES_NOT_FIT_SESSION"
+}

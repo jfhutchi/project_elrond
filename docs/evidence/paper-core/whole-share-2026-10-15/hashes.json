@@ -1,0 +1,217 @@
+{
+  "files": [
+    {
+      "path": ".gitattributes",
+      "sha256": "2cacd8c5b88d28a6324a5b106d17970ce30df8e32f9b76c87d00d4ca430747a8"
+    },
+    {
+      "path": "amended-binding.json",
+      "sha256": "084072c1d9fb40fe185a545a83fcafaee2e79fc7717cebfb7805629373ec76fb"
+    },
+    {
+      "path": "amended-manifest.json",
+      "sha256": "5c96e58f745d700c58afe01c9559e82fb3cb9d4f8e9f59492eeecfb4489eff51"
+    },
+    {
+      "path": "amended-role-fence.json",
+      "sha256": "9d95fb6c82c570b4c30b3dc1fa40ac0ec1c2a69b043a04e80e0a8d3679585d1f"
+    },
+    {
+      "path": "bridge-binding.json",
+      "sha256": "9ed0603cb89f4c8f1be0ec1c530702819de1ee0ac1436d2b28e57f6f48cc8848"
+    },
+    {
+      "path": "bridge-final-tests.txt",
+      "sha256": "1255907d4b8755b6d4b0c7ec240165c6827d5946e5972d2ca6d5d94aecab1023"
+    },
+    {
+      "path": "bridge-installed.json",
+      "sha256": "8ed1484db36298ce17fe6eac3b6fca7d374b9fd6b68eecc3a39a5217dc54d7e8"
+    },
+    {
+      "path": "bridge-manifest.json",
+      "sha256": "eece52d16dae6feb27366d6dcb85b4e0c73aa86c8af78cd357f1749642afb95a"
+    },
+    {
+      "path": "capture.py",
+      "sha256": "ccd523c9303045ae2ea50683c18ebeb35f3216a5ca8ff3232fc502cf5f05b415"
+    },
+    {
+      "path": "cohort-market-probe.json",
+      "sha256": "2f0d95e1c9e3bd05a1bf01babd0ec187e52e4c1ed7f4aa5a8d4507f8798b5549"
+    },
+    {
+      "path": "cohort-repair-tests.txt",
+      "sha256": "ac6959aded37ba68d5129dfafd33bb7e8282007513495c392d9be9794b9634a2"
+    },
+    {
+      "path": "console-deployment.json",
+      "sha256": "50c38821f97be7a03af29c7192182d2a8e349b6e396b37dd615b8403a6ba460a"
+    },
+    {
+      "path": "console-health.json",
+      "sha256": "7950fb0afbf8997181eb5408ff3ba8d61800c457f48b139baff6a53d8303d110"
+    },
+    {
+      "path": "correct_cohort.py",
+      "sha256": "d2b6b33dec30f29a4e55a607f300f9720af09c3aaa3a56f059e089a45c9e9920"
+    },
+    {
+      "path": "corrected-binding.json",
+      "sha256": "d0ad4690d464323cf2721d5fbbf66da85c2b49bcecf9c49903fb9797d63b076e"
+    },
+    {
+      "path": "corrected-manifest.json",
+      "sha256": "c0961cc28d06a3bc9ca5dc4ffc23eb7ed2eadb19fbd28367c673042f28c31bf6"
+    },
+    {
+      "path": "corrected-patch-plan.json",
+      "sha256": "10ae185115f2d8616f2fe9a535beceabaf43a61f053aa834a5a2495c78ccabd6"
+    },
+    {
+      "path": "corrected-role-fence.json",
+      "sha256": "cedae2a266f2606ac8063f90d6896303af9d8c38c64432199eeb518ad9f00491"
+    },
+    {
+      "path": "deploy-console.ps1",
+      "sha256": "5d560c632ed6c553e4735d47e11a2d03c6e225af7138c17baf5f602a99667fa0"
+    },
+    {
+      "path": "deploy-protection.ps1",
+      "sha256": "4eeabe5152842c67d5cceb0ca2411d5155afee6dfc8dc6771bb5f2cd22ce12e2"
+    },
+    {
+      "path": "entry-resume.json",
+      "sha256": "8bcc13c563dec9735f81df2ffa846b67c3beee8313a2a7af26bfb3129b127914"
+    },
+    {
+      "path": "fence-amendment.ps1",
+      "sha256": "aef337e48bc59fd9abbe0aacba1457030fd2c2f6c8abbddd815e8f1961142f7f"
+    },
+    {
+      "path": "fence-correction.ps1",
+      "sha256": "96497c76023c9bb6ecd3f71d66d9caaa51cf3e567228024400e4750c8b6185b3"
+    },
+    {
+      "path": "fence-roles.ps1",
+      "sha256": "a2b8df842ff8fcb2ee32cf4aec7110698997e99b5e2dbc7969bbfceae3fcd3ec"
+    },
+    {
+      "path": "final-frozen-core.txt",
+      "sha256": "562bf9cf83a7e08d766b4c79220f0b2fc99c8ebc607e4159754469a6d8cf95cc"
+    },
+    {
+      "path": "final-regression.txt",
+      "sha256": "d508c80b3d343efd746616443e75e99b3f5162b739065c55c37986193d3ff6ef"
+    },
+    {
+      "path": "handover.py",
+      "sha256": "2c6a2cae9430544dc1cfe9461c79620248912c52845c3fbeef15bd7307c37050"
+    },
+    {
+      "path": "health-amended-ready.json",
+      "sha256": "ae8550cf3cd056214ed4291cf81657f840f4c1ab8349abf1ccc012f6c3b4fd7c"
+    },
+    {
+      "path": "health-amended-startup.json",
+      "sha256": "8e4a8ce1fd37855860a65d334d6e7e1451a68fb1fcee371bc7ef3ed0a9ecb441"
+    },
+    {
+      "path": "health-bridge.json",
+      "sha256": "7a5ea071336412fec7c3376cda47035051baca46f1a7f15fa47794791e76975f"
+    },
+    {
+      "path": "health-corrected-ready.json",
+      "sha256": "c1248df130b0f8bb5f6a38f1ea698b3addc23135796dd17d5e9292ecf6f87111"
+    },
+    {
+      "path": "health-deadline.json",
+      "sha256": "0eab22a59d5871e001fc9c69fa0a63c493879077d389a2ba8aebb8eed9eddd15"
+    },
+    {
+      "path": "health-exit.json",
+      "sha256": "cca3136d8c93da059d6a75bc3e8ea94df745a15add490a66610cd0e5cbe9002e"
+    },
+    {
+      "path": "health-final.json",
+      "sha256": "9632221b951e145d1e2f9af61fd6173608c3d067cae3447497c8d72b193ea697"
+    },
+    {
+      "path": "health-post-boundary.json",
+      "sha256": "bcd9bf8b3e8f7b2c93fa22a393a7a9dc8118f21f30a39132afa5b715ca04a18d"
+    },
+    {
+      "path": "health-pre-close.json",
+      "sha256": "367984c12c31543e1940629a9e1a1959eaa2b61d1868612e6472b7016d02c6b6"
+    },
+    {
+      "path": "health-resumed.json",
+      "sha256": "6c61f36bbaa45bd736dc219e14722cb4df1093ed98e50e249ace57bb31eb180c"
+    },
+    {
+      "path": "immutable-preservation.json",
+      "sha256": "effadfed3b049b48f21442fecb2be7ed696e303b821f372f6ea590be0a03c633"
+    },
+    {
+      "path": "late-session-wait.json",
+      "sha256": "d8429bbbb42fe5e1feab916f7722221973e1fff969f233a8417391d46043010f"
+    },
+    {
+      "path": "maintenance-fence.json",
+      "sha256": "c67cdca3a41cf2671dc07f3459bf0760a4af700e5e4c2ae1b37b9c7e2a362cbe"
+    },
+    {
+      "path": "market-probe.json",
+      "sha256": "57b67ac7fc6552471256f8f5eebe62bef943c2665fe9fc3b7c11045741fa3bc8"
+    },
+    {
+      "path": "market_probe.py",
+      "sha256": "63ef7ed23da65e3f2989c06ad37985117098c044c6e583dbae583627dc1ed32c"
+    },
+    {
+      "path": "native-clamped-check.txt",
+      "sha256": "a53cf3395addfc269c0e43bcf2a83e4db7a3ce83f79823deb41892b9c30697b7"
+    },
+    {
+      "path": "old-role-fence.json",
+      "sha256": "e3b678200bb73a965f2493f2376302b063d23cd1c782a0b754536fe017bb7f38"
+    },
+    {
+      "path": "patch-plan.json",
+      "sha256": "46672d214de9485d8f6ddcba5b98cf99a487ae96ae188d96e5071548fd8afb2f"
+    },
+    {
+      "path": "preservation-check.json",
+      "sha256": "e2718aa41a9ce74bca86b164784af0a1b14f5ad12e53dd6ec3f562c9d17052ed"
+    },
+    {
+      "path": "protection-check.json",
+      "sha256": "24ba7a86c18db76d0ff08f86054effe9d34dc4fdc24c3d8487e62e7ad54d51df"
+    },
+    {
+      "path": "protection-deployment.json",
+      "sha256": "e1bf878f1a897e214b1dba83827c45d4d56c07ed1276bab94b4289b04b766ee0"
+    },
+    {
+      "path": "README.md",
+      "sha256": "8241aec7f49d62c7e02b612c31db6dc573d50cd1dbf1e97f2120da744b31446e"
+    },
+    {
+      "path": "recover_inventory_waits.py",
+      "sha256": "131ca88d58e29cb77694b102bbc5f36ef6b4ddcb4529897b97cc9169045b3595"
+    },
+    {
+      "path": "scoped-recovery.json",
+      "sha256": "4fa79978dacd6859e98935c35886106b10568d4c7d416c7f82f08505680779b8"
+    },
+    {
+      "path": "source-byte-verification.json",
+      "sha256": "155a106395872c6e4ff4c7f44da02593a39940be5a4b6a7aadb32b07cfe52ec5"
+    },
+    {
+      "path": "verification.json",
+      "sha256": "7b18a3a9fc66dd613cccf0dd4b1ba54b5da60f0424e3918b01acad5afcfc089a"
+    }
+  ],
+  "sensitive_value_scan": "passed"
+}

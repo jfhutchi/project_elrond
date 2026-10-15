@@ -1,6 +1,6 @@
 # Project Elrond
 
-> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](docs/evidence/paper-core/submission-2026-10-15/README.md).
+> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](docs/evidence/paper-core/whole-share-2026-10-15/README.md).
 
 An autonomous quantitative research and PAPER trading platform that tries hard not to fool itself.
 
@@ -10,13 +10,7 @@ and automatic recovery when fresh evidence permits. Explicit manual entry stops 
 identity, ownership, or accounting failures retain their controls. Protection, exits, and
 trustworthy outcome processing remain independent of entry and learning failures.
 
-The local upgrade includes both schema-36 migrations, the obsolete-writer fence, the paper desk,
-and repaired retained services. The original IWM exit filled and was reconciled using actual
-broker evidence. The core commission is preserved and the submission readiness fixes are
-installed. Guardian and outcomes are healthy; the enabled trader currently waits for fresh
-IEX market data. New fills and daily fits are not yet verified. See the
-[submission repair](docs/evidence/paper-core/submission-2026-10-15/README.md) for measured
-state, verification, source pins and local evidence paths.
+The local Omen runs the commissioned hybrid core, compatible dashboard and retained protection. Its first AAPL entry and owned exit have filled and reconciled. The affordable-stock and whole-share amendment is active with the base commission, model and history preserved. The learner remains in its ten-completed-session warmup; no fit or improvement is claimed. See the [current handover](docs/evidence/paper-core/whole-share-2026-10-15/README.md) for exact pins and measured limitations.
 
 The [approved successor policy](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 uses qualifying model signals first and otherwise makes exploratory PAPER entries across stocks,
@@ -31,7 +25,7 @@ buying power and the existing loss budget cover it. Fresh eligibility is checked
 before submission. The amendment preserves trade history, model state and daily limits;
 it does not sell inherited holdings to raise cash.
 
-**The successor is implemented, reviewed and merged to main. Its installed trader is not yet commissioned.**
+**The hybrid successor is commissioned locally. The new entry amendment is deployed from the reviewed feature branch; integration into main remains a separate step.**
 The integrated witness collects ten sessions of wins and losses,
 fits and activates V3, then selects a qualifying signal and a negative-prediction exploratory
 trade. The earlier measured XLE package remains separate. An attempted trade cannot guarantee
@@ -108,8 +102,8 @@ The target evidence chain is observation -> decision -> intent -> owned fills ->
 protected exit -> flat reconciliation for that lot -> truthful gross/cost/net evidence -> learning receipt -> later
 decision acknowledging the exact active model. Unknown actual costs remain `COSTS_PENDING`;
 modeled costs never become verified broker net P&L. Synthetic tests, real-data simulation, and
-broker-PAPER observations stay separate. A broker-PAPER lifecycle under the replacement is still
-required; no deployed learning or profitability is claimed.
+broker-PAPER observations stay separate. The first broker-PAPER round trip is now recorded;
+actual daily fitting remains in warmup and no durable profitability is claimed.
 
 Elrond also retains the broader research discipline: pre-registration, statistical power gates,
 protected holdouts, adversarial testing, multiple-testing accounting, and permanent positive and

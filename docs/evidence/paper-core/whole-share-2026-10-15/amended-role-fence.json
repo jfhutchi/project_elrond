@@ -1,0 +1,33 @@
+﻿{
+    "at":  "2026-10-15T19:30:47.5741301Z",
+    "prior_roles":  [
+                        {
+                            "name":  "Elrond Paper Core Trader",
+                            "state":  "Disabled",
+                            "enabled":  false
+                        },
+                        {
+                            "name":  "Elrond Paper Core Outcomes",
+                            "state":  "Running",
+                            "enabled":  true
+                        },
+                        {
+                            "name":  "Elrond Paper Core Guardian",
+                            "state":  "Running",
+                            "enabled":  true
+                        }
+                    ],
+    "remaining_core_processes":  [
+
+                                 ],
+    "retained_support":  [
+                             {
+                                 "TaskName":  "Elrond Paper Deadline",
+                                 "State":  "Running"
+                             },
+                             {
+                                 "TaskName":  "Elrond Protection",
+                                 "State":  "Running"
+                             }
+                         ]
+}

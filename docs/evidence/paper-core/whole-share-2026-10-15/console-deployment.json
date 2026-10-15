@@ -1,0 +1,10 @@
+﻿{
+    "at":  "2026-10-15T19:07:34.2194800Z",
+    "old_repository":  "D:\\Elrond\\releases\\dashboard-bfe6e47-20261015",
+    "new_repository":  "D:\\Elrond\\releases\\dashboard-whole-share-381787e-20261015",
+    "source_commit":  "381787e28a7f02843c6f1df233934e9b58e065ee",
+    "clean_source":  true,
+    "environment_unchanged":  true,
+    "database_unchanged":  true,
+    "old_processes_remaining":  0
+}

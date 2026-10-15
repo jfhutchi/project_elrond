@@ -1,13 +1,14 @@
 # Outcome-first PAPER exploration
 
-> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](../evidence/paper-core/submission-2026-10-15/README.md).
+> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](../evidence/paper-core/whole-share-2026-10-15/README.md).
 
 ## Approved hybrid successor
 
 The [daily PAPER specification](../superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-extends the merged [PAPER core](../paper-core.md). It is merged to main in PR #290 and commissioned locally with the submission readiness repair:
-The successor is implemented and locally tested, including the combined trading-to-learning witness. [Handover](../evidence/paper-core/handover.md) records integration/preparation
-status; the measured staged package remains the older XLE release.
+extends the merged [PAPER core](../paper-core.md). The hybrid successor is commissioned locally;
+the affordable-stock/whole-share amendment is active from its reviewed feature branch. The
+[current handover](../evidence/paper-core/whole-share-2026-10-15/README.md) records exact pins,
+the first actual AAPL round trip and the remaining whole-share/learning acceptance limits.
 
 `SIGNAL_OR_EXPLORE_V1` evaluates AAPL, MSFT, AMZN, GOOGL, META, NVDA, JPM, JNJ, XOM and PG,
 with SPY as benchmark only. Any valid activated prediction strictly above 10 bps takes

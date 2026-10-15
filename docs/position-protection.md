@@ -1,6 +1,6 @@
 # Position protection
 
-> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
+> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](evidence/paper-core/whole-share-2026-10-15/README.md).
 
 ## PAPER core guardian and inherited positions
 
@@ -31,12 +31,13 @@ reservations, a failed fit or unavailable entry-funds permission cannot disable 
 or outcomes. The successor is merged in PR #290 and commissioned locally with the submission readiness repair; this is its protection contract,
 not evidence that the staged tasks have run it.
 
-The [current rollout](evidence/paper-core/omen-deployment/README.md) has not started the
-new guardian. Existing Protection and Paper Deadline services remain unchanged, and nine
-inherited positions retain `adaptive-momentum-v1-309894d8d8a5296e` ownership. Do not adopt
+The [current handover](evidence/paper-core/whole-share-2026-10-15/README.md) records the
+running independent guardian and compatible retained Protection/Deadline services. Eight
+inherited positions retain `adaptive-momentum-v1-309894d8d8a5296e` ownership; the original
+IWM exit is complete and the first core AAPL round trip is recorded. Do not adopt
 or liquidate unexplained inventory or retire a protection owner before its replacement
-has acknowledged every transferred lot. An existing pending exit must reconcile through
-its original IDs before the no-open-order commission can succeed.
+has acknowledged every transferred lot. Any later pending exit must reconcile through its
+original IDs before a flat policy amendment can succeed.
 
 Schema-36 migration also requires a compatible protection/exit transition: legacy binaries
 expect schema 29 at startup. A running old process is not proof it can safely restart

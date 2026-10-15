@@ -1,0 +1,12 @@
+﻿{
+    "at":  "2026-10-15T19:19:24.9493559Z",
+    "old_repository":  "D:\\Elrond\\releases\\support-readiness-20261015",
+    "new_repository":  "D:\\Elrond\\releases\\support-whole-share-20261015",
+    "source_commit":  "383c54867d1643e3d591762f14db266054c54cad",
+    "clean_source":  true,
+    "environment_unchanged":  true,
+    "database_unchanged":  true,
+    "old_processes_remaining":  0,
+    "core_guardian_retained":  true,
+    "retained_deadline_running":  true
+}

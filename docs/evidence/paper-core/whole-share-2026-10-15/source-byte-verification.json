@@ -1,0 +1,124 @@
+{
+  "source_commit": "59c5ca5ae919e9e2f87f1718d72f6c8286928776",
+  "files": [
+    {
+      "path": "src/quantbot/execution/coordinator.py",
+      "git_blob_sha256": "96533522db48b1825607494e79ba49ced369ee1a3a29e2cbb954f8f56b3278e8",
+      "native_sha256": "c19feb6110b2b826750dc61932014387d5980501eb2f564ca76a28b1bf5e53c0",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/operations/protection.py",
+      "git_blob_sha256": "5f80496907a53fc4f4254e8213d9832687f5b35a745392f826d2de6c95aab690",
+      "native_sha256": "ae275579fa1f80b756d679da6d7e0ca9b5f99c9b0f0e16281fab84a0cb06de93",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/storage/repositories.py",
+      "git_blob_sha256": "c3042f556c6f096f1e3e4026c0f181ccd674d2d070a0a564912d36b571c899db",
+      "native_sha256": "73603aded9786baaaa1bd32315d016502a97747674f548f8ccd5dba4c659856e",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/__main__.py",
+      "git_blob_sha256": "cc619858d9f88f6dfece534e72d1fd72799e4530dc709393e9cb41cbd0b09a85",
+      "native_sha256": "e4b843b154deba4a4659f15803d1e09408081971adbaf933dc7726810af31c9c",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/alpaca_adapter.py",
+      "git_blob_sha256": "c5c76ac874673af88ebc3cc019121bc0abf0bb97e8e08c1d9f53dcbabfd82c19",
+      "native_sha256": "02461e699acdb3b98141511d71bd8fb95fd83a729e56c0e6416e27b9b9e5fe09",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/authority.py",
+      "git_blob_sha256": "e917cd442167ad71af16243779b3247a2c58e0add6678ee88db08845d8ebb05c",
+      "native_sha256": "29438bbcb422b93da81c8bf87094e5e14977b2a0c9d0018c221ea7369779c9b9",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/contracts.py",
+      "git_blob_sha256": "995be3e3cea3ea5b6857f83697efc7e8fe94cc98b05b20c4d46c7ae4690c1e8e",
+      "native_sha256": "d2d1c37dac24bbb109ad4173c1c5b59b0e6e03f2874edb0da246b0a52f5ad4ba",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/entry_policy.py",
+      "git_blob_sha256": "11ea7a0756d4259dc104b5f6db3a5411e2589c676c382b0b162c3e45dd1556f3",
+      "native_sha256": "11ea7a0756d4259dc104b5f6db3a5411e2589c676c382b0b162c3e45dd1556f3",
+      "exact_bytes_equal": true,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/health.py",
+      "git_blob_sha256": "914ed19ee27604bb629624764d5875a8d9724b58c98390baa4d2b726d4d06b33",
+      "native_sha256": "bb3c440dae0903c9388665a27ffe031a5e5be0afb8941787f74fa44083a1f96c",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/outcomes.py",
+      "git_blob_sha256": "1e78f5f6ef52390e6dfee0e3fc08c7c4118b5d74468b0eb44712dd705d373b5a",
+      "native_sha256": "81fbd4b74be234947846fa95f246fca658fe8f995cab8951b554844026ec0d97",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/release.py",
+      "git_blob_sha256": "f81d17cd752cc0c6d4cd75118f18db7ad6adf9f675675e703b40bcfb5578403c",
+      "native_sha256": "e6775ab0f73e96eadcd69a211db0aaba2eaca149443b581f182490788f587c99",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/runtime.py",
+      "git_blob_sha256": "2a6e84fc4eaafe9f518acc51cb9787ad468972401cdf05441a119c8e4773b9e7",
+      "native_sha256": "b237de87b6b3f0747e85a829798cf3c6232a05a311bd45704d90721e633bf3ca",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/selection.py",
+      "git_blob_sha256": "b56f127e70978dad00ba736980fd8ed2ae510a983809e1fcf6caba1c30610243",
+      "native_sha256": "b56f127e70978dad00ba736980fd8ed2ae510a983809e1fcf6caba1c30610243",
+      "exact_bytes_equal": true,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/send_guard.py",
+      "git_blob_sha256": "aa121758fbf1f44c780ac80377451e148693b1046b5c561cd6592e0f2d066411",
+      "native_sha256": "09290914aab48b97d1585a0216353361df9766908157b2411dfa7d3c49136ea9",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/store.py",
+      "git_blob_sha256": "4e7baded8801318c2fef7511b49b2ba5d9a28887cfbfcbfcdb46f88e8a7dbaa7",
+      "native_sha256": "ada3906f1f106cf5fdc94f1040fa5dcaec0a78bfcc3744bea7016bc7ba78ad79",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/trader.py",
+      "git_blob_sha256": "37d887ab1f5ad138717cc1f88c09c6efc4a9446777b921c1a86f59bd508a9c9a",
+      "native_sha256": "9920bd8d0a79d0278b77cac5b62c2e875be5f19d3499a875737c62bbf3a55d4e",
+      "exact_bytes_equal": false,
+      "newline_normalized_equal": true
+    },
+    {
+      "path": "src/quantbot/paper_core/protection_bridge.py",
+      "git_blob_sha256": "5f62078144b9c53384d63fd0533c7422ea6863506b21607ba067201dfaf1fe8b",
+      "native_sha256": "5f62078144b9c53384d63fd0533c7422ea6863506b21607ba067201dfaf1fe8b",
+      "exact_bytes_equal": true,
+      "newline_normalized_equal": true
+    }
+  ]
+}

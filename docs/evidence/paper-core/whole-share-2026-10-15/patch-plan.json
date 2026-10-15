@@ -1,0 +1,122 @@
+{
+  "old_release_id": "aaa40bdbc8f49b8f63ad736740cbffb0fc00f9d14f96e344e0aba4d68c6d78d0",
+  "bridge_release_id": "d3d0701ee0f4409de8ee47a9b54984e73cbe80bd90356f737af385918122f351",
+  "amended_release_id": "172810ad8e4170e19e66235be3980b78cf9d56956d5ec4677127b5d2586256de",
+  "entry_policy_id": "ded04e1a1559a55731c452e283f2a29420ddafd1be083b9f6d2a3a8d14b645a4",
+  "entry_policy": {
+    "contract": "WHOLE_SHARE_FALLBACK_V1",
+    "symbols": [
+      "AAPL",
+      "MSFT",
+      "AMZN",
+      "GOOGL",
+      "META",
+      "NVDA",
+      "JPM",
+      "JNJ",
+      "XOM",
+      "PG",
+      "F",
+      "T",
+      "PFE",
+      "VZ",
+      "HPQ",
+      "SOFI",
+      "UBER"
+    ],
+    "minimum_whole_shares": 1,
+    "sizing_headroom_bps": 100
+  },
+  "base_config_unchanged": true,
+  "dependencies_unchanged": true,
+  "changes": [
+    {
+      "path": "src/quantbot/execution/coordinator.py",
+      "old_sha256": "1d21826b0e42a290700f200c920128a413e969a96fb49b3dda0d0977389e9135",
+      "new_sha256": "c19feb6110b2b826750dc61932014387d5980501eb2f564ca76a28b1bf5e53c0"
+    },
+    {
+      "path": "src/quantbot/operations/protection.py",
+      "old_sha256": "a72337349d95a1b57f2faede95fb02a8f674884ed724429deb1ae4455ca7f1f1",
+      "new_sha256": "ae275579fa1f80b756d679da6d7e0ca9b5f99c9b0f0e16281fab84a0cb06de93"
+    },
+    {
+      "path": "src/quantbot/storage/repositories.py",
+      "old_sha256": "3fd3f521019e17deef949a60965b5e048669e8d95f9db5a3d1df08ba5f15b2a1",
+      "new_sha256": "73603aded9786baaaa1bd32315d016502a97747674f548f8ccd5dba4c659856e"
+    },
+    {
+      "path": "src/quantbot/paper_core/__main__.py",
+      "old_sha256": "3080c289e7f88319bab433aebf941c791735213e3d8b8db74d0bde5ebefb8cea",
+      "new_sha256": "e4b843b154deba4a4659f15803d1e09408081971adbaf933dc7726810af31c9c"
+    },
+    {
+      "path": "src/quantbot/paper_core/alpaca_adapter.py",
+      "old_sha256": "ab8e45a98ac9a67b9981d2faa21451806893c555ddbac00034dc872cbb2f8099",
+      "new_sha256": "02461e699acdb3b98141511d71bd8fb95fd83a729e56c0e6416e27b9b9e5fe09"
+    },
+    {
+      "path": "src/quantbot/paper_core/authority.py",
+      "old_sha256": "8bbc158f02729efa1feaa83d4fd76c291424e35e1a76f8f2ea7b905f98b03246",
+      "new_sha256": "29438bbcb422b93da81c8bf87094e5e14977b2a0c9d0018c221ea7369779c9b9"
+    },
+    {
+      "path": "src/quantbot/paper_core/contracts.py",
+      "old_sha256": "7caddc1f9d6a8e19e4616bc3a2a2b33d66df6a9770d3c77dd3b8a4c2abf6ee2f",
+      "new_sha256": "d2d1c37dac24bbb109ad4173c1c5b59b0e6e03f2874edb0da246b0a52f5ad4ba"
+    },
+    {
+      "path": "src/quantbot/paper_core/entry_policy.py",
+      "old_sha256": null,
+      "new_sha256": "11ea7a0756d4259dc104b5f6db3a5411e2589c676c382b0b162c3e45dd1556f3"
+    },
+    {
+      "path": "src/quantbot/paper_core/health.py",
+      "old_sha256": "79f990558401562abace80e1de5ae3485d5901f8f843037a5a7b3fe0f9f60e13",
+      "new_sha256": "bb3c440dae0903c9388665a27ffe031a5e5be0afb8941787f74fa44083a1f96c"
+    },
+    {
+      "path": "src/quantbot/paper_core/outcomes.py",
+      "old_sha256": "4a45f46fffa1b435aed7622aec9d81b3080560abc748e26a5a23b5263d2f3201",
+      "new_sha256": "81fbd4b74be234947846fa95f246fca658fe8f995cab8951b554844026ec0d97"
+    },
+    {
+      "path": "src/quantbot/paper_core/release.py",
+      "old_sha256": "276f95a6a5bfe1a9f079586190d55c5e8faceaeb7ade7acb0cb64c432832bc7b",
+      "new_sha256": "e6775ab0f73e96eadcd69a211db0aaba2eaca149443b581f182490788f587c99"
+    },
+    {
+      "path": "src/quantbot/paper_core/runtime.py",
+      "old_sha256": "b42629b28812cf87f723c92b47c9b40c4d2f45c0de41dfca7f1644da56195b48",
+      "new_sha256": "b237de87b6b3f0747e85a829798cf3c6232a05a311bd45704d90721e633bf3ca"
+    },
+    {
+      "path": "src/quantbot/paper_core/selection.py",
+      "old_sha256": "7edf388c756da055176c9ff9d72412062abedf7b26be3ddc34c5ad20c7a5d2ca",
+      "new_sha256": "b56f127e70978dad00ba736980fd8ed2ae510a983809e1fcf6caba1c30610243"
+    },
+    {
+      "path": "src/quantbot/paper_core/send_guard.py",
+      "old_sha256": "e724bcd8ce7cb46a1fa7053c5162c0206d6e2f3696efb8626717e7eeecdf18f0",
+      "new_sha256": "09290914aab48b97d1585a0216353361df9766908157b2411dfa7d3c49136ea9"
+    },
+    {
+      "path": "src/quantbot/paper_core/store.py",
+      "old_sha256": "54c1d7bcd11b2ce1da119060dcdd1ba74ac474fd12a4adeccf736aa1e208adb1",
+      "new_sha256": "ada3906f1f106cf5fdc94f1040fa5dcaec0a78bfcc3744bea7016bc7ba78ad79"
+    },
+    {
+      "path": "src/quantbot/paper_core/trader.py",
+      "old_sha256": "51b8db2308ea734b2e9c6b616214cb50f75692aff143b98ef578cb2aa605bfe6",
+      "new_sha256": "fedb22a66a23a6f2eb9e5c69ab135186c7a1ababbb5c8660fefb4da17bc4a466"
+    },
+    {
+      "path": "src/quantbot/paper_core/protection_bridge.py",
+      "old_sha256": null,
+      "new_sha256": "5f62078144b9c53384d63fd0533c7422ea6863506b21607ba067201dfaf1fe8b"
+    }
+  ],
+  "retained_separate_support_files": [
+    "src/quantbot/console/state.py"
+  ]
+}

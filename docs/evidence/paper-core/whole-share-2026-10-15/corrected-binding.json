@@ -1,0 +1,16 @@
+{
+  "at": "2026-10-15T19:36:08.121542+00:00",
+  "old_release_id": "172810ad8e4170e19e66235be3980b78cf9d56956d5ec4677127b5d2586256de",
+  "new_release_id": "a93b508b76f318a030fb1813f8f0a06eae98cd919fadddcefa65df574bfce61e",
+  "binding_id": "56bd5b9849affa5fed51d95b974b6732bee490fcdbdc7d323ed9bc7364f7c009",
+  "config_unchanged": true,
+  "backup_integrity": "ok",
+  "verification": {
+    "release_id": "a93b508b76f318a030fb1813f8f0a06eae98cd919fadddcefa65df574bfce61e",
+    "verified_at": "2026-10-15T19:36:09.197592+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  }
+}
