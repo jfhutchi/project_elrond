@@ -1,0 +1,71 @@
+$ErrorActionPreference='Stop'
+$stage=$PSScriptRoot
+$plan=Get-Content (Join-Path $stage 'deployment-plan.json') -Raw|ConvertFrom-Json
+$review='D:\Elrond\review\dashboard-20261015'
+$backup=Join-Path $review 'before-retry'
+$deployment='D:\Elrond\deploy\paper-core-activation-20261015'
+$activation='D:\Elrond\review\paper-core-activation-20261015T1155Z'
+$utf8=[Text.UTF8Encoding]::new($false)
+$manifest='D:\Elrond\config\paper-core-14352cc-20261015\runtime-manifest.json'
+$manifestHash=(Get-FileHash $manifest).Hash
+$candidate=Join-Path $stage 'continue-deployment-candidate.ps1'
+$errors=$null; $tokens=$null
+[void][Management.Automation.Language.Parser]::ParseFile($candidate,[ref]$tokens,[ref]$errors)
+if($errors.Count) { throw 'CANDIDATE_PARSE_FAILED' }
+if([DateTime]::UtcNow -ge [DateTime]::Parse('2026-10-15T13:25:00Z').ToUniversalTime()) { throw 'PENDING_ONLY_ROLLOUT_WINDOW_CLOSED' }
+$state=Get-Content (Join-Path $activation 'activation-state.json') -Raw|ConvertFrom-Json
+if($state.state -ne 'WAITING' -or $state.reason -ne 'ORIGINAL_IWM_EXIT_PENDING' -or (Test-Path (Join-Path $activation 'activation-complete.json')) -or (Test-Path (Join-Path $activation 'continuation-failure.json'))) { throw 'PENDING_HANDOVER_REQUIRED' }
+if((git -C $plan.repository rev-parse HEAD) -cne $plan.commit -or (git -C $plan.repository status --porcelain)) { throw 'CONSOLE_SOURCE_NOT_PINNED' }
+if(Test-Path $backup) { throw 'BACKUP_ALREADY_EXISTS' }
+New-Item -ItemType Directory -Path $backup|Out-Null
+foreach($name in @('Elrond Console','Elrond Paper Core Deploy')) {
+    [IO.File]::WriteAllText((Join-Path $backup ($name+'.xml')),(Export-ScheduledTask -TaskName $name),$utf8)
+}
+foreach($name in @('continue-deployment.ps1','helper-pins.json','activation_attempt.py','activation_health.py')) { Copy-Item -LiteralPath (Join-Path $deployment $name) -Destination $backup }
+$paused=$false
+try {
+    Disable-ScheduledTask -TaskName 'Elrond Paper Core Deploy'|Out-Null
+    Stop-ScheduledTask -TaskName 'Elrond Paper Core Deploy'
+    $paused=$true
+    Start-Sleep -Seconds 2
+    if(@(Get-CimInstance Win32_Process|Where-Object {$_.CommandLine -match 'activation_attempt\.py|continue-deployment\.ps1' -and $_.ProcessId -ne $PID}).Count) { throw 'DEPLOYMENT_PROCESS_REMAINS' }
+    Disable-ScheduledTask -TaskName 'Elrond Console'|Out-Null
+    Stop-ScheduledTask -TaskName 'Elrond Console'
+    Start-Sleep -Seconds 2
+    if(@(Get-CimInstance Win32_Process|Where-Object {$_.Name -eq 'python.exe' -and $_.CommandLine -match '\-m quantbot\.operations\.service .*\-\-component console( |$)'}).Count) { throw 'OLD_CONSOLE_REMAINS' }
+    [xml]$xml=Get-Content (Join-Path $backup 'Elrond Console.xml') -Raw
+    $exec=$xml.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']")
+    $exec.SelectSingleNode("*[local-name()='Arguments']").InnerText=$plan.console_arguments
+    $exec.SelectSingleNode("*[local-name()='WorkingDirectory']").InnerText=$plan.repository
+    Register-ScheduledTask -TaskName 'Elrond Console' -Xml $xml.OuterXml -Force|Out-Null
+    Enable-ScheduledTask -TaskName 'Elrond Console'|Out-Null
+    Start-ScheduledTask -TaskName 'Elrond Console'
+    $ready=$false
+    for($i=0;$i -lt 10;$i++) {
+        try { $page=Invoke-WebRequest 'http://127.0.0.1:8787/' -TimeoutSec 15; if($page.StatusCode -eq 200 -and $page.Content.Contains('_desk_styles') -eq $false -and $page.Content.Contains('<h1>Paper desk</h1>') -and $page.Content.Contains('class="nav-menu"')) { $ready=$true;break } } catch {}
+        Start-Sleep -Seconds 1
+    }
+    if(-not $ready -or [string](Get-ScheduledTask -TaskName 'Elrond Console').State -ne 'Running') { throw 'NEW_CONSOLE_NOT_READY' }
+    Copy-Item -LiteralPath $candidate -Destination (Join-Path $deployment 'continue-deployment.ps1')
+    $pins=@('activation_attempt.py','activation_health.py','continue-deployment.ps1')|ForEach-Object { [ordered]@{name=$_;sha256=(Get-FileHash (Join-Path $deployment $_) -Algorithm SHA256).Hash.ToLowerInvariant()} }
+    [IO.File]::WriteAllText((Join-Path $deployment 'helper-pins.json'),($pins|ConvertTo-Json),$utf8)
+    & (Join-Path $stage '..\2026-10-15-runtime-activation\register-continuation.ps1') -Check
+    if((Get-FileHash $manifest).Hash -cne $manifestHash) { throw 'CORE_MANIFEST_CHANGED' }
+    & (Join-Path $stage '..\2026-10-15-runtime-activation\register-continuation.ps1')
+    $paused=$false
+    $record=[ordered]@{at=[DateTime]::UtcNow.ToString('o');console_commit=$plan.commit;console_repository=$plan.repository;http_status=200;deployment_check='EXPECTED_PENDING_ORDER_REFUSAL';core_manifest_sha256=$manifestHash.ToLowerInvariant();core_source_unchanged=$plan.core_source_unchanged;core_release_unchanged=$plan.core_release_unchanged;result='CONSOLE_UPDATED_HANDOVER_RESUMED'}
+    [IO.File]::WriteAllText((Join-Path $review 'rollout.json'),($record|ConvertTo-Json),$utf8)
+    $record|ConvertTo-Json
+} catch {
+    $reason=$_.Exception.Message
+    if($paused) {
+        Stop-ScheduledTask -TaskName 'Elrond Console' -ErrorAction SilentlyContinue
+        foreach($name in @('continue-deployment.ps1','helper-pins.json')) { Copy-Item -LiteralPath (Join-Path $backup $name) -Destination (Join-Path $deployment $name) }
+        foreach($name in @('Elrond Console','Elrond Paper Core Deploy')) {
+            Register-ScheduledTask -TaskName $name -Xml (Get-Content (Join-Path $backup ($name+'.xml')) -Raw) -Force|Out-Null
+            Enable-ScheduledTask -TaskName $name|Out-Null
+            Start-ScheduledTask -TaskName $name
+        }
+    }
+    throw ('DASHBOARD_ROLLOUT_ROLLED_BACK: '+$reason)
+}

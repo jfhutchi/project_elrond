@@ -1,0 +1,39 @@
+{
+  "captured_at": "2026-10-15T13:17:11.8751696Z",
+  "tasks": [
+    {
+      "TaskName": "Elrond Console",
+      "State": "Running"
+    },
+    {
+      "TaskName": "Elrond Paper Core Deploy",
+      "State": "Running"
+    },
+    {
+      "TaskName": "Elrond Paper Deadline",
+      "State": "Running"
+    },
+    {
+      "TaskName": "Elrond Protection",
+      "State": "Running"
+    }
+  ],
+  "listener": [
+    {
+      "LocalAddress": "127.0.0.1",
+      "LocalPort": 8787
+    }
+  ],
+  "handover": {
+    "at": "2026-10-15T09:16:58.900072-04:00",
+    "state": "WAITING",
+    "reason": "ORIGINAL_IWM_EXIT_PENDING",
+    "market_open": false,
+    "open_orders": 1,
+    "next_open": "2026-10-15T09:30:00-04:00"
+  },
+  "core_manifest_sha256": "270eb286e49fd228e9584c2683d2f5101170f148fb21a2a0e4b3c112b7ed744c",
+  "console_source": "53866617274a205c164325eb3578f8d830b4d719",
+  "console_checkout_clean": true,
+  "failure_record_exists": false
+}

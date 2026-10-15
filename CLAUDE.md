@@ -6,6 +6,12 @@ Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` 
 
 **The objective is not to finish issues. The objective is to build a system capable of making money without fooling itself.**
 
+The October 15 paper desk refresh adds an account-scoped read model. Keep displayed
+heartbeats bound to the current release, configuration, store, owner and generation.
+Missing or incompatible evidence remains unknown or unverified. Console availability is
+not a trading health dependency. See [dashboard access](docs/dashboard-access.md) and
+[UI handover evidence](docs/evidence/paper-core/dashboard-2026-10-15/README.md).
+
 ## Primary Mission
 
 **Current delivery priority (October 15, 2026 EDT):** finish the operational handover of the

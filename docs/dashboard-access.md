@@ -1,5 +1,21 @@
 # Dashboard access and exposure
 
+The October 15 paper desk refresh is running at [the local Omen console](http://127.0.0.1:8787/).
+It uses horizontal navigation, a compact account line and a positions ledger. Research and
+system routes remain available through their menus. Operational warnings are visible by
+default; the manual stop remains prominent. Calendar and learner charts share the light palette.
+
+The overview reads only the configured account without exposing its identifier. It distinguishes
+missing inventory from a known flat account. Heartbeats must match the current executable
+binding before appearing as reporting. Existing same-origin controls and gates are unchanged.
+
+The console runs from its own pinned native checkout. Its availability is not a dependency
+for the pending core handover; task and process provenance remain checked. The trading
+release, configuration and original pending exit are unchanged. See the [UI handover
+evidence](evidence/paper-core/dashboard-2026-10-15/README.md).
+
+The dated access observations below remain historical.
+
 > **Current core boundary — October 14, 2026.** The [PAPER core](paper-core.md) dashboard/exporter is optional and read-only; entry, guardian and outcome progress must continue independently. The existing local console is a legacy deployed view, not proof that the new roles have started. Their [current deployment package](evidence/paper-core/omen-deployment/README.md) records disabled tasks and pending commissioning. A page view cannot migrate, commission or activate the replacement. The access observations below retain their original dates.
 
 The Omen dashboard is available **on the Omen** at
