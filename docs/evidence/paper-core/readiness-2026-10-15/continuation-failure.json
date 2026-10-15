@@ -1,0 +1,7 @@
+{
+    "at":  "2026-10-15T15:11:08.2685008Z",
+    "state":  "REFUSED",
+    "error_type":  "RuntimeException",
+    "code":  "PROTECTION_READINESS_REQUIRED_TRADER_REMAINS_DISABLED",
+    "trader_disabled":  true
+}

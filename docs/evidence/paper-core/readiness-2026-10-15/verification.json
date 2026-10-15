@@ -1,0 +1,12 @@
+{
+  "python_tests": {
+    "command": "python -m pytest tests/unit/operations/test_position_protection_supervisor.py tests/unit/operations/test_protection_runtime_wiring.py tests/unit/risk/test_protection.py -q",
+    "passed": 79,
+    "seconds": 14.08
+  },
+  "retained_service_gate_cases_passed": 4,
+  "activation_window_boundary_cases_passed": 4,
+  "cli_zero_argument_signature_and_argv_restoration_verified": true,
+  "independent_review": "SOURCE_AND_HELPER_FINDINGS_RESOLVED; LIVE_CLOCK_BLOCKER_REMAINS",
+  "paid_ci_triggered": false
+}

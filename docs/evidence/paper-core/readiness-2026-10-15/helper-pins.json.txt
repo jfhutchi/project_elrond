@@ -1,0 +1,14 @@
+[
+  {
+    "name": "activation_attempt.py",
+    "sha256": "fa1bf0a1c3dfedb3eae6b809ee0a24ac97688ed7bcbd6183c33e860caac331eb"
+  },
+  {
+    "name": "activation_health.py",
+    "sha256": "c955f24505459b48be90bf89f6e80569d57269f9121403ddd827e8a381f37b9a"
+  },
+  {
+    "name": "continue-deployment.ps1",
+    "sha256": "fc7a0f2b36467072c086ed4b40075078d913ef93bfd1ec2ce7327599f545d106"
+  }
+]

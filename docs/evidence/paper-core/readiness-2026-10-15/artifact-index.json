@@ -1,0 +1,66 @@
+[
+  {
+    "file": ".gitattributes",
+    "sha256": "308a40fa1d89ae5ea4390b4c9b46a0108b09f171f07898f25d451fa0c69c4e9f"
+  },
+  {
+    "file": "activation-state.json",
+    "sha256": "318e9c25cc20d6683560d7514cb3a4428dfcc48832ae3267c01f831407ca3e52"
+  },
+  {
+    "file": "activation_attempt.py.txt",
+    "sha256": "fa1bf0a1c3dfedb3eae6b809ee0a24ac97688ed7bcbd6183c33e860caac331eb"
+  },
+  {
+    "file": "activation_health.py.txt",
+    "sha256": "c955f24505459b48be90bf89f6e80569d57269f9121403ddd827e8a381f37b9a"
+  },
+  {
+    "file": "clock-blocker.json",
+    "sha256": "19273248b963f9f657bd4f370bf05edc3fab393a907895c41caf766dd04274e8"
+  },
+  {
+    "file": "continuation-failure.json",
+    "sha256": "b799c51364fa757f7cf125a3e988f3520c5fb9c48e19f67635510f77f3a6004b"
+  },
+  {
+    "file": "continue-deployment.ps1.txt",
+    "sha256": "fc7a0f2b36467072c086ed4b40075078d913ef93bfd1ec2ce7327599f545d106"
+  },
+  {
+    "file": "helper-pins.json.txt",
+    "sha256": "8375b9693a5c73c6f351b20c5626845ba16448edb985750a8c196356ab999100"
+  },
+  {
+    "file": "measured-status.json",
+    "sha256": "09a6745c220e0982f9ec7c724704c9a470ac6d77bde5b5a11cbcc12de32a25ce"
+  },
+  {
+    "file": "original-reconciliation.json",
+    "sha256": "64af7128b8460836951bebd33650ff629adcdf7bbe4719e6ef49e91f2dff890b"
+  },
+  {
+    "file": "README.md",
+    "sha256": "0fed12435ddbee6f4b25f4c5ddbd7dda0ddc108620caa7508d8d9ca43cacfc57"
+  },
+  {
+    "file": "reconcile_original.py.txt",
+    "sha256": "921dac2413f1018cb88a319d1a35d817f9722d9e14cad74d642f5308a003cbc4"
+  },
+  {
+    "file": "register.ps1.txt",
+    "sha256": "be03d5d1636179df86cc1215c7575537fccee4a486a23b4e5f06dd61fb9f9737"
+  },
+  {
+    "file": "selected-token-check.json",
+    "sha256": "2147fedd31dabb694a944698e525c77fda23bfb4c7e6e991b6d4aa3789f77ba5"
+  },
+  {
+    "file": "update-support.ps1.txt",
+    "sha256": "2bf4c553b94d63aa45f47f4fcc5ccb4ee5996601bd52a194fa6f6c2f39260884"
+  },
+  {
+    "file": "verification.json",
+    "sha256": "b0ebf46e25426f787436cd456c91476f3f081f5fb7df3f927b07c85efca08d85"
+  }
+]

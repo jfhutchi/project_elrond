@@ -1,0 +1,37 @@
+{
+  "at": "2026-10-15T15:12:05.761884+00:00",
+  "activation_complete": false,
+  "support_source": "ab6f6109b7a0c133571025a0d532568de133ee76",
+  "core_source": "14352cc428dcd999750138d52fbd5f30347991a1",
+  "core_manifest_sha256": "270eb286e49fd228e9584c2683d2f5101170f148fb21a2a0e4b3c112b7ed744c",
+  "commissions": 1,
+  "manual_stop": {
+    "engaged": 0,
+    "updated_at": "2026-10-14T01:17:42.473747Z"
+  },
+  "protection": {
+    "observed_at": "2026-10-15T15:10:57.217544Z",
+    "outcome": "HEALTHY",
+    "reason": "",
+    "position_count": 8,
+    "unprotected_count": 0
+  },
+  "roles": [
+    {
+      "role": "outcomes",
+      "pid": 8420,
+      "recorded_at": "2026-10-15T15:11:54.470477+00:00",
+      "valid_until": "2026-10-15T15:12:24.470477+00:00",
+      "last_useful_progress": "2026-10-15T15:11:54.470477+00:00",
+      "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c"
+    },
+    {
+      "role": "guardian",
+      "pid": 5976,
+      "recorded_at": "2026-10-15T15:11:54.672243+00:00",
+      "valid_until": "2026-10-15T15:12:24.672243+00:00",
+      "last_useful_progress": "2026-10-15T15:11:54.672243+00:00",
+      "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c"
+    }
+  ]
+}

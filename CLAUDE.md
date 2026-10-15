@@ -1,6 +1,6 @@
 # Project Elrond — Persistent Development Goal
 
-> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](docs/evidence/paper-core/runtime-handover-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. See the [measured readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md).
 
 Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` paper-trading system into an autonomous quantitative research and trading platform whose ultimate purpose is to discover, validate, and eventually exploit durable market edges that can compound real capital.
 
@@ -14,25 +14,13 @@ not a trading health dependency. See [dashboard access](docs/dashboard-access.md
 
 ## Primary Mission
 
-**Current delivery priority (October 15, 2026 EDT):** finish the operational handover of the
-merged and locally installed [daily hybrid PAPER core](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md).
-The core has independent trader, guardian, and outcomes roles; the outcomes role also performs
-bounded daily learning. The baseline implementation merged in
-[PR #289](https://github.com/jfhutchi/project_elrond/pull/289) on October 15 at 01:50 UTC, but the
-prepared runtime has not been commissioned or activated. That older configuration selects XLE.
-The hybrid/V3/current-funds successor is implemented, reviewed and merged to main,
-including the ten-session collection/fit/activation witness and later signal/exploration.
-[PR #290](https://github.com/jfhutchi/project_elrond/pull/290) merged at 06:12 Eastern. Its separate
-Omen release passed direct and actual task-identity verification; the core remains uncommissioned.
-Read the [current installation record](docs/evidence/paper-core/local-deployment-2026-10-15/README.md)
-for installed pins and the earlier installation snapshot, and the
-[sealed source evidence](docs/evidence/paper-core/daily-exploration/README.md) for reviews/tests.
-Both operating and learner stores are now schema 36. The upgraded retained services and bounded
-deployment continuation are running; read the latest runtime handover above before acting.
-Do not rerun installation/migration or enable old entry tasks. The original IWM exit remains
-the external commissioning gate; fresh guardian certification and inherited protection must
-pass before trader starts. Do not rebuild completed implementation or mistake an older snapshot
-for current status.
+**Current delivery priority (October 15, 2026 EDT):** operate the merged daily hybrid PAPER
+core and preserve its measured handover. PRs #289, #290 and #291 are merged. Both operating
+and learner stores are schema 36. The original IWM exit filled and is reconciled. Unchanged
+core release0734974b was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending.
+Read the [readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md) before
+acting. Do not rerun migrations, enable old entry tasks, clear explicit stops, or rebuild
+completed implementation. Older staging records remain dated evidence rather than current state.
 
 The operator now wants daily PAPER attempts even when model confidence or an ordinary no-signal
 decision would otherwise prevent a trade, and learning from eligible wins and losses. Preserve
