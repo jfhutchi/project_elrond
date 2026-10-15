@@ -6,18 +6,20 @@ Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` 
 
 ## Primary Mission
 
-**Current delivery priority (October 14, 2026 EDT):** finish the operational handover of the
-[PAPER core](docs/paper-core.md) and finish the
-[approved daily hybrid successor](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md).
+**Current delivery priority (October 15, 2026 EDT):** finish the operational handover of the
+merged and locally installed [daily hybrid PAPER core](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md).
 The core has independent trader, guardian, and outcomes roles; the outcomes role also performs
 bounded daily learning. The baseline implementation merged in
 [PR #289](https://github.com/jfhutchi/project_elrond/pull/289) on October 15 at 01:50 UTC, but the
 prepared runtime has not been commissioned or activated. That older configuration selects XLE.
-The hybrid/V3/current-funds successor is implemented and locally tested on its feature branch,
+The hybrid/V3/current-funds successor is implemented, reviewed and merged to main,
 including the ten-session collection/fit/activation witness and later signal/exploration.
-It is published in [PR #290](https://github.com/jfhutchi/project_elrond/pull/290), not merged to main or commissioned. Read the
-[successor evidence](docs/evidence/paper-core/daily-exploration/README.md) for exact source-review
-and candidate-preparation status; do not rebuild completed implementation after a context reset.
+[PR #290](https://github.com/jfhutchi/project_elrond/pull/290) merged at 06:12 Eastern. Its separate
+Omen release passed direct and actual task-identity verification; the core remains uncommissioned.
+Read the [current installation record](docs/evidence/paper-core/local-deployment-2026-10-15/README.md)
+for installed pins and the fresh inherited-order/schema handover blocker, and the
+[sealed source evidence](docs/evidence/paper-core/daily-exploration/README.md) for reviews/tests.
+Do not rebuild completed implementation or mistake the old pre-merge snapshot for current status.
 
 The operator now wants daily PAPER attempts even when model confidence or an ordinary no-signal
 decision would otherwise prevent a trade, and learning from eligible wins and losses. Preserve

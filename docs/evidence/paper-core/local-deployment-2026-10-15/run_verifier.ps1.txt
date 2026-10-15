@@ -1,0 +1,34 @@
+$ErrorActionPreference = 'Stop'
+$recordRoot = [IO.File]::ReadAllText((Join-Path $PSScriptRoot 'deployment-root.txt')).Trim()
+$preparation = Get-Content -LiteralPath (Join-Path $recordRoot 'installed-preparation.json') -Raw | ConvertFrom-Json
+$name = 'Elrond Paper Core Verify'
+$logPath = 'D:\Elrond\logs\paper-core-verify-launcher.log'
+$priorLog = if (Test-Path -LiteralPath $logPath) { [IO.File]::ReadAllText($logPath) } else { '' }
+$requested = [DateTime]::UtcNow
+$clock = [Diagnostics.Stopwatch]::StartNew()
+try {
+    Enable-ScheduledTask -TaskName $name | Out-Null
+    Start-ScheduledTask -TaskName $name
+    do {
+        Start-Sleep -Milliseconds 500
+        $task = Get-ScheduledTask -TaskName $name
+        $info = Get-ScheduledTaskInfo -TaskName $name
+        $fresh = $info.LastRunTime.ToUniversalTime() -ge $requested.AddSeconds(-1)
+        $finished = $fresh -and [string]$task.State -notin @('Running','Queued')
+        if ($finished) { break }
+    } while ($clock.Elapsed.TotalSeconds -lt 90)
+    if (-not $finished) { throw 'SELECTED_TOKEN_VERIFY_TIMEOUT' }
+    $currentLog = [IO.File]::ReadAllText($logPath)
+    if (-not $currentLog.StartsWith($priorLog)) { throw 'VERIFIER_LOG_PREFIX_CHANGED' }
+    $newLog = $currentLog.Substring($priorLog.Length)
+    [IO.File]::WriteAllText((Join-Path $recordRoot 'selected-token-verifier.log'), $newLog, [Text.UTF8Encoding]::new($false))
+    if ($info.LastTaskResult -ne 0 -or -not $newLog.Contains($preparation.release_id) -or -not $newLog.Contains('PREPARED')) { throw ('SELECTED_TOKEN_VERIFY_FAILED: ' + $info.LastTaskResult) }
+    $record = [ordered]@{ requested_at_utc = $requested.ToString('o'); completed_at_utc = [DateTime]::UtcNow.ToString('o'); task = $name; last_run_at_utc = $info.LastRunTime.ToUniversalTime().ToString('o'); exit_code = $info.LastTaskResult; release_id = $preparation.release_id; config_id = $preparation.config_id; principal = $task.Principal.UserId; logon_type = [string]$task.Principal.LogonType; run_level = [string]$task.Principal.RunLevel; broker = 'NOT_PROBED'; operating_database_opened = $false; commissioned = $false; functional_role_started = $false }
+    [IO.File]::WriteAllText((Join-Path $recordRoot 'selected-token-verification.json'), (ConvertTo-Json -InputObject $record -Depth 8), [Text.UTF8Encoding]::new($false))
+    $record | ConvertTo-Json -Depth 8
+} finally {
+    Disable-ScheduledTask -TaskName $name | Out-Null
+}
+foreach ($role in @('Guardian','Outcomes','Trader','Verify')) {
+    if ([string](Get-ScheduledTask -TaskName ('Elrond Paper Core ' + $role)).State -ne 'Disabled') { throw ('TASK_NOT_DISABLED: ' + $role) }
+}

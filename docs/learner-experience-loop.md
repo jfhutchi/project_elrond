@@ -1,5 +1,7 @@
 # What experience changes, and what still needs evidence
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## Current PAPER core learning contract
 
 The [PAPER core](paper-core.md) baseline is merged in PR289. The

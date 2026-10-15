@@ -1,0 +1,16 @@
+{
+  "requested_at_utc": "2026-10-15T10:23:23.7537276Z",
+  "completed_at_utc": "2026-10-15T10:23:28.2783932Z",
+  "task": "Elrond Paper Core Verify",
+  "last_run_at_utc": "2026-10-15T10:23:24.0000000Z",
+  "exit_code": 0,
+  "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+  "config_id": "620d31ec42915eee76779a972521428adaeb9c0a5536694422d8c27e2b6acebd",
+  "principal": "leepa",
+  "logon_type": "Interactive",
+  "run_level": "Limited",
+  "broker": "NOT_PROBED",
+  "operating_database_opened": false,
+  "commissioned": false,
+  "functional_role_started": false
+}

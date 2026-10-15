@@ -1,0 +1,39 @@
+{
+  "captured_at_utc": "2026-10-15T10:31:45.6891110Z",
+  "tasks": [
+    {
+      "name": "Elrond Paper Core Guardian",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "command": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-guardian-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role guardian -SubmissionDisabled -EntryDisabled"
+    },
+    {
+      "name": "Elrond Paper Core Outcomes",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "command": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-outcomes-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role outcomes -SubmissionDisabled -EntryDisabled"
+    },
+    {
+      "name": "Elrond Paper Core Trader",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "command": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-trader-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role trader -SubmissionDisabled -EntryDisabled"
+    },
+    {
+      "name": "Elrond Paper Core Verify",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "command": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-verify-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Verify"
+    }
+  ],
+  "functional_core_process_count": 0,
+  "operational_activation": "NOT_PERFORMED"
+}

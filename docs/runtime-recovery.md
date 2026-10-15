@@ -1,5 +1,7 @@
 # Recover runtime truth before deployment (#190)
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## PAPER core transition
 
 Use [PAPER core](paper-core.md), [handover](evidence/paper-core/handover.md) and the
@@ -10,7 +12,7 @@ rehearsal and successful exact-release verifier do not establish trading readine
 
 That evidence belongs to the older XLE package. The
 [approved hybrid/V3/current-funds successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-is not merged or commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. Use its own prepared manifest/configuration and retained integrated
+is merged in PR #290 and locally installed, but not commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. Use its own prepared manifest/configuration and retained integrated
 verification. It is an economic change, not an executable-only compatibility transition:
 do not reopen a commissioned store with a new config identity or reinterpret its net model
 as gross. Initial successor commission starts with target-neutral COLLECT and explicit

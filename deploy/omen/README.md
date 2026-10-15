@@ -1,58 +1,28 @@
 # Native Windows PAPER runtime on the HP Omen
 
-## Current PAPER core staging — October 14, 2026
+## Merged successor installed — October 15, 2026
 
-Use the [PAPER core overview](../../docs/paper-core.md),
-[implementation handover](../../docs/evidence/paper-core/handover.md) and
-[exact Omen deployment package](../../docs/evidence/paper-core/omen-deployment/README.md)
-for the replacement path. Its three independent roles are trader, guardian and outcomes;
-the dashboard is optional. Functional rollout has not completed.
+[PR 290](https://github.com/jfhutchi/project_elrond/pull/290) merged as `14352cc428dcd999750138d52fbd5f30347991a1` at 06:12 Eastern. The code is installed in `D:\Elrond\releases\paper-core-14352cc-20261015`, with a separate locked native Python environment and configuration under `D:\Elrond\config\paper-core-14352cc-20261015`.
 
-The [approved daily successor](../../docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-adds signal-first/exploratory stock selection, six durable daily reservations, V3 gross learning
-and `BROKER_PAPER_BALANCE_V1` current-funds authority. It is not merged to main or commissioned:
-The successor is implemented and locally tested, including the combined trading-to-learning witness. Use
-the [handover](../../docs/evidence/paper-core/handover.md) for actual integration/preparation
-status. This guide does not claim completed successor verification or provide new release pins.
+Installed release: `0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c`.
+Installed config: `620d31ec42915eee76779a972521428adaeb9c0a5536694422d8c27e2b6acebd`.
+The 366 executable pins and 46 dependency distributions passed direct prepare/verify, then verification under the actual `leepa / Interactive / Limited` task identity at 06:23 Eastern. The verifier-only task was disabled afterward. No Bypass argument was added.
 
-Measured baseline prepared release: `ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645`.
-Baseline XLE configuration: `aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2`.
-Supported schema: **36**; patched Mako: **1.4.3**. Restored operational and learner copies
-passed the 29-to-36 rehearsal with original data preserved. The operating stores have
-not been migrated and the runtime has not been commissioned.
+The four core task definitions point to the installed successor. Guardian, outcomes and trader remain disabled, trigger-free and clamped, with no operating commission. All 19 legacy task definitions and existing protection/deadline services remain unchanged. Their scheduler state does not prove fresh protection health.
 
-The three functional tasks are registered **disabled**, with no triggers and both
-submission and entry clamps. The exact verifier passed under `leepa / Interactive / Limited`
-with Windows PowerShell `CurrentUser RemoteSigned`. No Bypass argument was added.
-Existing Protection and Paper Deadline services and their task definitions are unchanged.
-Nine inherited positions retain owner `adaptive-momentum-v1-309894d8d8a5296e`.
+The [measured installation record](../../docs/evidence/paper-core/local-deployment-2026-10-15/README.md) contains exact source/export provenance, config/manifest, direct and task-identity verification, new task definitions and fresh GET-only broker/store evidence. The [source review/test package](../../docs/evidence/paper-core/daily-exploration/README.md) and older [XLE baseline package](../../docs/evidence/paper-core/omen-deployment/README.md) remain sealed historical snapshots.
 
-At October 15, 01:44 UTC (October 14 Eastern), an existing broker-accepted IWM sell of
-0.169669 shares remained unfilled during the closed market. This blocks the no-open-order
-commissioning requirement. Do not cancel, replace, resubmit or rewrite that intent to
-make commissioning pass. Its terminal state must first reconcile through the original IDs.
+### Why the trader is not active yet
 
-The successor is an economic selection/learning/funds change, not a code-only compatible
-transition. Prepare and verify a distinct manifest/configuration and exact target/funds
-authority; the baseline hashes and verifier do not cover it. Initial successor commissioning
-starts from target-neutral COLLECT and uses `DAILY_BOUNDED_V3` for gross learning. Existing
-net predictive models/commissions cannot be silently reinterpreted, and a commissioned
-store cannot simply reopen under a new economic config identity. Current balance authority
-must preserve incomplete historical cash, unknown fees and null net; it is not a cash repair.
+The 06:15 Eastern broker capture confirms the original IWM SELL of 0.169669 shares remains accepted with zero filled. Its original client/broker IDs are preserved. The broker reports the next opening at 09:30 Eastern. Initial commissioning requires no open orders; installation does not cancel or replace this exit.
 
-For a later handover, refresh writer/task/ownership evidence and WAL-aware backups, fence
-old entries while preserving exits, and verify schema-compatible protection before the
-reviewed additive migration. **Existing legacy executables expect schema 29 on startup;
-do not restart them against schema 36.** Then use fresh bounded acquisition/commission
-evidence from the exact verified successor package once available. Start independent guardian/outcomes before trader
-enablement. Clamps, scheduling and model authority must match the reviewed commission;
-neither a verifier run nor this document grants entry authority. Never restore an older
-trading database over newer broker activity.
+The operating database is still schema 29; the new core requires 36. Nine inherited positions retain their original owner. Existing legacy executables expect schema 29 on startup, so establish a compatible protection/deadline transition before migrating the shared operating store. New-core startup never silently migrates or commissions it.
 
-Routine provider/clock faults use scoped waits and fresh-evidence recovery. Manual stops
-and integrity faults retain explicit controls; guardian and trustworthy outcomes continue.
-Keep deployment secrets in the existing protected environment reference, and prepare frozen
-dependencies in an isolated release directory. Do not sync a running environment.
+After the original exit becomes terminal, reconcile it through its original IDs, refresh ownership/open-order/writer evidence, establish compatible protection, fence old entry writers and take fresh WAL-aware backups. Then perform the reviewed migration and fresh bounded acquisition/commission. Reverify the provisional learning origin and exact installed pins. Establish independent guardian/outcomes readiness before enabling the trader. No old database may be restored over later broker activity.
+
+The installed policy uses qualifying signals first, exploratory fallback, six durable daily reservations, V3 gross learning from all eligible history after ten completed sessions, and separate current-funds authority. It preserves unknown fees/net values and does not reinterpret older net model authority. Routine provider/clock faults remain scoped retries; manual stops and genuine integrity incidents retain their controls. The installation did not start a new trading role or establish natural PAPER acceptance.
+
+Keep secrets in the existing protected environment reference. Do not sync dependencies into a running environment, contact the retired Pi, or restart a legacy schema-29 service against schema 36. Use the [handover](../../docs/evidence/paper-core/handover.md) for the exact remaining sequence.
 
 ## Legacy native installer and historical measurements
 

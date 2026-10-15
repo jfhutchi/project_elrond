@@ -1,0 +1,81 @@
+{
+  "installed_at": "2026-10-15T10:18:40.333333+00:00",
+  "source_commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+  "source_archive_sha256": "970f5b7e9d65546f808f8751ea9134fbab00e7131fec86b17f234211edb8a58e",
+  "release_directory": "D:\\Elrond\\releases\\paper-core-14352cc-20261015",
+  "config_directory": "D:\\Elrond\\config\\paper-core-14352cc-20261015",
+  "reviewed_source_files_verified": 366,
+  "exact_reviewed_byte_matches": 353,
+  "native_export_newline_only_differences": [
+    {
+      "path": "src/quantbot/paper_core/__init__.py",
+      "reviewed_sha256": "8a4a4d20f8ba513c45d817cb3321a25458f143a97edd2bda88228232f89839a9",
+      "installed_sha256": "148a7cca8135aba3e25eac633ade656e1ab4cc097b961063986652220819760c"
+    },
+    {
+      "path": "src/quantbot/paper_core/features.py",
+      "reviewed_sha256": "f3a9e02d07025594ee73b762d41fa36dfc1770dc06d8749cfabc5ba29f7a42e4",
+      "installed_sha256": "2f4cacac6ad2d5f76e5c0c58af530daf6a69044f8fad521a6728d946da9aa15c"
+    },
+    {
+      "path": "src/quantbot/paper_core/funds.py",
+      "reviewed_sha256": "0f94d60349e05c213ad6fd44ae74b193d0e816e0efff197afc2e103fe35e6f1a",
+      "installed_sha256": "3350d9b71ba8b6e1c971eac8e666df2ac91da43c59e857ebbce475cb6e287340"
+    },
+    {
+      "path": "src/quantbot/paper_core/operational_costs.py",
+      "reviewed_sha256": "6255c83e551b84755225135f0c81ade2d39b5602b26e5a35e80a1aec138627ac",
+      "installed_sha256": "fc07e93d75289d18eeef326ae50e9814b899eada64e526aa98d5e73e44a35ed3"
+    },
+    {
+      "path": "src/quantbot/paper_core/selection.py",
+      "reviewed_sha256": "1faf7ebbe0e598c476bc6bff9cd3546283764c28a86590f046c03fb9cdb475ba",
+      "installed_sha256": "7edf388c756da055176c9ff9d72412062abedf7b26be3ddc34c5ad20c7a5d2ca"
+    },
+    {
+      "path": "src/quantbot/storage/core_activation_schema.py",
+      "reviewed_sha256": "4ec505f50d9180c14d238d8719ab3b06510f17fd8679c4db228e62158ed89358",
+      "installed_sha256": "c9118199e9baff78330488d537e28f82338860bbb6bfa227992737d84f0a638f"
+    },
+    {
+      "path": "src/quantbot/storage/core_cost_schema.py",
+      "reviewed_sha256": "f5314cd2ae7e2c972ee35710456577b7bfad8492581f98f2774df012a3c02d9f",
+      "installed_sha256": "02d41be2296d17fe010ce1fe7f4ff8bab851b5a2d6ba826b02a6d313e6d20cab"
+    },
+    {
+      "path": "src/quantbot/storage/core_health_schema.py",
+      "reviewed_sha256": "a46a5709c9b7ca83ec41c41f18383ec9add844d4725d0527ac5935c632a814e5",
+      "installed_sha256": "42347f9741bfaf19c4e1eefc8d9cc509ded29e058688e7e4e99ed7af46525d80"
+    },
+    {
+      "path": "src/quantbot/storage/core_learning_schema.py",
+      "reviewed_sha256": "f2ebf8b86d7f2cde069ed093dff5ff8a6dc85094ebca3c229f64db18a49f71e4",
+      "installed_sha256": "6c98f893f7bbaa779618c67408310cd6a9bd3f43dbfc96e0a476db4fcd2457e8"
+    },
+    {
+      "path": "src/quantbot/storage/migrations/versions/0032_paper_core_health.py",
+      "reviewed_sha256": "ee4b96ddfd59fcd03ab8956d3ec0b201dbe7d947d262194a65ac0a037527d74f",
+      "installed_sha256": "b68097cf648c0610f73eb6bb958a4ab7742154e11dc2491b937f5465e3e06d32"
+    },
+    {
+      "path": "src/quantbot/storage/migrations/versions/0033_paper_core_learning.py",
+      "reviewed_sha256": "f122a737ee44a0e64d1c4dc49839caef59260fd0ce873292cf9a7e0fb7e022b5",
+      "installed_sha256": "bb5cfd2e4009d155aa70bc6dc0beceeb7fc256e6271d9c0ca76e813af576b4c6"
+    },
+    {
+      "path": "src/quantbot/storage/migrations/versions/0034_paper_core_activation.py",
+      "reviewed_sha256": "0817d5bf29aeffc09cd303fb9ed413736d218a3e5eef4bd24c9269278832ff11",
+      "installed_sha256": "dd959b87ccf53663ae8b48617674297d833374852d804fc688facedea4077011"
+    },
+    {
+      "path": "src/quantbot/storage/migrations/versions/0035_core_runtime.py",
+      "reviewed_sha256": "4abcf10fa3ecdca01f6f71712b7ebfa477012aa083c2ffc69709eb8b76a4fd3d",
+      "installed_sha256": "aa86ebe868c23bb267efb246da94de01d69b183feb181a497509380d72b65e9a"
+    }
+  ],
+  "first_attempt": "Strict original-worktree byte comparison refused native Git export newline differences; original manifests were preserved, all files then compared with exact CRLF/LF-only allowance. A distinct installed-byte manifest must be prepared.",
+  "repository_is_only_config_change": true,
+  "runtime_started": false,
+  "operating_database_migrated": false,
+  "existing_release_or_config_overwritten": false
+}

@@ -1,0 +1,32 @@
+{
+  "captured_at": "2026-10-15T10:30:29.983841+00:00",
+  "query_only": true,
+  "identity": {
+    "id": 1,
+    "version": 29,
+    "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+  },
+  "manual_stop": {
+    "id": 1,
+    "engaged": 0,
+    "reason": "stop",
+    "updated_at": "2026-10-14T01:17:42.473747Z"
+  },
+  "core_commission_count": 0,
+  "intent_states": [
+    [
+      "BROKER_ACCEPTED",
+      1
+    ],
+    [
+      "FILLED",
+      17
+    ],
+    [
+      "REJECTED",
+      1
+    ]
+  ],
+  "schema_identity_manual_stop_unchanged": true,
+  "core_functional_startup_performed": false
+}

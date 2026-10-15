@@ -1,5 +1,7 @@
 # QuantBot status: current pointers and historical snapshot
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](docs/evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## Current orientation — October 14, 2026 EDT
 
 The three-role [PAPER core](docs/paper-core.md) implementation merged in
@@ -25,9 +27,9 @@ after ten completed exchange sessions, retaining all compatible history with nor
 and net null without blocking V3 gross labels. The versioned current-funds policy separately
 authorizes bounded sizing from fresh broker balances without inventing historical cash.
 
-The successor is implemented and locally tested on its feature branch, with an actual
+The successor is implemented, reviewed and merged to main, with an actual
 ten-session collection/fit/activation witness followed by signal and exploratory entries.
-It is not merged to main or commissioned. The earlier measured package remains the older
+It is merged to main in PR #290 and locally installed, but not commissioned. The earlier measured package remains the older
 XLE configuration; current test/review and candidate-preparation evidence is kept separately.
 No deployed daily fit or profit improvement is claimed.
 

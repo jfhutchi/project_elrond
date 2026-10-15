@@ -1,9 +1,11 @@
 # Outcome-first PAPER exploration
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](../evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## Approved hybrid successor
 
 The [daily PAPER specification](../superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-extends the merged [PAPER core](../paper-core.md). It is not merged to main or commissioned:
+extends the merged [PAPER core](../paper-core.md). It is merged to main in PR #290 and locally installed, but not commissioned:
 The successor is implemented and locally tested, including the combined trading-to-learning witness. [Handover](../evidence/paper-core/handover.md) records integration/preparation
 status; the measured staged package remains the older XLE release.
 

@@ -1,0 +1,44 @@
+{
+  "captured_at": "2026-10-15T10:15:09.375237+00:00",
+  "mode": "QUERY_ONLY",
+  "database": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+  "identity": {
+    "id": 1,
+    "version": 29,
+    "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+  },
+  "manual_stop": {
+    "id": 1,
+    "engaged": 0,
+    "reason": "stop",
+    "updated_at": "2026-10-14T01:17:42.473747Z"
+  },
+  "intent_states": [
+    [
+      "BROKER_ACCEPTED",
+      1
+    ],
+    [
+      "FILLED",
+      17
+    ],
+    [
+      "REJECTED",
+      1
+    ]
+  ],
+  "latest_protection": {
+    "cycle_id": "protection-d1363e63d19d4ebc4086ca28578d820a",
+    "observed_at": "2026-10-14T19:47:15.142996Z",
+    "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+    "policy_version": "position-protection-v2",
+    "outcome": "HEALTHY",
+    "position_count": 9,
+    "unprotected_count": 0,
+    "exit_required_count": 0
+  },
+  "core_commission_count": 0,
+  "core_tables_present": [],
+  "original_probe_sha256": "bdafe901520457c1eaec03ca4ce3b313bce9f353af7931e72996aa10703608e9",
+  "executed_probe_sha256": "1f46b1699114dbd143f6cc3dc27ba4855ac7eb5d201ded1189049ff82967a413"
+}

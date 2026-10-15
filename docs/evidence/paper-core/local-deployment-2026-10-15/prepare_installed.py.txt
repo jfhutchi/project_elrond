@@ -1,0 +1,48 @@
+"""Prepare and verify exact installed source/environment; no runtime startup."""
+from pathlib import Path
+from datetime import UTC, datetime
+import json
+import os
+import subprocess
+import sys
+
+scratch = Path(__file__).resolve().parent
+host = Path((scratch / "deployment-root.txt").read_text(encoding="utf-8"))
+release = Path((scratch / "local-release.txt").read_text(encoding="utf-8"))
+config_dir = Path((scratch / "local-config.txt").read_text(encoding="utf-8"))
+assert Path(sys.executable).resolve() == (release / ".venv/Scripts/python.exe").resolve()
+env = {key: os.environ[key] for key in ("SystemRoot", "WINDIR", "COMSPEC", "TEMP", "TMP", "PROCESSOR_ARCHITECTURE", "NUMBER_OF_PROCESSORS") if key in os.environ}
+env.update(PYTHONPATH=str(release / "src"), PYTHONNOUSERSITE="1", PYTHONDONTWRITEBYTECODE="1", PATH=str(Path(sys.executable).parent) + ";C:\\Windows\\System32")
+commands = []
+for command, name in (("prepare", "runtime-manifest.json"), ("verify", "installed-verification.json")):
+    argv = [sys.executable, "-B", "-m", "quantbot.paper_core", "--config", str(config_dir / "runtime-config.json")]
+    if command == "verify":
+        argv += ["--manifest", str(config_dir / "runtime-manifest.json")]
+    argv += ["--command", command]
+    result = subprocess.run(argv, cwd=release, env=env, capture_output=True, text=True)
+    (host / (command + "-stderr.txt")).write_text(result.stderr, encoding="utf-8")
+    commands.append({"argv": argv, "exit_code": result.returncode})
+    if result.returncode:
+        (host / (command + "-failure.txt")).write_text(result.stdout + result.stderr, encoding="utf-8")
+        raise RuntimeError(command + " failed; retained diagnostic, no operating command attempted")
+    parsed = json.loads(result.stdout)
+    (config_dir / name).write_text(json.dumps(parsed, indent=2) + "\n", encoding="utf-8")
+    if command == "verify":
+        assert parsed["state"] == "PREPARED" and parsed["objections"] == []
+        assert parsed["broker_state"] == "NOT_PROBED" and parsed["operational_commission"] == "NOT_PERFORMED"
+sys.path.insert(0, str(release / "src"))
+from quantbot.paper_core.release import PreparedRelease, RuntimeConfig
+config = RuntimeConfig.model_validate_json((config_dir / "runtime-config.json").read_text(encoding="utf-8"))
+manifest = PreparedRelease.model_validate_json((config_dir / "runtime-manifest.json").read_text(encoding="utf-8"))
+assert manifest.config == config and len(manifest.executable_pins) == 366
+result = {"prepared_at": datetime.now(UTC).isoformat(), "source_commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+    "config_id": config.id, "release_id": manifest.id, "repository": str(release),
+    "interpreter": manifest.interpreter, "executable_pins": len(manifest.executable_pins),
+    "distributions": len(manifest.distributions), "commands": commands,
+    "uv_sync": {"exit_code": 0, "locked": True, "new_isolated_environment": True,
+                "copy_fallback_warning": "Cross-volume cache hardlinks unavailable; uv installed full copies successfully."},
+    "operating_database_opened_by_prepare_verify": False, "environment_file_read_by_prepare_verify": False,
+    "broker_probed_by_prepare_verify": False, "migrated": False, "commissioned": False,
+    "runtime_roles_started": False, "learning_origin_status": "PROVISIONAL_UNTIL_ACTUAL_COMMISSION_SESSION"}
+(host / "installed-preparation.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+print(json.dumps(result, indent=2))

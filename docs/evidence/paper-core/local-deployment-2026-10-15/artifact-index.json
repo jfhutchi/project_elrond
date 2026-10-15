@@ -1,0 +1,104 @@
+{
+  "files": {
+    ".gitattributes": {
+      "bytes": 9,
+      "sha256": "8b9c3028d6467ff3be7c793141927841d70f47f52d0590677438f488ca154992"
+    },
+    "documentation-validation.json": {
+      "bytes": 602,
+      "sha256": "b31daed1b9bc294ffb884ad3a1bb343feb64a30871144db41f2a3c8d8b8e6d07"
+    },
+    "elrond-paper-core-guardian.xml": {
+      "bytes": 1725,
+      "sha256": "f63b8f7507a3cb584e203dff8d0036a697c413293effd7bc00e854a3c9636589"
+    },
+    "elrond-paper-core-outcomes.xml": {
+      "bytes": 1725,
+      "sha256": "ab06dc6a1bd50f57af5889949b5aa2972dfde2c662d6129eea128d889e13a9cd"
+    },
+    "elrond-paper-core-trader.xml": {
+      "bytes": 1719,
+      "sha256": "6b872d8223ed3d0143ac1f7a445377cfdd70a80c0c912794b396ded11434d18d"
+    },
+    "elrond-paper-core-verify.xml": {
+      "bytes": 1679,
+      "sha256": "1e5586a4ea405285f40ead9e117845e6957c417a71f9dd9085ac9b6daac04d2d"
+    },
+    "install-provenance.json": {
+      "bytes": 4434,
+      "sha256": "7108b3287a85f627b39b4dbba86602dbd34c9c73e20fa4bb49c2b58708edc30b"
+    },
+    "install_release.py.txt": {
+      "bytes": 3677,
+      "sha256": "628433395cce42f03bf57b5c2d33b26fdff9f3e0dcd3f05f376caa556435ed6a"
+    },
+    "installed-preparation.json": {
+      "bytes": 1887,
+      "sha256": "c1b1efa63aac768793abf77b3b54a9ce1694821f1be13b3946733a17081f3589"
+    },
+    "installed-tasks.json": {
+      "bytes": 5487,
+      "sha256": "81c162898579a57c3501ded96244abe9f6fe9d47e3777850e5671351d5386197"
+    },
+    "installed-verification.json": {
+      "bytes": 268,
+      "sha256": "cb456a514c857596dd0d6f5d1ee02e35b348bc479b3d40c054dce068a979ac51"
+    },
+    "post-install-store.json": {
+      "bytes": 622,
+      "sha256": "935ef65a533a256d1382c1cb7f918d2a4ef53d5e1c23fe6bc08e83af8030cb67"
+    },
+    "post-install-tasks.json": {
+      "bytes": 3089,
+      "sha256": "5e04c366d6b2b28301e12cd4000dfc4014c187e3f46bd8f55cded410c74aa856"
+    },
+    "preflight.py.txt": {
+      "bytes": 2917,
+      "sha256": "c52767c99e9c21560648139387fc5e8bf16ded02052a9bc6320b997f361c099b"
+    },
+    "prepare_installed.py.txt": {
+      "bytes": 3487,
+      "sha256": "00d02400ab679ae93433fae421ae037f48b24560f84cc78b64195f7b1e338d8f"
+    },
+    "README.md": {
+      "bytes": 5239,
+      "sha256": "d4c7138f718da3e089f8250970de3c4fc1d01f172dfbe397411cc42279869784"
+    },
+    "readonly-broker-preflight.json": {
+      "bytes": 1931,
+      "sha256": "c092faff15e160a9f9a2849ff40bd23ed1142cbb9686d654118259071c8232b9"
+    },
+    "readonly-store-preflight.json": {
+      "bytes": 1188,
+      "sha256": "d9d315691a9f2a392d822d1064a9de7791358647250bc926128aec3fa86d9e52"
+    },
+    "readonly_broker_probe.py.txt": {
+      "bytes": 3834,
+      "sha256": "1f46b1699114dbd143f6cc3dc27ba4855ac7eb5d201ded1189049ff82967a413"
+    },
+    "run_verifier.ps1.txt": {
+      "bytes": 2628,
+      "sha256": "2d22e5733a219a654234dc8f78b6684b52ab5d8d293c4a29cbc787411a7fc5bb"
+    },
+    "runtime-config.json": {
+      "bytes": 1848,
+      "sha256": "c21f3d816a27af2fcbe8f99e556a7f093c64e0d99021e9ecf8de0646c56312ee"
+    },
+    "runtime-manifest.json": {
+      "bytes": 59136,
+      "sha256": "270eb286e49fd228e9584c2683d2f5101170f148fb21a2a0e4b3c112b7ed744c"
+    },
+    "selected-token-verification.json": {
+      "bytes": 607,
+      "sha256": "46e08428c3e61ac0c46ca68e6fe511dc56625d919ff1f63d7605fe0ebcb94c2d"
+    },
+    "selected-token-verifier.log": {
+      "bytes": 276,
+      "sha256": "4fa212b309c1195a2b9b00b47e48ab401295e4cb85a61680053c7531eec3379f"
+    },
+    "stage_tasks.ps1.txt": {
+      "bytes": 5104,
+      "sha256": "5c47715f96b5e1576168dd05c52df62eb8e7d589771cd6ee28d1828ad81183f3"
+    }
+  }
+}

@@ -1,5 +1,7 @@
 # Deployed state: what is actually running
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## Current deployment boundary — October 14, 2026
 
 The accepted [PAPER core](paper-core.md) baseline is prepared, not functionally deployed. Read the
@@ -26,7 +28,7 @@ audited binding. Routine scoped waits do not clear manual stops or integrity qua
 The [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 is distinct from that staged XLE package. It adds hybrid stock selection with six durable
 daily reservations, V3 executed-gross learning and `BROKER_PAPER_BALANCE_V1` current-funds
-authority. It is not merged to main or commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. These are contract/development
+authority. It is merged to main in PR #290 and locally installed, but not commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. These are contract/development
 states supported by the combined offline witness; operating deployment still awaits handover.
 
 This economic change requires a successor manifest/configuration and target/funds-specific

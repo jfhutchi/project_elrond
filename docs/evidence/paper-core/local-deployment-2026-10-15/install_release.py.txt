@@ -1,0 +1,61 @@
+"""Install merged tracked source into a new isolated local release directory."""
+from pathlib import Path
+from datetime import UTC, datetime
+import hashlib
+import json
+import subprocess
+import zipfile
+
+scratch = Path(__file__).resolve().parent
+root = scratch.parents[2]
+host = Path((scratch / "deployment-root.txt").read_text(encoding="utf-8"))
+commit = "14352cc428dcd999750138d52fbd5f30347991a1"
+release = Path("D:/Elrond/releases/paper-core-14352cc-20261015")
+config_dir = Path("D:/Elrond/config/paper-core-14352cc-20261015")
+assert release.parent.resolve() == Path("D:/Elrond/releases").resolve()
+assert config_dir.parent.resolve() == Path("D:/Elrond/config").resolve()
+assert not config_dir.exists(), "New isolated configuration required"
+archive = host / "merged-source.zip"
+resuming_export = release.exists()
+if resuming_export:
+    assert archive.is_file() and not (release / ".venv").exists(), "Only the unactivated export from this attempt may resume"
+else:
+    subprocess.run(["C:/Program Files/Git/cmd/git.exe", "archive", "--format=zip", "--output", str(archive), commit], cwd=root, check=True)
+    release.mkdir(parents=True, exist_ok=False)
+with zipfile.ZipFile(archive) as source:
+    for name in source.namelist():
+        assert not Path(name).is_absolute() and ".." not in Path(name).parts
+        assert not name.startswith(".superpowers/")
+    if resuming_export:
+        for member in source.infolist():
+            if not member.is_dir():
+                assert (release / member.filename).read_bytes() == source.read(member), member.filename
+    else:
+        source.extractall(release)
+accepted = json.loads((root / "docs/evidence/paper-core/daily-exploration/prepared-release.json").read_text(encoding="utf-8"))
+newline_differences = []
+for name, expected in accepted["executable_pins"]:
+    reviewed = (root / name).read_bytes()
+    installed = (release / name).read_bytes()
+    assert hashlib.sha256(reviewed).hexdigest() == expected, name
+    installed_hash = hashlib.sha256(installed).hexdigest()
+    if installed_hash != expected:
+        assert reviewed.replace(b"\r\n", b"\n") == installed.replace(b"\r\n", b"\n"), name
+        newline_differences.append({"path": name, "reviewed_sha256": expected, "installed_sha256": installed_hash})
+config = accepted["config"]
+config["repository"] = str(release)
+config_dir.mkdir(parents=True, exist_ok=False)
+(config_dir / "runtime-config.json").write_text(json.dumps(config, indent=2) + "\n", encoding="utf-8")
+provenance = {"installed_at": datetime.now(UTC).isoformat(), "source_commit": commit,
+    "source_archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
+    "release_directory": str(release), "config_directory": str(config_dir),
+    "reviewed_source_files_verified": len(accepted["executable_pins"]),
+    "exact_reviewed_byte_matches": len(accepted["executable_pins"]) - len(newline_differences),
+    "native_export_newline_only_differences": newline_differences,
+    "first_attempt": "Strict original-worktree byte comparison refused native Git export newline differences; original manifests were preserved, all files then compared with exact CRLF/LF-only allowance. A distinct installed-byte manifest must be prepared.",
+    "repository_is_only_config_change": True, "runtime_started": False,
+    "operating_database_migrated": False, "existing_release_or_config_overwritten": False}
+(host / "install-provenance.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8")
+(scratch / "local-release.txt").write_text(str(release), encoding="utf-8")
+(scratch / "local-config.txt").write_text(str(config_dir), encoding="utf-8")
+print(json.dumps(provenance, indent=2))

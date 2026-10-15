@@ -8,14 +8,15 @@ and automatic recovery when fresh evidence permits. Explicit manual entry stops 
 identity, ownership, or accounting failures retain their controls. Protection, exits, and
 trustworthy outcome processing remain independent of entry and learning failures.
 
-**Baseline implementation merged; operational acceptance is still waiting.**
-[PR #289](https://github.com/jfhutchi/project_elrond/pull/289) merged on October 15, 2026 at
-01:50 UTC (October 14 EDT). The replacement is staged on the HP Omen but has not been functionally
-deployed or commissioned. The October 15, 02:00 UTC task capture shows its three functional
-tasks disabled, clamped, and trigger-free; the operating database was unmigrated. The broker check
-at 01:44 UTC found an existing unfilled IWM exit blocking the no-open-order commissioning condition. Existing protection
-and deadline services remained responsible for inherited positions. These are dated observations,
-not a current broker query.
+**Daily PAPER successor merged and installed locally; trading activation is still waiting.**
+[PR #290](https://github.com/jfhutchi/project_elrond/pull/290) merged on October 15, 2026 at
+06:12 Eastern. Its isolated Omen release passed exact verification under the actual Windows
+task identity at 06:23. The three functional core tasks remain disabled and uncommissioned.
+The 06:15 broker check confirmed the original IWM exit is still accepted with zero filled;
+the operating store remains schema 29 while the new core requires 36. Existing protection
+and deadline services and all 19 legacy task definitions remain unchanged. See the
+[measured local installation](docs/evidence/paper-core/local-deployment-2026-10-15/README.md)
+for exact pins, timestamps and the remaining protection/schema handover.
 
 The [approved successor policy](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 uses qualifying model signals first and otherwise makes exploratory PAPER entries across stocks,
@@ -23,8 +24,7 @@ learning from both wins and losses. It permits six durable reservations per exch
 with one concurrent core lot. Its V3 target is actual executed gross return; a separate
 current-funds policy preserves continued entry capacity without inventing fee or cash history.
 
-**The successor is implemented and locally tested on the feature branch; it is not merged
-to main or commissioned.** Review [PR #290](https://github.com/jfhutchi/project_elrond/pull/290).
+**The successor is implemented, reviewed and merged to main. Its installed trader is not yet commissioned.**
 The integrated witness collects ten sessions of wins and losses,
 fits and activates V3, then selects a qualifying signal and a negative-prediction exploratory
 trade. The earlier measured XLE package remains separate. An attempted trade cannot guarantee
@@ -35,7 +35,7 @@ baseline deployment evidence.
 
 Start with [the PAPER core overview](docs/paper-core.md), then use the
 [handover](docs/evidence/paper-core/handover.md) and
-[current deployment evidence](docs/evidence/paper-core/omen-deployment/README.md) for exact pins,
+[current deployment evidence](docs/evidence/paper-core/local-deployment-2026-10-15/README.md) for exact pins,
 verification results, the blocker, and the remaining rollout sequence.
 
 ## What the implemented core does

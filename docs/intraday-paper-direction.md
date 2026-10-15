@@ -1,5 +1,7 @@
 # Current direction: the PAPER trading and learning core
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 The implemented foundation as of October 14, 2026 is the smaller [PAPER core](paper-core.md).
 PR289 is merged to `main` at `7889f576`; functional rollout and natural
 broker-PAPER acceptance remain incomplete. The [handover](evidence/paper-core/handover.md)

@@ -1,0 +1,68 @@
+"""GET-only PAPER inventory probe; no store writes, credential output, or order authority."""
+
+import asyncio
+import hashlib
+import json
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+
+from quantbot.brokers.alpaca import ALPACA_PAPER_BASE_URL, AlpacaPaperBrokerAdapter
+from quantbot.brokers.transports import HttpxBrokerTransport
+from quantbot.config import Settings, validate_trading_authority
+from quantbot.operations.service import isolated_application_environment
+
+OUTPUT = Path('D:\\Elrond\\review\\paper-core-14352cc-20261015T101507Z\\readonly-broker-preflight.json')
+
+
+class ReadOnlyPaperTransport(HttpxBrokerTransport):
+    async def request(self, method, url, **kwargs):
+        if method != "GET" or not url.startswith(ALPACA_PAPER_BASE_URL + "/"):
+            raise ValueError("READ_ONLY_PAPER_PROBE_REFUSED")
+        return await super().request(method, url, **kwargs)
+
+
+async def run():
+    with isolated_application_environment(r"C:\Users\leepa\.config\quantbot\quantbot.env"):
+        settings = Settings()
+        expected = settings.EXPECTED_ACCOUNT_ID
+        if not expected or hashlib.sha256(expected.encode()).hexdigest() != "e09a79ca34d782e31e538bdf95a79b11d474f603e5916521e386f444b56053cc":
+            raise ValueError("EXPECTED_ACCOUNT_DIGEST_MISMATCH")
+        if settings.TRADING_MODE.value != "PAPER" or not validate_trading_authority(settings, expected).allowed:
+            raise ValueError("PAPER_AUTHORITY_REFUSED")
+        if not settings.ALPACA_PAPER_API_KEY or not settings.ALPACA_PAPER_API_SECRET:
+            raise ValueError("EXISTING_CREDENTIALS_UNAVAILABLE")
+        transport = ReadOnlyPaperTransport()
+        try:
+            broker = AlpacaPaperBrokerAdapter(api_key=settings.ALPACA_PAPER_API_KEY,
+                api_secret=settings.ALPACA_PAPER_API_SECRET, transport=transport,
+                max_retries=0, timeout_seconds=Decimal(3))
+            async with asyncio.timeout(20):
+                account = await broker.get_account()
+                if account.account.account_id != expected:
+                    raise ValueError("BROKER_ACCOUNT_MISMATCH")
+                orders = await broker.get_open_orders()
+                original = await broker.get_order_by_client_id("qb-595f587acd1b769f4bd0d59282e631ad14ecb9f7")
+                positions = await broker.get_positions()
+                clock = await broker.get_market_clock()
+            document = {"scope": "GET_ONLY_NOT_COMMISSIONING", "captured_at": datetime.now(UTC).isoformat(),
+                "account_hash_matches": True, "order_entry_allowed": account.order_entry_allowed,
+                "open_orders": [order.model_dump(mode="json") for order in orders],
+                "original_iwm_order": original.model_dump(mode="json") if original else None,
+                "positions": [{"symbol": position.symbol, "quantity": str(position.quantity)} for position in positions],
+                "market_clock": clock.model_dump(mode="json"),
+                "no_open_order_gate": not orders}
+            OUTPUT.write_text(json.dumps(document, indent=2), encoding="utf-8")
+            print(json.dumps(document))
+        finally:
+            await transport.aclose()
+
+
+try:
+    asyncio.run(run())
+except Exception as error:
+    # Do not render validation inputs, request headers, configuration or secrets.
+    known = {"EXPECTED_ACCOUNT_DIGEST_MISMATCH", "PAPER_AUTHORITY_REFUSED", "EXISTING_CREDENTIALS_UNAVAILABLE", "BROKER_ACCOUNT_MISMATCH", "READ_ONLY_PAPER_PROBE_REFUSED"}
+    code = str(error) if type(error) is ValueError and str(error) in known else "UNCLASSIFIED"
+    print(json.dumps({"state": "READ_ONLY_PROBE_FAILED", "error_type": type(error).__name__, "code": code}))
+    raise SystemExit(1) from None

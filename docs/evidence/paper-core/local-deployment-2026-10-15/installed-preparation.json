@@ -1,0 +1,53 @@
+{
+  "prepared_at": "2026-10-15T10:21:41.724331+00:00",
+  "source_commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+  "config_id": "620d31ec42915eee76779a972521428adaeb9c0a5536694422d8c27e2b6acebd",
+  "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+  "repository": "D:\\Elrond\\releases\\paper-core-14352cc-20261015",
+  "interpreter": "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+  "executable_pins": 366,
+  "distributions": 46,
+  "commands": [
+    {
+      "argv": [
+        "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "quantbot.paper_core",
+        "--config",
+        "D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json",
+        "--command",
+        "prepare"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "quantbot.paper_core",
+        "--config",
+        "D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json",
+        "--manifest",
+        "D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json",
+        "--command",
+        "verify"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "uv_sync": {
+    "exit_code": 0,
+    "locked": true,
+    "new_isolated_environment": true,
+    "copy_fallback_warning": "Cross-volume cache hardlinks unavailable; uv installed full copies successfully."
+  },
+  "operating_database_opened_by_prepare_verify": false,
+  "environment_file_read_by_prepare_verify": false,
+  "broker_probed_by_prepare_verify": false,
+  "migrated": false,
+  "commissioned": false,
+  "runtime_roles_started": false,
+  "learning_origin_status": "PROVISIONAL_UNTIL_ACTUAL_COMMISSION_SESSION"
+}

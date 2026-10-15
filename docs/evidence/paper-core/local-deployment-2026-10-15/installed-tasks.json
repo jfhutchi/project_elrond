@@ -1,0 +1,131 @@
+{
+  "installed_at_utc": "2026-10-15T10:22:49.9015329Z",
+  "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+  "config_id": "620d31ec42915eee76779a972521428adaeb9c0a5536694422d8c27e2b6acebd",
+  "tasks": [
+    {
+      "name": "Elrond Paper Core Guardian",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-guardian-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role guardian -SubmissionDisabled -EntryDisabled",
+      "functional_role_started": false
+    },
+    {
+      "name": "Elrond Paper Core Outcomes",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-outcomes-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role outcomes -SubmissionDisabled -EntryDisabled",
+      "functional_role_started": false
+    },
+    {
+      "name": "Elrond Paper Core Trader",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-trader-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role trader -SubmissionDisabled -EntryDisabled",
+      "functional_role_started": false
+    },
+    {
+      "name": "Elrond Paper Core Verify",
+      "state": "Disabled",
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "arguments": "\"D:\\Elrond\\logs\\paper-core-verify-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Verify",
+      "functional_role_started": false
+    }
+  ],
+  "legacy_tasks": [
+    {
+      "name": "Elrond Five Minute Observations",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Research",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Daemon",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond PAPER Exploration",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond DIA Alerts",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Paper Deadline",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Ingestion",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Paper Daily Close",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Console",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Adaptive Paper Shadow",
+      "definition_unchanged": true
+    },
+    {
+      "name": "ElrondModelServer",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Alert Dispatcher",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Protection",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Position Research",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Learner",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Trade Learning Observer",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Report",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond DIA Learner",
+      "definition_unchanged": true
+    },
+    {
+      "name": "Elrond Observer",
+      "definition_unchanged": true
+    }
+  ],
+  "service_host_sha256": "BD1F9BCAF2A819FCF3E3400502EA0D02724B3A81B84A16F67E172E0F09AFE529",
+  "functional_activation": "NOT_PERFORMED"
+}

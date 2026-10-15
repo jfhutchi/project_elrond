@@ -1,5 +1,7 @@
 # The research subsystem
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## Current core and retained research boundaries
 
 The merged [PAPER core](paper-core.md) baseline implements a fixed owned-outcome learning path
@@ -39,7 +41,7 @@ signals first, otherwise exploratory stock rotation, with six durable daily rese
 and one concurrent lot. It adds `BROKER_PAPER_BALANCE_V1` for bounded sizing from fresh
 source-bound current funds without certifying incomplete historical cash. Quantity,
 identity, source, ledger-generation and integrity controls remain. This economic change
-needs its own initial commission from COLLECT. It is not merged to main or commissioned;
+needs its own initial commission from COLLECT. It is merged to main in PR #290 and locally installed, but not commissioned;
 The successor is implemented and locally tested, including the combined trading-to-learning witness. The older measured prepared configuration remains XLE-bound.
 
 How Elrond decides what counts as evidence, and the mechanisms that stop it being talked into

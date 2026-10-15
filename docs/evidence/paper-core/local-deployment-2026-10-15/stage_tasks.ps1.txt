@@ -1,0 +1,51 @@
+$ErrorActionPreference = 'Stop'
+$scratch = $PSScriptRoot
+$recordRoot = [IO.File]::ReadAllText((Join-Path $scratch 'deployment-root.txt')).Trim()
+$releaseRoot = [IO.File]::ReadAllText((Join-Path $scratch 'local-release.txt')).Trim()
+$configRoot = [IO.File]::ReadAllText((Join-Path $scratch 'local-config.txt')).Trim()
+$preparation = Get-Content -LiteralPath (Join-Path $recordRoot 'installed-preparation.json') -Raw | ConvertFrom-Json
+$verification = Get-Content -LiteralPath (Join-Path $configRoot 'installed-verification.json') -Raw | ConvertFrom-Json
+if ($verification.state -ne 'PREPARED' -or @($verification.objections).Count -ne 0 -or $verification.release_id -cne $preparation.release_id) { throw 'INSTALLED_VERIFICATION_REQUIRED' }
+$serviceHost = 'D:\Elrond\state\service-host\179e6da6c10668c86ca39c5a\elrond-service-host.exe'
+$expectedHostHash = (Get-Content -LiteralPath ($serviceHost + '.sha256') -Raw).Trim()
+if ((Get-FileHash -LiteralPath $serviceHost -Algorithm SHA256).Hash -cne $expectedHostHash) { throw 'SERVICE_HOST_BINARY_CHANGED' }
+$utf8 = [Text.UTF8Encoding]::new($false)
+$beforeDirectory = Join-Path $recordRoot 'tasks-before'
+$proposalDirectory = Join-Path $recordRoot 'tasks-installed'
+New-Item -ItemType Directory -Path $beforeDirectory -Force | Out-Null
+New-Item -ItemType Directory -Path $proposalDirectory -Force | Out-Null
+$coreNames = @('Elrond Paper Core Guardian','Elrond Paper Core Outcomes','Elrond Paper Core Trader','Elrond Paper Core Verify')
+$legacyBefore = @{}
+foreach ($legacy in @(Get-ScheduledTask | Where-Object { $_.TaskName -like '*Elrond*' -and $_.TaskName -notin $coreNames })) {
+    $legacyBefore[$legacy.TaskName] = Export-ScheduledTask -TaskName $legacy.TaskName -TaskPath $legacy.TaskPath
+}
+foreach ($name in $coreNames) {
+    $task = Get-ScheduledTask -TaskName $name
+    if ([string]$task.State -ne 'Disabled' -or @($task.Triggers | Where-Object { $null -ne $_ }).Count -ne 0) { throw ('DISABLED_TRIGGERLESS_TASK_REQUIRED: ' + $name) }
+    [IO.File]::WriteAllText((Join-Path $beforeDirectory ($name + '.xml')), (Export-ScheduledTask -TaskName $name), $utf8)
+}
+$installed = @(foreach ($name in $coreNames) {
+    $role = $name.Split(' ')[-1].ToLowerInvariant()
+    [xml]$definition = Get-Content -LiteralPath (Join-Path $beforeDirectory ($name + '.xml')) -Raw
+    $exec = $definition.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']")
+    $suffix = if ($role -eq 'verify') { '-Verify' } else { '-Role ' + $role + ' -SubmissionDisabled -EntryDisabled' }
+    $arguments = '"D:\Elrond\logs\paper-core-' + $role + '-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -File "' + (Join-Path $releaseRoot 'deploy\omen\start-paper-core.ps1') + '" -Repository "' + $releaseRoot + '" -Config "' + (Join-Path $configRoot 'runtime-config.json') + '" -Manifest "' + (Join-Path $configRoot 'runtime-manifest.json') + '" ' + $suffix
+    $exec.SelectSingleNode("*[local-name()='Command']").InnerText = $serviceHost
+    $exec.SelectSingleNode("*[local-name()='Arguments']").InnerText = $arguments
+    $exec.SelectSingleNode("*[local-name()='WorkingDirectory']").InnerText = $releaseRoot
+    $definition.SelectSingleNode("//*[local-name()='RegistrationInfo']/*[local-name()='Description']").InnerText = 'Merged daily PAPER successor installed; functional role remains disabled and uncommissioned.'
+    $proposal = Join-Path $proposalDirectory ($name + '.xml')
+    [IO.File]::WriteAllText($proposal, $definition.OuterXml, $utf8)
+    Register-ScheduledTask -TaskName $name -Xml $definition.OuterXml -Force | Out-Null
+    $actual = Get-ScheduledTask -TaskName $name
+    if ([string]$actual.State -ne 'Disabled' -or @($actual.Triggers | Where-Object { $null -ne $_ }).Count -ne 0 -or $actual.Actions.Execute -cne $serviceHost -or $actual.Actions.Arguments -cne $arguments) { throw ('TASK_INSTALL_VERIFICATION_FAILED: ' + $name) }
+    [ordered]@{ name = $name; state = [string]$actual.State; triggers = 0; principal = $actual.Principal.UserId; logon_type = [string]$actual.Principal.LogonType; run_level = [string]$actual.Principal.RunLevel; executable = $serviceHost; arguments = $arguments; functional_role_started = $false }
+})
+$legacyResults = @(foreach ($name in $legacyBefore.Keys) {
+    $same = (Export-ScheduledTask -TaskName $name) -ceq $legacyBefore[$name]
+    if (-not $same) { throw ('LEGACY_DEFINITION_CHANGED: ' + $name) }
+    [ordered]@{ name = $name; definition_unchanged = $same }
+})
+$record = [ordered]@{ installed_at_utc = [DateTime]::UtcNow.ToString('o'); release_id = $preparation.release_id; config_id = $preparation.config_id; tasks = $installed; legacy_tasks = $legacyResults; service_host_sha256 = $expectedHostHash; functional_activation = 'NOT_PERFORMED' }
+[IO.File]::WriteAllText((Join-Path $recordRoot 'installed-tasks.json'), (ConvertTo-Json -InputObject $record -Depth 12), $utf8)
+[ordered]@{ installed_tasks = $installed.Count; unchanged_legacy_definitions = $legacyResults.Count; release_id = $preparation.release_id; functional_tasks = 'DISABLED_TRIGGERLESS_CLAMPED'; verifier = 'NOT_RUN_YET' } | ConvertTo-Json

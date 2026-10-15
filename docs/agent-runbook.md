@@ -1,5 +1,7 @@
 # QuantBot Agent Runbook
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## Current handoff — October 14, 2026
 
 Start with the [PAPER core overview](paper-core.md), [accepted implementation handover](evidence/paper-core/handover.md)
@@ -34,7 +36,7 @@ normalized within each fit. Past-only validation, immutable outcome revisions, p
 data and permanent trial accounting remain mandatory. `NO_CHANGE` is honest progress;
 there is no daily-improvement guarantee or automatic LIVE transition. The
 [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
-is not merged to main or commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. The measured prepared release remains
+is merged to main in PR #290 and locally installed, but not commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. The measured prepared release remains
 the older XLE package; it does not verify successor behavior.
 
 The successor prefers any qualifying activated signal above 10 bps, otherwise records

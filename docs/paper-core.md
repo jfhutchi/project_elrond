@@ -6,7 +6,7 @@ execution, SQLite, research-memory, and protected-data foundations. This overvie
 [baseline specification](superpowers/specs/2026-10-13-paper-core-design.md) and the implementation
 in [`src/quantbot/paper_core/`](../src/quantbot/paper_core/). Detailed deployment facts belong in
 the [handover](evidence/paper-core/handover.md) and
-[current Omen evidence](evidence/paper-core/omen-deployment/README.md).
+[current Omen evidence](evidence/paper-core/local-deployment-2026-10-15/README.md).
 
 The [approved successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 collects daily PAPER experience across stocks: qualifying signals take priority, otherwise
@@ -14,8 +14,9 @@ it selects an exploratory entry. V3 learns from actual gross outcomes, including
 losses, while preserving unknown fees and net P&L. A separate versioned current-funds policy
 allows bounded entries without claiming that incomplete historical cash has been reconciled.
 
-**The successor is implemented and locally tested on its feature branch; it is not merged
-to main or commissioned.** The integrated witness covers ten sessions of mixed gross outcomes,
+**The successor is merged in PR #290 and installed locally, but not commissioned.**
+Its actual Windows task-identity verifier passed; the inherited IWM exit and compatible
+schema/protection handover still prevent starting the trader. The integrated witness covers ten sessions of mixed gross outcomes,
 real V3 fitting/activation and later signal/exploration decisions. The dated prepared baseline
 remains XLE-bound. Use the [handover](evidence/paper-core/handover.md) for rollout status.
 Daily attempts cannot guarantee fills or improved profit.

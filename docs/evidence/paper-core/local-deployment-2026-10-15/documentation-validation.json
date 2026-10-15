@@ -1,0 +1,18 @@
+{
+  "checked_at": "2026-10-15T10:33:40.519989+00:00",
+  "source_commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+  "current_guides": 24,
+  "local_links_resolved": 68,
+  "markdown_inventory": 181,
+  "prior_numbered_rulings_preserved": 63,
+  "generated_and_legacy_history_unchanged": true,
+  "sealed_packages_unchanged": {
+    "omen-deployment": 18,
+    "daily-exploration": 126
+  },
+  "installed_executable_pins_verified": 366,
+  "runtime_or_workflow_source_changes": 0,
+  "tracked_scratch": 0,
+  "config_and_manifest_match_actual_installation": true,
+  "selected_token_exit": 0
+}

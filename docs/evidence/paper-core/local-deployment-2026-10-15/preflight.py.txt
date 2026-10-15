@@ -1,0 +1,49 @@
+"""Refresh only GET broker evidence and query-only operating-store metadata."""
+from datetime import UTC, datetime
+from pathlib import Path
+import hashlib
+import json
+import runpy
+import sqlite3
+import sys
+
+scratch = Path(__file__).resolve().parent
+root = scratch.parents[2]
+sys.path.insert(0, str(root / "src"))
+stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+output = Path("D:/Elrond/review") / ("paper-core-14352cc-" + stamp)
+output.mkdir(parents=True, exist_ok=False)
+(scratch / "deployment-root.txt").write_text(str(output), encoding="utf-8")
+template = root / ".superpowers/sdd/2026-10-13-paper-core/omen_readonly_broker_preflight.py"
+source = template.read_text(encoding="utf-8")
+old = 'OUTPUT = Path(r"D:\\Elrond\\review\\paper-core-20261014-mako-79e9155a\\readonly-broker-preflight.json")'
+assert source.count(old) == 1
+source = source.replace(old, "OUTPUT = Path(" + repr(str(output / "readonly-broker-preflight.json")) + ")")
+probe = scratch / "readonly_broker_probe.py"
+probe.write_text(source, encoding="utf-8")
+runpy.run_path(str(probe), run_name="__main__")
+database = Path("D:/Elrond/state/quantbot-paper-fresh-20260908.db")
+connection = sqlite3.connect(database.as_uri() + "?mode=ro", uri=True, timeout=10)
+connection.row_factory = sqlite3.Row
+try:
+    connection.execute("PRAGMA query_only=ON")
+    connection.execute("BEGIN")
+    tables = {r[0] for r in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    identity = dict(connection.execute("SELECT * FROM schema_version").fetchone())
+    assert identity["store_identity"] == "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+    protection = connection.execute("SELECT cycle_id,observed_at,strategy_id,policy_version,outcome,position_count,unprotected_count,exit_required_count FROM position_protection_cycles ORDER BY observed_at DESC LIMIT 1").fetchone()
+    document = {
+        "captured_at": datetime.now(UTC).isoformat(), "mode": "QUERY_ONLY",
+        "database": str(database), "identity": identity,
+        "manual_stop": dict(connection.execute("SELECT * FROM kill_switch_state").fetchone()),
+        "intent_states": [list(r) for r in connection.execute("SELECT state,count(*) FROM order_intents GROUP BY state")],
+        "latest_protection": dict(protection) if protection else None,
+        "core_commission_count": connection.execute("SELECT count(*) FROM core_runtime_commissions").fetchone()[0] if "core_runtime_commissions" in tables else 0,
+        "core_tables_present": sorted(t for t in tables if t.startswith("core_")),
+        "original_probe_sha256": hashlib.sha256(template.read_bytes()).hexdigest(),
+        "executed_probe_sha256": hashlib.sha256(probe.read_bytes()).hexdigest(),
+    }
+finally:
+    connection.close()
+(output / "readonly-store-preflight.json").write_text(json.dumps(document, indent=2) + "\n", encoding="utf-8")
+print(json.dumps({"output": str(output), "store": document}, indent=2))

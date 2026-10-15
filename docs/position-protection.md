@@ -1,5 +1,7 @@
 # Position protection
 
+> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+
 ## PAPER core guardian and inherited positions
 
 The [PAPER core](paper-core.md) has a separate guardian process that acknowledges durable
@@ -13,7 +15,7 @@ The [approved hybrid successor](superpowers/specs/2026-10-14-daily-paper-explora
 requires health checks and guardian price refresh for the selected/actually owned symbol,
 including owned lots no longer in the candidate universe. Reaching six daily entry
 reservations, a failed fit or unavailable entry-funds permission cannot disable protection
-or outcomes. The successor is not merged or commissioned; this is its protection contract,
+or outcomes. The successor is merged in PR #290 and locally installed, but not commissioned; this is its protection contract,
 not evidence that the staged tasks have run it.
 
 The [current rollout](evidence/paper-core/omen-deployment/README.md) has not started the
