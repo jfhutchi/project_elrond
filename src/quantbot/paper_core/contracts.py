@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import date, datetime, timedelta
 from decimal import Decimal
 from typing import Annotated, Any, ClassVar, Literal, Self
@@ -24,6 +25,8 @@ class CoreConfig(BrokerModel):
 
     account_id: str = Field(min_length=1)
     symbol: str
+    symbols: tuple[str, ...] = ()
+    selection_policy: Literal["MODEL_ONLY_V1", "SIGNAL_OR_EXPLORE_V1"] = "MODEL_ONLY_V1"
     release_id: str = "m1-synthetic-fixture"
     policy_id: str = "collect-owned-30m-stop100-v1"
     owner: str = "paper-core-synthetic"
@@ -43,9 +46,31 @@ class CoreConfig(BrokerModel):
     @model_serializer(mode="wrap")
     def preserve_v31_config(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         payload = dict(handler(self))
-        if "clock_profile" not in self.model_fields_set:
-            payload.pop("clock_profile", None)
+        for name in {"clock_profile", "symbols", "selection_policy"} - self.model_fields_set:
+            payload.pop(name, None)
         return payload
+
+    @property
+    def entry_symbols(self) -> tuple[str, ...]:
+        return self.symbols or (self.symbol,)
+
+    @model_validator(mode="after")
+    def stock_universe(self) -> Self:
+        if self.symbols or self.selection_policy == "SIGNAL_OR_EXPLORE_V1":
+            if (
+                len(self.entry_symbols) > 32
+                or len(set(self.entry_symbols)) != len(self.entry_symbols)
+                or any(
+                    re.fullmatch(r"[A-Z]{1,5}(?:\.[A-Z])?", s) is None or s == "SPY"
+                    for s in self.entry_symbols
+                )
+            ):
+                raise ValueError(
+                    "unique uppercase supported stock universe, excluding SPY, required"
+                )
+        if self.selection_policy == "MODEL_ONLY_V1" and self.symbols not in {(), (self.symbol,)}:
+            raise ValueError("multi-symbol universe requires SIGNAL_OR_EXPLORE_V1")
+        return self
 
 
 class Evidence(BrokerModel):
@@ -195,6 +220,26 @@ class TimeProjection(BrokerModel):
     objections: tuple[str, ...]
 
 
+class ObservationCohort(BrokerModel):
+    """One bounded completed source boundary with explicit missing-member evidence."""
+
+    source_end: datetime
+    session_open: datetime
+    session_close: datetime
+    observations: tuple[Observation, ...]
+    unavailable: tuple[tuple[str, str], ...] = ()
+
+
+class SelectionEvidence(BrokerModel):
+    policy: Literal["SIGNAL_OR_EXPLORE_V1"] = "SIGNAL_OR_EXPLORE_V1"
+    kind: Literal["SIGNAL", "EXPLORATION", "UNAVAILABLE"]
+    cohort: ObservationCohort
+    boundary_id: str
+    session_counts: tuple[tuple[str, int], ...]
+    prior_counts: tuple[tuple[str, int], ...]
+    exclusions: tuple[tuple[str, tuple[str, ...]], ...]
+
+
 class Decision(Evidence):
     legacy_optional_fields = frozenset(
         {
@@ -209,6 +254,7 @@ class Decision(Evidence):
             "model_digest",
             "prediction_bps",
             "model_mode",
+            "selection",
         }
     )
     time_evidence_id: str | None = None
@@ -221,6 +267,7 @@ class Decision(Evidence):
     model_digest: str | None = None
     prediction_bps: Annotated[float, Field(allow_inf_nan=False)] | None = None
     model_mode: Literal["COLLECT", "PREDICT"] | None = None
+    selection: SelectionEvidence | None = None
     observation_id: str
     policy_id: str
     model_id: str

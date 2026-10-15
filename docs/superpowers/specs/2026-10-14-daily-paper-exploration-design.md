@@ -22,9 +22,9 @@ At each completed five-minute boundary, when the global core entry slot is avail
 
 1. Acquire a bounded causal cohort for the configured universe plus benchmark. A missing or unavailable symbol has an explicit reason and does not suppress healthy members. Each observation uses actual received data/times, one completed boundary and the correct symbol.
 2. Exclude inherited-held symbols, invalid/stale data, scoped quarantine, or other genuine entry failures. Preserve account/store/PAPER identity, guardian readiness, inventory/cash certification, deadline and unknown-send checks.
-3. Prefer symbols not yet reserved in this session, to collect experience across stocks. If every currently eligible symbol has been used and quota remains, allow repeats. Use durable prior counts and configured-universe order for deterministic fair ties/rotation.
-4. Among that eligible diversity tier, prefer the largest valid activated prediction strictly above the existing 10-basis-point hurdle. This is a numeric selection threshold, not a calibrated probability of profit.
-5. Otherwise select the least-used eligible member for exploration. Preserve its real zero/negative prediction; label the decision `EXPLORATION`, rather than inventing a positive score. COLLECT produces exploration. An invalid model/activation is an authority failure, not a weak signal.
+3. Search the entire eligible cohort for valid activated predictions strictly above the existing 10-basis-point hurdle. Any qualifying signal takes priority over exploration, including a previously used stock when unused stocks have only weak signals. This is a numeric selection threshold, not a calibrated probability of profit.
+4. Among qualifying signals, prefer stocks not yet reserved in this session, then the largest prediction. If all qualifying stocks have been used, permit repeats, preferring the least-used stocks before ranking predictions. Break remaining ties by configured-universe order.
+5. Only when no eligible signal qualifies, select the least-used eligible member for exploration, breaking ties by configured-universe order. Preserve its real zero/negative prediction; label the decision `EXPLORATION`, rather than inventing a positive score. COLLECT produces exploration. An invalid model/activation is an authority failure, not a weak signal.
 
 Persist enough cohort, prediction and selection evidence for claim-time replay. A caller-provided exploration Boolean is not sufficient authority. A replay must establish that the selected member follows the rule over the captured cohort. Record unavailable members and the reason for a wait if none is eligible.
 
@@ -52,7 +52,7 @@ Warmup remains ten completed exchange sessions, including quiet sessions. Then c
 
 Six usable completed trades per normal session can meet the day-ten sample floors without discarding adjacent feature windows. Short sessions, rejected/unfilled orders or invalid evidence can still leave insufficient data. In that case, record the day's learning receipt and exact reason; do not claim a fit or alter weights without data. Candidate failure or rejection retains the incumbent while exploration continues. Daily learning is always attempted when due; daily parameter changes and daily profit improvement are not guaranteed.
 
-Carry exact target/procedure/policy through the receipt, permanent trial charge and activation authority. Never treat a net-return predictive incumbent as a gross-return predictor. New commissioning starts from the target-neutral COLLECT model; any existing incompatible predictive incumbent requires an explicit supported transition, never a silent reinterpretation.
+Carry exact target/procedure/policy through the receipt, permanent trial charge and activation authority. Use `DAILY_BOUNDED_V3` for automatically activating the new gross procedure; retain `DAILY_BOUNDED_V2` for the legacy net procedure and `REVIEW_EACH_CANDIDATE` for explicit candidate approval. Never broaden an older commission to authorize a different target. Never treat a net-return predictive incumbent as a gross-return predictor. New commissioning starts from the target-neutral COLLECT model; any existing incompatible predictive incumbent requires an explicit supported transition, never a silent reinterpretation.
 
 ## Compatibility and deployment
 

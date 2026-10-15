@@ -412,7 +412,6 @@ def transition_release(
 def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
     """Fresh independent readiness authorizes only an explicit exact-current entry fence."""
     from quantbot.paper_core.activation import _boundary, active_in_session
-    from quantbot.paper_core.health import entry_health_objections
     from quantbot.paper_core.time_evidence import TimeEvidence
     from quantbot.paper_core.work import current_receipts
     from quantbot.storage import StorageRepository
@@ -491,7 +490,9 @@ def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
             < time_proof.samples[-1].provider.session_open
         ):
             raise StateConflictError("RESUME_FRESH_TIME_REQUIRED")
-        if entry_health_objections(store, session, store.config.symbol):
+        from quantbot.paper_core.health import universe_health_objections
+
+        if universe_health_objections(store, session):
             raise StateConflictError("RESUME_MANUAL_STOP_OR_QUARANTINE")
         _boundary(session, cutoff=now)
         evidence_id = content_id(approval)

@@ -168,7 +168,20 @@ def independent_cash_available(store: CoreStore, session: Session) -> bool:
     return authority is not None and authority.id in independent
 
 
-def recover_health(store: CoreStore, proof: ReconciliationProof, *, now: datetime) -> None:
+def universe_health_objections(store: CoreStore, session: Session) -> tuple[str, ...]:
+    """Entry readiness requires at least one healthy member; claims check its exact scope."""
+    scoped = [
+        entry_health_objections(store, session, symbol) for symbol in store.config.entry_symbols
+    ]
+    if any(not reasons for reasons in scoped):
+        return ()
+    return tuple(dict.fromkeys(reason for reasons in scoped for reason in reasons))
+
+
+def recover_health(
+    store: CoreStore, proof: ReconciliationProof, *, now: datetime, symbol: str | None = None
+) -> None:
+    symbol = symbol or store.config.symbol
     with store.database.transaction() as session:
         failures = [
             h
@@ -177,7 +190,7 @@ def recover_health(store: CoreStore, proof: ReconciliationProof, *, now: datetim
             and h.role in {"TRADER", "GUARDIAN"}
             and (
                 h.scope == "SYMBOL"
-                and h.scope_id == store.config.symbol
+                and h.scope_id == symbol
                 or h.scope == "ACCOUNT"
                 and h.scope_id == store.config.account_id
             )
@@ -197,7 +210,7 @@ def recover_health(store: CoreStore, proof: ReconciliationProof, *, now: datetim
                 h.scope == "ACCOUNT"
                 and h.scope_id == store.config.account_id
                 or h.scope == "SYMBOL"
-                and h.scope_id == store.config.symbol
+                and h.scope_id == symbol
             )
             for h in active_health(session)
         ):
@@ -213,7 +226,7 @@ def recover_health(store: CoreStore, proof: ReconciliationProof, *, now: datetim
                 release_id=store.config.release_id,
                 role="TRADER",
                 scope="SYMBOL",
-                scope_id=store.config.symbol,
+                scope_id=symbol,
                 state="READY",
                 objections=(),
                 first_blocker=None,

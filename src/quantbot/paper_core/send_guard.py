@@ -196,6 +196,9 @@ def final_send_in_session(
     # Sample after durable reads and writer-lock acquisition, never the caller's decision time.
     now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
     reasons: list[str] = list(runtime_reasons)
+    from quantbot.paper_core.selection import reservation_objections
+
+    reasons.extend(reservation_objections(store, session, decision, intent_id=intent.intent_id))
     reasons.extend(
         guardian_objections(store, session, now=now, receipt_id=receipt.id if receipt else None)
     )

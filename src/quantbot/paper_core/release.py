@@ -70,7 +70,7 @@ class RuntimeConfig(BrokerModel):
         if self.cost_contract is not None and (
             hashlib.sha256(self.cost_contract.account_id.encode()).hexdigest()
             != self.expected_account_hash
-            or self.core.symbol not in self.cost_contract.symbols
+            or not set(self.core.entry_symbols) <= set(self.cost_contract.symbols)
         ):
             raise ValueError("cost contract account/symbol mismatch")
         return self
