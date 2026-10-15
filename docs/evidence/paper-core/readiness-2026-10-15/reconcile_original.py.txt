@@ -1,0 +1,52 @@
+"""Reconcile only the original filled IWM order using existing durable sync logic."""
+import asyncio,json,os,sqlite3,traceback
+from datetime import UTC,datetime
+from pathlib import Path
+from quantbot.operations.service import isolated_application_environment
+from quantbot.config import Settings
+from quantbot.runtime import build_runtime
+from quantbot.storage import SingleWriterLock,StorageRepository
+from quantbot.learner.paper_deadlines import PaperDeadlineSupervisor
+
+ROOT=Path('D:/Elrond/review/readiness-20261015')
+CLIENT='qb-595f587acd1b769f4bd0d59282e631ad14ecb9f7'
+ORDER='28523181-cd04-4f74-bd67-bcebe4582164'
+class ReadOnly:
+    def __init__(self,inner): self.inner=inner
+    async def request(self,method,url,**kwargs):
+        if method!='GET' or not url.startswith('https://paper-api.alpaca.markets/'):
+            raise ValueError('GET_ONLY')
+        return await self.inner.request(method,url,**kwargs)
+    async def aclose(self): await self.inner.aclose()
+
+async def main():
+    with isolated_application_environment('C:/Users/leepa/.config/quantbot/quantbot.env'):
+        os.environ['QUANTBOT_GIT_COMMIT']='14352cc428dcd999750138d52fbd5f30347991a1'
+        runtime=build_runtime(Settings())
+        runtime.broker._transport=ReadOnly(runtime.broker._transport)
+        try:
+            with SingleWriterLock(runtime.paths.lock):
+                with runtime.database.transaction() as session:
+                    repo=StorageRepository(session)
+                    intent=next(i for i in repo.list_unresolved_order_intents() if i.client_order_id==CLIENT)
+                    known=repo.get_broker_order_by_client_order_id(CLIENT)
+                    assert known.broker_order_id==ORDER and intent.symbol=='IWM' and intent.side.value=='SELL'
+                source=sqlite3.connect(str(runtime.paths.database))
+                target=sqlite3.connect(str(ROOT/'before-original-reconciliation.db'))
+                source.backup(target);target.close();source.close()
+                sync=PaperDeadlineSupervisor(database=runtime.database,broker=runtime.broker,
+                    coordinator=runtime.coordinator,identity=runtime.identity,
+                    expected_account_id=runtime.settings.EXPECTED_ACCOUNT_ID,lock_path=runtime.paths.lock)
+                order,fills=await sync._sync_order(intent)
+                assert order.broker_order_id==ORDER and order.status=='filled'
+                record={'at':datetime.now(UTC).isoformat(),'original_order_identity_preserved':True,
+                    'status':order.status,'filled_quantity':str(order.filled_quantity),
+                    'fill_count':len(fills),'broker_mutations':0,'method':'PaperDeadlineSupervisor._sync_order'}
+                (ROOT/'original-reconciliation.json').write_text(json.dumps(record,indent=2))
+                print(json.dumps(record))
+        finally:
+            await runtime.aclose();runtime.database.close()
+try: asyncio.run(main())
+except Exception as e:
+    print(json.dumps({'type':type(e).__name__,'frames':[(Path(f.filename).name,f.lineno,f.name) for f in traceback.extract_tb(e.__traceback__)]}))
+    raise SystemExit(1) from None

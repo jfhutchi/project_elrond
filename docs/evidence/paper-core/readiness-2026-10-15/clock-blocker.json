@@ -1,0 +1,17 @@
+{
+  "result": "ADMINISTRATOR_TIME_RESYNC_REQUIRED",
+  "windows_time_source": "Local CMOS Clock",
+  "windows_time_synchronized": false,
+  "ntp_peer": "time.windows.com",
+  "offset_samples_seconds": [
+    1.0347974,
+    1.0330305,
+    1.0369883,
+    1.0330406,
+    1.0333774
+  ],
+  "unprivileged_resync": "ACCESS_DENIED_0x80070005",
+  "elevated_resync": "WINDOWS_PROMPT_CANCELLED",
+  "trader_disabled": true,
+  "deployment_task_disabled_after_readiness_refusal": true
+}

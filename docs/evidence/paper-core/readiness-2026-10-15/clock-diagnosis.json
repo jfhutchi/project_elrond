@@ -1,0 +1,27 @@
+{
+  "captured_date": "2026-10-15",
+  "timezone": "America/New_York",
+  "boot_time": "2026-10-15T10:48:42.5-04:00",
+  "service_start": "AUTOMATIC_RUNNING",
+  "ntp_client_enabled": true,
+  "ntp_peer": "time.windows.com,0x9",
+  "special_poll_interval_seconds": 32768,
+  "min_poll_exponent": 10,
+  "max_poll_exponent": 15,
+  "observed_dns_failure": {
+    "event_id": 134,
+    "at": "2026-10-12T08:14:46-04:00",
+    "code": "0x80072AF9"
+  },
+  "last_prior_boot_periodic_status": {
+    "at": "2026-10-15T09:58:21-04:00",
+    "last_successful_sync_utc": "2026-10-15T13:24:14.60Z",
+    "source": "time.windows.com,0x9"
+  },
+  "current_boot_synchronized": false,
+  "current_ntp_probe_reachable": true,
+  "offset_seconds_about": 1.03,
+  "existing_force_sync_task_start": "ACCESS_DENIED",
+  "command_session_matches_explorer": true,
+  "inference": "Infrequent polling plus failure to resynchronize after reboot/network interruption; hardware battery failure not established"
+}

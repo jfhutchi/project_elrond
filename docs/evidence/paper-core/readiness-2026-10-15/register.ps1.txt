@@ -1,0 +1,41 @@
+[CmdletBinding()]
+param([switch]$Check)
+$ErrorActionPreference='Stop'
+$review='D:\Elrond\review\readiness-20261015'
+$directory='D:\Elrond\deploy\readiness-20261015'
+$name='Elrond Paper Core Deploy'
+if(-not (Test-Path (Join-Path $review 'deployment-task-before.xml'))) { [IO.File]::WriteAllText((Join-Path $review 'deployment-task-before.xml'),(Export-ScheduledTask -TaskName $name),[Text.UTF8Encoding]::new($false)) }
+if([string](Get-ScheduledTask -TaskName $name).State -eq 'Running') { throw 'PREVIOUS_DEPLOYMENT_STILL_RUNNING' }
+[xml]$xml=Get-Content (Join-Path $review 'tasks-before\Elrond Paper Core Guardian.xml') -Raw
+$xml.SelectSingleNode("//*[local-name()='RegistrationInfo']/*[local-name()='URI']").InnerText='\'+$name
+$xml.SelectSingleNode("//*[local-name()='RegistrationInfo']/*[local-name()='Description']").InnerText='User-authorized readiness repair; fresh one-time PAPER commissioning attempt expires 2026-10-15T16:00Z; all core gates retained.'
+$xml.SelectSingleNode("//*[local-name()='Settings']/*[local-name()='Enabled']").InnerText='true'
+$xml.SelectSingleNode("//*[local-name()='Settings']/*[local-name()='ExecutionTimeLimit']").InnerText='PT2H'
+$exec=$xml.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']")
+$exec.SelectSingleNode("*[local-name()='Command']").InnerText='D:\Elrond\state\service-host\179e6da6c10668c86ca39c5a\elrond-service-host.exe'
+$exec.SelectSingleNode("*[local-name()='WorkingDirectory']").InnerText=$directory
+$args='"D:\Elrond\logs\readiness-deployment-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -File "'+$directory+'\continue-deployment.ps1"'
+if($Check) { $args+=' -Check' }
+$exec.SelectSingleNode("*[local-name()='Arguments']").InnerText=$args
+Register-ScheduledTask -TaskName $name -Xml $xml.OuterXml -Force|Out-Null
+$login=New-ScheduledTaskTrigger -AtLogOn -User ($env:USERDOMAIN+'\'+$env:USERNAME)
+$login.EndBoundary='2026-10-15T16:00:00Z'
+Set-ScheduledTask -TaskName $name -Trigger $login|Out-Null
+$started=Get-Date
+Start-ScheduledTask -TaskName $name
+if($Check) {
+    $deadline=[DateTime]::UtcNow.AddSeconds(60)
+    do {
+        Start-Sleep -Seconds 2
+        $task=Get-ScheduledTask -TaskName $name
+        $info=Get-ScheduledTaskInfo -TaskName $name
+        if([string]$task.State -ne 'Running' -and $info.LastRunTime -ge $started.AddSeconds(-2)) { break }
+    } while([DateTime]::UtcNow -lt $deadline)
+    Disable-ScheduledTask -TaskName $name|Out-Null
+    if([string]$task.State -eq 'Running' -or $info.LastTaskResult -ne 10) { throw 'FRESH_CHECK_FAILED' }
+    $state=Get-Content (Join-Path $review 'activation-state.json') -Raw|ConvertFrom-Json
+    if($state.state -ne 'READY_FOR_EXPLICIT_ACTIVATION') { throw 'FRESH_ACTIVATION_NOT_READY' }
+    $record=[ordered]@{at=[DateTime]::UtcNow.ToString('o');exit_code=$info.LastTaskResult;principal=$task.Principal.UserId;state=$state.state;commission_performed=$false}
+    [IO.File]::WriteAllText((Join-Path $review 'selected-token-check.json'),($record|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    $record|ConvertTo-Json
+}

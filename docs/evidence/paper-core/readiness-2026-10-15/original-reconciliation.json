@@ -1,0 +1,9 @@
+{
+  "at": "2026-10-15T15:01:10.038477+00:00",
+  "original_order_identity_preserved": true,
+  "status": "filled",
+  "filled_quantity": "0.169669",
+  "fill_count": 1,
+  "broker_mutations": 0,
+  "method": "PaperDeadlineSupervisor._sync_order"
+}

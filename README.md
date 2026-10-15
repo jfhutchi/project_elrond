@@ -1,6 +1,6 @@
 # Project Elrond
 
-> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](docs/evidence/paper-core/runtime-handover-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md).
 
 An autonomous quantitative research and PAPER trading platform that tries hard not to fool itself.
 
@@ -10,13 +10,11 @@ and automatic recovery when fresh evidence permits. Explicit manual entry stops 
 identity, ownership, or accounting failures retain their controls. Protection, exits, and
 trustworthy outcome processing remain independent of entry and learning failures.
 
-The local upgrade now includes the operating/learner database migration, obsolete-writer fence,
-and merged protection/deadline/dashboard services. A one-time deployment task is running;
-the original IWM exit must reconcile before it commissions the three new core roles.
-The broker reports the next opening at 09:30 Eastern. The fresh inherited protection assessment
-requires the guardian's certified inventory; the trader stays disabled until that check passes.
-See the [runtime handover](docs/evidence/paper-core/runtime-handover-2026-10-15/README.md)
-for measured state, backups, exact pins, continuation limits and live local status paths.
+The local upgrade includes both schema-36 migrations, the obsolete-writer fence, the paper desk,
+and repaired retained services. The original IWM exit filled and was reconciled using actual
+broker evidence. The unchanged core is commissioned. guardian, outcomes and trader are active after fresh independent progress and protection checks.
+See the [readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md)
+for measured state, verification, source pins and local evidence paths.
 
 The [approved successor policy](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 uses qualifying model signals first and otherwise makes exploratory PAPER entries across stocks,

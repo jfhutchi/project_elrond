@@ -946,6 +946,59 @@ async def test_closed_market_waits_for_open_instead_of_treating_an_old_mark_as_c
     assert result.cycles_completed == 0
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stale_seconds", [0, 2])
+async def test_opening_boundary_repolls_a_closed_clock_without_evaluating_or_exiting(
+    tmp_path: Path, stale_seconds: int,
+) -> None:
+    stop = StopFlag()
+    calls: list[str] = []
+
+    class OpeningClock:
+        async def get_market_clock(self) -> MarketClock:
+            calls.append("clock")
+            return MarketClock(
+                timestamp=NOW, is_open=len(calls) > 1,
+                next_open=NOW - timedelta(seconds=stale_seconds),
+                next_close=NOW + timedelta(hours=6),
+            )
+
+    async def evaluate(_moment: datetime) -> object:
+        calls.append("evaluate")
+        stop.stopped = True
+        return object()
+
+    async def sleeper(delay: Decimal) -> None:
+        assert Decimal(0) < delay <= Decimal(5)
+        calls.append("sleep")
+
+    result = await PositionProtectionDaemonRunner(
+        clock_provider=OpeningClock(), evaluate=evaluate, sleeper=sleeper,
+        metrics=OperationalMetrics(), lock_path=tmp_path / "protection.lock",
+    ).run(stop, now=lambda: NOW)
+
+    assert calls == ["clock", "sleep", "clock", "evaluate"]
+    assert result.cycles_completed == 1
+
+
+@pytest.mark.asyncio
+async def test_a_persistently_closed_past_open_clock_never_evaluates(tmp_path: Path) -> None:
+    stop = StopFlag()
+
+    async def evaluate(_moment: datetime) -> object:
+        pytest.fail("a closed broker clock cannot authorize evaluation")
+
+    async def sleeper(delay: Decimal) -> None:
+        assert delay == Decimal(5)
+        stop.stopped = True
+
+    result = await PositionProtectionDaemonRunner(
+        clock_provider=FakeClock(open=False, next_open=NOW), evaluate=evaluate,
+        sleeper=sleeper, metrics=OperationalMetrics(), lock_path=tmp_path / "protection.lock",
+    ).run(stop, now=lambda: NOW)
+    assert result.cycles_completed == 0
+
+
 def test_the_independent_loop_has_no_strategy_or_order_submitter() -> None:
     fields = set(PositionProtectionDaemonRunner.__dataclass_fields__)
     assert "strategy" not in fields

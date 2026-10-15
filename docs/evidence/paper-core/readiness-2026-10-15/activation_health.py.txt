@@ -1,0 +1,99 @@
+"""Query-only live role readiness, followed optionally by a real no-submission assessment."""
+import argparse
+import asyncio
+import json
+import os
+import sqlite3
+from dataclasses import replace
+from datetime import UTC, datetime
+from pathlib import Path
+
+ROOT=Path('D:/Elrond/review/readiness-20261015')
+STORE=Path('D:/Elrond/state/quantbot-paper-fresh-20260908.db')
+RELEASE='0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c'
+
+def progress_current(heartbeat,now,started):
+    if not heartbeat or not heartbeat.get('last_useful_progress'):
+        return False
+    progress=datetime.fromisoformat(heartbeat['last_useful_progress'].replace('Z','+00:00'))
+    recorded=datetime.fromisoformat(heartbeat['recorded_at'].replace('Z','+00:00'))
+    valid=datetime.fromisoformat(heartbeat['valid_until'].replace('Z','+00:00'))
+    # A failed role poll publishes a fresh heartbeat but preserves old progress.
+    # A successful poll sets progress immediately before recording its heartbeat.
+    return started <= progress <= recorded <= now < valid and 0 <= (recorded-progress).total_seconds()<1 and (now-progress).total_seconds()<45
+
+async def check(assess,trader):
+    connection=sqlite3.connect(STORE.as_uri()+'?mode=ro',uri=True)
+    connection.row_factory=sqlite3.Row
+    connection.execute('PRAGMA query_only=ON')
+    try:
+        rows=connection.execute('SELECT h.payload FROM core_role_current c JOIN core_role_heartbeats h ON h.id=c.heartbeat_id').fetchall()
+        heartbeats={h['role']:h for h in (json.loads(r[0]) for r in rows)}
+        stop=dict(connection.execute('SELECT * FROM kill_switch_state').fetchone())
+        reasons=[]
+        roles=('guardian','outcomes','trader') if trader else ('guardian','outcomes')
+        now=datetime.now(UTC)
+        starts=json.loads((ROOT/'role-starts.json').read_text())
+        output=ROOT/('activation-final-health.json' if trader else 'activation-protection-health.json')
+        previous=json.loads(output.read_text()).get('heartbeats',{}) if output.exists() else {}
+        for role in roles:
+            h=heartbeats.get(role)
+            started=datetime.fromisoformat(starts[role].replace('Z','+00:00')) if role in starts else now
+            if not h or h['release_id']!=RELEASE or not progress_current(h,now,started):
+                reasons.append(role.upper()+'_FRESH_PROGRESS_REQUIRED')
+            elif role!='trader' and h['objections']:
+                reasons.append(role.upper()+'_OBJECTIONS')
+            elif role not in previous or previous[role]['pid']!=h['pid'] or previous[role]['last_useful_progress'] is None or h['last_useful_progress']<=previous[role]['last_useful_progress']:
+                reasons.append(role.upper()+'_SECOND_ADVANCING_SUCCESSFUL_POLL_REQUIRED')
+        if len({heartbeats[r]['pid'] for r in roles if r in heartbeats})!=len(roles):
+            reasons.append('INDEPENDENT_ROLE_PROCESSES_REQUIRED')
+        if stop['engaged']:
+            reasons.append('EXPLICIT_ENTRY_PAUSE_PRESERVED')
+        if not connection.execute('SELECT 1 FROM core_inventory_certifications LIMIT 1').fetchone():
+            reasons.append('CERTIFIED_INVENTORY_REQUIRED')
+    finally:
+        connection.close()
+    assessment=None
+    if not reasons and assess:
+        from quantbot.operations.service import isolated_application_environment
+        from quantbot.config import Settings
+        from quantbot.runtime import build_runtime
+        from quantbot.storage import SingleWriterLock
+        from quantbot.learner.paper_deadlines import supervisor_objections
+        from activation_attempt import ReadOnlyTransport
+        from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter
+        from decimal import Decimal
+        with isolated_application_environment('C:/Users/leepa/.config/quantbot/quantbot.env'):
+            os.environ['QUANTBOT_GIT_COMMIT']='14352cc428dcd999750138d52fbd5f30347991a1'
+            settings=Settings()
+            runtime=build_runtime(settings)
+            transport=ReadOnlyTransport()
+            try:
+                reasons.extend(supervisor_objections(runtime.database,account_id=settings.EXPECTED_ACCOUNT_ID,now=datetime.now(UTC)))
+                bounded=AlpacaPaperBrokerAdapter(api_key=settings.ALPACA_PAPER_API_KEY,api_secret=settings.ALPACA_PAPER_API_SECRET,transport=transport,max_retries=0,timeout_seconds=Decimal(2))
+                async with asyncio.timeout(6):
+                    with SingleWriterLock(runtime.paths.lock):
+                        result=await replace(runtime.protector(),submitter=None,broker=bounded).evaluate(now=datetime.now(UTC))
+                assessment=result.model_dump(mode='json')
+                if result.outcome!='HEALTHY' or result.unprotected_count:
+                    reasons.append('INHERITED_PROTECTION_NOT_HEALTHY')
+            finally:
+                await transport.aclose()
+                await runtime.aclose()
+                runtime.database.close()
+    document={'at':datetime.now(UTC).isoformat(),'ready':not reasons,'reasons':reasons,'heartbeats':heartbeats,'assessment':assessment}
+    output.write_text(json.dumps(document,indent=2))
+    print(json.dumps(document),flush=True)
+    return 0 if not reasons else 10
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--assess',action='store_true')
+    parser.add_argument('--trader',action='store_true')
+    args=parser.parse_args()
+    try:
+        code=asyncio.run(check(args.assess,args.trader))
+    except Exception as error:
+        print(json.dumps({'ready':False,'error_type':type(error).__name__}),flush=True)
+        code=11
+    raise SystemExit(code)

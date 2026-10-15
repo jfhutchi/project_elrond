@@ -1,0 +1,31 @@
+$ErrorActionPreference='Stop'
+$review='D:\Elrond\review\readiness-20261015'
+$source='D:\Elrond\releases\support-readiness-20261015'
+$old='D:\Elrond\releases\legacy-support-14352cc-20261015'
+$commit='ab6f6109b7a0c133571025a0d532568de133ee76'
+$utf8=[Text.UTF8Encoding]::new($false)
+if((git -C $source rev-parse HEAD) -cne $commit -or (git -C $source status --porcelain)) { throw 'SUPPORT_NOT_PINNED' }
+& (Join-Path $source '.venv\Scripts\python.exe') -m quantbot.operations.service --env-file C:\Users\leepa\.config\quantbot\quantbot.env --commit $commit --database D:\Elrond\state\quantbot-paper-fresh-20260908.db --component protection --check
+if($LASTEXITCODE -ne 0) { throw 'SUPPORT_VALIDATION_FAILED' }
+$names=@('Elrond Protection','Elrond Paper Deadline')
+foreach($name in $names) { [IO.File]::WriteAllText((Join-Path $review ($name+'-before.xml')),(Export-ScheduledTask -TaskName $name),$utf8) }
+try {
+    foreach($name in $names) { Disable-ScheduledTask -TaskName $name|Out-Null;Stop-ScheduledTask -TaskName $name }
+    Start-Sleep -Seconds 2
+    $env:PYTHONPATH='D:\Elrond\releases\paper-core-14352cc-20261015\src'
+    & D:\Elrond\releases\paper-core-14352cc-20261015\.venv\Scripts\python.exe (Join-Path $PSScriptRoot 'reconcile_original.py')
+    if($LASTEXITCODE -ne 0) { throw 'ORIGINAL_RECONCILIATION_FAILED' }
+    foreach($name in $names) {
+        [xml]$xml=Get-Content (Join-Path $review ($name+'-before.xml')) -Raw
+        $exec=$xml.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']")
+        $exec.SelectSingleNode("*[local-name()='Arguments']").InnerText=$exec.SelectSingleNode("*[local-name()='Arguments']").InnerText.Replace($old,$source).Replace('14352cc428dcd999750138d52fbd5f30347991a1',$commit)
+        $exec.SelectSingleNode("*[local-name()='WorkingDirectory']").InnerText=$source
+        Register-ScheduledTask -TaskName $name -Xml $xml.OuterXml -Force|Out-Null
+        Enable-ScheduledTask -TaskName $name|Out-Null
+        Start-ScheduledTask -TaskName $name
+    }
+} catch {
+    foreach($name in $names) { Stop-ScheduledTask -TaskName $name -ErrorAction SilentlyContinue;Register-ScheduledTask -TaskName $name -Xml (Get-Content (Join-Path $review ($name+'-before.xml')) -Raw) -Force|Out-Null;Enable-ScheduledTask -TaskName $name|Out-Null;Start-ScheduledTask -TaskName $name }
+    throw
+}
+'SUPPORT_UPDATED_ORIGINAL_ORDER_RECONCILED'
