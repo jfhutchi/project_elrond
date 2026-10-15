@@ -1,5 +1,7 @@
 # Counterfactual operator report
 
+> **Hypothetical research scope.** These retained reports are separate from the [PAPER core](paper-core.md) executed-outcome learner. Counterfactual returns and untraded observations never become broker fills or owned net-return labels. Current core learning needs attributable lots, actual cost completeness and compatible contracts; the report does not grant execution/model authority or satisfy the requested daily multi-stock collection behavior.
+
 Run against the configured existing durable store (`QUANTBOT_DB_PATH` or
 `QUANTBOT_DATABASE_URL`, following the normal database target rules):
 

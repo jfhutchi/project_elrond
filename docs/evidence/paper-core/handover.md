@@ -2,7 +2,9 @@
 
 **Isolated implementation and preparation ACCEPTED; operational acceptance WAITING.** Application source: commit d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0 on codex/paper-core-m0. Security update a3d5880f02f9d57104e3e833474a4648d1ec181e requires patched Mako and locks 1.4.3; application and launcher code are unchanged. Functional deployment has not occurred.
 
-The current [Mako security successor](mako-security/README.md) is prepared release `79e9155a7b54dd542b422cf2b3d11f71bb3616154de122fc7f27bc8f59147791`, with unchanged config `8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c` and schema 36. Its native Windows security reproduction passes after failing on the old dependency; the affected local gate passes 169 tests with 26 PostgreSQL-only skips. Use its config/manifest paths for subsequent deployment. Prior frozen bundles below remain historical evidence.
+The current [HP Omen deployment package](omen-deployment/README.md) is prepared release `ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645`, config `aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2`, schema 36. Preflight corrected the account-digest convention for the same verified account; all application and dependency pins are unchanged from the [Mako security fix](mako-security/README.md). Its affected local gate passes 169 tests with 26 PostgreSQL-only skips. Use the omen-deployment config/manifest paths for subsequent deployment. Prior frozen bundles below remain historical evidence.
+
+The exact release verifier passes under the existing limited task identity after user-authorized CurrentUser RemoteSigned. Replacement tasks are registered disabled. Fresh operational and learner copies migrate to schema 36 while retaining all original data values. Functional activation is waiting for an existing broker-accepted IWM SELL of 0.169669 shares; the market is closed. No live migration or commission has occurred, and existing protection/exit services remain unchanged.
 
 The replacement has three independent roles: trader, guardian, and outcomes with daily learning. Ordinary provider or clock interruptions cause scoped waits and recovery after fresh evidence. Manual stops and genuine ownership/accounting failures retain their explicit controls.
 
@@ -36,13 +38,15 @@ For the final package, the owner verified 44 working/committed artifact files, s
 
 ## Ordered operational review
 
-1. Verify the accepted release under the existing leepa Limited task identity using the exact verifier-only proposal. It checks runtime files without the operating database, environment file, broker or functional roles. Static proposals are disabled and trigger-free; actual selected-token execution, host/job-tree and log access are not yet established. This step does not authorize functional startup, migration or trading.
+1. The exact verifier-only proposal has passed under the existing leepa Limited task identity. It checks runtime files without the operating database, environment file, broker or functional roles. All four replacement tasks are now registered disabled and trigger-free. Functional process-tree ownership and role readiness still need verification before activation; a verifier pass is not functional startup.
 2. Refresh writer/task/ownership evidence and WAL-aware backups with a restore into a separate path. Review the exact old-entry-writer fence and additive schema36 migration. Keep the existing Protection/Deadline services and nine original-owner positions. Preserve original client IDs and resolve uncertain sends; never restore an older database over later activity.
 3. Acquire fresh account/position/cash evidence against the migrated store and exact reviewed release. Review the commission document within its 120-second freshness window; baseline capture must remain within five seconds of its original commission timestamp. Reacquire when stale. A combined acquire-and-commit operation requires explicit bounded approval; timestamps are never edited to simulate freshness.
 4. After approved commissioning, start submission-disabled guardian and outcomes before trader. Verify independent processes, fresh readiness and useful progress. Removing submission/entry clamps and scheduling are separately named changes. Explicit entry resume never clears another manual stop or quarantine.
 5. Observe an unforced broker-PAPER entry, protected exit, reconciliation, costed outcome and later daily learning receipt/model attribution. Existing XLE ownership or unknown actual costs may legitimately keep this acceptance waiting. Do not force trades, liquidations or model changes.
 
-The proposed first learning origin is October 15, 2026 at 13:30 UTC; regenerate and review the config if the actual handover date makes that stale. Exact component-cost applicability, canonical metadata, current retained-owner provenance, selected-token execution and recent-order provider latency/quota capacity remain operational prerequisites.
+The proposed first learning origin is October 15, 2026 at 13:30 UTC; regenerate and review the config if the actual handover date makes that stale. Exact component-cost applicability, canonical metadata, current retained-owner provenance and recent-order provider latency/quota capacity remain operational prerequisites. Selected-token verification is complete for this specific prepared release.
+
+The prepared configuration remains single-symbol XLE with one concurrent core position. The user's later October 14 clarification requests signal-led PAPER trades plus exploration across different stocks when no confident signal exists, with daily experience collection and learning from wins and losses. That changes the earlier no-quota, single-symbol design and is not implemented by this package. Its new execution/learning policy requires its own versioned preparation and tests; the staged XLE release must not be presented as satisfying that request.
 
 ## Review package
 
@@ -50,15 +54,16 @@ The proposed first learning origin is October 15, 2026 at 13:30 UTC; regenerate 
 - [Design](../../superpowers/specs/2026-10-13-paper-core-design.md)
 - [Authoritative implementation plan](../../superpowers/plans/2026-10-13-paper-core.md)
 - [Whole-branch findings](final-review.md)
-- [Current security-patched release and artifact paths](mako-security/README.md)
+- [Current HP Omen deployment package, exact status and blocker](omen-deployment/README.md)
+- [Mako security fix and regression evidence](mako-security/README.md)
 - [Pre-security prepared release and final implementation regression evidence](missing-work-recovery/README.md)
 - [Preceding residual correction and evidence](residual-cutoff/README.md)
-- [Consolidated repair runbook and recovery semantics](final-repair/README.md); use the current mako-security release paths for future actions.
+- [Consolidated repair runbook and recovery semantics](final-repair/README.md); use the current omen-deployment release paths for future actions.
 - [Implementation report and staged test results](final-repair/final-fix-report.md)
 - [Consolidated repair scoped review](final-repair-review.md): R2–R4 addressed.
 - [Residual cutoff review](residual-cutoff-review.md): normal and existing-work paths addressed; original residual preserved in this historical report.
 - [Final scoped acceptance](missing-work-review.md): missing-work-arrival correction accepted; all identified R1–R4 findings closed.
-- [Owner verification record](../../../.superpowers/sdd/2026-10-13-paper-core/missing-work-root-artifact-verification.json)
+- [Committed artifact inventory for the accepted implementation](missing-work-recovery/artifact-index.json)
 - [Owner decisions and preserved chronological rulings](decisions.md)
 
-No operating-store migration, commission, task change, direct broker probe, forced trade, LIVE enablement or deployment occurred during implementation. At the user's request, a read-only dashboard check confirmed HTTP 200 from the existing deployed console on 127.0.0.1:8787; that console does not run this replacement. The user's original request requires review before disruptive migration. This package prepares that review; it does not grant operational approval.
+PR #289 was merged into main at 2026-10-15 01:50:03 UTC. The user separately authorized HP Omen deployment and persistent script enablement. Subsequent staging performed the GET-only PAPER account/order check, copied-database rehearsal and disabled-task registration documented in the current Omen package. No operating-store migration, commission, replacement trading role, forced trade or LIVE enablement has occurred. The existing console remains the legacy deployment. The latest measured blocker and staged state take precedence over the earlier implementation-only status in historical bundles.

@@ -1,8 +1,36 @@
 # Runtime topology
 
-> **Current guidance — 2026-10-06:** The [current intraday PAPER direction](intraday-paper-direction.md) retains the Omen-only authority and retired-Pi policy. Dated deployment measurements below are historical, not a current inventory. Alienware dashboard viewing would not make it a trading host; see [access boundaries](dashboard-access.md).
+## Accepted topology — October 14, 2026
 
-## Current policy and observed state — 2026-09-08
+The [PAPER core](paper-core.md) uses three independently supervised native Windows
+processes on the HP Omen and one authoritative operational SQLite store. The trader
+evaluates fresh five-minute boundaries; the guardian recovers orders and protects
+new-core owned lots; outcomes resolves durable evidence and considers daily learning.
+Guardian and outcome work cannot depend on entry readiness or a fitting child. Target
+guardian/outcome polling is at most 15 seconds under healthy conditions; provider outages
+remain explicit waits rather than a guarantee of that cadence.
+
+The dashboard/exporter is an optional read-only view. Separate ingestion, news, Ollama,
+Kronos and general research tasks are not dependencies of the core. Existing optional
+tasks are retained until their dependencies and retirement are explicitly reviewed.
+There is no second new-core order outbox, new host or distributed workflow system.
+
+Omen remains the sole permitted trading host; Alienware viewing does not grant trading
+authority. The Pi is retired and must not be contacted. Host/process locks and SQLite
+transactional claims fence supported local writers; they do not prove global cross-host
+fencing. Any unverified alternate entry writer blocks handover.
+
+Functional rollout remains pending. The [Omen staging record](evidence/paper-core/omen-deployment/README.md)
+records three disabled, trigger-free replacement tasks and a successful verifier under
+`leepa / Interactive / Limited`. Existing protection/deadline services remain unchanged,
+and inherited lots keep their original owner. The operating store is not yet migrated or
+commissioned. Legacy binaries expect schema 29 at startup; schema-36 migration requires
+a verified compatible exit/protection transition, not a blanket service restart.
+
+See [handover](evidence/paper-core/handover.md) for the exact release and acceptance boundary,
+and [dashboard access](dashboard-access.md) for the separate viewing boundary.
+
+## Historical policy and observed state — September 2026
 
 The HP Omen laptop is the sole permitted Elrond coordinator. It carries the scheduler,
 supervision, durable PAPER ledger, broker integration, risk engine, reconciliation, kill switch,
@@ -59,9 +87,9 @@ Portable Ollama 0.33.3 is registered as `ElrondModelServer` and measured listeni
 480 MB; that demonstrates local worker execution, not broker state or forward evidence. See the
 [dated Omen runtime report](omen-runtime-2026-09-08.md) for the evidence record.
 
-## Role boundaries
+## Legacy role boundaries
 
-**Required Omen roles.** Coordinator, supervisor, dashboard, storage, paper execution, risk,
+**Legacy required Omen roles.** Coordinator, supervisor, dashboard, storage, paper execution, risk,
 reconciliation and kill-switch enforcement run natively on Windows. Required runtime health must
 be derivable from this one host.
 

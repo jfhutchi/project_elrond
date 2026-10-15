@@ -1,5 +1,10 @@
 # Retired Raspberry Pi deployment
 
+The current [PAPER core](../../docs/paper-core.md) keeps trader, guardian and outcomes on
+the existing native Windows Omen. No Pi or other host is required for trading, protection,
+learning or viewing. [Omen staging](../../docs/evidence/paper-core/omen-deployment/README.md)
+is still awaiting functional commissioning; it does not change the retirement policy below.
+
 > **Retired by operator policy on 2026-09-08. Do not contact the Pi and do not use it as a
 > coordinator, watchdog, dashboard or worker.** `setup.sh` exits immediately without making
 > changes. The material below is preserved as historical engineering evidence; it is not a

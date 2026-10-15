@@ -1,6 +1,8 @@
 # Adaptive PAPER source compatibility baseline
 
-> **Current guidance — 2026-10-06:** The [current direction](intraday-paper-direction.md) supersedes earlier rollout ordering, not compatibility or safety floors. Read the current integration PR and verify actual deployed pins; a main merge is not a runtime or exact-model activation.
+> **Legacy compatibility baseline.** Use [PAPER core](paper-core.md) and its [handover](evidence/paper-core/handover.md) for the replacement release. Core release identity is separate from economic policy/model identity; compatible executable transitions require an audited binding and do not automatically reclassify old outcomes. The retained table below describes the earlier experiment candidate, not schema-36 startup compatibility or current deployment.
+
+> **Earlier guidance — 2026-10-06:** The then-current direction superseded earlier rollout ordering, not compatibility or safety floors. This table's integration PR and deployed pins must be checked for that release; a main merge is not a runtime or exact-model activation.
 
 Implementation begins from approved plan commit `087dfc8c89d07986bded1c799fbf25450eb87189` in an existing isolated linked worktree. Native branch: `codex/adaptive-paper-coordinator`. No runtime/task changes are made to establish this baseline.
 

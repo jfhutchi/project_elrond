@@ -1,5 +1,7 @@
 # Capture and compare recovery evidence (#190 / #220)
 
+> **Current transition pointer.** Use [PAPER core](paper-core.md) and the [Omen package](evidence/paper-core/omen-deployment/README.md) to identify the current prepared release and pending operating migration. The portable inventory procedures below preserve earlier recovery evidence; they do not commission or launch core roles. The Pi remains retired and must not be contacted. A captured legacy schema/store/task record must not be relabeled as schema-36 startup compatibility or fresh broker proof.
+
 These commands inspect state. They never start Elrond, import its operational package, acquire
 locks, migrate/create a database, submit orders or clear the kill switch. They write only the
 tool extraction directory and redirected evidence files. Leave runtime checkouts, environments

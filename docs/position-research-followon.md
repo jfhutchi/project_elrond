@@ -1,5 +1,7 @@
 # Bounded PAPER position research journal
 
+> **Optional legacy research.** The [PAPER core](paper-core.md) does not require news, SEC research, a thesis journal or model-generated commentary to evaluate entries, protect owned lots or learn from outcomes. This separate journal keeps its original observational authority and point-in-time limits. Missing coverage cannot fabricate evidence or widen core authority. Its retained code and history may be retired only after dependency/ownership review.
+
 This source-only follow-on starts from frozen runtime head 90490a3. It is not
 deployed and does not modify the pilot universe, forecast, risk policy, exit
 ownership, account, provider configuration, or promotion state.

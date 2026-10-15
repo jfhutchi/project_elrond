@@ -1,0 +1,61 @@
+{
+  "captured_at_utc": "2026-10-15T02:00:02.7976062Z",
+  "tasks": [
+    {
+      "name": "Elrond Paper Core Guardian",
+      "state": "Disabled",
+      "role": "guardian",
+      "arguments_match_proposal": true,
+      "executable_matches_proposal": true,
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "last_run_at_utc": null,
+      "last_result": null,
+      "functional_role_started_by_this_deployment": false
+    },
+    {
+      "name": "Elrond Paper Core Outcomes",
+      "state": "Disabled",
+      "role": "outcomes",
+      "arguments_match_proposal": true,
+      "executable_matches_proposal": true,
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "last_run_at_utc": null,
+      "last_result": null,
+      "functional_role_started_by_this_deployment": false
+    },
+    {
+      "name": "Elrond Paper Core Trader",
+      "state": "Disabled",
+      "role": "trader",
+      "arguments_match_proposal": true,
+      "executable_matches_proposal": true,
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "last_run_at_utc": null,
+      "last_result": null,
+      "functional_role_started_by_this_deployment": false
+    },
+    {
+      "name": "Elrond Paper Core Verify",
+      "state": "Disabled",
+      "role": "verify",
+      "arguments_match_proposal": true,
+      "executable_matches_proposal": true,
+      "triggers": 0,
+      "principal": "leepa",
+      "logon_type": "Interactive",
+      "run_level": "Limited",
+      "last_run_at_utc": "2026-10-15T01:46:03.0000000Z",
+      "last_result": 0,
+      "functional_role_started_by_this_deployment": false
+    }
+  ]
+}

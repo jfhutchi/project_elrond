@@ -1,5 +1,7 @@
 # Multi-node deployment
 
+> **Current successor.** The [PAPER core](paper-core.md) requires three independent processes on the existing native Windows Omen and one operational SQLite store. A separate host, model server, research worker or dashboard is not a dependency. The Pi remains retired and must not be contacted. The multi-node design below stays historical; see [runtime topology](runtime-topology.md) for the current boundary.
+
 How a second machine becomes an Elrond node, and what has to exist before that is routine
 rather than a bespoke project each time. Extends [`runtime-topology.md`](runtime-topology.md)
 and #38.

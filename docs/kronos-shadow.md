@@ -1,5 +1,7 @@
 # Kronos Shadow Forecasting
 
+> **Optional research subsystem.** Kronos is not a dependency of the merged [PAPER core](paper-core.md) trader, guardian or outcomes worker. Core learning uses a fixed bounded ridge procedure and owned executed outcomes; Kronos forecasts do not become its labels or execution authority. Keep the separate worker environment, forecast ledger and historical evidence intact. Current staging and any future retirement are governed by [handover](evidence/paper-core/handover.md).
+
 ## Status and boundary
 
 This integration is an **experimental, shadow-only research collector**. It generates and later

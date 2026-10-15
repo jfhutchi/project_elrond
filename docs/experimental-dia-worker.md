@@ -1,6 +1,8 @@
 # Isolated experimental DIA PAPER worker
 
-> **Current guidance — 2026-10-06:** The [current direction](intraday-paper-direction.md) adds a separate shadow sector-ETF research lane. This retained DIA entry capability keeps its own commissioning, risk limits and exit ownership; its last receipt and natural next cohort must be measured independently.
+> **Retained legacy owner.** This DIA route is separate from the merged [PAPER core](paper-core.md), whose prepared configuration remains XLE-bound. The new requested daily multi-stock collection policy is not implemented by starting this older worker. Preserve its original ownership and commissioning evidence until an explicit verified transition; do not create a competing entry writer. See [current Omen staging](evidence/paper-core/omen-deployment/README.md).
+
+> **Earlier guidance — 2026-10-06:** A separate shadow sector-ETF research lane was added. This retained DIA entry capability keeps its own commissioning, risk limits and exit ownership; its last receipt and next cohort must be measured independently.
 
 This optional worker uses a separate learner directory, explicit DIA-only configuration and an existing operator-approved frozen model. It does not alter the original learner universe, transfer legacy exit ownership, or grant live execution.
 

@@ -1,5 +1,7 @@
 # Worker environment identity across execution backends
 
+> **PAPER core identity boundary.** Environment/release measurements remain distinct from economic policy and immutable model identity in [PAPER core](paper-core.md). A dependency or executable repair changes release identity; it may retain policy/model lineage only through the audited compatible binding. Do not discard compatible experience merely because the code SHA changes, or silently reuse outcomes after a semantic contract change. The historical worker default below remains specific to those research backends.
+
 **Status:** `PROJECT_DEFAULT` · **Version:** 1 · **Recorded:** 2026-08-30 · **Issue:** #137
 
 **Provenance:** chosen by Claude (Opus 5) under CLAUDE.md's rule that an unspecified operator

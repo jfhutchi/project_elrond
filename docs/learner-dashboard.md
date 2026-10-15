@@ -1,6 +1,8 @@
 # Learner dashboard
 
-> **Current guidance — 2026-10-06:** See [current direction](intraday-paper-direction.md) and [safe access](dashboard-access.md). The experiment journal is separately exposed through /experiments; the optional existing-store console binding is read-only. Historical fit diagnostics, shadow forecasts, matured market labels and actual PAPER P&L must remain separate, with missing data unknown.
+> **Current view boundary.** The [PAPER core](paper-core.md) has its own immutable model/learning receipts and role health; the `/learner` projection below remains the earlier market-label learner. Its forecasts, historical scores and chart returns are not core owned-trade P&L. A core daily `NO_CHANGE` is a valid consideration result, not proof of failed execution or a hidden model update. The existing console does not run or activate the staged replacement; see [deployment status](evidence/paper-core/omen-deployment/README.md).
+
+> **Earlier view update — 2026-10-06:** The experiment journal is separately exposed through /experiments; the optional existing-store console binding is read-only. Historical fit diagnostics, shadow forecasts, matured market labels and actual PAPER P&L remain separate, with missing data unknown. [Dashboard access](dashboard-access.md) retains its own current boundary.
 
 The operator console now exposes `/learner` and `/api/learner`. Operations and Research link to
 the new page. `/api/state` contains the same learner projection. Refresh reads the latest saved

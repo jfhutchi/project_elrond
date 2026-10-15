@@ -1,5 +1,7 @@
 # Dashboard access and exposure
 
+> **Current core boundary — October 14, 2026.** The [PAPER core](paper-core.md) dashboard/exporter is optional and read-only; entry, guardian and outcome progress must continue independently. The existing local console is a legacy deployed view, not proof that the new roles have started. Their [current deployment package](evidence/paper-core/omen-deployment/README.md) records disabled tasks and pending commissioning. A page view cannot migrate, commission or activate the replacement. The access observations below retain their original dates.
+
 The Omen dashboard is available **on the Omen** at
 http://127.0.0.1:8787/ . Experiment views use /experiments and
 /experiments/adaptive-sector-raw-20261006-v1; /learner shows the existing learner,

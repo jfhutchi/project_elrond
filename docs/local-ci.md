@@ -1,5 +1,7 @@
 # Local CI on Omen (#218)
 
+> **PAPER core verification scope.** Current implementation evidence is indexed in [handover](evidence/paper-core/handover.md). Report its bounded gates separately; do not add their test counts into a full-repository-green claim or treat test success as operational commissioning. The [Omen package](evidence/paper-core/omen-deployment/README.md) records the separate exact-release verifier, schema-copy rehearsal and disabled tasks. Verification remains local; no paid hosted CI is part of this rollout.
+
 From a clean, committed checkout, run:
 
 ```powershell

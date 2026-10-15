@@ -1,6 +1,8 @@
 # Adaptive PAPER candidate acceptance
 
-> **Current integration guidance — 2026-10-06:** [Intraday goals and real acceptance](intraday-paper-direction.md) are current. PR267 was retargeted to main after an independently reviewed, source-identical main-history reconciliation. Read its exact final-head checks and remote merge record; the earlier PR258-first ordering below is retained historical planning, not a current command. Dependency upgrades/docs are independently verified before integration. No branch-rule bypass, hosted-CI success or model activation is inferred.
+> **Historical acceptance of the legacy candidate.** Current implementation/operational boundaries are in [PAPER core](paper-core.md) and [handover](evidence/paper-core/handover.md). PR289 is merged, but its prepared roles are not functionally active and natural broker-PAPER acceptance remains open. The test counts, PR ordering and model-switch limits below belong to their named earlier candidate and are not current-core verification or commissioning evidence.
+
+> **Earlier integration guidance — 2026-10-06:** PR267 was retargeted to main after an independently reviewed, source-identical main-history reconciliation. Its exact final-head checks and remote merge record apply to that candidate; the earlier PR258-first ordering below is retained historical planning, not a current command. Dependency upgrades/docs were independently verified before integration. No branch-rule bypass, hosted-CI success or model activation is inferred.
 
 This candidate adds an isolated experiment coordinator, a permanent shared fit budget, point-in-time observations and research journals, retained PAPER execution integration, independent lot ownership, honest forward evaluation, and read-only experiment dashboards. It does not activate a model or change a running service.
 

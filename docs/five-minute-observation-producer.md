@@ -1,5 +1,7 @@
 # Frozen five-minute observation-only producer
 
+> **Optional legacy observation path.** The [PAPER core](paper-core.md) trader acquires its own declared symbol/benchmark inputs and does not depend on this frozen-model producer. Its owned-executed outcome target, scoped clock recovery and daily all-history learning are separate from the producer's market labels and monitor receipt. Preserve the earlier artifacts and charges; this launcher is not a core role startup recipe.
+
 `learner.five_minute_forward` can evaluate already-fitted, content-addressed
 five-minute models and append local prospective observations/outcomes. It has
 no fitting, order submission, deployment, promotion or risk-override API. This

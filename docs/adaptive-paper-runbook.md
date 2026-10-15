@@ -1,5 +1,7 @@
 # Bounded adaptive PAPER research
 
+> **Legacy experiment runbook.** For current architecture and rollout use [PAPER core](paper-core.md), [handover](evidence/paper-core/handover.md) and the [Omen package](evidence/paper-core/omen-deployment/README.md). The stages below describe the earlier SHADOW/experiment coordinator and its separate stores, market labels and activation path. They are not instructions to start the new trader/guardian/outcomes roles. The replacement uses one operational store, owned-outcome learning after ten completed exchange sessions, all eligible retained history with recent weighting, and scoped fault recovery. Legacy binaries expect schema 29 at startup; a schema-36 migration needs a verified compatible protection/exit transition.
+
 This workflow is experimental. Passing code tests is not a deployed trade, a
 forward sample, or evidence of profitability. The existing frozen entry model,
 independent deadline supervisor and protection services retain their own pins.

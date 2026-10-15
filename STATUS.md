@@ -1,6 +1,12 @@
 # QuantBot — Agent Orientation
 
-> **Current guidance — 2026-10-06:** [Current direction and acceptance](docs/intraday-paper-direction.md) supersede earlier goal/runtime summaries. Dated observations below are historical, not proof of current liveness, model authority or profit.
+> **Current guidance — October 14, 2026:** Start with the [PAPER core overview](docs/paper-core.md), [current direction](docs/intraday-paper-direction.md), and [measured deployment handover](docs/evidence/paper-core/handover.md). PR #289 is merged. The new trader, guardian and outcomes roles are staged but inactive; the operating database has not been migrated. The last broker check found an existing unfilled IWM exit, which blocks commissioning. The prepared core is still XLE-only. The user's subsequent requirement is signal-led trades with daily exploration across stocks when no confident signal exists; that extension is not yet implemented or deployed.
+
+The learner's intended daily loop retains eligible wins and losses, uses all compatible history, and gives the latest ten sessions more weight after a ten-session baseline. Trading, fitting, activation and profitability are separate facts. A daily receipt does not prove a fit or a better model, and the historical counts below do not describe the new runtime.
+
+## Preserved historical orientation
+
+The sections below retain their original findings and dates. They explain earlier research and operational decisions; they are not current startup instructions or evidence of present liveness.
 
 > **Runtime correction — 2026-09-08:** the Pi is retired entirely by operator policy and must not
 > be contacted or used for any role. The native Windows Omen is the sole permitted PAPER

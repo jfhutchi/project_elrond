@@ -1,0 +1,121 @@
+{
+  "captured_at_utc": "2026-10-15T02:00:02.7976062Z",
+  "archive_manifest": "D:\\Elrond\\review\\paper-core-20261014-mako-79e9155a\\tasks-before-functional-staging\\manifest.json",
+  "tasks": [
+    {
+      "name": "Elrond Adaptive Paper Shadow",
+      "definition_unchanged": true,
+      "archived_sha256": "89bb5c8bea9e3f468474e5b3d36b65be8fbb7691c7a37c5168a3e999523a356c",
+      "state": "Disabled"
+    },
+    {
+      "name": "Elrond Alert Dispatcher",
+      "definition_unchanged": true,
+      "archived_sha256": "3c763b8b6adf97d42aba645f140fb421ec55aed08ccc94b0ae268a909eda962d",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Console",
+      "definition_unchanged": true,
+      "archived_sha256": "1f3ec0a6363b3f492d3a76e81876c615cba8248627d3c97fc4ffba86b33ea5ed",
+      "state": "Running"
+    },
+    {
+      "name": "Elrond Daemon",
+      "definition_unchanged": true,
+      "archived_sha256": "842d7b0f84df31e89569a6bb853b677095ce35476f3526faa6379a18ea5dcc4c",
+      "state": "Running"
+    },
+    {
+      "name": "Elrond DIA Alerts",
+      "definition_unchanged": true,
+      "archived_sha256": "0d6a5d3ba91347ab057a762a71e071537fc80247ab5a305bb3d16529f6fa043e",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond DIA Learner",
+      "definition_unchanged": true,
+      "archived_sha256": "7dee8d647af40f6241e855ea71494e448216fa9b036efea1e8f227263cb01924",
+      "state": "Disabled"
+    },
+    {
+      "name": "Elrond Five Minute Observations",
+      "definition_unchanged": true,
+      "archived_sha256": "9cb9a0666ae075fc3b53720ef6ab05edf5d48f471bff5def7273e92c43781519",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Ingestion",
+      "definition_unchanged": true,
+      "archived_sha256": "86bd6292c5c035fd0fb491f2d73ee4f9f9685e8d2f8f497a56a049e9a49cc41b",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Learner",
+      "definition_unchanged": true,
+      "archived_sha256": "47cfc0e69306e52589a2efe4ca0e4ca20da932c972729afbb49e245b4ecb26f8",
+      "state": "Running"
+    },
+    {
+      "name": "Elrond Observer",
+      "definition_unchanged": true,
+      "archived_sha256": "f0af46b060a0c5e5284c8e6b14f0aabc2442bad535bac1268dfa22d4d94219df",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Paper Daily Close",
+      "definition_unchanged": true,
+      "archived_sha256": "197ae124f4d871bdd3204a6eb8893d231cb737289982ed132935e09bd78b30af",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Paper Deadline",
+      "definition_unchanged": true,
+      "archived_sha256": "05e418b8fbb753e9de20508525f61d93dad5fef01212267545500f578eceb77b",
+      "state": "Running"
+    },
+    {
+      "name": "Elrond PAPER Exploration",
+      "definition_unchanged": true,
+      "archived_sha256": "caf029f27635d028f13037c6fb971672e069e8dc0766c325c1426edd0c9bdb7b",
+      "state": "Running"
+    },
+    {
+      "name": "Elrond Position Research",
+      "definition_unchanged": true,
+      "archived_sha256": "6e83032b821f2c27622645550a5ac51c361963ac4c52f1f3dcb3ceb3a8981d99",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Protection",
+      "definition_unchanged": true,
+      "archived_sha256": "c90fef5926d49890d9fd3598582a87c40e5b640ebfbdde40ce4ef53bc6c2e7c4",
+      "state": "Running"
+    },
+    {
+      "name": "Elrond Report",
+      "definition_unchanged": true,
+      "archived_sha256": "ca82aa8fe57c87edc168e1a794c590d84a1a2f8eb57c2739f61d172ee4fd4f8a",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Research",
+      "definition_unchanged": true,
+      "archived_sha256": "99c8a8d2d99e7f63f83d6247fee4445f75d16a9f1cd176ddc907ca61ade5e3a8",
+      "state": "Ready"
+    },
+    {
+      "name": "Elrond Trade Learning Observer",
+      "definition_unchanged": true,
+      "archived_sha256": "44753234cb891f7398832134babfdbede090cd2c39d614c54c91a6c341db32bf",
+      "state": "Ready"
+    },
+    {
+      "name": "ElrondModelServer",
+      "definition_unchanged": true,
+      "archived_sha256": "350ba485027814e8b61f7b18c66394037f248d83a41a20eb9ce5777ff00dfc99",
+      "state": "Running"
+    }
+  ],
+  "limitation": "Scheduler state is not a fresh protection-health or broker proof."
+}

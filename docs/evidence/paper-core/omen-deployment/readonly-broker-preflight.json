@@ -1,0 +1,79 @@
+{
+  "scope": "GET_ONLY_NOT_COMMISSIONING",
+  "captured_at": "2026-10-15T01:44:15.825306+00:00",
+  "account_hash_matches": true,
+  "order_entry_allowed": true,
+  "open_orders": [
+    {
+      "symbol": "IWM",
+      "broker_order_id": "28523181-cd04-4f74-bd67-bcebe4582164",
+      "client_order_id": "qb-595f587acd1b769f4bd0d59282e631ad14ecb9f7",
+      "side": "SELL",
+      "order_type": "MARKET",
+      "time_in_force": "DAY",
+      "quantity": "0.169669",
+      "filled_quantity": "0",
+      "status": "accepted",
+      "submitted_at": "2026-10-14T20:05:02.623090Z",
+      "filled_average_price": null
+    }
+  ],
+  "original_iwm_order": {
+    "symbol": "IWM",
+    "broker_order_id": "28523181-cd04-4f74-bd67-bcebe4582164",
+    "client_order_id": "qb-595f587acd1b769f4bd0d59282e631ad14ecb9f7",
+    "side": "SELL",
+    "order_type": "MARKET",
+    "time_in_force": "DAY",
+    "quantity": "0.169669",
+    "filled_quantity": "0",
+    "status": "accepted",
+    "submitted_at": "2026-10-14T20:05:02.623090Z",
+    "filled_average_price": null
+  },
+  "positions": [
+    {
+      "symbol": "DBC",
+      "quantity": "1.462583"
+    },
+    {
+      "symbol": "EEM",
+      "quantity": "0.726321"
+    },
+    {
+      "symbol": "EFA",
+      "quantity": "0.463951"
+    },
+    {
+      "symbol": "IWM",
+      "quantity": "0.169669"
+    },
+    {
+      "symbol": "QQQ",
+      "quantity": "0.069596"
+    },
+    {
+      "symbol": "SPY",
+      "quantity": "0.065269"
+    },
+    {
+      "symbol": "XLE",
+      "quantity": "0.771962"
+    },
+    {
+      "symbol": "XLK",
+      "quantity": "0.26607"
+    },
+    {
+      "symbol": "XLV",
+      "quantity": "0.299132"
+    }
+  ],
+  "market_clock": {
+    "timestamp": "2026-10-15T01:44:15.763154Z",
+    "is_open": false,
+    "next_open": "2026-10-15T13:30:00Z",
+    "next_close": "2026-10-15T20:00:00Z"
+  },
+  "no_open_order_gate": false
+}

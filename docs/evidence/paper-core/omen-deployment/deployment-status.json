@@ -1,0 +1,24 @@
+{
+  "captured_at_utc": "2026-10-15T02:00:02.7976062Z",
+  "state": "STAGED_NOT_ACTIVATED",
+  "release_id": "ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645",
+  "config_id": "aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2",
+  "prepared_symbol": "XLE",
+  "exact_selected_token_verifier_passed": true,
+  "execution_policy": "Windows PowerShell CurrentUser RemoteSigned",
+  "replacement_functional_roles": "REGISTERED_DISABLED_NOT_RUN",
+  "operating_database_migrated": false,
+  "commissioned": false,
+  "old_entry_writers_fenced": false,
+  "operating_positions_reset": false,
+  "existing_exit_cancelled_or_replaced": false,
+  "blocker": "Existing IWM SELL accepted with zero filled at last read-only broker snapshot; no-open-order commissioning gate failed.",
+  "broker_snapshot_at_utc": "2026-10-15T01:44:15.825306Z",
+  "current_broker_rechecked_for_this_capture": false,
+  "next_steps": [
+    "Reconcile original exit to terminal state; refresh broker and ownership evidence.",
+    "Refresh writer fence and backups; verify compatible legacy protection/deadline transition before operating schema migration.",
+    "Reprepare if requested multi-stock signal/exploration policy changes; current package remains single-symbol XLE.",
+    "Commission only with fresh bounded evidence; verify guardian/outcomes readiness before trader activation."
+  ]
+}

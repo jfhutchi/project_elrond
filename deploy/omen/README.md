@@ -1,12 +1,54 @@
 # Native Windows PAPER runtime on the HP Omen
 
-> **Current guidance — 2026-10-06:** Use the [current direction](../../docs/intraday-paper-direction.md), [adaptive staged runbook](../../docs/adaptive-paper-runbook.md) and [safe dashboard access](../../docs/dashboard-access.md) for current commissioning. Dated host/deployment measurements below are retained history; never reapply an old installer or infer current health from them.
+## Current PAPER core staging — October 14, 2026
+
+Use the [PAPER core overview](../../docs/paper-core.md),
+[implementation handover](../../docs/evidence/paper-core/handover.md) and
+[exact Omen deployment package](../../docs/evidence/paper-core/omen-deployment/README.md)
+for the replacement path. Its three independent roles are trader, guardian and outcomes;
+the dashboard is optional. Functional rollout has not completed.
+
+Prepared release: `ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645`.
+Configuration: `aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2`.
+Supported schema: **36**; patched Mako: **1.4.3**. Restored operational and learner copies
+passed the 29-to-36 rehearsal with original data preserved. The operating stores have
+not been migrated and the runtime has not been commissioned.
+
+The three functional tasks are registered **disabled**, with no triggers and both
+submission and entry clamps. The exact verifier passed under `leepa / Interactive / Limited`
+with Windows PowerShell `CurrentUser RemoteSigned`. No Bypass argument was added.
+Existing Protection and Paper Deadline services and their task definitions are unchanged.
+Nine inherited positions retain owner `adaptive-momentum-v1-309894d8d8a5296e`.
+
+At October 15, 01:44 UTC (October 14 Eastern), an existing broker-accepted IWM sell of
+0.169669 shares remained unfilled during the closed market. This blocks the no-open-order
+commissioning requirement. Do not cancel, replace, resubmit or rewrite that intent to
+make commissioning pass. Its terminal state must first reconcile through the original IDs.
+
+For a later handover, refresh writer/task/ownership evidence and WAL-aware backups, fence
+old entries while preserving exits, and verify schema-compatible protection before the
+reviewed additive migration. **Existing legacy executables expect schema 29 on startup;
+do not restart them against schema 36.** Then use fresh bounded acquisition/commission
+evidence from the exact current package. Start independent guardian/outcomes before trader
+enablement. Clamps, scheduling and model authority must match the reviewed commission;
+neither a verifier run nor this document grants entry authority. Never restore an older
+trading database over newer broker activity.
+
+Routine provider/clock faults use scoped waits and fresh-evidence recovery. Manual stops
+and integrity faults retain explicit controls; guardian and trustworthy outcomes continue.
+Keep deployment secrets in the existing protected environment reference, and prepare frozen
+dependencies in an isolated release directory. Do not sync a running environment.
+
+## Legacy native installer and historical measurements
+
+The commands below describe the earlier multi-task runtime. They remain useful for its
+original services and evidence, but are **not** a PAPER core installation or restart recipe.
 
 The HP Omen laptop is the sole permitted Elrond coordinator. The Raspberry Pi is retired by
 operator policy and must not be contacted or used as a coordinator, watchdog, dashboard or worker.
 The Omen runtime has no Alienware or other-computer dependency.
 
-This directory's current entry point is `setup-windows.ps1`. The older WSL/systemd files remain as
+The legacy runtime's installer is `setup-windows.ps1`. The older WSL/systemd files remain as
 historical deployment artifacts and are not compatible with the measured current host: WSL is not
 installed and Docker is absent.
 
@@ -52,7 +94,7 @@ Omen is the only host policy permits to hold authority, but global coordinator/s
 and other-host fencing remain `UNKNOWN` to the read-only recovery inventory. Installation alone
 does not establish broker readiness or forward qualification; consult the current evidence above.
 
-## Install
+## Legacy install
 
 The runtime Python is installed at `D:\Elrond\tools\python`, outside packaged-app AppData
 virtualization. When preparing this host from packaged Codex, use an explicit external install:
@@ -135,7 +177,7 @@ Then inspect the scheduled task, process ownership, configured absolute paths an
 credentials, if later supplied outside the repository, permit a read-only reconciliation check;
 their absence is an honest refusal, not a reason to populate placeholders.
 
-## Required local roles
+## Legacy required local roles
 
 The native Windows runtime supervises the coordinator, position-protection process and dashboard
 on Omen. Research and inference workers are optional local subprocesses dispatched only when

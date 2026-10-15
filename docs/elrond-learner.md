@@ -1,5 +1,7 @@
 # Elrond Learner (#242)
 
+> **Legacy market-label learner.** The software below predicts five-session excess returns and remains optional research. The current [PAPER core](paper-core.md) uses a different target, `owned-executed-net-return-v1`, from certified fee-complete owned trades. After ten completed exchange sessions it considers learning daily over all eligible compatible history, latest ten sessions raw weight 2 and older sessions weight 1, normalized per fit. Its ten causal features and all-history procedure are not the twelve-feature/60-session feature lookback below. Keep artifacts and targets separate; see [the current learning loop](learner-experience-loop.md).
+
 The learner fits supervised models of **five exchange sessions of security price return minus
 SPY price return**. It produces scores and rankings. It has no order, risk override, strategy
 replacement, or promotion path.

@@ -1,5 +1,7 @@
 # Experiment detail journal reuse
 
+> **Legacy experiment view.** This optimization remains specific to the earlier experiment journal. The [PAPER core](paper-core.md) has separate joined evidence and role-health readers over its operational store; this console measurement does not prove current-core latency, commissioned deployment or completed outcomes. Both views remain read-only and must keep missing evidence unknown.
+
 The experiment detail panel used the ordinary read-only store independently in
 its evaluation, each exploration scorecard, lot resolver and feedback provenance
 reader. Those nested readers repeatedly queried and hash-checked the same complete

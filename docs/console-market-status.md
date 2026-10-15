@@ -1,5 +1,7 @@
 # Console market status
 
+> **Legacy console projection.** The [PAPER core](paper-core.md) reports each role's progress, first blocker, proof age and recovery requirements independently. A normal market closure may explain an entry wait; it cannot conceal unknown submissions, overdue protection, unfinished outcomes or a missing active model. The console behavior below does not supply core timing authority or establish that the staged roles are running. See [current deployment](evidence/paper-core/omen-deployment/README.md).
+
 The Operations dashboard shows **Market open**, **Market closed**, or **Market status
 unavailable** for the configured PAPER XNYS market. It compares the broker clock with the
 separate session-calendar endpoint, including holidays, early closes and Eastern daylight

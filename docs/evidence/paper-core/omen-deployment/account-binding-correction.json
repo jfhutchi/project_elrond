@@ -1,0 +1,16 @@
+{
+  "account_changed": false,
+  "configured_stored_and_broker_account_match": true,
+  "prior_digest_scheme": "content_id({'paper_account': account_id})",
+  "required_digest_scheme": "sha256(account_id.encode()).hexdigest()",
+  "prior_expected_account_hash": "ca2610f8f4c50efeb889856dd17445944557b3cd2f2a9ed67b83d59de2a49d19",
+  "corrected_expected_account_hash": "e09a79ca34d782e31e538bdf95a79b11d474f603e5916521e386f444b56053cc",
+  "old_release_id": "79e9155a7b54dd542b422cf2b3d11f71bb3616154de122fc7f27bc8f59147791",
+  "new_release_id": "ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645",
+  "old_config_id": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "new_config_id": "aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2",
+  "predecessor_derived_core": "REFUSED: configured account hash mismatch",
+  "successor_derived_core": "MATCHES_EXISTING_ACCOUNT",
+  "application_launcher_interpreter_and_distributions_unchanged": true,
+  "functional_deployment": "NOT_PERFORMED"
+}

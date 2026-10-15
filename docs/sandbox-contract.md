@@ -1,5 +1,7 @@
 # The sandbox contract
 
+> **Scope relative to PAPER core.** These security guarantees concern general generated-code research backends. The [PAPER core](paper-core.md) fitting child instead receives an immutable export through a restricted program interface, has a 30-second budget and no broker credentials or operational database handle. That interface is not a claim of a new OS sandbox and does not require optional research/model services. Preserve the distinctions below when reporting runtime isolation.
+
 What a research sandbox backend must provide, which of its guarantees are security boundaries, and
 what each backend actually enforces on the host it runs on.
 

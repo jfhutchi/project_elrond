@@ -1,6 +1,8 @@
 # Five-minute PAPER adapter candidate
 
-> **Current guidance — 2026-10-06:** See [current direction and acceptance](intraday-paper-direction.md). These retained commissioning controls continue to apply; historical setup records do not activate the new shadow artifacts or earn fresh outcomes.
+> **Legacy DIA adapter commissioning.** Current architecture and deployment are [PAPER core](paper-core.md) and the [Omen package](evidence/paper-core/omen-deployment/README.md). The procedures below preserve the earlier adapter's exact approval/ownership boundaries. They do not commission the new roles, widen the prepared XLE binding to daily multi-stock collection, or provide a compatible restart of schema-29 services after schema-36 migration.
+
+> **Earlier guidance — 2026-10-06:** These commissioning controls applied to the retained adapter; historical setup records did not activate new shadow artifacts or earn fresh outcomes.
 
 This is local source, not an activated strategy. It consumes existing frozen DIA
 observations and preserves the original models, trial charges, zero-selection

@@ -1,5 +1,7 @@
 # Bounded learner and observer rollout preparation
 
+> **Optional legacy observer deployment.** This is not the [PAPER core](paper-core.md) role rollout. Trader, guardian and outcomes have their own exact [deployment package](evidence/paper-core/omen-deployment/README.md); no separate observer or legacy learner task is required for their progress. The older schema/store assumptions and task commands below remain scoped to that earlier candidate. Do not apply them to a schema-36 operating store or infer that registration enables core authority.
+
 This follow-on adds source-only deployment procedures to the integrated learner/alert candidate.
 No task registration, code rollout, credential/principal change or chat delivery has occurred.
 The scripts default to plan-only; `-Apply` requires the operator's explicit rollout authority.

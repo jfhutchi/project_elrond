@@ -6,12 +6,32 @@ Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` 
 
 ## Primary Mission
 
-**Current delivery priority (2026-10-06):** the [intraday PAPER direction](docs/intraday-paper-direction.md)
-requires research, multiple eligible daily opportunities, protected trades, reconciled costs and
-outcomes, and bounded adaptation tested on later fresh evidence. The new adaptive experiment is
-currently SHADOW-only. Neither the historical turnover comment nor a 70–80% profitable-day goal
-is an implemented trade-count quota or authority to activate weak models. Preserve all existing
-risk, kill-switch, holdout, permanent fit-budget and real-money boundaries.
+**Current delivery priority (October 14, 2026 EDT):** finish the operational handover of the
+[PAPER core](docs/paper-core.md) and implement the latest request for daily bounded PAPER
+exploration across different stocks. The core has independent trader, guardian, and outcomes
+roles; the outcomes role also performs bounded daily learning. Its implementation merged in
+[PR #289](https://github.com/jfhutchi/project_elrond/pull/289) on October 15 at 01:50 UTC, but the
+prepared runtime has not been commissioned or activated. The prepared configuration selects XLE
+with one new position and can abstain. Daily multi-stock exploration is a new requirement, not
+an already implemented capability.
+
+The operator now wants daily PAPER attempts even when model confidence or an ordinary no-signal
+decision would otherwise prevent a trade, and learning from eligible wins and losses. Implement
+that selection policy explicitly and version its experience contract. Preserve the fixed PAPER
+account, truthful fills and costs, independent exits, historical holdings, protected-data
+exclusions, and trial accounting. Provider/market unavailability requires visible retries; it
+does not justify invented trades. Daily consideration is required by the baseline learner;
+insufficient or unreliable evidence may still produce `NO_CHANGE`. Do not promise a fill or
+progressively better performance on every day.
+
+The [accepted baseline design](docs/superpowers/specs/2026-10-13-paper-core-design.md) and
+[handover](docs/evidence/paper-core/handover.md) distinguish implemented contracts from deployment
+authority. Read the [current Omen evidence](docs/evidence/paper-core/omen-deployment/README.md)
+before runtime work. At the last recorded check, October 15 at 01:44 UTC, an existing accepted,
+unfilled IWM exit blocked the no-open-order commissioning condition. The replacement tasks were
+disabled with clamps and no triggers, and the operating store was unmigrated. Existing protection
+and deadline services remain responsible for inherited positions. Refresh this dated evidence
+before acting; a merge is not a deployment.
 
 Build Elrond into a continuously improving research system that can:
 
@@ -38,6 +58,10 @@ The current configuration boundary is `TRADING_MODE=PAPER` with
 may use that phrase as shorthand for the real-capital boundary, but code and deployment guidance
 must refer to the settings that actually exist.
 
+The new core fixes its endpoint to `https://paper-api.alpaca.markets` and binds runtime authority
+to the exact account, store, release, policy, model, and role. Preparing a release, creating a
+model file, or registering a task does not grant execution or unattended activation authority.
+
 No AI agent may:
 
 - Enable live trading or change the live-capital acknowledgement on its own authority.
@@ -53,15 +77,42 @@ supply credentials, or move money. An agent *may* conclude that a package is rea
 review with real capital in mind, provided the package states plainly what authority its success
 criteria carried (#72).
 
-### Kill-switch authority is role-specific
+### PAPER entry stops and recovery are scoped
 
-Research agents, external workers, and model-generated tools must never receive authority to clear
-the global kill switch.
+Ordinary clock, data, provider, and acquisition interruptions must not strand PAPER behind an
+automatic persistent global kill switch. Record a scoped wait or retryable failure, retry with
+bounded backoff, and recover automatically only after new complete reconciliation evidence,
+fresh decision timing/dependencies, and valid guardian readiness. Preserve failure and recovery
+receipts. Historical clean evidence is not current readiness.
 
-An operational control path may clear the paper-mode kill switch only through the existing
-authoritative readiness mechanism, after the actual underlying conditions have been mechanically
-verified and the action is durably audited. No LLM assertion, confidence score, environment flag,
-or operator-intent guess can substitute for those readiness checks.
+An explicit manual entry stop remains durable until an explicit audited resume passes fresh
+readiness. Research agents, external workers, and model-generated tools have no authority to
+clear it. Resume never clears another manual stop or integrity quarantine. No LLM assertion,
+confidence score, environment flag, or guess about operator intent substitutes for evidence.
+
+Genuine identity, ownership, store, or accounting contradictions quarantine the affected
+authority/evidence, expanding to the account when the fault cannot safely be bounded. Repeated
+raw observations do not repair a contradiction. Independently trustworthy protection, exits,
+outcomes, and learning continue; ambiguous ownership never authorizes blind selling. Retained
+legacy controls keep their own contracts until their responsibilities are deliberately handed
+over. Preserve their safety purpose and history without reintroducing routine global stops into
+the new core.
+
+### Daily learning is consideration, not a guaranteed fit
+
+The implemented learner starts after ten completed exchange sessions from the commissioned
+origin, including quiet sessions, then considers learning after every completed session. Use all
+eligible, compatible retained history, including wins and losses. Weight the latest ten completed
+sessions by raw 2 and older sessions by raw 1, normalized to mean 1 in preprocessing and fitting.
+There is no 60-session cutoff in the current contract.
+
+Preserve past-only chronological procedure validation, availability cutoffs, protected-holdout
+exclusions before materialization, episode floors, bounded fitting, and permanent trial charges.
+After validation, refit on all eligible history; do not claim an independent held-out score for
+the final artifact after it consumes development-validation data. Unknown costs and outcomes
+awaiting correction are not training labels. A `NO_CHANGE` receipt must identify its inputs,
+exclusions, reason, and unchanged model. Later decisions acknowledge the relevant receipt and
+exact active model; model-file creation alone is not learning acceptance.
 
 ## Baseline
 
@@ -69,7 +120,9 @@ Treat branch `version_01` as the preserved known-good baseline.
 
 Do not develop directly on `version_01`.
 
-Create/use an appropriate development branch for the v0.2 research architecture and make changes through auditable commits.
+Create/use an appropriate development branch and make changes through auditable commits. The
+current PAPER core is an incremental replacement within this project, not a rewrite of its
+broker, accounting, or research history.
 
 Preserve the existing:
 
@@ -81,11 +134,14 @@ Preserve the existing:
 - Strategy identity/versioning.
 - Supervisor/watchdog behavior.
 - Reconciliation controls.
-- Kill-switch behavior.
+- Explicit manual entry stops and their audit history; use the new scoped recovery contract for
+  routine PAPER interruptions.
 - Existing research results.
 - `REFUTED.md` institutional knowledge.
 
-Do not replace working infrastructure merely because another framework exists.
+Do not replace working infrastructure merely because another framework exists. Preserve original
+intent/fill/client identities and inherited ownership through additive migration. Never reset
+positions to simplify handover or restore an old trading database over newer broker activity.
 
 ## Operational Truth and Forward Evidence
 
@@ -182,6 +238,11 @@ The target loop is:
 
 Do not skip stages simply because an idea looks promising.
 
+This is the broader hypothesis-research loop. The separately commissioned PAPER core uses its
+fixed collection/prediction and learning contracts to gather attributable experience; optional
+research services are not prerequisites for its protection or outcome processing. A new daily
+exploration policy must declare its selection contract rather than relabel earlier experience.
+
 ## Deterministic Checks Before LLM Judgment
 
 Where possible, prefer mechanical tests over asking an LLM to reason about something that software can prove.
@@ -233,6 +294,12 @@ A future agent asking:
 > "What has Elrond learned about momentum?"
 
 should receive evidence-linked project knowledge rather than regenerated narrative.
+
+Keep root `.superpowers/`, `.codex/`, and other ignored scratch directories local and out of
+origin. Durable specifications/plans in `docs/superpowers/` and reviewed evidence in
+`docs/evidence/` are intentional repository records. Promote evidence needed by future readers
+into durable documentation before removing a scratch dependency; retain original historical
+records and their identity rather than rewriting them as current results.
 
 ## Infrastructure Philosophy
 
@@ -314,8 +381,8 @@ Measured improvements in the current system should generally outrank speculative
 For every meaningful change:
 
 - Inspect existing implementation before modifying it.
-- Write or update tests.
-- Run relevant test suites.
+- Write or update meaningful tests for behavior changes.
+- Run checks suited to the change; source and link verification is appropriate for documentation-only edits.
 - Validate failure paths.
 - Avoid changing unrelated behavior.
 - Preserve backward compatibility unless deliberately breaking it.
@@ -388,10 +455,12 @@ research waited on operator intent, and a data-mined candidate could dead-end wa
 to attest a number the system had already measured. The agent obeyed the stop rule instead of
 building the autonomous system the rule exists to serve.
 
-**Human authorization is required only at the real-capital boundary, and for access software
-cannot obtain.** Everything else — research, backtesting, shadow mode, paper trading, risk policy,
-model selection, statistical policy, runtime topology, ordinary implementation — proceeds on a
-default the agent selects and labels honestly.
+**Do not manufacture approval gates for routine work.** Research, backtesting, shadow mode,
+paper trading, model selection, statistical policy, runtime topology, and ordinary implementation
+proceed within the user's authorized scope using a defensible, labeled default. Honor explicit
+user constraints and the exact runtime/ownership/activation commissioning contract; an
+implementation approval is not a substitute for a required deployment record. Real capital and
+access software cannot obtain remain human boundaries.
 
 When a preference is unspecified:
 
@@ -406,9 +475,10 @@ When a preference is unspecified:
 5. If one action cannot safely execute, continue everything that does not depend on it.
 6. A blocker stops the unsafe or impossible action, never the whole session.
 
-**Tiebreak for thresholds**, in order: an existing deployed value; a value implied by a constraint
-already written down; then the value that refuses more — a false refusal costs a missed paper
-trade, a false permit costs the thing the control exists to prevent.
+**Tiebreak for thresholds**, in order: the applicable approved contract; a compatible existing
+deployed value; then a conservative, explicitly versioned project default. Distinguish safety
+invariants from collection/model-confidence policy. Do not silently turn the new daily PAPER
+exploration objective back into optional trading by treating every additional refusal as safer.
 
 ### A default is not an approval
 

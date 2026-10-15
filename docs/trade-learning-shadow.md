@@ -1,5 +1,7 @@
 # PAPER execution attribution and bounded challenger research
 
+> **Legacy shadow learner.** The [PAPER core](paper-core.md) replaces this path for new-core owned-outcome fitting while preserving the original artifacts. Its independent outcomes worker considers eligible wins and losses daily after ten completed exchange sessions, using all eligible compatible history with recent-session weighting and past-only validation. Exact activation authority and later decision attribution are required; the shadow proposals below neither supply that authority nor satisfy current functional rollout. See [the current learning loop](learner-experience-loop.md).
+
 `quantbot.learner.trade_learning.read_trade_episodes` reads a snapshot-consistent,
 read-only operational store. It binds a five-minute forecast to its exact durable
 deadline handoff and entry intent, then joins broker fills through client order

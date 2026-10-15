@@ -1,6 +1,60 @@
 # What experience changes, and what still needs evidence
 
-This describes source behavior, not deployed acceptance or demonstrated profitability.
+## Current PAPER core learning contract
+
+The [PAPER core](paper-core.md) implementation is merged in PR289; functional activation
+and natural broker-PAPER acceptance remain pending in the
+[deployment handover](evidence/paper-core/handover.md). It fits a fixed ridge predictor to
+`owned-executed-net-return-v1`, the net return on entry notional of the exact owned lot
+under its fixed stop/deadline/selection contract. This differs from earlier market-label
+learners and from the legacy exploration counters below.
+
+The independent outcomes role resolves attributable entry/exit fills, terminal order
+evidence, protection and reconciled flatness **for the owned lot**, while inherited holdings
+keep their original owner. Broker net is populated only with complete actual cost evidence
+(`BROKER_REPORTED` or applicable documented `CONTRACTUAL_ZERO`). Unknown fees remain
+`COSTS_PENDING`; modeled costs are separate, and execution-price effects are not deducted
+again. Corrections append outcome revisions, exclude dirty outcomes until reconciliation,
+and never turn one trade into multiple training samples.
+
+After ten completed exchange sessions, including quiet sessions, consider learning after
+every completed session. Eligible wins and losses both train; do not select by profitability.
+Use all eligible compatible retained history, with the latest ten completed sessions at
+raw weight 2 and older sessions at raw weight 1, normalized to mean 1 for preprocessing
+and ridge loss. There is no 60-session retention cutoff. Preserve all prior outcomes and
+their exclusion reasons. No executed label is invented for an untraded observation.
+
+The procedure uses ten causal features, alpha 1 and seed 0, one charged candidate procedure
+per completed session, and a 30-second bounded fitting child without broker credentials or
+an operational database handle. Outcome processing has priority over fitting and keeps
+working while entries wait or the market is closed.
+
+Five expanding chronological folds use revisions actually available at each fold cutoff,
+nonoverlapping windows and at least a 30-minute embargo. The first fold needs at least
+30 certified episodes across five earlier sessions; the five later validation sessions need
+at least ten episodes. Protected ranges are excluded before materialization. Compare with
+training-only constants and the exact historical decision models on the same episodes.
+When fixed gates pass, refit on all current eligible history, including development
+validation. The result has procedure-validation evidence, not an independent held-out
+score after the refit. Protected final holdouts retain their separate registry/budget.
+
+Insufficient or unchanged eligible evidence produces immutable `NO_CHANGE` with the parent
+model retained. Failed fits, rejected candidates and awaiting-activation states retain
+their own receipts. Initial model use and unattended daily activation need the exact
+commissioned authority; activation is atomic at a safe decision boundary and the later
+decision must acknowledge its model and learning receipt. A successful fit cannot by itself
+grant entries, increase risk or establish profitability.
+
+The newly requested daily PAPER exploration across multiple stocks is a follow-on behavior
+requirement. The prepared release binds XLE and its benchmark dependencies; it does not yet
+implement that requested multi-stock daily collection policy. Daily consideration is not a
+claim that every day supplies broker fills or a valid parameter update. The current
+[direction](intraday-paper-direction.md) separates that goal from measured deployment.
+
+## Legacy experiment experience and adaptation reference
+
+The following sections retain earlier coordinator behavior and its evidence limits. They
+do not describe the replacement learner, its all-history procedure or its activation API.
 
 ## Owned-trade experience
 

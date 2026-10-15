@@ -1,10 +1,39 @@
 # Deployed state: what is actually running
 
-> **Current guidance — 2026-10-06:** Use [current direction and acceptance](intraday-paper-direction.md) alongside these identity semantics. A merged branch, configured task or live process does not prove current forecasts, actual fills, reconciled outcomes or profitability.
+## Current deployment boundary — October 14, 2026
 
-**Issue:** #190 · **Schema:** 27 · **Command:** `quantbot deployment-status`
+The accepted [PAPER core](paper-core.md) is prepared, not functionally deployed. Read the
+[current Omen staging record](evidence/paper-core/omen-deployment/README.md) and
+[handover](evidence/paper-core/handover.md) for exact release/configuration hashes and evidence.
+The prepared release uses schema 36 and Mako 1.4.3. Only restored operational and learner
+copies migrated from schema 29; their original values and identities were preserved.
+No operating migration or runtime commission has occurred.
 
-Current Omen observations are in [the September 10 runtime record](omen-runtime-2026-09-10.md).
+Trader, guardian and outcomes tasks are registered disabled, with submission/entry clamps
+and no triggers. The verifier passed under the actual `leepa / Interactive / Limited`
+identity with Windows PowerShell `CurrentUser RemoteSigned`; no Bypass was introduced.
+Existing protection/deadline services are unchanged. Nine inherited positions retain
+`adaptive-momentum-v1-309894d8d8a5296e` ownership. The October 15, 01:44 UTC read found an
+accepted unfilled IWM sell of 0.169669 shares during the closed market, preventing the
+required no-open-order commissioning. Reacquire evidence before any later action.
+
+A checkout, successful verifier, registered task or live process does not establish a
+commissioned model, attributable fill, reconciled outcome or profitability. Core identity
+separates release, economic policy, immutable model, outcome revision and commissioned
+deployment. Compatible executable maintenance preserves economic identity only through an
+audited binding. Routine scoped waits do not clear manual stops or integrity quarantine.
+
+## Legacy deployment inventory mechanism
+
+The remaining sections describe the retained inventory API and historical observations.
+Their schema/commit/status values are not current rollout pins. Legacy executables expect
+schema 29 at startup; do not restart them against schema 36 without a compatible protection
+and exit transition. The core's own status/export and role heartbeats provide separate
+release, authority, progress and first-blocker evidence after commissioning.
+
+**Issue:** #190 · **Historical schema at introduction:** 27 · **Command:** `quantbot deployment-status`
+
+Historical Omen observations are in [the September 10 runtime record](omen-runtime-2026-09-10.md).
 Local-account application startup tasks run from commit `5025b21586223d05dfeb4c37c2a514338a25a711` against
 `D:\Elrond\state\quantbot-paper-fresh-20260908.db`. PAPER reconciliation and readiness pass, and
 the durable kill switch is clear after the tested equity-valuation update and measured clearance.

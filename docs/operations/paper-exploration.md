@@ -1,5 +1,7 @@
 # Outcome-first PAPER exploration
 
+> **Legacy exploration implementation.** The [PAPER core](../paper-core.md) is the merged replacement foundation, with [operational activation still staged](../evidence/paper-core/omen-deployment/README.md). The latest user requirement is bounded daily PAPER exploration across different stocks even without a confident positive forecast. That follow-on behavior is not implemented by the prepared XLE-bound release or by automatically reusing this older coordinator's commissioning. Preserve original policies, owner IDs and trial history; do not claim a multi-stock daily fill or learning update without actual evidence.
+
 This is an explicitly commissioned, nonpredictive sampling policy. It collects
 protected PAPER trade experience without pretending a weak forecast is qualified.
 Negative baseline predictions remain unchanged, linked pretrade diagnostics.

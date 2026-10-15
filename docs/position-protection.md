@@ -1,5 +1,27 @@
 # Position protection
 
+## PAPER core guardian and inherited positions
+
+The [PAPER core](paper-core.md) has a separate guardian process that acknowledges durable
+protection plans before new-core entry submission, tracks incremental fills, recovers
+uncertain orders with their original IDs and submits owned risk-reducing exits. Trader
+failure, entry waits, closed-session learning or a failed fitting child cannot disable it.
+Current core limits include a 100 bps stop, 30-minute horizon and at least a 120-second
+close buffer; the legacy policy defaults below do not replace that fixed envelope.
+
+The [current rollout](evidence/paper-core/omen-deployment/README.md) has not started the
+new guardian. Existing Protection and Paper Deadline services remain unchanged, and nine
+inherited positions retain `adaptive-momentum-v1-309894d8d8a5296e` ownership. Do not adopt
+or liquidate unexplained inventory or retire a protection owner before its replacement
+has acknowledged every transferred lot. An existing pending exit must reconcile through
+its original IDs before the no-open-order commission can succeed.
+
+Schema-36 migration also requires a compatible protection/exit transition: legacy binaries
+expect schema 29 at startup. A running old process is not proof it can safely restart
+against the migrated store. Preserve original fills, stops and owner provenance throughout.
+
+## Legacy protection-daemon policy reference
+
 The independent `protection-daemon` evaluates broker positions without waiting for strategy,
 research, or model execution. It records every evaluated position in the existing durable ledger
 and submits required exits through the execution coordinator. Deployment and authoritative-store

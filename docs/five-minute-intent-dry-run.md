@@ -1,5 +1,7 @@
 # Five-minute intent dry-run
 
+> **Legacy diagnostic bridge.** This dry run retains its original frozen market-label model contract. The [PAPER core](paper-core.md) records its own durable decisions, intents and protection handoffs and learns from certified owned executed outcomes. This hypothetical report supplies no broker authority, new-core readiness or evidence that daily multi-stock collection is implemented.
+
 This source-only bridge diagnoses a frozen `five-minute-price-alpha-v1` DIA
 observation. It does not construct a runtime, broker, execution coordinator,
 domain order intent, deployment or promotion. It never fits a model or writes

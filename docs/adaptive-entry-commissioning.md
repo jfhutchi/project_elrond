@@ -1,6 +1,8 @@
 # Adaptive PAPER entry commissioning
 
-> **Current guidance — 2026-10-06:** See [current intraday PAPER direction](intraday-paper-direction.md). The deployed new experiment is observational SHADOW; this document describes a separately gated entry capability, not proof that it is active. Existing entry/protection owners retain authority until an exact authorized, readiness-verified transfer.
+> **Legacy commissioning contract.** The [PAPER core](paper-core.md) replaces this experiment-entry route. Its merged implementation is staged, with disabled roles and no operating migration or commission; use the [exact current Omen package](evidence/paper-core/omen-deployment/README.md). This document preserves the old entry owner's controls and evidence. It does not activate a core model, transfer inherited lots or permit a schema-29 executable to restart against schema 36.
+
+> **Earlier guidance — 2026-10-06:** The deployed experiment at that time was observational SHADOW; this document describes a separately gated entry capability, not proof that it was active. Existing entry/protection owners retain authority until an exact authorized, readiness-verified transfer.
 
 The default `experiment_launch` remains SHADOW-only. The separate
 `experiment_entry` launcher supplies retained PAPER services before the unchanged

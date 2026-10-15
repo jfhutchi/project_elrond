@@ -1,5 +1,36 @@
 # Recover runtime truth before deployment (#190)
 
+## PAPER core transition
+
+Use [PAPER core](paper-core.md), [handover](evidence/paper-core/handover.md) and the
+[current Omen package](evidence/paper-core/omen-deployment/README.md) before applying any
+recovery procedure below. PR289 is merged; the replacement roles are staged disabled,
+and the operating stores have not migrated or been commissioned. A copy-only schema-36
+rehearsal and successful exact-release verifier do not establish trading readiness.
+
+Refresh existing orders, task/process writers, account/ownership evidence and WAL-aware
+backups before transition. The latest dated check has an accepted unfilled IWM exit that
+blocks the no-open-order commission. Resolve it through its original IDs without another
+submission. Nine inherited positions retain their original owner and existing protection
+and deadline services continue unchanged.
+
+**Legacy executables expect schema 29 at startup.** Establish a compatible protection/exit
+transition before the reviewed additive migration to schema 36; do not migrate and then
+blindly restart every old task. Never restore an old trading database over later broker
+activity. If a prior executable cannot read new schema/ownership, retain compatible
+protection/recovery and repair forward. Guardian/outcomes readiness precedes entry enablement.
+
+Routine acquisition/provider/clock failures recover through scoped waits and fresh valid
+evidence. Preserve explicit manual stops and audited integrity quarantine. An entry fence
+or rollback-model action must use the exact commissioned binding; resume does not clear
+unrelated stops or grant authority to an uncommissioned release.
+
+## Legacy inventory and historical recovery reference
+
+The procedures below describe retained inventory mechanisms and earlier measured states.
+They do not select the new-core release, migrate the store or commission its roles. Use an
+already prepared pinned environment for inspection; do not synchronize running dependencies.
+
 Use `deployment-status` before `doctor`, the ordinary supervisor, any installer, or any
 database command. `doctor` probes the broker and builds the runtime; construction can persist
 deployment/policy metadata. The ordinary supervisor can restart a daemon. Neither is a

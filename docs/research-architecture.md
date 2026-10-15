@@ -1,6 +1,32 @@
 # The research subsystem
 
-> **Current guidance — 2026-10-06:** [Current intraday PAPER direction](intraday-paper-direction.md) adds the bounded point-in-time forecast/market-label and later protected-trade/outcome/adaptation lanes. The trust boundaries below still apply; multiple eligible opportunities are the goal, not an annual trade-count quota.
+## Current core and retained research boundaries
+
+The merged [PAPER core](paper-core.md) implements a fixed owned-outcome learning path
+inside three independent roles: trader, guardian and outcomes. General hypothesis
+generation, news, semantic analysis and Kronos are optional research systems; they are
+not dependencies of entry, protection, outcome reconciliation or daily core learning.
+Functional rollout remains staged in the [handover](evidence/paper-core/handover.md).
+
+After ten completed exchange sessions, including quiet sessions, core learning considers
+eligible wins and losses after every completed session. It uses all compatible retained
+history, latest ten sessions at raw weight 2 and older sessions at weight 1, normalized
+within each fit. It does not discard history at 60 sessions. It retains past-only validation,
+pre-materialization protected-data exclusions and permanent trial charges. Unknown costs
+and pending corrections stay excluded; insufficient evidence yields `NO_CHANGE`.
+
+The core's fixed ridge target is owned executed net return under its declared selection
+and exit contract. Old market-label learners, hypothetical portfolios and untraded
+observations cannot silently supply that target. Fit execution has a restricted immutable
+input/result interface and time budget; that is not a claim of a new OS security sandbox.
+See [the learning loop](learner-experience-loop.md) for procedure validation, all-history
+refitting and the separate activation boundary.
+
+The rest of this document preserves the broader research subsystem's trust boundaries and
+historical findings. Its model search, promotion gates and milestone statements do not
+define the replacement core's startup recipe or establish current deployment. The newly
+requested daily multi-stock PAPER collection policy is follow-on work; the prepared
+configuration remains XLE-bound.
 
 How Elrond decides what counts as evidence, and the mechanisms that stop it being talked into
 something. This complements [STATUS.md](../STATUS.md), which covers the trading side.

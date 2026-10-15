@@ -1,6 +1,8 @@
 # Learner progress alerts — first delivery batch
 
-> **Current guidance — 2026-10-06:** See [current intraday acceptance](intraday-paper-direction.md). Operator consent, model commissioning, market/calendar waiting, coverage failure and real incidents are separate states. The approved external 17-code webhook remains unchanged; repository integration does not enable added local codes or establish digest delivery.
+> **Legacy alert delivery contract.** The [PAPER core](paper-core.md) supplies role-scoped progress and recovery evidence; this earlier worker/webhook catalog does not automatically expose new core states. Preserve the existing authorized delivery route and catalog. Closed-market waits, transient retries, manual entry stops, integrity faults, learning `NO_CHANGE` and awaiting activation are distinct. Current [staged roles](evidence/paper-core/omen-deployment/README.md) are disabled, not running successfully because a legacy alert was delivered.
+
+> **Earlier delivery update — 2026-10-06:** Operator consent, model commissioning, market/calendar waiting, coverage failure and real incidents are separate states. The approved external 17-code webhook remained unchanged; repository integration did not enable added local codes or establish digest delivery.
 
 This batch addresses portions of #251, #252 and #253. It does not close those issues.
 

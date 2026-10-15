@@ -1,5 +1,7 @@
 # Stable broker snapshot acquisition
 
+> **Legacy acquisition reference.** The [PAPER core](paper-core.md) reuses broker/ownership primitives but requires its own versioned reconciliation proof and current cash authority. Acquisition instability is a scoped wait/retry, not a persistent global kill-switch reset. Raw account/position observations or repeated matching snapshots are not independently derived proof. Genuine identity/ownership/accounting contradictions retain quarantine; current staging is in [handover](evidence/paper-core/handover.md).
+
 This candidate changes acquisition and diagnostics, not reconciliation tolerances,
 strategy selection, risk limits, position ownership or kill-switch authority.
 

@@ -1,5 +1,7 @@
 # Sanitized alert envelope prerequisite (#253)
 
+> **Retained delivery boundary.** The [PAPER core](paper-core.md) health records do not automatically extend this legacy external-message allowlist or authorize sending to another chat. New role states remain local unless their exact catalog and destination are separately configured. Current core operational state is in [handover](evidence/paper-core/handover.md); no message delivery proves commissioning or broker acceptance.
+
 `quantbot.operations.alert_delivery` implements a pure encoder and consumer filter.
 It does not send comments, install a dispatcher, create an automation, acknowledge
 an alert or change delivery status. External delivery remains NOT_CONFIGURED.

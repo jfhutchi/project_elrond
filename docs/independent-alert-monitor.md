@@ -1,5 +1,7 @@
 # Independent receipt monitoring
 
+> **Optional monitoring scope.** The [PAPER core](paper-core.md) records independent trader/guardian/outcomes health with first blockers, evidence age and useful progress. This retained monitor may observe legacy workers but is not a dependency or trading authority for the core. A provider/clock interruption in the new path is a scoped recoverable wait; it must not be converted to an automatic persistent global kill switch. External delivery retains its existing separate authorization.
+
 This follow-on to #251/#252/#253 runs independently of the learner. Its optional market-hours
 probe uses existing PAPER GET capabilities only. It has no application-store migration, order,
 model-promotion or scheduler-installation dependency.

@@ -1,6 +1,56 @@
 # QuantBot Agent Runbook
 
-> **Current guidance — 2026-10-06:** Start with the [current intraday PAPER direction](intraday-paper-direction.md), [staged runbook](adaptive-paper-runbook.md) and [dashboard access](dashboard-access.md). Verify actual pins/receipts and gates locally. September measurements and baseline rotation descriptions below are historical and do not establish current clearance or adaptive-model authority.
+## Current handoff — October 14, 2026
+
+Start with the [PAPER core overview](paper-core.md), [accepted implementation handover](evidence/paper-core/handover.md)
+and [current Omen deployment package](evidence/paper-core/omen-deployment/README.md).
+PR289 is merged to `main` at `7889f576`. The replacement has three independent roles on native Windows Omen: trader,
+guardian and outcomes with bounded daily learning, sharing one operational SQLite store.
+Dashboard, news, Kronos and general research workers are optional. The Pi remains retired;
+do not contact it. No LIVE route is introduced.
+
+Implementation acceptance is separate from functional rollout. The prepared release is
+schema 36 with Mako 1.4.3. Restored operational and learner copies migrated from 29 to 36
+with original data preserved; the operating stores have not been migrated or commissioned.
+The three replacement tasks are registered **disabled**, with entry/submission clamps and
+no triggers. The exact verifier passed under `leepa / Interactive / Limited` after the
+user-authorized Windows PowerShell `CurrentUser RemoteSigned` change; no Bypass was added.
+
+At October 15, 01:44 UTC (October 14 Eastern), the existing IWM sell of 0.169669 shares
+remained broker-accepted and unfilled during the closed market, blocking the no-open-order
+commissioning gate. Existing protection and deadline services remain unchanged. Nine
+inherited positions retain owner `adaptive-momentum-v1-309894d8d8a5296e`. These are dated
+observations, not fresh readiness proof; obtain current evidence for a later handover.
+
+Routine provider/clock/acquisition faults cause scoped waits and recover after fresh
+acceptable evidence. Do not clear a manual stop to repair such a wait. Manual entry stops
+and integrity/ownership quarantines retain their explicit controls. Guardian and trustworthy
+outcome work continue independently of entry, fitting and closed-session waits.
+
+Learning begins consideration after ten completed exchange sessions, including quiet ones,
+and then considers eligible wins and losses after every completed session. Use all eligible
+compatible retained history: latest ten sessions raw weight 2, older history weight 1,
+normalized within each fit. Past-only validation, immutable outcome revisions, protected
+data and permanent trial accounting remain mandatory. `NO_CHANGE` is honest progress;
+there is no daily-improvement guarantee or automatic LIVE transition. The latest requested
+daily multi-stock PAPER exploration behavior is follow-on work, not a deployed capability:
+the prepared release remains XLE-bound. Do not treat current no-signal waits as completion
+of that new requirement or fabricate fills/labels to satisfy it.
+
+For continuation, read the deployment package before considering any state change. Preserve
+WAL-aware backups, original order IDs and original exit ownership; establish the compatible
+protection/exit transition before an additive migration. **Existing legacy executables
+expect schema 29 at startup: do not restart them against schema 36.** A rollback cannot
+restore an older trading database over newer broker activity. Guardian/outcomes readiness
+precedes trader enablement, and exact release/config/model authority must be commissioned.
+
+## Legacy coordinator reference and dated session notes
+
+The remainder describes earlier releases, commands and measurements. It is retained to
+interpret legacy evidence and original-owner services, not as the PAPER core startup recipe.
+Its hard-failure kill-switch behavior, feature/fit rules, risk caps, schema versions and
+historical clearance claims do not define the replacement contract. Current direction is
+summarized in [intraday PAPER direction](intraday-paper-direction.md).
 
 Continuation notes for any session picking this repository up. `PROJECT_STATUS.md` is
 machine-generated and overwritten by `quantbot run-once` / `quantbot doctor`; this file is

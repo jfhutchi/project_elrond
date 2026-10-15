@@ -1,5 +1,7 @@
 # Historical replay ranges
 
+> **Legacy replay display.** These training/validation charts remain diagnostic views of their original artifacts. The [PAPER core](paper-core.md) learns from all eligible compatible owned outcomes after ten completed exchange sessions and refits after past-only procedure validation. Neither these seen-data plots nor a core all-history refit establish untouched holdout performance, broker acceptance or profitable daily improvement.
+
 The learner dashboard can display verified saved-model replay over the complete
 existing training and validation rows. These are separate sections, each starting
 at $100. Training is in sample; validation was reused during development. Neither

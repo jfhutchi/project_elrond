@@ -1,5 +1,7 @@
 # Database target: the seam, and why it enables nothing
 
+> **PAPER core storage boundary.** The [PAPER core](paper-core.md) keeps one authoritative operational SQLite store and the existing intent outbox. Schema 36 is an explicit additive migration, not a side effect of a read or normal startup. The [Omen rehearsal](evidence/paper-core/omen-deployment/README.md) migrated restored schema-29 operational/learner copies only; the operating stores remain unmigrated. Legacy executables expect schema 29 at startup, so establish compatible protection/exits before migration. Historical stores, IDs, cost revisions, holdouts and trial charges are preserved; PostgreSQL is not enabled by the new core.
+
 **Issue:** #196 (parent #195) · **Enabled backends:** SQLite only
 
 ---

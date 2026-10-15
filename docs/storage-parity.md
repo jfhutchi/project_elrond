@@ -1,5 +1,7 @@
 # SQLite/PostgreSQL schema parity (#197)
 
+> **Current core storage scope.** The [PAPER core](paper-core.md) keeps SQLite as its sole operational backend and adds schema 36 explicitly. PostgreSQL test parity does not authorize a backend switch. The [Omen package](evidence/paper-core/omen-deployment/README.md) records only restored-copy 29-to-36 migrations; operating migration is pending and must preserve original data, store identity, order IDs and exit ownership. Legacy schema-29 binaries need a compatible protection transition before a schema-36 restart.
+
 SQLite remains the only enabled production backend. `DatabaseTarget.require_enabled()` still
 refuses PostgreSQL, and the SQLite database lifecycle, WAL configuration, backup path, and
 create-versus-open authority are unchanged. This work qualifies the shared schema and Alembic
