@@ -1,0 +1,125 @@
+[CmdletBinding()]
+param([switch]$Check)
+$ErrorActionPreference='Stop'
+$evidence='D:\Elrond\review\paper-core-activation-20261015T1155Z'
+$python='D:\Elrond\releases\paper-core-14352cc-20261015\.venv\Scripts\python.exe'
+$repository='D:\Elrond\releases\paper-core-14352cc-20261015'
+$config='D:\Elrond\config\paper-core-14352cc-20261015'
+$support='D:\Elrond\releases\legacy-support-14352cc-20261015'
+$hostExecutable='D:\Elrond\state\service-host\179e6da6c10668c86ca39c5a\elrond-service-host.exe'
+$retained=@('Elrond Protection','Elrond Paper Deadline')
+$consoleRepository='D:\Elrond\releases\dashboard-bfe6e47-20261015'
+$consoleCommit='53866617274a205c164325eb3578f8d830b4d719'
+$utf8=[Text.UTF8Encoding]::new($false)
+$env:PYTHONPATH=Join-Path $repository 'src'
+$env:PYTHONNOUSERSITE='1'
+foreach($name in @('PYTHONHOME','PYTHONEXECUTABLE','__PYVENV_LAUNCHER__')) { [Environment]::SetEnvironmentVariable($name,$null,'Process') }
+. (Join-Path $repository 'deploy\omen\windows-job.ps1')
+$deploymentJob=New-ElrondProcessJob
+
+function Assert-DeploymentInputs {
+    $pins=Get-Content -LiteralPath (Join-Path $PSScriptRoot 'helper-pins.json') -Raw | ConvertFrom-Json
+    foreach($pin in $pins) {
+        if ((Get-FileHash -LiteralPath (Join-Path $PSScriptRoot $pin.name) -Algorithm SHA256).Hash.ToLowerInvariant() -cne $pin.sha256) { throw 'DEPLOYMENT_HELPER_PIN_CHANGED' }
+    }
+    if ((git -C $support rev-parse HEAD) -cne '14352cc428dcd999750138d52fbd5f30347991a1' -or (git -C $support status --porcelain)) { throw 'SUPPORT_CHECKOUT_CHANGED' }
+    $tasks=@(Get-ScheduledTask | Where-Object { $_.TaskName -like '*Elrond*' -and $_.TaskName -notlike 'Elrond Paper Core *' })
+    if (@($tasks | Where-Object { $_.TaskName -notin $retained -and $_.TaskName -ne 'Elrond Console' -and [string]$_.State -ne 'Disabled' }).Count) { throw 'OLD_ENTRY_TASK_ENABLED' }
+    foreach($name in $retained) {
+        $task=Get-ScheduledTask -TaskName $name
+        if ([string]$task.State -ne 'Running' -or -not $task.Actions.Arguments.Contains($support) -or -not $task.Actions.Arguments.Contains('14352cc428dcd999750138d52fbd5f30347991a1')) { throw 'RETAINED_SERVICE_NOT_READY' }
+    }
+    # The console cannot produce entry orders. Its health is not a trading dependency,
+    # but any running console process must still originate from its pinned checkout.
+    if ((git -C $consoleRepository rev-parse HEAD) -cne $consoleCommit -or (git -C $consoleRepository status --porcelain)) { throw 'CONSOLE_CHECKOUT_CHANGED' }
+    $expectedConsoleArguments='"D:\Elrond\logs\dashboard-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -File "D:\Elrond\releases\dashboard-bfe6e47-20261015\deploy\omen\start-service.ps1" -Repository "D:\Elrond\releases\dashboard-bfe6e47-20261015" -EnvironmentFile "C:\Users\leepa\.config\quantbot\quantbot-console.env" -Commit 53866617274a205c164325eb3578f8d830b4d719 -Database "D:\Elrond\state\quantbot-paper-fresh-20260908.db" -Component console -ExperimentStore "C:\Users\leepa\Documents\Codex\2026-09-30\task\adaptive-paper-research-20261006\experiment.db"'
+    $consoleTask=Get-ScheduledTask -TaskName 'Elrond Console'
+    if ($consoleTask.Actions.Count -ne 1 -or $consoleTask.Actions.Execute -cne $hostExecutable -or $consoleTask.Actions.WorkingDirectory -cne $consoleRepository -or $consoleTask.Actions.Arguments -cne $expectedConsoleArguments) { throw 'CONSOLE_TASK_ACTION_CHANGED' }
+    $processes=@(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match '\-m quantbot\.' })
+    foreach($process in $processes) {
+        if ($process.CommandLine -notmatch '\-m quantbot\.(operations\.service|learner\.execution_worker|paper_core)( |$)' -or $process.CommandLine -match '\-\-component (daemon|ingestion|research|report)( |$)') { throw 'OLD_QUANTBOT_PROCESS_REMAINS' }
+        $origin=$process.CommandLine
+        if (-not $origin.Contains($support) -and -not $origin.Contains($repository) -and -not $origin.Contains($consoleRepository)) {
+            $parent=@($processes | Where-Object ProcessId -eq $process.ParentProcessId)
+            if($parent.Count -ne 1) { throw 'UNPINNED_QUANTBOT_PROCESS' }
+            $origin=$parent[0].CommandLine
+        }
+        if ($origin.Contains($consoleRepository)) {
+            if ($process.CommandLine -notmatch '\-m quantbot\.operations\.service .*\-\-component console( |$)') { throw 'CONSOLE_PROCESS_NOT_READ_CONTROL_SERVICE' }
+        } elseif (-not $origin.Contains($support) -and -not $origin.Contains($repository)) { throw 'UNPINNED_QUANTBOT_PROCESS' }
+
+    }
+    $fence=[ordered]@{captured_at=[DateTime]::UtcNow.ToString('o');entry_writers_disabled=$true;old_processes_absent=$true;retained_services=$retained;processes=@($processes | Select-Object ProcessId,ParentProcessId,CommandLine);task_names=@($tasks.TaskName)}
+    [IO.File]::WriteAllText((Join-Path $evidence 'continuation-writer-fence.json'),($fence|ConvertTo-Json -Depth 8),$utf8)
+}
+
+function Start-CoreRole([string]$Role) {
+    $name='Elrond Paper Core '+(Get-Culture).TextInfo.ToTitleCase($Role)
+    [xml]$definition=Get-Content -LiteralPath (Join-Path $evidence ('tasks-before\'+$name+'.xml')) -Raw
+    $exec=$definition.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']")
+    $arguments='"D:\Elrond\logs\paper-core-'+$Role+'-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -File "'+$repository+'\deploy\omen\start-paper-core.ps1" -Repository "'+$repository+'" -Config "'+$config+'\runtime-config.json" -Manifest "'+$config+'\runtime-manifest.json" -Role '+$Role
+    if($Role -ne 'trader') { $arguments+=' -EntryDisabled' }
+    $exec.SelectSingleNode("*[local-name()='Command']").InnerText=$hostExecutable
+    $exec.SelectSingleNode("*[local-name()='Arguments']").InnerText=$arguments
+    $exec.SelectSingleNode("*[local-name()='WorkingDirectory']").InnerText=$repository
+    Register-ScheduledTask -TaskName $name -Xml $definition.OuterXml -Force | Out-Null
+    $login=New-ScheduledTaskTrigger -AtLogOn -User ($env:USERDOMAIN+'\'+$env:USERNAME)
+    $retry=New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(5) -RepetitionInterval (New-TimeSpan -Minutes 5)
+    Set-ScheduledTask -TaskName $name -Trigger @($login,$retry) | Out-Null
+    Enable-ScheduledTask -TaskName $name | Out-Null
+    $startsPath=Join-Path $evidence 'role-starts.json'
+    $starts=@{}
+    if(Test-Path -LiteralPath $startsPath) { $oldStarts=Get-Content -LiteralPath $startsPath -Raw|ConvertFrom-Json; foreach($property in $oldStarts.PSObject.Properties) { $starts[$property.Name]=$property.Value } }
+    $starts[$Role]=[DateTime]::UtcNow.ToString('o')
+    [IO.File]::WriteAllText($startsPath,($starts|ConvertTo-Json),$utf8)
+    Start-ScheduledTask -TaskName $name
+    New-Item -ItemType Directory -Force -Path (Join-Path $evidence 'tasks-activated') | Out-Null
+    [IO.File]::WriteAllText((Join-Path $evidence ('tasks-activated\'+$name+'.xml')),(Export-ScheduledTask -TaskName $name),$utf8)
+}
+
+try {
+    do {
+        Assert-DeploymentInputs
+        $arguments=@((Join-Path $PSScriptRoot 'activation_attempt.py'))
+        if(-not $Check) { $arguments+='--activate' }
+        & $python @arguments
+        $result=$LASTEXITCODE
+        if($Check) { exit $result }
+        if($result -eq 20) { throw 'DEPLOYMENT_REFUSED_SEE_ACTIVATION_STATE' }
+        if([DateTime]::UtcNow -ge [DateTime]::Parse('2026-10-15T14:00:00Z').ToUniversalTime()) { throw 'FIRST_SESSION_ACTIVATION_WINDOW_EXPIRED' }
+        if($result -ne 0) { Start-Sleep -Seconds 20 }
+    } while($result -ne 0)
+    Assert-DeploymentInputs
+    Start-CoreRole 'guardian'
+    Start-CoreRole 'outcomes'
+    $ready=$false
+    $deadline=[DateTime]::UtcNow.AddMinutes(5)
+    do {
+        Assert-DeploymentInputs
+        & $python (Join-Path $PSScriptRoot 'activation_health.py') --assess
+        if($LASTEXITCODE -eq 0) { $ready=$true;break }
+        Start-Sleep -Seconds 10
+    } while([DateTime]::UtcNow -lt $deadline)
+    if(-not $ready) { throw 'PROTECTION_READINESS_REQUIRED_TRADER_REMAINS_DISABLED' }
+    Assert-DeploymentInputs
+    Start-CoreRole 'trader'
+    $ready=$false
+    $deadline=[DateTime]::UtcNow.AddMinutes(3)
+    do {
+        & $python (Join-Path $PSScriptRoot 'activation_health.py') --trader
+        if($LASTEXITCODE -eq 0) { $ready=$true;break }
+        Start-Sleep -Seconds 10
+    } while([DateTime]::UtcNow -lt $deadline)
+    if(-not $ready) { throw 'TRADER_PROGRESS_NOT_CONFIRMED' }
+    [IO.File]::WriteAllText((Join-Path $evidence 'activation-complete.json'),([ordered]@{at=[DateTime]::UtcNow.ToString('o');state='ACTIVE';release_id='0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c';real_fills_or_learning_not_assumed=$true}|ConvertTo-Json),$utf8)
+    Disable-ScheduledTask -TaskName 'Elrond Paper Core Deploy' | Out-Null
+    exit 0
+} catch {
+    # Never clear the stop or manufacture success. Existing guardian/outcomes remain useful.
+    Disable-ScheduledTask -TaskName 'Elrond Paper Core Trader' -ErrorAction SilentlyContinue | Out-Null
+    Stop-ScheduledTask -TaskName 'Elrond Paper Core Trader' -ErrorAction SilentlyContinue
+    $record=[ordered]@{at=[DateTime]::UtcNow.ToString('o');state='REFUSED';error_type=$_.Exception.GetType().Name;code=if($_.Exception.Message -match '^[A-Z_]+$'){$_.Exception.Message}else{'UNCLASSIFIED_DEPLOYMENT_FAILURE'};trader_disabled=$true}
+    [IO.File]::WriteAllText((Join-Path $evidence 'continuation-failure.json'),($record|ConvertTo-Json),$utf8)
+    $record|ConvertTo-Json
+    exit 2
+}

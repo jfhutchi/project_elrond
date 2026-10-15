@@ -1,0 +1,30 @@
+[
+  {
+    "file": ".gitattributes",
+    "sha256": "308a40fa1d89ae5ea4390b4c9b46a0108b09f171f07898f25d451fa0c69c4e9f"
+  },
+  {
+    "file": "continue-deployment.ps1.txt",
+    "sha256": "d1c8971f129a679360af55d7af0bbf71e37d0d9d059f45101b6b2fabe6b231ef"
+  },
+  {
+    "file": "local-status.json",
+    "sha256": "d1f4ff5d47cae716e1629c3132d5e642b2abea5489570372e08086024622a979"
+  },
+  {
+    "file": "README.md",
+    "sha256": "7ed0038d67b3e147b806a4c7a1dff538b72adf2fd3622684976834714f7f4cc5"
+  },
+  {
+    "file": "rollout.json",
+    "sha256": "a522e95f701ce6471a0095ef337ca6ceb6eabb98b5c7bcdb4048f75f75f84e1e"
+  },
+  {
+    "file": "rollout.ps1.txt",
+    "sha256": "8b10be76446cecd11465bb2c1d69b2daa97d8ba1d46c4d42533b4057e2aa2fb6"
+  },
+  {
+    "file": "selected-token-check.json",
+    "sha256": "e3ddd90ba66c43544a58cde670916dfd55e51ece96fc4d91467a042f551caf50"
+  }
+]

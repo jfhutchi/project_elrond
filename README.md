@@ -57,6 +57,9 @@ Real market data -> Trader -> durable decision and protected entry intent -> PAP
 | Outcomes | Reconcile complete round trips and costs continuously; consider bounded model updates after completed exchange sessions, with outcome processing ahead of fitting |
 
 The roles share one authoritative operational SQLite store and retained execution primitives.
+The [paper desk](docs/dashboard-access.md) presents recorded positions, account status and
+verified role heartbeats in a compact ledger. Missing inventory stays unknown; old observations
+do not imply current service health. Existing operator controls retain their gates.
 The optional dashboard is a view, not execution authority. The Omen is the sole permitted PAPER
 coordinator; the Pi is retired and must not be contacted.
 

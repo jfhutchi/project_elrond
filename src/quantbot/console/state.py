@@ -31,8 +31,10 @@ from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from quantbot.config import Settings
 from quantbot.console.learner import LearnerPanel
 from quantbot.console.market_status import MarketStatus
+from quantbot.console.overview import OverviewPanel, read_overview
 from quantbot.operations.registry import ConfigSetting, config_registry
 from quantbot.research.promotion import Stage
 from quantbot.storage import StorageRepository
@@ -370,6 +372,7 @@ class ResearchRuntimePanel(FrozenModel):
 
 
 class ConsoleState(FrozenModel):
+    overview: OverviewPanel = OverviewPanel()
     """Everything the read-only console renders, assembled in one pass."""
 
     generated_at: datetime
@@ -1068,6 +1071,7 @@ def read_console_state(
     settings = {item.key: item for item in config_registry()}
     strategies = _strategies(session)
     return ConsoleState(
+        overview=read_overview(session, account_id=Settings().EXPECTED_ACCOUNT_ID, now=now),
         generated_at=now,
         market=(market or MarketStatus()).current(now),
         health=_health(session, settings, now=now),

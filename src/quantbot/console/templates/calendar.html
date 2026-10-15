@@ -1,16 +1,5 @@
 {% extends "base.html" %}
 {% set title = "P&L calendar" %}
-{% block page_styles %}
-<style>
-  :root {
-    --bg: var(--performance-canvas); --panel: var(--performance-card);
-    --panel-2: var(--performance-flat); --ink: var(--performance-text);
-    --ink-dim: var(--performance-secondary); --ink-faint: var(--performance-secondary);
-    --accent: var(--performance-lime);
-  }
-  body { font-family: var(--performance-ui); }
-</style>
-{% endblock %}
 {% block body %}
 <h1>P&L calendar</h1>
 <p class="sub">Recorded daily net P&L. Finalized observations only; cumulative totals include all observed months.</p>
@@ -31,7 +20,7 @@
 <div>{{ cell.day }}</div>
 {% if cell.amount %}<div class="amount performance-{{ cell.tone }}">{{ cell.amount }}</div>{% endif %}
 <div class="day-status">{% if cell.status == 'FINAL' and cell.tone == 'neutral' %}Flat{% else %}{{ cell.status.capitalize() }}{% endif %}</div>
-{% if cell.reason %}<div class="day-status">{{ cell.reason }}</div>{% endif %}
+{% if cell.reason %}<details class="day-note"><summary>Details</summary><div class="day-status">{{ cell.reason }}</div></details>{% endif %}
 </div>
 {% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
 </table></div>
