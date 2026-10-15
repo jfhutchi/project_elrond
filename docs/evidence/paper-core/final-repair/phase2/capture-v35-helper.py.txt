@@ -1,0 +1,58 @@
+"""One-time pre-repair capture from the accepted populated v34 archive."""
+
+import gzip
+import json
+from pathlib import Path
+
+from alembic import command
+from sqlalchemy import create_engine
+
+from quantbot.storage import Database
+
+
+def test_capture(tmp_path):
+    fixture = json.loads(
+        gzip.decompress(Path(__file__).with_name("core_v34_m5.json.gz").read_bytes())
+    )
+    path = tmp_path / "accepted.db"
+    engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+    with engine.begin() as connection:
+        command.upgrade(Database._alembic_config(connection), "0034")
+        connection.exec_driver_sql("PRAGMA defer_foreign_keys=ON")
+        for name, rows in fixture.items():
+            if name in {"schema_version", "alembic_version"} or not rows:
+                continue
+            if name == "kill_switch_state":
+                connection.exec_driver_sql("DELETE FROM kill_switch_state")
+            for row in rows:
+                keys = tuple(row)
+                connection.exec_driver_sql(
+                    f'INSERT INTO "{name}" ({",".join(keys)}) '
+                    f'VALUES ({",".join("?" for _ in keys)})',
+                    tuple(row[k] for k in keys),
+                )
+    engine.dispose()
+    with Database.migrate(path) as db, db.engine.connect() as connection:
+        names = [
+            r[0]
+            for r in connection.exec_driver_sql(
+                "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name"
+            )
+        ]
+        rows = {
+            name: [
+                dict(r) for r in connection.exec_driver_sql(f'SELECT * FROM "{name}"').mappings()
+            ]
+            for name in names
+        }
+    assert rows["schema_version"][0]["version"] == 35
+    for name, prior in fixture.items():
+        if name not in {"schema_version", "alembic_version"}:
+            assert sorted(rows[name], key=lambda r: json.dumps(r, sort_keys=True)) == sorted(
+                prior, key=lambda r: json.dumps(r, sort_keys=True)
+            )
+    target = Path(__file__).with_name("core_v35_accepted.json.gz")
+    assert not target.exists(), "never recapture accepted history under new source"
+    target.write_bytes(
+        gzip.compress(json.dumps(rows, sort_keys=True, separators=(",", ":")).encode(), mtime=0)
+    )

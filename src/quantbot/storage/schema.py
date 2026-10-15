@@ -18,7 +18,7 @@ from sqlalchemy import (
 
 from quantbot.storage.core_runtime_schema import runtime_tables
 
-SCHEMA_VERSION = 35
+SCHEMA_VERSION = 36
 
 metadata = MetaData(
     naming_convention={
@@ -1804,6 +1804,10 @@ Index("ix_runtime_deployments_commit", runtime_deployments.c.git_commit)
 from quantbot.storage.core_schema import core_tables  # noqa: E402
 
 _core_tables = core_tables(metadata)
+
+from quantbot.storage.core_recovery_schema import recovery_tables  # noqa: E402
+
+_core_recovery_tables = recovery_tables(metadata)
 
 from quantbot.storage.core_cost_schema import cost_tables  # noqa: E402
 

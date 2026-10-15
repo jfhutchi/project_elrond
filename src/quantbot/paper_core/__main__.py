@@ -48,6 +48,8 @@ def parser() -> argparse.ArgumentParser:
             "commission",
             "fence",
             "rollback-model",
+            "transition-release",
+            "resume",
         ),
     )
     result.add_argument("--decision-id")
@@ -80,6 +82,33 @@ def derived_core(release: PreparedRelease, account_id: str) -> CoreConfig:
     return release.config.core.model_copy(
         update={"release_id": release.id, "account_id": account_id}
     )
+
+
+def commissioned_core(release: PreparedRelease, recorded: dict[str, Any]) -> CoreConfig:
+    """Validate executable binding before credential access; preserve original economic IDs."""
+    from quantbot.paper_core.authority import ExecutableBinding
+
+    if len(recorded["commissions"]) != 1 or len(recorded["economic_configs"]) != 1:
+        raise ValueError("CORE_RUNTIME_UNCOMMISSIONED")
+    commission = RuntimeCommission.model_validate(recorded["commissions"][0])
+    economic = CoreConfig.model_validate(recorded["economic_configs"][0])
+    binding = (
+        ExecutableBinding.model_validate(recorded["executable_binding"])
+        if recorded.get("executable_binding")
+        else None
+    )
+    expected = derived_core(release, commission.account_id).model_copy(
+        update={"release_id": commission.release_id}
+    )
+    if (
+        economic != expected
+        or content_id(economic) != commission.config_id
+        or binding is None
+        or binding.release != release
+        or binding.commission_id != commission.id
+    ):
+        raise ValueError("CORE_RUNTIME_BINDING_MISMATCH")
+    return economic
 
 
 async def _acquire(args: argparse.Namespace, release: PreparedRelease) -> None:
@@ -166,15 +195,7 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
         if args.fixture_driver:
             raise ValueError("fixture driver cannot authorize PAPER")
         recorded = read_status(Path(config.store_path))
-        if len(recorded["commissions"]) != 1:
-            raise ValueError("CORE_RUNTIME_UNCOMMISSIONED")
-        recorded_commission = RuntimeCommission.model_validate(recorded["commissions"][0])
-        if (
-            recorded_commission.release_id != release.id
-            or recorded_commission.config_id
-            != content_id(derived_core(release, recorded_commission.account_id))
-        ):
-            raise ValueError("CORE_RUNTIME_BINDING_MISMATCH")
+        economic_core = commissioned_core(release, recorded)
         # Sole existing Settings credential source, reached only by separately commissioned runtime.
         settings = Settings(_env_file=config.environment_file_reference)
         if not settings.EXPECTED_ACCOUNT_ID:
@@ -191,11 +212,15 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
         if not args.fixture_driver or config.environment_file_reference:
             raise ValueError("explicit credential-free fixture driver required")
         account_id = config.core.account_id
-    core = derived_core(release, account_id)
+    core = (
+        economic_core
+        if config.core.evidence_lane == "BROKER_PAPER"
+        else derived_core(release, account_id)
+    )
     with Database(Path(config.store_path)) as db:
         if db.store_identity != config.store_identity:
             raise ValueError("store lineage mismatch")
-        store = CoreStore(db, core, clocks=clocks)
+        store = CoreStore(db, core, clocks=clocks, runtime_release_id=release.id)
         store.runtime_role = args.role
         store.runtime_submission_enabled = (
             config.submission_enabled and not args.submission_disabled
@@ -286,22 +311,42 @@ def main() -> None:
                     }
                 )
             )
-    elif args.command in {"commission", "fence", "rollback-model"}:
+    elif args.command in {"commission", "fence", "rollback-model", "transition-release", "resume"}:
         if args.approval_document is None or not args.approval_document.is_absolute():
             raise ValueError("explicit exact approved nonsecret document required")
         document = json.loads(args.approval_document.read_text(encoding="utf-8"))
         commission = RuntimeCommission.model_validate(document["commission"])
-        core = derived_core(release, commission.account_id)
+        if args.command == "commission":
+            core = derived_core(release, commission.account_id)
+            executable_id = release.id
+        else:
+            recorded = read_status(Path(config.store_path))
+            core = CoreConfig.model_validate(recorded["economic_configs"][0])
+            executable_id = recorded["executable_binding"]["release"]
+            executable_id = PreparedRelease.model_validate(executable_id).id
+            if args.command != "transition-release":
+                commissioned_core(release, recorded)
         with Database(Path(config.store_path)) as db:
-            store = CoreStore(db, core)
+            store = CoreStore(db, core, runtime_release_id=executable_id)
+            if args.command != "commission":
+                with db.transaction() as session:
+                    from quantbot.paper_core.authority import commission_in_session
+
+                    if commission_in_session(store, session) != commission:
+                        raise ValueError("exact current commission required")
             if args.command == "commission":
                 identity = commission_runtime(
                     store, release, commission, baseline=document["baseline"]
                 )
-                from quantbot.paper_core.activation import initialize_operational_model
-
-                initialize_operational_model(store, config.initial_model, at=commission.approved_at)
                 print(json.dumps({"commission_id": identity, "release_id": release.id}))
+            elif args.command == "transition-release":
+                from quantbot.paper_core.authority import transition_release
+
+                print(transition_release(store, release, document))
+            elif args.command == "resume":
+                from quantbot.paper_core.authority import resume_entries
+
+                print(resume_entries(store, document))
             elif args.command == "fence":
                 from quantbot.paper_core.authority import fence_entries
 

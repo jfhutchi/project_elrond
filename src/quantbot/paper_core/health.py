@@ -146,14 +146,14 @@ def independent_cash_available(store: CoreStore, session: Session) -> bool:
         source_ids = incident.detail.get("implicated_source_ids", [])
         if incident.kind == "CORE_EVIDENCE_CONFLICT" and isinstance(source_ids, list):
             disputed.update(str(s) for s in source_ids)
-    accepted = {str(row[0]) for row in session.execute(select(sources.c.id))} - disputed
-    from quantbot.paper_core.contracts import BrokerEvent
-
-    independent = set()
-    for identity, payload in session.execute(select(sources.c.id, sources.c.payload)):
-        activity = BrokerEvent.model_validate_json(payload).cash_activity
-        if identity in accepted and activity is not None:
-            independent.add(activity.id)
+    index = table("core_document_index")
+    independent = set(
+        session.execute(
+            select(index.c.reference)
+            .join(sources, sources.c.id == index.c.id)
+            .where(index.c.kind == "core_cash_activity_sources", index.c.id.not_in(disputed))
+        ).scalars()
+    )
     complete = [
         a
         for a in (

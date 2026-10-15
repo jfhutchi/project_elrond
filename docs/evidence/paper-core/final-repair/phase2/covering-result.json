@@ -1,0 +1,11 @@
+{
+  "exit_code": 0,
+  "summary": "296 passed, 26 skipped in 283.28s",
+  "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-cwwsp1xt\\result.txt",
+  "raw_bytes": 830140,
+  "raw_sha256": "638cdb9b5c237cc853cd98331087ee3d256bfc31adee9538b554f98f6877ba42",
+  "compressed_sha256": "afa3906d761b0516b1041593ca09d3a038c82595fc4d83338d17105cd9763786",
+  "source_pins_sha256": "d6d696496813f81e8a91d4d057142f7b8a3405cdac4d9a864d5932f5eb0bdc01",
+  "frozen_archive_sha256": "a36e605507e69e3566c517661f15eab4e622806c3060344754d31db5c0e15e36",
+  "capacity_witness": "NOT_REPEATED_PHASE1_PASSED"
+}

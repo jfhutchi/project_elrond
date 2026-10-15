@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from contextlib import nullcontext
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any, TypeVar
@@ -36,6 +37,9 @@ def put(session: Session, name: str, identity: str, payload: object) -> None:
             raise StateConflictError(f"conflicting immutable {name} {identity}")
         return
     session.execute(target.insert().values(id=identity, payload=encoded))
+    from quantbot.paper_core.work import notify_document
+
+    notify_document(session, name, identity, encoded)
 
 
 def latest_certification(session: Session) -> tuple[int, str] | None:
@@ -56,17 +60,31 @@ class CoreStore:
     runtime_settings: Any = None
 
     def __init__(
-        self, database: Database, config: CoreConfig, *, clocks: Clocks | None = None
+        self,
+        database: Database,
+        config: CoreConfig,
+        *,
+        clocks: Clocks | None = None,
+        runtime_release_id: str | None = None,
     ) -> None:
         self.database = database
         self.config = config
         self.clocks = clocks or SystemClocks()
         self.config_id = content_id(config)
+        self.runtime_release_id = runtime_release_id or config.release_id
         with database.transaction() as session:
             existing = session.execute(select(table("core_identities").c.id)).scalars().all()
             if existing and existing != [self.config_id]:
                 raise StateConflictError("store has another owner/configuration")
             put(session, "core_identities", self.config_id, config)
+            # Explicit raw historical fixtures can populate a new schema after
+            # creation. Seed their projections once; ordinary migration seeds in SQL.
+            if session.execute(select(table("core_document_index").c.id).limit(1)).first() is None:
+                from quantbot.paper_core.work import DOCUMENT_REFERENCES, index_document
+
+                for name in DOCUMENT_REFERENCES:
+                    for row in session.execute(select(table(name))).mappings():
+                        index_document(session, name, row["id"], json.loads(row["payload"]))
 
     def record(self, name: str, value: Evidence) -> str:
         with self.database.transaction() as session:
@@ -124,11 +142,13 @@ class CoreStore:
     def revoke_stale_cash(self, session: Session, *, source_ids: tuple[str, ...]) -> None:
         """Revocation and accepted ledger changes share one business transaction."""
         revoked = table("core_cash_authority_revocations")
-        for row in session.execute(select(table("core_inventory_certifications"))).mappings():
-            if session.execute(
-                select(revoked.c.snapshot_id).where(revoked.c.snapshot_id == row["snapshot_id"])
-            ).first():
-                continue
+        certifications = table("core_inventory_certifications")
+        quantities, cash, fills = self.ledger(session)
+        for row in session.execute(
+            select(certifications).where(
+                certifications.c.snapshot_id.not_in(select(revoked.c.snapshot_id))
+            )
+        ).mappings():
             proof = ReconciliationProof.model_validate_json(
                 session.execute(
                     select(table("core_reconciliation_proofs").c.payload).where(
@@ -136,7 +156,14 @@ class CoreStore:
                     )
                 ).scalar_one()
             )
-            if not self.cash_authority_current(session, proof):
+            if not (
+                proof.cash_complete
+                and cash is not None
+                and proof.expected_cash == cash
+                and proof.account.cash == cash
+                and set(proof.fill_ids) == set(fills)
+                and dict(proof.expected_quantities) == quantities
+            ):
                 session.execute(
                     revoked.insert().values(
                         snapshot_id=row["snapshot_id"],
@@ -145,6 +172,9 @@ class CoreStore:
                         ),
                     )
                 )
+                from quantbot.paper_core.work import revoked_proof
+
+                revoked_proof(session, row["proof_id"])
 
     def links(self) -> list[dict[str, Any]]:
         with self.database.transaction() as session:
@@ -166,17 +196,19 @@ class CoreStore:
             for row in session.execute(select(table("core_intent_links"))).mappings()
         }
         totals: dict[str, Decimal] = {}
+        intents_by_client = {
+            intent.client_order_id: intent
+            for i in links
+            if (intent := repo.get_order_intent(i)) is not None
+        }
+        orders_by_id = {o.broker_order_id: o for o in repo.list_broker_orders()}
         fills = repo.list_fills()
         if self.config.evidence_lane == "BROKER_PAPER":
-            clients = {
-                intent.client_order_id
-                for i in links
-                if (intent := repo.get_order_intent(i)) is not None
-            }
+            clients = set(intents_by_client)
             fills = [
                 f
                 for f in fills
-                if (order := repo.get_broker_order(f.broker_order_id)) is not None
+                if (order := orders_by_id.get(f.broker_order_id)) is not None
                 and order.client_order_id in clients
             ]
         from quantbot.paper_core.costs import actual_fee, current_costs
@@ -193,17 +225,9 @@ class CoreStore:
             else:
                 cash += Decimal(external["net_cash"])
         for fill in fills:
-            order = repo.get_broker_order(fill.broker_order_id)
+            order = orders_by_id.get(fill.broker_order_id)
             assert order is not None
-            intents = [repo.get_order_intent(i) for i in links]
-            intent = next(
-                (
-                    i
-                    for i in intents
-                    if i is not None and i.client_order_id == order.client_order_id
-                ),
-                None,
-            )
+            intent = intents_by_client.get(order.client_order_id)
             if intent is None or fill.symbol != intent.symbol or fill.side is not intent.side:
                 raise StateConflictError("unowned or inconsistent fill")
             totals[fill.broker_order_id] = (
@@ -253,8 +277,11 @@ class CoreStore:
         positions: tuple[Position, ...],
         acquisition_id: str,
         complete: bool = True,
+        session: Session | None = None,
     ) -> ReconciliationProof:
-        with self.database.transaction() as session:
+        with (
+            nullcontext(session) if session is not None else self.database.transaction()
+        ) as session:
             expected, cash, fill_ids = self.ledger(session)
             baseline_id = session.execute(select(table("core_fixture_baselines").c.id)).scalar_one()
             certification = latest_certification(session)
@@ -316,8 +343,14 @@ class CoreStore:
             for a in (CashActivity.model_validate_json(payload),)
         }
         actual_costs = current_costs(session, cutoff=datetime.max.replace(tzinfo=UTC))
+        from quantbot.paper_core.health import independent_cash_available
+
+        independent_cash = independent_cash_available(self, session)
         return content_id(
             {
+                "cash_derivation_contract": "EXACT_INDEPENDENT_CASH_V2"
+                if independent_cash
+                else "FILL_COST_LEDGER_V2",
                 "orders": sorted(
                     (o.model_dump(exclude={"submitted_at"}) for o in repo.list_broker_orders()),
                     key=canonical_result_json,
@@ -327,7 +360,9 @@ class CoreStore:
                 "cash_movements": sorted(cash_movements),
                 "actual_cost_revisions": sorted(
                     item.id for item in actual_costs.values() if item.source != "MODELED"
-                ),
+                )
+                if not independent_cash
+                else [],
             }
         )
 
@@ -372,12 +407,16 @@ class CoreStore:
         }
 
 
-def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
+def certify_inventory(
+    store: CoreStore, proof: ReconciliationProof, *, session: Session | None = None
+) -> int:
     certs = table(
         "core_inventory_certifications" if proof.cash_complete else "core_quantity_certifications"
     )
-    with store.database.transaction() as session:
-        session.execute(text("BEGIN IMMEDIATE"))
+    owns_transaction = session is None
+    with nullcontext(session) if session is not None else store.database.transaction() as session:
+        if owns_transaction:
+            session.execute(text("BEGIN IMMEDIATE"))
         put(session, "core_reconciliation_proofs", proof.id, proof)
         existing = session.execute(
             select(certs.c.generation).where(certs.c.proof_id == proof.id)
@@ -417,7 +456,15 @@ def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
             session.execute(select(table("core_fixture_baselines").c.payload)).scalar_one()
         )
         basis = {p["symbol"]: Decimal(p["average_entry_price"]) for p in baseline["positions"]}
-        links = list(session.execute(select(table("core_intent_links"))).mappings())
+        links = list(
+            session.execute(
+                select(table("core_intent_links")).where(
+                    table("core_intent_links").c.lot_id.not_in(
+                        select(table("core_round_trips").c.id)
+                    )
+                )
+            ).mappings()
+        )
         for entry in (link for link in links if link["role"] == "ENTRY"):
             intent = repo.get_order_intent(entry["intent_id"])
             assert intent is not None
@@ -467,18 +514,17 @@ def certify_inventory(store: CoreStore, proof: ReconciliationProof) -> int:
         if not proof.cash_complete:
             revoked = table("core_cash_authority_revocations")
             full = table("core_inventory_certifications")
-            for snapshot in session.execute(select(full.c.snapshot_id)).scalars():
-                if (
-                    session.execute(
-                        select(revoked.c.snapshot_id).where(revoked.c.snapshot_id == snapshot)
-                    ).first()
-                    is None
-                ):
-                    session.execute(
-                        revoked.insert().values(
-                            snapshot_id=snapshot, reason="CURRENT_CASH_INCOMPLETE"
-                        )
-                    )
+            for snapshot in session.execute(
+                select(full.c.snapshot_id).where(
+                    full.c.snapshot_id.not_in(select(revoked.c.snapshot_id))
+                )
+            ).scalars():
+                session.execute(
+                    revoked.insert().values(snapshot_id=snapshot, reason="CURRENT_CASH_INCOMPLETE")
+                )
+                from quantbot.paper_core.work import revoked_proof
+
+                revoked_proof(session, snapshot.removeprefix("core-certified-"))
             return proof.generation
         repo.save_reconciliation(
             "core-" + proof.id,

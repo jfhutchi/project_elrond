@@ -21,7 +21,6 @@ from quantbot.paper_core.authority import (
 )
 from quantbot.paper_core.contracts import (
     Decision,
-    GuardianReceipt,
     LearningPolicy,
     LearningReceipt,
     ProtectionPlan,
@@ -32,7 +31,7 @@ from quantbot.paper_core.release import RuntimeConfig
 from quantbot.paper_core.runtime import coordinator, require_runtime_broker
 from quantbot.paper_core.send_guard import definitively_unsent
 from quantbot.paper_core.store import CoreStore, table
-from quantbot.paper_core.trader import trader_cycle
+from quantbot.paper_core.trader import claim_entry, trader_cycle
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
 
@@ -82,9 +81,21 @@ def claim_objections(store: CoreStore, decision: Decision | None = None) -> tupl
 
 async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
     reasons = []
-    for link in store.links():
-        if link["role"] != "ENTRY":
-            continue
+    with store.database.transaction() as session:
+        links, intents = table("core_intent_links"), table("order_intents")
+        prepared = list(
+            session.execute(
+                select(links)
+                .join(intents, links.c.intent_id == intents.c.intent_id)
+                .where(
+                    links.c.role == "ENTRY",
+                    intents.c.state.in_(
+                        (IntentState.RISK_APPROVED.value, IntentState.ORDER_CREATED.value)
+                    ),
+                )
+            ).mappings()
+        )
+    for link in prepared:
         with store.database.transaction() as session:
             intent = StorageRepository(session).get_order_intent(link["intent_id"])
         if intent is None or intent.state not in {
@@ -96,12 +107,9 @@ async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
         plan = store.read("core_protection_plans", link["protection_id"], ProtectionPlan)
         # Give guardian its bounded next poll to acknowledge the original durable plan.
         with store.database.transaction() as session:
-            receipts = [
-                GuardianReceipt.model_validate_json(p)
-                for p in session.execute(
-                    select(table("core_guardian_receipts").c.payload)
-                ).scalars()
-            ]
+            from quantbot.paper_core.work import current_receipts
+
+            receipts = current_receipts(session, plan_id=plan.id)
             matching = [
                 r
                 for r in receipts
@@ -128,6 +136,28 @@ async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
             gate = getattr(error, "decision", None)
             reasons.extend(getattr(gate, "reasons", (type(error).__name__,)))
     return tuple(dict.fromkeys(reasons))
+
+
+def retry_entry_candidate(store: CoreStore, candidate: Decision | None) -> Decision | None:
+    """Retry one original candidate while its original authority remains live."""
+    if candidate is None:
+        return None
+    now = store.clocks.sample()[0]
+    plan = ProtectionPlan.for_decision(candidate, store.config)
+    if (
+        candidate.action != "BUY"
+        or not candidate.recorded_at_utc <= now < candidate.valid_until
+        or now >= plan.deadline
+        or now >= candidate.session_close - timedelta(seconds=plan.exit_buffer_seconds)
+    ):
+        return None
+    links = table("core_intent_links")
+    with store.database.transaction() as session:
+        if session.execute(
+            select(links.c.intent_id).where(links.c.decision_id == candidate.id).limit(1)
+        ).first():
+            return None
+    return None if claim_entry(store, candidate, plan) is not None else candidate
 
 
 async def daily_consideration(
@@ -217,6 +247,7 @@ async def run_role(
     last_progress: datetime | None = None
     count, failures = 0, 0
     last_boundary = None
+    pending_candidate: Decision | None = None
     learning_task: asyncio.Task[tuple[str, ...]] | None = None
     last_learning_session = None
     try:
@@ -283,6 +314,7 @@ async def run_role(
                     boundary = int(store.clocks.sample()[0].timestamp() // 300)
                     decision = None
                     if boundary != last_boundary:
+                        pending_candidate = None
                         async with asyncio.timeout(5):
                             observation = await broker.observation()
                         model = activation.read_active_model(store)
@@ -296,6 +328,8 @@ async def run_role(
                         )
                         last_boundary = boundary
                         evidence_ids = (decision.id,)
+                        pending_candidate = decision if decision.action == "BUY" else None
+                    pending_candidate = retry_entry_candidate(store, pending_candidate)
                     send_reasons = await dispatch_entries(store, broker)
                     reasons = tuple(
                         dict.fromkeys((*claim_objections(store, decision), *send_reasons))
@@ -321,10 +355,11 @@ async def run_role(
                 current_time = store.read(
                     "core_time_evidence", store.runtime_time_evidence_id, TimeEvidence
                 )
+                evidence_ids = tuple(dict.fromkeys((*evidence_ids, current_time.id)))
                 time_proof_age = max(0, store.clocks.sample()[1] - current_time.acquired_monotonic)
             heartbeat = RoleHeartbeat(
                 role=role,
-                release_id=store.config.release_id,
+                release_id=store.runtime_release_id,
                 config_id=store.config_id,
                 store_identity=store.database.store_identity,
                 owner=store.config.owner,

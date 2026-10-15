@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import select, text, update
+from sqlalchemy import or_, select, text, update
 from sqlalchemy.orm import Session
 
 from quantbot.domain import BrokerOrder, Fill, IntentState, OrderIntent, OrderSide
@@ -21,7 +21,6 @@ from quantbot.paper_core.contracts import (
     BrokerEvent,
     CycleReceipt,
     Decision,
-    GuardianReceipt,
     Observation,
     OutcomeBatch,
     ProtectionPlan,
@@ -184,6 +183,9 @@ def import_broker_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> t
                     .where(pointer.c.lot_id.in_(lot_ids))
                     .values(status="INTEGRITY_FAILURE")
                 )
+                from quantbot.paper_core.work import dirty
+
+                dirty(session, lot_ids)
         raise
 
 
@@ -278,14 +280,18 @@ def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[s
 
                     contradiction = None
                     if event.cost.source == "CONTRACTUAL_ZERO" and event.cost.document_id:
-                        contradiction = session.execute(
-                            select(table("core_source_cursors")).where(
-                                table("core_source_cursors").c.source_id
-                                == cost_contract_conflict_source(
-                                    event.account_id, event.cost.document_id
+                        contradiction = (
+                            session.execute(
+                                select(table("core_source_cursors")).where(
+                                    table("core_source_cursors").c.source_id
+                                    == cost_contract_conflict_source(
+                                        event.account_id, event.cost.document_id
+                                    )
                                 )
                             )
-                        ).mappings().one_or_none()
+                            .mappings()
+                            .one_or_none()
+                        )
                     if contradiction is None:
                         record_cost(session, event.cost, fill)
                     else:
@@ -406,7 +412,11 @@ def terminal_evidence(session: Session, order: BrokerOrder, *, cutoff: datetime)
     if sum((f.quantity for f in fills), Decimal(0)) != order.filled_quantity:
         return None
     candidates = []
-    for row in session.execute(select(table("core_broker_event_sources"))).mappings():
+    from quantbot.paper_core.work import indexed
+
+    for row in session.execute(
+        indexed(session, "core_broker_event_sources", reference=order.client_order_id)
+    ).mappings():
         event = BrokerEvent.model_validate_json(row["payload"])
         if (
             event.order == order
@@ -469,21 +479,29 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     proofs = []
     fill_ids = {f.fill_id for f in (*buys, *sells)}
     for name in ("core_inventory_certifications", "core_quantity_certifications"):
-        certified = select(table(name).c.proof_id)
+        documents = table("core_reconciliation_proofs")
+        index = table("core_document_index")
+        memberships = table("core_proof_fill_memberships")
+        certified = (
+            select(documents.c.payload)
+            .join(table(name), documents.c.id == table(name).c.proof_id)
+            .join(index, documents.c.id == index.c.id)
+            .join(memberships, documents.c.id == memberships.c.proof_id)
+            .where(
+                index.c.kind == "core_reconciliation_proofs",
+                index.c.reference == store.config.account_id,
+                memberships.c.fill_id == min(f.fill_id for f in sells),
+            )
+            .order_by(index.c.available_at, table(name).c.generation)
+        )
         if name == "core_inventory_certifications":
             certified = certified.where(
                 table(name).c.snapshot_id.not_in(
                     select(table("core_cash_authority_revocations").c.snapshot_id)
                 )
             )
-        for proof_id in session.execute(certified).scalars():
-            proof = ReconciliationProof.model_validate_json(
-                session.execute(
-                    select(table("core_reconciliation_proofs").c.payload).where(
-                        table("core_reconciliation_proofs").c.id == proof_id
-                    )
-                ).scalar_one()
-            )
+        for payload in session.execute(certified).scalars():
+            proof = ReconciliationProof.model_validate_json(payload)
             if (
                 proof.recorded_at_utc <= as_of
                 and proof.complete
@@ -491,6 +509,7 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
                 and proof.actual_quantities == proof.expected_quantities
             ):
                 proofs.append(proof)
+                break
     if not proofs:
         raise OutcomeIncomplete("OWNED_FLAT_RECONCILIATION_UNAVAILABLE")
     proof = min(proofs, key=lambda p: (p.recorded_at_utc, p.generation))
@@ -521,10 +540,9 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     )
     if plan.decision_id != decision.id or plan.owner != store.config.owner:
         raise StateConflictError("protection authority mismatch")
-    receipts = [
-        GuardianReceipt.model_validate_json(p)
-        for p in session.execute(select(table("core_guardian_receipts").c.payload)).scalars()
-    ]
+    from quantbot.paper_core.work import historical_receipts
+
+    receipts = historical_receipts(session, plan.id)
     handoffs = [
         r
         for r in receipts
@@ -558,7 +576,7 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     if not handoffs:
         raise OutcomeIncomplete("PRESEND_GUARDIAN_HANDOFF_UNAVAILABLE")
     handoff = min(handoffs, key=lambda r: (r.recorded_at_utc, r.id))
-    costs = current_costs(session, cutoff=as_of)
+    costs = current_costs(session, cutoff=as_of, fill_ids=fill_ids)
     allocated = [
         costs[(f.fill_id, component)]
         for f in (*buys, *sells)
@@ -583,9 +601,15 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     state_hash = content_id(
         {"resolver": "owned-executed-net-return-v1", "sources": sources, "fills": ordered_fills}
     )
+    from quantbot.paper_core.work import indexed
+
     revisions = [
         RoundTrip.model_validate_json(p)
-        for p in session.execute(select(table("core_outcome_revisions").c.payload)).scalars()
+        for p in session.execute(
+            indexed(session, "core_outcome_revisions", reference=lot_id).with_only_columns(
+                table("core_outcome_revisions").c.payload
+            )
+        ).scalars()
     ]
     revisions = [r for r in revisions if r.lot_id == lot_id]
     identical = next((r for r in revisions if r.source_state_hash == state_hash), None)
@@ -640,28 +664,61 @@ def reconcile_round_trip(store: CoreStore, lot_id: str, *, as_of: datetime) -> R
 
 def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
     outcomes, reasons = [], []
+    links, work = table("core_intent_links"), table("core_outcome_work")
     with store.database.transaction() as session:
-        session.execute(text("BEGIN IMMEDIATE"))
-        lots = (
+        lots = list(
             session.execute(
-                select(table("core_intent_links").c.lot_id).where(
-                    table("core_intent_links").c.role == "ENTRY"
+                select(links.c.lot_id)
+                .outerjoin(work, links.c.lot_id == work.c.lot_id)
+                .where(
+                    links.c.role == "ENTRY",
+                    or_(work.c.version.is_(None), work.c.version > work.c.processed_version),
                 )
-            )
-            .scalars()
-            .all()
+                .order_by(work.c.attempted_at, links.c.lot_id)
+                .limit(16)
+            ).scalars()
         )
-        for lot in lots:
+    for lot in lots:
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            from quantbot.paper_core.work import dirty
+
+            version = session.execute(
+                select(work.c.version).where(work.c.lot_id == lot)
+            ).scalar_one_or_none()
+            if version is None:
+                dirty(session, (lot,))
+                version = 1
+            session.execute(
+                update(work).where(work.c.lot_id == lot).values(attempted_at=encode_utc(cutoff))
+            )
             try:
                 trip = _resolve(store, session, lot, cutoff)
             except OutcomeIncomplete as error:
                 reasons.append(f"{lot}:{error}")
+                session.execute(
+                    update(table("core_outcome_index"))
+                    .where(table("core_outcome_index").c.lot_id == lot)
+                    .values(
+                        status="INTEGRITY_FAILURE"
+                        if str(error) == "SOURCE_EVIDENCE_QUARANTINED"
+                        else "AUTHORITY_PENDING"
+                    )
+                )
                 continue
             pointer = table("core_outcome_index")
             current = session.execute(
                 select(pointer.c.outcome_id).where(pointer.c.lot_id == lot)
             ).scalar_one_or_none()
             if current == trip.id:
+                session.execute(
+                    update(pointer).where(pointer.c.lot_id == lot).values(status=trip.status)
+                )
+                session.execute(
+                    update(work)
+                    .where(work.c.lot_id == lot, work.c.version == version)
+                    .values(processed_version=version)
+                )
                 continue
             if current is not None and trip.supersedes != current:
                 # Historical cutoff cannot roll the current outcome backwards.
@@ -676,6 +733,9 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
                     .where(target.c.id == lot)
                     .values(payload=canonical_result_json(trip))
                 )
+                from quantbot.paper_core.work import index_document
+
+                index_document(session, "core_round_trips", lot, trip.model_dump(mode="json"))
             else:
                 put(session, "core_round_trips", lot, trip)
             assert trip.source_start and trip.source_end and trip.available_at
@@ -694,6 +754,11 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
             else:
                 session.execute(pointer.insert().values(lot_id=lot, **fields))
             outcomes.append(trip)
+            session.execute(
+                update(work)
+                .where(work.c.lot_id == lot, work.c.version == version)
+                .values(processed_version=version)
+            )
     return OutcomeBatch(
         recorded_at_utc=cutoff,
         evidence_lane=store.config.evidence_lane,

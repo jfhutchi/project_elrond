@@ -35,8 +35,8 @@ async def synchronize(
     require_runtime_broker(store, broker)
     from quantbot.paper_core.outcomes import recover_intents
 
+    start = store.clocks.sample()[1]
     if store.config.clock_profile == "PAPER_TIME_V2":
-        start = store.clocks.sample()[1]
         async with asyncio.timeout(5):
             await recover_intents(store, broker)
             account = await broker.get_account()
@@ -62,23 +62,41 @@ async def synchronize(
         await recover_intents(store, broker)
         account = await broker.get_account()
         positions = await broker.get_positions()
-    proof = store.proof(
-        account.account,
-        tuple((p.symbol, p.quantity) for p in positions),
-        now=now,
-        positions=positions,
-        acquisition_id=content_id(
-            {
-                "at": now,
-                "provider": broker.provider,
-                "positions": positions,
-                "account": account.account,
-            }
-        ),
-    )
+    proof = None
     try:
-        certify_inventory(store, proof)
+        # Network acquisition has finished. Derive and certify the local generation
+        # against one locked ledger, without a competing certification gap.
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            if (
+                store.config.clock_profile == "PAPER_TIME_V2"
+                and store.clocks.sample()[1] - start > 5
+            ):
+                raise TimeoutError("INVENTORY_ACQUISITION_UNSTABLE")
+            proof = store.proof(
+                account.account,
+                tuple((p.symbol, p.quantity) for p in positions),
+                now=now,
+                positions=positions,
+                acquisition_id=content_id(
+                    {
+                        "at": now,
+                        "provider": broker.provider,
+                        "positions": positions,
+                        "account": account.account,
+                    }
+                ),
+                session=session,
+            )
+            certify_inventory(store, proof, session=session)
+            if (
+                store.config.clock_profile == "PAPER_TIME_V2"
+                and store.clocks.sample()[1] - start > 5
+            ):
+                raise TimeoutError("INVENTORY_ACQUISITION_UNSTABLE")
     except StateConflictError:
+        if proof is None:
+            raise  # Construction refusal retains its original exception and rollback.
         if store.config.clock_profile == "PAPER_TIME_V2":
             with store.database.transaction() as session:
                 latest = latest_certification(session)
@@ -210,7 +228,17 @@ async def guardian_cycle(
     if store.config.clock_profile == "PAPER_TIME_V2":
         now = broker.now
     exits = []
-    for entry in [link for link in store.links() if link["role"] == "ENTRY"]:
+    with store.database.transaction() as session:
+        links = table("core_intent_links")
+        active_entries = list(
+            session.execute(
+                select(links).where(
+                    links.c.role == "ENTRY",
+                    links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
+                )
+            ).mappings()
+        )
+    for entry in active_entries:
         plan = store.read("core_protection_plans", entry["protection_id"], ProtectionPlan)
         with store.database.transaction() as session:
             repo = StorageRepository(session)

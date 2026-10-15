@@ -3,7 +3,8 @@ param(
     [Parameter(Mandatory=$true)][string] $Repository,
     [Parameter(Mandatory=$true)][string] $Config,
     [Parameter(Mandatory=$true)][string] $Manifest,
-    [Parameter(Mandatory=$true)][ValidateSet('trader','guardian','outcomes')][string] $Role,
+    [Parameter(Mandatory=$true,ParameterSetName='Role')][ValidateSet('trader','guardian','outcomes')][string] $Role,
+    [Parameter(Mandatory=$true,ParameterSetName='Verify')][switch] $Verify,
     [switch] $SubmissionDisabled,
     [switch] $EntryDisabled
 )
@@ -19,7 +20,9 @@ $env:PYTHONNOUSERSITE = '1'
 . (Join-Path $PSScriptRoot 'windows-job.ps1')
 $CoreJob = New-ElrondProcessJob
 $ErrorActionPreference = 'Continue'
-$CoreArguments = @('-B','-m','quantbot.paper_core','--config',$Config,'--manifest',$Manifest,'--role',$Role)
+$CoreArguments = @('-B','-m','quantbot.paper_core','--config',$Config,'--manifest',$Manifest)
+if ($Verify) { $CoreArguments += @('--command','verify') }
+else { $CoreArguments += @('--role',$Role) }
 if ($SubmissionDisabled) { $CoreArguments += '--submission-disabled' }
 if ($EntryDisabled) { $CoreArguments += '--entry-disabled' }
 & $Python @CoreArguments

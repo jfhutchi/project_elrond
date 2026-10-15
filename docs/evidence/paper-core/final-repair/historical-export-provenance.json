@@ -1,0 +1,20 @@
+[
+  {
+    "path": "phase2/exports/m6_v34_compatibility.json",
+    "marker": "M6_V34_COMPATIBILITY",
+    "occurrence": 0,
+    "source_log": "phase2/covering-gate.txt.gz",
+    "source_line": 1,
+    "raw_json_sha256": "a5f2e5bf36aea916686b8aa9bdbb218706b35e30177e16c22bb1b5d45768310e",
+    "source_pins_sha256": "d6d696496813f81e8a91d4d057142f7b8a3405cdac4d9a864d5932f5eb0bdc01"
+  },
+  {
+    "path": "phase1/phase1-capacity.json",
+    "marker": "M5_CAPACITY",
+    "occurrence": 0,
+    "source_log": "phase1/covering-gate.txt.gz",
+    "source_line": 2,
+    "raw_json_sha256": "a1ad6eb6c771bdb9f5b1da868020bee2e5e919a0a567702acd289edae531a831",
+    "source_pins_sha256": "d0ed6fe28733baeaef80facf83b9ff917da43dd765974ef697bb46bddfd7b588"
+  }
+]

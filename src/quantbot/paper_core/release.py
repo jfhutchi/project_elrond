@@ -222,6 +222,14 @@ def read_status(path: Path) -> dict[str, Any]:
             json.loads(r[0])
             for r in connection.execute("SELECT payload FROM core_runtime_commissions")
         ]
+        status["economic_configs"] = [
+            json.loads(r[0]) for r in connection.execute("SELECT payload FROM core_identities")
+        ]
+        binding = connection.execute(
+            "SELECT h.payload FROM core_runtime_config_history h "
+            "JOIN core_runtime_current c ON c.document_id=h.id"
+        ).fetchone()
+        status["executable_binding"] = json.loads(binding[0]) if binding else None
         return status
 
 

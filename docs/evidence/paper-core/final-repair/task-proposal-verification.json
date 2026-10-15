@@ -1,0 +1,42 @@
+{
+  "static_only": true,
+  "runtime_token_verification": "NOT_PERFORMED",
+  "checks": [
+    {
+      "role": "guardian",
+      "sha256": "83fb1a6523c990d5ae275662a860459a636b6d328aeafd0d4ebfc912f92cf0ab",
+      "disabled": true,
+      "no_triggers": true,
+      "least_privilege": true,
+      "policy_bypass": false,
+      "args": "\"D:\\Elrond\\logs\\paper-core-guardian-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\deploy\\omen\\start-paper-core.ps1\" -Repository \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\" -Config \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-config.json\" -Manifest \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-release.json\" -Role guardian -SubmissionDisabled -EntryDisabled"
+    },
+    {
+      "role": "outcomes",
+      "sha256": "fca952c96a8977c0b7270302b2052bd0c9561098eec871cf009faf6303c5a65c",
+      "disabled": true,
+      "no_triggers": true,
+      "least_privilege": true,
+      "policy_bypass": false,
+      "args": "\"D:\\Elrond\\logs\\paper-core-outcomes-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\deploy\\omen\\start-paper-core.ps1\" -Repository \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\" -Config \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-config.json\" -Manifest \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-release.json\" -Role outcomes -SubmissionDisabled -EntryDisabled"
+    },
+    {
+      "role": "trader",
+      "sha256": "9b953fc2b087d4b7525d96296b6e585fcd8704978b70f3d628481264d8c7f007",
+      "disabled": true,
+      "no_triggers": true,
+      "least_privilege": true,
+      "policy_bypass": false,
+      "args": "\"D:\\Elrond\\logs\\paper-core-trader-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\deploy\\omen\\start-paper-core.ps1\" -Repository \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\" -Config \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-config.json\" -Manifest \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-release.json\" -Role trader -SubmissionDisabled -EntryDisabled"
+    },
+    {
+      "role": "verify",
+      "sha256": "863b6cb8c45b8c57a87a4cbbec01226ff419e27bb126e6986cac098371c3f4f8",
+      "disabled": true,
+      "no_triggers": true,
+      "least_privilege": true,
+      "policy_bypass": false,
+      "args": "\"D:\\Elrond\\logs\\paper-core-verify-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\deploy\\omen\\start-paper-core.ps1\" -Repository \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\" -Config \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-config.json\" -Manifest \"C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\final-repair\\prepared-release.json\" -Verify"
+    }
+  ]
+}

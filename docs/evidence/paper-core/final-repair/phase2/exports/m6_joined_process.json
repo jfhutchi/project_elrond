@@ -1,0 +1,661 @@
+[
+  {
+    "scope": "SELECTED_DECISION_READ_ONLY_SNAPSHOT",
+    "broker_state": "NOT_PROBED",
+    "schema": {
+      "id": 1,
+      "version": 36,
+      "store_identity": "068618e3-96a3-45c6-a503-887d0fa7d934"
+    },
+    "decision_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+    "decision": {
+      "action": "BUY",
+      "activation_id": "428a209160e37f297e7796bb5b2d68a3e42ffe0f7ce0c631d6e94e387f6af486",
+      "clock_process_id": "772e6f76-d235-430d-bb5e-8fa767a43045",
+      "config_id": "386e38e85b721c658395269448c7647b5b5285cdbc51b4a6c19e322dabc9f698",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "gates": [],
+      "inventory_generation": 3,
+      "inventory_id": "a550113501a42465879ca1f18164d427f2aa7d9aecdd1feb186346cfd750d326",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "model_digest": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+      "model_generation": 1,
+      "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+      "model_mode": "COLLECT",
+      "monotonic_anchor": 213710.843,
+      "observation_id": "ee47b8905a04582ce8f666aaeab2321c90c51dd5f8e7e00b166b4ec22f4a881c",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "prediction_bps": null,
+      "price": "100",
+      "provider_deadline": "2026-10-14T23:43:30.830755+00:00",
+      "quantity": "5",
+      "recorded_at_utc": "2026-10-14T23:43:29.451064+00:00",
+      "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+      "schema_version": 1,
+      "session_close": "2026-10-14T23:45:30.830755+00:00",
+      "source_refs": [
+        "ee47b8905a04582ce8f666aaeab2321c90c51dd5f8e7e00b166b4ec22f4a881c",
+        "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+        "a550113501a42465879ca1f18164d427f2aa7d9aecdd1feb186346cfd750d326",
+        "3d35c91a802400159d8fc21535635032f6dd523e87a7575e22210865449844b5"
+      ],
+      "source_start": "2026-10-14T23:08:29.410005+00:00",
+      "symbol": "XLE",
+      "time_evidence_id": "3d35c91a802400159d8fc21535635032f6dd523e87a7575e22210865449844b5",
+      "time_projection": {
+        "evidence_id": "3d35c91a802400159d8fc21535635032f6dd523e87a7575e22210865449844b5",
+        "monotonic_at": 213710.843,
+        "objections": [],
+        "process_id": "772e6f76-d235-430d-bb5e-8fa767a43045",
+        "provider_earliest": "2026-10-14T23:43:29.451064+00:00",
+        "provider_latest": "2026-10-14T23:43:29.466488+00:00",
+        "wall_at": "2026-10-14T23:43:29.451064+00:00"
+      },
+      "valid_until": "2026-10-14T23:45:29.410005+00:00"
+    },
+    "observation": {
+      "available_at": "2026-10-14T23:43:29.410005+00:00",
+      "dependencies": [
+        "SPY"
+      ],
+      "dependency_available_at": [
+        "2026-10-14T23:43:29.410005+00:00"
+      ],
+      "evidence_lane": "SYNTHETIC_TEST",
+      "feature_version": "five-minute-price-alpha-v1",
+      "features": [
+        [
+          "return_5m",
+          0.0
+        ],
+        [
+          "return_15m",
+          0.0
+        ],
+        [
+          "return_30m",
+          0.0
+        ],
+        [
+          "realized_volatility_15m",
+          0.0
+        ],
+        [
+          "relative_strength_15m",
+          0.0
+        ],
+        [
+          "distance_sma_15m",
+          0.0
+        ],
+        [
+          "distance_sma_30m",
+          0.0
+        ],
+        [
+          "momentum_acceleration",
+          0.0
+        ],
+        [
+          "market_return_15m",
+          0.0
+        ],
+        [
+          "market_volatility_15m",
+          0.0
+        ]
+      ],
+      "feed": "EXPLICIT_SYNTHETIC",
+      "price": "100",
+      "raw_data_digest": "explicit-process-bars-2026-10-14T23:43:29.410005+00:00",
+      "recorded_at_utc": "2026-10-14T23:43:29.410005+00:00",
+      "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+      "schema_version": 1,
+      "sequence": 1792021409,
+      "session_close": "2026-10-14T23:45:30.830755+00:00",
+      "session_open": "2026-10-14T00:00:00+00:00",
+      "source_end": "2026-10-14T23:43:29.410005+00:00",
+      "source_refs": [],
+      "source_start": "2026-10-14T23:08:29.410005+00:00",
+      "symbol": "XLE"
+    },
+    "model": {
+      "description": "nonpredictive baseline; no fitted model",
+      "feature_version": "five-minute-price-alpha-v1",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "mode": "COLLECT"
+    },
+    "activation": {
+      "action": "INITIALIZE",
+      "at": "2026-10-14T23:43:29.319705+00:00",
+      "authority_id": null,
+      "config_id": "386e38e85b721c658395269448c7647b5b5285cdbc51b4a6c19e322dabc9f698",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "generation": 1,
+      "learning_run_id": null,
+      "model_digest": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+      "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+      "previous_activation_id": null,
+      "previous_model_id": null,
+      "reason": "EXPLICIT_LOCAL_FIXTURE_BOOTSTRAP",
+      "receipt_id": null
+    },
+    "activation_authority": null,
+    "learning_receipt": null,
+    "trial_charge": null,
+    "time_evidence": {
+      "acquired_monotonic": 213710.812,
+      "contract": "PAPER_TIME_V2",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "objections": [],
+      "offset_lower": 0.0,
+      "offset_upper": 0.015424,
+      "process_id": "772e6f76-d235-430d-bb5e-8fa767a43045",
+      "recorded_at_utc": "2026-10-14T23:43:29.430933+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "samples": [
+        {
+          "mono_end": 213710.796,
+          "mono_start": 213710.796,
+          "offset_lower": 0.0,
+          "offset_upper": 0.003497,
+          "provider": {
+            "account_id": "synthetic",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 1e-06,
+            "session_close": "2026-10-14T23:45:30.830755+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T00:00:00+00:00",
+            "timestamp": "2026-10-14T23:43:29.415509+00:00"
+          },
+          "wall_end": "2026-10-14T23:43:29.415509+00:00",
+          "wall_start": "2026-10-14T23:43:29.412012+00:00"
+        },
+        {
+          "mono_end": 213710.812,
+          "mono_start": 213710.796,
+          "offset_lower": 0.0,
+          "offset_upper": 0.015424,
+          "provider": {
+            "account_id": "synthetic",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 1e-06,
+            "session_close": "2026-10-14T23:45:30.830755+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T00:00:00+00:00",
+            "timestamp": "2026-10-14T23:43:29.430933+00:00"
+          },
+          "wall_end": "2026-10-14T23:43:29.430933+00:00",
+          "wall_start": "2026-10-14T23:43:29.415509+00:00"
+        }
+      ],
+      "schema_version": 1,
+      "source_refs": [],
+      "wall_anchor": "2026-10-14T23:43:29.430933+00:00"
+    },
+    "links": [
+      {
+        "intent_id": "core-entry-05e6f303a58c5d8c88e17105cc6d053c4c6b673bd4a391417eff1b4cb6549647",
+        "decision_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+        "protection_id": "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb",
+        "observation_id": "ee47b8905a04582ce8f666aaeab2321c90c51dd5f8e7e00b166b4ec22f4a881c",
+        "role": "ENTRY",
+        "lot_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+        "payload": "{\"decision_id\":\"661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15\",\"intent\":{\"client_order_id\":\"qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b\",\"created_at\":\"2026-10-14T23:43:29.451064+00:00\",\"extended_hours\":false,\"intent_id\":\"core-entry-05e6f303a58c5d8c88e17105cc6d053c4c6b673bd4a391417eff1b4cb6549647\",\"limit_price\":null,\"order_type\":\"MARKET\",\"quantity\":\"5\",\"side\":\"BUY\",\"signal_date\":\"2026-10-14\",\"state\":\"RISK_APPROVED\",\"stop_price\":null,\"strategy_id\":\"paper-core-synthetic\",\"symbol\":\"XLE\",\"time_in_force\":\"DAY\"},\"protection_id\":\"8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb\"}"
+      },
+      {
+        "intent_id": "core-exit-86f19251e9daae347743afc484dc29964d65f23e34a300ed9fb1f591ac7314fb",
+        "decision_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+        "protection_id": "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb",
+        "observation_id": "ee47b8905a04582ce8f666aaeab2321c90c51dd5f8e7e00b166b4ec22f4a881c",
+        "role": "EXIT",
+        "lot_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+        "payload": "{\"client_order_id\":\"qb-86f19251e9daae347743afc484dc29964d65f23e\",\"created_at\":\"2026-10-14T23:43:33.274236+00:00\",\"extended_hours\":false,\"intent_id\":\"core-exit-86f19251e9daae347743afc484dc29964d65f23e34a300ed9fb1f591ac7314fb\",\"limit_price\":null,\"order_type\":\"MARKET\",\"quantity\":\"5\",\"side\":\"SELL\",\"signal_date\":\"2026-10-14\",\"state\":\"RISK_APPROVED\",\"stop_price\":null,\"strategy_id\":\"paper-core-synthetic\",\"symbol\":\"XLE\",\"time_in_force\":\"DAY\"}"
+      }
+    ],
+    "intents": [
+      {
+        "intent_id": "core-entry-05e6f303a58c5d8c88e17105cc6d053c4c6b673bd4a391417eff1b4cb6549647",
+        "client_order_id": "qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "signal_date": "2026-10-14",
+        "side": "BUY",
+        "order_type": "MARKET",
+        "time_in_force": "DAY",
+        "quantity": "5",
+        "limit_price": null,
+        "stop_price": null,
+        "extended_hours": 0,
+        "state": "FILLED",
+        "created_at": "2026-10-14T23:43:29.451064Z"
+      },
+      {
+        "intent_id": "core-exit-86f19251e9daae347743afc484dc29964d65f23e34a300ed9fb1f591ac7314fb",
+        "client_order_id": "qb-86f19251e9daae347743afc484dc29964d65f23e",
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "signal_date": "2026-10-14",
+        "side": "SELL",
+        "order_type": "MARKET",
+        "time_in_force": "DAY",
+        "quantity": "5",
+        "limit_price": null,
+        "stop_price": null,
+        "extended_hours": 0,
+        "state": "FILLED",
+        "created_at": "2026-10-14T23:43:33.274236Z"
+      }
+    ],
+    "orders": [
+      {
+        "broker_order_id": "synthetic-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+        "client_order_id": "qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+        "symbol": "XLE",
+        "side": "BUY",
+        "order_type": "MARKET",
+        "time_in_force": "DAY",
+        "quantity": "5",
+        "filled_quantity": "5",
+        "status": "filled",
+        "submitted_at": "2026-10-14T23:43:29.503068Z",
+        "filled_average_price": "100"
+      },
+      {
+        "broker_order_id": "synthetic-qb-86f19251e9daae347743afc484dc29964d65f23e",
+        "client_order_id": "qb-86f19251e9daae347743afc484dc29964d65f23e",
+        "symbol": "XLE",
+        "side": "SELL",
+        "order_type": "MARKET",
+        "time_in_force": "DAY",
+        "quantity": "5",
+        "filled_quantity": "5",
+        "status": "filled",
+        "submitted_at": "2026-10-14T23:43:33.468369Z",
+        "filled_average_price": "100"
+      }
+    ],
+    "fills": [
+      {
+        "fill_id": "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+        "broker_order_id": "synthetic-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+        "symbol": "XLE",
+        "side": "BUY",
+        "quantity": "5",
+        "price": "100",
+        "occurred_at": "2026-10-14T23:43:29.503068Z",
+        "fee": null,
+        "fee_source": "UNKNOWN",
+        "fee_reference": null
+      },
+      {
+        "fill_id": "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e",
+        "broker_order_id": "synthetic-qb-86f19251e9daae347743afc484dc29964d65f23e",
+        "symbol": "XLE",
+        "side": "SELL",
+        "quantity": "5",
+        "price": "100",
+        "occurred_at": "2026-10-14T23:43:33.468369Z",
+        "fee": null,
+        "fee_source": "UNKNOWN",
+        "fee_reference": null
+      }
+    ],
+    "order_events": [],
+    "protection_plans": {
+      "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb": {
+        "clock_process_id": "772e6f76-d235-430d-bb5e-8fa767a43045",
+        "clock_profile": "PAPER_TIME_V2",
+        "deadline": "2026-10-14T23:43:30.830755+00:00",
+        "decision_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+        "evidence_lane": "SYNTHETIC_TEST",
+        "exit_buffer_seconds": 120,
+        "exit_quantity_rule": "owned-filled-minus-owned-exited",
+        "generation": 1,
+        "inventory_generation": 3,
+        "monotonic_anchor": 213710.843,
+        "monotonic_expiry": 213712.207267,
+        "owner": "paper-core-synthetic",
+        "recorded_at_utc": "2026-10-14T23:43:29.451064+00:00",
+        "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+        "schema_version": 1,
+        "source_refs": [
+          "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15"
+        ],
+        "stop_price": "99"
+      }
+    },
+    "guardian_receipts": {
+      "2f1b4b6768d3d4b6330506e2a30a8edf4baf728ecca3efb402b320c68f566ba9": {
+        "evidence_lane": "SYNTHETIC_TEST",
+        "generation": 1,
+        "owner": "paper-core-synthetic",
+        "protection_ids": [
+          "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb"
+        ],
+        "recorded_at_utc": "2026-10-14T23:43:29.463821+00:00",
+        "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+        "schema_version": 1,
+        "source_refs": [
+          "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb"
+        ],
+        "valid_until": "2026-10-14T23:45:29.463821+00:00"
+      }
+    },
+    "reconciliation_proofs": {
+      "1c20841251e937a68ea01b9912cd61dc21a6e4a9f53b82eb4a1dc89938a7914e": {
+        "account": {
+          "account_id": "synthetic",
+          "buying_power": "100000",
+          "cash": "100000",
+          "currency": "USD",
+          "equity": "100000"
+        },
+        "acquisition_id": "9c960aa7a0cbd3962a8122d7986ca0fd3af5a15f591989e8fbeb2737043304cd",
+        "actual_quantities": [],
+        "baseline_id": "cf2e3d0b58be19415d0d208be1e09fa79cf356ad259d6dc89ee4d5845649ddc2",
+        "cash_complete": false,
+        "complete": true,
+        "evidence_lane": "SYNTHETIC_TEST",
+        "expected_cash": null,
+        "expected_quantities": [],
+        "fill_ids": [
+          "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+          "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e"
+        ],
+        "generation": 6,
+        "ledger_state_id": "cfb24dbbbd55391c578bc21d572ec0c88c8694e8ddb05a14ffeb58c18d8cdc56",
+        "order_ids": [
+          "synthetic-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+          "synthetic-qb-86f19251e9daae347743afc484dc29964d65f23e"
+        ],
+        "positions": [],
+        "recorded_at_utc": "2026-10-14T23:43:33.497596+00:00",
+        "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+        "schema_version": 1,
+        "source_refs": [
+          "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+          "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e"
+        ]
+      },
+      "a550113501a42465879ca1f18164d427f2aa7d9aecdd1feb186346cfd750d326": {
+        "account": {
+          "account_id": "synthetic",
+          "buying_power": "100000",
+          "cash": "100000",
+          "currency": "USD",
+          "equity": "100000"
+        },
+        "acquisition_id": "2ab8e929b798e372558a5d0106307277c8a4ca43363ce0cb417fb42423572f09",
+        "actual_quantities": [],
+        "baseline_id": "cf2e3d0b58be19415d0d208be1e09fa79cf356ad259d6dc89ee4d5845649ddc2",
+        "cash_complete": true,
+        "complete": true,
+        "evidence_lane": "SYNTHETIC_TEST",
+        "expected_cash": "100000",
+        "expected_quantities": [],
+        "fill_ids": [],
+        "generation": 3,
+        "ledger_state_id": "bfa74d21ce13867b5d59fec5fc8053907672ddd9090490cd596e3695182db94d",
+        "order_ids": [],
+        "positions": [],
+        "recorded_at_utc": "2026-10-14T23:43:29.438863+00:00",
+        "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+        "schema_version": 1,
+        "source_refs": []
+      }
+    },
+    "broker_sources": [
+      {
+        "id": "248375fd943b7ad9a20e5b742452268768615b7afcbbf956fdf61a8952d9b511",
+        "document": {
+          "account_id": "synthetic",
+          "activity_complete": false,
+          "activity_fill_ids": [],
+          "activity_watermark": null,
+          "cash_activity": null,
+          "client_order_id": "qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+          "correction_of": null,
+          "cost": null,
+          "endpoint": "synthetic/activities",
+          "event_id": "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+          "evidence_lane": "SYNTHETIC_TEST",
+          "fill": {
+            "broker_order_id": "synthetic-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+            "fee": null,
+            "fee_reference": null,
+            "fee_source": "UNKNOWN",
+            "fill_id": "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+            "occurred_at": "2026-10-14T23:43:29.503068+00:00",
+            "price": "100",
+            "quantity": "5",
+            "side": "BUY",
+            "symbol": "XLE"
+          },
+          "occurred_at": "2026-10-14T23:43:29.503068+00:00",
+          "order": null,
+          "provider": "EXPLICIT_SYNTHETIC",
+          "raw_digest": "e3684d4c34572dbbece23efb6780879166cfe7cab1aaa854bb8b053ca8980e91",
+          "recorded_at_utc": "2026-10-14T23:43:29.503068+00:00",
+          "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+          "schema_version": 1,
+          "source_refs": []
+        }
+      },
+      {
+        "id": "54439f64fd24fbc93913e1f548c247e0f2dc9ba9ddabde9fca4660b766cc3c4d",
+        "document": {
+          "account_id": "synthetic",
+          "activity_complete": false,
+          "activity_fill_ids": [],
+          "activity_watermark": null,
+          "cash_activity": null,
+          "client_order_id": "qb-86f19251e9daae347743afc484dc29964d65f23e",
+          "correction_of": null,
+          "cost": null,
+          "endpoint": "synthetic/activities",
+          "event_id": "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e",
+          "evidence_lane": "SYNTHETIC_TEST",
+          "fill": {
+            "broker_order_id": "synthetic-qb-86f19251e9daae347743afc484dc29964d65f23e",
+            "fee": null,
+            "fee_reference": null,
+            "fee_source": "UNKNOWN",
+            "fill_id": "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e",
+            "occurred_at": "2026-10-14T23:43:33.468369+00:00",
+            "price": "100",
+            "quantity": "5",
+            "side": "SELL",
+            "symbol": "XLE"
+          },
+          "occurred_at": "2026-10-14T23:43:33.468369+00:00",
+          "order": null,
+          "provider": "EXPLICIT_SYNTHETIC",
+          "raw_digest": "9168920887177e97a5b3b1d5c3a0f690e8e4eedb3addcb592df1e4b925242277",
+          "recorded_at_utc": "2026-10-14T23:43:33.468369+00:00",
+          "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+          "schema_version": 1,
+          "source_refs": []
+        }
+      },
+      {
+        "id": "88d4186fdb232cda7f09416a7b0d2a4dc10494d783ed6f93287da04ae565f942",
+        "document": {
+          "account_id": "synthetic",
+          "activity_complete": true,
+          "activity_fill_ids": [
+            "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e"
+          ],
+          "activity_watermark": "2026-10-14T23:43:33.468369+00:00",
+          "cash_activity": null,
+          "client_order_id": "qb-86f19251e9daae347743afc484dc29964d65f23e",
+          "correction_of": null,
+          "cost": null,
+          "endpoint": "synthetic/order-and-complete-activities",
+          "event_id": "964f3bace688c9f153225a65b11c7bde1551c68b646b5d2407245f19c02d4218",
+          "evidence_lane": "SYNTHETIC_TEST",
+          "fill": null,
+          "occurred_at": "2026-10-14T23:43:33.468369+00:00",
+          "order": {
+            "broker_order_id": "synthetic-qb-86f19251e9daae347743afc484dc29964d65f23e",
+            "client_order_id": "qb-86f19251e9daae347743afc484dc29964d65f23e",
+            "filled_average_price": "100",
+            "filled_quantity": "5",
+            "order_type": "MARKET",
+            "quantity": "5",
+            "side": "SELL",
+            "status": "filled",
+            "submitted_at": "2026-10-14T23:43:33.468369+00:00",
+            "symbol": "XLE",
+            "time_in_force": "DAY"
+          },
+          "provider": "EXPLICIT_SYNTHETIC",
+          "raw_digest": "964f3bace688c9f153225a65b11c7bde1551c68b646b5d2407245f19c02d4218",
+          "recorded_at_utc": "2026-10-14T23:43:33.468369+00:00",
+          "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+          "schema_version": 1,
+          "source_refs": []
+        }
+      },
+      {
+        "id": "931b651653ff4c380b88b43110c3b64e1feb119bbb08104d5b6ca8b695c594f0",
+        "document": {
+          "account_id": "synthetic",
+          "activity_complete": true,
+          "activity_fill_ids": [
+            "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b"
+          ],
+          "activity_watermark": "2026-10-14T23:43:29.503068+00:00",
+          "cash_activity": null,
+          "client_order_id": "qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+          "correction_of": null,
+          "cost": null,
+          "endpoint": "synthetic/order-and-complete-activities",
+          "event_id": "e1aa639ecbd0ea32bf2d33c2d8f4f29950107f3a23368fd6c5e1b3e10ee4ed07",
+          "evidence_lane": "SYNTHETIC_TEST",
+          "fill": null,
+          "occurred_at": "2026-10-14T23:43:29.503068+00:00",
+          "order": {
+            "broker_order_id": "synthetic-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+            "client_order_id": "qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+            "filled_average_price": "100",
+            "filled_quantity": "5",
+            "order_type": "MARKET",
+            "quantity": "5",
+            "side": "BUY",
+            "status": "filled",
+            "submitted_at": "2026-10-14T23:43:29.503068+00:00",
+            "symbol": "XLE",
+            "time_in_force": "DAY"
+          },
+          "provider": "EXPLICIT_SYNTHETIC",
+          "raw_digest": "e1aa639ecbd0ea32bf2d33c2d8f4f29950107f3a23368fd6c5e1b3e10ee4ed07",
+          "recorded_at_utc": "2026-10-14T23:43:29.503068+00:00",
+          "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+          "schema_version": 1,
+          "source_refs": []
+        }
+      }
+    ],
+    "cost_revisions": [],
+    "outcome_revisions": [
+      {
+        "id": "5850fff77cb4af01be67bd43bfa6484bcff9e6a149c549c9be5d180e3e511755",
+        "document": {
+          "actual_fees": null,
+          "available_at": "2026-10-14T23:43:33.605753+00:00",
+          "cost_item_ids": [],
+          "cost_reason": "FEE_UNAVAILABLE",
+          "dataset": "EXPLICIT_SYNTHETIC",
+          "decision_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+          "entry_fill_ids": [
+            "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b"
+          ],
+          "entry_notional": "500",
+          "evidence_lane": "SYNTHETIC_TEST",
+          "exit_fill_ids": [
+            "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e"
+          ],
+          "gross_pnl": "0",
+          "lot_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+          "modeled_costs": null,
+          "modeled_net_pnl": null,
+          "net_pnl": null,
+          "open_quantity": "0",
+          "policy_id": "collect-owned-30m-stop100-v1",
+          "protection_id": "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb",
+          "reconciliation_id": "1c20841251e937a68ea01b9912cd61dc21a6e4a9f53b82eb4a1dc89938a7914e",
+          "recorded_at_utc": "2026-10-14T23:43:33.605753+00:00",
+          "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+          "revision": 1,
+          "schema_version": 1,
+          "source_end": "2026-10-14T23:43:33.468369+00:00",
+          "source_refs": [
+            "1c20841251e937a68ea01b9912cd61dc21a6e4a9f53b82eb4a1dc89938a7914e",
+            "2f1b4b6768d3d4b6330506e2a30a8edf4baf728ecca3efb402b320c68f566ba9",
+            "88d4186fdb232cda7f09416a7b0d2a4dc10494d783ed6f93287da04ae565f942",
+            "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb",
+            "931b651653ff4c380b88b43110c3b64e1feb119bbb08104d5b6ca8b695c594f0",
+            "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+            "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e"
+          ],
+          "source_start": "2026-10-14T23:08:29.410005+00:00",
+          "source_state_hash": "ca45d0b3282e50223ccfc0b16fc6bfaa4ec500b2a368ed406c4c43bf428391bf",
+          "status": "COSTS_PENDING",
+          "supersedes": null,
+          "terminal_order_ids": [
+            "synthetic-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+            "synthetic-qb-86f19251e9daae347743afc484dc29964d65f23e"
+          ]
+        }
+      }
+    ],
+    "current_outcome": {
+      "actual_fees": null,
+      "available_at": "2026-10-14T23:43:33.605753+00:00",
+      "cost_item_ids": [],
+      "cost_reason": "FEE_UNAVAILABLE",
+      "dataset": "EXPLICIT_SYNTHETIC",
+      "decision_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+      "entry_fill_ids": [
+        "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b"
+      ],
+      "entry_notional": "500",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_fill_ids": [
+        "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e"
+      ],
+      "gross_pnl": "0",
+      "lot_id": "661446e0213212fd6b83c76a4c023f450e4fd092cce6e5b6e53d7633972ccc15",
+      "modeled_costs": null,
+      "modeled_net_pnl": null,
+      "net_pnl": null,
+      "open_quantity": "0",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "protection_id": "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb",
+      "reconciliation_id": "1c20841251e937a68ea01b9912cd61dc21a6e4a9f53b82eb4a1dc89938a7914e",
+      "recorded_at_utc": "2026-10-14T23:43:33.605753+00:00",
+      "release_id": "fab2eea4dcfdd48d41e6025abd2149828bb79cfe82e6e305aadddb485bf8f1b5",
+      "revision": 1,
+      "schema_version": 1,
+      "source_end": "2026-10-14T23:43:33.468369+00:00",
+      "source_refs": [
+        "1c20841251e937a68ea01b9912cd61dc21a6e4a9f53b82eb4a1dc89938a7914e",
+        "2f1b4b6768d3d4b6330506e2a30a8edf4baf728ecca3efb402b320c68f566ba9",
+        "88d4186fdb232cda7f09416a7b0d2a4dc10494d783ed6f93287da04ae565f942",
+        "8f5bb3de4068129f7142e7587cdb31aaf26e62f4fa7cabe2c3fb7b5332b112fb",
+        "931b651653ff4c380b88b43110c3b64e1feb119bbb08104d5b6ca8b695c594f0",
+        "synthetic-fill-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+        "synthetic-fill-qb-86f19251e9daae347743afc484dc29964d65f23e"
+      ],
+      "source_start": "2026-10-14T23:08:29.410005+00:00",
+      "source_state_hash": "ca45d0b3282e50223ccfc0b16fc6bfaa4ec500b2a368ed406c4c43bf428391bf",
+      "status": "COSTS_PENDING",
+      "supersedes": null,
+      "terminal_order_ids": [
+        "synthetic-qb-05e6f303a58c5d8c88e17105cc6d053c4c6b673b",
+        "synthetic-qb-86f19251e9daae347743afc484dc29964d65f23e"
+      ]
+    }
+  }
+]

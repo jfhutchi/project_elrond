@@ -1,0 +1,13 @@
+[
+  {
+    "commission": "2a452e68c889cec4fddcbd60ad094ca6eef790ad800fb34387576c8e35a2e3d6",
+    "original_plan": "72ae3cf77e298bb8efaadb837c385324137dd1ef94b88a1aad92ca4133a616c6",
+    "original_decision": "9ce8265ef09e2392b4efe39d39fcfd9d1b666aee7840d6c5a52dc0e6225a6012",
+    "fence": "f3626510fa23192378e72dd88cd929aeb29b50850b065b2fc12fa648f48dfa51",
+    "resume": "6fabbc564cade4ef6cc381927964d129a07d1b145ce3b82d914e1ea22aec2557",
+    "new_claim": "6e8ced80184e3ad71b373295e36b9e4751774674886f776dbf1b6913032261a9",
+    "new_fence": "82bcdd1b61023748d70ae307f98929ccf4a40fcc119172ed87b23f9c622ab98b",
+    "posts": 2,
+    "mock_only": true
+  }
+]

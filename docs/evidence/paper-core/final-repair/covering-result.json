@@ -1,0 +1,13 @@
+{
+  "phase": "final-guard",
+  "exit_code": 0,
+  "summary": "105 passed in 166.52s",
+  "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\result.txt",
+  "raw_bytes": 233940,
+  "raw_sha256": "8dc8993acdcce6bf6cd98032ede87e7c4b721911d5eec4aff656a795acca6c0f",
+  "compressed_sha256": "b2432390f003d367fe73d33370e28b994e732420f99973ba5d7900e6939a9825",
+  "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989",
+  "frozen_archive_sha256": "c0f5599ad37b1895af22ac8ba8650e8362975e243caec7b1ef26dea0bfa31dba",
+  "capacity_witness": "NOT_REPEATED_PHASE1_PASSED",
+  "affected_gate": "PHASE2_296_PASSED_26_SKIPPED_RETAINED"
+}

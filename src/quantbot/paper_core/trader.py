@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -16,7 +17,6 @@ from quantbot.paper_core.contracts import (
     CoreConfig,
     Decision,
     EntryIntent,
-    GuardianReceipt,
     ModelArtifact,
     Observation,
     ProtectionPlan,
@@ -288,22 +288,17 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         ).first():
             return None
         # Only a proven pre-SUBMITTING refusal releases the slot; ERROR alone is unsafe.
-        for link in session.execute(select(links).where(links.c.role == "ENTRY")).mappings():
-            if (
-                session.execute(
-                    select(table("core_round_trips").c.id).where(
-                        table("core_round_trips").c.id == link["lot_id"]
-                    )
-                ).first()
-                is not None
-            ):
-                continue
+        for link in session.execute(
+            select(links).where(
+                links.c.role == "ENTRY",
+                links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
+            )
+        ).mappings():
             if not definitively_unsent(repo, link["intent_id"]):
                 return None
-        receipts = [
-            GuardianReceipt.model_validate_json(p)
-            for p in session.execute(select(table("core_guardian_receipts").c.payload)).scalars()
-        ]
+        from quantbot.paper_core.work import current_receipts
+
+        receipts = current_receipts(session)
         from quantbot.paper_core.authority import guardian_objections, runtime_objections
 
         if store.config.evidence_lane == "BROKER_PAPER" and runtime_objections(
@@ -359,6 +354,9 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
                 payload=canonical_result_json(wrapper),
             )
         )
+        from quantbot.paper_core.work import dirty
+
+        dirty(session, (decision.id,))
         return wrapper
 
 
@@ -384,7 +382,14 @@ async def trader_cycle(
             from quantbot.paper_core.guardian import synchronize
 
             try:
-                await synchronize(store, broker, now=store.clocks.sample()[0])
+                async with asyncio.timeout(5):
+                    for attempt in range(2):
+                        try:
+                            await synchronize(store, broker, now=store.clocks.sample()[0])
+                            break
+                        except TimeoutError as error:
+                            if attempt or str(error) != "RECONCILIATION_AUTHORITY_CHANGED":
+                                raise
                 inventory = store.latest_proof()
             except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError):
                 acquisition_reasons = ("INVENTORY_ACQUISITION_RETRYABLE",)

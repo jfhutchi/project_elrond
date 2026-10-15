@@ -236,11 +236,19 @@ def _select(
         _revision_metadata(session, cutoff) if policy.procedure_version else _metadata(session)
     )
     quarantined = _quarantined_lots(session)
+    work = table("core_outcome_work")
+    pending = set(
+        session.execute(
+            select(work.c.lot_id).where(work.c.version > work.c.processed_version)
+        ).scalars()
+    )
     considered = tuple(sorted(str(r["outcome_id"]) for r in metadata))
     for row in metadata:
         reason = None
         if row["lot_id"] in quarantined:
             reason = "LOT_EVIDENCE_QUARANTINED"
+        elif row["lot_id"] in pending:
+            reason = "OUTCOME_RECONCILIATION_PENDING"
         elif (
             row["dataset"] != policy.dataset
             or row["policy_id"] != policy.policy_id

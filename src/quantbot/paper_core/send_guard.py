@@ -10,7 +10,6 @@ from sqlalchemy.orm import Session
 from quantbot.domain import IntentState, OrderIntent
 from quantbot.paper_core.contracts import (
     Decision,
-    GuardianReceipt,
     ProtectionPlan,
     ReconciliationProof,
 )
@@ -185,10 +184,9 @@ def final_send_in_session(
             )
         ).scalar_one()
     )
-    receipts = [
-        GuardianReceipt.model_validate_json(p)
-        for p in session.execute(select(table("core_guardian_receipts").c.payload)).scalars()
-    ]
+    from quantbot.paper_core.work import current_receipts
+
+    receipts = current_receipts(session, plan_id=plan.id)
     receipts = [
         r
         for r in receipts
@@ -397,7 +395,17 @@ def retire_stale_entries(store: CoreStore, *, clock: Callable[[], datetime]) -> 
         session.execute(text("BEGIN IMMEDIATE"))
         repo = StorageRepository(session)
         links = table("core_intent_links")
-        for link in session.execute(select(links).where(links.c.role == "ENTRY")).mappings():
+        intents = table("order_intents")
+        for link in session.execute(
+            select(links)
+            .join(intents, links.c.intent_id == intents.c.intent_id)
+            .where(
+                links.c.role == "ENTRY",
+                intents.c.state.in_(
+                    (IntentState.RISK_APPROVED.value, IntentState.ORDER_CREATED.value)
+                ),
+            )
+        ).mappings():
             intent = repo.get_order_intent(link["intent_id"])
             if intent is None or intent.state not in {
                 IntentState.RISK_APPROVED,

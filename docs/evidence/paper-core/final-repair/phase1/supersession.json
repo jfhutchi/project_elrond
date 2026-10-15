@@ -1,0 +1,45 @@
+{
+  "state": "PREPARED_WAITING_NOT_COMMISSIONED",
+  "repair_base": "31cd5167dc7ef9a50a39850df9c131f7c70f84c4",
+  "old_release_id": "f0433941ffb9c059b9d7a4b53ab530622968734d1ac50332931180cf4370c5df",
+  "new_release_id": "c8a7fdf33d6ebabac14eb1eb4b17fa5167c774c19608208eb9ed202f4614bbd1",
+  "config_id": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "old_verification_on_repaired_source": {
+    "release_id": "f0433941ffb9c059b9d7a4b53ab530622968734d1ac50332931180cf4370c5df",
+    "verified_at": "2026-10-14T23:00:48.946890+00:00",
+    "state": "REFUSED",
+    "objections": [
+      "EXECUTABLE_INVENTORY_MISMATCH",
+      "EXECUTABLE_PIN_MISMATCH:deploy/omen/start-paper-core.ps1",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/__main__.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/activation.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/authority.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/costs.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/guardian.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/learning.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/outcomes.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/release.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/roles.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/send_guard.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/store.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/trader.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/storage/database.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/storage/schema.py",
+      "SCHEMA_BUILD_MISMATCH"
+    ],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "new_verification": {
+    "release_id": "c8a7fdf33d6ebabac14eb1eb4b17fa5167c774c19608208eb9ed202f4614bbd1",
+    "verified_at": "2026-10-14T23:00:47.830417+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "config_bytes_unchanged": true,
+  "executable_pins": 364,
+  "distributions": 46,
+  "operational_release_transfer": "EXPLICIT_SAME_SCHEMA_CODE_ONLY_V1_SUPPORTED_NOT_PERFORMED"
+}

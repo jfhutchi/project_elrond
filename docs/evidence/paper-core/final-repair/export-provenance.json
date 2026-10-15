@@ -1,0 +1,146 @@
+[
+  {
+    "path": "exports/final_executable_transition.json",
+    "marker": "FINAL_EXECUTABLE_TRANSITION",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 1,
+    "raw_json_sha256": "634a581f7f471962fc368a12374df79bc64b7df4f26c9ae67f7787f9a68c890b",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/final_retained_history.json",
+    "marker": "FINAL_RETAINED_HISTORY",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 2,
+    "raw_json_sha256": "f71903a0cbc605acbd94a9123bd3ff89db2557b70a995ef204b9e354882f4f90",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/final_cash_fingerprint.json",
+    "marker": "FINAL_CASH_FINGERPRINT",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 3,
+    "raw_json_sha256": "40074b39f50ce559780b5c95f9ded2bfb53349928c66d822a56b5566fd617ef6",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/final_cash_fingerprint.json",
+    "marker": "FINAL_CASH_FINGERPRINT",
+    "occurrence": 1,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 4,
+    "raw_json_sha256": "86facb54ddf8b1546119ded05607fbe590c53ac9c3bba8c034f47f24fa2d1b81",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/final_recovery_chain.json",
+    "marker": "FINAL_RECOVERY_CHAIN",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 5,
+    "raw_json_sha256": "d84c8605d905dbd4962f9c9f2fd857fcca858b5aaaadd18fa05c02fed0500165",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m6_joined_process.json",
+    "marker": "M6_JOINED_PROCESS",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 7,
+    "raw_json_sha256": "6216ca196ae5116c59f28f74c25d220b1ead903341dc4fedf40c46fda59bac6d",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m6_fix1_flat_handshake.json",
+    "marker": "M6_FIX1_FLAT_HANDSHAKE",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 53,
+    "raw_json_sha256": "6502a0c4dd5c77e14c97e1338dd66bad98345a7921ae6f1b1cfa662813c1c26f",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 0,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 80,
+    "raw_json_sha256": "5c4dd4b74fe3993f6e1d669c078eba03428dae774951b7f8991baa77a381870b",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 1,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 81,
+    "raw_json_sha256": "c1dad8fe4976f27d2530daddf138d4fe83e27cdca705c644b5944b59d08077fe",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 2,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 82,
+    "raw_json_sha256": "bfd5f558761c906981c203a373a39d1e3275009301b3fd82a0849f1ea066b75b",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 3,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 83,
+    "raw_json_sha256": "af80e3441b92b3d7c3869aec31bdd842514502f9be4603fab4b4033bf3bf365e",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 4,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 84,
+    "raw_json_sha256": "29c771f3ac8615a91994641a36a50458b40fc717accf64844a70ecd630ef21b2",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 5,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 85,
+    "raw_json_sha256": "a7ea2f2443aeda30b77441cafc010449ab051c6c1a11e8d74e82a2a10663632e",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 6,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 86,
+    "raw_json_sha256": "0501a7026073cf78dcab36986a664fe268b098d867a3f5d968a437a83df79eac",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 7,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 87,
+    "raw_json_sha256": "efde199fb3af429081a5ae495b5ae329a9429a7231d10c6ed6151c3cec107e88",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "exports/m2_repair.json",
+    "marker": "M2_REPAIR",
+    "occurrence": 8,
+    "source_log": "covering-gate.txt.gz",
+    "source_line": 88,
+    "raw_json_sha256": "c60583aea3f4bccca4a427ec9e58ca6799519d53f921804135066bb2d6630c11",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  }
+]

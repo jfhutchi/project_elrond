@@ -230,39 +230,52 @@ def initialize_fixture_model(store: CoreStore, model: ModelArtifact, *, at: date
 def initialize_operational_model(
     store: CoreStore, model: ModelArtifact, *, at: datetime
 ) -> Activation:
-    from quantbot.paper_core.authority import commission_in_session
-
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
-        commission = commission_in_session(store, session)
-        if (
-            store.config.evidence_lane != "BROKER_PAPER"
-            or model.mode != "COLLECT"
-            or model.fixture_authority
-            or model.estimator is not None
-            or model.id != commission.initial_model_id
-            or at != commission.approved_at
-        ):
-            raise StateConflictError("INITIAL_MODEL_NOT_EXACTLY_COMMISSIONED")
-        if active_in_session(store, session) is not None:
+        return initialize_operational_model_in_session(store, session, model, at=at)
+
+
+def initialize_operational_model_in_session(
+    store: CoreStore, session: Session, model: ModelArtifact, *, at: datetime
+) -> Activation:
+    """Only the initial commission transaction creates operational COLLECT."""
+    from quantbot.paper_core.authority import commission_in_session
+
+    commission = commission_in_session(store, session)
+    if (
+        store.config.evidence_lane != "BROKER_PAPER"
+        or model.mode != "COLLECT"
+        or model.fixture_authority
+        or model.estimator is not None
+        or model.id != commission.initial_model_id
+        or at != commission.approved_at
+    ):
+        raise StateConflictError("INITIAL_MODEL_NOT_EXACTLY_COMMISSIONED")
+    event = Activation(
+        config_id=store.config_id,
+        evidence_lane="BROKER_PAPER",
+        generation=1,
+        previous_activation_id=None,
+        previous_model_id=None,
+        model_id=model.id,
+        model_digest=model.id,
+        receipt_id=None,
+        authority_id=None,
+        at=at,
+        action="INITIALIZE",
+        reason="EXPLICIT_OPERATIONAL_COLLECT_COMMISSION:" + commission.id,
+    )
+    current = active_in_session(store, session)
+    if current is not None:
+        if current[1] != event:
             raise StateConflictError("MODEL_ALREADY_COMMISSIONED")
-        put(session, "core_models", model.id, model)
-        event = Activation(
-            config_id=store.config_id,
-            evidence_lane="BROKER_PAPER",
-            generation=1,
-            previous_activation_id=None,
-            previous_model_id=None,
-            model_id=model.id,
-            model_digest=model.id,
-            receipt_id=None,
-            authority_id=None,
-            at=at,
-            action="INITIALIZE",
-            reason="EXPLICIT_OPERATIONAL_COLLECT_COMMISSION:" + commission.id,
-        )
-        _write_event(session, event)
         return event
+    # An incomplete older commission is not permission to backdate availability.
+    if not session.info.get("core_initial_commission"):
+        raise StateConflictError("INITIAL_MODEL_REQUIRES_ATOMIC_COMMISSION")
+    put(session, "core_models", model.id, model)
+    _write_event(session, event)
+    return event
 
 
 def commission_operational_candidate(
