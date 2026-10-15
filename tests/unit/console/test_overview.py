@@ -117,6 +117,7 @@ def test_core_heartbeat_does_not_expose_identity_or_report_an_unapproved_release
     binding = None
     if bound:
         import hashlib
+
         from quantbot.paper_core.authority import ExecutableBinding
         from quantbot.paper_core.contracts import CoreConfig
         from quantbot.paper_core.release import PreparedRelease, RuntimeConfig
