@@ -483,7 +483,7 @@ async def trader_cycle(
     if cohort is not None:
         from quantbot.paper_core.selection import record_cohort, validate_cohort
 
-        validate_cohort(store.config, cohort)
+        validate_cohort(store.config, cohort, entry_policy=store.entry_policy)
         record_cohort(store, cohort)
         if not cohort.observations:
             raise ValueError("NO_ELIGIBLE_COHORT_MEMBERS:" + repr(cohort.unavailable))

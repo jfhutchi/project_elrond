@@ -17,7 +17,7 @@ from quantbot.paper_core.contracts import ProtectionPlan
 from quantbot.paper_core.entry_policy import EntryPolicy
 from quantbot.paper_core.roles import dispatch_entries
 from quantbot.paper_core.send_guard import definitively_unsent
-from quantbot.paper_core.trader import claim_entry
+from quantbot.paper_core.trader import claim_entry, trader_cycle
 from quantbot.storage import StorageRepository
 
 
@@ -59,6 +59,39 @@ async def prepared(tmp_path):
         provider_factory=WholeProvider,
         entry_policy=EntryPolicy(symbols=("AAPL", "MSFT", "F")),
     )
+
+
+@pytest.mark.asyncio
+async def test_full_trader_cycle_accepts_expanded_cohort_and_recovers_scoped_wait(tmp_path):
+    db, store, broker, provider, clocks = await prepared(tmp_path)
+    try:
+        from quantbot.paper_core.health import active_health, report
+
+        report(
+            store,
+            role="GUARDIAN",
+            state="RETRYABLE_FAILURE",
+            scope="ACCOUNT",
+            scope_id=store.config.account_id,
+            reasons=("OWNED_FILL_ACTIVITY_PENDING",),
+            now=clocks.wall,
+        )
+        clocks.advance(1)
+        cohort = await broker.observation_cohort()
+        decision = await trader_cycle(
+            store, broker, cohort, broker.config.initial_model, store.latest_proof(), now=broker.now
+        )
+        assert (decision.symbol, decision.quantity, decision.action) == ("F", Decimal(1), "BUY")
+        assert store.links()
+        with db.transaction() as session:
+            assert not any(
+                "OWNED_FILL_ACTIVITY_PENDING" in h.objections for h in active_health(session)
+            )
+        ready(store)
+        assert await dispatch_entries(store, broker) == ()
+        assert len(provider.orders) == 1 and Decimal(provider.orders[0]["qty"]) == 1
+    finally:
+        db.close()
 
 
 @pytest.mark.asyncio
