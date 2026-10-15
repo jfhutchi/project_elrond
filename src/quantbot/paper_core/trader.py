@@ -227,14 +227,12 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         if repo.get_kill_switch_state().engaged:
             return None
         certification = latest_certification(session)
-        latest = certification[1] if certification else None
         revoked = table("core_cash_authority_revocations")
         if (
             certification is None
-            or certification[1] != latest
             or session.execute(
                 select(revoked.c.snapshot_id).where(
-                    revoked.c.snapshot_id == "core-certified-" + latest
+                    revoked.c.snapshot_id == "core-certified-" + certification[1]
                 )
             ).first()
             or decision.config_id != store.config_id
@@ -250,7 +248,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         certified = ReconciliationProof.model_validate_json(
             session.execute(
                 select(table("core_reconciliation_proofs").c.payload).where(
-                    table("core_reconciliation_proofs").c.id == latest
+                    table("core_reconciliation_proofs").c.id == certification[1]
                 )
             ).scalar_one()
         )

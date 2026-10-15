@@ -280,6 +280,7 @@ class AlpacaCoreBroker:
                 self.adapter._fill_from_payload(r) for r in rows if r.get("activity_type") == "FILL"
             )
             events = []
+            pending_owned_orders = []
             for intent in intents:
                 assert intent is not None
                 first = await self.adapter.get_order_by_client_id(
@@ -296,6 +297,10 @@ class AlpacaCoreBroker:
                     and sum((f.quantity for f in owned), Decimal(0)) == (first.filled_quantity)
                     and all(f.occurred_at <= until for f in owned)
                 )
+                if first == second and (
+                    sum((f.quantity for f in owned), Decimal(0)) < first.filled_quantity
+                ):
+                    pending_owned_orders.append(first)
                 at = self.now
                 events.append(
                     BrokerEvent(
@@ -337,6 +342,7 @@ class AlpacaCoreBroker:
             "after": after,
             "until": until,
             "rows": rows,
+            "pending_owned_orders": tuple(pending_owned_orders),
             "cost_authority": "UNKNOWN_ALL_IN_COMPONENTS",
             "cash_authority": "NOT_CERTIFIED",
             "release_id": store.config.release_id,

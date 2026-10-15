@@ -43,6 +43,7 @@ class FundsProvider(ProviderFixture):
         super().__init__(clocks.wall)
         self.clocks = clocks
         self.cash = Decimal(100000)
+        self.fill_price = Decimal(100)
         self.orders = []
         self.fills = []
         self.holdings = {}
@@ -89,7 +90,7 @@ class FundsProvider(ProviderFixture):
             body = kwargs["json_body"]
             quantity = Decimal(body["qty"])
             sign = 1 if body["side"] == "buy" else -1
-            self.cash -= sign * quantity * 100
+            self.cash -= sign * quantity * self.fill_price
             symbol = body["symbol"]
             self.holdings[symbol] = self.holdings.get(symbol, 0) + sign * quantity
             payload = dict(
@@ -98,7 +99,7 @@ class FundsProvider(ProviderFixture):
                 filled_qty=str(quantity),
                 status="filled",
                 submitted_at=self.now.isoformat(),
-                filled_avg_price="100",
+                filled_avg_price=str(self.fill_price),
             )
             self.orders.append(payload)
             self.fills.append(
@@ -108,7 +109,7 @@ class FundsProvider(ProviderFixture):
                     activity_type="FILL",
                     symbol=symbol,
                     qty=str(quantity),
-                    price="100",
+                    price=str(self.fill_price),
                     side=body["side"],
                     transaction_time=self.now.isoformat(),
                 )
@@ -150,10 +151,10 @@ class FundsProvider(ProviderFixture):
         )
 
 
-async def prepare(tmp_path, *, hybrid=True):
+async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider):
     clocks = Clocks()
     clocks.wall = datetime(2026, 10, 14, 14, 0, 3, tzinfo=UTC)
-    provider = FundsProvider(clocks)
+    provider = provider_factory(clocks)
     source = tmp_path / "canonical.db"
     Database.create(source).close()
     db = Database.create(tmp_path / "funds.db")

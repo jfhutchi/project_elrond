@@ -12,7 +12,13 @@ from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, Broke
 from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType, TimeInForce
 from quantbot.execution.coordinator import OrderSubmissionBlocked
 from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
-from quantbot.paper_core.contracts import CycleReceipt, Decision, GuardianReceipt, ProtectionPlan
+from quantbot.paper_core.contracts import (
+    CycleReceipt,
+    Decision,
+    GuardianReceipt,
+    ProtectionPlan,
+    ReconciliationProof,
+)
 from quantbot.paper_core.funds import PaperFundsEvidence, paper_balance_policy
 from quantbot.paper_core.health import active_health, report
 from quantbot.paper_core.runtime import require_runtime_broker
@@ -28,6 +34,106 @@ from quantbot.paper_core.time_evidence import (
 from quantbot.research.manifest import canonical_result_json, content_id
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StateConflictError, StorageRepository
+
+
+def _pending_owned_activity(
+    store: CoreStore, proof: ReconciliationProof, *, capture_started: datetime, now: datetime
+) -> bool:
+    """Defer only a quantity delta explained by this poll's stable owned acknowledgements."""
+    import json
+
+    from quantbot.domain import BrokerOrder
+
+    if proof.account.account_id != store.config.account_id:
+        return False
+    with store.database.transaction() as session:
+        progress = (
+            session.execute(
+                select(table("core_provider_progress")).where(
+                    table("core_provider_progress").c.account_id == store.config.account_id
+                )
+            )
+            .mappings()
+            .one_or_none()
+        )
+        if progress is None:
+            return False
+        encoded = session.execute(
+            select(table("core_provider_acquisitions").c.payload).where(
+                table("core_provider_acquisitions").c.id == progress["document_id"]
+            )
+        ).scalar_one_or_none()
+        if encoded is None:
+            return False
+        document = json.loads(encoded)
+        if (
+            content_id(document) != progress["document_id"]
+            or document.get("account_id") != store.config.account_id
+            or document.get("release_id") != store.config.release_id
+            or document.get("endpoint") != AlpacaCoreBroker.endpoint
+            or not capture_started <= datetime.fromisoformat(document["until"]) <= now
+            or datetime.fromisoformat(progress["watermark"])
+            != datetime.fromisoformat(document["until"])
+            or session.execute(select(table("core_fixture_baselines").c.id)).scalar_one_or_none()
+            != proof.baseline_id
+        ):
+            return False
+        repo = StorageRepository(session)
+        if session.execute(
+            select(table("order_intents").c.intent_id)
+            .where(table("order_intents").c.state.in_(("SUBMITTING", "SUBMISSION_UNKNOWN")))
+            .limit(1)
+        ).first():
+            return False
+        pending: dict[str, Decimal] = {}
+        buy_basis: dict[str, Decimal] = {}
+        for payload in document.get("pending_owned_orders", ()):
+            order = BrokerOrder.model_validate(payload)
+            linked = session.execute(
+                select(table("core_intent_links").c.intent_id)
+                .join(
+                    table("order_intents"),
+                    table("order_intents").c.intent_id == table("core_intent_links").c.intent_id,
+                )
+                .where(table("order_intents").c.client_order_id == order.client_order_id)
+            ).scalar_one_or_none()
+            intent = repo.get_order_intent(linked) if linked else None
+            if (
+                intent is None
+                or intent.strategy_id != store.config.owner
+                or intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}
+                or (intent.symbol, intent.side, intent.quantity)
+                != (order.symbol, order.side, order.quantity)
+                or repo.get_broker_order_by_client_order_id(order.client_order_id) != order
+            ):
+                return False
+            missing = order.filled_quantity - sum(
+                (f.quantity for f in repo.list_fills(broker_order_id=order.broker_order_id)),
+                Decimal(0),
+            )
+            if missing <= 0:
+                continue
+            pending[order.symbol] = pending.get(order.symbol, Decimal(0)) + (
+                missing if order.side is OrderSide.BUY else -missing
+            )
+            if order.side is OrderSide.BUY:
+                if order.filled_average_price is None:
+                    return False
+                buy_basis[order.symbol] = order.filled_average_price
+        expected, actual = dict(proof.expected_quantities), dict(proof.actual_quantities)
+        delta = {
+            s: actual.get(s, Decimal(0)) - expected.get(s, Decimal(0))
+            for s in expected.keys() | actual.keys()
+            if actual.get(s, 0) != expected.get(s, 0)
+        }
+        if not delta or delta != {s: q for s, q in pending.items() if q}:
+            return False
+        previous = store.latest_proof()
+        if previous.baseline_id != proof.baseline_id:
+            return False
+        basis = {p.symbol: p.average_entry_price for p in previous.positions}
+        basis.update(buy_basis)
+        return all(p.average_entry_price == basis.get(p.symbol) for p in proof.positions)
 
 
 async def synchronize(
@@ -177,6 +283,16 @@ async def synchronize(
                 if dict(proof.actual_quantities).get(s, 0)
                 != dict(proof.expected_quantities).get(s, 0)
             }
+            if mismatched and _pending_owned_activity(
+                store, proof, capture_started=capture_started, now=now
+            ):
+                report(
+                    store, role="GUARDIAN", state="RETRYABLE_FAILURE",
+                    reasons=("OWNED_FILL_ACTIVITY_PENDING",), now=now,
+                    scope="ACCOUNT", scope_id=store.config.account_id,
+                    evidence_ids=(proof.id,),
+                )
+                raise TimeoutError("OWNED_FILL_ACTIVITY_PENDING") from None
             if proof.account.account_id != store.config.account_id or (
                 proof.cash_complete and proof.account.cash != proof.expected_cash
             ):

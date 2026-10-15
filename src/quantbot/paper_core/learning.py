@@ -405,6 +405,62 @@ def _historical_comparator(
         and decision.learning_receipt_id == collect.learning_receipt_id
     ):
         return collect, None, None, None, None, None, None
+    if decision.model_id == collect.id:
+        from quantbot.paper_core.activation import (
+            Activation,
+            ActivationAuthority,
+            _document,
+            _receipt,
+        )
+        from quantbot.storage import StateConflictError
+
+        if decision.activation_id is None:
+            raise ValueError("INVALID_HISTORICAL_COLLECT_ACKNOWLEDGEMENT")
+        try:
+            ack = _receipt(session, collect, decision.learning_receipt_id)
+            event = _document(session, "core_activations", decision.activation_id, Activation)
+            authority = _document(
+                session, "core_activation_authorities", event.authority_id, ActivationAuthority
+            )
+        except (ValueError, StateConflictError):
+            raise ValueError("INVALID_HISTORICAL_COLLECT_ACKNOWLEDGEMENT") from None
+        if (
+            ack.status != "NO_CHANGE"
+            or ack.available_at is None
+            or not ack.available_at <= event.at <= decision.recorded_at_utc
+            or ack.completed_at != ack.available_at
+            or ack.execution_clock_domain != domain
+            or ack.policy.parent_model.id != collect.id
+            or ack.policy.target_contract != target_contract
+            or ack.policy.policy_id != decision.policy_id
+            or ack.policy.dataset != row["dataset"]
+            or ack.policy.evidence_lane != decision.evidence_lane
+            or ack.evidence_lane != decision.evidence_lane
+            or ack.release_id != decision.release_id
+            or ack.policy.procedure_version != (
+                "daily-paper-exploration-walk-forward-v3"
+                if target_contract == "owned-executed-paper-gross-return-v1"
+                else "daily-all-history-walk-forward-v2"
+            )
+            or event.action != "ACKNOWLEDGE"
+            or event.config_id != decision.config_id
+            or event.evidence_lane != decision.evidence_lane
+            or event.model_id != collect.id
+            or event.model_digest != collect.id
+            or event.receipt_id != ack.id
+            or event.learning_run_id != ack.run_id
+            or authority.config_id != decision.config_id
+            or authority.evidence_lane != decision.evidence_lane
+            or authority.candidate_id != collect.id
+            or authority.receipt_id != ack.id
+            or authority.expected_activation_id != event.previous_activation_id
+            or authority.target_contract != target_contract
+            or authority.policy_id != decision.policy_id
+            or authority.procedure_version != ack.policy.procedure_version
+            or not authority.commissioned_at <= event.at < authority.expires_at
+        ):
+            raise ValueError("INVALID_HISTORICAL_COLLECT_ACKNOWLEDGEMENT")
+        return collect, None, None, ack.id, ack.available_at, None, ack.model_dump_json()
     payload = session.execute(
         select(table("core_models").c.payload).where(table("core_models").c.id == decision.model_id)
     ).scalar_one_or_none()
