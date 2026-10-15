@@ -1,0 +1,10 @@
+{
+  "cycle_id": "protection-5ffa1e7668e40985fffb32c265d4dd9f",
+  "observed_at": "2026-10-15T12:01:23.414416Z",
+  "outcome": "DEGRADED",
+  "reason": "POSITION_STATE_UNRECONCILED",
+  "position_count": 9,
+  "evaluated_count": 9,
+  "unprotected_count": 9,
+  "exit_required_count": 0
+}

@@ -1,0 +1,40 @@
+[CmdletBinding()]
+param([switch]$Check)
+$ErrorActionPreference='Stop'
+$evidence='D:\Elrond\review\paper-core-activation-20261015T1155Z'
+$directory='D:\Elrond\deploy\paper-core-activation-20261015'
+$name='Elrond Paper Core Deploy'
+[xml]$definition=Get-Content -LiteralPath (Join-Path $evidence 'tasks-before\Elrond Paper Core Guardian.xml') -Raw
+$description=$definition.SelectSingleNode("//*[local-name()='RegistrationInfo']/*[local-name()='Description']")
+$description.InnerText='One-time authorized PAPER handover, bounded to 2026-10-15 first-session commissioning; waits for original IWM exit and preserves all entry gates.'
+$definition.SelectSingleNode("//*[local-name()='RegistrationInfo']/*[local-name()='URI']").InnerText='\'+$name
+$definition.SelectSingleNode("//*[local-name()='Settings']/*[local-name()='Enabled']").InnerText='true'
+$definition.SelectSingleNode("//*[local-name()='Settings']/*[local-name()='ExecutionTimeLimit']").InnerText='PT3H'
+$exec=$definition.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']")
+$exec.SelectSingleNode("*[local-name()='WorkingDirectory']").InnerText=$directory
+$arguments='"D:\Elrond\logs\paper-core-deployment-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -File "'+$directory+'\continue-deployment.ps1"'
+if($Check) { $arguments+=' -Check' }
+$exec.SelectSingleNode("*[local-name()='Arguments']").InnerText=$arguments
+Register-ScheduledTask -TaskName $name -Xml $definition.OuterXml -Force | Out-Null
+if(-not $Check) {
+    $login=New-ScheduledTaskTrigger -AtLogOn -User ($env:USERDOMAIN+'\'+$env:USERNAME)
+    $login.EndBoundary='2026-10-15T14:00:00Z'
+    Set-ScheduledTask -TaskName $name -Trigger $login | Out-Null
+}
+[IO.File]::WriteAllText((Join-Path $evidence ('deployment-task-'+$(if($Check){'check'}else{'active'})+'.xml')),(Export-ScheduledTask -TaskName $name),[Text.UTF8Encoding]::new($false))
+$before=[DateTime]::Now
+Start-ScheduledTask -TaskName $name
+if($Check) {
+    $deadline=[DateTime]::UtcNow.AddSeconds(45)
+    do {
+        Start-Sleep -Seconds 2
+        $task=Get-ScheduledTask -TaskName $name
+        $info=Get-ScheduledTaskInfo -TaskName $name
+        if([string]$task.State -ne 'Running' -and $info.LastRunTime -ge $before.AddSeconds(-2)) { break }
+    } while([DateTime]::UtcNow -lt $deadline)
+    Disable-ScheduledTask -TaskName $name | Out-Null
+    if([string]$task.State -eq 'Running' -or $info.LastTaskResult -ne 10) { throw 'SELECTED_TOKEN_EXPECTED_WAIT_NOT_CONFIRMED' }
+    $record=[ordered]@{at=[DateTime]::UtcNow.ToString('o');task=$name;principal=$task.Principal.UserId;logon_type=[string]$task.Principal.LogonType;run_level=[string]$task.Principal.RunLevel;last_run=$info.LastRunTime.ToUniversalTime().ToString('o');exit_code=$info.LastTaskResult;result='EXPECTED_PENDING_ORDER_REFUSAL';commission_or_role_start_performed=$false}
+    [IO.File]::WriteAllText((Join-Path $evidence 'continuation-selected-token-check.json'),($record|ConvertTo-Json),[Text.UTF8Encoding]::new($false))
+    $record|ConvertTo-Json
+}

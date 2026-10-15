@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Elrond Protection",
+    "commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+    "repository": "D:\\Elrond\\releases\\legacy-support-14352cc-20261015",
+    "arguments": "\"D:\\Elrond\\logs\\upgraded-protection-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\\deploy\\omen\\start-service.ps1\" -Repository \"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\" -EnvironmentFile \"C:\\Users\\leepa\\.config\\quantbot\\quantbot.env\" -Commit 14352cc428dcd999750138d52fbd5f30347991a1 -Database \"D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db\" -Component protection",
+    "started_at": "2026-10-15T12:00:20.5239449Z"
+  },
+  {
+    "name": "Elrond Paper Deadline",
+    "commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+    "repository": "D:\\Elrond\\releases\\legacy-support-14352cc-20261015",
+    "arguments": "\"D:\\Elrond\\logs\\upgraded-deadline-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\\deploy\\omen\\start-learner.ps1\" -Repository \"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\" -Directory \"D:\\Elrond\\learner\" -Database \"D:\\Elrond\\learner\\state\\learner.db\" -EnvironmentFile \"C:\\Users\\leepa\\.config\\quantbot\\quantbot.env\" -Commit 14352cc428dcd999750138d52fbd5f30347991a1 -DeadlineSupervisor -OperationsDatabase \"D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db\"",
+    "started_at": "2026-10-15T12:00:20.5987095Z"
+  },
+  {
+    "name": "Elrond Console",
+    "commit": "14352cc428dcd999750138d52fbd5f30347991a1",
+    "repository": "D:\\Elrond\\releases\\legacy-support-14352cc-20261015",
+    "arguments": "\"D:\\Elrond\\logs\\upgraded-console-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\\deploy\\omen\\start-service.ps1\" -Repository \"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\" -EnvironmentFile \"C:\\Users\\leepa\\.config\\quantbot\\quantbot-console.env\" -Commit 14352cc428dcd999750138d52fbd5f30347991a1 -Database \"D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db\" -Component console -ExperimentStore \"C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db\"",
+    "started_at": "2026-10-15T12:00:20.6870316Z"
+  }
+]

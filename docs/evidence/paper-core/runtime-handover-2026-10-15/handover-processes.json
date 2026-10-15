@@ -1,0 +1,32 @@
+[
+  {
+    "ProcessId": 25236,
+    "ParentProcessId": 11700,
+    "CommandLine": "\"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\\.venv\\Scripts\\python.exe\" -m quantbot.operations.service --env-file C:\\Users\\leepa\\.config\\quantbot\\quantbot.env --commit 14352cc428dcd999750138d52fbd5f30347991a1 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component protection"
+  },
+  {
+    "ProcessId": 1840,
+    "ParentProcessId": 18660,
+    "CommandLine": "\"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\\.venv\\Scripts\\python.exe\" -m quantbot.learner.execution_worker --commit 14352cc428dcd999750138d52fbd5f30347991a1 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --env-file C:\\Users\\leepa\\.config\\quantbot\\quantbot.env"
+  },
+  {
+    "ProcessId": 21076,
+    "ParentProcessId": 16976,
+    "CommandLine": "\"D:\\Elrond\\releases\\legacy-support-14352cc-20261015\\.venv\\Scripts\\python.exe\" -m quantbot.operations.service --env-file C:\\Users\\leepa\\.config\\quantbot\\quantbot-console.env --commit 14352cc428dcd999750138d52fbd5f30347991a1 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component console --experiment-store C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db"
+  },
+  {
+    "ProcessId": 2220,
+    "ParentProcessId": 1840,
+    "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -m quantbot.learner.execution_worker --commit 14352cc428dcd999750138d52fbd5f30347991a1 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --env-file C:\\Users\\leepa\\.config\\quantbot\\quantbot.env"
+  },
+  {
+    "ProcessId": 4256,
+    "ParentProcessId": 21076,
+    "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -m quantbot.operations.service --env-file C:\\Users\\leepa\\.config\\quantbot\\quantbot-console.env --commit 14352cc428dcd999750138d52fbd5f30347991a1 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component console --experiment-store C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db"
+  },
+  {
+    "ProcessId": 13672,
+    "ParentProcessId": 25236,
+    "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -m quantbot.operations.service --env-file C:\\Users\\leepa\\.config\\quantbot\\quantbot.env --commit 14352cc428dcd999750138d52fbd5f30347991a1 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component protection"
+  }
+]

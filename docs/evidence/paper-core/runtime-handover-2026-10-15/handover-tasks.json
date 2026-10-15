@@ -1,0 +1,170 @@
+[
+  {
+    "TaskName": "Elrond Adaptive Paper Shadow",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-08T12:11:42.0000000Z",
+    "Result": 267014
+  },
+  {
+    "TaskName": "Elrond Alert Dispatcher",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:59:30.0000000Z",
+    "Result": 1
+  },
+  {
+    "TaskName": "Elrond Console",
+    "State": "Running",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T12:11:44.0000000Z",
+    "Result": 2147946720
+  },
+  {
+    "TaskName": "Elrond Daemon",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:56:45.0000000Z",
+    "Result": 267014
+  },
+  {
+    "TaskName": "Elrond DIA Alerts",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:58:29.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond DIA Learner",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-08T15:21:36.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Five Minute Observations",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-14T20:11:05.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Ingestion",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:41:45.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Learner",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:59:35.0000000Z",
+    "Result": 267014
+  },
+  {
+    "TaskName": "Elrond Observer",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:59:01.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Paper Core Deploy",
+    "State": "Running",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T12:12:36.0000000Z",
+    "Result": 267009
+  },
+  {
+    "TaskName": "Elrond Paper Core Guardian",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "1999-11-30T05:00:00.0000000Z",
+    "Result": 267011
+  },
+  {
+    "TaskName": "Elrond Paper Core Outcomes",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "1999-11-30T05:00:00.0000000Z",
+    "Result": 267011
+  },
+  {
+    "TaskName": "Elrond Paper Core Trader",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "1999-11-30T05:00:00.0000000Z",
+    "Result": 267011
+  },
+  {
+    "TaskName": "Elrond Paper Core Verify",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T10:23:24.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Paper Daily Close",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:59:35.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Paper Deadline",
+    "State": "Running",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T12:13:35.0000000Z",
+    "Result": 2147946720
+  },
+  {
+    "TaskName": "Elrond PAPER Exploration",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-14T20:11:05.0000000Z",
+    "Result": 267014
+  },
+  {
+    "TaskName": "Elrond Position Research",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:50:35.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Protection",
+    "State": "Running",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T12:11:45.0000000Z",
+    "Result": 2147946720
+  },
+  {
+    "TaskName": "Elrond Report",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-14T17:11:45.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Research",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:11:45.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "Elrond Trade Learning Observer",
+    "State": "Disabled",
+    "Principal": "leepa",
+    "LastRun": "2026-10-15T11:59:16.0000000Z",
+    "Result": 0
+  },
+  {
+    "TaskName": "ElrondModelServer",
+    "State": "Disabled",
+    "Principal": "erlond",
+    "LastRun": "2026-10-15T11:58:27.0000000Z",
+    "Result": 267014
+  }
+]

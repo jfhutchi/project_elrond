@@ -1,0 +1,11 @@
+{
+  "at": "2026-10-15T12:12:35.8457702Z",
+  "task": "Elrond Paper Core Deploy",
+  "principal": "leepa",
+  "logon_type": "Interactive",
+  "run_level": "Limited",
+  "last_run": "2026-10-15T12:12:27.0000000Z",
+  "exit_code": 10,
+  "result": "EXPECTED_PENDING_ORDER_REFUSAL",
+  "commission_or_role_start_performed": false
+}

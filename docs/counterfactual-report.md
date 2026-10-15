@@ -1,6 +1,6 @@
 # Counterfactual operator report
 
-> **Local installation, October 15, 2026:** PR 290 is merged. Its isolated Omen release passed exact task-identity verification at 06:23 Eastern. The trader remains uncommissioned pending the original IWM exit and compatible protection/schema handover. See the [measured local installation](evidence/paper-core/local-deployment-2026-10-15/README.md).
+> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](evidence/paper-core/runtime-handover-2026-10-15/README.md).
 
 > **Hypothetical research scope.** These retained reports are separate from the [PAPER core](paper-core.md) executed-outcome learner. Counterfactual returns and untraded observations never become broker fills or owned labels. V2 requires actual cost completeness; the [approved V3 successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md) uses established executed gross outcomes and permits only a fee-unavailable gap in an otherwise closed, owned, reconciled lot. Fees stay unknown and net stays null. The successor is merged in PR #290 and locally installed, but not commissioned; this report grants no execution/model authority or evidence of daily hybrid stock trading.
 

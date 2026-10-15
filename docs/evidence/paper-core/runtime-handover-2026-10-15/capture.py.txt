@@ -1,0 +1,29 @@
+"""Sanitized query-only service/store/dashboard capture for a dated handover."""
+import hashlib
+import json
+import sqlite3
+from datetime import UTC,datetime
+from pathlib import Path
+import httpx
+
+root=Path('D:/Elrond/review/paper-core-activation-20261015T1155Z')
+store=Path('D:/Elrond/state/quantbot-paper-fresh-20260908.db')
+connection=sqlite3.connect(store.as_uri()+'?mode=ro',uri=True)
+connection.row_factory=sqlite3.Row
+connection.execute('PRAGMA query_only=ON')
+try:
+    document={'captured_at':datetime.now(UTC).isoformat(),'query_only':True,'schema':dict(connection.execute('SELECT * FROM schema_version').fetchone()),'manual_stop':dict(connection.execute('SELECT * FROM kill_switch_state').fetchone()),'core_commissions':connection.execute('SELECT count(*) FROM core_runtime_commissions').fetchone()[0],'core_role_heartbeats':connection.execute('SELECT count(*) FROM core_role_heartbeats').fetchone()[0],'intent_states':[list(r) for r in connection.execute('SELECT state,count(*) FROM order_intents GROUP BY state')],'latest_protection':dict(connection.execute('SELECT cycle_id,observed_at,strategy_id,outcome,position_count,unprotected_count,exit_required_count,reason FROM position_protection_cycles ORDER BY observed_at DESC LIMIT 1').fetchone())}
+finally:
+    connection.close()
+with httpx.Client(timeout=10) as client:
+    responses={path:client.get('http://127.0.0.1:8787'+path) for path in ('/','/api/state','/kill-switch','/api/learner')}
+    document['dashboard']={'statuses':{path:r.status_code for path,r in responses.items()},'state_generated_at':responses['/api/state'].json()['generated_at'],'paper_mode':responses['/api/state'].json()['health']['trading_mode']}
+assert all(code==200 for code in document['dashboard']['statuses'].values())
+assert document['schema']['version']==36 and document['schema']['store_identity']=='cd2a5911-853a-484e-bbc8-d0c27b5d27aa'
+assert document['manual_stop']=={'id':1,'engaged':0,'reason':'stop','updated_at':'2026-10-14T01:17:42.473747Z'}
+document['continuation']=json.loads((root/'activation-state.json').read_text())
+document['helper_pins']=json.loads(Path('D:/Elrond/deploy/paper-core-activation-20261015/helper-pins.json').read_text())
+for pin in document['helper_pins']:
+    assert hashlib.sha256((Path('D:/Elrond/deploy/paper-core-activation-20261015')/pin['name']).read_bytes()).hexdigest()==pin['sha256']
+(root/'handover-capture.json').write_text(json.dumps(document,indent=2))
+print(json.dumps(document,indent=2))

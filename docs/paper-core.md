@@ -1,5 +1,7 @@
 # PAPER core: baseline, approved successor and acceptance
 
+> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](evidence/paper-core/runtime-handover-2026-10-15/README.md).
+
 The merged baseline replaces the operational path incrementally with three independent roles:
 **trader**, **guardian**, and **outcomes with daily learning**. It retains the existing broker,
 execution, SQLite, research-memory, and protected-data foundations. This overview summarizes the
@@ -15,8 +17,10 @@ losses, while preserving unknown fees and net P&L. A separate versioned current-
 allows bounded entries without claiming that incomplete historical cash has been reconciled.
 
 **The successor is merged in PR #290 and installed locally, but not commissioned.**
-Its actual Windows task-identity verifier passed; the inherited IWM exit and compatible
-schema/protection handover still prevent starting the trader. The integrated witness covers ten sessions of mixed gross outcomes,
+Its actual Windows task-identity verifier passed. The original IWM exit must reconcile before
+commissioning; fresh guardian certification and inherited protection must then pass before
+starting the trader. Both stores are now schema 36 and compatible retained services are running.
+The integrated witness covers ten sessions of mixed gross outcomes,
 real V3 fitting/activation and later signal/exploration decisions. The dated prepared baseline
 remains XLE-bound. Use the [handover](evidence/paper-core/handover.md) for rollout status.
 Daily attempts cannot guarantee fills or improved profit.

@@ -1,0 +1,14 @@
+# HP Omen runtime handover, 2026-10-15
+
+Authorization: user "upgrade everything and get it running", following local deployment and merged PR290. Scope is the Elrond stack and locked dependencies; PAPER only, no paid CI.
+
+1. Capture broker, database, tasks and process provenance; retain original IWM exit IDs and nine inherited owners. Done at 11:56Z; original exit accepted, market opens 13:30Z.
+2. Install merged 14352cc locked native Git checkout for inherited protection/deadline/console. Core uses separately verified archive release0734974b. Done; no source changes.
+3. Rehearse WAL-aware backup/restore and schema29→36 on copies, fingerprint all original columns. Done: operational and learner59tables preserved, experiment backed up.
+4. Archive definitions, disable obsolete entry/learner/research writers and pause compatible retained services. Verify all old Python/service process trees stopped before fresh fenced backups and migration. Preserve switch state and identities. Immediately restart upgraded inherited protection/deadline/console against36. Obsolete tasks stay disabled.
+5. Verify HTTP dashboard, retained service source pins and fresh protection/deadline state. Pending original exit must reconcile normally; no cancellation/replacement or fake terminal state.
+6. Acquire stable real PAPER account/positions with zero open orders and fenced-writer evidence, then commission exact verified release within120seconds. Existing learner canonical metadata preserved. Initial session origin13:30Z is valid only if actual activation supports it.
+7. Enable guardian/outcomes first and prove healthy authority, then trader. Preserve explicit stops. Configure login/restart recovery; validate source pins, heartbeat progression and real broker status. No fabricated fills, fees or trades.
+8. Record new dated handover evidence and update current documentation without changing sealed prior packages. Publish only reviewed nonsecret artifacts; never environment contents, credentials or broker account ID.
+
+If the IWM order remains pending before13:30Z, complete steps1–5 and prepare an explicit fail-closed deployment continuation for steps6–7 using unchanged acquisition/commission contracts. It must refuse unknown state, expired session origin, changed code/config/store/owners, old entry writers, explicit stop or unhealthy retained protection; preserve every refusal in local logs.

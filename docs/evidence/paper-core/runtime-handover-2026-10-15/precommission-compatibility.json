@@ -1,0 +1,13 @@
+{
+  "at": "2026-10-15T12:18:09.487348+00:00",
+  "query_only": true,
+  "canonical_source_schema": 36,
+  "canonical_windows": 0,
+  "canonical_holdouts": 1,
+  "canonical_trials": 12,
+  "existing_trials": 12,
+  "conflicting_trial_metadata": 0,
+  "independent_deadline_objections": [],
+  "operating_commission_performed": false,
+  "broker_probed": false
+}

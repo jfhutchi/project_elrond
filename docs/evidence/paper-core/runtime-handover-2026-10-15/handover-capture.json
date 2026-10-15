@@ -1,0 +1,73 @@
+{
+  "captured_at": "2026-10-15T12:13:26.403415+00:00",
+  "query_only": true,
+  "schema": {
+    "id": 1,
+    "version": 36,
+    "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+  },
+  "manual_stop": {
+    "id": 1,
+    "engaged": 0,
+    "reason": "stop",
+    "updated_at": "2026-10-14T01:17:42.473747Z"
+  },
+  "core_commissions": 0,
+  "core_role_heartbeats": 0,
+  "intent_states": [
+    [
+      "BROKER_ACCEPTED",
+      1
+    ],
+    [
+      "FILLED",
+      17
+    ],
+    [
+      "REJECTED",
+      1
+    ]
+  ],
+  "latest_protection": {
+    "cycle_id": "protection-5ffa1e7668e40985fffb32c265d4dd9f",
+    "observed_at": "2026-10-15T12:01:23.414416Z",
+    "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+    "outcome": "DEGRADED",
+    "position_count": 9,
+    "unprotected_count": 9,
+    "exit_required_count": 0,
+    "reason": "POSITION_STATE_UNRECONCILED"
+  },
+  "dashboard": {
+    "statuses": {
+      "/": 200,
+      "/api/state": 200,
+      "/kill-switch": 200,
+      "/api/learner": 200
+    },
+    "state_generated_at": "2026-10-15T12:13:30.465081Z",
+    "paper_mode": "PAPER"
+  },
+  "continuation": {
+    "at": "2026-10-15T12:13:10.199961+00:00",
+    "state": "WAITING",
+    "reason": "ORIGINAL_IWM_EXIT_PENDING",
+    "market_open": false,
+    "open_orders": 1,
+    "next_open": "2026-10-15T13:30:00+00:00"
+  },
+  "helper_pins": [
+    {
+      "name": "activation_attempt.py",
+      "sha256": "bd0a851845e8cd8c06a3edfabf7901074dbaf9da6ddb8967891c5411c1384bcb"
+    },
+    {
+      "name": "activation_health.py",
+      "sha256": "7530d5f4b2f3187b3b15fb0de217eebd5ce3c7ecf9eaf45b036574a3187b6a42"
+    },
+    {
+      "name": "continue-deployment.ps1",
+      "sha256": "6d38f2742a158ef9677e69927f6f9f6b24e611b7a09265244a1a161292e06137"
+    }
+  ]
+}

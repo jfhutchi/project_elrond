@@ -1,0 +1,29 @@
+$ErrorActionPreference = 'Stop'
+$evidence = 'D:\Elrond\review\paper-core-activation-20261015T1155Z'
+$tasks = @(Get-ScheduledTask | Where-Object { $_.TaskName -like '*Elrond*' -and $_.TaskName -notlike 'Elrond Paper Core *' })
+foreach ($task in $tasks) {
+    if (-not (Test-Path -LiteralPath (Join-Path $evidence ('tasks-before\' + $task.TaskName + '.xml')))) { throw 'TASK_BACKUP_REQUIRED' }
+    Disable-ScheduledTask -TaskName $task.TaskName | Out-Null
+}
+# Entry producers first, then retained risk reducers immediately before the migration.
+$last = @('Elrond Paper Deadline','Elrond Protection','Elrond Console')
+foreach ($task in @($tasks | Where-Object TaskName -notin $last) + @($tasks | Where-Object TaskName -in $last)) {
+    if ([string](Get-ScheduledTask -TaskName $task.TaskName).State -eq 'Running') {
+        Stop-ScheduledTask -TaskName $task.TaskName
+    }
+}
+Start-Sleep -Seconds 2
+$remaining = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match '\-m quantbot\.' })
+# Earlier wrappers can predate Job Object containment. Explicitly fence only verified QuantBot processes.
+foreach ($process in $remaining) {
+    $fresh = Get-CimInstance Win32_Process -Filter ('ProcessId=' + $process.ProcessId) -ErrorAction SilentlyContinue
+    if ($fresh -and $fresh.CreationDate -eq $process.CreationDate -and $fresh.CommandLine -ceq $process.CommandLine) {
+        Stop-Process -Id $process.ProcessId -Force -ErrorAction Stop
+    }
+}
+Start-Sleep -Seconds 1
+$stillRunning = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq 'python.exe' -and $_.CommandLine -match '\-m quantbot\.' })
+if ($stillRunning.Count -ne 0) { throw 'OLD_QUANTBOT_PROCESSES_REMAIN' }
+$record = [ordered]@{ captured_at=[DateTime]::UtcNow.ToString('o'); authorization='USER_UPGRADE_EVERYTHING_AND_GET_IT_RUNNING_20261015'; tasks=@($tasks.TaskName); all_legacy_tasks_disabled=$true; old_quantbot_processes=0; explicit_orphan_processes_stopped=@($remaining.ProcessId); preserved_iwm_client_order_id='qb-595f587acd1b769f4bd0d59282e631ad14ecb9f7'; original_order_cancelled_or_replaced=$false }
+[IO.File]::WriteAllText((Join-Path $evidence 'writer-fence.json'), ($record | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
+$record | ConvertTo-Json -Depth 6

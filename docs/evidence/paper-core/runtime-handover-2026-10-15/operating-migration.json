@@ -1,0 +1,44 @@
+{
+  "records": [
+    {
+      "role": "operational",
+      "path": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+      "before": {
+        "id": 1,
+        "version": 29,
+        "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+      },
+      "after": {
+        "id": 1,
+        "version": 36,
+        "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+      },
+      "backup": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\fenced-backups\\operational.db",
+      "restored": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\fenced-backups\\operational-restored.db",
+      "backup_sha256": "58f3254767da6c000aba645065890d660ce737d1edd61ea09279a62e35e7e136",
+      "original_tables_preserved": 59,
+      "all_original_columns_preserved": true,
+      "completed_at": "2026-10-15T12:00:18.875014+00:00"
+    },
+    {
+      "role": "learner",
+      "path": "D:\\Elrond\\learner\\state\\learner.db",
+      "before": {
+        "id": 1,
+        "version": 29,
+        "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+      },
+      "after": {
+        "id": 1,
+        "version": 36,
+        "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+      },
+      "backup": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\fenced-backups\\learner.db",
+      "restored": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\fenced-backups\\learner-restored.db",
+      "backup_sha256": "dbe6fe86215b63b5ded14cce207a9a79390987c6a04e8fc1702a8ec4e30924f1",
+      "original_tables_preserved": 59,
+      "all_original_columns_preserved": true,
+      "completed_at": "2026-10-15T12:00:19.821100+00:00"
+    }
+  ]
+}

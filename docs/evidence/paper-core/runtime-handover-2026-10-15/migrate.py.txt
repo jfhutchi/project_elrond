@@ -1,0 +1,61 @@
+"""Authorized fenced migration, fresh restorable backups and exact old-column preservation."""
+import hashlib
+import json
+import shutil
+import sqlite3
+from datetime import UTC, datetime
+from pathlib import Path
+
+from quantbot.storage import Database
+
+root = Path('D:/Elrond/review/paper-core-activation-20261015T1155Z')
+fence = json.loads((root / 'writer-fence.json').read_text())
+assert fence['old_quantbot_processes'] == 0 and fence['all_legacy_tasks_disabled']
+assert 0 <= (datetime.now(UTC) - datetime.fromisoformat(fence['captured_at'])).total_seconds() < 120
+out = root / 'fenced-backups'
+out.mkdir(exist_ok=False)
+
+def quote(value):
+    return '"' + value.replace('"', '""') + '"'
+
+def connect(path):
+    connection = sqlite3.connect(path.as_uri() + '?mode=ro', uri=True)
+    connection.row_factory = sqlite3.Row
+    connection.execute('PRAGMA query_only=ON')
+    return connection
+
+def fingerprint(connection, name, columns):
+    selected = ','.join(quote(c) for c in columns)
+    digest = hashlib.sha256()
+    count = 0
+    for row in connection.execute(f'SELECT {selected} FROM {quote(name)} ORDER BY {selected}'):
+        digest.update(json.dumps(list(row), separators=(',', ':'), default=str).encode() + b'\n')
+        count += 1
+    return {'rows':count, 'sha256':digest.hexdigest()}
+
+results = []
+for role, source in [('operational', Path('D:/Elrond/state/quantbot-paper-fresh-20260908.db')), ('learner', Path('D:/Elrond/learner/state/learner.db'))]:
+    backup = out / (role + '.db')
+    restored = out / (role + '-restored.db')
+    with connect(source) as old, sqlite3.connect(backup) as destination:
+        old.backup(destination)
+    shutil.copy2(backup, restored)
+    backup_hash = hashlib.sha256(backup.read_bytes()).hexdigest()
+    assert hashlib.sha256(restored.read_bytes()).hexdigest() == backup_hash
+    with connect(restored) as old:
+        assert old.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+        identity = dict(old.execute('SELECT * FROM schema_version').fetchone())
+        assert identity['version'] == 29
+        columns = {r[0]:[c[1] for c in old.execute('PRAGMA table_info(' + quote(r[0]) + ')')] for r in old.execute("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'") if r[0] not in {'schema_version','alembic_version'}}
+        before = {name:fingerprint(old,name,cols) for name,cols in columns.items()}
+    with Database.migrate(source) as migrated:
+        assert migrated.store_identity == identity['store_identity']
+    with connect(source) as new:
+        current = dict(new.execute('SELECT * FROM schema_version').fetchone())
+        assert current['version'] == 36 and current['store_identity'] == identity['store_identity']
+        assert new.execute('PRAGMA integrity_check').fetchone()[0] == 'ok'
+        after = {name:fingerprint(new,name,cols) for name,cols in columns.items()}
+    assert before == after, [name for name in before if before[name] != after[name]]
+    results.append({'role':role,'path':str(source),'before':identity,'after':current,'backup':str(backup),'restored':str(restored),'backup_sha256':backup_hash,'original_tables_preserved':len(before),'all_original_columns_preserved':True,'completed_at':datetime.now(UTC).isoformat()})
+    (root / 'operating-migration.json').write_text(json.dumps({'records':results},indent=2))
+    print(json.dumps(results[-1]),flush=True)

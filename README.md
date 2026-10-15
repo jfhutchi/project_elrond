@@ -1,5 +1,7 @@
 # Project Elrond
 
+> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](docs/evidence/paper-core/runtime-handover-2026-10-15/README.md).
+
 An autonomous quantitative research and PAPER trading platform that tries hard not to fool itself.
 
 The implemented PAPER core has three independent roles: a trader, a guardian, and an outcomes
@@ -8,15 +10,13 @@ and automatic recovery when fresh evidence permits. Explicit manual entry stops 
 identity, ownership, or accounting failures retain their controls. Protection, exits, and
 trustworthy outcome processing remain independent of entry and learning failures.
 
-**Daily PAPER successor merged and installed locally; trading activation is still waiting.**
-[PR #290](https://github.com/jfhutchi/project_elrond/pull/290) merged on October 15, 2026 at
-06:12 Eastern. Its isolated Omen release passed exact verification under the actual Windows
-task identity at 06:23. The three functional core tasks remain disabled and uncommissioned.
-The 06:15 broker check confirmed the original IWM exit is still accepted with zero filled;
-the operating store remains schema 29 while the new core requires 36. Existing protection
-and deadline services and all 19 legacy task definitions remain unchanged. See the
-[measured local installation](docs/evidence/paper-core/local-deployment-2026-10-15/README.md)
-for exact pins, timestamps and the remaining protection/schema handover.
+The local upgrade now includes the operating/learner database migration, obsolete-writer fence,
+and merged protection/deadline/dashboard services. A one-time deployment task is running;
+the original IWM exit must reconcile before it commissions the three new core roles.
+The broker reports the next opening at 09:30 Eastern. The fresh inherited protection assessment
+requires the guardian's certified inventory; the trader stays disabled until that check passes.
+See the [runtime handover](docs/evidence/paper-core/runtime-handover-2026-10-15/README.md)
+for measured state, backups, exact pins, continuation limits and live local status paths.
 
 The [approved successor policy](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 uses qualifying model signals first and otherwise makes exploratory PAPER entries across stocks,

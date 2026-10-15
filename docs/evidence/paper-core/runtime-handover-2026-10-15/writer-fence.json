@@ -1,0 +1,32 @@
+{
+  "captured_at": "2026-10-15T12:00:12.1574145Z",
+  "authorization": "USER_UPGRADE_EVERYTHING_AND_GET_IT_RUNNING_20261015",
+  "tasks": [
+    "Elrond Adaptive Paper Shadow",
+    "Elrond Alert Dispatcher",
+    "Elrond Console",
+    "Elrond Daemon",
+    "Elrond DIA Alerts",
+    "Elrond DIA Learner",
+    "Elrond Five Minute Observations",
+    "Elrond Ingestion",
+    "Elrond Learner",
+    "Elrond Observer",
+    "Elrond Paper Daily Close",
+    "Elrond Paper Deadline",
+    "Elrond PAPER Exploration",
+    "Elrond Position Research",
+    "Elrond Protection",
+    "Elrond Report",
+    "Elrond Research",
+    "Elrond Trade Learning Observer",
+    "ElrondModelServer"
+  ],
+  "all_legacy_tasks_disabled": true,
+  "old_quantbot_processes": 0,
+  "explicit_orphan_processes_stopped": [
+    null
+  ],
+  "preserved_iwm_client_order_id": "qb-595f587acd1b769f4bd0d59282e631ad14ecb9f7",
+  "original_order_cancelled_or_replaced": false
+}

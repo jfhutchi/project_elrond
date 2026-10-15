@@ -1,0 +1,173 @@
+{
+  "read_only_sources": true,
+  "cross_store_atomic": false,
+  "operating_migration_performed": false,
+  "records": [
+    {
+      "role": "operational",
+      "source": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+      "backup": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\operational.db",
+      "restored": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\operational-restored.db",
+      "started_at": "2026-10-15T11:57:57.879017+00:00",
+      "completed_at": "2026-10-15T11:58:00.562031+00:00",
+      "bytes": 92295168,
+      "sha256": "c14be77ff81e1d130764b92a8998688bda81c7325cb16dcc4a0d6f08683dda10",
+      "restore_integrity": "ok",
+      "inventory": {
+        "identity": {
+          "id": 1,
+          "version": 29,
+          "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+        },
+        "intent_states": [
+          [
+            "BROKER_ACCEPTED",
+            1
+          ],
+          [
+            "FILLED",
+            17
+          ],
+          [
+            "REJECTED",
+            1
+          ]
+        ],
+        "manual_stop": {
+          "id": 1,
+          "engaged": 0,
+          "reason": "stop",
+          "updated_at": "2026-10-14T01:17:42.473747Z"
+        },
+        "latest_protection": {
+          "cycle_id": "protection-d1363e63d19d4ebc4086ca28578d820a",
+          "observed_at": "2026-10-14T19:47:15.142996Z",
+          "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+          "policy_version": "position-protection-v2",
+          "outcome": "HEALTHY",
+          "position_count": 9,
+          "unprotected_count": 0,
+          "exit_required_count": 0
+        },
+        "protected_positions": [
+          {
+            "symbol": "DBC",
+            "quantity": "1.462583",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "EEM",
+            "quantity": "0.726321",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "EFA",
+            "quantity": "0.463951",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "IWM",
+            "quantity": "0.169669",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "QQQ",
+            "quantity": "0.069596",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "SPY",
+            "quantity": "0.065269",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "XLE",
+            "quantity": "0.771962",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "XLK",
+            "quantity": "0.26607",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          },
+          {
+            "symbol": "XLV",
+            "quantity": "0.299132",
+            "strategy_id": "adaptive-momentum-v1-309894d8d8a5296e",
+            "reconciled": 1,
+            "outcome": "NO_ACTION",
+            "protected": 1
+          }
+        ]
+      },
+      "rehearsal": {
+        "path": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\operational-migration-rehearsal.db",
+        "schema_version": 36,
+        "original_tables_preserved": 59,
+        "all_original_rows_and_columns_preserved": true
+      }
+    },
+    {
+      "role": "learner",
+      "source": "D:\\Elrond\\learner\\state\\learner.db",
+      "backup": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\learner.db",
+      "restored": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\learner-restored.db",
+      "started_at": "2026-10-15T11:58:03.727799+00:00",
+      "completed_at": "2026-10-15T11:58:04.043219+00:00",
+      "bytes": 23494656,
+      "sha256": "dbe6fe86215b63b5ded14cce207a9a79390987c6a04e8fc1702a8ec4e30924f1",
+      "restore_integrity": "ok",
+      "inventory": {
+        "identity": {
+          "id": 1,
+          "version": 29,
+          "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+        }
+      },
+      "rehearsal": {
+        "path": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\learner-migration-rehearsal.db",
+        "schema_version": 36,
+        "original_tables_preserved": 59,
+        "all_original_rows_and_columns_preserved": true
+      }
+    },
+    {
+      "role": "experiment",
+      "source": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db",
+      "backup": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\experiment.db",
+      "restored": "D:\\Elrond\\review\\paper-core-activation-20261015T1155Z\\backup-rehearsal-v2\\experiment-restored.db",
+      "started_at": "2026-10-15T11:58:04.611231+00:00",
+      "completed_at": "2026-10-15T11:58:05.728844+00:00",
+      "bytes": 83247104,
+      "sha256": "7d7c6ee481cb42034bd2693ff3944712b8b451a283f20bace2b4741815520236",
+      "restore_integrity": "ok",
+      "inventory": {
+        "identity": null
+      }
+    }
+  ]
+}

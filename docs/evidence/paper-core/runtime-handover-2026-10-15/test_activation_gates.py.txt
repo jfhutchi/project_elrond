@@ -1,0 +1,51 @@
+"""Pure deployment gate tests; no synthetic objects touch an operating broker or store."""
+import unittest
+from types import SimpleNamespace as N
+from decimal import Decimal
+from activation_attempt import CLIENT,ORDER,original_objections
+from activation_health import progress_current
+from datetime import UTC,datetime,timedelta
+
+def order(**changes):
+    values=dict(client_order_id=CLIENT,broker_order_id=ORDER,symbol='IWM',side=N(value='SELL'),quantity=Decimal('0.169669'),order_type=N(value='MARKET'),time_in_force=N(value='DAY'),status='accepted',filled_quantity=Decimal(0))
+    return N(**(values|changes))
+
+class Gates(unittest.TestCase):
+    def test_missing_refused(self):
+        self.assertEqual(original_objections(None),'ORIGINAL_ORDER_IDENTITY_CHANGED')
+    def test_original_pending_waits(self):
+        self.assertEqual(original_objections(order()),'ORIGINAL_IWM_EXIT_PENDING')
+    def test_different_id_refused(self):
+        self.assertEqual(original_objections(order(broker_order_id='replacement')),'ORIGINAL_ORDER_IDENTITY_CHANGED')
+    def test_changed_type_refused(self):
+        self.assertEqual(original_objections(order(order_type=N(value='LIMIT'))),'ORIGINAL_ORDER_IDENTITY_CHANGED')
+    def test_partial_terminal_refused(self):
+        self.assertEqual(original_objections(order(status='canceled',filled_quantity=Decimal('.1'))),'PARTIAL_ORIGINAL_EXIT_REQUIRES_REVIEW')
+    def test_contradictory_terminal_refused(self):
+        self.assertEqual(original_objections(order(status='filled')),'ORIGINAL_TERMINAL_QUANTITY_CONTRADICTION')
+    def test_genuine_full_fill_allowed(self):
+        self.assertIsNone(original_objections(order(status='filled',filled_quantity=Decimal('.169669'))))
+    def test_genuine_expiration_allowed(self):
+        self.assertIsNone(original_objections(order(status='expired')))
+
+class Progress(unittest.TestCase):
+    def setUp(self):
+        self.now=datetime(2026,10,15,13,35,tzinfo=UTC)
+        self.start=self.now-timedelta(minutes=1)
+        self.heartbeat={'recorded_at':self.now.isoformat(),'last_useful_progress':(self.now-timedelta(milliseconds=20)).isoformat(),'valid_until':(self.now+timedelta(seconds=30)).isoformat()}
+    def test_current_success(self):
+        self.assertTrue(progress_current(self.heartbeat,self.now,self.start))
+    def test_fresh_heartbeat_failed_cycle_refused(self):
+        self.heartbeat['last_useful_progress']=(self.now-timedelta(seconds=15)).isoformat()
+        self.assertFalse(progress_current(self.heartbeat,self.now,self.start))
+    def test_old_non_null_progress_refused(self):
+        self.heartbeat['last_useful_progress']=(self.now-timedelta(days=1)).isoformat()
+        self.assertFalse(progress_current(self.heartbeat,self.now,self.start))
+    def test_pre_start_progress_refused(self):
+        self.assertFalse(progress_current(self.heartbeat,self.now,self.now))
+    def test_missing_progress_refused(self):
+        self.heartbeat['last_useful_progress']=None
+        self.assertFalse(progress_current(self.heartbeat,self.now,self.start))
+
+if __name__=='__main__':
+    unittest.main()

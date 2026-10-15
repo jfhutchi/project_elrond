@@ -1,8 +1,10 @@
 # Documentation map
 
+> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](evidence/paper-core/runtime-handover-2026-10-15/README.md).
+
 Reviewed October 15, 2026, America/New_York. Start with the [PAPER core overview](paper-core.md), [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md), [direction](intraday-paper-direction.md), and [measured handover](evidence/paper-core/handover.md).
 
-This inventory covers 181 Markdown files, including this index. Current guidance, historical records and golden fixtures are listed separately below. The original 160-file review and subsequent overview/staging guidance remain preserved; the successor adds its specification, implementation plan and retained verification/review evidence.
+This inventory covers 182 Markdown files, including this index. Current guidance, historical records and golden fixtures are listed separately below. The original 160-file review and subsequent overview/staging guidance remain preserved; the successor adds its specification, implementation plan and retained verification/review evidence.
 
 The [successor evidence package](evidence/paper-core/daily-exploration/README.md) retains the
 combined offline witness, task/final review status, candidate-preparation status and release
@@ -10,7 +12,7 @@ blockers. Successor code merged in PR #290; its installed local release is uncom
 
 Dated specifications, frozen review/test evidence, research findings and refutations keep their original dates and claims. An old modification date alone is not a reason to rewrite a historical result. Golden files remain exact test expectations. Local `.superpowers/` scratch is ignored and absent from current Git trees; reviewed records in `docs/superpowers/` and `docs/evidence/` are intentional.
 
-## Current guidance and handover (56)
+## Current guidance and handover (57)
 
 - [CLAUDE.md](../CLAUDE.md)
 - [PROJECT_STATUS.md](../PROJECT_STATUS.md)
@@ -69,6 +71,8 @@ Dated specifications, frozen review/test evidence, research findings and refutat
 - [docs/worker-environment-identity.md](worker-environment-identity.md)
 
 - [docs/evidence/paper-core/local-deployment-2026-10-15/README.md](evidence/paper-core/local-deployment-2026-10-15/README.md)
+
+- [docs/evidence/paper-core/runtime-handover-2026-10-15/README.md](evidence/paper-core/runtime-handover-2026-10-15/README.md)
 
 ## Historical records retained (122)
 

@@ -1,0 +1,161 @@
+"""One bounded deployment attempt, using the unchanged core acquisition/commission CLI.
+
+Only --activate may commission. No broker mutations, cancellation, fills, pause clearing,
+position adoption or parameter changes are implemented here. Private acquisition contains
+the actual account identity and must never be published with review evidence.
+"""
+import argparse
+import asyncio
+import contextlib
+import hashlib
+import io
+import json
+import sqlite3
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+
+from quantbot.brokers.alpaca import ALPACA_PAPER_BASE_URL, AlpacaPaperBrokerAdapter
+from quantbot.brokers.transports import HttpxBrokerTransport
+from quantbot.config import Settings, validate_trading_authority
+from quantbot.operations.service import isolated_application_environment
+from quantbot.paper_core.__main__ import main as core_main
+from quantbot.paper_core.release import PreparedRelease, RuntimeConfig, verify_release
+
+ROOT = Path('D:/Elrond/review/paper-core-activation-20261015T1155Z')
+CONFIG = Path('D:/Elrond/config/paper-core-14352cc-20261015/runtime-config.json')
+MANIFEST = CONFIG.with_name('runtime-manifest.json')
+RELEASE = '0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c'
+CLIENT = 'qb-595f587acd1b769f4bd0d59282e631ad14ecb9f7'
+ORDER = '28523181-cd04-4f74-bd67-bcebe4582164'
+OWNER = 'adaptive-momentum-v1-309894d8d8a5296e'
+QUANTITIES = {'DBC':'1.462583','EEM':'0.726321','EFA':'0.463951','IWM':'0.169669','QQQ':'0.069596','SPY':'0.065269','XLE':'0.771962','XLK':'0.26607','XLV':'0.299132'}
+
+class ReadOnlyTransport(HttpxBrokerTransport):
+    async def request(self, method, url, **kwargs):
+        if method != 'GET' or not url.startswith(ALPACA_PAPER_BASE_URL + '/'):
+            raise ValueError('GET_ONLY_DEPLOYMENT_PROBE')
+        return await super().request(method,url,**kwargs)
+
+def emit(state, reason, **facts):
+    document={'at':datetime.now(UTC).isoformat(),'state':state,'reason':reason,**facts}
+    (ROOT/'activation-state.json').write_text(json.dumps(document,indent=2))
+    print(json.dumps(document),flush=True)
+
+def store_connection(config):
+    connection=sqlite3.connect(Path(config.store_path).as_uri()+'?mode=ro',uri=True,timeout=5)
+    connection.row_factory=sqlite3.Row
+    connection.execute('PRAGMA query_only=ON')
+    return connection
+
+def original_objections(order):
+    if order is None or (order.client_order_id,order.broker_order_id,order.symbol,order.side.value,order.quantity,order.order_type.value,order.time_in_force.value)!=(CLIENT,ORDER,'IWM','SELL',Decimal('0.169669'),'MARKET','DAY'):
+        return 'ORIGINAL_ORDER_IDENTITY_CHANGED'
+    if order.status.lower() not in {'filled','canceled','cancelled','expired','rejected'}:
+        return 'ORIGINAL_IWM_EXIT_PENDING'
+    if order.filled_quantity not in {Decimal(0),order.quantity}:
+        return 'PARTIAL_ORIGINAL_EXIT_REQUIRES_REVIEW'
+    if (order.status.lower()=='filled') != (order.filled_quantity==order.quantity):
+        return 'ORIGINAL_TERMINAL_QUANTITY_CONTRADICTION'
+    return None
+
+async def attempt(activate):
+    config=RuntimeConfig.model_validate_json(CONFIG.read_text())
+    release=PreparedRelease.model_validate_json(MANIFEST.read_text())
+    if release.id!=RELEASE or release.config!=config or verify_release(release)['objections']:
+        emit('REFUSED','EXECUTABLE_OR_CONFIG_CHANGED'); return 20
+    fence_path=ROOT/'continuation-writer-fence.json'
+    fence=json.loads(fence_path.read_text())
+    if not fence.get('entry_writers_disabled') or not fence.get('old_processes_absent') or not 0 <= (datetime.now(UTC)-datetime.fromisoformat(fence['captured_at'])).total_seconds()<60:
+        emit('REFUSED','FRESH_WRITER_FENCE_REQUIRED'); return 20
+    with store_connection(config) as connection:
+        identity=dict(connection.execute('SELECT * FROM schema_version').fetchone())
+        stop=dict(connection.execute('SELECT * FROM kill_switch_state').fetchone())
+        commissioned=connection.execute('SELECT count(*) FROM core_runtime_commissions').fetchone()[0]
+        if identity['version']!=36 or identity['store_identity']!=config.store_identity:
+            emit('REFUSED','STORE_LINEAGE_CHANGED'); return 20
+        if stop['engaged']:
+            emit('REFUSED','EXPLICIT_ENTRY_PAUSE_PRESERVED'); return 20
+        if commissioned:
+            from quantbot.paper_core.__main__ import commissioned_core
+            from quantbot.paper_core.release import read_status
+            commissioned_core(release,read_status(Path(config.store_path)))
+            emit('COMMISSIONED','EXACT_COMMISSION_ALREADY_PRESENT',release_id=RELEASE); return 0
+    now=datetime.now(UTC)
+    if not datetime(2026,10,15,12,tzinfo=UTC) <= now < datetime(2026,10,15,14,0,tzinfo=UTC):
+        emit('REFUSED','FIRST_SESSION_ACTIVATION_WINDOW_EXPIRED'); return 20
+    with isolated_application_environment(config.environment_file_reference):
+        settings=Settings()
+        if not settings.EXPECTED_ACCOUNT_ID or hashlib.sha256(settings.EXPECTED_ACCOUNT_ID.encode()).hexdigest()!=config.expected_account_hash or settings.TRADING_MODE.value!='PAPER' or not validate_trading_authority(settings,settings.EXPECTED_ACCOUNT_ID).allowed:
+            emit('REFUSED','EXISTING_PAPER_AUTHORITY_REQUIRED'); return 20
+        transport=ReadOnlyTransport()
+        try:
+            broker=AlpacaPaperBrokerAdapter(api_key=settings.ALPACA_PAPER_API_KEY,api_secret=settings.ALPACA_PAPER_API_SECRET,transport=transport,max_retries=0,timeout_seconds=Decimal(2))
+            async with asyncio.timeout(12):
+                account=await broker.get_account()
+                original=await broker.get_order_by_client_id(CLIENT)
+                orders=await broker.get_open_orders()
+                positions=await broker.get_positions()
+                clock=await broker.get_market_clock()
+            if account.account.account_id!=settings.EXPECTED_ACCOUNT_ID or not account.order_entry_allowed or account.restrictions:
+                emit('REFUSED','PAPER_ACCOUNT_NOT_READY'); return 20
+            objection=original_objections(original)
+            if objection:
+                emit('WAITING' if objection=='ORIGINAL_IWM_EXIT_PENDING' else 'REFUSED',objection,market_open=clock.is_open,open_orders=len(orders),next_open=clock.next_open.isoformat())
+                return 10 if objection=='ORIGINAL_IWM_EXIT_PENDING' else 20
+            if orders:
+                emit('WAITING','BROKER_OPEN_ORDERS_REMAIN',open_orders=len(orders)); return 10
+            expected={s:Decimal(q) for s,q in QUANTITIES.items()}
+            expected['IWM']-=original.filled_quantity
+            expected={s:q for s,q in expected.items() if q}
+            if {p.symbol:p.quantity for p in positions if p.quantity}!=expected:
+                emit('REFUSED','INHERITED_POSITION_CHANGE_REQUIRES_REVIEW'); return 20
+            if not clock.is_open:
+                emit('WAITING','WAITING_FOR_FIRST_SESSION',next_open=clock.next_open.isoformat()); return 10
+            with store_connection(config) as connection:
+                intent=connection.execute('SELECT * FROM order_intents WHERE client_order_id=?',(CLIENT,)).fetchone()
+                known=connection.execute('SELECT * FROM broker_orders WHERE client_order_id=?',(CLIENT,)).fetchone()
+                fills=connection.execute('SELECT quantity FROM fills WHERE broker_order_id=?',(ORDER,)).fetchall()
+                filled=sum((Decimal(r[0]) for r in fills),Decimal(0))
+                if intent is None or known is None or known['broker_order_id']!=ORDER or intent['strategy_id']!=OWNER:
+                    emit('REFUSED','ORIGINAL_LEDGER_IDENTITY_CHANGED'); return 20
+                if intent['state'] not in {'FILLED','CANCELLED','EXPIRED','REJECTED'} or filled!=original.filled_quantity:
+                    emit('WAITING','ORIGINAL_TERMINAL_RECONCILIATION_REQUIRED'); return 10
+                if connection.execute("SELECT 1 FROM order_intents WHERE state IN ('SUBMITTING','SUBMISSION_UNKNOWN') LIMIT 1").fetchone():
+                    emit('REFUSED','UNRESOLVED_SUBMISSION'); return 20
+        finally:
+            await transport.aclose()
+        if not activate:
+            emit('READY_FOR_EXPLICIT_ACTIVATION','CHECK_ONLY_NO_COMMISSION'); return 10
+        request={'release_id':RELEASE,'approval_reference':'USER_UPGRADE_EVERYTHING_AND_GET_IT_RUNNING_20261015','fenced_writer_evidence_ids':[hashlib.sha256(fence_path.read_bytes()).hexdigest()],'legacy_owners':sorted((s,OWNER) for s in expected)}
+        request_path=ROOT/'acquisition-request.json'
+        request_path.write_text(json.dumps(request,indent=2))
+        # Use the actual supported CLI with the exact prepared manifest. Capture private
+        # acquisition output locally; never render raw account identity in task logs.
+        from quantbot.paper_core.__main__ import _acquire
+        import argparse as argument_parser
+        captured=io.StringIO()
+        with contextlib.redirect_stdout(captured):
+            await _acquire(argument_parser.Namespace(approval_document=request_path),release)
+        private_path=ROOT/'PRIVATE-commission-document.json'
+        document=json.loads(captured.getvalue())
+        private_path.write_text(json.dumps(document,indent=2))
+        captured=io.StringIO()
+        with contextlib.redirect_stdout(captured):
+            result=core_main(['--config',str(CONFIG),'--manifest',str(MANIFEST),'--command','commission','--approval-document',str(private_path)])
+        if result not in (0,None):
+            emit('REFUSED','SUPPORTED_COMMISSION_FAILED'); return 20
+        emit('COMMISSIONED','SUPPORTED_FRESH_BROKER_COMMISSION_COMPLETE',release_id=RELEASE)
+        return 0
+
+if __name__=='__main__':
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--activate',action='store_true')
+    args=parser.parse_args()
+    try:
+        exit_code=asyncio.run(attempt(args.activate))
+    except Exception as error:
+        # No validation inputs, credentials, request headers or account identity.
+        emit('RETRYABLE_FAILURE','ACQUISITION_OR_RUNTIME_ERROR',error_type=type(error).__name__)
+        exit_code=11
+    raise SystemExit(exit_code)

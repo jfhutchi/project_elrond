@@ -1,6 +1,8 @@
 # Native Windows PAPER runtime on the HP Omen
 
-## Merged successor installed — October 15, 2026
+> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](../../docs/evidence/paper-core/runtime-handover-2026-10-15/README.md).
+
+## Earlier installation capture — October 15 at 06:23 Eastern
 
 [PR 290](https://github.com/jfhutchi/project_elrond/pull/290) merged as `14352cc428dcd999750138d52fbd5f30347991a1` at 06:12 Eastern. The code is installed in `D:\Elrond\releases\paper-core-14352cc-20261015`, with a separate locked native Python environment and configuration under `D:\Elrond\config\paper-core-14352cc-20261015`.
 
@@ -12,7 +14,7 @@ The four core task definitions point to the installed successor. Guardian, outco
 
 The [measured installation record](../../docs/evidence/paper-core/local-deployment-2026-10-15/README.md) contains exact source/export provenance, config/manifest, direct and task-identity verification, new task definitions and fresh GET-only broker/store evidence. The [source review/test package](../../docs/evidence/paper-core/daily-exploration/README.md) and older [XLE baseline package](../../docs/evidence/paper-core/omen-deployment/README.md) remain sealed historical snapshots.
 
-### Why the trader is not active yet
+### Blockers recorded at that earlier capture
 
 The 06:15 Eastern broker capture confirms the original IWM SELL of 0.169669 shares remains accepted with zero filled. Its original client/broker IDs are preserved. The broker reports the next opening at 09:30 Eastern. Initial commissioning requires no open orders; installation does not cancel or replace this exit.
 

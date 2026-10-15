@@ -1,0 +1,33 @@
+"""Query-only remaining contract compatibility, no commission or broker requests."""
+import json,sqlite3
+from pathlib import Path
+from datetime import UTC,datetime
+from quantbot.paper_core.canonical import snapshot_canonical_metadata,TRIAL_FIELDS
+from quantbot.storage import Database
+from quantbot.config import Settings
+from quantbot.operations.service import isolated_application_environment
+from quantbot.learner.paper_deadlines import supervisor_objections
+
+path=Path('D:/Elrond/state/quantbot-paper-fresh-20260908.db')
+canonical=snapshot_canonical_metadata(Path('D:/Elrond/learner/state/learner.db'),('us-equities-daily',))
+connection=sqlite3.connect(path.as_uri()+'?mode=ro',uri=True)
+connection.row_factory=sqlite3.Row
+connection.execute('PRAGMA query_only=ON')
+conflicts=0
+existing=0
+try:
+    for row in canonical['trials']:
+        prior=connection.execute('SELECT '+','.join(TRIAL_FIELDS)+' FROM search_runs WHERE search_id=?',(row['search_id'],)).fetchone()
+        if prior:
+            existing+=1
+            conflicts+=any(prior[name]!=row[name] for name in TRIAL_FIELDS)
+finally:
+    connection.close()
+with isolated_application_environment('C:/Users/leepa/.config/quantbot/quantbot.env'):
+    settings=Settings()
+    with Database(path) as database:
+        objections=supervisor_objections(database,account_id=settings.EXPECTED_ACCOUNT_ID,now=datetime.now(UTC))
+record={'at':datetime.now(UTC).isoformat(),'query_only':True,'canonical_source_schema':canonical['source_identity']['version'],'canonical_windows':len(canonical['windows']),'canonical_holdouts':len(canonical['holdouts']),'canonical_trials':len(canonical['trials']),'existing_trials':existing,'conflicting_trial_metadata':conflicts,'independent_deadline_objections':objections,'operating_commission_performed':False,'broker_probed':False}
+assert conflicts==0 and not objections
+Path('D:/Elrond/review/paper-core-activation-20261015T1155Z/precommission-compatibility.json').write_text(json.dumps(record,indent=2))
+print(json.dumps(record,indent=2))

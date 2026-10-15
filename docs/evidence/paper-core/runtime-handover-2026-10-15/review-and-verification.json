@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-15T12:15:21.933415+00:00",
+  "pure_deployment_gate_tests": 13,
+  "result": "PASS",
+  "fresh_context_review": "COMPLETED_TWO_MEDIUM_FINDINGS_RESOLVED",
+  "fixes": [
+    "Require post-start advancing successful role progress, not just fresh heartbeats",
+    "Bound inherited assessment to six seconds using GET-only broker with two-second requests and zero retries"
+  ],
+  "native_selected_token_check_exit": 10,
+  "native_selected_token_check_meaning": "EXPECTED_PENDING_ORDER_WAIT_NO_COMMISSION_OR_ROLE_START",
+  "trigger_schema_check": "TWO_TRIGGERS_REGISTERED_WHILE_VERIFY_TASK_DISABLED_THEN_ORIGINAL_RESTORED",
+  "runtime_source_changes": 0,
+  "paid_ci_triggered": false
+}

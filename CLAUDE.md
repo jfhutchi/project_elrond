@@ -1,5 +1,7 @@
 # Project Elrond — Persistent Development Goal
 
+> **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](docs/evidence/paper-core/runtime-handover-2026-10-15/README.md).
+
 Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` paper-trading system into an autonomous quantitative research and trading platform whose ultimate purpose is to discover, validate, and eventually exploit durable market edges that can compound real capital.
 
 **The objective is not to finish issues. The objective is to build a system capable of making money without fooling itself.**
@@ -17,9 +19,14 @@ including the ten-session collection/fit/activation witness and later signal/exp
 [PR #290](https://github.com/jfhutchi/project_elrond/pull/290) merged at 06:12 Eastern. Its separate
 Omen release passed direct and actual task-identity verification; the core remains uncommissioned.
 Read the [current installation record](docs/evidence/paper-core/local-deployment-2026-10-15/README.md)
-for installed pins and the fresh inherited-order/schema handover blocker, and the
+for installed pins and the earlier installation snapshot, and the
 [sealed source evidence](docs/evidence/paper-core/daily-exploration/README.md) for reviews/tests.
-Do not rebuild completed implementation or mistake the old pre-merge snapshot for current status.
+Both operating and learner stores are now schema 36. The upgraded retained services and bounded
+deployment continuation are running; read the latest runtime handover above before acting.
+Do not rerun installation/migration or enable old entry tasks. The original IWM exit remains
+the external commissioning gate; fresh guardian certification and inherited protection must
+pass before trader starts. Do not rebuild completed implementation or mistake an older snapshot
+for current status.
 
 The operator now wants daily PAPER attempts even when model confidence or an ordinary no-signal
 decision would otherwise prevent a trade, and learning from eligible wins and losses. Preserve

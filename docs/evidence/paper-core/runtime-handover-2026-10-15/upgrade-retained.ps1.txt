@@ -1,0 +1,36 @@
+$ErrorActionPreference = 'Stop'
+$evidence = 'D:\Elrond\review\paper-core-activation-20261015T1155Z'
+$repository = 'D:\Elrond\releases\legacy-support-14352cc-20261015'
+$commit = '14352cc428dcd999750138d52fbd5f30347991a1'
+$hostExecutable = 'D:\Elrond\state\service-host\179e6da6c10668c86ca39c5a\elrond-service-host.exe'
+$database = 'D:\Elrond\state\quantbot-paper-fresh-20260908.db'
+$environment = 'C:\Users\leepa\.config\quantbot\quantbot.env'
+if ((git -C $repository rev-parse HEAD) -cne $commit -or (git -C $repository status --porcelain)) { throw 'CLEAN_MERGED_SUPPORT_CHECKOUT_REQUIRED' }
+$migration = Get-Content -LiteralPath (Join-Path $evidence 'operating-migration.json') -Raw | ConvertFrom-Json
+if (@($migration.records | Where-Object { $_.after.version -ne 36 -or -not $_.all_original_columns_preserved }).Count -ne 0 -or $migration.records.Count -ne 2) { throw 'MIGRATION_EVIDENCE_REQUIRED' }
+$installed = Join-Path $evidence 'tasks-upgraded'
+New-Item -ItemType Directory -Path $installed -Force | Out-Null
+$records = @(foreach ($component in @('protection','deadline','console')) {
+    $name = switch ($component) { protection {'Elrond Protection'} deadline {'Elrond Paper Deadline'} console {'Elrond Console'} }
+    $log = 'D:\Elrond\logs\upgraded-' + $component + '-launcher.log'
+    if ($component -eq 'deadline') {
+        $arguments = '"' + $log + '" -NoProfile -NonInteractive -WindowStyle Hidden -File "' + $repository + '\deploy\omen\start-learner.ps1" -Repository "' + $repository + '" -Directory "D:\Elrond\learner" -Database "D:\Elrond\learner\state\learner.db" -EnvironmentFile "' + $environment + '" -Commit ' + $commit + ' -DeadlineSupervisor -OperationsDatabase "' + $database + '"'
+    } else {
+        $envFile = if ($component -eq 'console') { 'C:\Users\leepa\.config\quantbot\quantbot-console.env' } else { $environment }
+        $arguments = '"' + $log + '" -NoProfile -NonInteractive -WindowStyle Hidden -File "' + $repository + '\deploy\omen\start-service.ps1" -Repository "' + $repository + '" -EnvironmentFile "' + $envFile + '" -Commit ' + $commit + ' -Database "' + $database + '" -Component ' + $component
+        if ($component -eq 'console') { $arguments += ' -ExperimentStore "C:\Users\leepa\Documents\Codex\2026-09-30\task\adaptive-paper-research-20261006\experiment.db"' }
+    }
+    [xml]$definition = Get-Content -LiteralPath (Join-Path $evidence ('tasks-before\' + $name + '.xml')) -Raw
+    $exec = $definition.SelectSingleNode("//*[local-name()='Actions']/*[local-name()='Exec']")
+    $exec.SelectSingleNode("*[local-name()='Command']").InnerText = $hostExecutable
+    $exec.SelectSingleNode("*[local-name()='Arguments']").InnerText = $arguments
+    $exec.SelectSingleNode("*[local-name()='WorkingDirectory']").InnerText = $repository
+    $definition.SelectSingleNode("//*[local-name()='RegistrationInfo']/*[local-name()='Description']").InnerText = 'Merged PR290 support for inherited PAPER positions and local console; old entry producers disabled.'
+    Register-ScheduledTask -TaskName $name -Xml $definition.OuterXml -Force | Out-Null
+    Enable-ScheduledTask -TaskName $name | Out-Null
+    Start-ScheduledTask -TaskName $name
+    [IO.File]::WriteAllText((Join-Path $installed ($name + '.xml')), (Export-ScheduledTask -TaskName $name), [Text.UTF8Encoding]::new($false))
+    [ordered]@{name=$name;commit=$commit;repository=$repository;arguments=$arguments;started_at=[DateTime]::UtcNow.ToString('o')}
+})
+[IO.File]::WriteAllText((Join-Path $evidence 'retained-services.json'), ($records | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
+$records | Select-Object name,commit,started_at | ConvertTo-Json

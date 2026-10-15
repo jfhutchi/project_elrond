@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-15T12:18:58.927682+00:00",
+  "base_main": "acdbbdf1bb20319bfc07c743168164df34789cce",
+  "current_guides": 24,
+  "resolved_added_local_links": 33,
+  "markdown_inventory": 182,
+  "prior_numbered_rulings_preserved": 64,
+  "sealed_packages_preserved": {
+    "omen-deployment": 18,
+    "daily-exploration": 126,
+    "local-deployment-2026-10-15": 25
+  },
+  "runtime_or_workflow_source_changes": 0,
+  "tracked_scratch": 0,
+  "private_account_identity_published": false,
+  "helpers_match_reviewed_installed_pins": true
+}
