@@ -9,6 +9,8 @@ description = "Safety-first quantitative trading foundation"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.16,<2",
+    # Alembic's template dependency: exclude Windows traversal GHSA-5639-2j2p-m4mx.
+    "mako>=1.4.2,<2",
     # The operator console (#82). FastAPI because every policy object in this project is already
     # a Pydantic model, so `model_json_schema()` *is* the schema-driven form requirement and
     # OpenAPI makes "explicit, versioned application APIs" true by construction rather than by
