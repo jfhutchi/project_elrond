@@ -1,0 +1,69 @@
+{
+  "recorded_at": "2026-10-15T05:05:55.391704+00:00",
+  "source_commit": "36d61811e15a350da401eb15e6ac8980e7aea4f1",
+  "source_tree": "5a002f2828974bf41d6899cdc1a63835083dac9e",
+  "source_pins_clean_against_commit": true,
+  "repository": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond",
+  "release_import_path": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\src\\quantbot\\paper_core\\release.py",
+  "commands": [
+    {
+      "argv": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "quantbot.paper_core",
+        "--config",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\daily-exploration\\prepared-config.json",
+        "--command",
+        "prepare"
+      ],
+      "exit_code": 0
+    },
+    {
+      "argv": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "quantbot.paper_core",
+        "--config",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\daily-exploration\\prepared-config.json",
+        "--manifest",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\docs\\evidence\\paper-core\\daily-exploration\\prepared-release.json",
+        "--command",
+        "verify"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "config_id": "8ecad4bb682852ce1e25faf10970cd3271da46bd3a7203261a4d5d9f90385801",
+  "release_id": "091369467a5d9744b20e3704e1eab4e2b624e65b13aff26f90d1bda2e1d36be9",
+  "schema_required": 36,
+  "executable_pin_count": 366,
+  "distribution_pin_count": 46,
+  "predecessor_release_id": "ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645",
+  "predecessor_config_id": "aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2",
+  "predecessor_index_sha256": "7fde73035086094f33c9052c21ee7b1649b2df0e4eda1034df57b8159d53a9d7",
+  "predecessor_files_verified_unchanged": 18,
+  "config_changes_from_predecessor": [
+    "core.symbol",
+    "core.symbols",
+    "core.selection_policy",
+    "activation_policy"
+  ],
+  "learning_policy": {
+    "procedure_version": "daily-paper-exploration-walk-forward-v3",
+    "target_contract": "owned-executed-paper-gross-return-v1",
+    "policy_id": "collect-owned-30m-stop100-v1"
+  },
+  "learning_origin_status": "PROVISIONAL_REVERIFY_ACTUAL_COMMISSION_SESSION_AND_REPREPARE_IF_CHANGED",
+  "submission_enabled_in_uncommissioned_candidate": true,
+  "operational_database_opened": false,
+  "operational_migration_performed": false,
+  "environment_file_read": false,
+  "broker_state": "NOT_PROBED",
+  "operational_commission": "NOT_PERFORMED",
+  "runtime_roles_started": false,
+  "scheduled_tasks_changed": false,
+  "successor_selected_token_verification": "NOT_PERFORMED",
+  "ci_triggered": false
+}

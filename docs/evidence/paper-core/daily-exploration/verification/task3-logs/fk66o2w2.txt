@@ -1,0 +1,50 @@
+.............F...                                                        [100%]
+================================== FAILURES ===================================
+_ test_actual_coordinator_rechecks_funds_and_locked_source_before_post[quarantine] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-fk66o2w2/pytest/test_actual_coordinator_rechec6')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000193BACEB050>
+fault = 'quarantine'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('fault', ['cash', 'buying_power', 'equity', 'restricted', 'open_order',
+                                      'manual', 'quarantine', 'source_race', 'ledger_race'])
+    async def test_actual_coordinator_rechecks_funds_and_locked_source_before_post(
+        tmp_path, monkeypatch, fault
+    ):
+        from sqlalchemy import delete
+    
+        from quantbot.paper_core.contracts import ProtectionPlan
+        from quantbot.paper_core.runtime import CoreExecutionCoordinator
+        from quantbot.paper_core.trader import claim_entry
+    
+        db, store, broker, provider, clocks = await prepare(tmp_path)
+        try:
+            await enter(store, broker)
+            await close(store, broker, clocks)
+            decision = await candidate(store, broker)
+            entry = claim_entry(store, decision, ProtectionPlan.for_decision(decision, store.config))
+            assert entry is not None
+            ready(store)
+            if fault in {'cash', 'buying_power', 'equity'}:
+                provider.account_overrides[fault] = '1'
+            elif fault == 'restricted':
+                provider.account_overrides['trading_blocked'] = True
+            elif fault == 'open_order':
+                provider.open_orders = [dict(provider.orders[0], id='unowned', client_order_id='unowned',
+                                             status='new', filled_qty='0')]
+            elif fault == 'manual':
+                with db.transaction() as session:
+                    StorageRepository(session).set_kill_switch(True, reason='OFFLINE_MANUAL_STOP',
+                                                              updated_at=clocks.wall)
+            elif fault == 'quarantine':
+                with db.transaction() as session:
+>                   StorageRepository(session).create_incident(
+                        'disputed', kind='CORE_EVIDENCE_CONFLICT', severity='CRITICAL',
+                        detail={'account_scope': True}, opened_at=clocks.wall)
+E                       TypeError: StorageRepository.create_incident() got an unexpected keyword argument 'opened_at'
+
+tests\integration\paper_core\test_paper_funds.py:337: TypeError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[quarantine]
+1 failed, 16 passed, 16 deselected in 57.23s

@@ -2,7 +2,7 @@
 
 ## Current deployment boundary — October 14, 2026
 
-The accepted [PAPER core](paper-core.md) is prepared, not functionally deployed. Read the
+The accepted [PAPER core](paper-core.md) baseline is prepared, not functionally deployed. Read the
 [current Omen staging record](evidence/paper-core/omen-deployment/README.md) and
 [handover](evidence/paper-core/handover.md) for exact release/configuration hashes and evidence.
 The prepared release uses schema 36 and Mako 1.4.3. Only restored operational and learner
@@ -22,6 +22,18 @@ commissioned model, attributable fill, reconciled outcome or profitability. Core
 separates release, economic policy, immutable model, outcome revision and commissioned
 deployment. Compatible executable maintenance preserves economic identity only through an
 audited binding. Routine scoped waits do not clear manual stops or integrity quarantine.
+
+The [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+is distinct from that staged XLE package. It adds hybrid stock selection with six durable
+daily reservations, V3 executed-gross learning and `BROKER_PAPER_BALANCE_V1` current-funds
+authority. It is not merged to main or commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. These are contract/development
+states supported by the combined offline witness; operating deployment still awaits handover.
+
+This economic change requires a successor manifest/configuration and target/funds-specific
+initial commission from COLLECT; a code-only compatible binding cannot grant it. Keep V2 net
+and V3 gross models/receipts distinct. A current-funds receipt authorizes bounded sizing only,
+leaving historical cash incomplete and fees/net unknown when evidence is missing. Report
+successor verification and runtime status separately from every baseline fact above.
 
 ## Legacy deployment inventory mechanism
 

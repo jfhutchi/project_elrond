@@ -1,0 +1,146 @@
+.F..F                                                                    [100%]
+================================== FAILURES ===================================
+___ test_collect_history_requires_exact_past_warmup_acknowledgement[forged] ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-6fc_umyk/pytest/test_collect_history_requires_1')
+fault = 'forged'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", [None, "forged", "future", "wrong-target", "wrong-model"])
+    async def test_collect_history_requires_exact_past_warmup_acknowledgement(tmp_path, fault):
+        from quantbot.paper_core.learning import _historical_comparator, _select
+    
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            first, reasons = await enter(store, broker)
+            assert first.action == "BUY" and not reasons
+            await close(store, broker, clocks)
+            advance_to(clocks, SESSIONS[0] + timedelta(hours=6, minutes=30, seconds=3))
+            await daily_consideration(store, broker, broker.config)
+            model, active = selection(store)
+            receipt = store.read("core_learning_runs", active.receipt_id, LearningReceipt)
+            advance_to(clocks, SESSIONS[1] + timedelta(minutes=35, seconds=10))
+            await catch_up_provider(store, broker, clocks)
+            second, reasons = await enter(store, broker)
+            assert second.action == "BUY" and not reasons
+            await close(store, broker, clocks)
+            advance_to(clocks, SESSIONS[1] + timedelta(hours=6, minutes=30, seconds=3))
+            with db.transaction() as session:
+                rows, _, _ = _select(session, receipt.policy, clocks.wall, execution_now=clocks.wall)
+            row = next(r for r in rows if r["lot_id"] == second.id)
+            if fault:
+                acknowledgement = receipt
+                if fault == "future":
+                    acknowledgement = receipt.model_copy(update={"available_at": clocks.wall + timedelta(days=1)})
+                elif fault == "wrong-target":
+                    acknowledgement = receipt.model_copy(update={"policy": receipt.policy.model_copy(
+                        update={"target_contract": "owned-executed-net-return-v1"})})
+                elif fault == "wrong-model":
+                    acknowledgement = receipt.model_copy(update={"parent_model_id": "wrong-model"})
+                store.record("core_learning_runs", acknowledgement)
+                second = second.model_copy(update={"learning_receipt_id": (
+                    "missing-receipt" if fault == "forged" else acknowledgement.id)})
+                store.record("core_decisions", second)
+                row = {**row, "lot_id": second.id}
+            with db.transaction() as session:
+                if fault:
+                    with pytest.raises(ValueError):
+>                       _historical_comparator(session, row, clocks.execution_domain, GROSS)
+
+tests\integration\paper_core\test_daily_paper_loop.py:195: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\learning.py:417: in _historical_comparator
+    ack = _receipt(session, collect, decision.learning_receipt_id)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\paper_core\activation.py:372: in _receipt
+    receipt: LearningReceipt = _document(session, "core_learning_runs", identity, LearningReceipt)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+session = <sqlalchemy.orm.session.Session object at 0x000002B2B720B5D0>
+name = 'core_learning_runs', identity = 'missing-receipt'
+kind = <class 'quantbot.paper_core.contracts.LearningReceipt'>
+
+    def _document(session: Session, name: str, identity: str, kind: type[Any]) -> Any:
+        target = table(name)
+        payload = session.execute(
+            select(target.c.payload).where(target.c.id == identity)
+        ).scalar_one_or_none()
+        if payload is None:
+>           raise StateConflictError("MODEL_AUTHORITY_DOCUMENT_MISSING")
+E           quantbot.storage.repositories.StateConflictError: MODEL_AUTHORITY_DOCUMENT_MISSING
+
+src\quantbot\paper_core\activation.py:109: StateConflictError
+_ test_collect_history_requires_exact_past_warmup_acknowledgement[wrong-model] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-6fc_umyk/pytest/test_collect_history_requires_4')
+fault = 'wrong-model'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", [None, "forged", "future", "wrong-target", "wrong-model"])
+    async def test_collect_history_requires_exact_past_warmup_acknowledgement(tmp_path, fault):
+        from quantbot.paper_core.learning import _historical_comparator, _select
+    
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            first, reasons = await enter(store, broker)
+            assert first.action == "BUY" and not reasons
+            await close(store, broker, clocks)
+            advance_to(clocks, SESSIONS[0] + timedelta(hours=6, minutes=30, seconds=3))
+            await daily_consideration(store, broker, broker.config)
+            model, active = selection(store)
+            receipt = store.read("core_learning_runs", active.receipt_id, LearningReceipt)
+            advance_to(clocks, SESSIONS[1] + timedelta(minutes=35, seconds=10))
+            await catch_up_provider(store, broker, clocks)
+            second, reasons = await enter(store, broker)
+            assert second.action == "BUY" and not reasons
+            await close(store, broker, clocks)
+            advance_to(clocks, SESSIONS[1] + timedelta(hours=6, minutes=30, seconds=3))
+            with db.transaction() as session:
+                rows, _, _ = _select(session, receipt.policy, clocks.wall, execution_now=clocks.wall)
+            row = next(r for r in rows if r["lot_id"] == second.id)
+            if fault:
+                acknowledgement = receipt
+                if fault == "future":
+                    acknowledgement = receipt.model_copy(update={"available_at": clocks.wall + timedelta(days=1)})
+                elif fault == "wrong-target":
+                    acknowledgement = receipt.model_copy(update={"policy": receipt.policy.model_copy(
+                        update={"target_contract": "owned-executed-net-return-v1"})})
+                elif fault == "wrong-model":
+                    acknowledgement = receipt.model_copy(update={"parent_model_id": "wrong-model"})
+                store.record("core_learning_runs", acknowledgement)
+                second = second.model_copy(update={"learning_receipt_id": (
+                    "missing-receipt" if fault == "forged" else acknowledgement.id)})
+                store.record("core_decisions", second)
+                row = {**row, "lot_id": second.id}
+            with db.transaction() as session:
+                if fault:
+                    with pytest.raises(ValueError):
+>                       _historical_comparator(session, row, clocks.execution_domain, GROSS)
+
+tests\integration\paper_core\test_daily_paper_loop.py:195: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\learning.py:417: in _historical_comparator
+    ack = _receipt(session, collect, decision.learning_receipt_id)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+session = <sqlalchemy.orm.session.Session object at 0x000002B2B6E0AC90>
+model = ModelArtifact(mode='COLLECT', description='nonpredictive baseline; no fitted model', feature_version='five-minute-pric...e, target_contract=None, policy_id=None, parent_model_id=None, input_ids=(), fixture_authority=None, constant_bps=None)
+identity = '6a28f7d95718855a42680785762460f7bda16caeba6dcd3ea3768b731adf28fb'
+
+    def _receipt(session: Session, model: ModelArtifact, identity: str) -> LearningReceipt:
+        receipt: LearningReceipt = _document(session, "core_learning_runs", identity, LearningReceipt)
+        mapping = table("core_learning_considerations")
+        actual = session.execute(
+            select(mapping.c.receipt_id).where(mapping.c.run_id == receipt.run_id)
+        ).scalar_one_or_none()
+        if actual != receipt.id:
+>           raise StateConflictError("ACTIVATION_RECEIPT_MAPPING_INVALID")
+E           quantbot.storage.repositories.StateConflictError: ACTIVATION_RECEIPT_MAPPING_INVALID
+
+src\quantbot\paper_core\activation.py:378: StateConflictError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[forged]
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[wrong-model]
+2 failed, 3 passed, 3 deselected in 21.01s

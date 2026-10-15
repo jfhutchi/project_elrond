@@ -1,0 +1,37 @@
+..........................................F......................        [100%]
+================================== FAILURES ===================================
+________ test_nondefault_health_recovery_does_not_clear_another_symbol ________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-20k6k14e/pytest/test_nondefault_health_recover0')
+
+    def test_nondefault_health_recovery_does_not_clear_another_symbol(tmp_path):
+        from quantbot.paper_core.health import entry_health_objections, recover_health, report
+    
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            for symbol in ("AAPL", "MSFT"):
+                report(
+                    store,
+                    role="TRADER",
+                    state="RETRYABLE_FAILURE",
+                    reasons=("DATA_WAIT",),
+                    now=NOW,
+                    scope_id=symbol,
+                )
+            newer = proof.model_copy(
+                update={
+                    "generation": proof.generation + 1,
+                    "recorded_at_utc": NOW + timedelta(seconds=1),
+                }
+            )
+            recover_health(store, newer, now=NOW + timedelta(seconds=1), symbol="MSFT")
+            with db.transaction() as session:
+                assert entry_health_objections(store, session, "AAPL") == ("DATA_WAIT",)
+>               assert not entry_health_objections(store, session, "MSFT")
+E               AssertionError: assert not ('DATA_WAIT',)
+E                +  where ('DATA_WAIT',) = <function entry_health_objections at 0x0000027C260939C0>(<quantbot.paper_core.store.CoreStore object at 0x0000027C26587DD0>, <sqlalchemy.orm.session.Session object at 0x0000027C27945C90>, 'MSFT')
+
+tests\integration\paper_core\test_daily_selection.py:473: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_nondefault_health_recovery_does_not_clear_another_symbol
+1 failed, 64 passed in 40.46s

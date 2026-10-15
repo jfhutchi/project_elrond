@@ -1,0 +1,66 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__ test_cross_day_exploration_resets_today_usage_and_retains_prior_rotation ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-qgtuswba/pytest/test_cross_day_exploration_res0')
+
+    @pytest.mark.asyncio
+    async def test_cross_day_exploration_resets_today_usage_and_retains_prior_rotation(tmp_path):
+        from quantbot.paper_core.contracts import BrokerEvent, CostItem
+        from quantbot.paper_core.guardian import guardian_cycle, synchronize
+        from quantbot.paper_core.outcomes import import_broker_events
+        from quantbot.paper_core.trader import trader_cycle
+    
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            observed = []
+            for day, offset in ((0, 0), (0, 1), *((1, i) for i in range(6))):
+                broker.now = NOW + timedelta(days=day, minutes=5 * offset)
+                for symbol in store.config.entry_symbols:
+                    broker.set_mark(symbol, Decimal(100), as_of=broker.now)
+                await synchronize(store, broker, now=broker.now)
+                await guardian_cycle(store, broker, now=broker.now)
+                captured = cohort(at=broker.now, unavailable=(
+                    (("MSFT", "MISSING"), ("NVDA", "MISSING")) if day == 0 else ()
+                ))
+                decision = await trader_cycle(store, broker, captured, model,
+                                              store.latest_proof(), now=broker.now)
+                assert decision.action == "BUY"
+                observed.append(decision.symbol)
+                if day == 1 and offset == 0:
+                    assert decision.selection.session_counts == ()
+                    assert decision.selection.prior_counts == (("AAPL", 2),)
+                broker.set_mark(decision.symbol, Decimal(98), as_of=broker.now)
+                await guardian_cycle(store, broker, now=broker.now)
+                # Explicit provider fee fixtures apply to only this pair of actual synthetic fills.
+                fees = []
+                for fill in broker.fills[-2:]:
+                    order = next(o for o in broker.orders.values()
+                                 if o.broker_order_id == fill.broker_order_id)
+                    cost = CostItem(recorded_at_utc=broker.now, fill_id=fill.fill_id, amount=Decimal(0),
+                                    source="BROKER_REPORTED", document_id="cross-day-provider-fee",
+                                    effective_start=fill.occurred_at,
+                                    effective_end=fill.occurred_at+timedelta(minutes=1))
+                    fees.append(BrokerEvent(
+                        recorded_at_utc=broker.now, occurred_at=broker.now,
+                        account_id=store.config.account_id, provider=broker.provider,
+                        endpoint="synthetic/fees", event_id=cost.id, raw_digest=cost.id,
+                        client_order_id=order.client_order_id, cost=cost,
+                    ))
+                import_broker_events(store, tuple(fees))
+                await synchronize(store, broker, now=broker.now)
+                if day == 0 and offset == 1:
+                    config, path = store.config, db.path
+                    db.close()
+                    db = Database(path)
+                    store = CoreStore(db, config)
+>           assert observed == ["AAPL", "AAPL", "MSFT", "NVDA", "AAPL", "MSFT", "NVDA", "AAPL"]
+E           AssertionError: assert ['AAPL', 'AAP..., 'MSFT', ...] == ['AAPL', 'AAP..., 'MSFT', ...]
+E             
+E             At index 7 diff: 'MSFT' != 'AAPL'
+E             Use -v to get more diff
+
+tests\integration\paper_core\test_daily_selection.py:223: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_cross_day_exploration_resets_today_usage_and_retains_prior_rotation
+1 failed, 24 deselected in 5.46s

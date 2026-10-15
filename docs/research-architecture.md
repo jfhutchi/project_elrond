@@ -2,7 +2,7 @@
 
 ## Current core and retained research boundaries
 
-The merged [PAPER core](paper-core.md) implements a fixed owned-outcome learning path
+The merged [PAPER core](paper-core.md) baseline implements a fixed owned-outcome learning path
 inside three independent roles: trader, guardian and outcomes. General hypothesis
 generation, news, semantic analysis and Kronos are optional research systems; they are
 not dependencies of entry, protection, outcome reconciliation or daily core learning.
@@ -12,11 +12,20 @@ After ten completed exchange sessions, including quiet sessions, core learning c
 eligible wins and losses after every completed session. It uses all compatible retained
 history, latest ten sessions at raw weight 2 and older sessions at weight 1, normalized
 within each fit. It does not discard history at 60 sessions. It retains past-only validation,
-pre-materialization protected-data exclusions and permanent trial charges. Unknown costs
-and pending corrections stay excluded; insufficient evidence yields `NO_CHANGE`.
+pre-materialization protected-data exclusions and permanent trial charges. V2 excludes
+unknown-cost outcomes. The approved V3 gross procedure admits established gross P&L from
+a closed, owned, reconciled lot only when `FEE_UNAVAILABLE` is its sole incompleteness;
+fees stay unknown, cost status stays `COSTS_PENDING` and broker net stays null. Pending
+corrections, quarantine, invalid ownership and other noncausal evidence remain excluded.
+Insufficient evidence yields `NO_CHANGE`, with the incumbent retained and exploration continuing.
 
-The core's fixed ridge target is owned executed net return under its declared selection
-and exit contract. Old market-label learners, hypothetical portfolios and untraded
+V2's fixed ridge target is `owned-executed-net-return-v1`; V3 adds
+`daily-paper-exploration-walk-forward-v3` targeting `owned-executed-paper-gross-return-v1`.
+V3 keeps overlapping feature windows within training/history while preserving actual label
+availability, past-only folds and train/validation purge/embargo. Gross automatic activation
+needs `DAILY_BOUNDED_V3`; an existing net model/commission cannot be silently reused. Keep
+holding/exit policy and original selection provenance, versioning selection/target/procedure
+separately. Old market-label learners, hypothetical portfolios and untraded
 observations cannot silently supply that target. Fit execution has a restricted immutable
 input/result interface and time budget; that is not a claim of a new OS security sandbox.
 See [the learning loop](learner-experience-loop.md) for procedure validation, all-history
@@ -24,9 +33,14 @@ refitting and the separate activation boundary.
 
 The rest of this document preserves the broader research subsystem's trust boundaries and
 historical findings. Its model search, promotion gates and milestone statements do not
-define the replacement core's startup recipe or establish current deployment. The newly
-requested daily multi-stock PAPER collection policy is follow-on work; the prepared
-configuration remains XLE-bound.
+define the replacement core's startup recipe or establish current deployment. The
+[approved successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md) uses
+signals first, otherwise exploratory stock rotation, with six durable daily reservations
+and one concurrent lot. It adds `BROKER_PAPER_BALANCE_V1` for bounded sizing from fresh
+source-bound current funds without certifying incomplete historical cash. Quantity,
+identity, source, ledger-generation and integrity controls remain. This economic change
+needs its own initial commission from COLLECT. It is not merged to main or commissioned;
+The successor is implemented and locally tested, including the combined trading-to-learning witness. The older measured prepared configuration remains XLE-bound.
 
 How Elrond decides what counts as evidence, and the mechanisms that stop it being talked into
 something. This complements [STATUS.md](../STATUS.md), which covers the trading side.

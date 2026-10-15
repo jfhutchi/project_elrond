@@ -1,0 +1,96 @@
+FF.                                                                      [100%]
+================================== FAILURES ===================================
+_ test_pure_gross_procedure_refuses_noncausal_fold_inputs[future-validation] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-xwbwigxz/pytest/test_pure_gross_procedure_refu0')
+fault = 'future-validation'
+
+    @pytest.mark.parametrize("fault", ["future-validation", "wrong-session", "training-crosses-fold"])
+    def test_pure_gross_procedure_refuses_noncausal_fold_inputs(tmp_path, fault):
+        from datetime import timedelta
+    
+        from quantbot.paper_core.contracts import LearningFold
+        from quantbot.paper_core.learning_procedure import run_procedure
+    
+        db, store, policy, cutoff, calendar = daily_inputs(tmp_path, gross=True)
+        try:
+            with db.transaction() as session:
+                rows, _, _ = learning._select(session, policy, cutoff, execution_now=cutoff)
+                inputs = learning._materialize(session, rows)
+            folds = []
+            for day in calendar.sequence.sessions[-5:]:
+                validation = tuple(e for e in inputs if e.session == day.session_date)
+                training = tuple(e for e in inputs if e.session < day.session_date)
+                folds.append(LearningFold(session=day.session_date, cutoff=day.open_at,
+                    training=training, validation=validation,
+                    historical_models=(policy.parent_model,) * len(validation),
+                    historical_model_ids=(policy.parent_model.id,) * len(validation),
+                    historical_available_at=(None,) * len(validation),
+                    historical_receipt_ids=(None,) * len(validation),
+                    historical_acknowledgement_ids=(None,) * len(validation),
+                    historical_acknowledgement_available_at=(None,) * len(validation),
+                    historical_receipt_payloads=(None,) * len(validation),
+                    historical_acknowledgement_payloads=(None,) * len(validation)))
+            first = folds[0]
+            e = first.validation[0]
+            if fault == "future-validation":
+                e = e.model_copy(update={"outcome": e.outcome.model_copy(
+                    update={"available_at": cutoff + timedelta(seconds=1)})})
+                folds[0] = first.model_copy(update={"validation": (e, *first.validation[1:])})
+            elif fault == "wrong-session":
+                folds[0] = first.model_copy(update={"validation": (inputs[-1], *first.validation[1:])})
+            else:
+                folds[0] = first.model_copy(update={"training": (*first.training, e)})
+>           with pytest.raises(ValueError, match="NONCAUSAL"):
+E           Failed: DID NOT RAISE ValueError
+
+tests\fault\paper_core\test_learning_gross.py:164: Failed
+___ test_pure_gross_procedure_refuses_noncausal_fold_inputs[wrong-session] ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-xwbwigxz/pytest/test_pure_gross_procedure_refu1')
+fault = 'wrong-session'
+
+    @pytest.mark.parametrize("fault", ["future-validation", "wrong-session", "training-crosses-fold"])
+    def test_pure_gross_procedure_refuses_noncausal_fold_inputs(tmp_path, fault):
+        from datetime import timedelta
+    
+        from quantbot.paper_core.contracts import LearningFold
+        from quantbot.paper_core.learning_procedure import run_procedure
+    
+        db, store, policy, cutoff, calendar = daily_inputs(tmp_path, gross=True)
+        try:
+            with db.transaction() as session:
+                rows, _, _ = learning._select(session, policy, cutoff, execution_now=cutoff)
+                inputs = learning._materialize(session, rows)
+            folds = []
+            for day in calendar.sequence.sessions[-5:]:
+                validation = tuple(e for e in inputs if e.session == day.session_date)
+                training = tuple(e for e in inputs if e.session < day.session_date)
+                folds.append(LearningFold(session=day.session_date, cutoff=day.open_at,
+                    training=training, validation=validation,
+                    historical_models=(policy.parent_model,) * len(validation),
+                    historical_model_ids=(policy.parent_model.id,) * len(validation),
+                    historical_available_at=(None,) * len(validation),
+                    historical_receipt_ids=(None,) * len(validation),
+                    historical_acknowledgement_ids=(None,) * len(validation),
+                    historical_acknowledgement_available_at=(None,) * len(validation),
+                    historical_receipt_payloads=(None,) * len(validation),
+                    historical_acknowledgement_payloads=(None,) * len(validation)))
+            first = folds[0]
+            e = first.validation[0]
+            if fault == "future-validation":
+                e = e.model_copy(update={"outcome": e.outcome.model_copy(
+                    update={"available_at": cutoff + timedelta(seconds=1)})})
+                folds[0] = first.model_copy(update={"validation": (e, *first.validation[1:])})
+            elif fault == "wrong-session":
+                folds[0] = first.model_copy(update={"validation": (inputs[-1], *first.validation[1:])})
+            else:
+                folds[0] = first.model_copy(update={"training": (*first.training, e)})
+>           with pytest.raises(ValueError, match="NONCAUSAL"):
+E           Failed: DID NOT RAISE ValueError
+
+tests\fault\paper_core\test_learning_gross.py:164: Failed
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_pure_gross_procedure_refuses_noncausal_fold_inputs[future-validation]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_pure_gross_procedure_refuses_noncausal_fold_inputs[wrong-session]
+2 failed, 1 passed, 8 deselected in 4.70s

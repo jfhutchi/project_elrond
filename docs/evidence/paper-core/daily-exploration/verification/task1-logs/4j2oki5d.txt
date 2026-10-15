@@ -1,0 +1,66 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+____ test_one_bounded_bar_cohort_preserves_missing_and_restricted_members _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4j2oki5d/pytest/test_one_bounded_bar_cohort_pr0')
+
+    @pytest.mark.asyncio
+    async def test_one_bounded_bar_cohort_preserves_missing_and_restricted_members(tmp_path):
+        now = datetime(2026, 10, 14, 14, 5, 3, tzinfo=UTC)
+        class Provider(ProviderFixture):
+            async def request(self, method, url, **kwargs):
+                if "/assets/" in url:
+                    self.calls.append((method, url, kwargs.get("params")))
+                    symbol = url.rsplit("/", 1)[-1]
+                    return BrokerTransportResponse(status_code=200, headers={}, content=json.dumps({
+                        "symbol": symbol, "class": "us_equity", "status": "active",
+                        "tradable": True, "fractionable": symbol != "NVDA",
+                    }).encode())
+                response = await super().request(method, url, **kwargs)
+                if url.endswith("/bars"):
+                    payload = json.loads(response.content)
+                    payload["bars"]["AAPL"] = payload["bars"].pop("XLE")
+                    return response.model_copy(update={"content": json.dumps(payload).encode()})
+                return response
+        provider = Provider(now)
+        class Market:
+            async def request(self, *args, **kwargs):
+                return TransportResponse.model_validate((await provider.request(*args, **kwargs)).model_dump())
+        class Clock:
+            process_id = "daily-cohort"
+            def sample(self):
+                return now, 1.
+        config = RuntimeConfig(
+            repository=str(Path(__file__).resolve().parents[3]), store_path=str(tmp_path/"fixture.db"),
+            store_identity="fixture", expected_account_hash=hashlib.sha256(b"paper").hexdigest(),
+            core=CoreConfig(account_id="paper", symbol="XLE", symbols=("AAPL", "MSFT", "NVDA"),
+                            selection_policy="SIGNAL_OR_EXPLORE_V1", release_id="UNBOUND_PREPARED_RELEASE",
+                            evidence_lane="BROKER_PAPER", clock_profile="PAPER_TIME_V2"),
+            holdout_source=str(tmp_path/"canonical.db"), learning_origin=now-timedelta(days=20),
+            canonical_datasets=("us-equities-daily",),
+        )
+        key = SecretStr("offline")
+        broker = AlpacaCoreBroker(
+            AlpacaPaperBrokerAdapter(api_key=key, api_secret=key, transport=provider),
+            AlpacaMarketDataClient(api_key=key, api_secret=key, transport=Market()),
+            AlpacaMarketCalendar(api_key=key, api_secret=key, transport=Market()),
+            config, Clock(), account_id="paper",
+        )
+>       captured = await broker.observation_cohort()
+                         ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_daily_cohort_adapter.py:64: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <quantbot.paper_core.alpaca_adapter.AlpacaCoreBroker object at 0x00000182F4E44B10>
+name = 'observation_cohort'
+
+    def __getattr__(self, name: str) -> Any:
+>       return getattr(self.adapter, name)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AttributeError: 'AlpacaPaperBrokerAdapter' object has no attribute 'observation_cohort'
+
+src\quantbot\paper_core\alpaca_adapter.py:56: AttributeError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_cohort_adapter.py::test_one_bounded_bar_cohort_preserves_missing_and_restricted_members
+1 failed in 2.10s

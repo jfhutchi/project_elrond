@@ -1,0 +1,247 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+____ test_delayed_exit_activity_stays_retryable_until_actual_fill_arrives _____
+
+self = <sqlalchemy.engine.base.Connection object at 0x0000023E94884E50>
+dialect = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x0000023E95B1A110>
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x0000023E94885D50>
+statement = <sqlalchemy.dialects.sqlite.base.SQLiteCompiler object at 0x0000023E94886FD0>
+parameters = [('missing-document',)]
+
+    def _exec_single_context(
+        self,
+        dialect: Dialect,
+        context: ExecutionContext,
+        statement: Union[str, Compiled],
+        parameters: Optional[_AnyMultiExecuteParams],
+    ) -> CursorResult[Any]:
+        """continue the _execute_context() method for a single DBAPI
+        cursor.execute() or cursor.executemany() call.
+    
+        """
+        if dialect.bind_typing is BindTyping.SETINPUTSIZES:
+            generic_setinputsizes = context._prepare_set_input_sizes()
+    
+            if generic_setinputsizes:
+                try:
+                    dialect.do_set_input_sizes(
+                        context.cursor, generic_setinputsizes, context
+                    )
+                except BaseException as e:
+                    self._handle_dbapi_exception(
+                        e, str(statement), parameters, None, context
+                    )
+    
+        cursor, str_statement, parameters = (
+            context.cursor,
+            context.statement,
+            context.parameters,
+        )
+    
+        effective_parameters: Optional[_AnyExecuteParams]
+    
+        if not context.executemany:
+            effective_parameters = parameters[0]
+        else:
+            effective_parameters = parameters
+    
+        if self._has_events or self.engine._has_events:
+            for fn in self.dispatch.before_cursor_execute:
+                str_statement, effective_parameters = fn(
+                    self,
+                    cursor,
+                    str_statement,
+                    effective_parameters,
+                    context,
+                    context.executemany,
+                )
+    
+        if self._echo:
+            self._log_info(str_statement)
+    
+            stats = context._get_cache_stats()
+    
+            if not self.engine.hide_parameters:
+                self._log_info(
+                    "[%s] %r",
+                    stats,
+                    sql_util._repr_params(
+                        effective_parameters,
+                        batches=10,
+                        ismulti=context.executemany,
+                    ),
+                )
+            else:
+                self._log_info(
+                    "[%s] [SQL parameters hidden due to hide_parameters=True]",
+                    stats,
+                )
+    
+        evt_handled: bool = False
+        try:
+            if context.execute_style is ExecuteStyle.EXECUTEMANY:
+                effective_parameters = cast(
+                    "_CoreMultiExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_executemany:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_executemany(
+                        cursor,
+                        str_statement,
+                        effective_parameters,
+                        context,
+                    )
+            elif not effective_parameters and context.no_parameters:
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute_no_params:
+                        if fn(cursor, str_statement, context):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+                    self.dialect.do_execute_no_params(
+                        cursor, str_statement, context
+                    )
+            else:
+                effective_parameters = cast(
+                    "_CoreSingleExecuteParams", effective_parameters
+                )
+                if self.dialect._has_events:
+                    for fn in self.dialect.dispatch.do_execute:
+                        if fn(
+                            cursor,
+                            str_statement,
+                            effective_parameters,
+                            context,
+                        ):
+                            evt_handled = True
+                            break
+                if not evt_handled:
+>                   self.dialect.do_execute(
+                        cursor, str_statement, effective_parameters, context
+                    )
+
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x0000023E95B1A110>
+cursor = <sqlite3.Cursor object at 0x0000023E93E17440>
+statement = 'UPDATE core_provider_progress SET document_id=?'
+parameters = ('missing-document',)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x0000023E94885D50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlite3.IntegrityError: FOREIGN KEY constraint failed
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-3ru4ayk_/pytest/test_delayed_exit_activity_sta0')
+
+    @pytest.mark.asyncio
+    async def test_delayed_exit_activity_stays_retryable_until_actual_fill_arrives(tmp_path):
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            first, reasons = await enter(store, broker)
+            assert first.action == "BUY" and not reasons
+            provider.activity_lag_seconds = 60
+            clocks.advance(1800)
+            store.runtime_role = "guardian"
+            receipt = await guardian_cycle(store, broker, now=clocks.wall)
+            assert "POST_EXIT_RECONCILIATION_WAIT" in receipt.reasons
+            assert not any(
+                h["state"] == "INTEGRITY_FAILURE" for h in store.documents("core_health_events")
+            )
+            assert dict(store.latest_proof().actual_quantities) == {"AAPL": Decimal(5)}
+            assert provider.holdings["AAPL"] == 0
+            assert store.export_loop(first.id)["round_trip"] is None
+            pending_health = next(
+                h
+                for h in store.documents("core_health_events")
+                if "OWNED_FILL_ACTIVITY_PENDING" in h["objections"]
+            )
+            proof = store.read(
+                "core_reconciliation_proofs", pending_health["evidence_ids"][0], ReconciliationProof
+            )
+            with db.transaction() as session:
+                original_id = session.execute(
+                    select(table("core_provider_progress").c.document_id)
+                ).scalar_one()
+                source = json.loads(
+                    session.execute(
+                        select(table("core_provider_acquisitions").c.payload).where(
+                            table("core_provider_acquisitions").c.id == original_id
+                        )
+                    ).scalar_one()
+                )
+            started = datetime.fromisoformat(source["until"])
+            assert _pending_owned_activity(store, proof, capture_started=started, now=clocks.wall)
+            for fault in ("missing", "stale", "wrong-account", "wrong-endpoint", "wrong-order"):
+                changed = dict(source)
+                if fault == "stale":
+                    changed["until"] = (started - timedelta(seconds=1)).isoformat()
+                elif fault == "wrong-account":
+                    changed["account_id"] = "another-account"
+                elif fault == "wrong-endpoint":
+                    changed["endpoint"] = "https://api.alpaca.markets"
+                elif fault == "wrong-order":
+                    changed["pending_owned_orders"] = [
+                        dict(changed["pending_owned_orders"][0], client_order_id="unowned-order")
+                    ]
+                identity = "missing-document" if fault == "missing" else content_id(changed)
+                with db.transaction() as session:
+                    if fault != "missing":
+                        put(session, "core_provider_acquisitions", identity, changed)
+>                   session.execute(
+                        table("core_provider_progress").update().values(document_id=identity)
+                    )
+
+tests\integration\paper_core\test_daily_paper_loop.py:202: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2373: in execute
+    return self._execute_internal(
+.venv\Lib\site-packages\sqlalchemy\orm\session.py:2280: in _execute_internal
+    result = conn.execute(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:526: in _execute_on_connection
+    return connection._execute_clauseelement(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1643: in _execute_clauseelement
+    ret = self._execute_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1848: in _execute_context
+    return self._exec_single_context(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1988: in _exec_single_context
+    self._handle_dbapi_exception(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2365: in _handle_dbapi_exception
+    raise sqlalchemy_exception.with_traceback(exc_info[2]) from e
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1969: in _exec_single_context
+    self.dialect.do_execute(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <sqlalchemy.dialects.sqlite.pysqlite.SQLiteDialect_pysqlite object at 0x0000023E95B1A110>
+cursor = <sqlite3.Cursor object at 0x0000023E93E17440>
+statement = 'UPDATE core_provider_progress SET document_id=?'
+parameters = ('missing-document',)
+context = <sqlalchemy.dialects.sqlite.base.SQLiteExecutionContext object at 0x0000023E94885D50>
+
+    def do_execute(self, cursor, statement, parameters, context=None):
+>       cursor.execute(statement, parameters)
+E       sqlalchemy.exc.IntegrityError: (sqlite3.IntegrityError) FOREIGN KEY constraint failed
+E       [SQL: UPDATE core_provider_progress SET document_id=?]
+E       [parameters: ('missing-document',)]
+E       (Background on this error at: https://sqlalche.me/e/20/gkpj)
+
+.venv\Lib\site-packages\sqlalchemy\engine\default.py:952: IntegrityError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_delayed_exit_activity_stays_retryable_until_actual_fill_arrives
+1 failed, 8 deselected in 5.52s

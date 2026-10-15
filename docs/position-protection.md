@@ -9,6 +9,13 @@ failure, entry waits, closed-session learning or a failed fitting child cannot d
 Current core limits include a 100 bps stop, 30-minute horizon and at least a 120-second
 close buffer; the legacy policy defaults below do not replace that fixed envelope.
 
+The [approved hybrid successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+requires health checks and guardian price refresh for the selected/actually owned symbol,
+including owned lots no longer in the candidate universe. Reaching six daily entry
+reservations, a failed fit or unavailable entry-funds permission cannot disable protection
+or outcomes. The successor is not merged or commissioned; this is its protection contract,
+not evidence that the staged tasks have run it.
+
 The [current rollout](evidence/paper-core/omen-deployment/README.md) has not started the
 new guardian. Existing Protection and Paper Deadline services remain unchanged, and nine
 inherited positions retain `adaptive-momentum-v1-309894d8d8a5296e` ownership. Do not adopt

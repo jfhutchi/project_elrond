@@ -1,12 +1,16 @@
 # Documentation map
 
-Reviewed October 14, 2026, America/New_York. Start with the [current PAPER design](paper-core.md), [direction](intraday-paper-direction.md), and [measured handover](evidence/paper-core/handover.md).
+Reviewed October 15, 2026, America/New_York. Start with the [PAPER core overview](paper-core.md), [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md), [direction](intraday-paper-direction.md), and [measured handover](evidence/paper-core/handover.md).
 
-This inventory covers all 160 tracked Markdown files present before this refresh, plus the two new overview/staging documents. Current guidance was reconciled with merged PR289 and the subsequent daily-exploration requirement. The latter is a requested extension, not a completed deployment.
+This inventory covers 180 Markdown files, including this index. Current guidance, historical records and golden fixtures are listed separately below. The original 160-file review and subsequent overview/staging guidance remain preserved; the successor adds its specification, implementation plan and retained verification/review evidence.
+
+The [successor evidence package](evidence/paper-core/daily-exploration/README.md) retains the
+combined offline witness, task/final review status, candidate-preparation status and release
+blockers. Successor code remains on the feature branch until merged; it is uncommissioned.
 
 Dated specifications, frozen review/test evidence, research findings and refutations keep their original dates and claims. An old modification date alone is not a reason to rewrite a historical result. Golden files remain exact test expectations. Local `.superpowers/` scratch is ignored and absent from current Git trees; reviewed records in `docs/superpowers/` and `docs/evidence/` are intentional.
 
-## Current guidance and handover (53)
+## Current guidance and handover (55)
 
 - [CLAUDE.md](../CLAUDE.md)
 - [PROJECT_STATUS.md](../PROJECT_STATUS.md)
@@ -28,6 +32,7 @@ Dated specifications, frozen review/test evidence, research findings and refutat
 - [docs/database-target.md](database-target.md)
 - [docs/deployed-state.md](deployed-state.md)
 - [docs/elrond-learner.md](elrond-learner.md)
+- [docs/evidence/paper-core/daily-exploration/README.md](evidence/paper-core/daily-exploration/README.md)
 - [docs/evidence/paper-core/decisions.md](evidence/paper-core/decisions.md)
 - [docs/evidence/paper-core/handover.md](evidence/paper-core/handover.md)
 - [docs/evidence/paper-core/omen-deployment/README.md](evidence/paper-core/omen-deployment/README.md)
@@ -59,10 +64,11 @@ Dated specifications, frozen review/test evidence, research findings and refutat
 - [docs/sanitized-alert-envelope.md](sanitized-alert-envelope.md)
 - [docs/stable-snapshot-reconciliation.md](stable-snapshot-reconciliation.md)
 - [docs/storage-parity.md](storage-parity.md)
+- [docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 - [docs/trade-learning-shadow.md](trade-learning-shadow.md)
 - [docs/worker-environment-identity.md](worker-environment-identity.md)
 
-## Historical records retained (107)
+## Historical records retained (122)
 
 - [REFUTED.md](../REFUTED.md)
 - [docs/COMPETITIVE_FRONTIER_2026-08-29.md](COMPETITIVE_FRONTIER_2026-08-29.md)
@@ -171,6 +177,22 @@ Dated specifications, frozen review/test evidence, research findings and refutat
 - [reports/research/refuted-power-audit-2026-08-19.md](../reports/research/refuted-power-audit-2026-08-19.md)
 - [reports/research/spy-sma200-resolved-2026-08-19.md](../reports/research/spy-sma200-resolved-2026-08-19.md)
 - [reports/weekly/2026-33.md](../reports/weekly/2026-33.md)
+
+- [docs/evidence/paper-core/daily-exploration/review/design-rulings.md](evidence/paper-core/daily-exploration/review/design-rulings.md)
+- [docs/evidence/paper-core/daily-exploration/review/final-review.md](evidence/paper-core/daily-exploration/review/final-review.md)
+- [docs/evidence/paper-core/daily-exploration/review/task-1-fix1-review.md](evidence/paper-core/daily-exploration/review/task-1-fix1-review.md)
+- [docs/evidence/paper-core/daily-exploration/review/task-1-review.md](evidence/paper-core/daily-exploration/review/task-1-review.md)
+- [docs/evidence/paper-core/daily-exploration/review/task-2-review.md](evidence/paper-core/daily-exploration/review/task-2-review.md)
+- [docs/evidence/paper-core/daily-exploration/review/task-3-review.md](evidence/paper-core/daily-exploration/review/task-3-review.md)
+- [docs/evidence/paper-core/daily-exploration/review/task-4-fix1-review.md](evidence/paper-core/daily-exploration/review/task-4-fix1-review.md)
+- [docs/evidence/paper-core/daily-exploration/review/task-4-review.md](evidence/paper-core/daily-exploration/review/task-4-review.md)
+- [docs/evidence/paper-core/daily-exploration/verification/current-docs-report.md](evidence/paper-core/daily-exploration/verification/current-docs-report.md)
+- [docs/evidence/paper-core/daily-exploration/verification/implementation-ledger.md](evidence/paper-core/daily-exploration/verification/implementation-ledger.md)
+- [docs/evidence/paper-core/daily-exploration/verification/task-1-report.md](evidence/paper-core/daily-exploration/verification/task-1-report.md)
+- [docs/evidence/paper-core/daily-exploration/verification/task-2-report.md](evidence/paper-core/daily-exploration/verification/task-2-report.md)
+- [docs/evidence/paper-core/daily-exploration/verification/task-3-report.md](evidence/paper-core/daily-exploration/verification/task-3-report.md)
+- [docs/evidence/paper-core/daily-exploration/verification/task-4-report.md](evidence/paper-core/daily-exploration/verification/task-4-report.md)
+- [docs/superpowers/plans/2026-10-14-daily-paper-exploration.md](superpowers/plans/2026-10-14-daily-paper-exploration.md)
 
 ## Golden test fixtures retained (2)
 

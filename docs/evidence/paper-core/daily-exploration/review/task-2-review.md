@@ -1,0 +1,36 @@
+### Spec Compliance
+
+- ✅ Spec compliant for Task 2 at b37e664ffbd85ef8dde749358899454eca3a70e0: V3/gross is selected explicitly from the hybrid mode with the configured economic policy identity (`src/quantbot/paper_core/roles.py:221`), and mixed target/procedure pairs are rejected (`src/quantbot/paper_core/contracts.py:561`). Every production and test file named in the brief has a corresponding change.
+- ✅ Fee-only pending outcomes are eligible while V2 retains COMPLETE-only selection and its overlap exclusion (`src/quantbot/paper_core/learning.py:302`, `src/quantbot/paper_core/learning.py:331`). Gross and net targets dispatch separately, unsupported incomplete gross outcomes are rejected, and source economics are not mutated (`src/quantbot/paper_core/learning_procedure.py:38`, `tests/fault/paper_core/test_learning_gross.py:154`, `tests/fault/paper_core/test_learning_gross.py:301`).
+- ✅ Receipt, permanent charge, predictive model, authority, selected mode and operational commission are bound to their exact target/procedure/policy (`src/quantbot/paper_core/learning.py:924`, `src/quantbot/paper_core/activation.py:446`, `src/quantbot/paper_core/activation.py:473`, `src/quantbot/paper_core/activation.py:492`, `src/quantbot/paper_core/activation.py:537`). V2 commissions do not grant V3 automatic activation (`src/quantbot/paper_core/release.py:49`, `src/quantbot/paper_core/authority.py:126`), while explicit candidate review remains available.
+- ⚠️ Operational unknown-fee cash continuity is outside this commit and remains the controller's separate Task 3 gate. The fixture explicitly supplies independent synthetic cash authority and disclaims operational readiness (`tests/fixtures/core_gross.py:1`, `tests/fixtures/core_gross.py:111`). Its successful 60-outcome learning run is not proof that the production provider can continue entering.
+- ⚠️ The requirement that failed/rejected daily learning never blocks exploration spans unchanged Task 1 entry behavior. This diff preserves that entry implementation and produces truthful learning results (`src/quantbot/paper_core/learning.py:1070`, `src/quantbot/paper_core/learning.py:1085`); the controller should retain Task 1's entry evidence and the final cross-task integration gate rather than treating this Task 2 fixture as that evidence.
+
+### Strengths
+
+- The day-ten fixture executes actual synthetic trader/outcome paths, the real bounded learner and activation; its assertions cover 60 final inputs, 30/36/42/48/54 training rows, five validation sessions, exact 2x weights and unchanged pending outcomes (`tests/fixtures/core_gross.py:92`, `tests/fault/paper_core/test_learning_gross.py:260`, `tests/fault/paper_core/test_learning_gross.py:276`). Positive and negative gross targets affect the fitted predictions, including a sign-inversion control (`tests/fault/paper_core/test_learning_gross.py:154`).
+- Metadata guards remain ahead of full feature/outcome hydration (`src/quantbot/paper_core/learning.py:274`, `src/quantbot/paper_core/learning.py:313`, `src/quantbot/paper_core/learning.py:344`). New V3 canaries exercise the existing protected/forward/declared-holdout and future-cutoff boundaries (`tests/fault/paper_core/test_learning_daily.py:449`, `tests/fault/paper_core/test_learning_daily.py:567`).
+- Chronological fold construction retains ten completed-session warmup, sample/session floors and one permanent daily attempt (`src/quantbot/paper_core/learning.py:787`, `src/quantbot/paper_core/learning.py:801`, `src/quantbot/paper_core/learning.py:866`, `src/quantbot/paper_core/learning.py:884`). Pure V3 scoring adds validation availability/session checks while retaining the 30-minute training purge; weighting and final refit continue to include all eligible history (`src/quantbot/paper_core/learning_procedure.py:187`, `src/quantbot/paper_core/learning_procedure.py:219`, `src/quantbot/paper_core/learning_procedure.py:235`, `src/quantbot/paper_core/learning_procedure.py:319`).
+- Historical predictive comparators reject target reinterpretation while retaining receipt and acknowledgement provenance (`src/quantbot/paper_core/learning.py:415`, `src/quantbot/paper_core/learning.py:446`). Activation tests independently tamper with authority and permanent charge fields and confirm the pointer stays unchanged until exact activation (`tests/fault/paper_core/test_learning_gross.py:323`).
+- Legacy serializers and V2 artifact description remain unchanged; V3-only charge additions are conditional (`src/quantbot/paper_core/contracts.py:531`, `src/quantbot/paper_core/learning_procedure.py:115`, `src/quantbot/paper_core/learning.py:943`). The retained affected-gate run includes the legacy temporal/canonical/activation suites without warnings (`.superpowers/sdd/2026-10-14-daily-paper-exploration/task2-logs/o5j1wldt.txt:1`).
+
+### Issues
+
+- Critical: none found.
+- Important: none found within Task 2 scope.
+- Minor: none found that warrant a change.
+
+### Checks and Review Boundaries
+
+- Reviewed the supplied diff; the initial tool response truncated its middle, so the omitted spans were retrieved separately. No Git commands or test reruns were performed.
+- Read only the necessary surrounding changed-function sections where diff hunks ended mid-function: `_select` / `_materialize` for metadata-before-hydration ordering; `_consider_learning` for sample floors, daily charging and truthful failure receipts; `run_procedure` for chronology, recency weighting and final-fit handling (`src/quantbot/paper_core/learning.py:233`, `src/quantbot/paper_core/learning.py:780`, `src/quantbot/paper_core/learning.py:1024`, `src/quantbot/paper_core/learning_procedure.py:197`).
+- Named unchanged-source risk checked: whether a pending gross RoundTrip can represent an open or fill-less lot, or lack established gross P&L. Its model requires gross P&L, owned-flat quantity and nonempty entry/exit fill sets; the new target also requires reconciliation and positive entry notional (`src/quantbot/paper_core/contracts.py:389`, `src/quantbot/paper_core/contracts.py:415`, `src/quantbot/paper_core/learning_procedure.py:47`).
+- Read retained RED evidence: V3/gross literals rejected before implementation (`.superpowers/sdd/2026-10-14-daily-paper-exploration/task2-logs/36ra25w7.txt:1`).
+- Read retained GREEN evidence: 38 passed (`.superpowers/sdd/2026-10-14-daily-paper-exploration/task2-logs/hs30h8a4.txt:2`); 108 passed, 2 deliberately deselected (`.superpowers/sdd/2026-10-14-daily-paper-exploration/task2-logs/o5j1wldt.txt:3`); 2 operational contract tests passed (`.superpowers/sdd/2026-10-14-daily-paper-exploration/task2-logs/gffnp37_.txt:2`). These outputs contain no warnings.
+- Read retained source typing and scoped lint evidence: seven production files clean; Ruff clean (`.superpowers/sdd/2026-10-14-daily-paper-exploration/task2-mypy.txt:1`, `.superpowers/sdd/2026-10-14-daily-paper-exploration/task2-lint.txt:1`).
+
+### Assessment
+
+**Task quality: Approved.**
+
+**Reasoning:** The change is bounded to explicit learning-target and activation contracts, preserves the legacy path, and exercises real learning/activation behavior with meaningful target, temporal and authority controls. Approval covers Task 2; production cash continuity and unchanged entry integration remain the explicitly identified cross-task gates.

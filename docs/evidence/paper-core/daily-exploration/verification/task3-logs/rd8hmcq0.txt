@@ -1,0 +1,126 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_actual_coordinator_rechecks_funds_and_locked_source_before_post[unknown_send] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-rd8hmcq0/pytest/test_actual_coordinator_rechec0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x0000013836393ED0>
+fault = 'unknown_send'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "fault",
+        [
+            "cash",
+            "buying_power",
+            "equity",
+            "restricted",
+            "open_order",
+            "manual",
+            "quarantine",
+            "source_race",
+            "ledger_race",
+            "unknown_send",
+        ],
+    )
+    async def test_actual_coordinator_rechecks_funds_and_locked_source_before_post(
+        tmp_path, monkeypatch, fault
+    ):
+        from sqlalchemy import delete
+    
+        from quantbot.paper_core.contracts import ProtectionPlan
+        from quantbot.paper_core.runtime import CoreExecutionCoordinator
+        from quantbot.paper_core.trader import claim_entry
+    
+        db, store, broker, provider, clocks = await prepare(tmp_path)
+        try:
+            await enter(store, broker)
+            await close(store, broker, clocks)
+            decision = await candidate(store, broker)
+            entry = claim_entry(store, decision, ProtectionPlan.for_decision(decision, store.config))
+            assert entry is not None
+            ready(store)
+            if fault in {"cash", "buying_power", "equity"}:
+                provider.account_overrides[fault] = "1"
+            elif fault == "restricted":
+                provider.account_overrides["trading_blocked"] = True
+            elif fault == "open_order":
+                provider.open_orders = [
+                    dict(
+                        provider.orders[0],
+                        id="unowned",
+                        client_order_id="unowned",
+                        status="new",
+                        filled_qty="0",
+                    )
+                ]
+            elif fault == "manual":
+                with db.transaction() as session:
+                    StorageRepository(session).set_kill_switch(
+                        True, reason="OFFLINE_MANUAL_STOP", updated_at=clocks.wall
+                    )
+            elif fault == "quarantine":
+                with db.transaction() as session:
+                    StorageRepository(session).create_incident(
+                        "disputed",
+                        kind="CORE_EVIDENCE_CONFLICT",
+                        severity="ERROR",
+                        message="OFFLINE_DISPUTED_CASH",
+                        detail={"account_scope": True},
+                        occurred_at=clocks.wall,
+                    )
+            elif fault == "unknown_send":
+                from quantbot.domain import IntentState
+    
+                with db.transaction() as session:
+                    repo = StorageRepository(session)
+                    other = entry.intent.model_copy(update={
+                        "intent_id": "other-unknown", "client_order_id": "other-unknown-client"})
+                    repo.create_order_intent(other)
+                    for state in (IntentState.ORDER_CREATED, IntentState.SUBMITTING,
+                                  IntentState.SUBMISSION_UNKNOWN):
+                        other = repo.transition_order_intent(other.intent_id, state,
+                                                            expected_current=other.state)
+            else:
+                gate = CoreExecutionCoordinator._gate
+                observed = []
+    
+                def changed_after_gate(self, *args, **kwargs):
+                    result = gate(self, *args, **kwargs)
+                    observed.append(result.allowed)
+                    if len(observed) == 2:
+                        assert result.allowed
+                        with db.transaction() as session:
+                            if fault == "source_race":
+                                session.execute(
+                                    delete(table("core_provider_acquisitions")).where(
+                                        table("core_provider_acquisitions").c.id
+                                        == store.latest_proof().acquisition_id
+                                    )
+                                )
+                            else:
+                                AlpacaCoreBroker.record_external(
+                                    session,
+                                    dict(
+                                        event_id="new-account-event",
+                                        account_id="paper",
+                                        symbol="",
+                                        owner="ACCOUNT_NONTRADE",
+                                        quantity_delta="0",
+                                        net_cash="1",
+                                        order_id=None,
+                                        occurred_at=clocks.wall.isoformat(),
+                                        activity_type="CSD",
+                                        source_document="OFFLINE_SOURCE_CHANGE",
+                                    ),
+                                )
+                    return result
+    
+                monkeypatch.setattr(CoreExecutionCoordinator, "_gate", changed_after_gate)
+            reasons = await dispatch_entries(store, broker)
+>           assert reasons
+E           assert ()
+
+tests\integration\paper_core\test_paper_funds.py:514: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[unknown_send]
+1 failed, 35 deselected in 6.39s

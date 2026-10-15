@@ -1,0 +1,117 @@
+F....FFFF                                                                [100%]
+================================== FAILURES ===================================
+______________ test_legacy_config_payload_and_hash_are_unchanged ______________
+
+    def test_legacy_config_payload_and_hash_are_unchanged():
+        from quantbot.research.manifest import content_id
+        config = CoreConfig(account_id="synthetic-account", symbol="XLE")
+        assert "symbols" not in config.model_dump()
+        assert "selection_policy" not in config.model_dump()
+>       assert config.entry_symbols == ("XLE",)
+               ^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_daily_selection.py:54: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = CoreConfig(account_id='synthetic-account', symbol='XLE', release_id='m1-synthetic-fixture', policy_id='collect-owned-3...25, stop_bps=100, horizon_minutes=30, exit_buffer_seconds=120, buying_power_reserve_bps=500, clock_profile='STRICT_V0')
+item = 'entry_symbols'
+
+    def __getattr__(self, item: str) -> Any:
+        private_attributes = object.__getattribute__(self, '__private_attributes__')
+        if item in private_attributes:
+            attribute = private_attributes[item]
+            if hasattr(attribute, '__get__'):
+                return attribute.__get__(self, type(self))  # type: ignore
+    
+            try:
+                # Note: self.__pydantic_private__ cannot be None if self.__private_attributes__ has items
+                return self.__pydantic_private__[item]  # type: ignore
+            except KeyError as exc:
+                raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}') from exc
+        else:
+            # `__pydantic_extra__` can fail to be set if the model is not yet fully initialized.
+            # See `BaseModel.__repr_args__` for more details
+            try:
+                pydantic_extra = object.__getattribute__(self, '__pydantic_extra__')
+            except AttributeError:
+                pydantic_extra = None
+    
+            if pydantic_extra and item in pydantic_extra:
+                return pydantic_extra[item]
+            else:
+                if hasattr(self.__class__, item):
+                    return super().__getattribute__(item)  # Raises AttributeError if appropriate
+                else:
+                    # this is the current error
+>                   raise AttributeError(f'{type(self).__name__!r} object has no attribute {item!r}')
+E                   AttributeError: 'CoreConfig' object has no attribute 'entry_symbols'
+
+.venv\Lib\site-packages\pydantic\main.py:1042: AttributeError
+____________ test_signal_beats_weak_and_diversity_precedes_signal _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-y94l8tx1/pytest/test_signal_beats_weak_and_div0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000002C6989F0ED0>
+
+    def test_signal_beats_weak_and_diversity_precedes_signal(tmp_path, monkeypatch):
+>       from quantbot.paper_core.selection import evaluate_cohort
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.selection'
+
+tests\integration\paper_core\test_daily_selection.py:65: ModuleNotFoundError
+___________ test_missing_and_held_members_allow_collect_exploration ___________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-y94l8tx1/pytest/test_missing_and_held_members_0')
+
+    def test_missing_and_held_members_allow_collect_exploration(tmp_path):
+>       from quantbot.paper_core.selection import evaluate_cohort
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.selection'
+
+tests\integration\paper_core\test_daily_selection.py:90: ModuleNotFoundError
+___________ test_forged_fallback_and_incomplete_cohort_cannot_claim ___________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-y94l8tx1/pytest/test_forged_fallback_and_incom0')
+
+    def test_forged_fallback_and_incomplete_cohort_cannot_claim(tmp_path):
+>       from quantbot.paper_core.selection import evaluate_cohort
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.selection'
+
+tests\integration\paper_core\test_daily_selection.py:103: ModuleNotFoundError
+________ test_nondefault_stop_and_restart_rotation_and_boundary_dedup _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-y94l8tx1/pytest/test_nondefault_stop_and_resta0')
+
+    @pytest.mark.asyncio
+    async def test_nondefault_stop_and_restart_rotation_and_boundary_dedup(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle, synchronize
+        from quantbot.paper_core.outcomes import import_broker_events
+        from quantbot.paper_core.trader import trader_cycle
+        from tests.fixtures.core_m2 import fee_events
+>       db, store, broker, proof, model, active = prepare(tmp_path)
+                                                  ^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_daily_selection.py:129: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-y94l8tx1/pytest/test_nondefault_stop_and_resta0')
+inherited = None, predictive = False
+
+    def prepare(tmp_path, *, inherited=None, predictive=False):
+>       config = CoreConfig(
+            account_id="synthetic-account", symbol="XLE", symbols=("AAPL", "MSFT", "NVDA"),
+            selection_policy="SIGNAL_OR_EXPLORE_V1",
+        )
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for CoreConfig
+E       symbols
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=('AAPL', 'MSFT', 'NVDA'), input_type=tuple]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+E       selection_policy
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='SIGNAL_OR_EXPLORE_V1', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\integration\paper_core\test_daily_selection.py:17: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_legacy_config_payload_and_hash_are_unchanged
+FAILED tests/integration/paper_core/test_daily_selection.py::test_signal_beats_weak_and_diversity_precedes_signal
+FAILED tests/integration/paper_core/test_daily_selection.py::test_missing_and_held_members_allow_collect_exploration
+FAILED tests/integration/paper_core/test_daily_selection.py::test_forged_fallback_and_incomplete_cohort_cannot_claim
+FAILED tests/integration/paper_core/test_daily_selection.py::test_nondefault_stop_and_restart_rotation_and_boundary_dedup
+5 failed, 4 passed in 2.28s

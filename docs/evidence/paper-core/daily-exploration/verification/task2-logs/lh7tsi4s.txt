@@ -1,0 +1,173 @@
+FFF                                                                      [100%]
+================================== FAILURES ===================================
+____ test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation _____
+
+    def test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation():
+>       assert gross_policy().model_dump()["target_contract"] == GROSS
+               ^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+kwargs = {}
+
+    def gross_policy(**kwargs):
+>       return LearningPolicy(target_contract=GROSS, procedure_version=V3, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for LearningPolicy
+E       target_contract
+E         Input should be 'owned-executed-net-return-v1' [type=literal_error, input_value='owned-executed-paper-gross-return-v1', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+E       procedure_version
+E         Input should be 'daily-all-history-walk-forward-v2' [type=literal_error, input_value='daily-paper-exploration-walk-forward-v3', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+
+tests\fault\paper_core\test_learning_gross.py:31: ValidationError
+__ test_gross_fit_accepts_only_fee_pending_and_preserves_original_economics ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-lh7tsi4s/pytest/test_gross_fit_accepts_only_fe0')
+
+    def test_gross_fit_accepts_only_fee_pending_and_preserves_original_economics(tmp_path):
+        db, store, old, cutoff, _ = daily_inputs(tmp_path)
+        try:
+            with db.transaction() as session:
+                rows, _, _ = learning._select(session, old, cutoff, execution_now=cutoff)
+                inputs = learning._materialize(session, rows)
+            pending = tuple(e.model_copy(update={"outcome": e.outcome.model_copy(update={
+                "status": "COSTS_PENDING", "cost_reason": "FEE_UNAVAILABLE",
+                "net_pnl": None, "actual_fees": None,
+            })}) for e in inputs)
+            before = tuple(e.outcome.model_dump_json() for e in pending)
+            parent = ModelArtifact(feature_version="five-minute-price-alpha-v1")
+>           candidate = fit_candidate(pending, parent, gross_policy())
+                                                       ^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:53: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+kwargs = {}
+
+    def gross_policy(**kwargs):
+>       return LearningPolicy(target_contract=GROSS, procedure_version=V3, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for LearningPolicy
+E       target_contract
+E         Input should be 'owned-executed-net-return-v1' [type=literal_error, input_value='owned-executed-paper-gross-return-v1', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+E       procedure_version
+E         Input should be 'daily-all-history-walk-forward-v2' [type=literal_error, input_value='daily-paper-exploration-walk-forward-v3', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+
+tests\fault\paper_core\test_learning_gross.py:31: ValidationError
+__ test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-lh7tsi4s/pytest/test_day_ten_actual_gross_outc0')
+
+    @pytest.mark.asyncio
+    async def test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority(tmp_path):
+>       db, store, broker, parent, trips, joins = await gross_episodes(tmp_path)
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-lh7tsi4s/pytest/test_day_ten_actual_gross_outc0')
+
+    async def gross_episodes(path):
+        from quantbot.domain import Bar
+        from quantbot.learner.five_minute import FEATURE_NAMES, build_features
+        from quantbot.paper_core.contracts import ModelArtifact, Observation
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.outcomes import process_outcomes
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.strategy import XNYSSession, XNYSSessionSequence
+    
+        db, store, broker, proof, _, collect = prepare(path)
+        collect = ModelArtifact(feature_version="five-minute-price-alpha-v1")
+        sessions = [
+            datetime(2026, 10, 14, 13, 30, tzinfo=UTC) + timedelta(days=d)
+            for d in (0, 1, 2, 5, 6, 7, 8, 9, 12, 13)
+        ]
+        calendar = XNYSSessionSequence(
+            calendar="XNYS",
+            sessions=tuple(
+                XNYSSession(
+                    session_date=s.date(), open_at=s, close_at=s + timedelta(hours=6, minutes=30)
+                )
+                for s in sessions
+            ),
+        )
+        trips, joins = [], []
+        try:
+            for i in range(60):
+                session_index, offset = divmod(i, 6)
+                now = sessions[session_index] + timedelta(minutes=35 + offset * 35)
+                sign = 1 if i % 2 == 0 else -1
+                broker.now = now
+                broker.set_mark("XLE", Decimal(100), as_of=now)
+                await guardian_cycle(store, broker, now=now)
+                proof = store.latest_proof()
+                bars = []
+                for k in range(7):
+                    for symbol in ("XLE", "SPY"):
+                        value = Decimal(100)
+                        if symbol == "XLE" and k == 5:
+                            value = Decimal(100) / (Decimal(1) + Decimal(sign) / 500)
+                        bars.append(
+                            Bar(
+                                symbol=symbol,
+                                timestamp=now - timedelta(minutes=35 - k * 5),
+                                open=value,
+                                high=value,
+                                low=value,
+                                close=value,
+                                volume=1,
+                                adjustment="1",
+                            )
+                        )
+                (row,) = build_features(
+                    bars,
+                    calendar,
+                    decision_at=now,
+                    receipt_at=now,
+                    symbols=("XLE",),
+                    source_snapshot_hash=f"m4-causal-bars-{i}",
+                )
+                observation = Observation(
+                    recorded_at_utc=now,
+                    symbol="XLE",
+                    source_start=now - timedelta(minutes=35),
+                    source_end=now,
+                    available_at=now,
+                    price=100,
+                    raw_data_digest=row.source_snapshot_hash,
+                    feature_version="five-minute-price-alpha-v1",
+                    features=tuple(zip(FEATURE_NAMES, row.values, strict=True)),
+                    dependencies=("SPY",),
+                    dependency_available_at=(now,),
+                    sequence=i + 1,
+                    session_close=sessions[session_index] + timedelta(hours=6, minutes=30),
+                )
+                decision = await trader_cycle(store, broker, observation, collect, proof, now=now)
+                assert decision.action == "BUY", decision.gates
+                if i == 0:
+                    posted = len(broker.posts)
+                    assert (
+                        await trader_cycle(store, broker, observation, collect, proof, now=now)
+                        == decision
+                    )
+                    assert len(broker.posts) == posted
+                broker.now = now + timedelta(minutes=30)
+                # Known fees are zero for this explicit synthetic provider activity.
+                broker.set_mark("XLE", Decimal(100) + Decimal(sign) / 5, as_of=broker.now)
+                await guardian_cycle(store, broker, now=broker.now)
+>               (trip,) = process_outcomes(store, cutoff=broker.now).outcomes
+                ^^^^^^^
+E               ValueError: not enough values to unpack (expected 1, got 0)
+
+tests\fixtures\core_gross.py:97: ValueError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation
+FAILED tests/fault/paper_core/test_learning_gross.py::test_gross_fit_accepts_only_fee_pending_and_preserves_original_economics
+FAILED tests/fault/paper_core/test_learning_gross.py::test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority
+3 failed in 3.54s

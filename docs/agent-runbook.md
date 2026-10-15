@@ -32,10 +32,31 @@ and then considers eligible wins and losses after every completed session. Use a
 compatible retained history: latest ten sessions raw weight 2, older history weight 1,
 normalized within each fit. Past-only validation, immutable outcome revisions, protected
 data and permanent trial accounting remain mandatory. `NO_CHANGE` is honest progress;
-there is no daily-improvement guarantee or automatic LIVE transition. The latest requested
-daily multi-stock PAPER exploration behavior is follow-on work, not a deployed capability:
-the prepared release remains XLE-bound. Do not treat current no-signal waits as completion
-of that new requirement or fabricate fills/labels to satisfy it.
+there is no daily-improvement guarantee or automatic LIVE transition. The
+[approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+is not merged to main or commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. The measured prepared release remains
+the older XLE package; it does not verify successor behavior.
+
+The successor prefers any qualifying activated signal above 10 bps, otherwise records
+exploration with its actual weak/negative score. The configured stock universe rotates by
+current/prior-session reservation counts under the exact signal-ranking rule in the spec.
+There are six durable reservations per exchange session and one concurrent core lot;
+completed/unknown-send reservations count unless definitive pre-send proof releases one.
+Claim and send replay cohort selection; guardian marks follow actually owned symbols.
+
+V3 uses actual owned gross-return labels, admitting `COSTS_PENDING` only for an established
+closed/reconciled gross outcome whose sole incompleteness is `FEE_UNAVAILABLE`. Fees stay
+unknown and net stays null. V3 retains within-training overlapping windows while enforcing
+past-only validation and purge/embargo. V2 remains strict net. Gross activation requires
+`DAILY_BOUNDED_V3`, starts initial commissioning from target-neutral COLLECT, and cannot
+silently reuse a net model or commission. Failed/rejected fits do not stop exploration.
+
+The separate `BROKER_PAPER_BALANCE_V1` policy must bind fresh stable broker funds/open-order
+evidence to quantity proof, current ledger and exact commission at claim, gate, locked send
+and recovery. It authorizes current sizing, leaving `expected_cash=None`, `cash_complete=False`,
+unknown fees and null net when history is incomplete. Do not invent cash activity or
+reconciliation; preserve discrepancies, unknown sends, manual stops and all other genuine
+entry gates. This contract is implemented on the successor branch and remains uncommissioned.
 
 For continuation, read the deployment package before considering any state change. Preserve
 WAL-aware backups, original order IDs and original exit ownership; establish the compatible
@@ -43,6 +64,8 @@ protection/exit transition before an additive migration. **Existing legacy execu
 expect schema 29 at startup: do not restart them against schema 36.** A rollback cannot
 restore an older trading database over newer broker activity. Guardian/outcomes readiness
 precedes trader enablement, and exact release/config/model authority must be commissioned.
+Prepare and verify a distinct successor manifest/configuration before that initial commission;
+hybrid selection, V3 target and current funds are economic changes, not code-only compatibility.
 
 ## Legacy coordinator reference and dated session notes
 

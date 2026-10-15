@@ -2,12 +2,18 @@
 
 ## Current PAPER core learning contract
 
-The [PAPER core](paper-core.md) implementation is merged in PR289; functional activation
-and natural broker-PAPER acceptance remain pending in the
-[deployment handover](evidence/paper-core/handover.md). It fits a fixed ridge predictor to
-`owned-executed-net-return-v1`, the net return on entry notional of the exact owned lot
-under its fixed stop/deadline/selection contract. This differs from earlier market-label
-learners and from the legacy exploration counters below.
+The [PAPER core](paper-core.md) baseline is merged in PR289. The
+[approved successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md) is not
+merged to main or commissioned: The successor is implemented and locally tested, including the combined trading-to-learning witness. See the [handover](evidence/paper-core/handover.md)
+for integration/preparation status. The following describes the approved learning contract,
+with the completed combined offline witness kept separate from deployed results.
+
+V2 retains fixed-ridge `owned-executed-net-return-v1`. V3 adds
+`daily-paper-exploration-walk-forward-v3` and `owned-executed-paper-gross-return-v1`, exact
+executed gross P&L divided by entry notional. Preserve holding/exit
+`collect-owned-30m-stop100-v1`, compatible history and each original decision's selection
+provenance; version selection, procedure and target separately. Neither target is the
+earlier market-label learner or the legacy exploration counter below.
 
 The independent outcomes role resolves attributable entry/exit fills, terminal order
 evidence, protection and reconciled flatness **for the owned lot**, while inherited holdings
@@ -16,6 +22,12 @@ keep their original owner. Broker net is populated only with complete actual cos
 `COSTS_PENDING`; modeled costs are separate, and execution-price effects are not deducted
 again. Corrections append outcome revisions, exclude dirty outcomes until reconciliation,
 and never turn one trade into multiple training samples.
+
+V3 may admit such a closed, owned, reconciled lot with `COSTS_PENDING` only when gross P&L
+is established and `FEE_UNAVAILABLE` is its sole remaining incompleteness. The receipt does
+not change fee fields, cost status or null net. Gross predictions are before fees, not net
+profit evidence. V2 keeps its strict fee-complete admission. Invalid ownership, quarantine,
+pending corrections and other incomplete or noncausal rows remain excluded in both.
 
 After ten completed exchange sessions, including quiet sessions, consider learning after
 every completed session. Eligible wins and losses both train; do not select by profitability.
@@ -30,7 +42,9 @@ an operational database handle. Outcome processing has priority over fitting and
 working while entries wait or the market is closed.
 
 Five expanding chronological folds use revisions actually available at each fold cutoff,
-nonoverlapping windows and at least a 30-minute embargo. The first fold needs at least
+strict train/validation chronology and at least a 30-minute purge/embargo. V3 retains
+overlapping feature windows within training/history; V2 keeps its earlier overlap rule.
+The first fold needs at least
 30 certified episodes across five earlier sessions; the five later validation sessions need
 at least ten episodes. Protected ranges are excluded before materialization. Compare with
 training-only constants and the exact historical decision models on the same episodes.
@@ -41,15 +55,26 @@ score after the refit. Protected final holdouts retain their separate registry/b
 Insufficient or unchanged eligible evidence produces immutable `NO_CHANGE` with the parent
 model retained. Failed fits, rejected candidates and awaiting-activation states retain
 their own receipts. Initial model use and unattended daily activation need the exact
-commissioned authority; activation is atomic at a safe decision boundary and the later
+commissioned target authority: `DAILY_BOUNDED_V3`, legacy `DAILY_BOUNDED_V2` or explicit
+`REVIEW_EACH_CANDIDATE`. Initial successor commission uses target-neutral COLLECT; a net
+predictive incumbent cannot silently become a gross predictor or inherit V3 authority.
+Activation is atomic at a safe decision boundary and the later
 decision must acknowledge its model and learning receipt. A successful fit cannot by itself
 grant entries, increase risk or establish profitability.
 
-The newly requested daily PAPER exploration across multiple stocks is a follow-on behavior
-requirement. The prepared release binds XLE and its benchmark dependencies; it does not yet
-implement that requested multi-stock daily collection policy. Daily consideration is not a
-claim that every day supplies broker fills or a valid parameter update. The current
-[direction](intraday-paper-direction.md) separates that goal from measured deployment.
+The approved hybrid policy prefers any eligible signal above 10 bps, otherwise records
+exploration with the real weak/negative score. It rotates stock selection using durable
+current/prior-session reservation counts, permits six reservations per session and one
+concurrent core lot, and replays selection at claim/send. Failed fits or rejected candidates
+retain the incumbent while exploration continues. Daily consideration does not guarantee
+fills or parameter changes; the [current direction](intraday-paper-direction.md) gives the
+exact ranking, risk and evidence boundaries.
+
+Gross learning does not by itself authorize the next entry. The separately approved
+`BROKER_PAPER_BALANCE_V1` current-funds contract must validate fresh stable broker balances
+and open orders against quantity proof, current ledger and exact commissioned identity.
+It leaves reconstructed cash incomplete, unknown fees unchanged and net null; it cannot
+repair an integrity incident or replace exact cash in legacy mode. The combined witness uses this authority with zero independent cash activities. Fee-only learning alone would not establish successive-entry continuity; the actual adapter/coordinator witness supplies that evidence.
 
 ## Legacy experiment experience and adaptation reference
 

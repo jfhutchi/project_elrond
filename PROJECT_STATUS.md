@@ -17,11 +17,19 @@ state, exact release/config pins, migration rehearsal, and the remaining sequenc
 runtime uses schema 36 and Mako 1.4.3; migration was exercised only on copies. A source merge or
 the passage of time does not establish runtime progress.
 
-The latest request adds daily PAPER exploration across different stocks and learning from wins
-and losses. That behavior is pending implementation: the prepared configuration selects XLE with
-one new position and may abstain. The implemented learner considers all eligible compatible
-history after ten completed exchange sessions, including quiet sessions, with daily consideration
-and recent-session weighting. No deployed daily learning or improvement is claimed here.
+The [approved successor](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+selects qualifying signals before exploratory entries across stocks, with six durable daily
+reservations and one concurrent core lot. V3 learns from eligible executed gross wins/losses
+after ten completed exchange sessions, retaining all compatible history with normalized raw
+2/1 weighting for latest-ten/older sessions. Fee-only incompleteness may leave costs pending
+and net null without blocking V3 gross labels. The versioned current-funds policy separately
+authorizes bounded sizing from fresh broker balances without inventing historical cash.
+
+The successor is implemented and locally tested on its feature branch, with an actual
+ten-session collection/fit/activation witness followed by signal and exploratory entries.
+It is not merged to main or commissioned. The earlier measured package remains the older
+XLE configuration; current test/review and candidate-preparation evidence is kept separately.
+No deployed daily fit or profit improvement is claimed.
 
 ## Preserved generated snapshot — August 18, 2026
 

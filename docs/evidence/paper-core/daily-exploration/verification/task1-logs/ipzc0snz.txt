@@ -1,0 +1,64 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_______ test_signal_beats_weak_even_when_only_qualifying_stock_was_used _______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ipzc0snz/pytest/test_signal_beats_weak_even_wh0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001732A876B90>
+
+    def test_signal_beats_weak_even_when_only_qualifying_stock_was_used(tmp_path, monkeypatch):
+        from quantbot.paper_core.selection import evaluate_cohort
+        db, store, broker, proof, model, active = prepare(tmp_path, predictive=True)
+        model = model.model_copy(update={"feature_version": "synthetic-causal-v1"})
+        active = active.model_copy(update={"model_id": model.id, "model_digest": model.id})
+        def predictions(model, rows):
+            return [rows[0]["return"] * 1000]
+        monkeypatch.setattr("quantbot.paper_core.learning.predict_bps", predictions)
+        captured = cohort()
+        captured = captured.model_copy(update={"observations": tuple(
+            o.model_copy(update={"features": (("return", value),)})
+            for o, value in zip(captured.observations, (.001, .025, -.004), strict=True)
+        )})
+        try:
+            chosen = evaluate_cohort(store.config, captured, model, proof, activation=active)
+            assert chosen.symbol == "MSFT" and chosen.selection.kind == "SIGNAL"
+            assert chosen.prediction_bps == 25
+            diverse = evaluate_cohort(store.config, captured, model, proof, activation=active,
+                                      session_counts=(("MSFT", 1),))
+            assert diverse.symbol == "MSFT" and diverse.selection.kind == "SIGNAL"
+            assert diverse.prediction_bps == 25
+            repeated = captured.model_copy(update={"observations": tuple(
+                o.model_copy(update={"features": (("return", value),)})
+                for o, value in zip(captured.observations, (.011, .025, .02), strict=True)
+            )})
+            fair = evaluate_cohort(store.config, repeated, model, proof, activation=active,
+                                   session_counts=(("AAPL", 1), ("MSFT", 2), ("NVDA", 1)))
+>           assert fair.symbol == "NVDA" and fair.prediction_bps == 20
+E           AssertionError: assert ('MSFT' == 'NVDA'
+E             
+E             - NVDA
+E             + MSFT)
+
+tests\integration\paper_core\test_daily_selection.py:91: AssertionError
+______ test_substituting_unavailable_reason_cannot_hide_captured_member _______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ipzc0snz/pytest/test_substituting_unavailable_0')
+
+    def test_substituting_unavailable_reason_cannot_hide_captured_member(tmp_path):
+        from quantbot.paper_core.selection import evaluate_cohort
+        from quantbot.paper_core.trader import claim_entry, record_observation
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            captured = cohort()
+            for o in captured.observations:
+                record_observation(store, o)
+            hidden = captured.model_copy(update={"observations": captured.observations[1:],
+                                                 "unavailable": (("AAPL", "FAKE_MISSING"),)})
+            forged = evaluate_cohort(store.config, hidden, model, proof, activation=active)
+>           with pytest.raises(ValueError, match="captured cohort"):
+E           Failed: DID NOT RAISE ValueError
+
+tests\integration\paper_core\test_daily_selection.py:268: Failed
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_signal_beats_weak_even_when_only_qualifying_stock_was_used
+FAILED tests/integration/paper_core/test_daily_selection.py::test_substituting_unavailable_reason_cannot_hide_captured_member
+2 failed, 13 deselected in 3.18s

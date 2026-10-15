@@ -1,0 +1,25 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____ test_all_unavailable_members_retain_truthful_durable_wait_evidence ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-wvbhaxul/pytest/test_all_unavailable_members_r0')
+
+    @pytest.mark.asyncio
+    async def test_all_unavailable_members_retain_truthful_durable_wait_evidence(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            captured = cohort(unavailable=tuple((s, "MISSING") for s in store.config.entry_symbols))
+            with pytest.raises(ValueError, match="NO_ELIGIBLE_COHORT_MEMBERS"):
+                await trader_cycle(store, broker, captured, model, proof, now=NOW)
+            assert not broker.posts
+>           assert any(d.get("selection_cohort", {}).get("unavailable") ==
+                       [["AAPL", "MISSING"], ["MSFT", "MISSING"], ["NVDA", "MISSING"]]
+                       for d in store.documents("core_provider_acquisitions"))
+E                      assert False
+E                       +  where False = any(<generator object test_all_unavailable_members_retain_truthful_durable_wait_evidence.<locals>.<genexpr> at 0x000002AAA961D030>)
+
+tests\integration\paper_core\test_daily_selection.py:349: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_all_unavailable_members_retain_truthful_durable_wait_evidence
+1 failed, 17 deselected in 2.84s

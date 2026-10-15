@@ -1,16 +1,56 @@
 # PAPER core implementation and handover
 
-**Isolated implementation and preparation ACCEPTED; operational acceptance WAITING.** Application source: commit d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0 on codex/paper-core-m0. Security update a3d5880f02f9d57104e3e833474a4648d1ec181e requires patched Mako and locks 1.4.3; application and launcher code are unchanged. Functional deployment has not occurred.
+**Baseline implementation and preparation ACCEPTED; operational acceptance WAITING.** Application source: commit d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0 on codex/paper-core-m0. Security update a3d5880f02f9d57104e3e833474a4648d1ec181e requires patched Mako and locks 1.4.3; application and launcher code are unchanged in that package. Functional deployment has not occurred. The approved successor below is not merged to main or commissioned.
 
-The current [HP Omen deployment package](omen-deployment/README.md) is prepared release `ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645`, config `aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2`, schema 36. Preflight corrected the account-digest convention for the same verified account; all application and dependency pins are unchanged from the [Mako security fix](mako-security/README.md). Its affected local gate passes 169 tests with 26 PostgreSQL-only skips. Use the omen-deployment config/manifest paths for subsequent deployment. Prior frozen bundles below remain historical evidence.
+The measured baseline [HP Omen deployment package](omen-deployment/README.md) is prepared release `ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645`, config `aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2`, schema 36. Preflight corrected the account-digest convention for the same verified account; all application and dependency pins are unchanged from the [Mako security fix](mako-security/README.md). Its affected local gate passes 169 tests with 26 PostgreSQL-only skips. Those pins and checks belong to the older XLE package, not the approved hybrid/V3 successor. Preserve its frozen bytes; a successor needs its own manifest/configuration and verification.
 
-The exact release verifier passes under the existing limited task identity after user-authorized CurrentUser RemoteSigned. Replacement tasks are registered disabled. Fresh operational and learner copies migrate to schema 36 while retaining all original data values. Functional activation is waiting for an existing broker-accepted IWM SELL of 0.169669 shares; the market is closed. No live migration or commission has occurred, and existing protection/exit services remain unchanged.
+The baseline exact-release verifier passed under the existing limited task identity after user-authorized CurrentUser RemoteSigned. The `2026-10-15T02:00:02.7976062Z` task capture recorded replacement tasks disabled. Copy-only operational and learner rehearsals migrated to schema 36 while retaining original data values. The broker GET-only capture at `2026-10-15T01:44:15.825306Z` recorded an accepted, unfilled IWM SELL of 0.169669 shares while the market was closed. These are dated observations requiring refresh before handover. No operating migration or commission has been performed by this work.
 
 The replacement has three independent roles: trader, guardian, and outcomes with daily learning. Ordinary provider or clock interruptions cause scoped waits and recovery after fresh evidence. Manual stops and genuine ownership/accounting failures retain their explicit controls.
 
 Learning starts considering updates after ten completed exchange sessions, including quiet sessions. Each later day considers all eligible retained history. The latest ten sessions receive raw weight 2 and older sessions weight 1, normalized before fitting. Past-only validation and protected-data exclusions remain. Insufficient or unreliable evidence produces a recorded NO_CHANGE. Old history is retained; corrected outcomes are excluded while their durable reprocessing is pending.
 
 Independent reviews closed all four identified findings: bound repeated historical polling, preserve economic/model identity across compatible executable maintenance, provide audited entry resume, and commit commissioning plus initial activation atomically. Late fee corrections now remain pending until their evidence is covered, including restart and legacy recovery. The integration owner accepts the isolated implementation and preparation; operational acceptance remains separate.
+
+## Implemented successor: source and operational acceptance are separate
+
+The [daily hybrid specification](../../superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+supersedes baseline single-XLE/no-quota selection. The feature is implemented and locally tested,
+including a ten-session mixed-outcome corpus, actual V3 fit/activation and later positive-signal
+and negative-prediction exploratory entries. [PR 290](https://github.com/jfhutchi/project_elrond/pull/290)
+contains the implementation; it is not merged to main or commissioned.
+The [successor evidence package](daily-exploration/README.md) holds exact test/review results,
+candidate-preparation status, pins and limitations. The baseline verifier does not cover this
+successor, and offline evidence does not establish operating acceptance.
+
+`SIGNAL_OR_EXPLORE_V1` prefers any valid activated signal above 10 bps; otherwise it selects
+labeled exploration with the actual zero/negative score. The configured stock universe and
+current/prior-session reservation counts determine rotation under the spec's exact ranking.
+Six durable reservations per verified session coexist with one concurrent core lot. Completed
+and unknown-send cases count; only definitive pre-send proof releases a reservation. Cohort
+selection replays at claim/send, and guardian marks/health follow selected or owned symbols.
+
+V3 targets `owned-executed-paper-gross-return-v1`, admitting established gross outcomes from
+closed, owned, reconciled lots only when `FEE_UNAVAILABLE` is the sole gap. Fees remain unknown,
+`COSTS_PENDING` remains and net stays null. V2 remains strict net. V3 retains overlapping
+feature windows within training/history while preserving past-only folds, label availability,
+purge/embargo, protected exclusions, ten-session warmup, daily all-history consideration and
+normalized latest-ten/older raw weights 2/1. Failed/rejected fits retain the incumbent while
+exploration continues. Initial successor commission starts from COLLECT and must authorize
+`DAILY_BOUNDED_V3`; no older net model or commission is silently reinterpreted.
+
+The current-funds contract uses fresh stable PAPER account/position/open-order evidence bound
+to quantity proof, current ledger and exact commissioned identity to authorize bounded sizing.
+It leaves `expected_cash=None`, `cash_complete=False`, unknown fees and null net when historical
+cash is incomplete. It cannot invent cash activity/reconciliation or clear discrepancies,
+quarantine, unknown sends or manual stops. Capture stability, 120-second freshness and repeated
+claim/gate/locked-send/recovery checks remain required. Legacy model-only mode keeps exact cash.
+
+This is an economic selection/learning/funds change. The integrated verification and distinct
+successor preparation are recorded in the package above; reverify its exact pins before fresh initial commission. An
+already commissioned store cannot simply reopen with changed config identity. Existing IWM
+order IDs, inherited owners, protection/deadline responsibilities and measured handover blockers
+remain intact; this documentation grants no operational authority.
 
 ## Evidence and its limits
 
@@ -36,22 +76,24 @@ For the preceding residual package, the owner verified all 84 artifact files aga
 
 For the final package, the owner verified 44 working/committed artifact files, six raw/compressed/original logs, eight final marker exports, all 419 working/archive source pins, six code checks, typed release/config and four static task proposals. All 547 prior artifact records remain unchanged. The final evidence covers the previously missing-work-arrival case and selects only the corrected outcome after reconciliation.
 
-## Ordered operational review
+## Ordered operational review for the successor
 
-1. The exact verifier-only proposal has passed under the existing leepa Limited task identity. It checks runtime files without the operating database, environment file, broker or functional roles. All four replacement tasks are now registered disabled and trigger-free. Functional process-tree ownership and role readiness still need verification before activation; a verifier pass is not functional startup.
+1. The baseline exact verifier-only proposal passed under the existing leepa Limited task identity. It checks runtime files without the operating database, environment file, broker or functional roles. All four replacement tasks were registered disabled and trigger-free. The successor now has its distinct prepared manifest/configuration and direct verification in the linked package; successor selected-task-token verification remains unperformed. Functional process-tree ownership and role readiness still need verification before activation; a baseline verifier pass is not successor coverage or functional startup.
 2. Refresh writer/task/ownership evidence and WAL-aware backups with a restore into a separate path. Review the exact old-entry-writer fence and additive schema36 migration. Keep the existing Protection/Deadline services and nine original-owner positions. Preserve original client IDs and resolve uncertain sends; never restore an older database over later activity.
 3. Acquire fresh account/position/cash evidence against the migrated store and exact reviewed release. Review the commission document within its 120-second freshness window; baseline capture must remain within five seconds of its original commission timestamp. Reacquire when stale. A combined acquire-and-commit operation requires explicit bounded approval; timestamps are never edited to simulate freshness.
 4. After approved commissioning, start submission-disabled guardian and outcomes before trader. Verify independent processes, fresh readiness and useful progress. Removing submission/entry clamps and scheduling are separately named changes. Explicit entry resume never clears another manual stop or quarantine.
-5. Observe an unforced broker-PAPER entry, protected exit, reconciliation, costed outcome and later daily learning receipt/model attribution. Existing XLE ownership or unknown actual costs may legitimately keep this acceptance waiting. Do not force trades, liquidations or model changes.
+5. Observe real signal/exploratory broker-PAPER entries, protected exits, owned-flat reconciliation, truthful gross/cost/net outcomes and later daily learning receipt/model attribution. Prove successive entry-funds continuity without independent cash activity or invented fees. A fee-only gap may permit V3 gross learning but never a verified-net claim. Record genuine blockers and retry; do not fabricate fills, liquidate inherited holdings for capacity or claim forced parameter improvements. The old package's no-forced-entry and fee-complete learning expectations remain baseline evidence, not the successor selection/target rule.
 
-The proposed first learning origin is October 15, 2026 at 13:30 UTC; regenerate and review the config if the actual handover date makes that stale. Exact component-cost applicability, canonical metadata, current retained-owner provenance and recent-order provider latency/quota capacity remain operational prerequisites. Selected-token verification is complete for this specific prepared release.
+The candidate learning origin, October 15, 2026 at 13:30 UTC, remains provisional; verify the actual handover/session contract and regenerate the candidate if it changes. Preserve truthful cost metadata and unknown fees: V3 gross labels do not establish verified net returns. Current retained-owner provenance, source authority and recent-order provider latency/quota capacity remain operational prerequisites. Selected-token verification is complete only for the preceding baseline; direct successor prepare/verify does not establish that check.
 
-The prepared configuration remains single-symbol XLE with one concurrent core position. The user's later October 14 clarification requests signal-led PAPER trades plus exploration across different stocks when no confident signal exists, with daily experience collection and learning from wins and losses. That changes the earlier no-quota, single-symbol design and is not implemented by this package. Its new execution/learning policy requires its own versioned preparation and tests; the staged XLE release must not be presented as satisfying that request.
+The measured prepared configuration remains single-symbol XLE with one concurrent core position. It does not implement the approved successor contract above. Preserve its release evidence and dates; publish successor pins, review results and runtime measurements only when actually established. The staged XLE release must not be presented as satisfying the daily hybrid/V3/current-funds requirement.
 
 ## Review package
 
 - [Original source-backed audit](../../reviews/2026-10-13-paper-redesign/audit.md)
 - [Design](../../superpowers/specs/2026-10-13-paper-core-design.md)
+- [Approved daily hybrid, V3 and current-funds successor](../../superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+- [Reviewed successor evidence, prepared pins and remaining release work](daily-exploration/README.md)
 - [Authoritative implementation plan](../../superpowers/plans/2026-10-13-paper-core.md)
 - [Whole-branch findings](final-review.md)
 - [Current HP Omen deployment package, exact status and blocker](omen-deployment/README.md)

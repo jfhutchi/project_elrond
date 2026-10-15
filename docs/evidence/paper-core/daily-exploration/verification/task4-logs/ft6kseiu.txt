@@ -1,0 +1,46 @@
+F
+================================== FAILURES ===================================
+___ test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ft6kseiu/pytest/test_daily_hybrid_collect_fit_0')
+
+    @pytest.mark.asyncio
+    async def test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration(tmp_path):
+        # Catches broken current-funds continuation, daily-learning acknowledgement,
+        # gross-target operational activation, signal priority and negative exploration.
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            parent, initial = selection(store)
+            assert parent.mode == "COLLECT" and parent.target_contract is None
+            assert store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+            assert broker.config.activation_policy == "DAILY_BOUNDED_V3"
+            decisions, trips, warmups = [], [], []
+            for day_index, session_open in enumerate(SESSIONS[:10]):
+                for offset in range(6):
+                    advance_to(clocks, session_open + timedelta(minutes=35 + offset * 35, seconds=10))
+                    sign = 1 if offset % 2 == 0 else -1
+                    provider.signs = dict.fromkeys(("AAPL", "MSFT"), sign)
+                    provider.exit_sign = sign
+                    decision, reasons = await enter(store, broker)
+                    assert decision.action == "BUY", (day_index, offset, decision.gates)
+                    assert not reasons, reasons
+                    assert decision.selection.kind == "EXPLORATION"
+                    assert decision.prediction_bps is None and decision.model_id == parent.id
+                    assert decision.model_mode == "COLLECT"
+                    if day_index:
+                        assert decision.learning_receipt_id == warmups[-1].id
+                    decisions.append(decision)
+                    await close(store, broker, clocks)
+                    trip = RoundTrip.model_validate(store.export_loop(decision.id)["round_trip"])
+                    assert trip.status == "COSTS_PENDING" and trip.cost_reason == "FEE_UNAVAILABLE"
+                    assert trip.actual_fees is None and trip.net_pnl is None
+>                   assert trip.gross_pnl / trip.entry_notional == Decimal(sign) / 500
+E                   AssertionError: assert (Decimal('0') / Decimal('500')) == (Decimal('1') / 500)
+E                    +  where Decimal('0') = RoundTrip(schema_version=1, release_id='9cdb2c05d50971b30e9a15b7feb92c2756afb1e177eaa364549a18c55ae3a569', evidence_la...datetime.timezone.utc), available_at=datetime.datetime(2026, 10, 14, 14, 35, 10, 540000, tzinfo=datetime.timezone.utc)).gross_pnl
+E                    +  and   Decimal('500') = RoundTrip(schema_version=1, release_id='9cdb2c05d50971b30e9a15b7feb92c2756afb1e177eaa364549a18c55ae3a569', evidence_la...datetime.timezone.utc), available_at=datetime.datetime(2026, 10, 14, 14, 35, 10, 540000, tzinfo=datetime.timezone.utc)).entry_notional
+E                    +  and   Decimal('1') = Decimal(1)
+
+tests\integration\paper_core\test_daily_paper_loop.py:114: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration
+1 failed in 5.50s

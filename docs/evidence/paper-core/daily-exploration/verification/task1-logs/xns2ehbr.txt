@@ -1,0 +1,46 @@
+........F                                                                [100%]
+================================== FAILURES ===================================
+________ test_nondefault_stop_and_restart_rotation_and_boundary_dedup _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-xns2ehbr/pytest/test_nondefault_stop_and_resta0')
+
+    @pytest.mark.asyncio
+    async def test_nondefault_stop_and_restart_rotation_and_boundary_dedup(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle, synchronize
+        from quantbot.paper_core.outcomes import import_broker_events
+        from quantbot.paper_core.trader import trader_cycle
+        from tests.fixtures.core_m2 import fee_events
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            captured = cohort()
+            first = await trader_cycle(store, broker, captured, model, proof, now=NOW)
+            assert first.symbol == "AAPL" and len(broker.posts) == 1
+            broker.set_mark("AAPL", Decimal(98), as_of=NOW)
+            assert (await guardian_cycle(store, broker, now=NOW)).exit_intent_ids
+            import_broker_events(store, fee_events(store, broker))
+            await synchronize(store, broker, now=NOW)
+            config = store.config
+            db.close()
+            db = Database(tmp_path / "daily.db")
+            store = CoreStore(db, config)
+            changed = captured.model_copy(update={"observations": tuple(
+                o.model_copy(update={"recorded_at_utc": NOW+timedelta(seconds=1),
+                                     "available_at": NOW+timedelta(seconds=1)})
+                for o in captured.observations)})
+            await trader_cycle(store, broker, changed, model, store.latest_proof(), now=NOW)
+            assert len(broker.posts) == 2
+            broker.now = NOW+timedelta(minutes=5)
+            await synchronize(store, broker, now=broker.now)
+            later = await trader_cycle(store, broker, cohort(at=broker.now), model,
+                                       store.latest_proof(), now=broker.now)
+>           assert later.symbol == "MSFT" and len(broker.posts) == 3
+E           AssertionError: assert ('MSFT' == 'MSFT'
+E             
+E               MSFT and 2 == 3)
+E            +  where 2 = len([OrderIntent(symbol='AAPL', intent_id='core-entry-3433103b01eef87bf274c4094e81cded9d37f678eb77ed8d140ca82e07d8e8eb', c...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))])
+E            +    where [OrderIntent(symbol='AAPL', intent_id='core-entry-3433103b01eef87bf274c4094e81cded9d37f678eb77ed8d140ca82e07d8e8eb', c...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))] = <quantbot.paper_core.simulation.SyntheticBroker object at 0x0000028E69607C90>.posts
+
+tests\integration\paper_core\test_daily_selection.py:152: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_nondefault_stop_and_restart_rotation_and_boundary_dedup
+1 failed, 8 passed in 4.55s

@@ -8,7 +8,7 @@ and automatic recovery when fresh evidence permits. Explicit manual entry stops 
 identity, ownership, or accounting failures retain their controls. Protection, exits, and
 trustworthy outcome processing remain independent of entry and learning failures.
 
-**Implementation merged; operational acceptance is still waiting.**
+**Baseline implementation merged; operational acceptance is still waiting.**
 [PR #289](https://github.com/jfhutchi/project_elrond/pull/289) merged on October 15, 2026 at
 01:50 UTC (October 14 EDT). The replacement is staged on the HP Omen but has not been functionally
 deployed or commissioned. The October 15, 02:00 UTC task capture shows its three functional
@@ -17,11 +17,21 @@ at 01:44 UTC found an existing unfilled IWM exit blocking the no-open-order comm
 and deadline services remained responsible for inherited positions. These are dated observations,
 not a current broker query.
 
-**Latest requested behavior:** daily bounded PAPER exploration across different stocks, with
-learning from both wins and losses even when the model has no confident signal. That behavior
-is pending implementation. The prepared baseline selects **XLE with one new position** and can
-abstain; it does not yet meet the daily multi-stock exploration request. A requested daily
-attempt is not a guarantee of a broker fill or of improving performance every day.
+The [approved successor policy](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+uses qualifying model signals first and otherwise makes exploratory PAPER entries across stocks,
+learning from both wins and losses. It permits six durable reservations per exchange session,
+with one concurrent core lot. Its V3 target is actual executed gross return; a separate
+current-funds policy preserves continued entry capacity without inventing fee or cash history.
+
+**The successor is implemented and locally tested on the feature branch; it is not merged
+to main or commissioned.** Review [PR #290](https://github.com/jfhutchi/project_elrond/pull/290).
+The integrated witness collects ten sessions of wins and losses,
+fits and activates V3, then selects a qualifying signal and a negative-prediction exploratory
+trade. The earlier measured XLE package remains separate. An attempted trade cannot guarantee
+a broker fill or improved daily performance.
+The [successor evidence](docs/evidence/paper-core/daily-exploration/README.md) records
+test/review results, candidate-preparation status and remaining release work separately from
+baseline deployment evidence.
 
 Start with [the PAPER core overview](docs/paper-core.md), then use the
 [handover](docs/evidence/paper-core/handover.md) and
@@ -42,7 +52,7 @@ Real market data -> Trader -> durable decision and protected entry intent -> PAP
 
 | Role | Responsibility |
 |---|---|
-| Trader | Evaluate fresh five-minute opportunities using one active policy/model, record decisions and refusals, and submit only after entry and protection gates pass |
+| Trader | Evaluate fresh five-minute opportunities using one active policy/model; the approved successor selects qualifying signals before labeled exploration, with durable boundary/session limits |
 | Guardian | Independently recover uncertain submissions, reconcile owned fills, and protect/close owned lots; never create new exposure or adopt unexplained inventory |
 | Outcomes | Reconcile complete round trips and costs continuously; consider bounded model updates after completed exchange sessions, with outcome processing ahead of fitting |
 
@@ -56,8 +66,21 @@ and losses. Outcomes from the latest ten completed sessions receive raw weight 2
 receive weight 1, normalized before fitting. There is no current 60-session history cutoff.
 Past-only validation, protected-holdout exclusions, permanent trial accounting, fixed risk limits,
 and exact model attribution remain mandatory. Insufficient, unchanged, or unreliable evidence
-produces an honest `NO_CHANGE`; ten sessions do not guarantee a fit. Daily consideration does not
-justify invented outcomes, missing-cost labels, or a claim of monotonic improvement.
+produces an honest `NO_CHANGE`; ten sessions do not guarantee a fit. A failed fit or rejected
+candidate retains the incumbent while the hybrid policy continues exploration.
+
+V2 retains its strict net-return contract. The approved V3 learner admits a closed, owned,
+reconciled outcome with established gross P&L when `FEE_UNAVAILABLE` is its only remaining
+incompleteness. Fees stay unknown, status stays `COSTS_PENDING` and broker net P&L stays null.
+V3 retains overlapping feature windows within training while preserving past-only fold boundaries,
+label availability and purge/embargo. Its gross-target activation needs `DAILY_BOUNDED_V3`;
+an older net model or commission cannot be silently reused as gross authority.
+
+The approved `BROKER_PAPER_BALANCE_V1` entry-funds policy uses fresh stable PAPER account/position
+evidence and current open-order coverage, bound to quantity proof and the current ledger. It
+authorizes sizing from current cash/buying power, not reconstructed historical cash. Incomplete
+cash remains `expected_cash=None` and `cash_complete=False`; no balancing residual or invented
+reconciliation is allowed. Legacy model-only entries keep their strict exact-cash requirement.
 
 ## The safety and evidence boundary
 
@@ -72,7 +95,7 @@ audited resume with fresh readiness. A routine timeout does not become a persist
 and repeated observations do not repair a genuine accounting contradiction.
 
 The target evidence chain is observation -> decision -> intent -> owned fills -> independent
-protected exit -> flat reconciliation for that lot -> costed outcome -> learning receipt -> later
+protected exit -> flat reconciliation for that lot -> truthful gross/cost/net evidence -> learning receipt -> later
 decision acknowledging the exact active model. Unknown actual costs remain `COSTS_PENDING`;
 modeled costs never become verified broker net P&L. Synthetic tests, real-data simulation, and
 broker-PAPER observations stay separate. A broker-PAPER lifecycle under the replacement is still
@@ -135,7 +158,7 @@ contracts. They are not shortcuts for activating the replacement. `quantbot-kron
 
 | Document | Read it for |
 |---|---|
-| [PAPER core overview](docs/paper-core.md) | Implemented architecture, recovery, learning, pending request, and acceptance contract |
+| [PAPER core overview](docs/paper-core.md) | Merged baseline, approved hybrid/V3/current-funds successor, implementation status and acceptance contract |
 | [Accepted design](docs/superpowers/specs/2026-10-13-paper-core-design.md) | Detailed baseline design and the October 14 all-history learning amendment |
 | [Implementation plan](docs/superpowers/plans/2026-10-13-paper-core.md) | Milestones and implementation review history |
 | [Handover](docs/evidence/paper-core/handover.md) | Accepted implementation evidence and remaining operational work |

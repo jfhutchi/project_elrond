@@ -1,0 +1,22 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__ test_fractional_exit_activity_is_recovered_before_inventory_certification __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-79wwzdg4/pytest/test_fractional_exit_activity_0')
+
+    @pytest.mark.asyncio
+    async def test_fractional_exit_activity_is_recovered_before_inventory_certification(tmp_path):
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            first, reasons = await enter(store, broker)
+            assert first.action == "BUY" and not reasons
+            receipt = await close(store, broker, clocks)
+>           assert "POST_EXIT_RECONCILIATION_WAIT" not in receipt.reasons, receipt.reasons
+E           AssertionError: ('POST_EXIT_RECONCILIATION_WAIT',)
+E           assert 'POST_EXIT_RECONCILIATION_WAIT' not in ('POST_EXIT_RECONCILIATION_WAIT',)
+E            +  where ('POST_EXIT_RECONCILIATION_WAIT',) = CycleReceipt(schema_version=1, release_id='454777dfbc57dd45493561909f589e4e60d569380d9b5e1436c669d167758b69', evidence...easons=('POST_EXIT_RECONCILIATION_WAIT',), proof_id='04c24420f70172ba1f689aba63fd9a2c8b0973b9c043161212552dd08ddf3bbe').reasons
+
+tests\integration\paper_core\test_daily_paper_loop.py:124: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_fractional_exit_activity_is_recovered_before_inventory_certification
+1 failed, 1 deselected in 5.52s

@@ -1,0 +1,14 @@
+Traceback (most recent call last):
+  File "<string>", line 47, in <module>
+  File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "<string>", line 44, in probe
+AssertionError: {'caller_receipt_time': '2026-10-14T14:05:03.230000+00:00', 'capture_started': '2026-10-14T14:05:03.160000+00:00', 'receipt_minus_capture_seconds': 0.07, 'capture_elapsed_seconds': 0.06999999999993634, 'objections_after_actual_guardian_cycle': ()}
+{"caller_receipt_time": "2026-10-14T14:05:03.230000+00:00", "capture_elapsed_seconds": 0.06999999999993634, "capture_started": "2026-10-14T14:05:03.160000+00:00", "objections_after_actual_guardian_cycle": [], "receipt_minus_capture_seconds": 0.07}

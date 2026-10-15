@@ -1,0 +1,76 @@
+..F................................                                      [100%]
+================================== FAILURES ===================================
+______ test_delayed_owned_fill_cannot_explain_an_unrelated_symbol_delta _______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-6066tcwx/pytest/test_delayed_owned_fill_cannot0')
+
+    @pytest.mark.asyncio
+    async def test_delayed_owned_fill_cannot_explain_an_unrelated_symbol_delta(tmp_path):
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            first, reasons = await enter(store, broker)
+            assert first.action == "BUY" and not reasons
+            provider.activity_lag_seconds = 60
+            provider.holdings["XLE"] = Decimal(1)
+>           await close(store, broker, clocks)
+
+tests\integration\paper_core\test_daily_paper_loop.py:163: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\paper_core\test_paper_funds.py:288: in close
+    await synchronize(store, broker, now=clocks.wall)
+src\quantbot\paper_core\guardian.py:234: in synchronize
+    certify_inventory(store, proof, session=session)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x0000021566A50390>
+proof = ReconciliationProof(schema_version=1, release_id='68203740e1b1da06c6cd1b487ea742c96053a8b47a702e953d260f205f427051', e...id='82a143c1cf5fd4f254f18735a26cdf0cf13d546bb17a3ecb1b0e63245bc9ea9c', complete=True, order_ids=('order-0', 'order-1'))
+session = <sqlalchemy.orm.session.Session object at 0x0000021564D0A8D0>
+
+    def certify_inventory(
+        store: CoreStore, proof: ReconciliationProof, *, session: Session | None = None
+    ) -> int:
+        certs = table(
+            "core_inventory_certifications" if proof.cash_complete else "core_quantity_certifications"
+        )
+        owns_transaction = session is None
+        with nullcontext(session) if session is not None else store.database.transaction() as session:
+            if owns_transaction:
+                session.execute(text("BEGIN IMMEDIATE"))
+            put(session, "core_reconciliation_proofs", proof.id, proof)
+            existing = session.execute(
+                select(certs.c.generation).where(certs.c.proof_id == proof.id)
+            ).scalar_one_or_none()
+            if existing is not None:
+                return int(existing)
+            expected, cash, fills = store.ledger(session)
+            latest = latest_certification(session)
+            last = latest[0] if latest else 0
+            if (
+                not proof.complete
+                or proof.account.account_id != store.config.account_id
+                or proof.expected_quantities != tuple(sorted(expected.items()))
+                or proof.actual_quantities != tuple(sorted(expected.items()))
+                or proof.baseline_id
+                != session.execute(select(table("core_fixture_baselines").c.id)).scalar_one()
+                or proof.order_ids
+                != tuple(o.broker_order_id for o in StorageRepository(session).list_broker_orders())
+                or proof.release_id != store.config.release_id
+                or proof.fill_ids != fills
+                or (
+                    proof.ledger_state_id is not None
+                    and proof.ledger_state_id != store.ledger_state_id(session)
+                )
+                or proof.expected_cash != cash
+                or proof.cash_complete != (cash is not None)
+                or (cash is not None and proof.account.cash != cash)
+                or proof.generation != (last or 0) + 1
+            ):
+                # Refusal evidence must survive; certification authority must not.
+                session.commit()
+>               raise StateConflictError("INVENTORY_MISMATCH")
+E               quantbot.storage.repositories.StateConflictError: INVENTORY_MISMATCH
+
+src\quantbot\paper_core\store.py:453: StateConflictError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_delayed_owned_fill_cannot_explain_an_unrelated_symbol_delta
+1 failed, 34 passed, 1 deselected in 32.19s

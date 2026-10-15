@@ -1,6 +1,6 @@
 # Isolated experimental DIA PAPER worker
 
-> **Retained legacy owner.** This DIA route is separate from the merged [PAPER core](paper-core.md), whose prepared configuration remains XLE-bound. The new requested daily multi-stock collection policy is not implemented by starting this older worker. Preserve its original ownership and commissioning evidence until an explicit verified transition; do not create a competing entry writer. See [current Omen staging](evidence/paper-core/omen-deployment/README.md).
+> **Retained legacy owner.** This DIA route is separate from the merged [PAPER core](paper-core.md) baseline and its measured XLE-bound package. The [approved hybrid successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md) selects signals before exploratory stock rotation, with V3 gross learning and versioned current-funds authority; it is not merged or commissioned. Starting this older worker does not implement or authorize that policy. Preserve original ownership and commission evidence until a verified transition; do not create a competing entry writer. Use [handover](evidence/paper-core/handover.md) for successor status and the [Omen staging record](evidence/paper-core/omen-deployment/README.md) for baseline evidence.
 
 > **Earlier guidance — 2026-10-06:** A separate shadow sector-ETF research lane was added. This retained DIA entry capability keeps its own commissioning, risk limits and exit ownership; its last receipt and next cohort must be measured independently.
 

@@ -1,0 +1,113 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+____ test_collect_history_requires_exact_past_warmup_acknowledgement[None] ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-o470awmk/pytest/test_collect_history_requires_0')
+fault = None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", [None, "forged", "future", "wrong-target", "wrong-model"])
+    async def test_collect_history_requires_exact_past_warmup_acknowledgement(tmp_path, fault):
+        from quantbot.paper_core.learning import _historical_comparator, _select
+    
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            first, reasons = await enter(store, broker)
+            assert first.action == "BUY" and not reasons
+            await close(store, broker, clocks)
+            advance_to(clocks, SESSIONS[0] + timedelta(hours=6, minutes=30, seconds=3))
+            await daily_consideration(store, broker, broker.config)
+            model, active = selection(store)
+            receipt = store.read("core_learning_runs", active.receipt_id, LearningReceipt)
+            advance_to(clocks, SESSIONS[1] + timedelta(minutes=35, seconds=10))
+            await catch_up_provider(store, broker, clocks)
+            second, reasons = await enter(store, broker)
+            assert second.action == "BUY" and not reasons
+            await close(store, broker, clocks)
+            advance_to(clocks, SESSIONS[1] + timedelta(hours=6, minutes=30, seconds=3))
+            with db.transaction() as session:
+                rows, _, _ = _select(session, receipt.policy, clocks.wall, execution_now=clocks.wall)
+            row = next(r for r in rows if r["lot_id"] == second.id)
+            if fault:
+                acknowledgement = receipt
+                if fault == "future":
+                    acknowledgement = receipt.model_copy(update={"available_at": clocks.wall + timedelta(days=1)})
+                elif fault == "wrong-target":
+                    acknowledgement = receipt.model_copy(update={"policy": receipt.policy.model_copy(
+                        update={"target_contract": "owned-executed-net-return-v1"})})
+                elif fault == "wrong-model":
+                    acknowledgement = receipt.model_copy(update={"parent_model_id": "wrong-model"})
+                store.record("core_learning_runs", acknowledgement)
+                second = second.model_copy(update={"learning_receipt_id": (
+                    "missing-receipt" if fault == "forged" else acknowledgement.id)})
+                store.record("core_decisions", second)
+                row = {**row, "lot_id": second.id}
+            with db.transaction() as session:
+                if fault:
+                    with pytest.raises(ValueError):
+                        _historical_comparator(session, row, clocks.execution_domain, GROSS)
+                else:
+>                   resolved = _historical_comparator(session, row, clocks.execution_domain, GROSS)
+                               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_daily_paper_loop.py:197: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+session = <sqlalchemy.orm.session.Session object at 0x0000027B23CE1110>
+row = {'outcome_id': 'a5e927b0cf446d8365b5d864edfa15c5a06fa379bdfd4c2fca7481c27827e2c6', 'lot_id': '7aae495942a18bb24bdc1ec4...efa6711b885696b', 'available_at': '2026-10-15T14:35:11.100000+00:00', 'source_start': '2026-10-15T13:30:00+00:00', ...}
+domain = 'BROKER_PAPER:OFFLINE_PROVIDER_FIXTURE_TIME_V1'
+target_contract = 'owned-executed-paper-gross-return-v1'
+
+    def _historical_comparator(
+        session: Session,
+        row: dict[str, Any],
+        domain: str,
+        target_contract: str = "owned-executed-net-return-v1",
+    ) -> tuple[
+        ModelArtifact, datetime | None, str | None, str | None, datetime | None, str | None, str | None
+    ]:
+        """Resolve the exact contemporaneous model, with completion proof for PREDICT."""
+        decision = Decision.model_validate_json(
+            session.execute(
+                select(table("core_decisions").c.payload).where(
+                    table("core_decisions").c.id == row["lot_id"]
+                )
+            ).scalar_one()
+        )
+        observation = Observation.model_validate_json(
+            session.execute(
+                select(table("core_observations").c.payload).where(
+                    table("core_observations").c.id == row["observation_id"]
+                )
+            ).scalar_one()
+        )
+        if (
+            observation.id != decision.observation_id
+            or observation.available_at > decision.recorded_at_utc
+        ):
+            raise ValueError("HISTORICAL_OBSERVATION_UNAVAILABLE_AT_DECISION")
+        collect = ModelArtifact(feature_version=observation.feature_version)
+        if (
+            decision.model_id == collect.id
+            and decision.learning_receipt_id == collect.learning_receipt_id
+        ):
+            return collect, None, None, None, None, None, None
+        payload = session.execute(
+            select(table("core_models").c.payload).where(table("core_models").c.id == decision.model_id)
+        ).scalar_one_or_none()
+        if payload is None:
+            raise ValueError("MISSING_HISTORICAL_MODEL_PROVENANCE")
+        model = ModelArtifact.model_validate_json(payload)
+        if (
+            model.id != decision.model_id
+            or model.estimator is None
+            or model.feature_version != observation.feature_version
+            or model.policy_id != decision.policy_id
+        ):
+>           raise ValueError("INVALID_HISTORICAL_PREDICTIVE_MODEL")
+E           ValueError: INVALID_HISTORICAL_PREDICTIVE_MODEL
+
+src\quantbot\paper_core\learning.py:420: ValueError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[None]
+1 failed, 7 deselected in 6.09s

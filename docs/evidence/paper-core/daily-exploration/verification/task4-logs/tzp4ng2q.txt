@@ -1,0 +1,46 @@
+F
+================================== FAILURES ===================================
+___ test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tzp4ng2q/pytest/test_daily_hybrid_collect_fit_0')
+
+    @pytest.mark.asyncio
+    async def test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration(tmp_path):
+        # Catches broken current-funds continuation, daily-learning acknowledgement,
+        # gross-target operational activation, signal priority and negative exploration.
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            parent, initial = selection(store)
+            assert parent.mode == "COLLECT" and parent.target_contract is None
+            assert store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+            assert broker.config.activation_policy == "DAILY_BOUNDED_V3"
+            decisions, trips, warmups = [], [], []
+            for day_index, session_open in enumerate(SESSIONS[:10]):
+                for offset in range(6):
+                    advance_to(clocks, session_open + timedelta(minutes=35 + offset * 40, seconds=10))
+                    if offset == 0 and day_index:
+                        # Overnight fixture jump: retain actual bounded cursor recovery polls.
+                        for _ in range(4):
+                            await synchronize(store, broker, now=clocks.wall)
+                    sign = 1 if offset % 2 == 0 else -1
+                    provider.signs = dict.fromkeys(("AAPL", "MSFT"), sign)
+                    provider.exit_sign = sign
+                    decision, reasons = await enter(store, broker)
+                    assert decision.action == "BUY", (day_index, offset, decision.gates)
+                    assert not reasons, reasons
+                    assert decision.selection.kind == "EXPLORATION"
+                    assert decision.prediction_bps is None and decision.model_id == parent.id
+                    assert decision.model_mode == "COLLECT"
+                    if day_index:
+                        assert decision.learning_receipt_id == warmups[-1].id
+                    decisions.append(decision)
+                    await close(store, broker, clocks)
+                    exported = store.export_loop(decision.id)["round_trip"]
+>                   assert exported is not None, (day_index, offset, decision.id)
+E                   AssertionError: (3, 0, 'e145e7a6d6ec05c889da0c1dd58d6351ee65b0786dc4171d520fb080f8e441f0')
+E                   assert None is not None
+
+tests\integration\paper_core\test_daily_paper_loop.py:122: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration
+1 failed in 17.56s
