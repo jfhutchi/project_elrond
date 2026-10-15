@@ -294,6 +294,109 @@ async def test_first_buy_activity_delay_waits_without_certifying_partial_cash(
 
 
 @pytest.mark.asyncio
+async def test_partial_first_buy_activity_waits_without_restoring_revoked_cash(tmp_path):
+    from quantbot.paper_core.funds import entry_inventory_objections
+    from quantbot.paper_core.store import latest_certification
+
+    class PartialPublicationProvider(DailyProvider):
+        def __init__(self, clocks):
+            super().__init__(clocks)
+            self.publish_remaining = False
+
+        async def request(self, method, url, **kwargs):
+            result = await super().request(method, url, **kwargs)
+            if (
+                method == "POST"
+                and url.endswith("/orders")
+                and kwargs["json_body"]["side"] == "buy"
+            ):
+                fill = self.fills.pop()
+                self.fills.extend(
+                    (
+                        dict(fill, id=fill["id"] + "-a", qty="2"),
+                        dict(fill, id=fill["id"] + "-b", qty="3"),
+                    )
+                )
+            if url.endswith("/account/activities") and not self.publish_remaining:
+                rows = json.loads(result.content)
+                result = result.model_copy(
+                    update={
+                        "content": json.dumps(
+                            [row for row in rows if not row["id"].endswith("-b")]
+                        ).encode()
+                    }
+                )
+            return result
+
+    db, store, broker, provider, clocks = await prepare(
+        tmp_path, provider_factory=PartialPublicationProvider
+    )
+    try:
+        first, reasons = await enter(store, broker)
+        assert first.action == "BUY" and not reasons
+        with db.transaction() as session:
+            initial = latest_certification(session)
+            assert not StorageRepository(session).list_fills()
+        with pytest.raises(TimeoutError, match="OWNED_FILL_ACTIVITY_PENDING"):
+            await synchronize(store, broker, now=clocks.wall)
+        pending = next(
+            h
+            for h in store.documents("core_health_events")
+            if "OWNED_FILL_ACTIVITY_PENDING" in h["objections"]
+        )
+        proof = store.read(
+            "core_reconciliation_proofs", pending["evidence_ids"][0], ReconciliationProof
+        )
+        assert proof.expected_quantities == (("AAPL", Decimal(2)),)
+        assert proof.actual_quantities == (("AAPL", Decimal(5)),)
+        assert not proof.cash_complete and proof.expected_cash is None
+        with db.transaction() as session:
+            assert latest_certification(session) == initial
+            assert sum(f.quantity for f in StorageRepository(session).list_fills()) == 2
+            revocations = set(
+                session.execute(
+                    select(table("core_cash_authority_revocations").c.snapshot_id)
+                ).scalars()
+            )
+            assert "core-certified-" + initial[1] in revocations
+            assert entry_inventory_objections(store, session, proof, now=clocks.wall)
+        with pytest.raises(StateConflictError, match="CASH_AUTHORITY_REVOKED"):
+            store.latest_proof()
+        store.runtime_role = "guardian"
+        receipt = await guardian_cycle(store, broker, now=clocks.wall)
+        assert "INVENTORY_ACQUISITION_RETRYABLE" in receipt.reasons
+        assert "INVENTORY_MISMATCH" not in receipt.reasons
+        assert not any(
+            h["state"] == "INTEGRITY_FAILURE" for h in store.documents("core_health_events")
+        )
+        assert len(provider.orders) == 1 and not store.documents("core_cash_activities")
+
+        provider.publish_remaining = True
+        clocks.advance(1)
+        await synchronize(store, broker, now=clocks.wall)
+        current = store.latest_proof()
+        assert current.expected_quantities == current.actual_quantities == (("AAPL", Decimal(5)),)
+        assert not current.cash_complete and current.expected_cash is None
+        with db.transaction() as session:
+            assert sum(f.quantity for f in StorageRepository(session).list_fills()) == 5
+            assert all(f.fee is None for f in StorageRepository(session).list_fills())
+            assert revocations <= set(
+                session.execute(
+                    select(table("core_cash_authority_revocations").c.snapshot_id)
+                ).scalars()
+            )
+        await close(store, broker, clocks)
+        process_outcomes(store, cutoff=clocks.wall)
+        trip = store.export_loop(first.id)["round_trip"]
+        assert len(trip["entry_fill_ids"]) == 2
+        assert trip["actual_fees"] is None and trip["net_pnl"] is None
+        second, reasons = await enter(store, broker)
+        assert second.action == "BUY" and not reasons, (second.gates, reasons)
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
 async def test_delayed_owned_fill_cannot_explain_an_unrelated_symbol_delta(tmp_path):
     db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
     try:

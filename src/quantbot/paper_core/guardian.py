@@ -128,8 +128,19 @@ def _pending_owned_activity(
         }
         if not delta or delta != {s: q for s, q in pending.items() if q}:
             return False
-        previous = store.latest_proof()
-        if previous.baseline_id != proof.baseline_id:
+        certification = latest_certification(session)
+        if certification is None:
+            return False
+        encoded = session.execute(
+            select(table("core_reconciliation_proofs").c.payload).where(
+                table("core_reconciliation_proofs").c.id == certification[1]
+            )
+        ).scalar_one_or_none()
+        if encoded is None:
+            return False
+        # Historical basis only; revoked cash remains unusable as present authority.
+        previous = ReconciliationProof.model_validate_json(encoded)
+        if previous.id != certification[1] or previous.baseline_id != proof.baseline_id:
             return False
         basis = {p.symbol: p.average_entry_price for p in previous.positions}
         basis.update(buy_basis)
