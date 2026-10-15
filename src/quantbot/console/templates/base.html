@@ -12,7 +12,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ title|default("Elrond") }} — Elrond console</title>
-{% include "_workspace_styles.html" %}
+{% include "_desk_styles.html" %}
 {% include "_performance_styles.html" %}
 {% block page_styles %}{% endblock %}
 </head>
@@ -35,20 +35,18 @@
 
 <div class="shell">
   <nav class="workspace-nav" aria-label="Main navigation">
-    <div class="brand"><span class="brand-mark" aria-hidden="true">E</span><div><strong>Elrond</strong><small>PAPER TERMINAL</small></div></div>
+    <div class="brand"><strong>ELROND</strong><small>Paper<br>desk</small></div>
     <details class="nav-disclosure" open><summary>Navigation</summary><div class="nav-links">
-    {% set groups = [
-      ('Workspace', ['/', '/calendar', '/session', '/learner', '/risk']),
-      ('Research', ['/research', '/experiments', '/market-data', '/capacity', '/discovery']),
-      ('System', ['/config', '/config/policy', '/reports', '/runtime', '/kill-switch', '/glossary'])
-    ] %}
-    {% for group, paths in groups %}<div class="nav-group"><div class="nav-label">{{ group }}</div>
-      {% for href, label in navigation %}{% if href in paths %}
+      {% for href, label in navigation %}{% if href in ['/', '/calendar', '/learner', '/session', '/risk'] %}
       <a href="{{ href }}" class="{% if href == active %}on{% endif %}" {% if href == active %}aria-current="page"{% endif %}>{{ label }}</a>
       {% endif %}{% endfor %}
-    </div>{% endfor %}
+      {% for group, paths in [('Research', ['/research', '/experiments', '/market-data', '/capacity', '/discovery']), ('System', ['/config', '/config/policy', '/reports', '/runtime', '/kill-switch', '/glossary'])] %}
+      <details class="nav-menu"><summary>{{ group }}</summary><div class="nav-menu-links">
+      {% for href, label in navigation %}{% if href in paths %}
+        <a href="{{ href }}" class="{% if href == active %}on{% endif %}" {% if href == active %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endif %}{% endfor %}
+      </div></details>{% endfor %}
     </div></details>
-    <div class="nav-foot">Paper account<br>Local workspace</div>
   </nav>
   <main>
     {% block body %}{% endblock %}

@@ -1,6 +1,6 @@
 <header class="page-heading">
-  <div><p class="eyebrow">Workspace</p><h1>Operations</h1>
-  <p class="sub">Your paper account, trading services and recorded activity.</p></div>
+  <div><p class="eyebrow">Workspace</p><h1>Paper desk</h1>
+  <p class="sub">Positions and execution. Recorded account data.</p></div>
   <div class="snapshot-time">Snapshot {{ state.generated_at.strftime("%d %b %Y · %H:%M UTC") }}</div>
 </header>
 
@@ -36,9 +36,9 @@
 </section>
 
 {% if attention %}
-<section class="attention-panel" aria-label="Needs attention"><h2>Needs attention</h2>
+<details class="attention-panel" aria-label="Needs attention" open><summary>{{ attention|length }} checks require attention</summary>
   <ul class="attention">{% for item in attention %}<li>{{ item }}</li>{% endfor %}</ul>
-</section>
+</details>
 {% endif %}
 
 <div class="overview-layout">
@@ -74,9 +74,9 @@
     </section>
   </div>
   <aside class="overview-aside" aria-label="Trading and learning">
-    <section class="card"><div class="k">PAPER core</div><div class="v" style="font-size:18px">{{ state.overview.core_phase }}</div>
+    <section class="card"><div class="k">Execution</div><div class="v" style="font-size:18px">{{ state.overview.core_phase }}</div>
       {% if state.overview.core_phase == 'Not commissioned' %}
-      <p class="n">Trading has not been activated. Installed code alone does not establish running services.</p>
+      <p class="n">Awaiting commissioning. Entries are not active.</p>
       {% endif %}
       <div class="role-list">
       {% if state.overview.roles %}{% for role in state.overview.roles %}
@@ -85,7 +85,7 @@
       {% endfor %}{% else %}
         {% for role in ['Trader','Guardian','Outcomes'] %}<div class="role-row"><span>{{ role }}</span><span class="quiet">No verified heartbeat</span></div>{% endfor %}
       {% endif %}</div>
-      <p class="n">Daily learning follows ten completed baseline sessions, using eligible history and giving the latest ten sessions more weight.</p>
+      <p class="n">Learning baseline: ten completed sessions. Daily updates use all eligible history, with extra weight on the latest ten sessions.</p>
       <details class="hint"><summary>Legacy learner records</summary>
         <p><a href="/learner">{{ state.learner.status.replace('_', ' ').capitalize() }}</a>. {{ state.learner.reason }}</p>
         <p><a href="/learner">View forecasts and performance →</a></p>
