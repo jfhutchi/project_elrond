@@ -2,7 +2,7 @@
 
 October 13, 2026. Companion to the [audit](audit.md), [design](../../superpowers/specs/2026-10-13-paper-core-design.md) and [authoritative milestone plan](../../superpowers/plans/2026-10-13-paper-core.md).
 
-There are three distinct levels: runnable current-source diagnostic probes; future integrated replacement tests specified below; and genuine broker-PAPER acceptance after reviewed rollout. A pass at one level does not satisfy another. The replacement is not implemented and the future test paths do not exist yet.
+There are three distinct levels: runnable current-source diagnostic probes; future integrated replacement tests specified below; and genuine broker-PAPER acceptance after reviewed rollout. A pass at one level does not satisfy another. At the October13 audit, the replacement was not implemented and the future test paths did not yet exist. Implementation and reviewed results now appear in the [authoritative milestone plan](../../superpowers/plans/2026-10-13-paper-core.md) and [milestone evidence](../../evidence/paper-core/); the dated diagnostic results below remain historical.
 
 ## Runnable now: three acceptance gaps
 
