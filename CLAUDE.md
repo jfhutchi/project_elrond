@@ -15,7 +15,7 @@ bounded daily learning. The baseline implementation merged in
 prepared runtime has not been commissioned or activated. That older configuration selects XLE.
 The hybrid/V3/current-funds successor is implemented and locally tested on its feature branch,
 including the ten-session collection/fit/activation witness and later signal/exploration.
-It is not merged to main or commissioned. Read the
+It is published in [PR #290](https://github.com/jfhutchi/project_elrond/pull/290), not merged to main or commissioned. Read the
 [successor evidence](docs/evidence/paper-core/daily-exploration/README.md) for exact source-review
 and candidate-preparation status; do not rebuild completed implementation after a context reset.
 

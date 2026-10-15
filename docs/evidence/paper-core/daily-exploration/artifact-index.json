@@ -21,8 +21,8 @@
       "sha256": "39f76636b73fcf29a5c1418c5aa37d2be3423dceee6146f85db104c58d21b859"
     },
     "README.md": {
-      "bytes": 15229,
-      "sha256": "27de0f8b6635b2527126045b0b9bdcadc57f5b980a3dcba222e6ae45a85c93a7"
+      "bytes": 15388,
+      "sha256": "b0cf6903925545069b92c11b905c127319ec5faa7440c0bce1c0bebd01d0726e"
     },
     "review/design-rulings.md": {
       "bytes": 9949,
@@ -58,15 +58,15 @@
     },
     "verification/current-doc-validation.json": {
       "bytes": 444,
-      "sha256": "8cd92840ae5b07e592a7ce6fec2b41684b6b2ec9050e59abe806f1604cb8a0cb"
+      "sha256": "43ab005dc3936baaf89a5b63994e96b67e07f39c740e8608484ba04f2da3f9de"
     },
     "verification/current-docs-report.md": {
-      "bytes": 8867,
-      "sha256": "e57579102a1a827d3bc93fa08a0dd42169556e53d9339649449c1a12538fc706"
+      "bytes": 9542,
+      "sha256": "8936df04e975dd6593155cfb5098e3597c8e45ac6ca2974ef19c4e2c415d71f0"
     },
     "verification/implementation-ledger.md": {
-      "bytes": 29320,
-      "sha256": "f954ab02a6a59e17d4c496ec3a911299cb76b7dd3b728d4708a809735dd0cd90"
+      "bytes": 30435,
+      "sha256": "72d0b20cd55191aaa72b0bfa3c6931d3c6c2f99159029103ce1f430a80a4ab12"
     },
     "verification/task-1-report.md": {
       "bytes": 17687,

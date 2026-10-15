@@ -17,7 +17,8 @@ Independent reviews closed all four identified findings: bound repeated historic
 The [daily hybrid specification](../../superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
 supersedes baseline single-XLE/no-quota selection. The feature is implemented and locally tested,
 including a ten-session mixed-outcome corpus, actual V3 fit/activation and later positive-signal
-and negative-prediction exploratory entries. It is not merged to main or commissioned.
+and negative-prediction exploratory entries. [PR 290](https://github.com/jfhutchi/project_elrond/pull/290)
+contains the implementation; it is not merged to main or commissioned.
 The [successor evidence package](daily-exploration/README.md) holds exact test/review results,
 candidate-preparation status, pins and limitations. The baseline verifier does not cover this
 successor, and offline evidence does not establish operating acceptance.

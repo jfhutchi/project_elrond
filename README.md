@@ -24,7 +24,8 @@ with one concurrent core lot. Its V3 target is actual executed gross return; a s
 current-funds policy preserves continued entry capacity without inventing fee or cash history.
 
 **The successor is implemented and locally tested on the feature branch; it is not merged
-to main or commissioned.** The integrated witness collects ten sessions of wins and losses,
+to main or commissioned.** Review [PR #290](https://github.com/jfhutchi/project_elrond/pull/290).
+The integrated witness collects ten sessions of wins and losses,
 fits and activates V3, then selects a qualifying signal and a negative-prediction exploratory
 trade. The earlier measured XLE package remains separate. An attempted trade cannot guarantee
 a broker fill or improved daily performance.
