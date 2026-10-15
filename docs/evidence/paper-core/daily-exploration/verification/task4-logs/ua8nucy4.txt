@@ -1,0 +1,16 @@
+
+=================================== ERRORS ====================================
+_ ERROR collecting .superpowers/sdd/2026-10-14-daily-paper-exploration/test_first_buy_lag_probe.py _
+ImportError while importing test module 'C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\.superpowers\sdd\2026-10-14-daily-paper-exploration\test_first_buy_lag_probe.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.superpowers\sdd\2026-10-14-daily-paper-exploration\test_first_buy_lag_probe.py:2: in <module>
+    from tests.integration.paper_core.test_daily_paper_loop import DailyProvider
+E   ModuleNotFoundError: No module named 'tests'
+=========================== short test summary info ===========================
+ERROR .superpowers/sdd/2026-10-14-daily-paper-exploration/test_first_buy_lag_probe.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.76s

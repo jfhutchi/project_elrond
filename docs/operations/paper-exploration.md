@@ -1,6 +1,55 @@
 # Outcome-first PAPER exploration
 
-> **Legacy exploration implementation.** The [PAPER core](../paper-core.md) is the merged replacement foundation, with [operational activation still staged](../evidence/paper-core/omen-deployment/README.md). The latest user requirement is bounded daily PAPER exploration across different stocks even without a confident positive forecast. That follow-on behavior is not implemented by the prepared XLE-bound release or by automatically reusing this older coordinator's commissioning. Preserve original policies, owner IDs and trial history; do not claim a multi-stock daily fill or learning update without actual evidence.
+## Approved hybrid successor
+
+The [daily PAPER specification](../superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+extends the merged [PAPER core](../paper-core.md). It is not merged to main or commissioned:
+The successor is implemented and locally tested, including the combined trading-to-learning witness. [Handover](../evidence/paper-core/handover.md) records integration/preparation
+status; the measured staged package remains the older XLE release.
+
+`SIGNAL_OR_EXPLORE_V1` evaluates AAPL, MSFT, AMZN, GOOGL, META, NVDA, JPM, JNJ, XOM and PG,
+with SPY as benchmark only. Any valid activated prediction strictly above 10 bps takes
+priority, including a used stock over unused weak candidates. Rank signals by current-session
+reservation count ascending, prediction descending, prior-session count ascending and configured
+order. Only when no eligible signal qualifies, rank exploration by current-session count,
+prior-session count and configured order. Preserve the true weak/negative score and record
+`EXPLORATION`; COLLECT explores, invalid model authority refuses. Unavailable/inherited-held
+members do not suppress healthy candidates. Claim and final send replay cohort selection.
+
+Enforce six durable reservations per verified exchange session and one concurrent core lot.
+Completed and possible-send/unknown reservations count; only definitive pre-send proof releases
+one. A semantic bar boundary does not change with acquisition time, symbol, model or release.
+Retain 0.5% position value, 0.25% entry risk, 1% stop, 30-minute horizon and existing buffers.
+Six reservations do not guarantee six fills. Guardian marks follow owned symbols; protection/
+outcomes continue after the cap or a failed fit. Do not liquidate inherited holdings for capacity.
+
+V3 learns actual owned gross wins/losses after ten completed exchange sessions, including quiet
+ones. Consider daily using all eligible compatible history, latest-ten/older raw weights 2/1
+normalized during fitting. Preserve past-only folds, availability, protected exclusions and
+30-minute purge/embargo while retaining overlapping feature windows within training. Established
+gross outcomes may train when `FEE_UNAVAILABLE` is the sole remaining gap in a closed, owned,
+reconciled lot; fees stay unknown, status stays `COSTS_PENDING` and net stays null. V2 remains
+strict net. `DAILY_BOUNDED_V3` cannot inherit V2 authority; initial successor commission uses
+target-neutral COLLECT. Failed/rejected fits retain the incumbent while exploration continues.
+
+`BROKER_PAPER_BALANCE_V1` is the approved current-funds contract implemented on the successor branch.
+Fresh stable PAPER balances and open-order evidence must bind to quantity proof, current ledger
+and exact commission at claim/gate/locked send and recovery. Capture is stable within five
+seconds and at most 120 seconds old; changed source/ledger/balance needs fresh authority.
+It authorizes sizing, not historical cash reconstruction: retain `expected_cash=None`,
+`cash_complete=False`, unknown fees and null net. Never invent cash activity, a balancing
+residual or reconciliation; preserve discrepancies, unknown sends, manual stops, restrictions
+and other genuine gates. Legacy model-only mode remains strict exact-cash.
+
+This economic selection/learning/funds change requires its own successor manifest, configuration
+and initial commission. The older XLE verifier and legacy launch commands do not authorize it.
+Preserve original client IDs, owners, stores, trial charges and dated evidence.
+
+## Legacy exploration implementation retained for reference
+
+The remaining contract belongs to the earlier experiment coordinator. Its no-quota rotation,
+known-fees-only feedback and nonpredictive/no-promotion statements do not govern the approved
+hybrid/V3 successor. They remain unchanged to interpret old policies and receipts.
 
 This is an explicitly commissioned, nonpredictive sampling policy. It collects
 protected PAPER trade experience without pretending a weak forecast is qualified.

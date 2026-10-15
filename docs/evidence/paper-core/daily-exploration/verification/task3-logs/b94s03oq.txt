@@ -1,0 +1,72 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______ test_source_receipt_is_bound_at_claim_and_locked_send[missing] ________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-b94s03oq/pytest/test_source_receipt_is_bound_a0')
+fault = 'missing'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize('fault', [
+        'missing', 'digest', 'source', 'endpoint', 'account_id', 'store_identity', 'config_id',
+        'commission_id', 'evidence_lane', 'stale', 'slow', 'unstable_account', 'unstable_positions',
+        'restricted', 'open_order', 'baseline',
+    ])
+    async def test_source_receipt_is_bound_at_claim_and_locked_send(tmp_path, fault):
+        from sqlalchemy import delete, update
+    
+        from quantbot.paper_core.contracts import ProtectionPlan
+        from quantbot.paper_core.funds import PaperFundsEvidence, entry_inventory_objections
+        from quantbot.paper_core.send_guard import compatible_successor, final_send_objections
+        from quantbot.paper_core.store import certify_inventory, put
+        from quantbot.paper_core.trader import claim_entry
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from quantbot.risk import OrderPurpose
+    
+        db, store, broker, provider, clocks = await prepare(tmp_path)
+        try:
+            await enter(store, broker)
+            await close(store, broker, clocks)
+            current = store.latest_proof()
+            assert not current.cash_complete
+            receipt = store.read('core_provider_acquisitions', current.acquisition_id,
+                                 PaperFundsEvidence).model_dump(mode='json')
+            if fault in {'source', 'endpoint', 'account_id', 'store_identity', 'config_id',
+                         'commission_id', 'evidence_lane'}:
+                receipt[fault] = 'EXPLICIT_SYNTHETIC_TEST' if fault == 'source' else 'wrong'
+            elif fault == 'stale':
+                receipt['capture_started'] = (clocks.wall - timedelta(seconds=122)).isoformat()
+                receipt['recorded_at_utc'] = (clocks.wall - timedelta(seconds=121)).isoformat()
+            elif fault == 'slow':
+                receipt['elapsed_seconds'] = 5.01
+            elif fault == 'unstable_account':
+                receipt['second_account']['account']['cash'] = '1'
+            elif fault == 'unstable_positions':
+                receipt['second_positions'] = [dict(symbol='AAPL', quantity='1', market_price='100',
+                                                    market_value='100', average_entry_price='100')]
+            elif fault == 'restricted':
+                receipt['first_account']['order_entry_allowed'] = False
+                receipt['second_account'] = receipt['first_account']
+            elif fault == 'open_order':
+                receipt['first_open_orders'] = [(await broker.get_order_by_client_id(
+                    provider.orders[0]['client_order_id'])).model_dump(mode='json')]
+            identity = content_id(receipt)
+            with db.transaction() as session:
+                put(session, 'core_provider_acquisitions', identity, receipt)
+            forged = current.model_copy(update={
+                'generation': current.generation + 1, 'acquisition_id': identity})
+            certify_inventory(store, forged)
+            decision = await candidate(store, broker)
+            assert decision.action == 'BUY', decision.gates
+            if fault in {'missing', 'digest', 'baseline'}:
+                # Claim valid authority first so send's same-proof path is exercised after corruption.
+                entry = claim_entry(store, decision, ProtectionPlan.for_decision(decision, store.config))
+                with db.transaction() as session:
+>                   assert entry is not None, (entry_inventory_objections(
+                        store, session, forged, now=clocks.wall), store.documents('core_health_events'))
+E                       AssertionError: (('CORE_PAPER_FUNDS_SOURCE_INVALID',), [])
+E                       assert None is not None
+
+tests\integration\paper_core\test_paper_funds.py:296: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[missing]
+1 failed, 16 deselected in 5.60s

@@ -1,0 +1,43 @@
+F
+================================== FAILURES ===================================
+___ test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-yylpm01_/pytest/test_daily_hybrid_collect_fit_0')
+
+    @pytest.mark.asyncio
+    async def test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration(tmp_path):
+        # Catches broken current-funds continuation, daily-learning acknowledgement,
+        # gross-target operational activation, signal priority and negative exploration.
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=DailyProvider)
+        try:
+            parent, initial = selection(store)
+            assert parent.mode == "COLLECT" and parent.target_contract is None
+            assert store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
+            assert broker.config.activation_policy == "DAILY_BOUNDED_V3"
+            decisions, trips, warmups = [], [], []
+            for day_index, session_open in enumerate(SESSIONS[:10]):
+                for offset in range(6):
+                    advance_to(clocks, session_open + timedelta(minutes=35 + offset * 40, seconds=10))
+                    sign = 1 if offset % 2 == 0 else -1
+                    provider.signs = dict.fromkeys(("AAPL", "MSFT"), sign)
+                    provider.exit_sign = sign
+                    decision, reasons = await enter(store, broker)
+                    assert decision.action == "BUY", (day_index, offset, decision.gates)
+                    assert not reasons, reasons
+                    assert decision.selection.kind == "EXPLORATION"
+                    assert decision.prediction_bps is None and decision.model_id == parent.id
+                    assert decision.model_mode == "COLLECT"
+                    if day_index:
+                        assert decision.learning_receipt_id == warmups[-1].id
+                    decisions.append(decision)
+                    await close(store, broker, clocks)
+>                   trip = RoundTrip.model_validate(store.export_loop(decision.id)["round_trip"])
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E                   pydantic_core._pydantic_core.ValidationError: 1 validation error for RoundTrip
+E                     Input should be a valid dictionary or instance of RoundTrip [type=model_type, input_value=None, input_type=NoneType]
+E                       For further information visit https://errors.pydantic.dev/2.13/v/model_type
+
+tests\integration\paper_core\test_daily_paper_loop.py:116: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_paper_loop.py::test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration
+1 failed in 8.44s

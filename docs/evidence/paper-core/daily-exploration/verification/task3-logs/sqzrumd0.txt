@@ -1,0 +1,24 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____ test_real_adapter_repeats_entries_without_fabricating_cash_or_fees ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-sqzrumd0/pytest/test_real_adapter_repeats_entr0')
+
+    @pytest.mark.asyncio
+    async def test_real_adapter_repeats_entries_without_fabricating_cash_or_fees(tmp_path):
+        db, store, broker, provider, clocks = await prepare(tmp_path)
+        try:
+            decisions = []
+            for index in range(6):
+                decision, reasons = await enter(store, broker)
+>               assert decision.action == 'BUY', decision.gates
+E               AssertionError: ('INVENTORY_UNCERTIFIED',)
+E               assert 'WAIT' == 'BUY'
+E                 
+E                 - BUY
+E                 + WAIT
+
+tests\integration\paper_core\test_paper_funds.py:188: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_paper_funds.py::test_real_adapter_repeats_entries_without_fabricating_cash_or_fees
+1 failed in 5.31s

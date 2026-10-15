@@ -1,0 +1,107 @@
+FFF..                                                                    [100%]
+================================== FAILURES ===================================
+_ test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V3-True] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hv8it0v3/pytest/test_runtime_envelope_matches_0')
+mode = 'SIGNAL_OR_EXPLORE_V1', envelope = 'DAILY_BOUNDED_V3', allowed = True
+
+    @pytest.mark.parametrize("mode,envelope,allowed", [
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V3", True),
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V2", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V3", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V2", True),
+        ("SIGNAL_OR_EXPLORE_V1", "REVIEW_EACH_CANDIDATE", True),
+    ])
+    def test_runtime_envelope_matches_selected_learning_mode(tmp_path, mode, envelope, allowed):
+        from datetime import UTC, datetime
+    
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import RuntimeConfig
+    
+        fields = dict(repository=str(tmp_path), store_path=str(tmp_path / "fixture.db"),
+            store_identity="synthetic", expected_account_hash="a" * 64,
+            holdout_source=str(tmp_path / "canonical.db"), learning_origin=datetime(2026, 1, 1, tzinfo=UTC),
+            activation_policy=envelope,
+            core=CoreConfig(account_id="synthetic", symbol="XLE", release_id="UNBOUND_PREPARED_RELEASE",
+                clock_profile="PAPER_TIME_V2", selection_policy=mode,
+                **({"symbols": ("XLE", "AAPL")} if mode == "SIGNAL_OR_EXPLORE_V1" else {})))
+        if allowed:
+>           assert RuntimeConfig(**fields).activation_policy == envelope
+                   ^^^^^^^^^^^^^^^^^^^^^^^
+E           pydantic_core._pydantic_core.ValidationError: 1 validation error for RuntimeConfig
+E           activation_policy
+E             Input should be 'REVIEW_EACH_CANDIDATE' or 'DAILY_BOUNDED_V2' [type=literal_error, input_value='DAILY_BOUNDED_V3', input_type=str]
+E               For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+
+tests\fault\paper_core\test_learning_gross.py:55: ValidationError
+_ test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V2-False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hv8it0v3/pytest/test_runtime_envelope_matches_1')
+mode = 'SIGNAL_OR_EXPLORE_V1', envelope = 'DAILY_BOUNDED_V2', allowed = False
+
+    @pytest.mark.parametrize("mode,envelope,allowed", [
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V3", True),
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V2", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V3", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V2", True),
+        ("SIGNAL_OR_EXPLORE_V1", "REVIEW_EACH_CANDIDATE", True),
+    ])
+    def test_runtime_envelope_matches_selected_learning_mode(tmp_path, mode, envelope, allowed):
+        from datetime import UTC, datetime
+    
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import RuntimeConfig
+    
+        fields = dict(repository=str(tmp_path), store_path=str(tmp_path / "fixture.db"),
+            store_identity="synthetic", expected_account_hash="a" * 64,
+            holdout_source=str(tmp_path / "canonical.db"), learning_origin=datetime(2026, 1, 1, tzinfo=UTC),
+            activation_policy=envelope,
+            core=CoreConfig(account_id="synthetic", symbol="XLE", release_id="UNBOUND_PREPARED_RELEASE",
+                clock_profile="PAPER_TIME_V2", selection_policy=mode,
+                **({"symbols": ("XLE", "AAPL")} if mode == "SIGNAL_OR_EXPLORE_V1" else {})))
+        if allowed:
+            assert RuntimeConfig(**fields).activation_policy == envelope
+        else:
+>           with pytest.raises(ValueError, match="activation.*selection"):
+E           Failed: DID NOT RAISE ValueError
+
+tests\fault\paper_core\test_learning_gross.py:57: Failed
+_ test_runtime_envelope_matches_selected_learning_mode[MODEL_ONLY_V1-DAILY_BOUNDED_V3-False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-hv8it0v3/pytest/test_runtime_envelope_matches_2')
+mode = 'MODEL_ONLY_V1', envelope = 'DAILY_BOUNDED_V3', allowed = False
+
+    @pytest.mark.parametrize("mode,envelope,allowed", [
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V3", True),
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V2", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V3", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V2", True),
+        ("SIGNAL_OR_EXPLORE_V1", "REVIEW_EACH_CANDIDATE", True),
+    ])
+    def test_runtime_envelope_matches_selected_learning_mode(tmp_path, mode, envelope, allowed):
+        from datetime import UTC, datetime
+    
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import RuntimeConfig
+    
+        fields = dict(repository=str(tmp_path), store_path=str(tmp_path / "fixture.db"),
+            store_identity="synthetic", expected_account_hash="a" * 64,
+            holdout_source=str(tmp_path / "canonical.db"), learning_origin=datetime(2026, 1, 1, tzinfo=UTC),
+            activation_policy=envelope,
+            core=CoreConfig(account_id="synthetic", symbol="XLE", release_id="UNBOUND_PREPARED_RELEASE",
+                clock_profile="PAPER_TIME_V2", selection_policy=mode,
+                **({"symbols": ("XLE", "AAPL")} if mode == "SIGNAL_OR_EXPLORE_V1" else {})))
+        if allowed:
+            assert RuntimeConfig(**fields).activation_policy == envelope
+        else:
+>           with pytest.raises(ValueError, match="activation.*selection"):
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'activation.*selection'
+E             Actual message: "1 validation error for RuntimeConfig\nactivation_policy\n  Input should be 'REVIEW_EACH_CANDIDATE' or 'DAILY_BOUNDED_V2' [type=literal_error, input_value='DAILY_BOUNDED_V3', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+
+tests\fault\paper_core\test_learning_gross.py:57: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V3-True]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V2-False]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[MODEL_ONLY_V1-DAILY_BOUNDED_V3-False]
+3 failed, 2 passed, 3 deselected in 2.27s

@@ -1,0 +1,99 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__ test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-751xkpmk/pytest/test_day_ten_actual_gross_outc0')
+
+    @pytest.mark.asyncio
+    async def test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority(tmp_path):
+>       db, store, broker, parent, trips, joins = await gross_episodes(tmp_path)
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:75: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-751xkpmk/pytest/test_day_ten_actual_gross_outc0')
+
+    async def gross_episodes(path):
+        from quantbot.domain import Bar
+        from quantbot.learner.five_minute import FEATURE_NAMES, build_features
+        from quantbot.paper_core.contracts import ModelArtifact, Observation, RoundTrip
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.strategy import XNYSSession, XNYSSessionSequence
+    
+        db, store, broker, proof, _, collect = prepare(path)
+        collect = ModelArtifact(feature_version="five-minute-price-alpha-v1")
+        sessions = [
+            datetime(2026, 10, 14, 13, 30, tzinfo=UTC) + timedelta(days=d)
+            for d in (0, 1, 2, 5, 6, 7, 8, 9, 12, 13)
+        ]
+        calendar = XNYSSessionSequence(
+            calendar="XNYS",
+            sessions=tuple(
+                XNYSSession(
+                    session_date=s.date(), open_at=s, close_at=s + timedelta(hours=6, minutes=30)
+                )
+                for s in sessions
+            ),
+        )
+        trips, joins = [], []
+        try:
+            for i in range(60):
+                session_index, offset = divmod(i, 6)
+                now = sessions[session_index] + timedelta(minutes=35 + offset * 35)
+                sign = 1 if i % 2 == 0 else -1
+                broker.now = now
+                broker.set_mark("XLE", Decimal(100), as_of=now)
+                await guardian_cycle(store, broker, now=now)
+                proof = store.latest_proof()
+                bars = []
+                for k in range(7):
+                    for symbol in ("XLE", "SPY"):
+                        value = Decimal(100)
+                        if symbol == "XLE" and k == 5:
+                            value = Decimal(100) / (Decimal(1) + Decimal(sign) / 500)
+                        bars.append(
+                            Bar(
+                                symbol=symbol,
+                                timestamp=now - timedelta(minutes=35 - k * 5),
+                                open=value,
+                                high=value,
+                                low=value,
+                                close=value,
+                                volume=1,
+                                adjustment="1",
+                            )
+                        )
+                (row,) = build_features(
+                    bars,
+                    calendar,
+                    decision_at=now,
+                    receipt_at=now,
+                    symbols=("XLE",),
+                    source_snapshot_hash=f"m4-causal-bars-{i}",
+                )
+                observation = Observation(
+                    recorded_at_utc=now,
+                    symbol="XLE",
+                    source_start=now - timedelta(minutes=35),
+                    source_end=now,
+                    available_at=now,
+                    price=100,
+                    raw_data_digest=row.source_snapshot_hash,
+                    feature_version="five-minute-price-alpha-v1",
+                    features=tuple(zip(FEATURE_NAMES, row.values, strict=True)),
+                    dependencies=("SPY",),
+                    dependency_available_at=(now,),
+                    sequence=i + 1,
+                    session_close=sessions[session_index] + timedelta(hours=6, minutes=30),
+                )
+                decision = await trader_cycle(store, broker, observation, collect, proof, now=now)
+>               assert decision.action == "BUY", decision.gates
+                       ^^^^^^^^^^^^^^^^^^^^^^^^
+E               AssertionError: ('INVENTORY_UNCERTIFIED',)
+
+tests\fixtures\core_gross.py:84: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority
+1 failed, 2 deselected in 3.06s

@@ -1,6 +1,6 @@
 # Ingestion control: cursors, run history, incidents and heartbeats
 
-> **Legacy ingestion and reusable evidence controls.** The [PAPER core](paper-core.md) does not require a separate ingestion task; its trader acquires the configured symbol and real benchmark dependencies. General ingestion history remains useful research evidence, but its schema-25 introduction and scheduler behavior below are not current schema pins or core startup instructions. Core transient acquisition faults use scoped waits with fresh-evidence recovery while guardian/outcomes continue.
+> **Legacy ingestion and reusable evidence controls.** The [PAPER core](paper-core.md) does not require a separate ingestion task. Its [approved hybrid successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md), not merged or commissioned, acquires a bounded causal stock-universe cohort plus SPY benchmark inputs at each completed five-minute boundary. Unavailable members have explicit reasons without suppressing healthy eligible members. General ingestion history remains useful evidence, but its schema-25 introduction and scheduler behavior below are not current pins or core startup instructions. Transient acquisition faults use scoped waits and fresh-evidence recovery while guardian/outcomes continue.
 
 **Issue:** #198 · **Backend:** SQLite (schema 25) · **Status:** implemented, wired to
 `MarketDataSync`

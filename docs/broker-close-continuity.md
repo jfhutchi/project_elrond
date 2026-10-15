@@ -1,6 +1,6 @@
 # Prospective PAPER close continuity
 
-> **Account reporting scope.** This optional close-to-close account evidence remains distinct from [PAPER core](paper-core.md) owned-lot outcomes. Core learning uses certified fee-complete owned round trips, including losses, rather than account-equity movements or invented zero days. Account reporting includes inherited/unrealized exposure; it cannot establish core profitability, lot cost completeness or model activation. Current rollout is recorded in [handover](evidence/paper-core/handover.md).
+> **Account reporting scope.** This optional close-to-close account evidence remains distinct from [PAPER core](paper-core.md) owned-lot outcomes. V2 requires fee-complete net labels. The [approved V3 successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md), not yet merged or commissioned, admits established gross outcomes from closed, owned, reconciled lots when unavailable fees are their sole incompleteness; fees remain unknown and net remains null. Account-equity movements never substitute for owned labels. Current broker funds used for bounded sizing do not certify historical cash or actual net profit. Account reporting includes inherited/unrealized exposure; it cannot establish lot cost completeness or model activation. Rollout is recorded in [handover](evidence/paper-core/handover.md).
 
 The optional `--broker-close-reference` capture mode uses Alpaca's authenticated
 PAPER `GET /v2/account/portfolio/history`. Each previous/current exchange close

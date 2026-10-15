@@ -8,8 +8,15 @@ Use the [PAPER core overview](../../docs/paper-core.md),
 for the replacement path. Its three independent roles are trader, guardian and outcomes;
 the dashboard is optional. Functional rollout has not completed.
 
-Prepared release: `ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645`.
-Configuration: `aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2`.
+The [approved daily successor](../../docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+adds signal-first/exploratory stock selection, six durable daily reservations, V3 gross learning
+and `BROKER_PAPER_BALANCE_V1` current-funds authority. It is not merged to main or commissioned:
+The successor is implemented and locally tested, including the combined trading-to-learning witness. Use
+the [handover](../../docs/evidence/paper-core/handover.md) for actual integration/preparation
+status. This guide does not claim completed successor verification or provide new release pins.
+
+Measured baseline prepared release: `ec15cbd8dc28a1f90adcb03b26669552eb94b7fba4fa6e208c7cf5d342baf645`.
+Baseline XLE configuration: `aa6c93bccdf4f28a5c1cfda1d94efd1ace09bc1c7e5fd10da3e6298cb68679e2`.
 Supported schema: **36**; patched Mako: **1.4.3**. Restored operational and learner copies
 passed the 29-to-36 rehearsal with original data preserved. The operating stores have
 not been migrated and the runtime has not been commissioned.
@@ -25,11 +32,19 @@ At October 15, 01:44 UTC (October 14 Eastern), an existing broker-accepted IWM s
 commissioning requirement. Do not cancel, replace, resubmit or rewrite that intent to
 make commissioning pass. Its terminal state must first reconcile through the original IDs.
 
+The successor is an economic selection/learning/funds change, not a code-only compatible
+transition. Prepare and verify a distinct manifest/configuration and exact target/funds
+authority; the baseline hashes and verifier do not cover it. Initial successor commissioning
+starts from target-neutral COLLECT and uses `DAILY_BOUNDED_V3` for gross learning. Existing
+net predictive models/commissions cannot be silently reinterpreted, and a commissioned
+store cannot simply reopen under a new economic config identity. Current balance authority
+must preserve incomplete historical cash, unknown fees and null net; it is not a cash repair.
+
 For a later handover, refresh writer/task/ownership evidence and WAL-aware backups, fence
 old entries while preserving exits, and verify schema-compatible protection before the
 reviewed additive migration. **Existing legacy executables expect schema 29 on startup;
 do not restart them against schema 36.** Then use fresh bounded acquisition/commission
-evidence from the exact current package. Start independent guardian/outcomes before trader
+evidence from the exact verified successor package once available. Start independent guardian/outcomes before trader
 enablement. Clamps, scheduling and model authority must match the reviewed commission;
 neither a verifier run nor this document grants entry authority. Never restore an older
 trading database over newer broker activity.

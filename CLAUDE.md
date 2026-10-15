@@ -7,17 +7,27 @@ Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` 
 ## Primary Mission
 
 **Current delivery priority (October 14, 2026 EDT):** finish the operational handover of the
-[PAPER core](docs/paper-core.md) and implement the latest request for daily bounded PAPER
-exploration across different stocks. The core has independent trader, guardian, and outcomes
-roles; the outcomes role also performs bounded daily learning. Its implementation merged in
+[PAPER core](docs/paper-core.md) and finish the
+[approved daily hybrid successor](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md).
+The core has independent trader, guardian, and outcomes roles; the outcomes role also performs
+bounded daily learning. The baseline implementation merged in
 [PR #289](https://github.com/jfhutchi/project_elrond/pull/289) on October 15 at 01:50 UTC, but the
-prepared runtime has not been commissioned or activated. The prepared configuration selects XLE
-with one new position and can abstain. Daily multi-stock exploration is a new requirement, not
-an already implemented capability.
+prepared runtime has not been commissioned or activated. That older configuration selects XLE.
+The hybrid/V3/current-funds successor is implemented and locally tested on its feature branch,
+including the ten-session collection/fit/activation witness and later signal/exploration.
+It is not merged to main or commissioned. Read the
+[successor evidence](docs/evidence/paper-core/daily-exploration/README.md) for exact source-review
+and candidate-preparation status; do not rebuild completed implementation after a context reset.
 
 The operator now wants daily PAPER attempts even when model confidence or an ordinary no-signal
-decision would otherwise prevent a trade, and learning from eligible wins and losses. Implement
-that selection policy explicitly and version its experience contract. Preserve the fixed PAPER
+decision would otherwise prevent a trade, and learning from eligible wins and losses. Preserve
+`SIGNAL_OR_EXPLORE_V1`: any valid activated signal above 10 bps has priority; otherwise select
+labeled exploration with the real zero/negative score. Rotate through the configured stock
+universe using current-session and historical reservation counts under the exact ranking rule
+in the spec. Permit six durable reservations per verified session and one concurrent core lot;
+completed and unknown-send reservations still count unless definitive pre-send proof releases
+them. Replay selection at claim and final send; no arbitrary fallback flag grants authority.
+Preserve legacy `MODEL_ONLY_V1` and the fixed PAPER
 account, truthful fills and costs, independent exits, historical holdings, protected-data
 exclusions, and trial accounting. Provider/market unavailability requires visible retries; it
 does not justify invented trades. Daily consideration is required by the baseline learner;
@@ -81,8 +91,9 @@ criteria carried (#72).
 
 Ordinary clock, data, provider, and acquisition interruptions must not strand PAPER behind an
 automatic persistent global kill switch. Record a scoped wait or retryable failure, retry with
-bounded backoff, and recover automatically only after new complete reconciliation evidence,
-fresh decision timing/dependencies, and valid guardian readiness. Preserve failure and recovery
+bounded backoff, and recover automatically only after current quantity certification, the
+commissioned funds authority, fresh decision timing/dependencies and valid guardian readiness.
+Legacy exact-cash mode keeps its completeness requirement. Preserve failure and recovery
 receipts. Historical clean evidence is not current readiness.
 
 An explicit manual entry stop remains durable until an explicit audited resume passes fresh
@@ -109,10 +120,44 @@ There is no 60-session cutoff in the current contract.
 Preserve past-only chronological procedure validation, availability cutoffs, protected-holdout
 exclusions before materialization, episode floors, bounded fitting, and permanent trial charges.
 After validation, refit on all eligible history; do not claim an independent held-out score for
-the final artifact after it consumes development-validation data. Unknown costs and outcomes
-awaiting correction are not training labels. A `NO_CHANGE` receipt must identify its inputs,
+the final artifact after it consumes development-validation data. V3
+`daily-paper-exploration-walk-forward-v3` targets `owned-executed-paper-gross-return-v1`.
+It may use established gross P&L from a closed, owned, reconciled lot when `FEE_UNAVAILABLE`
+is its only remaining incompleteness. Keep fees unknown, `COSTS_PENDING` and broker net null;
+do not infer contractual zero. Pending corrections, quarantine, invalid ownership and other
+noncausal evidence stay excluded. V3 retains overlapping feature windows within training;
+actual label availability and train/validation purge/embargo remain strict. V2 keeps its net
+target, fee completeness and prior overlap rules. A `NO_CHANGE` receipt must identify its inputs,
 exclusions, reason, and unchanged model. Later decisions acknowledge the relevant receipt and
 exact active model; model-file creation alone is not learning acceptance.
+
+Keep holding/exit policy `collect-owned-30m-stop100-v1`, compatible history and original
+selection provenance. Version selection/target/procedure separately. Gross automatic activation
+needs `DAILY_BOUNDED_V3`; V2 retains `DAILY_BOUNDED_V2`, and explicit candidate approval uses
+`REVIEW_EACH_CANDIDATE`. Initial successor commissioning starts with target-neutral COLLECT.
+Never reinterpret a net predictive incumbent as gross or silently widen an older commission.
+Candidate failure/rejection retains the incumbent while exploration continues.
+
+### PAPER current funds are separate from historical cash accounting
+
+The approved `BROKER_PAPER_BALANCE_V1` policy binds immutable evidence
+from stable broker account/position reads and current open-order coverage to quantity proof,
+account/store/owner/config/commission and ledger generation. Capture must be stable within
+five seconds and at most 120 seconds old. Validate it at claim, execution gate, locked send
+and recovery/resume; changed source, ledger or balance requires fresh authority. Broker-PAPER
+authority requires the commissioned PAPER adapter, never synthetic fixture evidence.
+
+Current cash and buying power may authorize bounded sizing while `expected_cash=None`,
+`cash_complete=False`, fees remain unknown and net P&L stays null. Never invent independent
+cash activity, a balancing residual or `RECONCILED` status. Keep known discrepancies,
+disputed sources, unknown sends, manual stops, restrictions, guardian/time readiness and
+daily/risk limits enforced. No competing/unexplained open order is allowed for a new entry.
+A balance receipt cannot clear integrity quarantine or revive revoked exact-cash authority.
+Legacy model-only mode remains strict; protection and outcomes need no entry-funds permission.
+
+This successor changes economic authority. It requires a distinct prepared config/manifest
+and target/funds-specific commission, not a compatible executable-only transition or a reopen
+of a commissioned store with a changed config identity.
 
 ## Baseline
 

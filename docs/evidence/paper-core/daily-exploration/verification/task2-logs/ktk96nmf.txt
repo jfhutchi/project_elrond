@@ -1,0 +1,162 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_ test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ktk96nmf/pytest/test_operational_daily_receipt0')
+gross = False
+
+    @pytest.mark.parametrize("gross", [False, True])
+    def test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract(tmp_path, gross):
+        import asyncio
+        from datetime import timedelta
+    
+        from tests.integration.paper_core.test_final_repair import commissioned
+    
+        from quantbot.paper_core.activation import active_in_session, commission_operational_candidate
+        from quantbot.paper_core.contracts import LearningCalendar, LearningReceipt
+        from quantbot.paper_core.roles import daily_consideration
+        from quantbot.strategy import XNYSSession, XNYSSessionSequence
+    
+        db, store, release, commission, _ = commissioned(tmp_path, gross=gross)
+        try:
+            now = store.clocks.sample()[0]
+    
+            # External calendar boundary only; learner, commission and activation remain real.
+            class CalendarProvider:
+                async def learning_calendar(self):
+                    return LearningCalendar(
+                        authority="ALPACA_PAPER_XNYS_V1",
+                        sequence=XNYSSessionSequence(
+                            calendar="XNYS",
+                            sessions=(
+                                XNYSSession(
+                                    session_date=now.date(),
+                                    open_at=now - timedelta(hours=2),
+                                    close_at=now - timedelta(minutes=1),
+                                ),
+                            ),
+                        ),
+                    )
+    
+>           reason = asyncio.run(daily_consideration(store, CalendarProvider(), release.config))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+src\quantbot\paper_core\roles.py:194: in daily_consideration
+    calendar = await broker.learning_calendar()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <test_learning_gross.test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract.<locals>.CalendarProvider object at 0x000001AED09B21D0>
+
+    async def learning_calendar(self):
+        return LearningCalendar(
+            authority="ALPACA_PAPER_XNYS_V1",
+>           sequence=XNYSSessionSequence(
+                calendar="XNYS",
+                sessions=(
+                    XNYSSession(
+                        session_date=now.date(),
+                        open_at=now - timedelta(hours=2),
+                        close_at=now - timedelta(minutes=1),
+                    ),
+                ),
+            ),
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for XNYSSessionSequence
+E         Value error, XNYS session sequence must contain at least two sessions [type=value_error, input_value={'calendar': 'XNYS', 'ses...tetime.timezone.utc)),)}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/value_error
+
+tests\fault\paper_core\test_learning_gross.py:99: ValidationError
+_ test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[True] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ktk96nmf/pytest/test_operational_daily_receipt1')
+gross = True
+
+    @pytest.mark.parametrize("gross", [False, True])
+    def test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract(tmp_path, gross):
+        import asyncio
+        from datetime import timedelta
+    
+        from tests.integration.paper_core.test_final_repair import commissioned
+    
+        from quantbot.paper_core.activation import active_in_session, commission_operational_candidate
+        from quantbot.paper_core.contracts import LearningCalendar, LearningReceipt
+        from quantbot.paper_core.roles import daily_consideration
+        from quantbot.strategy import XNYSSession, XNYSSessionSequence
+    
+        db, store, release, commission, _ = commissioned(tmp_path, gross=gross)
+        try:
+            now = store.clocks.sample()[0]
+    
+            # External calendar boundary only; learner, commission and activation remain real.
+            class CalendarProvider:
+                async def learning_calendar(self):
+                    return LearningCalendar(
+                        authority="ALPACA_PAPER_XNYS_V1",
+                        sequence=XNYSSessionSequence(
+                            calendar="XNYS",
+                            sessions=(
+                                XNYSSession(
+                                    session_date=now.date(),
+                                    open_at=now - timedelta(hours=2),
+                                    close_at=now - timedelta(minutes=1),
+                                ),
+                            ),
+                        ),
+                    )
+    
+>           reason = asyncio.run(daily_consideration(store, CalendarProvider(), release.config))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+src\quantbot\paper_core\roles.py:194: in daily_consideration
+    calendar = await broker.learning_calendar()
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <test_learning_gross.test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract.<locals>.CalendarProvider object at 0x000001AED58D3D10>
+
+    async def learning_calendar(self):
+        return LearningCalendar(
+            authority="ALPACA_PAPER_XNYS_V1",
+>           sequence=XNYSSessionSequence(
+                calendar="XNYS",
+                sessions=(
+                    XNYSSession(
+                        session_date=now.date(),
+                        open_at=now - timedelta(hours=2),
+                        close_at=now - timedelta(minutes=1),
+                    ),
+                ),
+            ),
+        )
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for XNYSSessionSequence
+E         Value error, XNYS session sequence must contain at least two sessions [type=value_error, input_value={'calendar': 'XNYS', 'ses...tetime.timezone.utc)),)}, input_type=dict]
+E           For further information visit https://errors.pydantic.dev/2.13/v/value_error
+
+tests\fault\paper_core\test_learning_gross.py:99: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[False]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[True]
+2 failed, 11 deselected in 8.35s

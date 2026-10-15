@@ -1,0 +1,36 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__ test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-l4oxgd6m/pytest/test_day_ten_actual_gross_outc0')
+
+    @pytest.mark.asyncio
+    async def test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority(tmp_path):
+        db, store, broker, parent, trips, joins = await gross_episodes(tmp_path)
+        try:
+            cutoff = broker.now.replace(hour=20, minute=0)
+            clock = ExecutionClock(cutoff)
+            calendar = learning_calendar()
+>           policy = gross_policy(parent_model=parent)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:80: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+kwargs = {'parent_model': ModelArtifact(mode='COLLECT', description='nonpredictive baseline; no fitted model', feature_version=..., target_contract=None, policy_id=None, parent_model_id=None, input_ids=(), fixture_authority=None, constant_bps=None)}
+
+    def gross_policy(**kwargs):
+>       return LearningPolicy(target_contract=GROSS, procedure_version=V3, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for LearningPolicy
+E       target_contract
+E         Input should be 'owned-executed-net-return-v1' [type=literal_error, input_value='owned-executed-paper-gross-return-v1', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+E       procedure_version
+E         Input should be 'daily-all-history-walk-forward-v2' [type=literal_error, input_value='daily-paper-exploration-walk-forward-v3', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+
+tests\fault\paper_core\test_learning_gross.py:31: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority
+1 failed, 2 deselected in 51.72s

@@ -1,0 +1,17 @@
+Traceback (most recent call last):
+  File "<string>", line 46, in <module>
+  File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 190, in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+  File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py", line 118, in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py", line 654, in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+  File "<string>", line 36, in probe
+  File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\guardian.py", line 252, in guardian_cycle
+    acknowledge_handoffs(store, now=now)
+  File "C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\guardian.py", line 216, in acknowledge_handoffs
+    raise ValueError("only independent guardian runtime may acknowledge protection")
+ValueError: only independent guardian runtime may acknowledge protection

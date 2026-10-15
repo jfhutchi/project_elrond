@@ -1,0 +1,78 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+______ test_first_buy_acknowledgement_before_fill_is_acquisition_pending ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-v3iro1m6/pytest/test_first_buy_acknowledgement0')
+
+    @pytest.mark.asyncio
+    async def test_first_buy_acknowledgement_before_fill_is_acquisition_pending(tmp_path):
+        db, store, broker, provider, clocks = await prepare(
+            tmp_path, provider_factory=FirstBuyLagProvider
+        )
+        try:
+            decision, reasons = await enter(store, broker)
+            assert decision.action == "BUY" and not reasons
+            assert len(provider.orders) == 1
+            with db.transaction() as session:
+                assert not StorageRepository(session).list_fills()
+            with pytest.raises(TimeoutError, match="OWNED_FILL_ACTIVITY_PENDING"):
+>               await synchronize(store, broker, now=clocks.wall)
+
+.superpowers\sdd\2026-10-14-daily-paper-exploration\test_first_buy_lag_probe.py:32: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\guardian.py:245: in synchronize
+    certify_inventory(store, proof, session=session)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x0000022BA711D8D0>
+proof = ReconciliationProof(schema_version=1, release_id='6099acb1645fed30c1975f20764beb6d1f6d4b99973ab4a925a304b366f24523', e...quisition_id='1c5dd2bd6820a99a7370206778f06625b03657b6956b69fc4502b85f6b5bc9a8', complete=True, order_ids=('order-0',))
+session = <sqlalchemy.orm.session.Session object at 0x0000022BA70A0050>
+
+    def certify_inventory(
+        store: CoreStore, proof: ReconciliationProof, *, session: Session | None = None
+    ) -> int:
+        certs = table(
+            "core_inventory_certifications" if proof.cash_complete else "core_quantity_certifications"
+        )
+        owns_transaction = session is None
+        with nullcontext(session) if session is not None else store.database.transaction() as session:
+            if owns_transaction:
+                session.execute(text("BEGIN IMMEDIATE"))
+            put(session, "core_reconciliation_proofs", proof.id, proof)
+            existing = session.execute(
+                select(certs.c.generation).where(certs.c.proof_id == proof.id)
+            ).scalar_one_or_none()
+            if existing is not None:
+                return int(existing)
+            expected, cash, fills = store.ledger(session)
+            latest = latest_certification(session)
+            last = latest[0] if latest else 0
+            if (
+                not proof.complete
+                or proof.account.account_id != store.config.account_id
+                or proof.expected_quantities != tuple(sorted(expected.items()))
+                or proof.actual_quantities != tuple(sorted(expected.items()))
+                or proof.baseline_id
+                != session.execute(select(table("core_fixture_baselines").c.id)).scalar_one()
+                or proof.order_ids
+                != tuple(o.broker_order_id for o in StorageRepository(session).list_broker_orders())
+                or proof.release_id != store.config.release_id
+                or proof.fill_ids != fills
+                or (
+                    proof.ledger_state_id is not None
+                    and proof.ledger_state_id != store.ledger_state_id(session)
+                )
+                or proof.expected_cash != cash
+                or proof.cash_complete != (cash is not None)
+                or (cash is not None and proof.account.cash != cash)
+                or proof.generation != (last or 0) + 1
+            ):
+                # Refusal evidence must survive; certification authority must not.
+                session.commit()
+>               raise StateConflictError("INVENTORY_MISMATCH")
+E               quantbot.storage.repositories.StateConflictError: INVENTORY_MISMATCH
+
+src\quantbot\paper_core\store.py:453: StateConflictError
+=========================== short test summary info ===========================
+FAILED .superpowers/sdd/2026-10-14-daily-paper-exploration/test_first_buy_lag_probe.py::test_first_buy_acknowledgement_before_fill_is_acquisition_pending
+1 failed in 5.41s

@@ -1,0 +1,371 @@
+......F.................                                                 [100%]
+================================== FAILURES ===================================
+__ test_six_completed_reservations_block_seventh_and_final_send_counts_once ___
+
+store = <quantbot.paper_core.store.CoreStore object at 0x000001183011C490>
+events = (BrokerEvent(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...None), cash_activity=None, activity_complete=False, activity_fill_ids=(), activity_watermark=None, correction_of=None))
+
+    def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[str, ...]:
+        """Commit canonical events, fees and source cursors together; conflicting replay rolls back."""
+        imported: list[str] = []
+        imported_at: list[datetime] = []
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            repo = StorageRepository(session)
+            links = {
+                link["intent_id"]: link
+                for link in session.execute(select(table("core_intent_links"))).mappings()
+            }
+            ordered = sorted(events, key=lambda e: 0 if e.order else 1 if e.fill else 2)
+            for supplied in ordered:
+                event = BrokerEvent.model_validate(supplied.model_dump())
+                try:
+                    if (
+                        event.account_id != store.config.account_id
+                        or event.evidence_lane != store.config.evidence_lane
+                        or event.release_id != store.config.release_id
+                        or event.correction_of is not None
+                    ):
+                        raise StateConflictError("source binding or correction authority mismatch")
+                    identity = _source_id(event)
+                    sources = table("core_broker_event_sources")
+                    previous = session.execute(
+                        select(sources.c.payload).where(sources.c.id == identity)
+                    ).scalar_one_or_none()
+                    if previous is not None:
+                        old = BrokerEvent.model_validate_json(previous)
+                        if _semantic(old) != _semantic(event):
+                            raise _EvidenceRejected(
+                                "conflicting source event replay",
+                                tuple(
+                                    sorted(
+                                        set(_implicated_clients(repo, event))
+                                        | set(_implicated_clients(repo, old))
+                                    )
+                                ),
+                                (identity,),
+                            )
+                        continue
+                    intent = next(
+                        (
+                            i
+                            for i in (repo.get_order_intent(identity) for identity in links)
+                            if i is not None and i.client_order_id == event.client_order_id
+                        ),
+                        None,
+                    )
+                    if intent is None or intent.intent_id not in links:
+                        raise StateConflictError("event has no accepted owned intent")
+                    if event.order:
+                        _adopt(repo, intent, event.order)
+                    if event.fill:
+                        order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+                        if (
+                            order is None
+                            or event.fill.broker_order_id != order.broker_order_id
+                            or event.fill.symbol != intent.symbol
+                            or event.fill.side is not intent.side
+                            or event.fill.occurred_at < order.submitted_at
+                        ):
+                            raise StateConflictError("fill ownership/chronology mismatch")
+                        repo.record_fill(event.fill)
+                    if event.cost:
+                        fill = repo.get_fill(event.cost.fill_id)
+                        order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+                        if (
+                            fill is None
+                            or order is None
+                            or fill.broker_order_id != order.broker_order_id
+                        ):
+                            raise StateConflictError("cost has no exact owned fill")
+                        if event.cost.recorded_at_utc != event.recorded_at_utc:
+                            raise StateConflictError("cost availability does not match source receipt")
+                        if not (
+                            event.cost.effective_start <= fill.occurred_at <= event.cost.effective_end
+                        ):
+                            raise StateConflictError("cost authority does not apply to fill time")
+                        from quantbot.paper_core.operational_costs import cost_contract_conflict_source
+    
+                        contradiction = None
+                        if event.cost.source == "CONTRACTUAL_ZERO" and event.cost.document_id:
+                            contradiction = (
+                                session.execute(
+                                    select(table("core_source_cursors")).where(
+                                        table("core_source_cursors").c.source_id
+                                        == cost_contract_conflict_source(
+                                            event.account_id, event.cost.document_id
+                                        )
+                                    )
+                                )
+                                .mappings()
+                                .one_or_none()
+                            )
+                        if contradiction is None:
+>                           record_cost(session, event.cost, fill)
+
+src\quantbot\paper_core\outcomes.py:297: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+session = <sqlalchemy.orm.session.Session object at 0x0000011830891E50>
+item = CostItem(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=datetime...datetime(2026, 10, 15, 14, 0, tzinfo=datetime.timezone.utc), allocation_rule='EXACT_FILL', revision=1, supersedes=None)
+fill = Fill(symbol='NVDA', fill_id='synthetic-fill-qb-fe9c3f4e368af9cde86aa5459ef81f1566f3076d', broker_order_id='synthetic-q...etime.datetime(2026, 10, 14, 14, 10, tzinfo=datetime.timezone.utc), fee=None, fee_source='UNKNOWN', fee_reference=None)
+
+    def record_cost(session: Session, item: CostItem, fill: Fill) -> None:
+        if not item.effective_start <= fill.occurred_at <= item.effective_end:
+            raise StateConflictError("cost authority does not apply to fill time")
+        # Writes must extend the whole durable chain. A historical receipt cutoff
+        # is for reads; using it here could fork an already-recorded later revision.
+        old = current_costs(
+            session, cutoff=datetime.max.replace(tzinfo=UTC), fill_ids={item.fill_id}
+        ).get((item.fill_id, item.component))
+        if old is not None and old.id == item.id:
+            return
+        if old is None:
+            if item.revision != 1 or item.supersedes is not None:
+                raise StateConflictError("cost predecessor missing")
+        elif (
+            item.revision != old.revision + 1
+            or item.supersedes != old.id
+            or item.recorded_at_utc < old.recorded_at_utc
+        ):
+>           raise StateConflictError("cost revision conflicts with current predecessor")
+E           quantbot.storage.repositories.StateConflictError: cost revision conflicts with current predecessor
+
+src\quantbot\paper_core\costs.py:52: StateConflictError
+
+The above exception was the direct cause of the following exception:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-4qxd_yhq/pytest/test_six_completed_reservation0')
+
+    @pytest.mark.asyncio
+    async def test_six_completed_reservations_block_seventh_and_final_send_counts_once(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle, synchronize
+        from quantbot.paper_core.outcomes import import_broker_events
+        from quantbot.paper_core.trader import trader_cycle
+        from tests.fixtures.core_m2 import fee_events
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            chosen = []
+            for i in range(7):
+                broker.now = NOW+timedelta(minutes=5*i)
+                await synchronize(store, broker, now=broker.now)
+                await guardian_cycle(store, broker, now=broker.now)
+                decision = await trader_cycle(store, broker, cohort(at=broker.now), model,
+                                              store.latest_proof(), now=broker.now)
+                if i == 6:
+                    assert decision.action == "WAIT" and "SESSION_RESERVATION_LIMIT" in decision.gates
+                    break
+                chosen.append(decision.symbol)
+                assert len(broker.posts) == 2*i+1
+                broker.set_mark(decision.symbol, Decimal(98), as_of=broker.now)
+                await guardian_cycle(store, broker, now=broker.now)
+>               import_broker_events(store, tuple(e for e in fee_events(store, broker)
+                                                  if e.cost.fill_id in {f.fill_id for f in broker.fills[-2:]}))
+
+tests\integration\paper_core\test_daily_selection.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\outcomes.py:123: in import_broker_events
+    return _import_events(store, events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x000001183011C490>
+events = (BrokerEvent(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...None), cash_activity=None, activity_complete=False, activity_fill_ids=(), activity_watermark=None, correction_of=None))
+
+    def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[str, ...]:
+        """Commit canonical events, fees and source cursors together; conflicting replay rolls back."""
+        imported: list[str] = []
+        imported_at: list[datetime] = []
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            repo = StorageRepository(session)
+            links = {
+                link["intent_id"]: link
+                for link in session.execute(select(table("core_intent_links"))).mappings()
+            }
+            ordered = sorted(events, key=lambda e: 0 if e.order else 1 if e.fill else 2)
+            for supplied in ordered:
+                event = BrokerEvent.model_validate(supplied.model_dump())
+                try:
+                    if (
+                        event.account_id != store.config.account_id
+                        or event.evidence_lane != store.config.evidence_lane
+                        or event.release_id != store.config.release_id
+                        or event.correction_of is not None
+                    ):
+                        raise StateConflictError("source binding or correction authority mismatch")
+                    identity = _source_id(event)
+                    sources = table("core_broker_event_sources")
+                    previous = session.execute(
+                        select(sources.c.payload).where(sources.c.id == identity)
+                    ).scalar_one_or_none()
+                    if previous is not None:
+                        old = BrokerEvent.model_validate_json(previous)
+                        if _semantic(old) != _semantic(event):
+                            raise _EvidenceRejected(
+                                "conflicting source event replay",
+                                tuple(
+                                    sorted(
+                                        set(_implicated_clients(repo, event))
+                                        | set(_implicated_clients(repo, old))
+                                    )
+                                ),
+                                (identity,),
+                            )
+                        continue
+                    intent = next(
+                        (
+                            i
+                            for i in (repo.get_order_intent(identity) for identity in links)
+                            if i is not None and i.client_order_id == event.client_order_id
+                        ),
+                        None,
+                    )
+                    if intent is None or intent.intent_id not in links:
+                        raise StateConflictError("event has no accepted owned intent")
+                    if event.order:
+                        _adopt(repo, intent, event.order)
+                    if event.fill:
+                        order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+                        if (
+                            order is None
+                            or event.fill.broker_order_id != order.broker_order_id
+                            or event.fill.symbol != intent.symbol
+                            or event.fill.side is not intent.side
+                            or event.fill.occurred_at < order.submitted_at
+                        ):
+                            raise StateConflictError("fill ownership/chronology mismatch")
+                        repo.record_fill(event.fill)
+                    if event.cost:
+                        fill = repo.get_fill(event.cost.fill_id)
+                        order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+                        if (
+                            fill is None
+                            or order is None
+                            or fill.broker_order_id != order.broker_order_id
+                        ):
+                            raise StateConflictError("cost has no exact owned fill")
+                        if event.cost.recorded_at_utc != event.recorded_at_utc:
+                            raise StateConflictError("cost availability does not match source receipt")
+                        if not (
+                            event.cost.effective_start <= fill.occurred_at <= event.cost.effective_end
+                        ):
+                            raise StateConflictError("cost authority does not apply to fill time")
+                        from quantbot.paper_core.operational_costs import cost_contract_conflict_source
+    
+                        contradiction = None
+                        if event.cost.source == "CONTRACTUAL_ZERO" and event.cost.document_id:
+                            contradiction = (
+                                session.execute(
+                                    select(table("core_source_cursors")).where(
+                                        table("core_source_cursors").c.source_id
+                                        == cost_contract_conflict_source(
+                                            event.account_id, event.cost.document_id
+                                        )
+                                    )
+                                )
+                                .mappings()
+                                .one_or_none()
+                            )
+                        if contradiction is None:
+                            record_cost(session, event.cost, fill)
+                        else:
+                            # Generation and import can straddle a fee poll in another role.
+                            # Keep the raw event below, but never grant its contradicted zero
+                            # current cost authority. Previously admitted zeros are backfilled.
+                            refusal = {
+                                "kind": "CONTRACTUAL_ZERO_ADMISSION_REFUSED",
+                                "account_id": event.account_id,
+                                "contract_id": event.cost.document_id,
+                                "source_event_id": identity,
+                                "cost_id": event.cost.id,
+                                "fill_id": fill.fill_id,
+                                "client_order_id": intent.client_order_id,
+                                "first_conflict_source": contradiction["event_id"],
+                                "first_conflict_at": contradiction["available_at"],
+                                "reason": "EXACT_COST_CONTRACT_CONTRADICTED_AT_IMPORT",
+                            }
+                            put(session, "core_provider_acquisitions", content_id(refusal), refusal)
+                    if event.cash_activity:
+                        activity = event.cash_activity
+                        fills = repo.list_fills()
+                        movements = dict(activity.movements)
+                        if (
+                            not activity.complete
+                            or activity.account_id != store.config.account_id
+                            or activity.evidence_lane != store.config.evidence_lane
+                            or activity.release_id != store.config.release_id
+                            or len(movements) != len(activity.movements)
+                            or set(movements) != {f.fill_id for f in fills}
+                            or len(activity.activity_ids) != len(fills)
+                            or len(set(activity.activity_ids)) != len(activity.activity_ids)
+                            or activity.watermark > activity.recorded_at_utc
+                            or any(activity.watermark < f.occurred_at for f in fills)
+                            or activity.recorded_at_utc != event.recorded_at_utc
+                        ):
+                            raise StateConflictError(
+                                "cash activity complete ownership watermark unavailable"
+                            )
+                        for fill in fills:
+                            gross = fill.quantity * fill.price
+                            amount = movements[fill.fill_id]
+                            if (fill.side is OrderSide.BUY and amount > -gross) or (
+                                fill.side is OrderSide.SELL and (amount > gross or amount < 0)
+                            ):
+                                raise StateConflictError(
+                                    "cash movement contradicts fill direction/notional"
+                                )
+                        existing = session.execute(
+                            select(table("core_cash_activities").c.payload)
+                        ).scalars()
+                        for encoded in existing:
+                            from quantbot.paper_core.contracts import CashActivity
+    
+                            old_activity = CashActivity.model_validate_json(encoded)
+                            if (
+                                dict(old_activity.movements).keys() == movements.keys()
+                                and old_activity.movements != activity.movements
+                            ):
+                                raise StateConflictError(
+                                    "conflicting cash activity; explicit correction required"
+                                )
+                        put(session, "core_cash_activities", activity.id, activity)
+                    put(session, "core_broker_event_sources", identity, event)
+                    cursor = table("core_source_cursors")
+                    source = content_id(
+                        {
+                            "provider": event.provider,
+                            "account": event.account_id,
+                            "endpoint": event.endpoint,
+                        }
+                    )
+                    current = session.execute(
+                        select(cursor.c.available_at).where(cursor.c.source_id == source)
+                    ).scalar_one_or_none()
+                    available = encode_utc(event.recorded_at_utc)
+                    if current is None:
+                        session.execute(
+                            cursor.insert().values(
+                                source_id=source, available_at=available, event_id=identity
+                            )
+                        )
+                    elif available > current:
+                        session.execute(
+                            update(cursor)
+                            .where(cursor.c.source_id == source)
+                            .values(available_at=available, event_id=identity)
+                        )
+                    imported.append(identity)
+                    imported_at.append(event.recorded_at_utc)
+                except _EvidenceRejected:
+                    raise
+                except StateConflictError as error:
+>                   raise _EvidenceRejected(
+                        str(error), _implicated_clients(repo, event), (_source_id(event),)
+                    ) from error
+E                   quantbot.paper_core.outcomes._EvidenceRejected: cost revision conflicts with current predecessor
+
+src\quantbot\paper_core\outcomes.py:389: _EvidenceRejected
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_six_completed_reservations_block_seventh_and_final_send_counts_once
+1 failed, 23 passed in 13.98s

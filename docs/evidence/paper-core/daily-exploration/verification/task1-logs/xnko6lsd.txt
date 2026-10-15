@@ -1,0 +1,56 @@
+.FF                                                                      [100%]
+================================== FAILURES ===================================
+_ test_trader_role_acquires_cohort_and_guardian_refreshes_owned_actual_symbol _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-xnko6lsd/pytest/test_trader_role_acquires_coho0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000251E3B678D0>
+
+    @pytest.mark.asyncio
+    async def test_trader_role_acquires_cohort_and_guardian_refreshes_owned_actual_symbol(tmp_path, monkeypatch):
+        from types import SimpleNamespace
+        from quantbot.paper_core import roles
+        from quantbot.paper_core.trader import trader_cycle
+        from tests.integration.paper_core.test_daily_selection import NOW, cohort, prepare
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        class Clock:
+            process_id = "role-cohort"
+            def sample(self):
+                return NOW, 100.
+        store.clocks = Clock()
+        captured = cohort()
+        async def acquire():
+            return captured
+        broker.observation_cohort = acquire
+        async def legacy():
+            raise AssertionError("hybrid role used legacy single-symbol acquisition")
+        broker.observation = legacy
+        runtime = SimpleNamespace(entry_poll_seconds=15, guardian_poll_seconds=15, outcomes_poll_seconds=15)
+        try:
+            await roles.run_role(store, broker, runtime, "trader", cycles=1)
+>           assert len(store.links()) == 1
+E           assert 0 == 1
+E            +  where 0 = len([])
+E            +    where [] = links()
+E            +      where links = <quantbot.paper_core.store.CoreStore object at 0x00000251E4FA3610>.links
+
+tests\integration\paper_core\test_daily_cohort_adapter.py:97: AssertionError
+---------------------------- Captured stdout call -----------------------------
+{"role":"trader","release_id":"m1-synthetic-fixture","config_id":"89ba9ba35cb88c3015bd489f71ae30fd314209092c3c859910ae5c7f12fa8cef","store_identity":"1ce74bfb-02ff-4226-94e0-c547870e70ef","owner":"paper-core-synthetic","generation":1,"process_epoch":"role-cohort","pid":24456,"recorded_at":"2026-10-14T14:00:00Z","valid_until":"2026-10-14T14:00:30Z","last_useful_progress":null,"objections":["CORE_INDEPENDENT_GUARDIAN_NOT_READY","hybrid role used legacy single-symbol acquisition"],"evidence_ids":[],"proof_age_seconds":null,"guardian_receipt_id":null,"first_blocker":"CORE_INDEPENDENT_GUARDIAN_NOT_READY","time_proof_age_seconds":null,"cycle_seconds":0.0}
+_____________ test_cost_contract_must_cover_whole_trade_universe ______________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-xnko6lsd/pytest/test_cost_contract_must_cover_0')
+
+    def test_cost_contract_must_cover_whole_trade_universe(tmp_path):
+        from quantbot.paper_core.operational_costs import PaperCostContract
+        now = datetime(2026, 10, 14, 14, 5, tzinfo=UTC)
+        contract = PaperCostContract(account_id="paper", endpoint="https://paper-api.alpaca.markets",
+                                     asset_class="US_LISTED_EQUITY", symbols=("XLE",),
+                                     start=now-timedelta(days=1), end=now+timedelta(days=1), components=())
+>       with pytest.raises(ValueError, match="cost contract"):
+E       Failed: DID NOT RAISE ValueError
+
+tests\integration\paper_core\test_daily_cohort_adapter.py:127: Failed
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_cohort_adapter.py::test_trader_role_acquires_cohort_and_guardian_refreshes_owned_actual_symbol
+FAILED tests/integration/paper_core/test_daily_cohort_adapter.py::test_cost_contract_must_cover_whole_trade_universe
+2 failed, 1 passed in 2.70s

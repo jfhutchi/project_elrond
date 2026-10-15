@@ -1,0 +1,29 @@
+F
+================================== FAILURES ===================================
+____ test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation _____
+
+    def test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation():
+>       assert gross_policy().model_dump()["target_contract"] == GROSS
+               ^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:35: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+kwargs = {}
+
+    def gross_policy(**kwargs):
+>       return LearningPolicy(target_contract=GROSS, procedure_version=V3, **kwargs)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 2 validation errors for LearningPolicy
+E       target_contract
+E         Input should be 'owned-executed-net-return-v1' [type=literal_error, input_value='owned-executed-paper-gross-return-v1', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+E       procedure_version
+E         Input should be 'daily-all-history-walk-forward-v2' [type=literal_error, input_value='daily-paper-exploration-walk-forward-v3', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/literal_error
+
+tests\fault\paper_core\test_learning_gross.py:31: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!
+1 failed in 2.17s

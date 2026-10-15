@@ -1,0 +1,220 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_______________ test_first_buy_partial_publication_is_retryable _______________
+
+store = <quantbot.paper_core.store.CoreStore object at 0x000002040D6C3C90>
+broker = <quantbot.paper_core.alpaca_adapter.AlpacaCoreBroker object at 0x000002041253A510>
+now = datetime.datetime(2026, 10, 14, 14, 5, 3, 440000, tzinfo=datetime.timezone.utc)
+
+    async def synchronize(
+        store: CoreStore, broker: SyntheticBroker | AlpacaCoreBroker, *, now: datetime
+    ) -> str:
+        require_runtime_broker(store, broker)
+        from quantbot.paper_core.outcomes import recover_intents
+    
+        capture_started, start = store.clocks.sample()
+        funds_capture = paper_balance_policy(store.config)
+        open_orders = second_open_orders = None
+        if store.config.clock_profile == "PAPER_TIME_V2":
+            async with asyncio.timeout(5):
+                await recover_intents(store, broker)
+                account = await broker.get_account()
+                positions = await broker.get_positions()
+                if funds_capture:
+                    try:
+                        open_orders = tuple(await broker.get_open_orders())
+                    except (
+                        OSError,
+                        TimeoutError,
+                        BrokerRequestError,
+                        BrokerTransportError,
+                        BrokerProtocolError,
+                    ):
+                        pass  # Entry funds unavailable; quantity protection still proceeds.
+                second_account = await broker.get_account()
+                second_positions = await broker.get_positions()
+                if funds_capture and open_orders is not None:
+                    try:
+                        second_open_orders = tuple(await broker.get_open_orders())
+                    except (
+                        OSError,
+                        TimeoutError,
+                        BrokerRequestError,
+                        BrokerTransportError,
+                        BrokerProtocolError,
+                    ):
+                        pass
+            if (
+                store.clocks.sample()[1] - start > 5
+                or account != second_account
+                or positions != second_positions
+            ):
+                report(
+                    store,
+                    role="GUARDIAN",
+                    state="RETRYABLE_FAILURE",
+                    reasons=("INVENTORY_ACQUISITION_UNSTABLE",),
+                    now=now,
+                )
+                raise TimeoutError("INVENTORY_ACQUISITION_UNSTABLE")
+            # Acquisitions finish outside the writer lock; derive a fresh cutoff afterward.
+            now = store.clocks.sample()[0]
+        else:
+            await recover_intents(store, broker)
+            account = await broker.get_account()
+            positions = await broker.get_positions()
+        proof = None
+        try:
+            # Network acquisition has finished. Derive and certify the local generation
+            # against one locked ledger, without a competing certification gap.
+            with store.database.transaction() as session:
+                session.execute(text("BEGIN IMMEDIATE"))
+                if (
+                    store.config.clock_profile == "PAPER_TIME_V2"
+                    and store.clocks.sample()[1] - start > 5
+                ):
+                    raise TimeoutError("INVENTORY_ACQUISITION_UNSTABLE")
+                funds = None
+                if funds_capture and open_orders is not None and second_open_orders is not None:
+                    from quantbot.paper_core.authority import commission_in_session
+    
+                    commission = commission_in_session(store, session)
+                    funds = PaperFundsEvidence(
+                        recorded_at_utc=now,
+                        evidence_lane="BROKER_PAPER",
+                        release_id=store.config.release_id,
+                        endpoint=commission.endpoint,
+                        account_id=store.config.account_id,
+                        store_identity=store.database.store_identity,
+                        config_id=store.config_id,
+                        commission_id=commission.id,
+                        process_id=store.clocks.process_id,
+                        capture_started=capture_started,
+                        elapsed_seconds=store.clocks.sample()[1] - start,
+                        first_account=account,
+                        second_account=second_account,
+                        first_positions=positions,
+                        second_positions=second_positions,
+                        first_open_orders=open_orders,
+                        second_open_orders=second_open_orders,
+                    )
+                    put(session, "core_provider_acquisitions", funds.id, funds)
+                proof = store.proof(
+                    account.account,
+                    tuple((p.symbol, p.quantity) for p in positions),
+                    now=now,
+                    positions=positions,
+                    acquisition_id=funds.id
+                    if funds is not None
+                    else content_id(
+                        {
+                            "at": now,
+                            "provider": broker.provider,
+                            "positions": positions,
+                            "account": account.account,
+                        }
+                    ),
+                    session=session,
+                )
+                if funds is not None:
+                    proof = proof.model_copy(update={"funds_authority": funds.contract})
+>               certify_inventory(store, proof, session=session)
+
+src\quantbot\paper_core\guardian.py:251: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x000002040D6C3C90>
+proof = ReconciliationProof(schema_version=1, release_id='b905fc32bc16a8e411c3e3d8f6ada1092aa6aeb016bfcc69aad00a424b072611', e...quisition_id='892683b4a9fe6c3ac2bdfaeb27261a45557b90e9999ecc277277379ea3ae29b1', complete=True, order_ids=('order-0',))
+session = <sqlalchemy.orm.session.Session object at 0x0000020410DAC810>
+
+    def certify_inventory(
+        store: CoreStore, proof: ReconciliationProof, *, session: Session | None = None
+    ) -> int:
+        certs = table(
+            "core_inventory_certifications" if proof.cash_complete else "core_quantity_certifications"
+        )
+        owns_transaction = session is None
+        with nullcontext(session) if session is not None else store.database.transaction() as session:
+            if owns_transaction:
+                session.execute(text("BEGIN IMMEDIATE"))
+            put(session, "core_reconciliation_proofs", proof.id, proof)
+            existing = session.execute(
+                select(certs.c.generation).where(certs.c.proof_id == proof.id)
+            ).scalar_one_or_none()
+            if existing is not None:
+                return int(existing)
+            expected, cash, fills = store.ledger(session)
+            latest = latest_certification(session)
+            last = latest[0] if latest else 0
+            if (
+                not proof.complete
+                or proof.account.account_id != store.config.account_id
+                or proof.expected_quantities != tuple(sorted(expected.items()))
+                or proof.actual_quantities != tuple(sorted(expected.items()))
+                or proof.baseline_id
+                != session.execute(select(table("core_fixture_baselines").c.id)).scalar_one()
+                or proof.order_ids
+                != tuple(o.broker_order_id for o in StorageRepository(session).list_broker_orders())
+                or proof.release_id != store.config.release_id
+                or proof.fill_ids != fills
+                or (
+                    proof.ledger_state_id is not None
+                    and proof.ledger_state_id != store.ledger_state_id(session)
+                )
+                or proof.expected_cash != cash
+                or proof.cash_complete != (cash is not None)
+                or (cash is not None and proof.account.cash != cash)
+                or proof.generation != (last or 0) + 1
+            ):
+                # Refusal evidence must survive; certification authority must not.
+                session.commit()
+>               raise StateConflictError("INVENTORY_MISMATCH")
+E               quantbot.storage.repositories.StateConflictError: INVENTORY_MISMATCH
+
+src\quantbot\paper_core\store.py:453: StateConflictError
+
+During handling of the above exception, another exception occurred:
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-je2mjqfi/pytest/test_first_buy_partial_publica0')
+
+    @pytest.mark.asyncio
+    async def test_first_buy_partial_publication_is_retryable(tmp_path):
+        db, store, broker, provider, clocks = await prepare(tmp_path, provider_factory=PartialPublicationProvider)
+        try:
+            first, reasons = await enter(store, broker)
+            assert first.action == 'BUY' and not reasons
+            with db.transaction() as session:
+                initial = latest_certification(session)
+                assert not StorageRepository(session).list_fills()
+            with pytest.raises(TimeoutError, match='OWNED_FILL_ACTIVITY_PENDING'):
+>               await synchronize(store, broker, now=clocks.wall)
+
+..\..\..\..\AppData\Local\Temp\task4-review-partial-buy-37f519e213f5452a9a17fd1d35176af6\test_partial_buy.py:38: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\guardian.py:286: in synchronize
+    if mismatched and _pending_owned_activity(
+src\quantbot\paper_core\guardian.py:131: in _pending_owned_activity
+    previous = store.latest_proof()
+               ^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <quantbot.paper_core.store.CoreStore object at 0x000002040D6C3C90>
+
+    def latest_proof(self) -> ReconciliationProof:
+        with self.database.transaction() as session:
+            latest = latest_certification(session)
+            assert latest is not None
+            identity = latest[1]
+            revoked = table("core_cash_authority_revocations")
+            if session.execute(
+                select(revoked.c.snapshot_id).where(
+                    revoked.c.snapshot_id == "core-certified-" + identity
+                )
+            ).first():
+>               raise StateConflictError("CASH_AUTHORITY_REVOKED_RECONCILIATION_REQUIRED")
+E               quantbot.storage.repositories.StateConflictError: CASH_AUTHORITY_REVOKED_RECONCILIATION_REQUIRED
+
+src\quantbot\paper_core\store.py:119: StateConflictError
+=========================== short test summary info ===========================
+FAILED ..\..\..\..\AppData\Local\Temp\task4-review-partial-buy-37f519e213f5452a9a17fd1d35176af6\test_partial_buy.py::test_first_buy_partial_publication_is_retryable
+1 failed in 5.87s

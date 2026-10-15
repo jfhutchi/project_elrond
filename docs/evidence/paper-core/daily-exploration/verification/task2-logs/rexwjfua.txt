@@ -1,0 +1,136 @@
+FFF.F..                                                                  [100%]
+================================== FAILURES ===================================
+_ test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V3-True] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-rexwjfua/pytest/test_runtime_envelope_matches_0')
+mode = 'SIGNAL_OR_EXPLORE_V1', envelope = 'DAILY_BOUNDED_V3', allowed = True
+
+    @pytest.mark.parametrize("mode,envelope,allowed", [
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V3", True),
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V2", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V3", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V2", True),
+        ("SIGNAL_OR_EXPLORE_V1", "REVIEW_EACH_CANDIDATE", True),
+    ])
+    def test_runtime_envelope_matches_selected_learning_mode(tmp_path, mode, envelope, allowed):
+        from datetime import UTC, datetime
+    
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import RuntimeConfig
+    
+        fields = dict(repository=str(tmp_path), store_path=str(tmp_path / "fixture.db"),
+            store_identity="synthetic", expected_account_hash="a" * 64,
+            holdout_source=str(tmp_path / "canonical.db"), learning_origin=datetime(2026, 1, 1, tzinfo=UTC),
+            activation_policy=envelope,
+>           core=CoreConfig(account_id="synthetic", symbol="XLE", release_id="UNBOUND_PREPARED_RELEASE",
+                clock_profile="PAPER_TIME_V2", selection_policy=mode,
+                **({"universe": ("XLE", "AAPL")} if mode == "SIGNAL_OR_EXPLORE_V1" else {})))
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       universe
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=('XLE', 'AAPL'), input_type=tuple]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fault\paper_core\test_learning_gross.py:51: ValidationError
+_ test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V2-False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-rexwjfua/pytest/test_runtime_envelope_matches_1')
+mode = 'SIGNAL_OR_EXPLORE_V1', envelope = 'DAILY_BOUNDED_V2', allowed = False
+
+    @pytest.mark.parametrize("mode,envelope,allowed", [
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V3", True),
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V2", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V3", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V2", True),
+        ("SIGNAL_OR_EXPLORE_V1", "REVIEW_EACH_CANDIDATE", True),
+    ])
+    def test_runtime_envelope_matches_selected_learning_mode(tmp_path, mode, envelope, allowed):
+        from datetime import UTC, datetime
+    
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import RuntimeConfig
+    
+        fields = dict(repository=str(tmp_path), store_path=str(tmp_path / "fixture.db"),
+            store_identity="synthetic", expected_account_hash="a" * 64,
+            holdout_source=str(tmp_path / "canonical.db"), learning_origin=datetime(2026, 1, 1, tzinfo=UTC),
+            activation_policy=envelope,
+>           core=CoreConfig(account_id="synthetic", symbol="XLE", release_id="UNBOUND_PREPARED_RELEASE",
+                clock_profile="PAPER_TIME_V2", selection_policy=mode,
+                **({"universe": ("XLE", "AAPL")} if mode == "SIGNAL_OR_EXPLORE_V1" else {})))
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       universe
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=('XLE', 'AAPL'), input_type=tuple]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fault\paper_core\test_learning_gross.py:51: ValidationError
+_ test_runtime_envelope_matches_selected_learning_mode[MODEL_ONLY_V1-DAILY_BOUNDED_V3-False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-rexwjfua/pytest/test_runtime_envelope_matches_2')
+mode = 'MODEL_ONLY_V1', envelope = 'DAILY_BOUNDED_V3', allowed = False
+
+    @pytest.mark.parametrize("mode,envelope,allowed", [
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V3", True),
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V2", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V3", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V2", True),
+        ("SIGNAL_OR_EXPLORE_V1", "REVIEW_EACH_CANDIDATE", True),
+    ])
+    def test_runtime_envelope_matches_selected_learning_mode(tmp_path, mode, envelope, allowed):
+        from datetime import UTC, datetime
+    
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import RuntimeConfig
+    
+        fields = dict(repository=str(tmp_path), store_path=str(tmp_path / "fixture.db"),
+            store_identity="synthetic", expected_account_hash="a" * 64,
+            holdout_source=str(tmp_path / "canonical.db"), learning_origin=datetime(2026, 1, 1, tzinfo=UTC),
+            activation_policy=envelope,
+            core=CoreConfig(account_id="synthetic", symbol="XLE", release_id="UNBOUND_PREPARED_RELEASE",
+                clock_profile="PAPER_TIME_V2", selection_policy=mode,
+                **({"universe": ("XLE", "AAPL")} if mode == "SIGNAL_OR_EXPLORE_V1" else {})))
+        if allowed:
+            assert RuntimeConfig(**fields).activation_policy == envelope
+        else:
+>           with pytest.raises(ValueError, match="activation.*selection"):
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'activation.*selection'
+E             Actual message: "1 validation error for RuntimeConfig\nactivation_policy\n  Input should be 'REVIEW_EACH_CANDIDATE' or 'DAILY_BOUNDED_V2' [type=literal_error, input_value='DAILY_BOUNDED_V3', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error"
+
+tests\fault\paper_core\test_learning_gross.py:57: AssertionError
+_ test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-REVIEW_EACH_CANDIDATE-True] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-rexwjfua/pytest/test_runtime_envelope_matches_4')
+mode = 'SIGNAL_OR_EXPLORE_V1', envelope = 'REVIEW_EACH_CANDIDATE'
+allowed = True
+
+    @pytest.mark.parametrize("mode,envelope,allowed", [
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V3", True),
+        ("SIGNAL_OR_EXPLORE_V1", "DAILY_BOUNDED_V2", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V3", False),
+        ("MODEL_ONLY_V1", "DAILY_BOUNDED_V2", True),
+        ("SIGNAL_OR_EXPLORE_V1", "REVIEW_EACH_CANDIDATE", True),
+    ])
+    def test_runtime_envelope_matches_selected_learning_mode(tmp_path, mode, envelope, allowed):
+        from datetime import UTC, datetime
+    
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.release import RuntimeConfig
+    
+        fields = dict(repository=str(tmp_path), store_path=str(tmp_path / "fixture.db"),
+            store_identity="synthetic", expected_account_hash="a" * 64,
+            holdout_source=str(tmp_path / "canonical.db"), learning_origin=datetime(2026, 1, 1, tzinfo=UTC),
+            activation_policy=envelope,
+>           core=CoreConfig(account_id="synthetic", symbol="XLE", release_id="UNBOUND_PREPARED_RELEASE",
+                clock_profile="PAPER_TIME_V2", selection_policy=mode,
+                **({"universe": ("XLE", "AAPL")} if mode == "SIGNAL_OR_EXPLORE_V1" else {})))
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       universe
+E         Extra inputs are not permitted [type=extra_forbidden, input_value=('XLE', 'AAPL'), input_type=tuple]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fault\paper_core\test_learning_gross.py:51: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V3-True]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V2-False]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[MODEL_ONLY_V1-DAILY_BOUNDED_V3-False]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-REVIEW_EACH_CANDIDATE-True]
+4 failed, 3 passed, 1 deselected in 3.07s

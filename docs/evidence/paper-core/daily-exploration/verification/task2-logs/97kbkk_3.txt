@@ -1,0 +1,27 @@
+.......F                                                                 [100%]
+================================== FAILURES ===================================
+__ test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-97kbkk_3/pytest/test_day_ten_actual_gross_outc0')
+
+    parent = ModelArtifact(feature_version="five-minute-price-alpha-v1")
+    candidate = fit_candidate(pending, parent, gross_policy())
+    predictions = predict_bps(candidate, tuple(dict(e.observation.features) for e in pending))
+    assert min(predictions) < -10 and max(predictions) > 10
+    assert tuple(e.outcome.model_dump_json() for e in pending) == before
+    assert "before-fee" in candidate.description
+    with pytest.raises(ValueError, match="UNKNOWN_COSTS"):
+        fit_candidate(pending, parent, old)
+    for reason in ("M1_COST_PROVENANCE_UNAVAILABLE", "RECONCILIATION_PENDING"):
+        bad = pending[0].model_copy(
+            update={"outcome": pending[0].outcome.model_copy(update={"cost_reason": reason})}
+        )
+>       with pytest.raises(ValueError, match="GROSS_TARGET"):
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: assert (59 == 60)
+E        +  where 59 = len([{'outcome_id': 'c3aa9628ebed3051e19f71688a90b92a717d7fdabccab62aa881cd3c3f55b00f', 'lot_id': '0ea3ad588a400078a35cde7...57989b93ab955e18', 'available_at': '2026-10-14T17:30:00+00:00', 'source_start': '2026-10-14T16:25:00+00:00', ...}, ...])
+
+tests\fault\paper_core\test_learning_gross.py:112: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority
+1 failed, 7 passed in 51.88s

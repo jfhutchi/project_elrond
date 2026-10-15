@@ -1,6 +1,6 @@
 # Five-minute PAPER adapter candidate
 
-> **Legacy DIA adapter commissioning.** Current architecture and deployment are [PAPER core](paper-core.md) and the [Omen package](evidence/paper-core/omen-deployment/README.md). The procedures below preserve the earlier adapter's exact approval/ownership boundaries. They do not commission the new roles, widen the prepared XLE binding to daily multi-stock collection, or provide a compatible restart of schema-29 services after schema-36 migration.
+> **Legacy DIA adapter commissioning.** Current architecture and status are [PAPER core](paper-core.md) and [handover](evidence/paper-core/handover.md). The [approved hybrid/V3/current-funds successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md) requires its own prepared configuration and target/funds-specific commission; it is not merged or commissioned. The [Omen package](evidence/paper-core/omen-deployment/README.md) records the older XLE baseline. These legacy procedures neither activate the successor nor provide a compatible schema-29 service restart after schema-36 migration. The no-forced-acceptance and known-fee rules below retain their earlier adapter scope; they do not prohibit properly commissioned hybrid exploratory entries or V3 gross learning.
 
 > **Earlier guidance — 2026-10-06:** These commissioning controls applied to the retained adapter; historical setup records did not activate new shadow artifacts or earn fresh outcomes.
 

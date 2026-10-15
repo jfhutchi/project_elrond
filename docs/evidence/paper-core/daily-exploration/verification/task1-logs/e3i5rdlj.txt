@@ -1,0 +1,113 @@
+.FFF..F                                                                  [100%]
+================================== FAILURES ===================================
+_ test_signal_rank_is_today_count_prediction_prior_count_then_universe[values0-daily0-prior0-AAPL] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-e3i5rdlj/pytest/test_signal_rank_is_today_coun0')
+values = (0.025, 0.011, -0.004), daily = (), prior = (('AAPL', 10),)
+expected = 'AAPL'
+
+    @pytest.mark.parametrize("values,daily,prior,expected", [
+        ((.025, .011, -.004), (), (("AAPL", 10),), "AAPL"),
+        ((.025, .011, -.004), (("AAPL", 1), ("MSFT", 2)), (("AAPL", 10),), "AAPL"),
+        ((.025, .011, -.004), (("AAPL", 1), ("MSFT", 1)), (("AAPL", 10),), "AAPL"),
+        ((.025, .025, -.004), (), (("AAPL", 10),), "MSFT"),
+        ((.025, .025, -.004), (), (("AAPL", 2), ("MSFT", 2)), "AAPL"),
+    ])
+    def test_signal_rank_is_today_count_prediction_prior_count_then_universe(
+        tmp_path, values, daily, prior, expected,
+    ):
+        from quantbot.paper_core.selection import evaluate_cohort
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            model, active, captured = fitted_signal_inputs(active, values)
+            decision = evaluate_cohort(store.config, captured, model, proof, activation=active,
+                                       session_counts=daily, prior_counts=prior)
+>           assert decision.symbol == expected
+E           AssertionError: assert 'MSFT' == 'AAPL'
+E             
+E             - AAPL
+E             + MSFT
+
+tests\integration\paper_core\test_daily_selection.py:154: AssertionError
+_ test_signal_rank_is_today_count_prediction_prior_count_then_universe[values1-daily1-prior1-AAPL] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-e3i5rdlj/pytest/test_signal_rank_is_today_coun1')
+values = (0.025, 0.011, -0.004), daily = (('AAPL', 1), ('MSFT', 2))
+prior = (('AAPL', 10),), expected = 'AAPL'
+
+    @pytest.mark.parametrize("values,daily,prior,expected", [
+        ((.025, .011, -.004), (), (("AAPL", 10),), "AAPL"),
+        ((.025, .011, -.004), (("AAPL", 1), ("MSFT", 2)), (("AAPL", 10),), "AAPL"),
+        ((.025, .011, -.004), (("AAPL", 1), ("MSFT", 1)), (("AAPL", 10),), "AAPL"),
+        ((.025, .025, -.004), (), (("AAPL", 10),), "MSFT"),
+        ((.025, .025, -.004), (), (("AAPL", 2), ("MSFT", 2)), "AAPL"),
+    ])
+    def test_signal_rank_is_today_count_prediction_prior_count_then_universe(
+        tmp_path, values, daily, prior, expected,
+    ):
+        from quantbot.paper_core.selection import evaluate_cohort
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            model, active, captured = fitted_signal_inputs(active, values)
+            decision = evaluate_cohort(store.config, captured, model, proof, activation=active,
+                                       session_counts=daily, prior_counts=prior)
+>           assert decision.symbol == expected
+E           AssertionError: assert 'MSFT' == 'AAPL'
+E             
+E             - AAPL
+E             + MSFT
+
+tests\integration\paper_core\test_daily_selection.py:154: AssertionError
+_ test_signal_rank_is_today_count_prediction_prior_count_then_universe[values2-daily2-prior2-AAPL] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-e3i5rdlj/pytest/test_signal_rank_is_today_coun2')
+values = (0.025, 0.011, -0.004), daily = (('AAPL', 1), ('MSFT', 1))
+prior = (('AAPL', 10),), expected = 'AAPL'
+
+    @pytest.mark.parametrize("values,daily,prior,expected", [
+        ((.025, .011, -.004), (), (("AAPL", 10),), "AAPL"),
+        ((.025, .011, -.004), (("AAPL", 1), ("MSFT", 2)), (("AAPL", 10),), "AAPL"),
+        ((.025, .011, -.004), (("AAPL", 1), ("MSFT", 1)), (("AAPL", 10),), "AAPL"),
+        ((.025, .025, -.004), (), (("AAPL", 10),), "MSFT"),
+        ((.025, .025, -.004), (), (("AAPL", 2), ("MSFT", 2)), "AAPL"),
+    ])
+    def test_signal_rank_is_today_count_prediction_prior_count_then_universe(
+        tmp_path, values, daily, prior, expected,
+    ):
+        from quantbot.paper_core.selection import evaluate_cohort
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            model, active, captured = fitted_signal_inputs(active, values)
+            decision = evaluate_cohort(store.config, captured, model, proof, activation=active,
+                                       session_counts=daily, prior_counts=prior)
+>           assert decision.symbol == expected
+E           AssertionError: assert 'MSFT' == 'AAPL'
+E             
+E             - AAPL
+E             + MSFT
+
+tests\integration\paper_core\test_daily_selection.py:154: AssertionError
+_____________ test_exploration_today_count_precedes_prior_history _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-e3i5rdlj/pytest/test_exploration_today_count_p0')
+
+    def test_exploration_today_count_precedes_prior_history(tmp_path):
+        from quantbot.paper_core.selection import evaluate_cohort
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            decision = evaluate_cohort(store.config, cohort(), model, proof, activation=active,
+                                       session_counts=(("AAPL", 1), ("MSFT", 2), ("NVDA", 2)),
+                                       prior_counts=(("AAPL", 10),))
+>           assert decision.symbol == "AAPL" and decision.selection.kind == "EXPLORATION"
+E           AssertionError: assert ('MSFT' == 'AAPL'
+E             
+E             - AAPL
+E             + MSFT)
+
+tests\integration\paper_core\test_daily_selection.py:168: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values0-daily0-prior0-AAPL]
+FAILED tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values1-daily1-prior1-AAPL]
+FAILED tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values2-daily2-prior2-AAPL]
+FAILED tests/integration/paper_core/test_daily_selection.py::test_exploration_today_count_precedes_prior_history
+4 failed, 3 passed, 17 deselected in 5.15s

@@ -8,6 +8,14 @@ recovery procedure below. PR289 is merged; the replacement roles are staged disa
 and the operating stores have not migrated or been commissioned. A copy-only schema-36
 rehearsal and successful exact-release verifier do not establish trading readiness.
 
+That evidence belongs to the older XLE package. The
+[approved hybrid/V3/current-funds successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md)
+is not merged or commissioned. The successor is implemented and locally tested, including the combined trading-to-learning witness. Use its own prepared manifest/configuration and retained integrated
+verification. It is an economic change, not an executable-only compatibility transition:
+do not reopen a commissioned store with a new config identity or reinterpret its net model
+as gross. Initial successor commission starts with target-neutral COLLECT and explicit
+`DAILY_BOUNDED_V3`/current-funds authority.
+
 Refresh existing orders, task/process writers, account/ownership evidence and WAL-aware
 backups before transition. The latest dated check has an accepted unfilled IWM exit that
 blocks the no-open-order commission. Resolve it through its original IDs without another
@@ -24,6 +32,16 @@ Routine acquisition/provider/clock failures recover through scoped waits and fre
 evidence. Preserve explicit manual stops and audited integrity quarantine. An entry fence
 or rollback-model action must use the exact commissioned binding; resume does not clear
 unrelated stops or grant authority to an uncommissioned release.
+
+The approved `BROKER_PAPER_BALANCE_V1` recovery path must validate source-bound stable PAPER
+account/position/open-order evidence against quantity proof, current ledger and exact commission.
+Capture stability is within five seconds and age at most 120 seconds; repeat authority checks
+at claim, execution gate, locked send and recovery/resume. Current cash/buying power authorizes
+sizing while `expected_cash=None`, `cash_complete=False`, fees are unknown and net remains null.
+Do not fabricate cash activity/reconciliation, clear known discrepancies or revive revoked
+exact-cash authority. Legacy model-only mode retains its strict exact-cash requirement.
+Guardian/outcomes continue without entry-funds permission; source/ledger/balance changes need
+fresh evidence, and unknown submissions still recover through their original IDs.
 
 ## Legacy inventory and historical recovery reference
 

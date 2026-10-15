@@ -1,0 +1,326 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_ test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tx1p3u8n/pytest/test_operational_daily_receipt0')
+gross = False
+
+    @pytest.mark.parametrize("gross", [False, True])
+    def test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract(tmp_path, gross):
+        import asyncio
+        from datetime import timedelta
+    
+        from tests.integration.paper_core.test_final_repair import commissioned
+    
+        from quantbot.paper_core.activation import active_in_session, commission_operational_candidate
+        from quantbot.paper_core.contracts import LearningCalendar, LearningReceipt
+        from quantbot.paper_core.roles import daily_consideration
+        from quantbot.strategy import XNYSSession, XNYSSessionSequence
+    
+        db, store, release, commission, _ = commissioned(tmp_path, gross=gross)
+        try:
+            now = store.clocks.sample()[0]
+    
+            # External calendar boundary only; learner, commission and activation remain real.
+            class CalendarProvider:
+                async def learning_calendar(self):
+                    return LearningCalendar(
+                        authority="ALPACA_PAPER_XNYS_V1",
+                        sequence=XNYSSessionSequence(
+                            calendar="XNYS",
+                            sessions=tuple(
+                                XNYSSession(
+                                    session_date=(now - timedelta(days=d)).date(),
+                                    open_at=now - timedelta(days=d, hours=2),
+                                    close_at=now - timedelta(days=d, minutes=1),
+                                ) for d in (1, 0)
+                            ),
+                        ),
+                    )
+    
+>           reason = asyncio.run(daily_consideration(store, CalendarProvider(), release.config))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+src\quantbot\paper_core\roles.py:255: in daily_consideration
+    activation.activate_model(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x000002C18BD78D10>
+expected_model_id = '8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01'
+candidate_id = '8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01'
+authority = ActivationAuthority(runtime_commission_id='76e1ccc5b517b255f5ff92c8dbba884e1528d986f197f2f6d0c30238ce8c5fec', config_i...n_transition='BOUNDED_COLLECT_TO_PREDICT', risk_contract='positions1-position50-risk25-stop100-horizon30-reserve10-v1')
+at = datetime.datetime(2026, 10, 15, 2, 53, 22, 413894, tzinfo=datetime.timezone.utc)
+
+    def activate_model(
+        store: CoreStore,
+        *,
+        expected_model_id: str,
+        candidate_id: str,
+        authority: ActivationAuthority,
+        at: datetime,
+    ) -> Activation:
+        if store.config.evidence_lane == "BROKER_PAPER":
+            from quantbot.paper_core.canonical import refresh_canonical_metadata
+    
+            refresh_canonical_metadata(store)
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            approved = _document(
+                session, "core_activation_authorities", authority.id, ActivationAuthority
+            )
+            selection = active_in_session(store, session)
+            if selection is None:
+                raise StateConflictError("ACTIVE_MODEL_UNCOMMISSIONED")
+            parent, previous = selection
+            if parent.id != expected_model_id or previous.id != authority.expected_activation_id:
+                raise StateConflictError("STALE_ACTIVATION")
+            if (
+                approved != authority
+                or authority.config_id != store.config_id
+                or authority.evidence_lane != store.config.evidence_lane
+                or authority.candidate_id != candidate_id
+                or not previous.at <= authority.commissioned_at <= at < authority.expires_at
+            ):
+                raise StateConflictError("ACTIVATION_AUTHORITY_INVALID")
+            candidate: ModelArtifact = _document(session, "core_models", candidate_id, ModelArtifact)
+            receipt = _receipt(session, candidate, authority.receipt_id)
+            _authority_contract(receipt, candidate, authority)
+            if parent.mode == "PREDICT" and (
+                parent.target_contract != receipt.policy.target_contract
+                or parent.policy_id != receipt.policy.policy_id
+            ):
+                raise StateConflictError("ACTIVATION_INCUMBENT_CONTRACT_MISMATCH")
+            if store.config.evidence_lane == "BROKER_PAPER":
+                from quantbot.paper_core.authority import commission_in_session
+    
+                commission = commission_in_session(store, session)
+                _operational_policy(store, receipt, commission.activation_policy)
+                if authority.runtime_commission_id != commission.id:
+                    raise StateConflictError("ACTIVATION_RUNTIME_AUTHORITY_INVALID")
+            if store.config.evidence_lane == "BROKER_PAPER":
+                from quantbot.paper_core.operational_costs import pending_cost_revision_source
+    
+                if session.execute(
+                    select(table("core_source_cursors").c.source_id).where(
+                        table("core_source_cursors").c.source_id
+                        == pending_cost_revision_source(store.config.account_id)
+                    )
+                ).first():
+                    raise StateConflictError("ACTIVATION_CURRENT_COST_REVISIONS_PENDING")
+            if store.config.evidence_lane == "BROKER_PAPER" and receipt.status != "NO_CHANGE":
+                from datetime import date
+    
+                from quantbot.paper_core.learning import _guard
+    
+                ranges = session.execute(
+                    select(table("core_outcome_revisions").c.payload).where(
+                        table("core_outcome_revisions").c.id.in_(receipt.final_input_ids)
+                    )
+                ).scalars()
+                for encoded in ranges:
+                    outcome = json.loads(encoded)
+                    reason = _guard(
+                        session,
+                        receipt.policy.dataset,
+                        date.fromisoformat(outcome["source_start"][:10]),
+                        date.fromisoformat(outcome["source_end"][:10]),
+                        now=store.clocks.sample()[0].date(),
+                    )
+                    if reason:
+                        raise StateConflictError("ACTIVATION_CURRENT_CANONICAL_REFUSAL:" + reason)
+            if (
+                receipt.parent_model_id != parent.id
+                or receipt.evidence_lane != authority.evidence_lane
+                or receipt.policy.evidence_lane != authority.evidence_lane
+                or receipt.available_at is None
+                or receipt.available_at > at
+                or receipt.completed_at != receipt.available_at
+                or receipt.execution_clock_domain is None
+                or not receipt.execution_clock_domain.startswith(authority.evidence_lane + ":")
+                or candidate.feature_version != authority.feature_version
+                or (candidate.mode == "PREDICT" and candidate.policy_id != authority.policy_id)
+                or (
+                    candidate.mode == "PREDICT"
+                    and candidate.target_contract != authority.target_contract
+                )
+                or receipt.policy.exit_contract != authority.exit_contract
+            ):
+>               raise StateConflictError("ACTIVATION_RECEIPT_OR_CONTRACT_INVALID")
+E               quantbot.storage.repositories.StateConflictError: ACTIVATION_RECEIPT_OR_CONTRACT_INVALID
+
+src\quantbot\paper_core\activation.py:596: StateConflictError
+_ test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[True] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tx1p3u8n/pytest/test_operational_daily_receipt1')
+gross = True
+
+    @pytest.mark.parametrize("gross", [False, True])
+    def test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract(tmp_path, gross):
+        import asyncio
+        from datetime import timedelta
+    
+        from tests.integration.paper_core.test_final_repair import commissioned
+    
+        from quantbot.paper_core.activation import active_in_session, commission_operational_candidate
+        from quantbot.paper_core.contracts import LearningCalendar, LearningReceipt
+        from quantbot.paper_core.roles import daily_consideration
+        from quantbot.strategy import XNYSSession, XNYSSessionSequence
+    
+        db, store, release, commission, _ = commissioned(tmp_path, gross=gross)
+        try:
+            now = store.clocks.sample()[0]
+    
+            # External calendar boundary only; learner, commission and activation remain real.
+            class CalendarProvider:
+                async def learning_calendar(self):
+                    return LearningCalendar(
+                        authority="ALPACA_PAPER_XNYS_V1",
+                        sequence=XNYSSessionSequence(
+                            calendar="XNYS",
+                            sessions=tuple(
+                                XNYSSession(
+                                    session_date=(now - timedelta(days=d)).date(),
+                                    open_at=now - timedelta(days=d, hours=2),
+                                    close_at=now - timedelta(days=d, minutes=1),
+                                ) for d in (1, 0)
+                            ),
+                        ),
+                    )
+    
+>           reason = asyncio.run(daily_consideration(store, CalendarProvider(), release.config))
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_gross.py:111: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:190: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\asyncio\base_events.py:654: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+src\quantbot\paper_core\roles.py:255: in daily_consideration
+    activation.activate_model(
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+store = <quantbot.paper_core.store.CoreStore object at 0x000002C18B8D2310>
+expected_model_id = '8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01'
+candidate_id = '8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01'
+authority = ActivationAuthority(runtime_commission_id='bbf135606fbd6fc41d300d7d18d5894c2bcb932afd87b2c4d8bde1d91468b13e', config_i...n_transition='BOUNDED_COLLECT_TO_PREDICT', risk_contract='positions1-position50-risk25-stop100-horizon30-reserve10-v1')
+at = datetime.datetime(2026, 10, 15, 2, 53, 25, 407812, tzinfo=datetime.timezone.utc)
+
+    def activate_model(
+        store: CoreStore,
+        *,
+        expected_model_id: str,
+        candidate_id: str,
+        authority: ActivationAuthority,
+        at: datetime,
+    ) -> Activation:
+        if store.config.evidence_lane == "BROKER_PAPER":
+            from quantbot.paper_core.canonical import refresh_canonical_metadata
+    
+            refresh_canonical_metadata(store)
+        with store.database.transaction() as session:
+            session.execute(text("BEGIN IMMEDIATE"))
+            approved = _document(
+                session, "core_activation_authorities", authority.id, ActivationAuthority
+            )
+            selection = active_in_session(store, session)
+            if selection is None:
+                raise StateConflictError("ACTIVE_MODEL_UNCOMMISSIONED")
+            parent, previous = selection
+            if parent.id != expected_model_id or previous.id != authority.expected_activation_id:
+                raise StateConflictError("STALE_ACTIVATION")
+            if (
+                approved != authority
+                or authority.config_id != store.config_id
+                or authority.evidence_lane != store.config.evidence_lane
+                or authority.candidate_id != candidate_id
+                or not previous.at <= authority.commissioned_at <= at < authority.expires_at
+            ):
+                raise StateConflictError("ACTIVATION_AUTHORITY_INVALID")
+            candidate: ModelArtifact = _document(session, "core_models", candidate_id, ModelArtifact)
+            receipt = _receipt(session, candidate, authority.receipt_id)
+            _authority_contract(receipt, candidate, authority)
+            if parent.mode == "PREDICT" and (
+                parent.target_contract != receipt.policy.target_contract
+                or parent.policy_id != receipt.policy.policy_id
+            ):
+                raise StateConflictError("ACTIVATION_INCUMBENT_CONTRACT_MISMATCH")
+            if store.config.evidence_lane == "BROKER_PAPER":
+                from quantbot.paper_core.authority import commission_in_session
+    
+                commission = commission_in_session(store, session)
+                _operational_policy(store, receipt, commission.activation_policy)
+                if authority.runtime_commission_id != commission.id:
+                    raise StateConflictError("ACTIVATION_RUNTIME_AUTHORITY_INVALID")
+            if store.config.evidence_lane == "BROKER_PAPER":
+                from quantbot.paper_core.operational_costs import pending_cost_revision_source
+    
+                if session.execute(
+                    select(table("core_source_cursors").c.source_id).where(
+                        table("core_source_cursors").c.source_id
+                        == pending_cost_revision_source(store.config.account_id)
+                    )
+                ).first():
+                    raise StateConflictError("ACTIVATION_CURRENT_COST_REVISIONS_PENDING")
+            if store.config.evidence_lane == "BROKER_PAPER" and receipt.status != "NO_CHANGE":
+                from datetime import date
+    
+                from quantbot.paper_core.learning import _guard
+    
+                ranges = session.execute(
+                    select(table("core_outcome_revisions").c.payload).where(
+                        table("core_outcome_revisions").c.id.in_(receipt.final_input_ids)
+                    )
+                ).scalars()
+                for encoded in ranges:
+                    outcome = json.loads(encoded)
+                    reason = _guard(
+                        session,
+                        receipt.policy.dataset,
+                        date.fromisoformat(outcome["source_start"][:10]),
+                        date.fromisoformat(outcome["source_end"][:10]),
+                        now=store.clocks.sample()[0].date(),
+                    )
+                    if reason:
+                        raise StateConflictError("ACTIVATION_CURRENT_CANONICAL_REFUSAL:" + reason)
+            if (
+                receipt.parent_model_id != parent.id
+                or receipt.evidence_lane != authority.evidence_lane
+                or receipt.policy.evidence_lane != authority.evidence_lane
+                or receipt.available_at is None
+                or receipt.available_at > at
+                or receipt.completed_at != receipt.available_at
+                or receipt.execution_clock_domain is None
+                or not receipt.execution_clock_domain.startswith(authority.evidence_lane + ":")
+                or candidate.feature_version != authority.feature_version
+                or (candidate.mode == "PREDICT" and candidate.policy_id != authority.policy_id)
+                or (
+                    candidate.mode == "PREDICT"
+                    and candidate.target_contract != authority.target_contract
+                )
+                or receipt.policy.exit_contract != authority.exit_contract
+            ):
+>               raise StateConflictError("ACTIVATION_RECEIPT_OR_CONTRACT_INVALID")
+E               quantbot.storage.repositories.StateConflictError: ACTIVATION_RECEIPT_OR_CONTRACT_INVALID
+
+src\quantbot\paper_core\activation.py:596: StateConflictError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_gross.py::test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[False]
+FAILED tests/fault/paper_core/test_learning_gross.py::test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[True]
+2 failed, 11 deselected in 8.54s

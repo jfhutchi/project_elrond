@@ -1,6 +1,6 @@
 # Experimental PAPER positions and daily performance
 
-> **Legacy pilot contract.** The current [PAPER core](paper-core.md) envelope uses at most one new position, 50 bps (0.5%) position value, 25 bps entry risk, a 100 bps stop and 30-minute horizon, retaining stricter controls. The earlier 5% ceiling below is not the new-core limit. Core owned-lot net outcomes, account daily equity, and modeled economics are separate. Original-owner inherited holdings and existing protection remain unchanged during [staging](evidence/paper-core/omen-deployment/README.md).
+> **Legacy pilot contract.** The [PAPER core](paper-core.md) retains one concurrent core lot, 50 bps (0.5%) position value, 25 bps entry risk, a 100 bps stop and 30-minute horizon. Its [approved successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md), not merged or commissioned, adds six durable entry reservations per exchange session; that cap is separate from concurrency and includes completed/unknown-send cases. V3 established gross outcomes may train with a fee-only gap, leaving fees unknown and net null. Current-funds entry authority does not certify historical cash. Owned gross/net outcomes, account daily equity and modeled economics remain separate. The older 5% pilot below and inherited-owner protections retain their original contracts; see [handover](evidence/paper-core/handover.md).
 
 The frozen experimental model has no live route and no automatic challenger promotion.
 New learner entries retain the tighter of existing controls and 0.25% entry risk,

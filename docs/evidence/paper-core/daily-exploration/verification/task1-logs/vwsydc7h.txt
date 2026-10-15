@@ -1,0 +1,21 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+____ test_collect_without_commissioned_activation_cannot_claim_exploration ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-vwsydc7h/pytest/test_collect_without_commissio0')
+
+    def test_collect_without_commissioned_activation_cannot_claim_exploration(tmp_path):
+        from quantbot.paper_core.selection import evaluate_cohort
+        db, store, broker, proof, model, active = prepare(tmp_path)
+        try:
+            decision = evaluate_cohort(store.config, cohort(), model, proof)
+>           assert decision.action == "WAIT" and "CORE_MODEL_UNCOMMISSIONED" in decision.gates
+E           AssertionError: assert ('BUY' == 'WAIT'
+E             
+E             - WAIT
+E             + BUY)
+
+tests\integration\paper_core\test_daily_selection.py:325: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_daily_selection.py::test_collect_without_commissioned_activation_cannot_claim_exploration
+1 failed, 16 deselected in 2.71s
