@@ -1,0 +1,57 @@
+{
+  "state": "PROPOSED_ONLY_NOT_REGISTERED",
+  "tasks": [
+    {
+      "name": "Elrond Paper Core Guardian",
+      "path": "task-proposal-guardian.xml",
+      "sha256": "48250de35d84598bbb8bd45ef3f09a9153ae2b4f3b88876009975d25f99ffa95",
+      "continuous_role_execution_time_limit": "PT0S",
+      "lifetime_reason": "Continuous protection/outcomes cannot be terminated by inherited learner PT5M limit",
+      "enabled": false,
+      "submission_disabled": true,
+      "precommission_verifier": false,
+      "token": "leepa/Interactive/Limited",
+      "based_on_archive": "5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc",
+      "runtime_token_verification": "NOT_PERFORMED"
+    },
+    {
+      "name": "Elrond Paper Core Outcomes",
+      "path": "task-proposal-outcomes.xml",
+      "sha256": "659c8536c3e8cd861aa167026cdc5b3402aa0eecb1256def53068e2e6bd3d1f2",
+      "continuous_role_execution_time_limit": "PT0S",
+      "lifetime_reason": "Continuous protection/outcomes cannot be terminated by inherited learner PT5M limit",
+      "enabled": false,
+      "submission_disabled": true,
+      "precommission_verifier": false,
+      "token": "leepa/Interactive/Limited",
+      "based_on_archive": "5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc",
+      "runtime_token_verification": "NOT_PERFORMED"
+    },
+    {
+      "name": "Elrond Paper Core Trader",
+      "path": "task-proposal-trader.xml",
+      "sha256": "21f6e1a1c0dd1583a61c4db436ee7ce7c3191ea56fea620bd83e67eb30a80c7c",
+      "continuous_role_execution_time_limit": "PT0S",
+      "lifetime_reason": "Continuous protection/outcomes cannot be terminated by inherited learner PT5M limit",
+      "enabled": false,
+      "submission_disabled": true,
+      "precommission_verifier": false,
+      "token": "leepa/Interactive/Limited",
+      "based_on_archive": "5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc",
+      "runtime_token_verification": "NOT_PERFORMED"
+    },
+    {
+      "name": "Elrond Paper Core Verify",
+      "path": "task-proposal-verify.xml",
+      "sha256": "3e73f6b9e967bf64cd0f2c10cdb03527da8f950c489aa8d6fa8fe21909bc82af",
+      "continuous_role_execution_time_limit": "PT0S",
+      "lifetime_reason": "Continuous protection/outcomes cannot be terminated by inherited learner PT5M limit",
+      "enabled": false,
+      "submission_disabled": false,
+      "precommission_verifier": true,
+      "token": "leepa/Interactive/Limited",
+      "based_on_archive": "5877f2706cb1a5aac15a73970650810e56b3330c1b46d5ffb583e81ac8ebcacc",
+      "runtime_token_verification": "NOT_PERFORMED"
+    }
+  ]
+}

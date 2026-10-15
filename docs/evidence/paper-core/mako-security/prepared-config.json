@@ -1,0 +1,44 @@
+{
+  "version": "paper-core-runtime-v1",
+  "repository": "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond",
+  "store_path": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+  "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+  "expected_account_hash": "ca2610f8f4c50efeb889856dd17445944557b3cd2f2a9ed67b83d59de2a49d19",
+  "endpoint": "https://paper-api.alpaca.markets",
+  "environment_file_reference": "C:\\Users\\leepa\\.config\\quantbot\\quantbot.env",
+  "core": {
+    "account_id": "RESOLVE_EXISTING_EXPECTED_ACCOUNT_ID",
+    "symbol": "XLE",
+    "release_id": "UNBOUND_PREPARED_RELEASE",
+    "policy_id": "collect-owned-30m-stop100-v1",
+    "owner": "paper-core",
+    "generation": 1,
+    "evidence_lane": "BROKER_PAPER",
+    "max_positions": 1,
+    "position_bps": 50,
+    "entry_risk_bps": 25,
+    "stop_bps": 100,
+    "horizon_minutes": 30,
+    "exit_buffer_seconds": 120,
+    "buying_power_reserve_bps": 500,
+    "clock_profile": "PAPER_TIME_V2"
+  },
+  "initial_model": {
+    "mode": "COLLECT",
+    "description": "nonpredictive baseline; no fitted model",
+    "feature_version": "five-minute-price-alpha-v1",
+    "learning_receipt_id": "M1_NO_LEARNING"
+  },
+  "holdout_source": "D:\\Elrond\\learner\\state\\learner.db",
+  "learning_origin": "2026-10-15T13:30:00Z",
+  "learning_dataset": "ALPACA_PAPER_OWNED",
+  "canonical_datasets": [
+    "us-equities-daily"
+  ],
+  "activation_policy": "DAILY_BOUNDED_V2",
+  "submission_enabled": true,
+  "cost_contract": null,
+  "guardian_poll_seconds": 15.0,
+  "outcomes_poll_seconds": 15.0,
+  "entry_poll_seconds": 15.0
+}

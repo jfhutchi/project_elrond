@@ -1,0 +1,13 @@
+........................................................................ [ 36%]
+..........ssssssssssssssssssssssssss.................................... [ 73%]
+...................................................                      [100%]
+=========================== short test summary info ===========================
+SKIPPED [2] tests\integration\test_storage_parity.py:161: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [4] tests\integration\test_storage_parity.py:200: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:207: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:232: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:257: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [10] tests\integration\test_storage_parity.py:399: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:417: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+SKIPPED [2] tests\integration\test_storage_parity.py:424: set QUANTBOT_TEST_POSTGRES_ADMIN_URL for disposable PostgreSQL parity tests
+169 passed, 26 skipped in 203.21s (0:03:23)

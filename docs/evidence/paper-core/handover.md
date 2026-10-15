@@ -1,6 +1,8 @@
 # PAPER core implementation and handover
 
-**Isolated implementation and preparation ACCEPTED; operational acceptance WAITING.** Implemented source: commit d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0 on codex/paper-core-m0. No deployment has occurred.
+**Isolated implementation and preparation ACCEPTED; operational acceptance WAITING.** Application source: commit d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0 on codex/paper-core-m0. Security update a3d5880f02f9d57104e3e833474a4648d1ec181e requires patched Mako and locks 1.4.3; application and launcher code are unchanged. Functional deployment has not occurred.
+
+The current [Mako security successor](mako-security/README.md) is prepared release `79e9155a7b54dd542b422cf2b3d11f71bb3616154de122fc7f27bc8f59147791`, with unchanged config `8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c` and schema 36. Its native Windows security reproduction passes after failing on the old dependency; the affected local gate passes 169 tests with 26 PostgreSQL-only skips. Use its config/manifest paths for subsequent deployment. Prior frozen bundles below remain historical evidence.
 
 The replacement has three independent roles: trader, guardian, and outcomes with daily learning. Ordinary provider or clock interruptions cause scoped waits and recovery after fresh evidence. Manual stops and genuine ownership/accounting failures retain their explicit controls.
 
@@ -18,7 +20,7 @@ The residual correction has its own preserved 28-test gate (51.12 seconds) and f
 
 The final missing-work correction passed ten focused tests in 17.25 seconds and six lint/type checks. It explicitly separates actual new-claim initialization from recovery; the added control proves an older notification cannot hide retained corrections when work metadata is absent. Claim replay cannot use new-claim initialization. These results remain separate from the earlier stages.
 
-## Exact local release
+## Pre-security release, preserved as historical evidence
 
 - Source commit: d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0.
 - Prepared release: 2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7.
@@ -48,9 +50,10 @@ The proposed first learning origin is October 15, 2026 at 13:30 UTC; regenerate 
 - [Design](../../superpowers/specs/2026-10-13-paper-core-design.md)
 - [Authoritative implementation plan](../../superpowers/plans/2026-10-13-paper-core.md)
 - [Whole-branch findings](final-review.md)
-- [Current prepared release, verifier command and artifact paths](missing-work-recovery/README.md)
+- [Current security-patched release and artifact paths](mako-security/README.md)
+- [Pre-security prepared release and final implementation regression evidence](missing-work-recovery/README.md)
 - [Preceding residual correction and evidence](residual-cutoff/README.md)
-- [Consolidated repair runbook and recovery semantics](final-repair/README.md); use the current missing-work-recovery release paths for future actions.
+- [Consolidated repair runbook and recovery semantics](final-repair/README.md); use the current mako-security release paths for future actions.
 - [Implementation report and staged test results](final-repair/final-fix-report.md)
 - [Consolidated repair scoped review](final-repair-review.md): R2–R4 addressed.
 - [Residual cutoff review](residual-cutoff-review.md): normal and existing-work paths addressed; original residual preserved in this historical report.

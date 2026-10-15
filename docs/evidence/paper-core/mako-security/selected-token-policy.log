@@ -1,0 +1,23 @@
+2026-10-15T01:32:42.4159940Z LEANNES-LAPTOP\leepa
+2026-10-15T01:32:42.4159940Z True
+2026-10-15T01:32:42.4159940Z C:\Windows\System32\WindowsPowerShell\v1.0
+2026-10-15T01:32:42.5467812Z 
+2026-10-15T01:32:42.5507599Z         Scope ExecutionPolicy
+2026-10-15T01:32:42.5507599Z         ----- ---------------
+2026-10-15T01:32:42.5507599Z MachinePolicy       Undefined
+2026-10-15T01:32:42.5507599Z    UserPolicy       Undefined
+2026-10-15T01:32:42.5507599Z       Process       Undefined
+2026-10-15T01:32:42.5507599Z   CurrentUser       Undefined
+2026-10-15T01:32:42.5507599Z  LocalMachine       Undefined
+2026-10-15T01:32:42.5507599Z 
+2026-10-15T01:32:42.5507599Z 
+2026-10-15T01:33:05.8977607Z 
+2026-10-15T01:33:05.9206445Z         Scope ExecutionPolicy
+2026-10-15T01:33:05.9206445Z         ----- ---------------
+2026-10-15T01:33:05.9206445Z MachinePolicy       Undefined
+2026-10-15T01:33:05.9206445Z    UserPolicy       Undefined
+2026-10-15T01:33:05.9206445Z       Process       Undefined
+2026-10-15T01:33:05.9206445Z   CurrentUser    RemoteSigned
+2026-10-15T01:33:05.9206445Z  LocalMachine       Undefined
+2026-10-15T01:33:05.9206445Z 
+2026-10-15T01:33:05.9206445Z 
