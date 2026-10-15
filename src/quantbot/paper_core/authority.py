@@ -467,10 +467,11 @@ def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
         ):
             raise StateConflictError("RESUME_FRESH_GUARDIAN_REQUIRED")
         proof = store.latest_proof()
+        from quantbot.paper_core.funds import entry_inventory_objections
+
         if (
             proof.id != approval.get("proof_id")
-            or not proof.complete
-            or not proof.cash_complete
+            or entry_inventory_objections(store, session, proof, now=now)
             or proof.ledger_state_id != store.ledger_state_id(session)
             or not 0 <= (now - proof.recorded_at_utc).total_seconds() <= 120
         ):

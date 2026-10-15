@@ -25,6 +25,7 @@ from quantbot.paper_core.contracts import (
     TimeProjection,
 )
 from quantbot.paper_core.features import observation_objections
+from quantbot.paper_core.funds import entry_inventory_objections, structural_funds_allowed
 from quantbot.paper_core.health import entry_health_objections, recover_health, report
 from quantbot.paper_core.runtime import coordinator, require_runtime_broker
 from quantbot.paper_core.send_guard import definitively_unsent
@@ -111,9 +112,7 @@ def evaluate_entry(
         inventory.account.account_id != config.account_id
         or inventory.expected_quantities != inventory.actual_quantities
         or not inventory.complete
-        or not inventory.cash_complete
-        or inventory.expected_cash is None
-        or inventory.account.cash != inventory.expected_cash
+        or not structural_funds_allowed(config, inventory)
     ):
         objections.append("INVENTORY_UNCERTIFIED")
     evaluated_at = (
@@ -227,11 +226,8 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             return None
         if repo.get_kill_switch_state().engaged:
             return None
-        certs = table("core_inventory_certifications")
-        latest = session.execute(
-            select(certs.c.proof_id).order_by(certs.c.generation.desc()).limit(1)
-        ).scalar_one()
         certification = latest_certification(session)
+        latest = certification[1] if certification else None
         revoked = table("core_cash_authority_revocations")
         if (
             certification is None
@@ -258,7 +254,16 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
                 )
             ).scalar_one()
         )
-        if not store.cash_authority_current(session, certified):
+        if entry_inventory_objections(
+            store,
+            session,
+            certified,
+            now=(
+                store.clocks.sample()[0]
+                if store.config.evidence_lane == "BROKER_PAPER"
+                else decision.recorded_at_utc
+            ),
+        ):
             return None
         from quantbot.paper_core.send_guard import compatible_successor, current_risk_allowed
 

@@ -467,6 +467,9 @@ def test_nondefault_health_recovery_does_not_clear_another_symbol(tmp_path):
                 "recorded_at_utc": NOW + timedelta(seconds=1),
             }
         )
+        from quantbot.paper_core.store import certify_inventory
+
+        certify_inventory(store, newer)
         recover_health(store, newer, now=NOW + timedelta(seconds=1), symbol="MSFT")
         with db.transaction() as session:
             assert entry_health_objections(store, session, "AAPL") == ("DATA_WAIT",)

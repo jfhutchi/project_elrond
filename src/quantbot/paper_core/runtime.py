@@ -14,6 +14,7 @@ from quantbot.domain import BrokerOrder, OrderIntent, Position
 from quantbot.execution import ExecutionCoordinator
 from quantbot.execution.coordinator import SubmissionPolicy
 from quantbot.paper_core.contracts import GuardianReceipt, ReconciliationProof
+from quantbot.paper_core.funds import entry_inventory_objections, paper_balance_policy
 from quantbot.paper_core.release import prepare_release, read_status, verify_release
 from quantbot.paper_core.send_guard import final_send_in_session
 from quantbot.paper_core.simulation import SyntheticBroker
@@ -105,6 +106,11 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
             assert adopted is not None
             return adopted
 
+    async def _open_exit_orders(self, purpose: OrderPurpose) -> tuple[BrokerOrder, ...]:
+        if purpose is OrderPurpose.ENTRY and paper_balance_policy(self.store.config):
+            return tuple(await self._broker.get_open_orders())
+        return await super()._open_exit_orders(purpose)
+
     def _gate(
         self,
         account_snapshot: BrokerAccountSnapshot,
@@ -138,11 +144,19 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                     reasons.append("CORE_MANUAL_ENTRY_PAUSE")
                 reasons.extend(entry_health_objections(self.store, session, intent.symbol))
                 proof = self.store.latest_proof()
-                if proof.account != account_snapshot.account or not proof.cash_complete:
+                if proof.account != account_snapshot.account or entry_inventory_objections(
+                    self.store, session, proof, now=self.store.clocks.sample()[0]
+                ):
                     reasons.append("CORE_CURRENT_CASH_OR_ACCOUNT_UNCERTIFIED")
+                if paper_balance_policy(self.store.config) and open_orders:
+                    reasons.append("CORE_COMPETING_OPEN_ORDER")
                 actual = tuple(sorted((p.symbol, p.quantity) for p in positions if p.quantity != 0))
                 if actual != tuple(sorted(proof.actual_quantities)):
                     reasons.append("CORE_INHERITED_EXPOSURE_CHANGED")
+                if sorted(
+                    (p.symbol, p.quantity, p.average_entry_price) for p in positions
+                ) != sorted((p.symbol, p.quantity, p.average_entry_price) for p in proof.positions):
+                    reasons.append("CORE_INHERITED_BASIS_CHANGED")
                 if any(p.symbol == intent.symbol and p.quantity != 0 for p in positions):
                     reasons.append("CORE_SYMBOL_ALREADY_HELD")
                 links = [r for r in self.store.links() if r["intent_id"] == intent.intent_id]

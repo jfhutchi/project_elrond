@@ -197,11 +197,9 @@ def recover_health(
             and proof.generation > h.failed_generation
             and proof.id not in h.evidence_ids
         ]
-        if (
-            not proof.complete
-            or not proof.cash_complete
-            or not store.cash_authority_current(session, proof)
-        ):
+        from quantbot.paper_core.funds import entry_inventory_objections
+
+        if entry_inventory_objections(store, session, proof, now=now):
             return
         # Quarantines remain until an explicit audited resolver supplies authority.
         if any(

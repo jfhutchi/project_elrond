@@ -13,10 +13,11 @@ from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType, Time
 from quantbot.execution.coordinator import OrderSubmissionBlocked
 from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
 from quantbot.paper_core.contracts import CycleReceipt, Decision, GuardianReceipt, ProtectionPlan
+from quantbot.paper_core.funds import PaperFundsEvidence, paper_balance_policy
 from quantbot.paper_core.health import active_health, report
 from quantbot.paper_core.runtime import require_runtime_broker
 from quantbot.paper_core.simulation import SyntheticBroker
-from quantbot.paper_core.store import CoreStore, certify_inventory, latest_certification, table
+from quantbot.paper_core.store import CoreStore, certify_inventory, latest_certification, put, table
 from quantbot.paper_core.time_evidence import (
     TimeEvidence,
     acquire_time_evidence,
@@ -35,14 +36,38 @@ async def synchronize(
     require_runtime_broker(store, broker)
     from quantbot.paper_core.outcomes import recover_intents
 
-    start = store.clocks.sample()[1]
+    capture_started, start = store.clocks.sample()
+    funds_capture = paper_balance_policy(store.config)
+    open_orders = second_open_orders = None
     if store.config.clock_profile == "PAPER_TIME_V2":
         async with asyncio.timeout(5):
             await recover_intents(store, broker)
             account = await broker.get_account()
             positions = await broker.get_positions()
+            if funds_capture:
+                try:
+                    open_orders = tuple(await broker.get_open_orders())
+                except (
+                    OSError,
+                    TimeoutError,
+                    BrokerRequestError,
+                    BrokerTransportError,
+                    BrokerProtocolError,
+                ):
+                    pass  # Entry funds unavailable; quantity protection still proceeds.
             second_account = await broker.get_account()
             second_positions = await broker.get_positions()
+            if funds_capture and open_orders is not None:
+                try:
+                    second_open_orders = tuple(await broker.get_open_orders())
+                except (
+                    OSError,
+                    TimeoutError,
+                    BrokerRequestError,
+                    BrokerTransportError,
+                    BrokerProtocolError,
+                ):
+                    pass
         if (
             store.clocks.sample()[1] - start > 5
             or account != second_account
@@ -73,12 +98,39 @@ async def synchronize(
                 and store.clocks.sample()[1] - start > 5
             ):
                 raise TimeoutError("INVENTORY_ACQUISITION_UNSTABLE")
+            funds = None
+            if funds_capture and open_orders is not None and second_open_orders is not None:
+                from quantbot.paper_core.authority import commission_in_session
+
+                commission = commission_in_session(store, session)
+                funds = PaperFundsEvidence(
+                    recorded_at_utc=now,
+                    evidence_lane="BROKER_PAPER",
+                    release_id=store.config.release_id,
+                    endpoint=commission.endpoint,
+                    account_id=store.config.account_id,
+                    store_identity=store.database.store_identity,
+                    config_id=store.config_id,
+                    commission_id=commission.id,
+                    process_id=store.clocks.process_id,
+                    capture_started=capture_started,
+                    elapsed_seconds=store.clocks.sample()[1] - start,
+                    first_account=account,
+                    second_account=second_account,
+                    first_positions=positions,
+                    second_positions=second_positions,
+                    first_open_orders=open_orders,
+                    second_open_orders=second_open_orders,
+                )
+                put(session, "core_provider_acquisitions", funds.id, funds)
             proof = store.proof(
                 account.account,
                 tuple((p.symbol, p.quantity) for p in positions),
                 now=now,
                 positions=positions,
-                acquisition_id=content_id(
+                acquisition_id=funds.id
+                if funds is not None
+                else content_id(
                     {
                         "at": now,
                         "provider": broker.provider,
@@ -88,6 +140,8 @@ async def synchronize(
                 ),
                 session=session,
             )
+            if funds is not None:
+                proof = proof.model_copy(update={"funds_authority": funds.contract})
             certify_inventory(store, proof, session=session)
             if (
                 store.config.clock_profile == "PAPER_TIME_V2"
