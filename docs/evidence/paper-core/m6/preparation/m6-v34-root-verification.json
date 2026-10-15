@@ -1,0 +1,23 @@
+{
+  "fixture": "tests\\fixtures\\core_v34_m5.json.gz",
+  "compressed_sha256": "bbe58e3f5a174ba2f9c780594ee88472f64c82a0e01269e7f4d381f6fb408bac",
+  "raw_sha256": "0f9bc0e5a1c37752db0daaf43c1da228db916e6f1b1b64ccd6bf6cd0f71e623c",
+  "bytes": 3898097,
+  "typed_ids_verified": {
+    "core_activations": 2,
+    "core_activation_authorities": 1,
+    "core_decisions": 41,
+    "core_protection_plans": 41,
+    "core_models": 2,
+    "core_learning_runs": 1
+  },
+  "active_pointer": {
+    "activation_id": "f6fc4de456cdbea62c2e10954623ecd89295e23e22cc6a510a2c0dfd181eda6c",
+    "generation": 2,
+    "id": 1,
+    "model_id": "dd95585f6be642a56f27890d1b2700aa3555d0102526d49ebade31c91bfda027",
+    "receipt_id": "df341b28d9a324b27a0f61745484f5eaffff4d8fc804def0ee80ec8c7e353a64"
+  },
+  "capture_result": "1 passed in 12.82s",
+  "capture_log": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-lx6se3_g/result.txt"
+}

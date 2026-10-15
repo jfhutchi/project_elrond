@@ -1,0 +1,26 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____ test_same_observation_cannot_reenter_after_immediate_completed_stop _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-govyerov/pytest/test_same_observation_cannot_r0')
+
+    @pytest.mark.asyncio
+    async def test_same_observation_cannot_reenter_after_immediate_completed_stop(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.set_mark("XLE", Decimal("98"), as_of=NOW)
+            await guardian_cycle(store, broker, now=NOW)
+            await trader_cycle(store, broker, observation, model, store.latest_proof(), now=NOW)
+>           assert len(broker.posts) == 2, "same observation entered again under a newer proof"
+E           AssertionError: same observation entered again under a newer proof
+E           assert 3 == 2
+E            +  where 3 = len([OrderIntent(symbol='XLE', intent_id='core-entry-af172ce5f7d35567fa4f71a4549343b48451f1d0f47e55e6b4b32eca7bdea25b', cl...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))])
+E            +    where [OrderIntent(symbol='XLE', intent_id='core-entry-af172ce5f7d35567fa4f71a4549343b48451f1d0f47e55e6b4b32eca7bdea25b', cl...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))] = <quantbot.paper_core.simulation.SyntheticBroker object at 0x00000241640401D0>.posts
+
+tests\integration\paper_core\test_thin_loop.py:401: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_thin_loop.py::test_same_observation_cannot_reenter_after_immediate_completed_stop
+1 failed, 14 deselected in 2.58s

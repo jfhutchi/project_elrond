@@ -1,0 +1,262 @@
+........................................................................ [ 28%]
+......................................FF................................ [ 56%]
+........................................................................ [ 84%]
+.......................................                                  [100%]
+================================== FAILURES ===================================
+__ test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tf797gvj/pytest/test_0027_downgrade_fails_befo0')
+
+    def test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes(
+        tmp_path: Path,
+    ) -> None:
+        path = tmp_path / "deployment.db"
+        database = Database.create(path)
+        identity = database.store_identity
+        with database.engine.begin() as connection:
+            connection.exec_driver_sql(
+                """
+                INSERT INTO runtime_deployments (
+                    observation_id, host_id, instance_id, role, git_commit, package_version,
+                    python_version, host_platform, trading_mode, store_identity, schema_version,
+                    process_started_at, observed_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    "current-observation",
+                    "omen",
+                    "pid-1",
+                    "COORDINATOR",
+                    "abc1234",
+                    "0.1.0",
+                    "3.13.0",
+                    "Windows",
+                    "PAPER",
+                    identity,
+                    SCHEMA_VERSION,
+                    "2026-09-02T20:00:00Z",
+                    "2026-09-02T21:00:00Z",
+                ),
+            )
+        database.close()
+
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+        # Bring the store down to exactly 0027 first, in its own committed step. This test was written
+        # while 0027 was head, and the property it guards is 0027's refusal. With revisions above it,
+        # a single `downgrade 0026` would apply theirs before reaching the refusal -- and because the
+        # `pytest.raises` below sits inside `engine.begin()`, those steps would commit and the
+        # fingerprint would move for a reason unrelated to 0027. Descending first keeps the assertion
+        # about the revision it names.
+        try:
+            with engine.begin() as connection:
+                config.attributes["connection"] = connection
+>               command.downgrade(config, "0027")
+
+tests\unit\test_migration_authority.py:294:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+.venv\Lib\site-packages\alembic\command.py:534: in downgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def downgrade() -> None:
+>       raise RuntimeError(
+            "v30 is additive and evidence-preserving; use compatible code or repair forward"
+        )
+E       RuntimeError: v30 is additive and evidence-preserving; use compatible code or repair forward
+
+src\quantbot\storage\migrations\versions\0030_paper_core.py:40: RuntimeError
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade 0030 -> 0029, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+------------------------------ Captured log call ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+_ test_a_rolled_back_chained_downgrade_through_0028_leaves_the_proposal_table_intact _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-tf797gvj/pytest/test_a_rolled_back_chained_dow0')
+
+    def test_a_rolled_back_chained_downgrade_through_0028_leaves_the_proposal_table_intact(
+        tmp_path: Path,
+    ) -> None:
+        """0028's downgrade must join the caller's transaction, not commit its drop on its own.
+
+        pysqlite begins a transaction only on DML, so a `DROP TABLE` issued before any write runs in
+        autocommit. Measured: with the drop first, a `downgrade 0026` that 0027 refuses -- and whose
+        caller rolls back -- leaves a store claiming revision 28 with `research_proposals` gone. That is
+        a store lying about its own shape, which is worse than either revision. Reordering the drop
+        after the version write makes this test fail, which is the point of it.
+        """
+        path = tmp_path / "chained.db"
+        Database.create(path).close()
+        before = fingerprint(path)
+
+        engine = create_engine(f"sqlite+pysqlite:///{path.as_posix()}")
+        config = Config(str(Path(__file__).parents[2] / "alembic.ini"))
+        try:
+>           with pytest.raises(RuntimeError, match="unsafe.*pre-0027 backup"):
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'unsafe.*pre-0027 backup'
+E             Actual message: 'v30 is additive and evidence-preserving; use compatible code or repair forward'
+
+tests\unit\test_migration_authority.py:354: AssertionError
+---------------------------- Captured stderr call -----------------------------
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO  [alembic.runtime.migration] Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO  [alembic.runtime.migration] Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO  [alembic.runtime.migration] Running upgrade 0003 -> 0004, Add research memory.
+INFO  [alembic.runtime.migration] Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO  [alembic.runtime.migration] Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO  [alembic.runtime.migration] Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO  [alembic.runtime.migration] Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO  [alembic.runtime.migration] Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO  [alembic.runtime.migration] Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO  [alembic.runtime.migration] Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO  [alembic.runtime.migration] Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO  [alembic.runtime.migration] Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO  [alembic.runtime.migration] Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO  [alembic.runtime.migration] Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO  [alembic.runtime.migration] Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO  [alembic.runtime.migration] Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO  [alembic.runtime.migration] Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO  [alembic.runtime.migration] Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO  [alembic.runtime.migration] Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO  [alembic.runtime.migration] Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO  [alembic.runtime.migration] Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO  [alembic.runtime.migration] Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO  [alembic.runtime.migration] Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO  [alembic.runtime.migration] Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO  [alembic.runtime.migration] Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO  [alembic.runtime.migration] Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO  [alembic.runtime.migration] Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO  [alembic.runtime.migration] Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+INFO  [alembic.runtime.migration] Context impl SQLiteImpl.
+INFO  [alembic.runtime.migration] Will assume non-transactional DDL.
+INFO  [alembic.runtime.migration] Running downgrade 0030 -> 0029, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+------------------------------ Captured log call ------------------------------
+INFO     alembic.runtime.migration:migration.py:205 Context impl SQLiteImpl.
+INFO     alembic.runtime.migration:migration.py:208 Will assume non-transactional DDL.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade  -> 0001, Create the initial durable audit schema.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0001 -> 0002, Add the frozen hypothesis registry.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0002 -> 0003, Generalise the registry beyond Sharpe and record power decisions.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0003 -> 0004, Add research memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0004 -> 0005, Add the budget ledger.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0005 -> 0006, Add research task orchestration.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0006 -> 0007, Separate reserving a protected window from spending it, and pin where a trial count came from.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0007 -> 0008, Persist the promotion ladder and its history.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0008 -> 0009, Add durable search records, so a trial count can be measured rather than declared.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0009 -> 0010, Add durable literature searches, so an outage cannot be forgotten as an absence.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0010 -> 0011, Bind the claim, the mandate and the assessment to the promotion record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0011 -> 0012, Persist what Elrond refused, so the refusing can eventually be judged.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0012 -> 0013, Persist what each refusal rested on, not only which rule refused.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0013 -> 0014, Persist what woke the research system up, before anything enriches it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0014 -> 0015, Persist how much capital the edge survives, so the milestone gate can read it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0015 -> 0016, Persist what kind of market a decision happened in, and bind it to observations.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0016 -> 0017, Persist what a refusal cost, without ever amending the refusal.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0017 -> 0018, Track one economic instrument across the names providers give it.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0018 -> 0019, Keep every version of the veto policy, so old refusals stay attributable.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0019 -> 0020, Was there a public reason for this anomaly, and did anyone manage to look (#56).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0020 -> 0021, A heartbeat that is durable even when nothing is wrong (#143).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0021 -> 0022, Durable independent position-protection evaluations (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0022 -> 0023, Durable protective-exit action outbox (#157).
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0023 -> 0024, Add preregistered artifact tests and component evidence memory.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0024 -> 0025, Add the ingestion control plane: sources, cursors, runs, events and heartbeats.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0025 -> 0026, Add the append-only deployed-state record.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0026 -> 0027, Add the durable store-lineage identity.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0027 -> 0028, Add the durable record of every autonomous proposal attempt.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0028 -> 0029, Add immutable supervised-learner artifacts, predictions, and outcomes.
+INFO     alembic.runtime.migration:migration.py:611 Running upgrade 0029 -> 0030, Add PAPER core fixture contracts and separate raw protection snapshots. Revision 0030.
+=========================== short test summary info ===========================
+FAILED tests/unit/test_migration_authority.py::test_0027_downgrade_fails_before_relabeling_lineage_uuids_as_path_hashes
+FAILED tests/unit/test_migration_authority.py::test_a_rolled_back_chained_downgrade_through_0028_leaves_the_proposal_table_intact
+2 failed, 253 passed in 74.30s (0:01:14)

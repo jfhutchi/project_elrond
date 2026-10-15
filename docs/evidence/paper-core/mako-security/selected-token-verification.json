@@ -1,0 +1,15 @@
+{
+  "state": "PASS_VERIFIER_ONLY",
+  "release_id": "79e9155a7b54dd542b422cf2b3d11f71bb3616154de122fc7f27bc8f59147791",
+  "machine": "OMEN by HP Gaming Laptop 16-n0xxx",
+  "user": "leepa",
+  "run_level": "Limited",
+  "logon_type": "Interactive",
+  "task_disabled_after_check": true,
+  "exact_proposed_action_restored": true,
+  "windows_powershell_current_user_policy": "RemoteSigned",
+  "policy_authorization": "User asked how to enable scripts and to stop requiring manual intervention",
+  "provider_access": false,
+  "store_access": false,
+  "functional_roles_started": false
+}

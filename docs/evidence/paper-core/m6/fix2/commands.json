@@ -1,0 +1,151 @@
+{
+  "environment": "CREDENTIAL_STRIPPED_NETWORK_DISABLED_CHECK_AND_UV_OFFLINE_CI",
+  "commands": [
+    {
+      "stage": "frozen-focused-gate",
+      "argv": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.superpowers\\sdd\\2026-10-13-paper-core\\check.py",
+        "tests/integration/paper_core/test_operational_adapter.py",
+        "tests/integration/paper_core/test_costed_loop.py",
+        "tests/fault/paper_core/test_outcomes_independent.py",
+        "tests/fault/paper_core/test_learning_temporal.py",
+        "tests/integration/paper_core/test_release_recovery.py",
+        "-s"
+      ],
+      "exit_code": 0,
+      "raw_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-m8vb5zhu\\result.txt",
+      "raw_log_sha256": "b70949af08873fde99e49f0703fc4b1f66f6bf3525959eac03ab0fc9fb3b686b",
+      "result": "75 passed in 86.95s (0:01:26)",
+      "command_sha256": "618a6bb2b01048e537a7b3ce34d0b8f07698c17810d2286c2474eb11bc0b0cc0"
+    },
+    {
+      "stage": "six-exact-CI",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "ruff",
+        "check",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\fix2\\ruff.txt",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "command_sha256": "808082d8f1fbf6a4530f570bde107ca6f5acd4521860d3043d95e8b56ff466ed"
+    },
+    {
+      "stage": "six-exact-CI",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "linux",
+        "src"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\fix2\\mypy-linux.txt",
+      "log_sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d",
+      "command_sha256": "ffe2e75d6753d856e99cb0fa13718a3f62cbbd32b5bdbcb606dd6108517f67ac"
+    },
+    {
+      "stage": "six-exact-CI",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "win32",
+        "src"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\fix2\\mypy-win32.txt",
+      "log_sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d",
+      "command_sha256": "150f4289d145572de1ef665bdf1bd393c4e743e06d58d9454f092f2ffbd77329"
+    },
+    {
+      "stage": "six-exact-CI",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "ruff",
+        "check",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\fix2\\ruff-helpers.txt",
+      "log_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+      "command_sha256": "576a1a46bbb2a0aaf79b30ebe9c7381ecc9492b3c3b19506918caf5807cf1424"
+    },
+    {
+      "stage": "six-exact-CI",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "linux",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\fix2\\mypy-linux-helpers.txt",
+      "log_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+      "command_sha256": "28f2a78298c27cea8acf69255f7e9ee73fa6aa35fec26d604603bb6f18bba71e"
+    },
+    {
+      "stage": "six-exact-CI",
+      "argv": [
+        "uv",
+        "run",
+        "--frozen",
+        "mypy",
+        "--platform",
+        "win32",
+        "scripts/ci_checks.py",
+        "scripts/local_ci.py",
+        "scripts/ci_process.py"
+      ],
+      "exit_code": 0,
+      "log": "docs\\evidence\\paper-core\\m6\\fix2\\mypy-win32-helpers.txt",
+      "log_sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+      "command_sha256": "9739e803584a26d25ad4ff3ded2560d4f247be21a95b88cc82dda1a6ceffe0dc"
+    }
+  ],
+  "historical_stages": "Raw logs retained separately; no reconstruction of unrecorded argument lists",
+  "helpers": [
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "sha256": "8224b1b29a9da883f2bdac07226a53ad9fa4811236d8cb24b950229c398d5d14"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/ci_m6_fix2.py",
+      "sha256": "3528798f1dd001eec056e9a49e9bc15c85be9fa010cee519c265a15b297206a1"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/freeze_m6_fix2.py",
+      "sha256": "a7c375b9ec13c0392bb8d8d8e9dcc68c19dcc632da69957f0e402afd3d3a7a5c"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/prepare_package_m6_fix2.py",
+      "sha256": "3fbde388c08e980d6fb813f0e25d5d4263de9c6c1aa0d7f9d58cba60f61dd13d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/task_proposals_m6_fix2.py",
+      "sha256": "692e1354f60f4425c42e08f454d71c6bf9ccb9109e53bc37fee256647d677831"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/package_m6_fix2.py",
+      "sha256": "b4797759059bda464c170e5a9bee49557e6a06dde28b8add44c7635331cf4e06"
+    }
+  ]
+}

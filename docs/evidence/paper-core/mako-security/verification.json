@@ -1,0 +1,98 @@
+{
+  "security_fix_commit": "a3d5880f02f9d57104e3e833474a4648d1ec181e",
+  "test_command_prefix": [
+    "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+    "-B",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py"
+  ],
+  "focused_selection": [
+    "tests/unit/test_mako_security.py",
+    "--tb=short"
+  ],
+  "regression_selection": [
+    "tests/unit/test_mako_security.py",
+    "tests/unit/test_storage.py",
+    "tests/unit/test_migration_authority.py",
+    "tests/unit/forecasting/test_database.py",
+    "tests/integration/test_storage_parity.py",
+    "tests/integration/paper_core/test_migration.py",
+    "tests/integration/paper_core/test_release_recovery.py",
+    "tests/integration/paper_core/test_final_repair.py",
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+    "--tb=short"
+  ],
+  "logs": [
+    {
+      "log": "red.txt",
+      "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-4mong6z0\\result.txt",
+      "sha256": "f16856af2a6675764fb4dcc341a4718cb317afdca4076f4a743cc8ea7f2fa4d4",
+      "result": "6 failed, 1 passed",
+      "installed_mako": "1.4.1"
+    },
+    {
+      "log": "green.txt",
+      "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-gqj812w_\\result.txt",
+      "sha256": "366c6d7e881781019f8fe29c4e286211cbc27c6df90eb7290c8e8f75ca888981",
+      "result": "7 passed",
+      "installed_mako": "1.4.3"
+    },
+    {
+      "log": "regression.txt",
+      "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-2jcltw7y\\result.txt",
+      "sha256": "c8d897d3765a3ad62b1821e445a5633aa4c5f79891a319f49e32218830b88a44",
+      "result": "169 passed, 26 skipped",
+      "installed_mako": "1.4.3"
+    }
+  ],
+  "checks": [
+    {
+      "command": [
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe",
+        "-B",
+        "-m",
+        "ruff",
+        "check",
+        "src",
+        "tests"
+      ],
+      "exit_code": 0,
+      "log": "ruff.txt",
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "command": [
+        "C:\\Users\\leepa\\.local\\bin\\uv.exe",
+        "lock",
+        "--check",
+        "--offline"
+      ],
+      "exit_code": 0,
+      "log": "lock-check.txt",
+      "sha256": "f3a5664493b354000d39001a51d75b50cdb98eb17db911315776f8dcac33e7ee"
+    },
+    {
+      "command": [
+        "C:\\Users\\leepa\\.local\\bin\\uv.exe",
+        "pip",
+        "check",
+        "--python",
+        "C:\\Users\\leepa\\.codex\\worktrees\\paper-core-m0\\project_elrond\\.venv\\Scripts\\python.exe"
+      ],
+      "exit_code": 0,
+      "log": "dependency-check.txt",
+      "sha256": "b5e33c25cfffed9f7177c7fd83a9ae010d93364adbb252e9055a91c82e322852"
+    }
+  ],
+  "review": {
+    "reviewer": "/root/mako_security_review",
+    "verdict": "No actionable findings",
+    "scope": "dependency constraints, native Windows tests, successor release pins",
+    "operational_acceptance": "NOT_ASSESSED"
+  },
+  "limitations": [
+    "No full-repository suite",
+    "26 PostgreSQL cases skipped: no disposable server",
+    "No hosted CI",
+    "No broker or store access by security verification"
+  ]
+}

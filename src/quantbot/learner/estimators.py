@@ -11,9 +11,16 @@ import hashlib
 import json
 import math
 from collections.abc import Sequence
-from typing import Self
+from typing import Any, Self
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 _FAMILIES = frozenset({"mean", "quadratic_ridge", "ridge"})
 _RIDGE_VERSION = "ridge-cholesky-v1"
@@ -41,6 +48,14 @@ class FittedEstimator(BaseModel):
     training_mse: float
     seed: int
     algorithm_version: str
+    sample_weights: tuple[float, ...] | None = None
+
+    @model_serializer(mode="wrap")
+    def legacy_payload(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        result = handler(self)
+        if self.sample_weights is None:
+            result.pop("sample_weights", None)
+        return dict(result)
 
     @field_validator("family")
     @classmethod
@@ -104,10 +119,20 @@ class FittedEstimator(BaseModel):
         if self.training_mse < 0.0:
             raise ValueError("training_mse must be non-negative")
         expected_version = _ALGORITHM_VERSIONS[self.family]
+        if self.sample_weights is not None:
+            if (
+                not self.sample_weights
+                or any(not math.isfinite(w) or w <= 0 for w in self.sample_weights)
+                or not math.isclose(
+                    math.fsum(self.sample_weights), len(self.sample_weights), rel_tol=1e-12
+                )
+            ):
+                raise ValueError(
+                    "sample_weights must be positive finite and normalized to mean one"
+                )
+            expected_version = "weighted-" + expected_version
         if self.algorithm_version != expected_version:
-            raise ValueError(
-                f"algorithm_version for {self.family} must be {expected_version!r}"
-            )
+            raise ValueError(f"algorithm_version for {self.family} must be {expected_version!r}")
         return self
 
     @property
@@ -171,9 +196,7 @@ def _validated_targets(y: Sequence[float], *, expected_length: int) -> tuple[flo
         raise ValueError("y must be a numeric sequence")
     if len(y) != expected_length:
         raise ValueError(f"y has length {len(y)}; expected {expected_length}")
-    return tuple(
-        _finite_float(value, location=f"y[{index}]") for index, value in enumerate(y)
-    )
+    return tuple(_finite_float(value, location=f"y[{index}]") for index, value in enumerate(y))
 
 
 def _validated_feature_names(
@@ -184,9 +207,7 @@ def _validated_feature_names(
     except TypeError as exc:
         raise ValueError("feature_names must be a sequence") from exc
     if len(names) != expected_width:
-        raise ValueError(
-            f"feature_names has length {len(names)}; expected {expected_width}"
-        )
+        raise ValueError(f"feature_names has length {len(names)}; expected {expected_width}")
     if any(not isinstance(name, str) or not name.strip() for name in names):
         raise ValueError("feature names must be non-empty strings")
     if len(set(names)) != len(names):
@@ -266,6 +287,7 @@ def fit_estimator(
     family: str = "ridge",
     alpha: float = 1.0,
     seed: int = 0,
+    sample_weights: Sequence[float] | None = None,
 ) -> FittedEstimator:
     """Fit a deterministic mean baseline or fixed regularized numeric estimator."""
     if family not in _FAMILIES:
@@ -286,20 +308,43 @@ def fit_estimator(
     names = _validated_feature_names(feature_names, expected_width=len(first_row))
     rows = _validated_matrix(x, expected_width=len(names), allow_empty=False)
     targets = _validated_targets(y, expected_length=len(rows))
+    weights = None
+    if sample_weights is not None:
+        raw = _validated_targets(sample_weights, expected_length=len(rows))
+        if any(w <= 0 for w in raw):
+            raise ValueError("sample_weights must be positive")
+        total = math.fsum(raw)
+        if not math.isfinite(total):
+            raise ValueError("sample_weights sum must be finite")
+        weights = tuple(w * len(raw) / total for w in raw)
 
     model_rows = _expanded_rows(rows, family=family)
     means, scales = _training_scaler(model_rows)
     intercept = math.fsum(targets) / len(targets)
+    if weights is not None:
+        count = len(rows)
+        means = tuple(
+            math.fsum(w * r[c] for w, r in zip(weights, model_rows, strict=True)) / count
+            for c in range(len(model_rows[0]))
+        )
+        scales = tuple(
+            math.sqrt(
+                math.fsum(
+                    w * (r[c] - means[c]) ** 2 for w, r in zip(weights, model_rows, strict=True)
+                )
+                / count
+            )
+            or 1.0
+            for c in range(len(means))
+        )
+        intercept = math.fsum(w * t for w, t in zip(weights, targets, strict=True)) / count
 
     if family == "mean":
         coefficients = (0.0,) * len(names)
         algorithm_version = _MEAN_VERSION
     else:
         standardized = tuple(
-            tuple(
-                (row[column] - means[column]) / scales[column]
-                for column in range(len(means))
-            )
+            tuple((row[column] - means[column]) / scales[column] for column in range(len(means)))
             for row in model_rows
         )
         centered_targets = tuple(target - intercept for target in targets)
@@ -318,6 +363,25 @@ def fit_estimator(
             )
             for column in range(len(means))
         ]
+        if weights is not None:
+            normal_matrix = [
+                [
+                    math.fsum(
+                        w * row[left] * row[right]
+                        for w, row in zip(weights, standardized, strict=True)
+                    )
+                    + (fitted_alpha if left == right else 0.0)
+                    for right in range(len(means))
+                ]
+                for left in range(len(means))
+            ]
+            normal_rhs = [
+                math.fsum(
+                    w * row[c] * target
+                    for w, row, target in zip(weights, standardized, centered_targets, strict=True)
+                )
+                for c in range(len(means))
+            ]
         coefficients = _cholesky_solve(normal_matrix, normal_rhs)
         algorithm_version = _ALGORITHM_VERSIONS[family]
 
@@ -330,9 +394,13 @@ def fit_estimator(
         for row in model_rows
     )
     training_mse = math.fsum(
-        (actual - fitted) ** 2
-        for actual, fitted in zip(targets, fitted_values, strict=True)
+        (actual - fitted) ** 2 for actual, fitted in zip(targets, fitted_values, strict=True)
     ) / len(targets)
+    if weights is not None:
+        training_mse = math.fsum(
+            w * (a - f) ** 2 for w, a, f in zip(weights, targets, fitted_values, strict=True)
+        ) / len(targets)
+        algorithm_version = "weighted-" + algorithm_version
 
     return FittedEstimator(
         family=family,
@@ -345,12 +413,11 @@ def fit_estimator(
         training_mse=training_mse,
         seed=seed,
         algorithm_version=algorithm_version,
+        sample_weights=weights,
     )
 
 
-def predict(
-    estimator: FittedEstimator, x: Sequence[Sequence[float]]
-) -> tuple[float, ...]:
+def predict(estimator: FittedEstimator, x: Sequence[Sequence[float]]) -> tuple[float, ...]:
     """Predict with the scaler and parameters frozen into ``estimator``."""
     rows = _validated_matrix(
         x,
@@ -361,8 +428,7 @@ def predict(
     predictions = tuple(
         estimator.intercept
         + math.fsum(
-            coefficient
-            * ((row[column] - estimator.means[column]) / estimator.scales[column])
+            coefficient * ((row[column] - estimator.means[column]) / estimator.scales[column])
             for column, coefficient in enumerate(estimator.coefficients)
         )
         for row in model_rows

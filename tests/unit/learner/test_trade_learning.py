@@ -143,6 +143,8 @@ def episode(store, *, closed=True, exit_quantity=Decimal("1"), before_orders=Non
                     quantity=quantity,
                     price=price,
                     fee=fee,
+                    fee_source="BROKER_REPORTED",
+                    fee_reference="synthetic-fee-activity",
                     occurred_at=(entry.created_at if order_intent.side == OrderSide.BUY
                                  else record.deadline_at),
                 )

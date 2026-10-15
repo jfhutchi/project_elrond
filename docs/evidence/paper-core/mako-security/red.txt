@@ -1,0 +1,34 @@
+.FFFFFF                                                                  [100%]
+================================== FAILURES ===================================
+________ test_mako_rejects_drive_uri_escaping_template_directory[/-C:] ________
+tests\unit\test_mako_security.py:32: in test_mako_rejects_drive_uri_escaping_template_directory
+    with pytest.raises(TemplateLookupException):
+E   Failed: DID NOT RAISE TemplateLookupException
+________ test_mako_rejects_drive_uri_escaping_template_directory[/-c:] ________
+tests\unit\test_mako_security.py:32: in test_mako_rejects_drive_uri_escaping_template_directory
+    with pytest.raises(TemplateLookupException):
+E   Failed: DID NOT RAISE TemplateLookupException
+________ test_mako_rejects_drive_uri_escaping_template_directory[/-D:] ________
+tests\unit\test_mako_security.py:32: in test_mako_rejects_drive_uri_escaping_template_directory
+    with pytest.raises(TemplateLookupException):
+E   Failed: DID NOT RAISE TemplateLookupException
+_______ test_mako_rejects_drive_uri_escaping_template_directory[\\-C:] ________
+tests\unit\test_mako_security.py:32: in test_mako_rejects_drive_uri_escaping_template_directory
+    with pytest.raises(TemplateLookupException):
+E   Failed: DID NOT RAISE TemplateLookupException
+_______ test_mako_rejects_drive_uri_escaping_template_directory[\\-c:] ________
+tests\unit\test_mako_security.py:32: in test_mako_rejects_drive_uri_escaping_template_directory
+    with pytest.raises(TemplateLookupException):
+E   Failed: DID NOT RAISE TemplateLookupException
+_______ test_mako_rejects_drive_uri_escaping_template_directory[\\-D:] ________
+tests\unit\test_mako_security.py:32: in test_mako_rejects_drive_uri_escaping_template_directory
+    with pytest.raises(TemplateLookupException):
+E   Failed: DID NOT RAISE TemplateLookupException
+=========================== short test summary info ===========================
+FAILED tests/unit/test_mako_security.py::test_mako_rejects_drive_uri_escaping_template_directory[/-C:]
+FAILED tests/unit/test_mako_security.py::test_mako_rejects_drive_uri_escaping_template_directory[/-c:]
+FAILED tests/unit/test_mako_security.py::test_mako_rejects_drive_uri_escaping_template_directory[/-D:]
+FAILED tests/unit/test_mako_security.py::test_mako_rejects_drive_uri_escaping_template_directory[\\-C:]
+FAILED tests/unit/test_mako_security.py::test_mako_rejects_drive_uri_escaping_template_directory[\\-c:]
+FAILED tests/unit/test_mako_security.py::test_mako_rejects_drive_uri_escaping_template_directory[\\-D:]
+6 failed, 1 passed in 1.11s

@@ -1,0 +1,76 @@
+...F.............F                                                       [100%]
+================================== FAILURES ===================================
+_ test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-d9rc77f9/pytest/test_conflicting_batch_only_qu0')
+
+    @pytest.mark.asyncio
+    async def test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors(tmp_path):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            first = await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            import_broker_events(store, fee_events(store, broker))
+            await synchronize(store, broker, now=broker.now)
+            broker.now += timedelta(seconds=1)
+            second = await trader_cycle(store, broker, fresh_observation(observation, broker.now), model, store.latest_proof(), now=broker.now)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            known = {e["fill_id"] for e in store.documents("core_cost_items")}
+            import_broker_events(store, tuple(e for e in fee_events(store, broker) if e.cost.fill_id not in known))
+            process_outcomes(store, cutoff=broker.now)
+            batch = list(events(store, broker))
+            bad = batch[1].model_copy(update={"raw_digest": "conflicting-one-old-fill"})
+            batch[1] = bad
+            before = store.documents("core_broker_event_sources")
+            with pytest.raises(StateConflictError):
+                import_broker_events(store, tuple(batch))
+            assert store.documents("core_broker_event_sources") == before
+            with db.transaction() as session:
+                rows = {r["lot_id"]: r for r in session.execute(select(table("core_outcome_index"))).mappings()}
+                assert rows[first.id]["status"] == "INTEGRITY_FAILURE"
+                assert rows[second.id]["status"] == "COMPLETE"
+                incident = StorageRepository(session).list_incidents(unresolved_only=True)[-1]
+                assert incident.detail["lot_ids"] == [first.id]
+                assert len(incident.detail["source_events"]) == len(batch)
+            result = process_outcomes(store, cutoff=broker.now)
+            assert len(result.reasons) == 1
+>           assert any(t.lot_id == second.id and t.status == "COMPLETE" for t in result.outcomes)
+E           assert False
+E            +  where False = any(<generator object test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors.<locals>.<genexpr> at 0x000001ED7FF8FD80>)
+
+tests\fault\paper_core\test_review_repairs.py:150: AssertionError
+____ test_refusal_before_error_commit_latches_against_clock_reversed_retry ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-d9rc77f9/pytest/test_refusal_before_error_comm0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x000001ED01BB9310>
+
+    @pytest.mark.asyncio
+    async def test_refusal_before_error_commit_latches_against_clock_reversed_retry(
+        tmp_path, monkeypatch
+    ):
+        from quantbot.execution import ExecutionCoordinator
+        from quantbot.paper_core.send_guard import final_send_objections
+    
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        original = ExecutionCoordinator._transition
+    
+        def crash_before_error(self, intent_id, target, expected):
+            if target is IntentState.ERROR:
+                raise RuntimeError("crash before ERROR commit")
+            return original(self, intent_id, target, expected)
+    
+        monkeypatch.setattr(ExecutionCoordinator, "_transition", crash_before_error)
+        try:
+            delay_final_fetch(broker, "get_account", at=NOW + timedelta(minutes=31))
+>           with pytest.raises(RuntimeError, match="ERROR commit"):
+E           AssertionError: Regex pattern did not match.
+E             Expected regex: 'ERROR commit'
+E             Actual message: 'order submission blocked: CORE_ENTRY_DECISION_EXPIRED, CORE_PROTECTION_DEADLINE_DUE, CORE_GUARDIAN_RECEIPT_EXPIRED'
+
+tests\fault\paper_core\test_final_send_authority.py:312: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_review_repairs.py::test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors
+FAILED tests/fault/paper_core/test_final_send_authority.py::test_refusal_before_error_commit_latches_against_clock_reversed_retry
+2 failed, 16 passed in 10.22s

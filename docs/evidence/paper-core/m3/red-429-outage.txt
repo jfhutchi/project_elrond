@@ -1,0 +1,70 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+__________ test_429_clock_fault_returns_scoped_wait_and_can_recover ___________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-7yfgxxzu/pytest/test_429_clock_fault_returns_s0')
+
+    @pytest.mark.asyncio
+    async def test_429_clock_fault_returns_scoped_wait_and_can_recover(tmp_path):
+        from quantbot.brokers.base import BrokerRequestError
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            broker.clock_fault = BrokerRequestError("synthetic429", status_code=429)
+>           assert (await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)).action == "WAIT"
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_transient_recovery.py:107: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\trader.py:258: in trader_cycle
+    time_evidence = await acquire_time_evidence(broker, store.clocks)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\paper_core\time_evidence.py:76: in acquire_time_evidence
+    p = await broker.get_clock()
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def get_clock():
+        from quantbot.paper_core.time_evidence import BrokerTime
+    
+        if broker.clock_fault:
+>           raise broker.clock_fault
+E           quantbot.brokers.base.BrokerRequestError: synthetic429
+
+tests\fixtures\core_m3.py:51: BrokerRequestError
+_ test_guardian_provider_outage_records_retry_without_disabling_outcome_poll __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-7yfgxxzu/pytest/test_guardian_provider_outage_0')
+
+    @pytest.mark.asyncio
+    async def test_guardian_provider_outage_records_retry_without_disabling_outcome_poll(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.guardian import guardian_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            clocks.advance(1801)
+            async def unavailable():
+                raise TimeoutError("synthetic outage")
+            broker.get_account = unavailable
+>           receipt = await guardian_cycle(store, broker, now=broker.now)
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_transient_recovery.py:128: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\guardian.py:284: in guardian_cycle
+    await coordinator(store, broker).submit_durable(
+src\quantbot\execution\coordinator.py:408: in submit_durable
+    initial_account = await self._broker.get_account()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    async def unavailable():
+>       raise TimeoutError("synthetic outage")
+E       TimeoutError: synthetic outage
+
+tests\fault\paper_core\test_transient_recovery.py:126: TimeoutError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_429_clock_fault_returns_scoped_wait_and_can_recover
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_guardian_provider_outage_records_retry_without_disabling_outcome_poll
+2 failed, 4 deselected in 3.61s

@@ -1,0 +1,10 @@
+{
+  "change": "expired_plan",
+  "phase": "claim",
+  "claimed": false,
+  "decision_id": "83c068efcf8bfa46139eb9849f5e93b2e59c3a6228231526461aef737b55ab86",
+  "original_proof_id": "e296d3af13ca679beb86eb8681d07a0ca96734b37e8fd60e5782cda2acd5b759",
+  "current_proof_id": "76cc27d9981578b6b60a831685444bfa3e3938f29dc42d314f2c2e85308c9855",
+  "ledger_before": "218aa9d5b39202e89777ffdd825d5b32efa343f5edd7cd9f1abf8ac4d70fa442",
+  "ledger_after": "218aa9d5b39202e89777ffdd825d5b32efa343f5edd7cd9f1abf8ac4d70fa442"
+}

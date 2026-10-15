@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Managed by project_elrond deploy/omen/adaptive-paper-rollout.ps1. Commit=0f811e3dd21e1411474cef784b8603265e6d621a</Description>
+    <URI>\Elrond Adaptive Paper Shadow</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-21-1356967796-4143092225-2789699475-1001</UserId>
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <Enabled>false</Enabled>
+    <ExecutionTimeLimit>PT0S</ExecutionTimeLimit>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <RestartOnFailure>
+      <Count>3</Count>
+      <Interval>PT1M</Interval>
+    </RestartOnFailure>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <IdleSettings>
+      <Duration>PT10M</Duration>
+      <WaitTimeout>PT1H</WaitTimeout>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+  </Settings>
+  <Triggers>
+    <TimeTrigger>
+      <StartBoundary>2026-10-06T05:11:19-04:00</StartBoundary>
+    </TimeTrigger>
+    <LogonTrigger>
+      <UserId>LEANNES-LAPTOP\leepa</UserId>
+    </LogonTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>D:\Elrond\state\service-host\1188bba2cb38de299aad0768\elrond-service-host.exe</Command>
+      <Arguments>"C:\Users\leepa\Documents\Codex\2026-09-30\task\adaptive-paper-research-20261006\logs\adaptive-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -Command "$Repository='C:\Users\leepa\Documents\Codex\2026-09-30\task\adaptive-release-ac1f85d';$Config='C:\Users\leepa\Documents\Codex\2026-09-30\task\project_elrond-trade-learning\.superpowers\sdd\2026-10-06-adaptive-paper-coordinator\prepared\entry-source-0f811e3.json';$ConfigHash='0ffee9e99b9cc8a5322aa256aee0e1bdba0d553436e9496eeb1f9b0d044a1f47';$Check=$false;$ErrorActionPreference='Stop'
+$Python=Join-Path $Repository '.venv\Scripts\python.exe'
+$VenvConfig=Join-Path $Repository '.venv\pyvenv.cfg'
+foreach($Path in @($Repository,$Config,$Python,$VenvConfig)){
+ if(-not (Test-Path -LiteralPath $Path)){throw 'ADAPTIVE_INPUT_INVALID'}
+}
+$Hasher=[Security.Cryptography.SHA256]::Create()
+$Stream=[IO.File]::OpenRead($Config)
+try {$ActualHash=[BitConverter]::ToString($Hasher.ComputeHash($Stream)).Replace('-','').ToLowerInvariant()}
+finally {$Stream.Dispose();$Hasher.Dispose()}
+if($ActualHash -cne $ConfigHash){
+ throw 'ADAPTIVE_CONFIG_PIN_MISMATCH'
+}
+$Homes=@(Get-Content -LiteralPath $VenvConfig | ForEach-Object{
+ if($_ -match '^home\s*=\s*(.+?)\s*$'){$Matches[1]}
+})
+if($Homes.Count -ne 1 -or -not [IO.Path]::IsPathRooted($Homes[0]) -or
+ -not (Test-Path -LiteralPath (Join-Path $Homes[0] 'python.exe'))){
+ throw 'ADAPTIVE_NATIVE_PYTHON_REQUIRED'
+}
+$AppData=[Environment]::GetFolderPath('ApplicationData')
+$LocalData=[Environment]::GetFolderPath('LocalApplicationData')
+if(-not $AppData -or -not $LocalData){throw 'ADAPTIVE_USER_PROFILE_METADATA_REQUIRED'}
+foreach($Root in @($AppData,(Join-Path $LocalData 'Packages'))){
+ if($Homes[0].StartsWith($Root+[IO.Path]::DirectorySeparatorChar,
+  [StringComparison]::OrdinalIgnoreCase)){throw 'ADAPTIVE_HOST_VISIBLE_PYTHON_REQUIRED'}
+}
+$env:PYTHONPATH=Join-Path $Repository 'src'
+$env:PYTHONNOUSERSITE='1'
+foreach($Name in @('PYTHONHOME','PYTHONEXECUTABLE','__PYVENV_LAUNCHER__')){
+ [Environment]::SetEnvironmentVariable($Name,$null,'Process')
+}
+$Arguments=@('-m','quantbot.learner.experiment_launch','--config',$Config,'--config-hash',$ConfigHash)
+if($Check){$Arguments+='--check'}
+$ErrorActionPreference='Continue'
+$global:LASTEXITCODE=$null
+&amp; $Python @Arguments
+if($null -eq $LASTEXITCODE){throw 'ADAPTIVE_NO_EXIT_CODE'}
+exit $LASTEXITCODE"</Arguments>
+      <WorkingDirectory>C:\Users\leepa\Documents\Codex\2026-09-30\task\adaptive-paper-research-20261006</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

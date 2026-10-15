@@ -2,7 +2,7 @@
 
 from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Annotated, Self
+from typing import Annotated, Literal, Self
 
 from pydantic import (
     BaseModel,
@@ -154,7 +154,25 @@ class Fill(SymbolModel):
     quantity: PositiveDecimal
     price: PositiveDecimal
     occurred_at: datetime
-    fee: NonNegativeDecimal = Decimal("0")
+    fee: NonNegativeDecimal | None = None
+    fee_source: Literal["UNKNOWN", "BROKER_REPORTED", "CONTRACTUAL_ZERO"] = "UNKNOWN"
+    fee_reference: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def unknown_zero(cls, values: object) -> object:
+        if isinstance(values, dict) and values.get("fee_source", "UNKNOWN") == "UNKNOWN":
+            if values.get("fee") in (0, Decimal(0), "0", "0.0", "0.00"):
+                return {**values, "fee": None}
+        return values
+
+    @model_validator(mode="after")
+    def validate_fee_authority(self) -> Self:
+        if self.fee_source != "UNKNOWN" and (self.fee is None or not self.fee_reference):
+            raise ValueError("known fee requires amount and source reference")
+        if self.fee_source == "CONTRACTUAL_ZERO" and self.fee != 0:
+            raise ValueError("contractual zero fee must be zero")
+        return self
 
 
 class MarketClock(FrozenModel):

@@ -1,0 +1,153 @@
+M2_REPAIR:{"case": "delayed_sender", "cut": "RISK_APPROVED", "decision_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd", "new_post": "core-entry-0ee5a8151eeb208cc2dcd15dcca9df618d3331be390d059a826d44cd08b66f4d", "old_sender_error": "OrderSubmissionBlocked", "post_count": 1, "refusal": {"decision_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd", "definitively_unsent": true, "guard_contract": "core-final-send-v1", "guardian_receipt_id": null, "protection_id": "fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d", "reasons": ["CORE_ENTRY_DECISION_EXPIRED", "CORE_GUARDIAN_RECEIPT_EXPIRED"], "state_at_refusal": "ORDER_CREATED"}, "refused_intent": "core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3"}
+.M2_REPAIR:{"case": "delayed_sender", "cut": "ORDER_CREATED", "decision_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd", "new_post": "core-entry-0ee5a8151eeb208cc2dcd15dcca9df618d3331be390d059a826d44cd08b66f4d", "old_sender_error": "StateConflictError", "post_count": 1, "refusal": {"decision_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd", "definitively_unsent": true, "guard_contract": "core-final-send-v1", "guardian_receipt_id": null, "protection_id": "fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d", "reasons": ["CORE_ENTRY_DECISION_EXPIRED", "CORE_GUARDIAN_RECEIPT_EXPIRED"], "state_at_refusal": "ORDER_CREATED"}, "refused_intent": "core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3"}
+.M2_REPAIR:{"case": "late_cash", "old_proof": "68c78796eb8f8d37e6d1d16deab6058d04de0d965731256f8e33f55d790c526d", "old_cash": "100000", "new_cash": "99999.8", "post_count_after_recovery": 3, "revocations": "durable"}
+.M2_REPAIR:{"bad_lot": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd", "case": "bounded_quarantine", "healthy_lot": "864acb766a0bdbdc0f2fa1ad47655163a16912c1c4cf67e996e4a54c1afeec17", "incident": {"evidence_lane": "SYNTHETIC_TEST", "implicated_client_order_ids": ["qb-e236da596872e8980b271e708dcec0fbcc09d961"], "implicated_source_ids": ["835e8d883cf7842492af649ce1d689144be0bb21f7d00e3580202c07f5328da8"], "lot_ids": ["b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd"], "source_events": [{"account_id": "synthetic-account", "activity_complete": true, "activity_fill_ids": ["synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"], "activity_watermark": "2026-10-14T15:00:01Z", "cash_activity": null, "client_order_id": "qb-e236da596872e8980b271e708dcec0fbcc09d961", "correction_of": null, "cost": null, "endpoint": "synthetic/order-and-complete-activities", "event_id": "0c15753d1aa7d6c8ac8b879977ffc8b4de7fc26d4fd0de58d16f432968e0123c", "evidence_lane": "SYNTHETIC_TEST", "fill": null, "occurred_at": "2026-10-14T15:00:01Z", "order": {"broker_order_id": "synthetic-qb-e236da596872e8980b271e708dcec0fbcc09d961", "client_order_id": "qb-e236da596872e8980b271e708dcec0fbcc09d961", "filled_average_price": "100", "filled_quantity": "5", "order_type": "MARKET", "quantity": "5", "side": "BUY", "status": "filled", "submitted_at": "2026-10-14T14:00:00Z", "symbol": "XLE", "time_in_force": "DAY"}, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "0c15753d1aa7d6c8ac8b879977ffc8b4de7fc26d4fd0de58d16f432968e0123c", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}, {"account_id": "synthetic-account", "activity_complete": false, "activity_fill_ids": [], "activity_watermark": null, "cash_activity": null, "client_order_id": "qb-e236da596872e8980b271e708dcec0fbcc09d961", "correction_of": null, "cost": null, "endpoint": "synthetic/activities", "event_id": "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961", "evidence_lane": "SYNTHETIC_TEST", "fill": {"broker_order_id": "synthetic-qb-e236da596872e8980b271e708dcec0fbcc09d961", "fee": null, "fee_reference": null, "fee_source": "UNKNOWN", "fill_id": "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961", "occurred_at": "2026-10-14T14:00:00Z", "price": "100", "quantity": "5", "side": "BUY", "symbol": "XLE"}, "occurred_at": "2026-10-14T14:00:00Z", "order": null, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "conflicting-one-old-fill", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}, {"account_id": "synthetic-account", "activity_complete": true, "activity_fill_ids": ["synthetic-fill-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88"], "activity_watermark": "2026-10-14T15:00:01Z", "cash_activity": null, "client_order_id": "qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88", "correction_of": null, "cost": null, "endpoint": "synthetic/order-and-complete-activities", "event_id": "4b66b5ee5288f447b429342047291c1073ab1fd2e18d92415f0e6cf2d439f6d2", "evidence_lane": "SYNTHETIC_TEST", "fill": null, "occurred_at": "2026-10-14T15:00:01Z", "order": {"broker_order_id": "synthetic-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88", "client_order_id": "qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88", "filled_average_price": "100", "filled_quantity": "5", "order_type": "MARKET", "quantity": "5", "side": "SELL", "status": "filled", "submitted_at": "2026-10-14T14:30:00Z", "symbol": "XLE", "time_in_force": "DAY"}, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "4b66b5ee5288f447b429342047291c1073ab1fd2e18d92415f0e6cf2d439f6d2", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}, {"account_id": "synthetic-account", "activity_complete": false, "activity_fill_ids": [], "activity_watermark": null, "cash_activity": null, "client_order_id": "qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88", "correction_of": null, "cost": null, "endpoint": "synthetic/activities", "event_id": "synthetic-fill-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88", "evidence_lane": "SYNTHETIC_TEST", "fill": {"broker_order_id": "synthetic-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88", "fee": null, "fee_reference": null, "fee_source": "UNKNOWN", "fill_id": "synthetic-fill-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88", "occurred_at": "2026-10-14T14:30:00Z", "price": "100", "quantity": "5", "side": "SELL", "symbol": "XLE"}, "occurred_at": "2026-10-14T14:30:00Z", "order": null, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "57896ee77979a3166d23070a1fe658326e38dccd8cc7fad01672c413a4f288cb", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}, {"account_id": "synthetic-account", "activity_complete": true, "activity_fill_ids": ["synthetic-fill-qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452"], "activity_watermark": "2026-10-14T15:00:01Z", "cash_activity": null, "client_order_id": "qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452", "correction_of": null, "cost": null, "endpoint": "synthetic/order-and-complete-activities", "event_id": "f112cef4d845dae47ddd53ac3ae66b53b84eb94b8908c88230e0e84af3427544", "evidence_lane": "SYNTHETIC_TEST", "fill": null, "occurred_at": "2026-10-14T15:00:01Z", "order": {"broker_order_id": "synthetic-qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452", "client_order_id": "qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452", "filled_average_price": "100", "filled_quantity": "5", "order_type": "MARKET", "quantity": "5", "side": "BUY", "status": "filled", "submitted_at": "2026-10-14T14:30:01Z", "symbol": "XLE", "time_in_force": "DAY"}, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "f112cef4d845dae47ddd53ac3ae66b53b84eb94b8908c88230e0e84af3427544", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}, {"account_id": "synthetic-account", "activity_complete": false, "activity_fill_ids": [], "activity_watermark": null, "cash_activity": null, "client_order_id": "qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452", "correction_of": null, "cost": null, "endpoint": "synthetic/activities", "event_id": "synthetic-fill-qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452", "evidence_lane": "SYNTHETIC_TEST", "fill": {"broker_order_id": "synthetic-qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452", "fee": null, "fee_reference": null, "fee_source": "UNKNOWN", "fill_id": "synthetic-fill-qb-4e068506bb3e32f3e9c6adea6a1ef872014c1452", "occurred_at": "2026-10-14T14:30:01Z", "price": "100", "quantity": "5", "side": "BUY", "symbol": "XLE"}, "occurred_at": "2026-10-14T14:30:01Z", "order": null, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "341179343e5024cdb6f29b930a9415b970d8837d17506b51ebebe2230ee351ec", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}, {"account_id": "synthetic-account", "activity_complete": true, "activity_fill_ids": ["synthetic-fill-qb-ae68478cab66055b14f1e8731e66928303360088"], "activity_watermark": "2026-10-14T15:00:01Z", "cash_activity": null, "client_order_id": "qb-ae68478cab66055b14f1e8731e66928303360088", "correction_of": null, "cost": null, "endpoint": "synthetic/order-and-complete-activities", "event_id": "886b23949d41b4db71ac7f57a12bce4e84d35ca3536f226652595885d1b950b3", "evidence_lane": "SYNTHETIC_TEST", "fill": null, "occurred_at": "2026-10-14T15:00:01Z", "order": {"broker_order_id": "synthetic-qb-ae68478cab66055b14f1e8731e66928303360088", "client_order_id": "qb-ae68478cab66055b14f1e8731e66928303360088", "filled_average_price": "100", "filled_quantity": "5", "order_type": "MARKET", "quantity": "5", "side": "SELL", "status": "filled", "submitted_at": "2026-10-14T15:00:01Z", "symbol": "XLE", "time_in_force": "DAY"}, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "886b23949d41b4db71ac7f57a12bce4e84d35ca3536f226652595885d1b950b3", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}, {"account_id": "synthetic-account", "activity_complete": false, "activity_fill_ids": [], "activity_watermark": null, "cash_activity": null, "client_order_id": "qb-ae68478cab66055b14f1e8731e66928303360088", "correction_of": null, "cost": null, "endpoint": "synthetic/activities", "event_id": "synthetic-fill-qb-ae68478cab66055b14f1e8731e66928303360088", "evidence_lane": "SYNTHETIC_TEST", "fill": {"broker_order_id": "synthetic-qb-ae68478cab66055b14f1e8731e66928303360088", "fee": null, "fee_reference": null, "fee_source": "UNKNOWN", "fill_id": "synthetic-fill-qb-ae68478cab66055b14f1e8731e66928303360088", "occurred_at": "2026-10-14T15:00:01Z", "price": "100", "quantity": "5", "side": "SELL", "symbol": "XLE"}, "occurred_at": "2026-10-14T15:00:01Z", "order": null, "provider": "EXPLICIT_SYNTHETIC", "raw_digest": "0fe94234a4ce85a05b233680eaa5e9d82fb675bbcb4e2d19fac69e2d88633da4", "recorded_at_utc": "2026-10-14T15:00:01Z", "release_id": "m1-synthetic-fixture", "schema_version": 1, "source_refs": []}]}, "reasons": ["b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd:SOURCE_EVIDENCE_QUARANTINED"]}
+.FF
+================================== FAILURES ===================================
+___ test_independent_cash_survives_fee_allocation_revision_and_allows_post ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ztrt8rjt/pytest/test_independent_cash_survives0')
+
+    @pytest.mark.asyncio
+    async def test_independent_cash_survives_fee_allocation_revision_and_allows_post(tmp_path):
+        from quantbot.paper_core.contracts import BrokerEvent, CashActivity
+        from quantbot.research.manifest import content_id
+    
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            first = await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+>           activity = CashActivity(recorded_at_utc=broker.now, account_id=store.config.account_id,
+                activity_ids=("cash-buy", "cash-sell"), complete=True, watermark=broker.now,
+                movements=tuple((f.fill_id, (-1 if f.side.value == "BUY" else 1) * f.quantity * f.price) for f in broker.fills))
+E               pydantic_core._pydantic_core.ValidationError: 1 validation error for CashActivity
+E               document_id
+E                 Field required [type=missing, input_value={'recorded_at_utc': datet...ce88', Decimal('500')))}, input_type=dict]
+E                   For further information visit https://errors.pydantic.dev/2.13/v/missing
+
+tests\fault\paper_core\test_review_repairs.py:177: ValidationError
+_____ test_cash_guard_and_send_cas_exclude_concurrent_process_cost_import _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ztrt8rjt/pytest/test_cash_guard_and_send_cas_e0')
+
+    @pytest.mark.asyncio
+    async def test_cash_guard_and_send_cas_exclude_concurrent_process_cost_import(tmp_path):
+        from quantbot.paper_core.guardian import acknowledge_handoffs
+    
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            zero = fee_events(store, broker)
+            import_broker_events(store, zero)
+            await synchronize(store, broker, now=broker.now)
+            broker.now += timedelta(seconds=1)
+            revisions = fee_events(store, broker, amount=".10", revision=2,
+                supersedes={e.cost.fill_id: e.cost.id for e in zero})
+            event_file = tmp_path / "cost-events.json"
+            event_file.write_text(json.dumps([e.model_dump(mode="json") for e in revisions]))
+            fresh = fresh_observation(observation, broker.now)
+            record_observation(store, fresh)
+            decision = evaluate_entry(store.config, fresh, model, store.latest_proof())
+            entry = claim_entry(store, decision, ProtectionPlan.for_decision(decision, store.config))
+            acknowledge_handoffs(store, now=broker.now)
+            sender = coordinator(store, broker)
+            check = sender._transactional_send_check
+            witness = []
+    
+            def check_and_contend(session, intent, purpose):
+                objections = check(session, intent, purpose)
+                assert not objections
+                code = '''
+    import json,sys
+    from quantbot.storage import Database
+    from quantbot.paper_core.store import CoreStore
+    from quantbot.paper_core.contracts import CoreConfig,BrokerEvent
+    from quantbot.paper_core.outcomes import import_broker_events
+    from sqlalchemy.exc import OperationalError
+    with Database(sys.argv[1],busy_timeout_ms=50) as db:
+        store=CoreStore(db,CoreConfig(account_id='synthetic-account',symbol='XLE'))
+        try:
+            import_broker_events(store,tuple(BrokerEvent.model_validate(e) for e in json.load(open(sys.argv[2]))))
+        except OperationalError as error:
+            assert 'locked' in str(error)
+            print('COST_IMPORT_LOCKED_BEFORE_SEND_CAS')
+        else:
+            raise AssertionError('cost import crossed locked guard/send boundary')
+    '''
+                process = subprocess.run([sys.executable, "-c", code, str(db.path), str(event_file)], capture_output=True, text=True)
+                assert process.returncode == 0, process.stdout + process.stderr
+                witness.append(process.stdout.strip())
+                return objections
+    
+            sender._transactional_send_check = check_and_contend
+            original_submit = broker.submit_order
+    
+            async def at_transport(intent):
+                with db.transaction() as session:
+                    assert StorageRepository(session).get_order_intent(intent.intent_id).state is IntentState.SUBMITTING
+                import_broker_events(store, revisions)
+                with pytest.raises(StateConflictError, match="CASH_AUTHORITY"):
+                    store.latest_proof()
+                return await original_submit(intent)
+    
+            broker.submit_order = at_transport
+>           await sender.submit_durable(entry.intent, purpose=OrderPurpose.ENTRY,
+                market_eligible=True, drawdown=None, risk_approved=True)
+
+tests\fault\paper_core\test_review_repairs.py:268: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <quantbot.execution.coordinator.ExecutionCoordinator object at 0x000001E66A519AD0>
+intent = OrderIntent(symbol='XLE', intent_id='core-entry-4e068506bb3e32f3e9c6adea6a1ef872014c145252fec05c684292d06fc5809c', cli...e.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 30, 1, tzinfo=datetime.timezone.utc))
+purpose = <OrderPurpose.ENTRY: 'ENTRY'>, market_eligible = True, drawdown = None
+risk_approved = True, vetoes = None
+
+    async def submit_durable(
+        self,
+        intent: OrderIntent,
+        *,
+        purpose: OrderPurpose,
+        market_eligible: bool,
+        drawdown: DrawdownState | None,
+        risk_approved: bool | None,
+        vetoes: PortfolioVetoDecision | None = None,
+    ) -> SubmissionResult:
+        """Submit or recover one pre-persisted intent without ever replacing its identity."""
+        stored = self._stored_intent(intent)
+        if stored.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
+            return await self._recover_persisted_submission(stored)
+        if stored.state in {
+            IntentState.BROKER_ACCEPTED,
+            IntentState.PARTIALLY_FILLED,
+            IntentState.FILLED,
+        }:
+            return SubmissionResult(intent=stored, broker_order=self._stored_order(stored))
+        if stored.state not in {IntentState.RISK_APPROVED, IntentState.ORDER_CREATED}:
+            raise OrderIntentNotResumable(stored)
+    
+        if stored.state is IntentState.RISK_APPROVED:
+            initial_account = await self._broker.get_account()
+            initial_positions = tuple(await self._broker.get_positions())
+            initial_gate = self._gate(
+                initial_account,
+                initial_positions,
+                stored,
+                purpose,
+                market_eligible,
+                drawdown,
+                risk_approved,
+                vetoes,
+                await self._open_exit_orders(purpose),
+            )
+            if not initial_gate.allowed:
+>               raise OrderSubmissionBlocked(initial_gate)
+E               quantbot.execution.coordinator.OrderSubmissionBlocked: order submission blocked: DRAWDOWN_STATE_UNAVAILABLE, PORTFOLIO_VETOES_NOT_EVALUATED
+
+src\quantbot\execution\coordinator.py:421: OrderSubmissionBlocked
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_review_repairs.py::test_independent_cash_survives_fee_allocation_revision_and_allows_post
+FAILED tests/fault/paper_core/test_review_repairs.py::test_cash_guard_and_send_cas_exclude_concurrent_process_cost_import
+2 failed, 4 passed in 5.22s

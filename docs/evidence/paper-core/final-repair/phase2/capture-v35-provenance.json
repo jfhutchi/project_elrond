@@ -1,0 +1,18 @@
+{
+  "accepted_head_before_capture": "31cd5167dc7ef9a50a39850df9c131f7c70f84c4",
+  "accepted_executable": "bcc0f11841c08952c1e273bc9190b8a204e6e4c0",
+  "fixture": "tests\\fixtures\\core_v35_accepted.json.gz",
+  "compressed_sha256": "7b3d4169ca323d8052187ad2aa766c86328fec41a2734880e45bdd65ed2bedc6",
+  "raw_sha256": "6fc5ffa68684b11e2a9d819bad2697273bbf004508577e210ec5414ea1bb938d",
+  "raw_bytes": 3898382,
+  "capture_log": "logs/accepted-v35-capture.txt.gz",
+  "capture_helper_current_postformat_sha256": "825d9d959b400ebf189a92db623f27d98d76e128fb6933add53aa56b5c92c798",
+  "helper_note": "Capture executed before v36/source repair; helper subsequently formatter/EOL-only changed and refuses overwrite. All economic rows exactly equal accepted v34 fixture; v35 runtime tables empty. No later code regenerates fixture.",
+  "accepted_git_blob_hashes": {
+    "src/quantbot/paper_core/store.py": "73ca18ab7a7516898e5bd011aea9ca5bc461961e6d838df283bca1becb94e2dc",
+    "src/quantbot/paper_core/contracts.py": "067ce4896feaaf8436e76921200efd08bdb1641d02c45447ca0e063e9f9e6f12",
+    "src/quantbot/storage/database.py": "f6ffbc30664619e77ca36a703e232c4a0d09dc16f3571991d21b72d9023cc965",
+    "src/quantbot/storage/schema.py": "10c656631031ebfad3efcb544badaabf5fa341d32057376e130596398fa442ed",
+    "src/quantbot/storage/migrations/versions/0035_core_runtime.py": "4abcf10fa3ecdca01f6f71712b7ebfa477012aa083c2ffc69709eb8b76a4fd3d"
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "base": "2fd17e18aa860a47bc35c1ba96d4ecc78bcfd202",
+  "original_artifact_index_sha256": "6930631f806dc279432d5aa90ff60d430514c2572baa6c1c0ac78c89fc4ce520",
+  "original_evidence_records_verified_unchanged": 123,
+  "report": "ORIGINAL_TEXT_PRESERVED_REPAIR_APPENDED",
+  "original_release_executable_verification": "EXPECTED_REFUSAL_ON_REPAIRED_SOURCE"
+}

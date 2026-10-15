@@ -1,0 +1,67 @@
+# Final repair — PREPARED / WAITING
+
+This package supersedes the M6 fix2 executable proposal and addresses accepted whole-branch findings R1–R4. It authorizes no deployment, broker probe, operating migration, commission, task registration, selected-token execution, stop clearing or trade. The original M6, fix1 and fix2 bundles remain historical evidence unchanged.
+
+The current proposed release is `c8a7fdf33d6ebabac14eb1eb4b17fa5167c774c19608208eb9ed202f4614bbd1`, schema36, with unchanged prepared config `8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c`. Typed JSON roundtrips and exact release verification pass. The predecessor release correctly refuses the changed executable inventory and schema. Source was frozen once at `2026-10-14T23:00:04.118347Z`; `source-pins.json` pins 418 executable, test, historical-fixture and preparation-helper files. Edited executable checkout bytes were normalized to the existing Windows CRLF policy before the focused GREEN and freeze; this directory preserves exact artifact bytes with `-text`.
+
+## Retained history and ordinary polling
+
+V36 adds rebuildable document-reference, guardian membership/current receipt, executable binding/current pointer and per-lot outcome work projections. Immutable source/model/decision/plan/cost/proof/outcome payloads are untouched. Normal outcome selection reads at most sixteen dirty/new lots and takes a separate writer transaction per selected lot. Each attempt records its cutoff so genuinely pending lots receive fair repeated catch-up. A settled idle pass takes no writer lock and performs no historical resolver work. Dirty version compare-and-swap prevents a notification made during resolution from being consumed by that older attempt.
+
+Accepted source/cost writes notify their exact lot in the same business transaction. Historical proof revocations notify outcomes that reference the revoked proof; refused conflicting sources retain incidents, invalidate their scoped current index and notify catch-up. Daily learning excludes dirty lots until their current authority has been resolved, then still uses all eligible retained history. It does not truncate training, raw receipts, plans or economics. Complete terminal sources, per-plan historical guardian acknowledgements, cost allocations and outcome revisions resolve through indexed identities. Current execution uses the current receipt pointer and requires exact independent heartbeat/plan membership. Guardian exit, claim, entry dispatch and stale-unsent traversal exclude settled history. Ledger derivation builds the intent/client and order lookup once and retains every attributable fill, external movement and unresolved reservation.
+
+Cold migration/catch-up is distinct from healthy cadence: migration seeds existing lots dirty and backfills reference/membership projections. This work may need several ordinary polls. The accepted populated v35 archive was captured before source changes; all 89 prior table contents, learned model/activation/qualifying receipt, forty closed lots and the original open claim are preserved. The ten v35 runtime tables in that fixture are empty; this is compatibility evidence, not an operational commission. `capture-v35-provenance.json` records raw/compressed hashes, accepted executable provenance, the successful capture log and the current formatted support helper hash. The helper refuses overwriting the archive.
+
+## Atomic initial commission
+
+The approved v36 commission writes baseline, canonical metadata, immutable commission, COMMISSION event, original COLLECT model/activation and initial executable binding in one `BEGIN IMMEDIATE` transaction. Failure before model/activation commit rolls all those authority rows back. The precreated exact CoreStore identity is inert. Restart can replay the original approved document only while its original acquisition/approval freshness remains valid; no timestamp is rewritten. After successful commit, exact repeat requires the original baseline/commission and original bootstrap activation. A differing commission or an already learned/acknowledged/rollback activation is refused; repeated commission cannot replace a current model. A committed older-schema commission lacking the v36 binding protocol is not silently adopted.
+
+## Compatible executable maintenance
+
+Executable identity now has a separate durable binding. The original economic CoreConfig/config ID, owner generation, commission ID, baseline, historical release attribution, model and qualifying receipt, plans/client IDs, unknown sends, fence and separate stops remain immutable. Successor role startup validates its exact current executable binding before credential access. Claim and locked final-send checks validate the same binding, so the predecessor cannot continue sending after the pointer changes. The protocol is available for same-schema v36 successors that implement those locked checks; v35 binaries cannot open schema36. No v35 operational commission exists in this preparation.
+
+`transition-release` is an explicit exact-old-to-exact-new CAS. It requires the existing commission, current binding and entry fence, current activation, fresh approval reference and actual old-writer fencing evidence. The full prepared RuntimeConfig and schema must be equal; account/store/owner/policy/model/feature/target/exit/learning/risk configuration changes cannot be submitted as code-only maintenance. Approval must review the exact executable/dependency diff and confirm those economic semantics are unchanged. It is not an automatic startup transition or a mechanism for arbitrary owner/legacy-lot transfer. A compatible reviewed prior executable can be selected through another forward binding event after its exact bytes are restored and verified; no event/history is overwritten.
+
+The integrated maintenance witness uses COLLECT and a null learning receipt. It preserves an actually possibly sent original client ID and open original protection plan, refuses resume while the original submission is unknown, and lets the successor guardian resolve that ID and exit that same owned lot while entries remain fenced. Separate populated-v35 migration evidence preserves the learned model and non-null qualifying receipt. Source-level preservation follows because successor stores retain the original economic config ID and `active_in_session` validates that same original commission/activation/model/receipt graph; only the executable pointer changes. These are separate proofs, not one learned operational handover trace.
+
+## Explicit entry resume
+
+`resume` requires the exact current commission, executable release, current fence and activation, approval reference/time, current proof, current guardian receipt and heartbeat and that guardian's fresh time evidence. Under the writer fence it refuses unresolved submissions, stale/ambiguous expected state, changed ledger authority, missing cash/quantity proof, stale independent readiness, session/exit boundary failures and manual stop/quarantine. It appends an immutable audited RESUME_ENTRY event and approval evidence. It changes no separate stop, quarantine, model, policy or plan. Later fence/binding changes are still checked at the actual locked send boundary. Restart, removal of `--entry-disabled`, model rollback and elapsed time do not themselves resume a durable fence.
+
+## Concrete future actions — not executed
+
+Use these exact paths in any later separately approved action:
+
+```powershell
+$Repo = 'C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond'
+$Evidence = Join-Path $Repo 'docs\evidence\paper-core\final-repair'
+$Python = Join-Path $Repo '.venv\Scripts\python.exe'
+$Config = Join-Path $Evidence 'prepared-config.json'
+$Manifest = Join-Path $Evidence 'prepared-release.json'
+# Executable verifier only; no operating store, environment file, broker or role:
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command verify
+# Equivalent proposed hidden-host selected-token action (requires its own approval):
+& 'D:\Elrond\state\service-host\1188bba2cb38de299aad0768\elrond-service-host.exe' `
+  'D:\Elrond\logs\paper-core-verify-launcher.log' -NoProfile -NonInteractive -WindowStyle Hidden `
+  -File "$Repo\deploy\omen\start-paper-core.ps1" -Repository $Repo -Config $Config -Manifest $Manifest -Verify
+# Only after approved WAL-aware backup/restore proof and exact legacy entry-writer fencing:
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command migrate
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command acquire --approval-document 'D:\Elrond\review\final-acquisition.approved.json'
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command commission --approval-document 'D:\Elrond\review\final-commission.approved.json'
+& $Python -B -m quantbot.paper_core --config $Config --command status
+# Later separately approved recovery/maintenance:
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command fence --approval-document 'D:\Elrond\review\exact-fence.approved.json'
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command rollback-model --approval-document 'D:\Elrond\review\exact-model-rollback.approved.json'
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command transition-release --approval-document 'D:\Elrond\review\exact-code-only-transition.approved.json'
+& $Python -B -m quantbot.paper_core --config $Config --manifest $Manifest --command resume --approval-document 'D:\Elrond\review\exact-current-fence-resume.approved.json'
+```
+
+The transition command above uses the separately prepared successor config/manifest at those reviewed paths, not the predecessor manifest. Its approval document contains the complete original `commission`, `commission_id`, `expected_binding_id`, `old_release_id`, `new_release_id`, `expected_fence_id`, `expected_activation_id`, `approved_at`, `approval_reference` and `old_writer_fence_evidence_ids`. Resume contains the complete original `commission`, `commission_id`, `runtime_release_id`, `expected_fence_id`, `expected_activation_id`, `proof_id`, `guardian_receipt_id`, `guardian_heartbeat_id`, `time_evidence_id`, `approved_at` and `approval_reference`. Fill these from fresh exact status/documents and reviewed evidence; placeholders and strings describing hypothetical approval are not authority.
+
+For maintenance, first fence entries while the old independent guardian/outcomes preserve protection. Prepare/verify and review the compatible successor before the handover window. Stop/fence the old entry writer and stage successor guardian/outcomes with entries disabled. Approve the exact binding switch while the durable entry fence remains set; perform CAS, verify old-binary refusal, then start successor protection/recovery and verify fresh distinct role readiness. Resolve any original unknown send by its original client ID. Keep the original owned plans active. Resume only through the freshly approved exact-fence document after independent readiness and unresolved-boundary checks pass. No old/new entry writer concurrency is authorized. Independent protection must not be suspended for review; a short executable switch must be explicitly staged and approved around current owned deadlines.
+
+The four static XML proposals are disabled, trigger-free, LeastPrivilege and PT0S. Functional roles also have submission and entry disabled; the verifier is a mutually exclusive launcher mode that runs only the existing read-only command. They were not registered or started. Static XML/source verification cannot establish actual leepa Limited-token, script-policy, hidden-host/job-tree or log behavior. That selected-token verification is a separately named action using `task-proposal-verify.xml`, not a functional role preflight.
+
+Acquisition needs migrated v36 and actual exact release approval/writer fencing/account/cash/positions/no-open-order/original-send evidence. It does not precede migration. Approval/acquisition freshness is 120 seconds and baseline capture is within five seconds of original commission approval; reacquire and review if elapsed approval expires, never edit timestamps. Retain the legacy Protection/Deadline tasks and their nine original-owner lots. Start guardian/outcomes before trader after commission, verify actual useful progress and blockers, and separately approve removing submission/entry clamps or scheduling. Current prepared config already permits submissions; the proposals clamp that authority until explicitly approved removal.
+
+First learning origin remains `2026-10-15T13:30:00Z`; review/update it if actual handover date makes it stale. Ten completed exchange sessions, all eligible history and fixed 2x latest-ten/1x older weighting remain unchanged. Unknown fees/net remain unknown; no forced trade, liquidation or model update is permitted. Provider recent-order two-read latency/quota capacity, current account/cost applicability/retained-owner provenance, selected-token host behavior, backups/migration/commission, natural broker-PAPER roundtrip and actual daily learning/activation remain later evidence requirements. SQLite is the selected operating store; no PostgreSQL operational execution or full-repository-green claim is made.

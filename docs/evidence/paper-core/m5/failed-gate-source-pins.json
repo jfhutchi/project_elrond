@@ -1,0 +1,126 @@
+{
+  "accepted_base": "fbdfca23f74bec146d19c630f001786c1123b2a6",
+  "schema": 34,
+  "pins": [
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/ci_m5.py",
+      "sha256": "37775635ae346a040b59965a2e3e96142d9a6c20cea3f702c39b8fe72bce82f2",
+      "bytes": 2310
+    },
+    {
+      "path": "src/quantbot/paper_core/activation.py",
+      "sha256": "7f63a22cd6cc260014975bf2b7c4a706d70a4102848c53b3a4b13bbed2ab0390",
+      "bytes": 20606
+    },
+    {
+      "path": "src/quantbot/paper_core/contracts.py",
+      "sha256": "44e7ca78f5340253d0042ec155558781fb56daf8be73b162a496879126b84d9b",
+      "bytes": 24789
+    },
+    {
+      "path": "src/quantbot/paper_core/guardian.py",
+      "sha256": "df28327021219f83ee46193039b9fd86cd5ea100f49449fa45a7d7a7b80e9e9e",
+      "bytes": 18368
+    },
+    {
+      "path": "src/quantbot/paper_core/health.py",
+      "sha256": "28355b6e8b8c24c186a09d1870fa1e3a8f47ae099c750206794147c1d227ce52",
+      "bytes": 9360
+    },
+    {
+      "path": "src/quantbot/paper_core/learning.py",
+      "sha256": "410449eabc3b4dc0042a5945786339db98aa99bd3f91107ccff89f6818d85c4f",
+      "bytes": 43163
+    },
+    {
+      "path": "src/quantbot/paper_core/local_simulation.py",
+      "sha256": "d61f3e369299118e07e3cf96919610e5f468866cdaeeaa83e07b5868d8808443",
+      "bytes": 20003
+    },
+    {
+      "path": "src/quantbot/paper_core/outcomes.py",
+      "sha256": "ae67b9d59b7d7821297ec0139329daeea620520a5a2e482f475055d9a0508a92",
+      "bytes": 33482
+    },
+    {
+      "path": "src/quantbot/paper_core/runtime.py",
+      "sha256": "f4ff823fd2bf497001af560d9fc17796af2db875e40a0d06f67f108a7f103e72",
+      "bytes": 4647
+    },
+    {
+      "path": "src/quantbot/paper_core/send_guard.py",
+      "sha256": "591c2a12a02b961502557f153be12445dc649e754563e5c4d499f82cddc1dc40",
+      "bytes": 12342
+    },
+    {
+      "path": "src/quantbot/paper_core/store.py",
+      "sha256": "e640b7ea4d4d56a5ed0531c368b157d363c33f56b9832eae6065cac4dfa9aa58",
+      "bytes": 18979
+    },
+    {
+      "path": "src/quantbot/paper_core/trader.py",
+      "sha256": "e00138d9a88ee99c43376b1407f26d2c617af20273105d50db033b3da078612c",
+      "bytes": 20830
+    },
+    {
+      "path": "src/quantbot/storage/core_activation_schema.py",
+      "sha256": "4ec505f50d9180c14d238d8719ab3b06510f17fd8679c4db228e62158ed89358",
+      "bytes": 1120
+    },
+    {
+      "path": "src/quantbot/storage/database.py",
+      "sha256": "a377ad45ba7acd6edd807189aca78bce7104426ebae03dd6f7ada5703944b9e4",
+      "bytes": 22516
+    },
+    {
+      "path": "src/quantbot/storage/migrations/versions/0034_paper_core_activation.py",
+      "sha256": "0817d5bf29aeffc09cd303fb9ed413736d218a3e5eef4bd24c9269278832ff11",
+      "bytes": 1066
+    },
+    {
+      "path": "src/quantbot/storage/schema.py",
+      "sha256": "23c79bf293ce895666a8a4508a89363e20ae081d1e1b117a689282ebf8ffeec7",
+      "bytes": 81833
+    },
+    {
+      "path": "tests/fault/paper_core/test_activation_races.py",
+      "sha256": "8610537830dbe03e1d2b5ca5eb85c793d76936c2df69675cb0a5b6255ad73672",
+      "bytes": 20807
+    },
+    {
+      "path": "tests/fixtures/core_m4.py",
+      "sha256": "5fc348b24f4080d02670a7f02d5b6474df1bc2b665ecc79978de9c3a0d96794a",
+      "bytes": 7157
+    },
+    {
+      "path": "tests/fixtures/core_m5.py",
+      "sha256": "6bedf46df028b02a9d64327782729ea9a574680b613b80f19b41a60ce7e9406c",
+      "bytes": 3350
+    },
+    {
+      "path": "tests/fixtures/core_m5_crash.py",
+      "sha256": "22315371802a530273c11511a16dc4358097d8cc6f122d88e029108c6272ef2b",
+      "bytes": 1647
+    },
+    {
+      "path": "tests/fixtures/core_v33_m4.json.gz",
+      "sha256": "36143b91a458d8f19d2420dab27cd76f6de255c54312d8ca3e2b8fd0e2ba89e2",
+      "bytes": 372761
+    },
+    {
+      "path": "tests/integration/paper_core/test_activation_capacity.py",
+      "sha256": "f8b74db370c47fceee9939a47cede91f6156b3091a3dfb31a0f4bd503be8086b",
+      "bytes": 8090
+    },
+    {
+      "path": "tests/integration/paper_core/test_learning_changes_decision.py",
+      "sha256": "d996803c3d50b20b897d7b22fb36e61af44b510c73b04a30bbc968ed927bede5",
+      "bytes": 13458
+    },
+    {
+      "path": "tests/integration/paper_core/test_real_data_simulation.py",
+      "sha256": "a1ace41f9b933ac0eb3736173ac1b8eca189e02605977fede408f9304574d1d5",
+      "bytes": 7395
+    }
+  ]
+}

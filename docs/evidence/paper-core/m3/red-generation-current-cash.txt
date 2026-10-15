@@ -1,0 +1,107 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_______ test_reconciliation_generation_race_is_retryable_not_integrity ________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-elrxqhv1/pytest/test_reconciliation_generation0')
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x00000197AF456090>
+
+    @pytest.mark.asyncio
+    async def test_reconciliation_generation_race_is_retryable_not_integrity(tmp_path, monkeypatch):
+        from quantbot.paper_core import guardian
+        from quantbot.paper_core.store import certify_inventory
+        from quantbot.paper_core.trader import trader_cycle
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = guardian.certify_inventory
+    
+        def competing_certification(store, proof):
+            peer = proof.model_copy(update={"acquisition_id": "competing-valid-generation"})
+            certify_inventory(store, peer)
+            return original(store, proof)
+    
+        monkeypatch.setattr(guardian, "certify_inventory", competing_certification)
+        try:
+            refused = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            assert refused.action == "WAIT" and not broker.posts
+>           assert not any(
+                h["state"] == "INTEGRITY_FAILURE" for h in store.documents("core_health_events")
+            )
+E           assert not True
+E            +  where True = any(<generator object test_reconciliation_generation_race_is_retryable_not_integrity.<locals>.<genexpr> at 0x00000197AFA3F850>)
+
+tests\fault\paper_core\test_health_authority.py:28: AssertionError
+___ test_disputed_current_cash_cannot_borrow_an_older_independent_authority ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-elrxqhv1/pytest/test_disputed_current_cash_can0')
+
+    @pytest.mark.asyncio
+    async def test_disputed_current_cash_cannot_borrow_an_older_independent_authority(tmp_path):
+        from quantbot.paper_core.contracts import BrokerEvent, CashActivity
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.outcomes import _source_id, import_broker_events, process_outcomes
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.research.manifest import content_id
+        from quantbot.storage import StorageRepository
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            first = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            clocks.advance(1801)
+            await guardian_cycle(store, broker, now=broker.now)
+            import_broker_events(store, fee_events(store, broker))
+            process_outcomes(store, cutoff=broker.now)
+            events = []
+            for number in range(2):
+                clocks.advance(1)
+                broker.now += timedelta(seconds=1)
+                activity = CashActivity(
+                    recorded_at_utc=broker.now,
+                    account_id=store.config.account_id,
+                    document_id=f"independent-cash-{number}",
+                    activity_ids=(f"buy-{number}", f"sell-{number}"),
+                    complete=True,
+                    watermark=broker.now,
+                    movements=tuple(
+                        (f.fill_id, (-1 if f.side.value == "BUY" else 1) * f.quantity * f.price)
+                        for f in broker.fills
+                    ),
+                )
+                event = BrokerEvent(
+                    recorded_at_utc=broker.now,
+                    occurred_at=broker.now,
+                    account_id=store.config.account_id,
+                    endpoint="synthetic/cash",
+                    event_id=activity.id,
+                    raw_digest=content_id(activity),
+                    client_order_id=broker.posts[0].client_order_id,
+                    cash_activity=activity,
+                )
+                import_broker_events(store, (event,))
+                events.append(event)
+            with db.transaction() as session:
+                StorageRepository(session).create_incident(
+                    "disputed-current-cash",
+                    severity="ERROR",
+                    kind="CORE_EVIDENCE_CONFLICT",
+                    message="disputed cash source",
+                    occurred_at=broker.now,
+                    detail={
+                        "lot_ids": [first.id],
+                        "implicated_source_ids": [_source_id(events[-1])],
+                        "disputed_authorities": ["CASH"],
+                    },
+                )
+            refused = await trader_cycle(
+                store, broker, fresh(observation, clocks), model, proof, now=clocks.wall
+            )
+>           assert refused.action == "WAIT" and len(broker.posts) == 2
+E           AssertionError: assert ('BUY' == 'WAIT'
+E             
+E             - WAIT
+E             + BUY)
+
+tests\fault\paper_core\test_health_authority.py:101: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_health_authority.py::test_reconciliation_generation_race_is_retryable_not_integrity
+FAILED tests/fault/paper_core/test_health_authority.py::test_disputed_current_cash_cannot_borrow_an_older_independent_authority
+2 failed in 3.01s

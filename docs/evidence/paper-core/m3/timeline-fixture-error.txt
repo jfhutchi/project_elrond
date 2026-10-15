@@ -1,0 +1,93 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____ test_joined_timeline_waits_preserve_exit_outcome_and_fresh_recovery _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8bo1mfve/pytest/test_joined_timeline_waits_pre0')
+
+    @pytest.mark.asyncio
+    async def test_joined_timeline_waits_preserve_exit_outcome_and_fresh_recovery(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.outcomes import import_broker_events, process_outcomes
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.research.manifest import canonical_result_json
+        from quantbot.storage import StorageRepository
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        timeline = []
+    
+        def witness(stage, decision=None):
+            timeline.append(
+                {
+                    "stage": stage,
+                    "posts": len(broker.posts),
+                    "at": broker.now,
+                    "decision_id": decision.id if decision else None,
+                    "gates": decision.gates if decision else (),
+                    "health": store.documents("core_health_events"),
+                    "outcomes": store.documents("core_outcome_revisions"),
+                }
+            )
+    
+        try:
+            entry = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            assert len(broker.posts) == 1
+            witness("valid-entry", entry)
+            broker.clock_fault = TimeoutError("synthetic timeout")
+            clocks.advance(1)
+            refusal = await trader_cycle(
+                store, broker, fresh(observation, clocks), model, proof, now=clocks.wall
+            )
+            assert refusal.action == "WAIT" and len(broker.posts) == 1
+            witness("provider-timeout", refusal)
+            clocks.advance(1800)
+            broker.now = NOW + timedelta(seconds=clocks.mono - 100)
+            receipt = await guardian_cycle(
+                store, broker, now=NOW + timedelta(seconds=clocks.mono - 100)
+            )
+            assert receipt.exit_intent_ids and len(broker.posts) == 2
+            broker.now = NOW + timedelta(seconds=clocks.mono - 100)
+            import_broker_events(store, fee_events(store, broker))
+            assert process_outcomes(store, cutoff=broker.now).outcomes[0].status == "COMPLETE"
+            witness("independent-exit-and-costed-outcome")
+            broker.clock_fault = None
+            broker.set_mark("XLU", Decimal(123), as_of=NOW - timedelta(days=1))
+            clocks.advance(1)
+            resumed = await trader_cycle(
+                store, broker, fresh(observation, clocks, sequence=3), model, proof, now=clocks.wall
+            )
+            assert len(broker.posts) == 3 and resumed.action == "BUY"
+            witness("unrelated-stale-symbol-fresh-recovery", resumed)
+            clocks.advance(6 * 3600)
+            closed = await trader_cycle(
+                store, broker, fresh(observation, clocks, sequence=4), model, proof, now=clocks.wall
+            )
+            assert closed.action == "WAIT" and len(broker.posts) == 3
+            witness("market-close", closed)
+            clocks.wall -= timedelta(hours=1)
+            jumped = await trader_cycle(
+                store, broker, fresh(observation, clocks, sequence=5), model, proof, now=clocks.wall
+            )
+            assert jumped.action == "WAIT" and len(broker.posts) == 3
+            witness("wall-jump", jumped)
+            # Owned exit and outcome polling continue during the closed-session wait.
+            receipt = await guardian_cycle(store, broker, now=broker.now)
+            assert receipt.exit_intent_ids and len(broker.posts) == 4
+            old_fills = {
+                f
+                for trip in store.documents("core_outcome_revisions")
+                for f in trip["entry_fill_ids"] + trip["exit_fill_ids"]
+            }
+            import_broker_events(
+                store, tuple(e for e in fee_events(store, broker) if e.cost.fill_id not in old_fills)
+            )
+>           assert len(process_outcomes(store, cutoff=broker.now).outcomes) == 2
+E           AssertionError: assert 1 == 2
+E            +  where 1 = len((RoundTrip(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=dateti...atetime.timezone.utc), available_at=datetime.datetime(2026, 10, 14, 20, 30, 2, 100000, tzinfo=datetime.timezone.utc)),))
+E            +    where (RoundTrip(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=dateti...atetime.timezone.utc), available_at=datetime.datetime(2026, 10, 14, 20, 30, 2, 100000, tzinfo=datetime.timezone.utc)),) = OutcomeBatch(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...one.utc), available_at=datetime.datetime(2026, 10, 14, 20, 30, 2, 100000, tzinfo=datetime.timezone.utc)),), reasons=()).outcomes
+E            +      where OutcomeBatch(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...one.utc), available_at=datetime.datetime(2026, 10, 14, 20, 30, 2, 100000, tzinfo=datetime.timezone.utc)),), reasons=()) = <function process_outcomes at 0x000002187400BB00>(<quantbot.paper_core.store.CoreStore object at 0x000002187416D790>, cutoff=datetime.datetime(2026, 10, 14, 20, 30, 2, 100000, tzinfo=datetime.timezone.utc))
+E            +        where datetime.datetime(2026, 10, 14, 20, 30, 2, 100000, tzinfo=datetime.timezone.utc) = <tests.fixtures.core_m2.JournalBroker object at 0x0000021873EFF150>.now
+
+tests\integration\paper_core\test_scoped_progress.py:110: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_scoped_progress.py::test_joined_timeline_waits_preserve_exit_outcome_and_fresh_recovery
+1 failed in 2.86s

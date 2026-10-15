@@ -1,0 +1,385 @@
+FFFFFFFFFFFFFFF                                                          [100%]
+================================== FAILURES ===================================
+_____________ test_skew_boundary_controls_actual_entry[-2.0-True] _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac0')
+offset = -2.0, allowed = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)])
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_timing.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac0')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+_____________ test_skew_boundary_controls_actual_entry[2.0-True] ______________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac1')
+offset = 2.0, allowed = True
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)])
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_timing.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac1')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+___________ test_skew_boundary_controls_actual_entry[-2.001-False] ____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac2')
+offset = -2.001, allowed = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)])
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_timing.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac2')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+____________ test_skew_boundary_controls_actual_entry[2.001-False] ____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac3')
+offset = 2.001, allowed = False
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("offset,allowed", [(-2.0, True), (2.0, True), (-2.001, False), (2.001, False)])
+    async def test_skew_boundary_controls_actual_entry(tmp_path, offset, allowed):
+        from quantbot.paper_core.trader import trader_cycle
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_timing.py:14: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_skew_boundary_controls_ac3')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+_________ test_proof_expires_at_120_seconds_restart_and_discontinuity _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_proof_expires_at_120_seco0')
+
+    @pytest.mark.asyncio
+    async def test_proof_expires_at_120_seconds_restart_and_discontinuity(tmp_path):
+>       from quantbot.paper_core.time_evidence import acquire_time_evidence, evidence_objections
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.time_evidence'
+
+tests\fault\paper_core\test_timing.py:41: ModuleNotFoundError
+_ test_two_samples_require_advancement_identity_consistency_budget_and_continuity[frozen] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_two_samples_require_advan0')
+fault = 'frozen'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", ["frozen", "identity", "disagree", "budget", "jump"])
+    async def test_two_samples_require_advancement_identity_consistency_budget_and_continuity(tmp_path, fault):
+>       from quantbot.paper_core.time_evidence import acquire_time_evidence
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.time_evidence'
+
+tests\fault\paper_core\test_timing.py:61: ModuleNotFoundError
+_ test_two_samples_require_advancement_identity_consistency_budget_and_continuity[identity] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_two_samples_require_advan1')
+fault = 'identity'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", ["frozen", "identity", "disagree", "budget", "jump"])
+    async def test_two_samples_require_advancement_identity_consistency_budget_and_continuity(tmp_path, fault):
+>       from quantbot.paper_core.time_evidence import acquire_time_evidence
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.time_evidence'
+
+tests\fault\paper_core\test_timing.py:61: ModuleNotFoundError
+_ test_two_samples_require_advancement_identity_consistency_budget_and_continuity[disagree] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_two_samples_require_advan2')
+fault = 'disagree'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", ["frozen", "identity", "disagree", "budget", "jump"])
+    async def test_two_samples_require_advancement_identity_consistency_budget_and_continuity(tmp_path, fault):
+>       from quantbot.paper_core.time_evidence import acquire_time_evidence
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.time_evidence'
+
+tests\fault\paper_core\test_timing.py:61: ModuleNotFoundError
+_ test_two_samples_require_advancement_identity_consistency_budget_and_continuity[budget] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_two_samples_require_advan3')
+fault = 'budget'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", ["frozen", "identity", "disagree", "budget", "jump"])
+    async def test_two_samples_require_advancement_identity_consistency_budget_and_continuity(tmp_path, fault):
+>       from quantbot.paper_core.time_evidence import acquire_time_evidence
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.time_evidence'
+
+tests\fault\paper_core\test_timing.py:61: ModuleNotFoundError
+_ test_two_samples_require_advancement_identity_consistency_budget_and_continuity[jump] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_two_samples_require_advan4')
+fault = 'jump'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("fault", ["frozen", "identity", "disagree", "budget", "jump"])
+    async def test_two_samples_require_advancement_identity_consistency_budget_and_continuity(tmp_path, fault):
+>       from quantbot.paper_core.time_evidence import acquire_time_evidence
+E       ModuleNotFoundError: No module named 'quantbot.paper_core.time_evidence'
+
+tests\fault\paper_core\test_timing.py:61: ModuleNotFoundError
+_ test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_delayed_final_fetch_inval0')
+
+    @pytest.mark.asyncio
+    async def test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.send_guard import definitively_unsent
+        from quantbot.storage import StorageRepository
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_timing.py:97: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_delayed_final_fetch_inval0')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+____ test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline _____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_wall_jump_and_stale_mark_0')
+
+    @pytest.mark.asyncio
+    async def test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.guardian import guardian_cycle
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_timing.py:120: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_wall_jump_and_stale_mark_0')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+_ test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[timeout] __
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_acquisition_wait_does_not0')
+failure = 'timeout'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["timeout", "changing_marks"])
+    async def test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes(tmp_path, failure):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StorageRepository
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_transient_recovery.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_acquisition_wait_does_not0')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+_ test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[changing_marks] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_acquisition_wait_does_not1')
+failure = 'changing_marks'
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("failure", ["timeout", "changing_marks"])
+    async def test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes(tmp_path, failure):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StorageRepository
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_transient_recovery.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_acquisition_wait_does_not1')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+___ test_valid_unowned_quantity_stays_quarantined_after_identical_snapshot ____
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_valid_unowned_quantity_st0')
+
+    @pytest.mark.asyncio
+    async def test_valid_unowned_quantity_stays_quarantined_after_identical_snapshot(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+>       db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+                                                               ^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_transient_recovery.py:50: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-8zzfw1tb/pytest/test_valid_unowned_quantity_st0')
+
+    def prepare(path):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.research.manifest import canonical_result_json, content_id
+        from sqlalchemy import update
+        from quantbot.paper_core.store import table
+    
+        db, old, broker, proof, observation, model = prepare_m2(path)
+>       config = CoreConfig(account_id=old.config.account_id, symbol="XLE", clock_profile="PAPER_TIME_V2")
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       pydantic_core._pydantic_core.ValidationError: 1 validation error for CoreConfig
+E       clock_profile
+E         Extra inputs are not permitted [type=extra_forbidden, input_value='PAPER_TIME_V2', input_type=str]
+E           For further information visit https://errors.pydantic.dev/2.13/v/extra_forbidden
+
+tests\fixtures\core_m3.py:31: ValidationError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[-2.0-True]
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[2.0-True]
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[-2.001-False]
+FAILED tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[2.001-False]
+FAILED tests/fault/paper_core/test_timing.py::test_proof_expires_at_120_seconds_restart_and_discontinuity
+FAILED tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[frozen]
+FAILED tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[identity]
+FAILED tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[disagree]
+FAILED tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[budget]
+FAILED tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[jump]
+FAILED tests/fault/paper_core/test_timing.py::test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent
+FAILED tests/fault/paper_core/test_timing.py::test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[timeout]
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[changing_marks]
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_valid_unowned_quantity_stays_quarantined_after_identical_snapshot
+15 failed in 5.15s

@@ -1,0 +1,35 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__________ test_event_batch_is_atomic_and_conflicting_replay_refused __________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-xkwducb9/pytest/test_event_batch_is_atomic_and0')
+
+    @pytest.mark.asyncio
+    async def test_event_batch_is_atomic_and_conflicting_replay_refused(tmp_path):
+        from quantbot.paper_core.outcomes import import_broker_events
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StateConflictError
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            batch = events(store, broker)
+            bad = batch[-1].model_copy(update={"raw_digest": "conflict"})
+            with pytest.raises(StateConflictError):
+                import_broker_events(store, (*batch, bad))
+            assert len(store.documents("core_broker_event_sources")) == 2
+            import_broker_events(store, batch)
+            with pytest.raises(StateConflictError):
+                import_broker_events(store, (bad,))
+            with db.transaction() as session:
+                from quantbot.storage import StorageRepository
+
+                incidents = StorageRepository(session).list_incidents(unresolved_only=True)
+>               assert any(i.kind == "CORE_EVIDENCE_CONFLICT" for i in incidents)
+E               assert False
+E                +  where False = any(<generator object test_event_batch_is_atomic_and_conflicting_replay_refused.<locals>.<genexpr> at 0x000001F90DC9F6B0>)
+
+tests\integration\paper_core\test_costed_loop.py:140: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_costed_loop.py::test_event_batch_is_atomic_and_conflicting_replay_refused
+1 failed, 11 deselected in 2.47s

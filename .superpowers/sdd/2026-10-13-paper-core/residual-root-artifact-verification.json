@@ -1,0 +1,29 @@
+{
+  "head": "fa7a1fb561ccd113e6d47d017c12bd1d89713426",
+  "artifact_index_sha256": "40dc3ce35409d1126326c12d911bd617f19af2a7e779bb948da9351c9cb3b09f",
+  "records_working_and_git": 84,
+  "stage_logs_raw_compressed_original": 16,
+  "exports_semantically_joined": 7,
+  "historical_exports_semantically_joined": 6,
+  "process_archives_raw_compressed_original": 0,
+  "source_pins_working_and_archive": 419,
+  "ci_checks": 6,
+  "prior_bundles": [
+    {
+      "bundle": "m6",
+      "unchanged_records": 123
+    },
+    {
+      "bundle": "m6/fix1",
+      "unchanged_records": 83
+    },
+    {
+      "bundle": "m6/fix2",
+      "unchanged_records": 77
+    },
+    {
+      "bundle": "final-repair",
+      "unchanged_records": 180
+    }
+  ]
+}

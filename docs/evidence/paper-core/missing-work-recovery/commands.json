@@ -1,0 +1,124 @@
+[
+  {
+    "stage": "final-frozen-missing-work-gate",
+    "exit_code": 0,
+    "result": "10 passed in17.25s",
+    "tests": 10,
+    "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-6whswg2_\\result.txt",
+    "archive": "covering-gate.txt.gz",
+    "raw_bytes": 6591,
+    "raw_sha256": "842fb986ea22144922a67b725acef73b5cbde0016f10b838f5d8e3d736159ac6",
+    "compressed_sha256": "011bfae6790e5f9a6f7601c5da6bef6bf062869752f4c0fbba2c98ec0f28cae6",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "-s",
+      "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+      "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing"
+    ]
+  },
+  {
+    "stage": "final-six-CI",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "src",
+      "tests"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\missing-work-recovery\\ruff.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "stage": "final-six-CI",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\missing-work-recovery\\mypy-linux.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b"
+  },
+  {
+    "stage": "final-six-CI",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\missing-work-recovery\\mypy-win32.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b"
+  },
+  {
+    "stage": "final-six-CI",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\missing-work-recovery\\ruff-helpers.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "stage": "final-six-CI",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\missing-work-recovery\\mypy-linux-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  },
+  {
+    "stage": "final-six-CI",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\missing-work-recovery\\mypy-win32-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  }
+]

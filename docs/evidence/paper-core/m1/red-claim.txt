@@ -1,0 +1,48 @@
+.......F.F                                                               [100%]
+================================== FAILURES ===================================
+_________________ test_forged_oversized_decision_cannot_claim _________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-kub_fprw/pytest/test_forged_oversized_decision0')
+
+    @pytest.mark.asyncio
+    async def test_forged_oversized_decision_cannot_claim(tmp_path):
+        from quantbot.paper_core.contracts import ProtectionPlan
+        from quantbot.paper_core.trader import claim_entry, evaluate_entry, record_observation
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            record_observation(store, observation)
+            decision = evaluate_entry(store.config, observation, model, proof)
+            forged = decision.model_copy(update={"quantity": Decimal("1000")})
+>           with pytest.raises(ValueError, match="decision"):
+E           Failed: DID NOT RAISE ValueError
+
+tests\integration\paper_core\test_thin_loop.py:179: Failed
+_____________ test_full_round_trip_releases_single_position_slot ______________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-kub_fprw/pytest/test_full_round_trip_releases_0')
+
+    @pytest.mark.asyncio
+    async def test_full_round_trip_releases_single_position_slot(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now = NOW + timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            later = observation.model_copy(update={"recorded_at_utc": broker.now,
+                "available_at": broker.now, "source_start": broker.now - timedelta(minutes=5),
+                "source_end": broker.now, "sequence": 2, "raw_data_digest": "synthetic-bar-002",
+                "dependency_available_at": (broker.now,)})
+            await trader_cycle(store, broker, later, model, store.latest_proof(), now=broker.now)
+            assert len(broker.posts) == 3
+>           assert broker.posts[2].quantity == Decimal("4.9995")
+E           AssertionError: assert Decimal('5') == Decimal('4.9995')
+E            +  where Decimal('5') = OrderIntent(symbol='XLE', intent_id='core-entry-e67ab27ce67bf29ed2a95683b9b42c4cdf963c60d298e8e44eb7a541807a3f4a', cli...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 30, tzinfo=datetime.timezone.utc)).quantity
+E            +  and   Decimal('4.9995') = Decimal('4.9995')
+
+tests\integration\paper_core\test_thin_loop.py:219: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_thin_loop.py::test_forged_oversized_decision_cannot_claim
+FAILED tests/integration/paper_core/test_thin_loop.py::test_full_round_trip_releases_single_position_slot
+2 failed, 8 passed in 6.40s

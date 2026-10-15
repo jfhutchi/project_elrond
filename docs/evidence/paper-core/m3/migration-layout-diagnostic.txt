@@ -1,0 +1,57 @@
+[('add_table', Table('core_health_events', MetaData(), Column('id', String(length=64), table=<core_health_events>, primary_key=True, nullable=False), Column('payload', Text(), table=<core_health_events>, nullable=False), schema=None)), ('add_table', Table('core_time_evidence', MetaData(), Column('id', String(length=64), table=<core_time_evidence>, primary_key=True, nullable=False), Column('payload', Text(), table=<core_time_evidence>, nullable=False), schema=None)), ('add_constraint', UniqueConstraint(Column('content_hash', NullType(), table=<artifact_test_registrations>))), ('add_constraint', UniqueConstraint(Column('client_order_id', NullType(), table=<broker_orders>))), ('add_constraint', UniqueConstraint(Column('proof_id', NullType(), table=<core_inventory_certifications>))), ('add_constraint', UniqueConstraint(Column('proof_id', NullType(), table=<core_quantity_certifications>))), ('add_constraint', UniqueConstraint(Column('account_snapshot_id', NullType(), table=<equity_snapshots>))), ('add_constraint', UniqueConstraint(Column('content_hash', NullType(), table=<hypotheses>))), ('add_constraint', UniqueConstraint(Column('document_hash', NullType(), table=<learner_datasets>))), ('add_constraint', UniqueConstraint(Column('document_hash', NullType(), table=<learner_evaluations>))), ('add_constraint', UniqueConstraint(Column('document_hash', NullType(), table=<learner_model_versions>))), ('add_constraint', UniqueConstraint(Column('document_hash', NullType(), table=<learner_outcomes>))), ('add_constraint', UniqueConstraint(Column('document_hash', NullType(), table=<learner_predictions>))), ('add_constraint', UniqueConstraint(Column('client_order_id', NullType(), table=<order_intents>))), ('add_constraint', UniqueConstraint(Column('client_order_id', NullType(), table=<position_protection_actions>))), ('add_constraint', UniqueConstraint(Column('intent_id', NullType(), table=<position_protection_actions>))), ('add_constraint', UniqueConstraint(Column('trigger_evaluation_id', NullType(), table=<position_protection_actions>)))]
+F
+================================== FAILURES ===================================
+_ test_populated_accepted_v31_migration_preserves_payload_ids_and_claim_replay _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-21409y0r/pytest/test_populated_accepted_v31_mi0')
+
+    def test_populated_accepted_v31_migration_preserves_payload_ids_and_claim_replay(tmp_path):
+        from quantbot.storage import Database
+        from quantbot.storage.schema import metadata
+        from quantbot.paper_core.contracts import CoreConfig, Decision, Observation, ProtectionPlan, RoundTrip
+        from quantbot.paper_core.store import CoreStore, table
+        fixture = json.loads((Path(__file__).parents[2]/"fixtures/core_v31_m2.json").read_text())
+        from sqlalchemy import create_engine
+        engine = create_engine("sqlite:///"+str(tmp_path/"v31.db"))
+        old = MetaData()
+        for target in metadata.sorted_tables:
+            if target.name not in {"core_health_events", "core_time_evidence"}:
+                target.to_metadata(old)
+        old.create_all(engine)
+        with engine.begin() as connection:
+            for target in old.sorted_tables:
+                if fixture[target.name]:
+                    connection.execute(target.insert(), fixture[target.name])
+        engine.dispose()
+        try:
+>           migrated = Database.migrate(tmp_path/"v31.db")
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_scoped_progress.py:147: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\storage\database.py:283: in migrate
+    return cls(location, busy_timeout_ms=busy_timeout_ms, may_migrate=True)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:214: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:435: in _initialize_schema
+    self._compare_against_metadata(connection)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+connection = <sqlalchemy.engine.base.Connection object at 0x000002121529A8D0>
+
+    @staticmethod
+    def _compare_against_metadata(connection: Connection) -> None:
+        """Fail unless the live schema matches the metadata this build was compiled against."""
+        context = MigrationContext.configure(
+            connection,
+            opts={"compare_type": True, "compare_server_default": True},
+        )
+        if compare_metadata(context, metadata):
+>           raise UnsupportedSchemaVersionError("incompatible schema")
+E           quantbot.storage.database.UnsupportedSchemaVersionError: Unsupported schema version incompatible schema; this build supports 32
+
+src\quantbot\storage\database.py:397: UnsupportedSchemaVersionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_scoped_progress.py::test_populated_accepted_v31_migration_preserves_payload_ids_and_claim_replay
+1 failed, 4 deselected in 3.85s

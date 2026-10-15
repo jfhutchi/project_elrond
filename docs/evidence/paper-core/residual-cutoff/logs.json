@@ -1,0 +1,198 @@
+[
+  {
+    "stage": "reviewer-original-diagnostic",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-n2ukb22c\\result.txt",
+    "archive": "logs/reviewer-original-diagnostic.txt.gz",
+    "raw_bytes": 1236,
+    "raw_sha256": "f84ac11956b9d11d4596510b5848bbe42b3c1e6be43eca260a1354fb1c9aeb3f",
+    "compressed_sha256": "d96eaa284a5cbed948c259c3d5a3c77e557317eeada70503e880c4848f68420a",
+    "result": "1 passed in 3.88s",
+    "meaning": "BASE ee079d38; reviewer scratch demonstrates original lost notification, not a repair",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "initial-cutoff-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-m61ge4of\\result.txt",
+    "archive": "logs/initial-cutoff-red.txt.gz",
+    "raw_bytes": 5563,
+    "raw_sha256": "496bec44d74d68f8c9407896284e2509ff62f8b0804c3a98d6c8b08d23a8dcd2",
+    "compressed_sha256": "6f0a717fbd823f6b8ab648ee0fc4348281f2b69f761859dc7ef4c470b7618023",
+    "result": "2 failed in 4.23s",
+    "meaning": "BASE ee079d38 production code; 19/19 stale zero-fee acknowledgement; initial test revision not separately archived",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "first-watermark-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-a6z49pu0\\result.txt",
+    "archive": "logs/first-watermark-green.txt.gz",
+    "raw_bytes": 1630,
+    "raw_sha256": "c461d59801b045d31b4b89571df6c6c210274bb7a101a1bda3092bb847117fdd",
+    "compressed_sha256": "7ad5a07899d7ff811a24ee3c5b7060ce528f7d23c46b3de449d65d9ced516d19",
+    "result": "2 passed in 4.92s",
+    "meaning": "Intermediate unfrozen code; two cutoff variants",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "initial-19-controls",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-h5ucek8k\\result.txt",
+    "archive": "logs/initial-19-controls.txt.gz",
+    "raw_bytes": 22208,
+    "raw_sha256": "74ca35c8bff16bb5dc768d31f992d318fa5c97fae5c6ecb4566fd2b1fe011bda",
+    "compressed_sha256": "accc88a4e72d7f6f20920160be6ed39b55a21c3d8450b020efce51e6f62cdb80",
+    "result": "19 passed in 36.94s",
+    "meaning": "Intermediate unfrozen code;19 controls; subsequent typing repairs not represented by this pass",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "legacy-four-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-umz4i80p\\result.txt",
+    "archive": "logs/legacy-four-green.txt.gz",
+    "raw_bytes": 3123,
+    "raw_sha256": "3a4d41c23e56e342139d210fa11ea8b867bd5b8191f51cc2639ffc28b865a69d",
+    "compressed_sha256": "6ea9a61544ae25a7581f6d00e6956bee2b949b1bd34bb525f75cbc98f68b1fa5",
+    "result": "4 passed in 8.22s",
+    "meaning": "Intermediate unfrozen code; four owned legacy variants",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "learning-before-catchup-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-tik6m53a\\result.txt",
+    "archive": "logs/learning-before-catchup-red.txt.gz",
+    "raw_bytes": 10963,
+    "raw_sha256": "68406091b4b4b32b3f949f5d113ac3a94a1f0b02fa2dc82cdc953d2ebe0d8aad",
+    "compressed_sha256": "dcda0f76a050da584a6de085fd031a0d87e7e7438722faaa66b5f83c9b2f091a",
+    "result": "2 failed, 2 passed in 6.39s",
+    "meaning": "Intermediate unfrozen code; stale missing-work/preacknowledged lots incorrectly eligible before first recovery",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "interrupted-healthy-setup-failure",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-hzqouf__\\result.txt",
+    "archive": "logs/interrupted-healthy-setup-failure.txt.gz",
+    "raw_bytes": 4356,
+    "raw_sha256": "d0c71fccb1005badfd3a2e1aeb10e663c801d0391eace27d2b4f05765e67d897",
+    "compressed_sha256": "12a619ff5f6e4aedd8ef020b6d7cebfb2eb97559891ea3eb03df514138d931a9",
+    "result": "1 failed, 4 passed in 9.82s",
+    "meaning": "Interrupted UI turn; command completed1failed4passed. Raw M5 healthy-learning setup lacked genuine bounded catch-up",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "healthy-setup-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-f9vhvq51\\result.txt",
+    "archive": "logs/healthy-setup-green.txt.gz",
+    "raw_bytes": 3502,
+    "raw_sha256": "9d42d49e8fe3479a0254eb8a7a5992ffab44f184fe933a8859b3b79d69c680bd",
+    "compressed_sha256": "207f5ea09092144eb17b4a6f792f4b6871db5539bcc246764b72d386c500b9a6",
+    "result": "7 passed in 12.23s",
+    "meaning": "Intermediate unfrozen code; healthy setup uses production catch-up; seven controls",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "archived-corpus-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-up3k6lil\\result.txt",
+    "archive": "logs/archived-corpus-red.txt.gz",
+    "raw_bytes": 1232,
+    "raw_sha256": "817884680fa57cc1d9bbb010ab6cb35e925eabb9557d5fb1dd0ba2f8572d417a",
+    "compressed_sha256": "3ad62b8b2596693fdc90bd3fdb9f17523da1a0d0a8fb2e1154457c1f6544aab8",
+    "result": "1 failed, 4 deselected in 3.37s",
+    "meaning": "Intermediate unfrozen code; blanket missing-work guard incorrectly excluded immutable corpus with no runtime ENTRY journal",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "fixed-predicate-focused-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-imqo6_jq\\result.txt",
+    "archive": "logs/fixed-predicate-focused-green.txt.gz",
+    "raw_bytes": 3942,
+    "raw_sha256": "82721df22cf90de70f821dfe00855f6ebca539b4e404837c7985a07e3eecc541",
+    "compressed_sha256": "06eed2ff1ebe498ff9949867e2276ddc8c4e8dee77e10cfcfbebefdc98f08c8c",
+    "result": "7 passed in 11.61s",
+    "meaning": "Pre-freeze final stage1 source; seven controls",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "existing-resolution-cas-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-pval84e0\\result.txt",
+    "archive": "logs/existing-resolution-cas-green.txt.gz",
+    "raw_bytes": 397,
+    "raw_sha256": "01ad5d8780656c7a6e267b355023819b4772c43bf6378f563f9f64efedbb594c",
+    "compressed_sha256": "b6269260d6944f640b396312a816c9c21e7d28becc29d81f7ea0560ad49859d8",
+    "result": "1 passed in 4.26s",
+    "meaning": "Pre-freeze final stage1 source; existing CAS/revocation control",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "affected-gate-collection",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-pjvr4go7\\result.txt",
+    "archive": "logs/affected-gate-collection.txt.gz",
+    "raw_bytes": 3558,
+    "raw_sha256": "ad5e209926a1c742bbd0d308dfff057545a0ca97eaabdbb40f339e9d57296369",
+    "compressed_sha256": "4366e7300a526f82e0553b2c85a01d9cd19582252216faa88b68ea6924b3182e",
+    "result": "28 tests collected in 2.54s",
+    "meaning": "Collection only28; no execution success claim",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "legacy-arrival-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-bwrcsd71\\result.txt",
+    "archive": "logs/legacy-arrival-red.txt.gz",
+    "raw_bytes": 5573,
+    "raw_sha256": "c7c9e8daaf4927411a9834c0438ba05b0cccf5d83f1e27930ded7ccb8403ed9f",
+    "compressed_sha256": "b6e8b0ab5e9bee51908f2ff7cb4efb835e9b792ae10b209b2067f022cb5221f7",
+    "result": "1 failed, 5 deselected in 3.28s",
+    "meaning": "Exact stage1 production code plus preserved legacy-arrival-red-test.py; processed version alone incorrectly grants20/20 acknowledgement",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "legacy-arrival-focused-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-80s5zpe_\\result.txt",
+    "archive": "logs/legacy-arrival-focused-green.txt.gz",
+    "raw_bytes": 4964,
+    "raw_sha256": "e17a61f2743a75016f9662a7485c71f7d066315e43e8e6f1164a6dd588534d99",
+    "compressed_sha256": "eb1bcce9a3b38c27e392abf04a9fbc447673d14732560cde9a3a65409d85b4e3",
+    "result": "6 passed in 9.31s",
+    "meaning": "Pre-freeze final source; six cutoff/corpus controls",
+    "source_capture": "Historical intermediate source snapshots were not independently frozen; only final stage1/current sources and exact reviewer/legacy RED test bytes are archived."
+  },
+  {
+    "stage": "stage1-frozen-affected-gate",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-i64vzea6\\result.txt",
+    "archive": "stage1/covering-gate.txt.gz",
+    "raw_sha256": "66763c04bee15ce5c7e0f2391ae4d7b4c1b3a1df6eab6eac5830c0f79da41d7f",
+    "compressed_sha256": "6b2f23aa15cd76477e518f5d4ad6ed607c63b84c8b3a177bcc996801bb6dd214",
+    "result": "28 passed in 51.12s",
+    "source_pins_sha256": "48a3934ee73a6cbbc7ce3233e7f219361734ce7050b986c35eb9471310bcb5ae",
+    "command": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "-s",
+      "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+      "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing",
+      "tests/fault/paper_core/test_outcomes_independent.py",
+      "tests/fault/paper_core/test_review_repairs.py",
+      "tests/fault/paper_core/test_learning_temporal.py::test_no_change_completion_is_execution_time_and_replay_is_immutable",
+      "tests/fault/paper_core/test_learning_temporal.py::test_later_recovery_has_later_availability_without_recharging",
+      "tests/fault/paper_core/test_learning_temporal.py::test_future_cutoff_does_not_expire_live_reservation_before_data",
+      "tests/fault/paper_core/test_learning_temporal.py::test_materialization_recheck_uses_fresh_execution_time"
+    ]
+  },
+  {
+    "stage": "final-frozen-guard-gate",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-ia8afqjw\\result.txt",
+    "archive": "covering-gate.txt.gz",
+    "raw_sha256": "4f616efe6b3cdab48a73913317becd3b3685a2c9e625afe8f41d53939b45496c",
+    "compressed_sha256": "f03079a2c3f617a0dfb5b29bbbb74c48a6c586cec3ff8cd5bc3ba3f46e8d6702",
+    "result": "9 passed in 16.31s",
+    "source_pins_sha256": "0f2e071f5f44f3bcfe3f9425235d2de4a3672801400c9bb965b12d5f6da35eca",
+    "command": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "-s",
+      "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+      "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing"
+    ]
+  }
+]

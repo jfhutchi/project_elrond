@@ -182,12 +182,63 @@ async def test_actual_protection_action_is_owned_and_economically_attributed(
     )
     initial = capture().attempts[0].before
     snapshot = initial.model_copy(
-        update={"account": initial.account.model_copy(update={"cash": Decimal(910)})}
+        update={"account": initial.account.model_copy(update={"cash": Decimal("899.90")})}
     )
     with database.transaction() as session:
         repo = StorageRepository(session)
         repo.save_strategy_deployment(IDENTITY)
         repo.save_account_snapshot("owned-local", snapshot.account, held, captured_at=NOW)
+        # Explicit test-only certification, derived from the pre-entry capture and canonical
+        # owned fills. A raw broker read or same-run status is never used as the expected ledger.
+        from quantbot.execution.reconciliation import compare_reconciliation
+        from quantbot.paper_core.contracts import ReconciliationProof
+        from quantbot.paper_core.store import put, table
+        from quantbot.research.manifest import content_id
+
+        entry_order = repo.get_broker_order_by_client_order_id(record.entry_intent.client_order_id)
+        owned_fills = tuple(repo.list_fills(broker_order_id=entry_order.broker_order_id))
+        expected_quantity = sum((f.quantity for f in owned_fills), Decimal(0))
+        expected_basis = (
+            sum((f.price * f.quantity for f in owned_fills), Decimal(0)) / expected_quantity
+        )
+        expected_cash = initial.account.cash - sum(
+            (f.price * f.quantity + f.fee for f in owned_fills), Decimal(0)
+        )
+        assert expected_quantity == Decimal("1")
+        assert expected_basis == Decimal("100")
+        assert expected_cash == Decimal("899.90")
+        expected_position = held[0].model_copy(
+            update={"quantity": expected_quantity, "average_entry_price": expected_basis}
+        )
+        expected = ReconciliationSnapshot(
+            account=initial.account.model_copy(update={"cash": expected_cash}),
+            positions=(expected_position,),
+            fills=owned_fills,
+        )
+        actual = ReconciliationSnapshot(account=snapshot.account, positions=held, fills=owned_fills)
+        comparison = compare_reconciliation(expected, actual)
+        assert comparison.allows_new_orders
+        proof = ReconciliationProof(
+            recorded_at_utc=NOW,
+            source_refs=tuple(f.fill_id for f in owned_fills),
+            account=snapshot.account,
+            baseline_id=content_id(capture().snapshot),
+            generation=1,
+            fill_ids=tuple(f.fill_id for f in owned_fills),
+            expected_quantities=(("DIA", expected_quantity),),
+            actual_quantities=(("DIA", held[0].quantity),),
+            positions=held,
+            expected_cash=expected_cash,
+            acquisition_id="explicit-owned-fixture-provider-state",
+            complete=True,
+            order_ids=(entry_order.broker_order_id,),
+        )
+        put(session, "core_reconciliation_proofs", proof.id, proof)
+        session.execute(
+            table("core_inventory_certifications")
+            .insert()
+            .values(generation=1, proof_id=proof.id, snapshot_id="owned-local")
+        )
         if corrupt_registration:
             session.execute(
                 update(signals)
@@ -236,6 +287,8 @@ async def test_actual_protection_action_is_owned_and_economically_attributed(
                 quantity=1,
                 price=90,
                 fee=Decimal(".20"),
+                fee_source="BROKER_REPORTED",
+                fee_reference="synthetic-protective-fee-fixture",
                 occurred_at=NOW + timedelta(minutes=2),
             )
         )

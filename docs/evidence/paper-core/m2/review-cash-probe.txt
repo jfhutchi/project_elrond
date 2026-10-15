@@ -1,0 +1,4 @@
+CASH_PROBE ledger_expected= 99999.8 certified_cash= 100000 latest_proof_cash= 100000
+CASH_PROBE posts_after_revision= 3
+.
+1 passed in 3.01s

@@ -1,0 +1,24 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_____ test_stop_freshness_uses_entire_provider_interval_not_receipt_wall ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-uiz7ry1r/pytest/test_stop_freshness_uses_entir0')
+
+    @pytest.mark.asyncio
+    async def test_stop_freshness_uses_entire_provider_interval_not_receipt_wall(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.guardian import guardian_cycle
+        from decimal import Decimal
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            broker.offset = 1.9
+            broker.set_mark("XLE", Decimal(98), as_of=clocks.wall-timedelta(seconds=119))
+>           assert not (await guardian_cycle(store, broker, now=clocks.wall)).exit_intent_ids
+E           AssertionError: assert not ('core-exit-583fdf70c42773ee11fd958c9e25e31dde5eac30258a31e922fdc927bd2227ab',)
+E            +  where ('core-exit-583fdf70c42773ee11fd958c9e25e31dde5eac30258a31e922fdc927bd2227ab',) = CycleReceipt(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=date...30258a31e922fdc927bd2227ab',), reasons=(), proof_id='56999d7eebebc1fa1d73e03b342b508118960278e59f6d6625da36e0488ec1f1').exit_intent_ids
+
+tests\fault\paper_core\test_timing.py:233: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_timing.py::test_stop_freshness_uses_entire_provider_interval_not_receipt_wall
+1 failed in 2.39s

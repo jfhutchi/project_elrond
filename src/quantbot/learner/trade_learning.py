@@ -44,7 +44,7 @@ class TradeEpisode:
     observed_at: datetime
     entry_fill_ids: tuple[str, ...]
     exit_fill_ids: tuple[str, ...]
-    fees: Decimal
+    fees: Decimal | None
     realized_net_pnl: Decimal | None
     net_return: Decimal | None
     forecast_score: float | None
@@ -52,6 +52,23 @@ class TradeEpisode:
     exit_notional: Decimal
     feature_identity: str
     entry_reference_close: float
+
+
+def _known_fee(row: sqlite3.Row) -> Decimal | None:
+    # Historical zeros were fabricated by the old FILL parser. Reading one is
+    # not fee authority, including on a copied pre-v31 store.
+    if row["fee"] is None:
+        return None
+    if "fee_source" not in row.keys() or row["fee_source"] == "UNKNOWN":
+        return None
+    return Decimal(row["fee"])
+
+
+def _required_fee(row: sqlite3.Row) -> Decimal:
+    fee = _known_fee(row)
+    if fee is None:
+        raise ValueError("verified fee is required for net arithmetic")
+    return fee
 
 
 def _fills(
@@ -84,7 +101,8 @@ def _fills(
     ).fetchall()
     visible = [r for r in rows if _time(r["occurred_at"]) <= now]
     for row in visible:
-        numbers = tuple(Decimal(row[field]) for field in ("quantity", "price", "fee"))
+        numbers = tuple(Decimal(row[field]) for field in ("quantity", "price"))
+        fee = _known_fee(row)
         if (
             row["strategy_id"] != (exit_strategy_id or record.identity.strategy_id)
             or row["symbol"] != record.entry_intent.symbol
@@ -98,7 +116,7 @@ def _fills(
             or any(not value.is_finite() for value in numbers)
             or numbers[0] <= 0
             or numbers[1] <= 0
-            or numbers[2] < 0
+            or (fee is not None and (not fee.is_finite() or fee < 0))
         ):
             raise ValueError("fill provenance or numeric integrity mismatch")
     return sorted(visible, key=lambda r: (_time(r["occurred_at"]), r["fill_id"]))
@@ -228,7 +246,9 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
     ]
     entry_qty = sum((Decimal(r["quantity"]) for r in entries), Decimal(0))
     exit_qty = sum((Decimal(r["quantity"]) for r in exits), Decimal(0))
-    fees = sum((Decimal(r["fee"]) for r in (*entries, *exits)), Decimal(0))
+    known = [_known_fee(r) for r in (*entries, *exits)]
+    fees = (None if any(f is None for f in known)
+            else sum((f for f in known if f is not None), Decimal(0)))
     status = "OPEN" if entries else "AWAITING_ENTRY_FILLS"
     pnl = net_return = None
     if exits and not closed:
@@ -264,13 +284,17 @@ def _episode(connection: sqlite3.Connection, signal: sqlite3.Row, now: datetime)
                     subset[0]["filled_quantity"]
                 ) and subset[0]["status"] in {"filled", "canceled", "expired", "rejected"}
         status = "CLOSED" if complete else "INCOMPLETE_FILL_ATTRIBUTION"
-        if complete:
+        if complete and fees is None:
+            status = "COSTS_PENDING"
+        if complete and fees is not None:
             entry_cost = sum(
-                (Decimal(r["price"]) * Decimal(r["quantity"]) + Decimal(r["fee"]) for r in entries),
+                (Decimal(r["price"]) * Decimal(r["quantity"]) + _required_fee(r)
+                 for r in entries),
                 Decimal(0),
             )
             proceeds = sum(
-                (Decimal(r["price"]) * Decimal(r["quantity"]) - Decimal(r["fee"]) for r in exits),
+                (Decimal(r["price"]) * Decimal(r["quantity"]) - _required_fee(r)
+                 for r in exits),
                 Decimal(0),
             )
             pnl = proceeds - entry_cost

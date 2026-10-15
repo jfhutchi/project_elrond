@@ -1,0 +1,42 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-465d_w69/pytest/test_conflicting_batch_only_qu0')
+
+    @pytest.mark.asyncio
+    async def test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors(tmp_path):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            first = await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            import_broker_events(store, fee_events(store, broker))
+            await synchronize(store, broker, now=broker.now)
+            broker.now += timedelta(seconds=1)
+            second = await trader_cycle(store, broker, fresh_observation(observation, broker.now), model, store.latest_proof(), now=broker.now)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            known = {e["fill_id"] for e in store.documents("core_cost_items")}
+            import_broker_events(store, tuple(e for e in fee_events(store, broker) if e.cost.fill_id not in known))
+            process_outcomes(store, cutoff=broker.now)
+            batch = list(events(store, broker))
+            bad = batch[1].model_copy(update={"raw_digest": "conflicting-one-old-fill"})
+            batch[1] = bad
+            before = store.documents("core_broker_event_sources")
+            with pytest.raises(StateConflictError):
+                import_broker_events(store, tuple(batch))
+            assert store.documents("core_broker_event_sources") == before
+            with db.transaction() as session:
+                rows = {r["lot_id"]: r for r in session.execute(select(table("core_outcome_index"))).mappings()}
+                assert rows[first.id]["status"] == "INTEGRITY_FAILURE"
+>               assert rows[second.id]["status"] == "COMPLETE"
+E               AssertionError: assert 'INTEGRITY_FAILURE' == 'COMPLETE'
+E                 
+E                 - COMPLETE
+E                 + INTEGRITY_FAILURE
+
+tests\fault\paper_core\test_review_repairs.py:144: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_review_repairs.py::test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors
+1 failed, 3 deselected in 2.55s

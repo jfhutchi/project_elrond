@@ -1,0 +1,34 @@
+"""Freeze the one agreed final covering gate, before executing it."""
+
+import hashlib
+import json
+import subprocess
+from datetime import UTC, datetime
+from pathlib import Path
+
+root = Path.cwd()
+output = root / "docs/evidence/paper-core/final-repair/source-pins.json"
+assert not output.exists(), "one freeze; preserve failed stages if a new change is required"
+paths = list((root / "src").rglob("*.py"))
+paths += list((root / "tests/integration/paper_core").rglob("*.py"))
+paths += list((root / "tests/fault/paper_core").rglob("*.py"))
+paths += list((root / "tests/fixtures").glob("core*"))
+paths += [root / p for p in (
+    "uv.lock", "pyproject.toml", "deploy/omen/start-paper-core.ps1",
+    "deploy/omen/windows-job.ps1", "deploy/omen/service-host.cs", "deploy/omen/process-job.cs",
+    "tests/fixtures/capture_core_v35.py", "tests/integration/test_storage_parity.py",
+    "tests/unit/test_migration_authority.py", "tests/unit/test_storage.py",
+    "tests/unit/research/test_registry.py",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    ".superpowers/sdd/2026-10-13-paper-core/ci_final_repair.py",
+    ".superpowers/sdd/2026-10-13-paper-core/prepare_final_repair.py",
+    ".superpowers/sdd/2026-10-13-paper-core/task_proposals_final_repair.py",
+    ".superpowers/sdd/2026-10-13-paper-core/freeze_final_repair.py",
+)]
+pins = {p.relative_to(root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
+        for p in sorted(set(paths)) if p.is_file()}
+document = {"frozen_at": datetime.now(UTC).isoformat(), "accepted_head": subprocess.check_output(
+    ["git", "rev-parse", "HEAD"], text=True).strip(), "pins": pins,
+    "checkout_policy": "Windows CRLF executable files; immutable evidence -text"}
+output.write_text(json.dumps(document, indent=2), encoding="utf-8")
+print("FROZEN", len(pins), document["frozen_at"])

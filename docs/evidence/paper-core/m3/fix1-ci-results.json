@@ -1,0 +1,91 @@
+[
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "src",
+      "tests"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m3\\fix1-ruff.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m3\\fix1-mypy-linux.txt",
+    "sha256": "12f6c6932b4b4cbbd4a955d15388e7f0c95796a2127a3872cc3e7b0e13fe671b"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m3\\fix1-mypy-win32.txt",
+    "sha256": "12f6c6932b4b4cbbd4a955d15388e7f0c95796a2127a3872cc3e7b0e13fe671b"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m3\\fix1-ruff-helpers.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m3\\fix1-mypy-linux-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m3\\fix1-mypy-win32-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  }
+]

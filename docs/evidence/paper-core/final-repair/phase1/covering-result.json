@@ -1,0 +1,11 @@
+{
+  "exit_code": 1,
+  "summary": "3 failed, 449 passed, 26 skipped in 582.74s",
+  "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-v5yf10bh\\result.txt",
+  "raw_bytes": 176447719,
+  "raw_sha256": "6d27ef3eca6abcb608eeaddc858c7092265b6dc514978ea91f119b2f0cb6475f",
+  "compressed_sha256": "34393eca1d69228426a4f7d1e8acec531ce2c25ea0433776b6c4ebd109dbc09e",
+  "source_pins_sha256": "d0ed6fe28733baeaef80facf83b9ff917da43dd765974ef697bb46bddfd7b588",
+  "frozen_archive_sha256": "0c1710c98e4ca6ed5fd8d629324868d7fa048b5d4e23efc004468df477ee49e2",
+  "capacity_witness": "PASSED_IN_THIS_PHASE_0.500S_GUARDIAN_AND_OUTCOME_10S_BOUND"
+}

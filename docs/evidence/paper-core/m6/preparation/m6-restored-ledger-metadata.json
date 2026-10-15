@@ -1,0 +1,77 @@
+{
+  "scope": "DATED_RESTORED_BACKUP_METADATA_ONLY_NOT_FRESH_BROKER_AUTHORITY",
+  "backup_source": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\operational-restored.db",
+  "source_snapshot_completed_at": "2026-10-14T17:17:40.075688+00:00",
+  "latest_account_snapshot": {
+    "snapshot_id": "protection-broker-snapshot-5e39109482a89713976ca9ea",
+    "captured_at": "2026-10-14T17:17:03.577452Z"
+  },
+  "positions_at_that_snapshot": [
+    {
+      "symbol": "DBC",
+      "quantity": "1.462583"
+    },
+    {
+      "symbol": "EEM",
+      "quantity": "0.726321"
+    },
+    {
+      "symbol": "EFA",
+      "quantity": "0.463951"
+    },
+    {
+      "symbol": "IWM",
+      "quantity": "0.169669"
+    },
+    {
+      "symbol": "QQQ",
+      "quantity": "0.069596"
+    },
+    {
+      "symbol": "SPY",
+      "quantity": "0.065269"
+    },
+    {
+      "symbol": "XLE",
+      "quantity": "0.771962"
+    },
+    {
+      "symbol": "XLK",
+      "quantity": "0.26607"
+    },
+    {
+      "symbol": "XLV",
+      "quantity": "0.299132"
+    }
+  ],
+  "intent_states": [
+    {
+      "state": "FILLED",
+      "count": 17
+    },
+    {
+      "state": "REJECTED",
+      "count": 1
+    }
+  ],
+  "broker_statuses": [
+    {
+      "status": "filled",
+      "count": 17
+    }
+  ],
+  "protection_action_statuses": [],
+  "recorded_stop": [
+    {
+      "engaged": 0,
+      "reason": "stop",
+      "updated_at": "2026-10-14T01:17:42.473747Z"
+    }
+  ],
+  "limits": [
+    "Legacy position snapshot is not new-core ownership authority",
+    "Empty protection_actions is not proof of absent legacy experiment exit ownership",
+    "Fresh broker reads and source-specific owner map required before handover"
+  ],
+  "source_snapshot_started_at": "2026-10-14T17:17:37.461597+00:00"
+}

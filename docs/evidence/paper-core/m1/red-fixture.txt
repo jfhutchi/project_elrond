@@ -1,0 +1,56 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_ test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot[manual_pause] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-7od3ko0g/pytest/test_fixture_initialization_ca0')
+existing = 'manual_pause'
+
+    @pytest.mark.parametrize("existing", ["manual_pause", "snapshot"])
+    def test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot(tmp_path, existing):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.runtime import initialize_fixture
+        from quantbot.paper_core.simulation import SyntheticBroker
+        from quantbot.paper_core.store import CoreStore
+        with Database.create(tmp_path / "not-empty.db") as db:
+            config = CoreConfig(account_id="synthetic-account", symbol="XLE")
+            broker = SyntheticBroker(account_id=config.account_id, now=NOW)
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+                if existing == "manual_pause":
+                    repo.set_kill_switch(True, reason="operator pause", updated_at=NOW)
+                else:
+                    repo.save_account_snapshot("historical", broker.snapshot().account, (), captured_at=NOW)
+            store = CoreStore(db, config)
+>           with pytest.raises(ValueError, match="fixture"):
+E           Failed: DID NOT RAISE ValueError
+
+tests\integration\paper_core\test_thin_loop.py:321: Failed
+_ test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot[snapshot] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-7od3ko0g/pytest/test_fixture_initialization_ca1')
+existing = 'snapshot'
+
+    @pytest.mark.parametrize("existing", ["manual_pause", "snapshot"])
+    def test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot(tmp_path, existing):
+        from quantbot.paper_core.contracts import CoreConfig
+        from quantbot.paper_core.runtime import initialize_fixture
+        from quantbot.paper_core.simulation import SyntheticBroker
+        from quantbot.paper_core.store import CoreStore
+        with Database.create(tmp_path / "not-empty.db") as db:
+            config = CoreConfig(account_id="synthetic-account", symbol="XLE")
+            broker = SyntheticBroker(account_id=config.account_id, now=NOW)
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+                if existing == "manual_pause":
+                    repo.set_kill_switch(True, reason="operator pause", updated_at=NOW)
+                else:
+                    repo.save_account_snapshot("historical", broker.snapshot().account, (), captured_at=NOW)
+            store = CoreStore(db, config)
+>           with pytest.raises(ValueError, match="fixture"):
+E           Failed: DID NOT RAISE ValueError
+
+tests\integration\paper_core\test_thin_loop.py:321: Failed
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_thin_loop.py::test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot[manual_pause]
+FAILED tests/integration/paper_core/test_thin_loop.py::test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot[snapshot]
+2 failed, 11 deselected in 2.72s

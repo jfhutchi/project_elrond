@@ -1,0 +1,68 @@
+[
+  {
+    "label": "independent-review-v2-red",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-u1a6k1le\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\independent-review-v2-red.txt.gz",
+    "raw_sha256": "e1b90ae1b6cdb1af69b5208e00fd82a873b673ceaef8c792d2965d578e8726bd",
+    "packaged_sha256": "dc5a473f6855d066f6e0389875f8a3ed461ac73d53f0c925539b3acaeadfacff",
+    "raw_bytes": 3043,
+    "summary": [
+      "1 failed, 1 passed in 4.19s\r"
+    ]
+  },
+  {
+    "label": "red-initialized-and-learned-v2-binding",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-x7v9uzcz\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\red-initialized-and-learned-v2-binding.txt.gz",
+    "raw_sha256": "2b952cd1326ad61d0ff6e5ebfc70f16163a88986a9106b501c9960fd25f5c8c1",
+    "packaged_sha256": "533f9d9dbf3ea3cac1222559c632ab699dd8b0b15da6de1f229753adeeed54c9",
+    "raw_bytes": 11387,
+    "summary": [
+      "2 failed in 7.79s\r"
+    ]
+  },
+  {
+    "label": "test-assertion-baseline-label-and-conservative-horizon",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-w8p0srvj\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\test-assertion-baseline-label-and-conservative-horizon.txt.gz",
+    "raw_sha256": "a66305541722d45238a2c8be2d038c5a92efcdc3df198e5aa2841026bf989b03",
+    "packaged_sha256": "7bce971d908679cb3ea87b7f48de93bbc16faff2e7a18354a968ed9784d5098a",
+    "raw_bytes": 13064,
+    "summary": [
+      "2 failed in 12.52s\r"
+    ]
+  },
+  {
+    "label": "test-assertion-baseline-label",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-vjsr5bqq\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\test-assertion-baseline-label.txt.gz",
+    "raw_sha256": "cd6d29d50fa2b2ab573e95596ffa8d06c94a8d2713e1baed77f63c898fd7c317",
+    "packaged_sha256": "2e53df66f39c0d346f76d223d2d2733f2bdccccb720f20dff6e745ab7b01bc42",
+    "raw_bytes": 86390,
+    "summary": [
+      "1 failed, 1 passed in 13.78s\r"
+    ]
+  },
+  {
+    "label": "focused-green-v2-binding",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-8q985_kn\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\focused-green-v2-binding.txt.gz",
+    "raw_sha256": "22a56e27d5597dbeaf3bee42db7ba0d261b123dc5bf996877ccc974c93e2b745",
+    "packaged_sha256": "ad625b38542ae4a2fd77748c37510092e1f87191a4cb2388ba10ac04234894e2",
+    "raw_bytes": 89756,
+    "summary": [
+      "2 passed in 13.95s\r"
+    ]
+  },
+  {
+    "label": "final-four-file-gate",
+    "origin": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-s0cfe_1c\\result.txt",
+    "path": "docs\\evidence\\paper-core\\m5\\fix1\\final-four-file-gate.txt.gz",
+    "raw_sha256": "a3e7a96f13855e3c0ec43d9c0f88d592a85e4858be6d587e432cf829c5498b0a",
+    "packaged_sha256": "baff412df9b6681aaa82e0155c571f4e18497a64649aff9a1f676de3e3db70e5",
+    "raw_bytes": 5819712,
+    "summary": [
+      "61 passed in 167.64s (0:02:47)\r"
+    ]
+  }
+]

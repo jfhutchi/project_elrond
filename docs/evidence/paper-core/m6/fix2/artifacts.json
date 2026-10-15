@@ -1,0 +1,436 @@
+{
+  "state": "PREPARED_WAITING",
+  "repair_base": "6026f02fd2ca46c541f9e7c45117f4049ce102b0",
+  "operational_commission": "NOT_PERFORMED",
+  "broker_state": "NOT_PROBED",
+  "release_id": "f0433941ffb9c059b9d7a4b53ab530622968734d1ac50332931180cf4370c5df",
+  "config_id": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "source_pin_count": 399,
+  "focused_result": "75 passed in 86.95s (0:01:26)",
+  "six_exact_ci_passed": true,
+  "report": {
+    "path": ".superpowers/sdd/2026-10-13-paper-core/m6-report.md",
+    "sha256": "4ff2ec57dc2d001a20afbb458a1f7b3b848e1130b1d3545294038aa5bb676a1e"
+  },
+  "helpers": [
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/ci_m6_fix2.py",
+      "sha256": "3528798f1dd001eec056e9a49e9bc15c85be9fa010cee519c265a15b297206a1"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/freeze_m6_fix2.py",
+      "sha256": "a7c375b9ec13c0392bb8d8d8e9dcc68c19dcc632da69957f0e402afd3d3a7a5c"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/prepare_package_m6_fix2.py",
+      "sha256": "3fbde388c08e980d6fb813f0e25d5d4263de9c6c1aa0d7f9d58cba60f61dd13d"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/task_proposals_m6_fix2.py",
+      "sha256": "692e1354f60f4425c42e08f454d71c6bf9ccb9109e53bc37fee256647d677831"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/package_m6_fix2.py",
+      "sha256": "b4797759059bda464c170e5a9bee49557e6a06dde28b8add44c7635331cf4e06"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/finalize_m6_fix2.py",
+      "sha256": "827a9209a63c87602f393575b51f9cdee559a99ea75a3055ddfb4abad260eeda"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/setup_m6_fix2.py",
+      "sha256": "4e3de93d0932a256cf0dd492864690eeab4d31d0edca32aa42322f3ffb7d96f9"
+    },
+    {
+      "path": ".superpowers/sdd/2026-10-13-paper-core/derive_package_m6_fix2.py",
+      "sha256": "bd368172f5f2ef867d6a1fa984ca4cdf55951bce9090947175ec539e85641f02"
+    }
+  ],
+  "records": [
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/acquisition-request.template.json",
+      "bytes": 996,
+      "sha256": "8d3c918dc7ab6d9d92e2d7114b00e4b8acd5a067473a37c2fa4afb74d93e6448"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/ci-results.json",
+      "bytes": 2140,
+      "sha256": "02ccd77143c6ae02ded3ffe142657cb4f50a793027f59bc4aacd957c456d12aa"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/commands.json",
+      "bytes": 5363,
+      "sha256": "693569296297267bbd00adf135d2a6db8291e9a1fdd231696d81093d87dd1d0f"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_adapter_observation-1.json",
+      "bytes": 1326,
+      "sha256": "f5f28d2e5a7e6f64496174aed4115b1d627dff20eb61b2d1594a0b80cf4fd904"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_flat_handshake-1.json",
+      "bytes": 32879,
+      "sha256": "187c6ae512af647f0858f0ab3d15001e7d05ca5a27113039f693d88613d04ae1"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_late_fee-1.json",
+      "bytes": 7720,
+      "sha256": "afe281c49921dd2c993c37bf43dd58e9b8a21f9511f569a6f824a5a88961985a"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_late_fee-2.json",
+      "bytes": 7721,
+      "sha256": "695eff1685643cb361a109992d7996ffd64a8495e3a9304861f0c64de2201ef7"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-1.json",
+      "bytes": 512,
+      "sha256": "3921c1ac27c002e10d85ee4957bef1e1c88a3b178a3b28fa15c9cdb1ab166d61"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-10.json",
+      "bytes": 522,
+      "sha256": "4131a45f53db5566c4b6c085acc7ce7b0f3963ba86f2bb1f1f01c7d18c605d79"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-11.json",
+      "bytes": 518,
+      "sha256": "83796f43e13ee472df5628152d2d4e8dd44d31c7e9a025207f7f6f1f66a276b5"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-12.json",
+      "bytes": 522,
+      "sha256": "ac774c4a8918837358a668eab5ce1a7dd1a36ebe7d2deab02125e5740bd60cb0"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-13.json",
+      "bytes": 512,
+      "sha256": "feee12c3693aec24c289b33ed603eb64f5d12366e192001d4c407163467291c8"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-14.json",
+      "bytes": 510,
+      "sha256": "897bda844a35613a6fae67fb9005614693282ec476d4f28c240be2751bf51cf9"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-15.json",
+      "bytes": 511,
+      "sha256": "9dcbb980f4602e4c1e3934f9f756f291ee8a37b7a87533b61029c1d0a3834eec"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-16.json",
+      "bytes": 515,
+      "sha256": "57c9b1767af978a07685e6598312fd7341838f0bf60d693dab68671d7946e3ca"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-17.json",
+      "bytes": 509,
+      "sha256": "3bc03892d63c28e8e194d329feef263c825605acbc69b526cbdc35057f91f15a"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-18.json",
+      "bytes": 513,
+      "sha256": "692cf986af3298d7dec4627f31343bbed8dfde3f153c72088d5eadc1572c1171"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-19.json",
+      "bytes": 510,
+      "sha256": "e5cca00e669487bcd338bbbd6a00bcd94ac33f4d62cf5d0f32999380c163541b"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-2.json",
+      "bytes": 510,
+      "sha256": "cc8ac70757d856d597e900b7ac8c0b7aa492e44ae8195204c0cef55fc9fae4af"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-20.json",
+      "bytes": 516,
+      "sha256": "8d880896aaba09b24c233ab0ec8179b3de1539d82abf2bf3591b280b7935202b"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-21.json",
+      "bytes": 512,
+      "sha256": "3551f34f6a23480f76523eebe85465eb025c5e9797e50dab47bda93075dee8ea"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-22.json",
+      "bytes": 521,
+      "sha256": "1710f20893b1048a872255eec56a80cbe7b175be1484e15fb389fbffb788b406"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-23.json",
+      "bytes": 517,
+      "sha256": "4d88d6c92743a1a43446d4019706acc1e43639ad65df439e2d50f9f37bea525f"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-24.json",
+      "bytes": 521,
+      "sha256": "4ebf9fa016f5c918074151733ee5e4615f72dccf91baa0105fee0dd452e24837"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-3.json",
+      "bytes": 512,
+      "sha256": "b4f01bd641f13f08f2c670aeab5778c70de2eb95f3154241c7deb4916ba6b3bc"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-4.json",
+      "bytes": 516,
+      "sha256": "7cfad64aaacbfd3754d14a5a55d307b370c577439654e35e40c641fb2c047114"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-5.json",
+      "bytes": 510,
+      "sha256": "02362e0a513258b7552bd1181b489ae2d315bb558cc073f10a88a855b8ef8717"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-6.json",
+      "bytes": 514,
+      "sha256": "dc60741fdcd43f6ca2c9a1ffd6ff4e412e40d4dff54dd45593b279869e79ebc9"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-7.json",
+      "bytes": 511,
+      "sha256": "abd996ca8e346a5745f88696857315b5145ac7341e11cdf74df54a4e0e25aeb0"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-8.json",
+      "bytes": 517,
+      "sha256": "53a7753729afa3c9857a400a250ef892f681dcd1c57c3eb8ad8be8e4c146a935"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix1_successor-9.json",
+      "bytes": 513,
+      "sha256": "082a3685f309f1e3991f018ec2afaa18dd59d9a127bc48c1b3e0ca69ebcc4061"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix2_delayed_zero-1.json",
+      "bytes": 15578,
+      "sha256": "fdb9dd3014d4210bba58563faad5bf91180eef06bce414c710deb40612fcd7ba"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix2_delayed_zero-2.json",
+      "bytes": 15579,
+      "sha256": "1d5f58a94dd5a9bc9e5c6001470bf06de04cb5ed0fac8fa068694244006ba02e"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix2_scope-1.json",
+      "bytes": 1815,
+      "sha256": "9e7fe19d9b706015677220d6e36e8928cd4821e7ecf82323b2bd25ed0aa8371c"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix2_scope-2.json",
+      "bytes": 313,
+      "sha256": "089faa39c2fdd31514e1f38f5fbfec2854145a8d423a1bce8be17b06bae77427"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_fix2_scope-3.json",
+      "bytes": 314,
+      "sha256": "22a7ab7743a0fe8766e07200f7e94fceab35a660af583088e65c76f35692295a"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_joined_process-1.json",
+      "bytes": 27285,
+      "sha256": "a3d5ffdce531a2cf615477207c4eaa1a1e6ede947e9ea7f69c34d03f3f0e4523"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_processes-1.json",
+      "bytes": 4210,
+      "sha256": "6d89a30eb2cae01bb9f2948b9d90968fd5e1edaf6d9cb4c993fbc842865500b6"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_restart_send-1.json",
+      "bytes": 560,
+      "sha256": "0fa332a5be0334500029f35f2fdd3bb824642b39cd673b3aa02355ca848181d9"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports/m6_v34_compatibility-1.json",
+      "bytes": 280,
+      "sha256": "70d965d292f482fc97af3c7f17294b5780b6db207d2a275618a047957958d6d1"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/exports.json",
+      "bytes": 11447,
+      "sha256": "783ec7c76f8ebf2aa15d5def740fdd8a759261ca2cc76821b3dea0c126b3181b"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/delayed-zero-admission-red.txt.gz",
+      "bytes": 4542,
+      "sha256": "c584a2262042b4516882791539e98e803fdf3be1245f92c3f3f7282e17f8d33d"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/focused-green.txt.gz",
+      "bytes": 4580,
+      "sha256": "0659fb5f52251a032dff442804f8a4d82cd3d46796ce735ab35b80b030587106"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/frozen-focused-gate.txt.gz",
+      "bytes": 24049,
+      "sha256": "6970332de9559ca163eba3f840bc9aef400b922e36f023e672a5bde3de5597bc"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/learning-feature-contract-setup.txt.gz",
+      "bytes": 4733,
+      "sha256": "0d079d1d441c803e0a38a3493156be5c4e9e0dce3451ef71a032dfae06e6999d"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/process-test_actual_three_role_process0-process-posts.jsonl.gz",
+      "bytes": 178,
+      "sha256": "d1e55999bab45e949168572365d92d98f5c4a67264fc61c11c4d24992fed68a0"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/process-test_actual_three_role_process0-process-provider-journal.json.gz",
+      "bytes": 425,
+      "sha256": "2c96f61354aac4583012932cbaa8e1bd7e86fb9d64c9de41ae1bf1a73f4f232e"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/process-test_flat_runtime_independent_0-flat-guardian.txt.gz",
+      "bytes": 8117,
+      "sha256": "0bd4871f8e9c3629d07218d5232b58379c6a7ff8ad88fc76395bd9192319257f"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/process-test_flat_runtime_independent_0-flat-outcomes.txt.gz",
+      "bytes": 2662,
+      "sha256": "2c8c807e112ae891e0ccf04b4d46f17322f177af7d9a279c495fd68e26678b65"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/process-test_flat_runtime_independent_0-flat-trader.txt.gz",
+      "bytes": 1296,
+      "sha256": "a7baf70f3924ad35f43ff5e474cd0c5749f338ffcace51f52a257bd162daab50"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/process-test_flat_runtime_independent_0-process-posts.jsonl.gz",
+      "bytes": 177,
+      "sha256": "28c3460c0c10c94ec74ff82cd2515c88f9aef9427b7980bba51263144b5acee2"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/process-test_flat_runtime_independent_0-process-provider-journal.json.gz",
+      "bytes": 421,
+      "sha256": "9f7e0a8196e51395b178f32e4ee2218420c89bcc821a4afe61effcc9dfbe52b3"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/selector-setup.txt.gz",
+      "bytes": 45,
+      "sha256": "10bfdae29192dd1c74aa64cde6bbcec8f5e45834f0380044dba43c176fd10ad3"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs/unchanged-outcome-setup.txt.gz",
+      "bytes": 3215,
+      "sha256": "753a136dbee3e542f652f9505dba6521fee16091002cab2983d36fbc48b8c5bd"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/logs.json",
+      "bytes": 3016,
+      "sha256": "a8d470dd93e3c6c6d7929490581ba45ca849a1d2362a10788a7fed42329c2fa6"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/mypy-linux-helpers.txt",
+      "bytes": 44,
+      "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/mypy-linux.txt",
+      "bytes": 46,
+      "sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/mypy-win32-helpers.txt",
+      "bytes": 44,
+      "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/mypy-win32.txt",
+      "bytes": 46,
+      "sha256": "46a69e7483c8da7a7fb9a691a8cec7dac0fd7b289d5eb14967a7375ce688007d"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/original-evidence-preservation.json",
+      "bytes": 513,
+      "sha256": "2d5bb73fb7061c2aeb956d70a2d0fe3cf25ba555e692d3c9cba4d553d71e1aaa"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/prepared-config.json",
+      "bytes": 1642,
+      "sha256": "66cc9bf1fc4b835f8814402c30eff5e92fcee90068cc98b1c6dd992be379ffbe"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/prepared-release.json",
+      "bytes": 58216,
+      "sha256": "238e34df33f647693ed4c8f8ec53ab402dc846d6c60bf5c5d7e0c4bd9de6b05e"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/prepared-verification.json",
+      "bytes": 266,
+      "sha256": "c169431baed8185c8e5c3a6a296f58a295bf515a533dd6086e38f34b33f237b0"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/process-logs.json",
+      "bytes": 3205,
+      "sha256": "df429259bc0c3a65f9b90b75d94eb60fa272c274cb840896c590a7b9bc8d5483"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/README.md",
+      "bytes": 5785,
+      "sha256": "fdf58ee00fcf2fc27c0328f5d843ce7febe51fe9d23437d483e12fd5c2902483"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/reviewer-fee-race.py.txt",
+      "bytes": 15833,
+      "sha256": "b115291a72a40d1745ae44ddd6572b1750857defa45d95c6dabab9f37ac720bc"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/reviewer-fee-race.txt.gz",
+      "bytes": 179,
+      "sha256": "03656f20a204074ce395adecdc30e151001043cf983c595126d139f4c2b9fe17"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/reviewer-provenance.json",
+      "bytes": 518,
+      "sha256": "101263d586ba819c62d21fd9c187d02cae0c944fd0a358afec3df08b1ec78998"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/ruff-helpers.txt",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/ruff.txt",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/source-pins.json",
+      "bytes": 46454,
+      "sha256": "37f93d60d2b7e21c14bef8fd624dce38ef308829efabe996f9fdbf2135a5104d"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/supersession.json",
+      "bytes": 1408,
+      "sha256": "964b7ab1def4d155c63bcf9e958690c11d3fac9ecd2f38ef57817bdfbab42943"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/task-proposal-guardian.xml",
+      "bytes": 2100,
+      "sha256": "e844aa43f9859621205bcc5a4c5585516b3c690c2fa7cd37655570b16a62f572"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/task-proposal-outcomes.xml",
+      "bytes": 2100,
+      "sha256": "0a47d682872f534b34e51cf8dace68e11cb242375601ae2ec8189ed130774ce6"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/task-proposal-trader.xml",
+      "bytes": 2092,
+      "sha256": "028ff50b9b510e48d853d16a81c6e749d0391f2c61c92add206a05c243209e56"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/task-proposal-verification.json",
+      "bytes": 1247,
+      "sha256": "e48b73fdebac95bf5a545bd6cf06794e40d7a52f8d594d7edefd407fa18cdbd7"
+    },
+    {
+      "path": "docs/evidence/paper-core/m6/fix2/task-proposals.json",
+      "bytes": 1898,
+      "sha256": "853d584a33dc5804b5318c12a9be737c11a2bf94a64ffc4ddd45a73246e85b23"
+    }
+  ]
+}

@@ -1,0 +1,102 @@
+[
+  {
+    "actual_fees": null,
+    "available_at": "2026-10-14T14:30:01+00:00",
+    "cost_item_ids": [],
+    "cost_reason": "FEE_UNAVAILABLE",
+    "dataset": "EXPLICIT_SYNTHETIC",
+    "decision_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd",
+    "entry_fill_ids": [
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "entry_notional": "500",
+    "evidence_lane": "SYNTHETIC_TEST",
+    "exit_fill_ids": [
+      "late-cancel-fill",
+      "synthetic-fill-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88",
+      "synthetic-fill-qb-b240eb6b7a5b62f4c5f0724783a5dd97ed229874"
+    ],
+    "gross_pnl": "0",
+    "lot_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd",
+    "modeled_costs": null,
+    "modeled_net_pnl": null,
+    "net_pnl": null,
+    "open_quantity": "0",
+    "policy_id": "collect-owned-30m-stop100-v1",
+    "protection_id": "fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d",
+    "reconciliation_id": "320ba4c0d69f9e7b533a8b57794ff4d278b7f4bf7419131b6283cfea93c9d192",
+    "recorded_at_utc": "2026-10-14T14:30:01+00:00",
+    "release_id": "m1-synthetic-fixture",
+    "revision": 1,
+    "schema_version": 1,
+    "source_end": "2026-10-14T14:30:01+00:00",
+    "source_refs": [
+      "1baefd886698aee7c9630f8b4e0fdc1c737e69afe8a85e016d03ac6a2a5cefee",
+      "320ba4c0d69f9e7b533a8b57794ff4d278b7f4bf7419131b6283cfea93c9d192",
+      "5c267d8d187d90fb3788d3aaa53433344e7f2e2b5bff11d86dc4a717dd0b2c68",
+      "64032e1b0406264b7b4298b8838f684508208dad87fe3eeb002463978bdbc4bb",
+      "795f0d03eaa90835457f509fea11edf90b96e82790e8749ecb467b355243bf9f",
+      "fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d",
+      "late-cancel-fill",
+      "synthetic-fill-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88",
+      "synthetic-fill-qb-b240eb6b7a5b62f4c5f0724783a5dd97ed229874",
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "source_start": "2026-10-14T13:55:00+00:00",
+    "source_state_hash": "a114fbb9a478668f47488950b08be1e70158374d0a6a671a39c9078237f1c634",
+    "status": "COSTS_PENDING",
+    "supersedes": null,
+    "terminal_order_ids": [
+      "synthetic-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88",
+      "synthetic-qb-b240eb6b7a5b62f4c5f0724783a5dd97ed229874",
+      "synthetic-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ]
+  },
+  {
+    "actual_fees": null,
+    "available_at": "2026-10-14T14:30:00+00:00",
+    "cost_item_ids": [],
+    "cost_reason": "FEE_UNAVAILABLE",
+    "dataset": "EXPLICIT_SYNTHETIC",
+    "decision_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd",
+    "entry_fill_ids": [
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "entry_notional": "500",
+    "evidence_lane": "SYNTHETIC_TEST",
+    "exit_fill_ids": [
+      "synthetic-fill-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88"
+    ],
+    "gross_pnl": "-10",
+    "lot_id": "b30b87669cd126f15a9e13e5d5a48eee2c21fed20b9c5915cf8d804b5da449bd",
+    "modeled_costs": null,
+    "modeled_net_pnl": null,
+    "net_pnl": null,
+    "open_quantity": "0",
+    "policy_id": "collect-owned-30m-stop100-v1",
+    "protection_id": "fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d",
+    "reconciliation_id": "824610b07f2d524e2f4799269c58b524017c5ad2bb8aa1e975339dda988be37f",
+    "recorded_at_utc": "2026-10-14T14:30:00+00:00",
+    "release_id": "m1-synthetic-fixture",
+    "revision": 1,
+    "schema_version": 1,
+    "source_end": "2026-10-14T14:30:00+00:00",
+    "source_refs": [
+      "1baefd886698aee7c9630f8b4e0fdc1c737e69afe8a85e016d03ac6a2a5cefee",
+      "3aab91714f928dc6bbdf7c34c93cf486d015d7439cc063acf341fd6fcaa2b08c",
+      "64032e1b0406264b7b4298b8838f684508208dad87fe3eeb002463978bdbc4bb",
+      "824610b07f2d524e2f4799269c58b524017c5ad2bb8aa1e975339dda988be37f",
+      "fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d",
+      "synthetic-fill-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88",
+      "synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ],
+    "source_start": "2026-10-14T13:55:00+00:00",
+    "source_state_hash": "0257acd18bc0ee4c7b303172fe976a6908322f934d9a10dbf0239c093b8e8a36",
+    "status": "COSTS_PENDING",
+    "supersedes": null,
+    "terminal_order_ids": [
+      "synthetic-qb-ad43bd7a94eef665c970a3e34d7fdae03394ce88",
+      "synthetic-qb-e236da596872e8980b271e708dcec0fbcc09d961"
+    ]
+  }
+]

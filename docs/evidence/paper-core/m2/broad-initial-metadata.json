@@ -1,0 +1,11 @@
+{
+  "source_head": "0d9510e71af068c420d1c85ae7ffa2535f5ae70a",
+  "original_path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-sdvxirie\\result.txt",
+  "original_sha256": "cb891e1b036ee36ad1d17e63d4ef3acbb20e7a2b553c891e66121d03da4c12e1",
+  "original_encoding": "Windows-1252",
+  "saved_encoding": "UTF-8 without BOM",
+  "saved_sha256": "747617c5112486c5726edc3a3dcc9b8284f2bfea4e197dd6435bdd20dbf0a7f2",
+  "pytest_result": "21 failed, 4372 passed, 47 skipped, 1 warning in 1283.12s",
+  "wrapper_note": "Pytest completed; only the wrapper tail display failed decoding the original log as UTF-8. No test rerun or changed result.",
+  "normalization": "Decoded Windows-1252 to UTF-8, normalized line endings and removed trailing line whitespace; original raw log retained at original_path with original_sha256."
+}

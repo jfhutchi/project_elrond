@@ -647,7 +647,9 @@ class AlpacaPaperBrokerAdapter:
                 quantity=_decimal(payload, "qty"),
                 price=_decimal(payload, "price"),
                 occurred_at=_timestamp(payload, "transaction_time"),
-                fee=Decimal("0"),
+                # FILL activity does not document commission/regulatory fees.
+                # Separate fee activity/contract evidence is needed, even for zero.
+                fee=None,
             )
         except (ValidationError, ValueError) as error:
             raise BrokerProtocolError("broker fill failed domain validation") from error

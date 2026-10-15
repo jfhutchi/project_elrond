@@ -1,0 +1,162 @@
+[
+  {
+    "stage": "capture-setup-failure",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-fye2ic6r\\result.txt",
+    "raw_sha256": "144ba6f3e741d5fe7a871134e36c9a1bd89d400aef33f06dc4a07e3f0afa28ad",
+    "archive": "logs\\capture-setup-failure.txt.gz",
+    "compressed_sha256": "e1647e94f403da75a05ce02a0bf98e5aa3200a7a080964e6fb66ea992e04e673",
+    "tail": "1 failed in 2.74s"
+  },
+  {
+    "stage": "accepted-v35-capture",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-w8jvd_pt\\result.txt",
+    "raw_sha256": "a805987b7b3a27f8ae623830ea2247d80096adfee86acbd9ac9416c861938471",
+    "archive": "logs\\accepted-v35-capture.txt.gz",
+    "compressed_sha256": "86ff2a2e9de7c3faf9db8080b0b0e1225bf2effb8749ee9887fb3c7e4532d439",
+    "tail": "1 passed in 2.65s"
+  },
+  {
+    "stage": "initial-regression-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-uykd4lrn\\result.txt",
+    "raw_sha256": "5964326749c3efe7f1c9203faacb99a707aefe175571f5260b03f9e6d075a116",
+    "archive": "logs\\initial-regression-red.txt.gz",
+    "compressed_sha256": "29edf111fdd5cf9271ea761cebfe8cbacc25b3060b6450642893ba51dfc6d187",
+    "tail": "4 failed in 16.51s"
+  },
+  {
+    "stage": "migration-fk-setup",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-dtg0033t\\result.txt",
+    "raw_sha256": "841d38a2f9318621dc2bacf0b0394c5053b74e38e669f1a09bfc3b595254cbab",
+    "archive": "logs\\migration-fk-setup.txt.gz",
+    "compressed_sha256": "2e8c5841d45bb68bf5dc00f8f0b7eaae587be213c8aca0b8a2a00d477a45b714",
+    "tail": "3 failed, 1 passed in 5.51s"
+  },
+  {
+    "stage": "projection-setup-controls",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-pzcuplxg\\result.txt",
+    "raw_sha256": "991fa123883ac1e18d7aa35ac29869a1a55fcae9d4316e8b42986d436dc318b7",
+    "archive": "logs\\projection-setup-controls.txt.gz",
+    "compressed_sha256": "29532fb6bf02b4ad48adf8e0c3807e6e80d2176a80e031a5ee185d303d6643ec",
+    "tail": "3 failed, 2 passed, 5 warnings in 13.48s"
+  },
+  {
+    "stage": "projection-current-receipt-controls",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-veus_mii\\result.txt",
+    "raw_sha256": "b0ac63fadd225b1ffde8de9759747adc1d8ad2898e9b00fdb26ad7b137c666d8",
+    "archive": "logs\\projection-current-receipt-controls.txt.gz",
+    "compressed_sha256": "c581d80d83cc8ab84a4534928330a29ca961044b40fe45c358d70e174f0cc579",
+    "tail": "5 failed, 5 passed in 15.02s"
+  },
+  {
+    "stage": "receipt-delete-fault-control",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-viehaj3m\\result.txt",
+    "raw_sha256": "6d11e3741dded66893a31c51e2848b7a77703894b0d253f20201ee9f570759a4",
+    "archive": "logs\\receipt-delete-fault-control.txt.gz",
+    "compressed_sha256": "26c2d16b93e5509ce3d001818ecd7d2e2fb0dbec180543a1eb4010211722f1ec",
+    "tail": "2 failed, 8 passed in 16.28s"
+  },
+  {
+    "stage": "first-seven-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-o30pnhz4\\result.txt",
+    "raw_sha256": "50c3d72e377e35aefd3f14cdfcc3b40ab21f137dc3024b3ae1030781f9b94c9a",
+    "archive": "logs\\first-seven-green.txt.gz",
+    "compressed_sha256": "b57ce20f8d3febb089be6381f9029c98816771457a58ae68fb0f8417eb592717",
+    "tail": "7 passed in 25.00s"
+  },
+  {
+    "stage": "integration-helper-syntax",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-gdgwfhvl\\result.txt",
+    "raw_sha256": "2c4e04b8da33862fb8fc5ac8b9abfe56f34c5f50fe556220e554a27e432feb9b",
+    "archive": "logs\\integration-helper-syntax.txt.gz",
+    "compressed_sha256": "4f458e6dd6f66987e3107abed3054a5065e21feb31689ff36a1622090d465f53",
+    "tail": "1 error in 1.98s"
+  },
+  {
+    "stage": "integration-helper-async",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-lgm6ymsc\\result.txt",
+    "raw_sha256": "2473ed511d8e96a810dcaaad9c9c02ef0cc53c4c5d5c5fa0882b21cecc078e79",
+    "archive": "logs\\integration-helper-async.txt.gz",
+    "compressed_sha256": "1fca4c8012cd1b0c22a99fe0106e6b9bf752a8d6a50e55235293c1abac8b686d",
+    "tail": "1 failed, 12 passed, 1 warning in 34.67s"
+  },
+  {
+    "stage": "integration-calendar-diagnostic",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-o_j8w0ss\\result.txt",
+    "raw_sha256": "37ffc254c25c71db66b0236a03b8fbcd86be98913fd98e4dcffdec007b3ee208",
+    "archive": "logs\\integration-calendar-diagnostic.txt.gz",
+    "compressed_sha256": "0c77915fc1edc7b9f67be74af2ca25b0be2cbeb1b6d8dba867170a3118346b94",
+    "tail": "1 failed in 8.12s"
+  },
+  {
+    "stage": "integration-calendar-binding",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-cry8j1zy\\result.txt",
+    "raw_sha256": "8f584301b0f395eec4b3b2a90601a31186721cfc3980b16dd69fcc5c91f0bc2d",
+    "archive": "logs\\integration-calendar-binding.txt.gz",
+    "compressed_sha256": "6012ab9ec5062e0056255a72bc0f197174fc5f268a585d0752dd238c31546360",
+    "tail": "1 failed in 8.23s"
+  },
+  {
+    "stage": "integration-mock-fee-replay",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-b91qyay3\\result.txt",
+    "raw_sha256": "37688634fea0f972f58e2b3929897a4a2f5769e0fc0825740d1ed1b574920024",
+    "archive": "logs\\integration-mock-fee-replay.txt.gz",
+    "compressed_sha256": "46176a0dfc3a5ce6d5b6f52eb4ad8a362832492d858d3b9c84f34ffe2524d62c",
+    "tail": "1 failed in 10.45s"
+  },
+  {
+    "stage": "integration-heartbeat-identity-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-aohy3fck\\result.txt",
+    "raw_sha256": "8f5002701334a8460148aa9c5829f2893824d89205501f6c80b92d88761dd313",
+    "archive": "logs\\integration-heartbeat-identity-red.txt.gz",
+    "compressed_sha256": "0f1056e17d4485792a7e4fca9ab8eb7989b83a7aefc193ca43fbd36450431a11",
+    "tail": "1 failed in 10.35s"
+  },
+  {
+    "stage": "integration-first-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-fu38nmom\\result.txt",
+    "raw_sha256": "31acbcd4138668850d94f229a0a7b1cb2ee33d2dc6d80f360424e737a74a996d",
+    "archive": "logs\\integration-first-green.txt.gz",
+    "compressed_sha256": "81f225729748bbc1c2477c43aae9d5b05ccfa7b943a1a108b96b9d97c2e58b0e",
+    "tail": "1 passed in 10.28s"
+  },
+  {
+    "stage": "learning-dirty-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-lwzmdi9k\\result.txt",
+    "raw_sha256": "eae390e54212bc2affba6d111afda41cc1d846fb81dbb9913b7a21246d919e7a",
+    "archive": "logs\\learning-dirty-red.txt.gz",
+    "compressed_sha256": "31c85edac864249fa77ae1ebadb647e8ae4d1d0c1a223a8e638e17f2b9abdd93",
+    "tail": "1 failed in 2.96s"
+  },
+  {
+    "stage": "focused-28-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-c37vbpoi\\result.txt",
+    "raw_sha256": "965cb04673310720b67ee45a5e87069db54c3105c84b4ede6a1f0e6e92c952e1",
+    "archive": "logs\\focused-28-green.txt.gz",
+    "compressed_sha256": "e359e82c228437d6655afd0052702f3ed2a61bac52fa4e0288588c1f6384b1e3",
+    "tail": "28 passed in 44.73s"
+  },
+  {
+    "stage": "unknown-resume-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-n916xu09\\result.txt",
+    "raw_sha256": "d031ba5afd6ccd576e99e535e7047d90221d1365dced092437b11f220a9f2d09",
+    "archive": "logs\\unknown-resume-red.txt.gz",
+    "compressed_sha256": "19fb53578393e2a1fc7e26e2b17150f02caf791c810979dc97967ee93842a2ba",
+    "tail": "1 failed in 9.65s"
+  },
+  {
+    "stage": "formatting-during-self-pin-refusal",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-zur1ygqy\\result.txt",
+    "raw_sha256": "32632e09c7672ee033b927d94feebc57cb27931ab7725955bb74c5357af25e67",
+    "archive": "logs\\formatting-during-self-pin-refusal.txt.gz",
+    "compressed_sha256": "d748a7aa70686bb54332ba09fa91acc633cad20ac40edf378b56af4d94759153",
+    "tail": "1 failed, 9 passed in 39.45s"
+  },
+  {
+    "stage": "fixed-source-focused-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-ylvfwiq_\\result.txt",
+    "raw_sha256": "94d1709bd0f711fe42c23fe08302b5b752754ba51ff34df75bd1a5c42b717ff8",
+    "archive": "logs\\fixed-source-focused-green.txt.gz",
+    "compressed_sha256": "dadd3e3db1ebb52ca8d7d6b317287958ce8f9bb03f2886dca34ee7b059b7e84d",
+    "tail": "29 passed in 51.16s"
+  }
+]

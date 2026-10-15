@@ -1,0 +1,28 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________ test_older_receipt_cannot_branch_an_existing_cost_revision __________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-dtr4eh1l/pytest/test_older_receipt_cannot_bran0')
+
+    @pytest.mark.asyncio
+    async def test_older_receipt_cannot_branch_an_existing_cost_revision(tmp_path):
+        from quantbot.paper_core.outcomes import import_broker_events
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.storage import StateConflictError
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            first = fee_events(store, broker)
+            import_broker_events(store, first)
+            previous = {event.cost.fill_id: event.cost.id for event in first}
+            broker.now = NOW + timedelta(hours=2)
+            import_broker_events(store, fee_events(store, broker, amount=".1", revision=2, supersedes=previous))
+            broker.now = NOW + timedelta(hours=1)
+>           with pytest.raises(StateConflictError, match="revision"):
+E           Failed: DID NOT RAISE StateConflictError
+
+tests\integration\paper_core\test_costed_loop.py:253: Failed
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_costed_loop.py::test_older_receipt_cannot_branch_an_existing_cost_revision
+1 failed, 13 deselected in 2.35s

@@ -52,24 +52,24 @@ class AppliedExecution(BrokerModel):
 
 
 class PortfolioAccountingState(BrokerModel):
-    cash: Decimal
-    realized_pnl: Decimal
+    cash: Decimal | None
+    realized_pnl: Decimal | None
     positions: tuple[AccountingPosition, ...] = ()
     applied_executions: tuple[AppliedExecution, ...] = ()
-    fees_paid: Decimal = Decimal("0")
+    fees_paid: Decimal | None = Decimal("0")
     slippage_cost: Decimal = Decimal("0")
 
     @field_validator("cash", "realized_pnl")
     @classmethod
-    def validate_finite_money(cls, value: Decimal) -> Decimal:
-        if not value.is_finite():
+    def validate_finite_money(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and not value.is_finite():
             raise ValueError("accounting money values must be finite")
         return value
 
     @field_validator("fees_paid", "slippage_cost")
     @classmethod
-    def validate_nonnegative_cost(cls, value: Decimal) -> Decimal:
-        if not value.is_finite() or value < 0:
+    def validate_nonnegative_cost(cls, value: Decimal | None) -> Decimal | None:
+        if value is not None and (not value.is_finite() or value < 0):
             raise ValueError("accounting cost values must be nonnegative and finite")
         return value
 
@@ -209,11 +209,15 @@ def apply_trade_update(
             average_cost=new_average,
         )
 
+    fee = fill.fee if fill.fee_source != "UNKNOWN" else None
     return PortfolioAccountingState(
-        cash=state.cash - signed_quantity * fill.price - fill.fee,
-        realized_pnl=state.realized_pnl + realized - fill.fee,
+        cash=(state.cash - signed_quantity * fill.price - fee
+              if state.cash is not None and fee is not None else None),
+        realized_pnl=(state.realized_pnl + realized - fee
+                      if state.realized_pnl is not None and fee is not None else None),
         positions=tuple(positions.values()),
         applied_executions=(*state.applied_executions, candidate),
-        fees_paid=state.fees_paid + fill.fee,
+        fees_paid=(state.fees_paid + fee
+                   if state.fees_paid is not None and fee is not None else None),
         slippage_cost=state.slippage_cost + _adverse_slippage(fill, reference_price),
     )

@@ -16,7 +16,9 @@ from sqlalchemy import (
     text,
 )
 
-SCHEMA_VERSION = 29
+from quantbot.storage.core_runtime_schema import runtime_tables
+
+SCHEMA_VERSION = 36
 
 metadata = MetaData(
     naming_convention={
@@ -217,7 +219,9 @@ fills = Table(
     Column("quantity", Text, nullable=False),
     Column("price", Text, nullable=False),
     Column("occurred_at", String(40), nullable=False),
-    Column("fee", Text, nullable=False),
+    Column("fee", Text),
+    Column("fee_source", String(32), nullable=False, server_default="UNKNOWN"),
+    Column("fee_reference", Text),
 )
 Index("ix_fills_broker_time", fills.c.broker_order_id, fills.c.occurred_at)
 
@@ -1794,3 +1798,31 @@ Index(
     runtime_deployments.c.observed_at,
 )
 Index("ix_runtime_deployments_commit", runtime_deployments.c.git_commit)
+
+
+# M1 additions share the existing operational metadata/outbox.
+from quantbot.storage.core_schema import core_tables  # noqa: E402
+
+_core_tables = core_tables(metadata)
+
+from quantbot.storage.core_recovery_schema import recovery_tables  # noqa: E402
+
+_core_recovery_tables = recovery_tables(metadata)
+
+from quantbot.storage.core_cost_schema import cost_tables  # noqa: E402
+
+_cost_tables = cost_tables(metadata)
+
+from quantbot.storage.core_health_schema import health_tables  # noqa: E402
+
+_health_tables = health_tables(metadata)
+
+from quantbot.storage.core_learning_schema import learning_tables  # noqa: E402
+
+_learning_tables = learning_tables(metadata)
+
+from quantbot.storage.core_activation_schema import activation_tables  # noqa: E402
+
+_activation_tables = activation_tables(metadata)
+
+runtime_tables(metadata)

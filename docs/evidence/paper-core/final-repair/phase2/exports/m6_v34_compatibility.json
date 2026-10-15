@@ -1,0 +1,10 @@
+[
+  {
+    "schema": 35,
+    "old_sha256": "814ceea22237353b88cb4812d78e1f1ddc8df7eba800d161924ac76f88cc33d9",
+    "active_event": "f6fc4de456cdbea62c2e10954623ecd89295e23e22cc6a510a2c0dfd181eda6c",
+    "claimed_decisions": 41,
+    "protection_plans": 41,
+    "all_prior_rows_equal": true
+  }
+]

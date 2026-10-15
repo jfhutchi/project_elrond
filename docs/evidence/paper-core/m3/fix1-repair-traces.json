@@ -1,0 +1,999 @@
+[
+  {
+    "account_delay": 0.001,
+    "case": "positive-inventory-latency",
+    "decision": {
+      "action": "BUY",
+      "clock_process_id": "m3-process-1",
+      "config_id": "4cb6652c5f1e2504b897bbd9ac7631dd4db762e5cf759c0ec9e0c003a4207403",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "gates": [],
+      "inventory_generation": 2,
+      "inventory_id": "f407f280b6d241fab11bc3dbe42b36a10d79099df3beb459feb910b3fe8c011e",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "model_id": "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+      "monotonic_anchor": 100.02200000000002,
+      "observation_id": "1de040fc9c2a7e4b0fc7f858c638bb1909f9e6e211745e4a35f83672c789ce39",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "price": "100",
+      "provider_deadline": "2026-10-14T14:30:00.022000+00:00",
+      "quantity": "5",
+      "recorded_at_utc": "2026-10-14T14:00:00.022000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "session_close": "2026-10-14T20:00:00+00:00",
+      "source_refs": [
+        "1de040fc9c2a7e4b0fc7f858c638bb1909f9e6e211745e4a35f83672c789ce39",
+        "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+        "f407f280b6d241fab11bc3dbe42b36a10d79099df3beb459feb910b3fe8c011e",
+        "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319"
+      ],
+      "source_start": "2026-10-14T13:55:00+00:00",
+      "symbol": "XLE",
+      "time_evidence_id": "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319",
+      "time_projection": {
+        "evidence_id": "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319",
+        "monotonic_at": 100.02200000000002,
+        "objections": [],
+        "process_id": "m3-process-1",
+        "provider_earliest": "2026-10-14T14:00:00.022000+00:00",
+        "provider_latest": "2026-10-14T14:00:00.032000+00:00",
+        "wall_at": "2026-10-14T14:00:00.022000+00:00"
+      },
+      "valid_until": "2026-10-14T14:02:00+00:00"
+    },
+    "inventory": {
+      "account": {
+        "account_id": "synthetic-account",
+        "buying_power": "100000",
+        "cash": "100000",
+        "currency": "USD",
+        "equity": "100000"
+      },
+      "acquisition_id": "d939ff18c5ef22bb72a0a6c78b67bf7b059f526aa007745cd96cda254d5727f0",
+      "actual_quantities": [
+        [
+          "SPY",
+          "2"
+        ]
+      ],
+      "baseline_id": "61fbd7dc4128806f5cba465e12e5151ea24b3c5680b0119b6140176f5fd0a84b",
+      "cash_complete": true,
+      "complete": true,
+      "evidence_lane": "SYNTHETIC_TEST",
+      "expected_cash": "100000",
+      "expected_quantities": [
+        [
+          "SPY",
+          "2"
+        ]
+      ],
+      "fill_ids": [],
+      "generation": 2,
+      "order_ids": [],
+      "positions": [
+        {
+          "average_entry_price": "100",
+          "market_price": "100",
+          "market_value": "200",
+          "quantity": "2",
+          "symbol": "SPY"
+        }
+      ],
+      "recorded_at_utc": "2026-10-14T14:00:00.022000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": []
+    },
+    "original_time": {
+      "acquired_monotonic": 100.02000000000001,
+      "contract": "PAPER_TIME_V2",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "objections": [],
+      "offset_lower": 0.0,
+      "offset_upper": 0.01,
+      "process_id": "m3-process-1",
+      "recorded_at_utc": "2026-10-14T14:00:00.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "samples": [
+        {
+          "mono_end": 100.01,
+          "mono_start": 100.0,
+          "offset_lower": 0.0,
+          "offset_upper": 0.01,
+          "provider": {
+            "account_id": "synthetic-account",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 0.001,
+            "session_close": "2026-10-14T20:00:00+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T13:00:00+00:00",
+            "timestamp": "2026-10-14T14:00:00.010000+00:00"
+          },
+          "wall_end": "2026-10-14T14:00:00.010000+00:00",
+          "wall_start": "2026-10-14T14:00:00+00:00"
+        },
+        {
+          "mono_end": 100.02000000000001,
+          "mono_start": 100.01,
+          "offset_lower": 0.0,
+          "offset_upper": 0.01,
+          "provider": {
+            "account_id": "synthetic-account",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 0.001,
+            "session_close": "2026-10-14T20:00:00+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T13:00:00+00:00",
+            "timestamp": "2026-10-14T14:00:00.020000+00:00"
+          },
+          "wall_end": "2026-10-14T14:00:00.020000+00:00",
+          "wall_start": "2026-10-14T14:00:00.010000+00:00"
+        }
+      ],
+      "schema_version": 1,
+      "source_refs": [],
+      "wall_anchor": "2026-10-14T14:00:00.020000+00:00"
+    },
+    "position_delay": 0,
+    "posts": [
+      {
+        "client_order_id": "qb-172f9a6a8012bf47d5c6234941f04cf09719b449",
+        "created_at": "2026-10-14T14:00:00.022000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-172f9a6a8012bf47d5c6234941f04cf09719b4492fbf60f27227a363612435c2",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ]
+  },
+  {
+    "account_delay": 0,
+    "case": "positive-inventory-latency",
+    "decision": {
+      "action": "BUY",
+      "clock_process_id": "m3-process-1",
+      "config_id": "4cb6652c5f1e2504b897bbd9ac7631dd4db762e5cf759c0ec9e0c003a4207403",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "gates": [],
+      "inventory_generation": 2,
+      "inventory_id": "f407f280b6d241fab11bc3dbe42b36a10d79099df3beb459feb910b3fe8c011e",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "model_id": "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+      "monotonic_anchor": 100.02200000000002,
+      "observation_id": "1de040fc9c2a7e4b0fc7f858c638bb1909f9e6e211745e4a35f83672c789ce39",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "price": "100",
+      "provider_deadline": "2026-10-14T14:30:00.022000+00:00",
+      "quantity": "5",
+      "recorded_at_utc": "2026-10-14T14:00:00.022000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "session_close": "2026-10-14T20:00:00+00:00",
+      "source_refs": [
+        "1de040fc9c2a7e4b0fc7f858c638bb1909f9e6e211745e4a35f83672c789ce39",
+        "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+        "f407f280b6d241fab11bc3dbe42b36a10d79099df3beb459feb910b3fe8c011e",
+        "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319"
+      ],
+      "source_start": "2026-10-14T13:55:00+00:00",
+      "symbol": "XLE",
+      "time_evidence_id": "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319",
+      "time_projection": {
+        "evidence_id": "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319",
+        "monotonic_at": 100.02200000000002,
+        "objections": [],
+        "process_id": "m3-process-1",
+        "provider_earliest": "2026-10-14T14:00:00.022000+00:00",
+        "provider_latest": "2026-10-14T14:00:00.032000+00:00",
+        "wall_at": "2026-10-14T14:00:00.022000+00:00"
+      },
+      "valid_until": "2026-10-14T14:02:00+00:00"
+    },
+    "inventory": {
+      "account": {
+        "account_id": "synthetic-account",
+        "buying_power": "100000",
+        "cash": "100000",
+        "currency": "USD",
+        "equity": "100000"
+      },
+      "acquisition_id": "d939ff18c5ef22bb72a0a6c78b67bf7b059f526aa007745cd96cda254d5727f0",
+      "actual_quantities": [
+        [
+          "SPY",
+          "2"
+        ]
+      ],
+      "baseline_id": "61fbd7dc4128806f5cba465e12e5151ea24b3c5680b0119b6140176f5fd0a84b",
+      "cash_complete": true,
+      "complete": true,
+      "evidence_lane": "SYNTHETIC_TEST",
+      "expected_cash": "100000",
+      "expected_quantities": [
+        [
+          "SPY",
+          "2"
+        ]
+      ],
+      "fill_ids": [],
+      "generation": 2,
+      "order_ids": [],
+      "positions": [
+        {
+          "average_entry_price": "100",
+          "market_price": "100",
+          "market_value": "200",
+          "quantity": "2",
+          "symbol": "SPY"
+        }
+      ],
+      "recorded_at_utc": "2026-10-14T14:00:00.022000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": []
+    },
+    "original_time": {
+      "acquired_monotonic": 100.02000000000001,
+      "contract": "PAPER_TIME_V2",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "objections": [],
+      "offset_lower": 0.0,
+      "offset_upper": 0.01,
+      "process_id": "m3-process-1",
+      "recorded_at_utc": "2026-10-14T14:00:00.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "samples": [
+        {
+          "mono_end": 100.01,
+          "mono_start": 100.0,
+          "offset_lower": 0.0,
+          "offset_upper": 0.01,
+          "provider": {
+            "account_id": "synthetic-account",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 0.001,
+            "session_close": "2026-10-14T20:00:00+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T13:00:00+00:00",
+            "timestamp": "2026-10-14T14:00:00.010000+00:00"
+          },
+          "wall_end": "2026-10-14T14:00:00.010000+00:00",
+          "wall_start": "2026-10-14T14:00:00+00:00"
+        },
+        {
+          "mono_end": 100.02000000000001,
+          "mono_start": 100.01,
+          "offset_lower": 0.0,
+          "offset_upper": 0.01,
+          "provider": {
+            "account_id": "synthetic-account",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 0.001,
+            "session_close": "2026-10-14T20:00:00+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T13:00:00+00:00",
+            "timestamp": "2026-10-14T14:00:00.020000+00:00"
+          },
+          "wall_end": "2026-10-14T14:00:00.020000+00:00",
+          "wall_start": "2026-10-14T14:00:00.010000+00:00"
+        }
+      ],
+      "schema_version": 1,
+      "source_refs": [],
+      "wall_anchor": "2026-10-14T14:00:00.020000+00:00"
+    },
+    "position_delay": 0.001,
+    "posts": [
+      {
+        "client_order_id": "qb-172f9a6a8012bf47d5c6234941f04cf09719b449",
+        "created_at": "2026-10-14T14:00:00.022000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-172f9a6a8012bf47d5c6234941f04cf09719b4492fbf60f27227a363612435c2",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ]
+  },
+  {
+    "account_delay": 0.25,
+    "case": "positive-inventory-latency",
+    "decision": {
+      "action": "BUY",
+      "clock_process_id": "m3-process-1",
+      "config_id": "4cb6652c5f1e2504b897bbd9ac7631dd4db762e5cf759c0ec9e0c003a4207403",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "gates": [],
+      "inventory_generation": 2,
+      "inventory_id": "64831772a6ffad11090d647e4e247a890e82b5bd018e64a9ccbca753a1ad70c4",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "model_id": "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+      "monotonic_anchor": 101.02000000000001,
+      "observation_id": "1de040fc9c2a7e4b0fc7f858c638bb1909f9e6e211745e4a35f83672c789ce39",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "price": "100",
+      "provider_deadline": "2026-10-14T14:30:01.020000+00:00",
+      "quantity": "5",
+      "recorded_at_utc": "2026-10-14T14:00:01.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "session_close": "2026-10-14T20:00:00+00:00",
+      "source_refs": [
+        "1de040fc9c2a7e4b0fc7f858c638bb1909f9e6e211745e4a35f83672c789ce39",
+        "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+        "64831772a6ffad11090d647e4e247a890e82b5bd018e64a9ccbca753a1ad70c4",
+        "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319"
+      ],
+      "source_start": "2026-10-14T13:55:00+00:00",
+      "symbol": "XLE",
+      "time_evidence_id": "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319",
+      "time_projection": {
+        "evidence_id": "7648bb25d173480270787ff67cb61153434b8d5b451417915df2bf0ae4d40319",
+        "monotonic_at": 101.02000000000001,
+        "objections": [],
+        "process_id": "m3-process-1",
+        "provider_earliest": "2026-10-14T14:00:01.020000+00:00",
+        "provider_latest": "2026-10-14T14:00:01.030000+00:00",
+        "wall_at": "2026-10-14T14:00:01.020000+00:00"
+      },
+      "valid_until": "2026-10-14T14:02:00+00:00"
+    },
+    "inventory": {
+      "account": {
+        "account_id": "synthetic-account",
+        "buying_power": "100000",
+        "cash": "100000",
+        "currency": "USD",
+        "equity": "100000"
+      },
+      "acquisition_id": "42e56966c0150456eacd094253e2671bfd63df441e6b9535c6401386440497e9",
+      "actual_quantities": [
+        [
+          "SPY",
+          "2"
+        ]
+      ],
+      "baseline_id": "61fbd7dc4128806f5cba465e12e5151ea24b3c5680b0119b6140176f5fd0a84b",
+      "cash_complete": true,
+      "complete": true,
+      "evidence_lane": "SYNTHETIC_TEST",
+      "expected_cash": "100000",
+      "expected_quantities": [
+        [
+          "SPY",
+          "2"
+        ]
+      ],
+      "fill_ids": [],
+      "generation": 2,
+      "order_ids": [],
+      "positions": [
+        {
+          "average_entry_price": "100",
+          "market_price": "100",
+          "market_value": "200",
+          "quantity": "2",
+          "symbol": "SPY"
+        }
+      ],
+      "recorded_at_utc": "2026-10-14T14:00:01.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": []
+    },
+    "original_time": {
+      "acquired_monotonic": 100.02000000000001,
+      "contract": "PAPER_TIME_V2",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "objections": [],
+      "offset_lower": 0.0,
+      "offset_upper": 0.01,
+      "process_id": "m3-process-1",
+      "recorded_at_utc": "2026-10-14T14:00:00.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "samples": [
+        {
+          "mono_end": 100.01,
+          "mono_start": 100.0,
+          "offset_lower": 0.0,
+          "offset_upper": 0.01,
+          "provider": {
+            "account_id": "synthetic-account",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 0.001,
+            "session_close": "2026-10-14T20:00:00+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T13:00:00+00:00",
+            "timestamp": "2026-10-14T14:00:00.010000+00:00"
+          },
+          "wall_end": "2026-10-14T14:00:00.010000+00:00",
+          "wall_start": "2026-10-14T14:00:00+00:00"
+        },
+        {
+          "mono_end": 100.02000000000001,
+          "mono_start": 100.01,
+          "offset_lower": 0.0,
+          "offset_upper": 0.01,
+          "provider": {
+            "account_id": "synthetic-account",
+            "provider": "EXPLICIT_SYNTHETIC",
+            "resolution_seconds": 0.001,
+            "session_close": "2026-10-14T20:00:00+00:00",
+            "session_id": "2026-10-14",
+            "session_open": "2026-10-14T13:00:00+00:00",
+            "timestamp": "2026-10-14T14:00:00.020000+00:00"
+          },
+          "wall_end": "2026-10-14T14:00:00.020000+00:00",
+          "wall_start": "2026-10-14T14:00:00.010000+00:00"
+        }
+      ],
+      "schema_version": 1,
+      "source_refs": [],
+      "wall_anchor": "2026-10-14T14:00:00.020000+00:00"
+    },
+    "position_delay": 0.25,
+    "posts": [
+      {
+        "client_order_id": "qb-172f9a6a8012bf47d5c6234941f04cf09719b449",
+        "created_at": "2026-10-14T14:00:01.020000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-172f9a6a8012bf47d5c6234941f04cf09719b4492fbf60f27227a363612435c2",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ]
+  },
+  {
+    "case": "close-monotonic-domain",
+    "elapsed": 8.2,
+    "offset": 1.9,
+    "plan": {
+      "clock_process_id": "m3-process-1",
+      "clock_profile": "PAPER_TIME_V2",
+      "deadline": "2026-10-14T19:58:00+00:00",
+      "decision_id": "0b970fce1e22ff8a9f0ed338935713e9f4a0bf07df08dba368ab474754e1e6cb",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_buffer_seconds": 120,
+      "exit_quantity_rule": "owned-filled-minus-owned-exited",
+      "generation": 1,
+      "inventory_generation": 2,
+      "monotonic_anchor": 21570.019999999997,
+      "monotonic_expiry": 21578.089999999997,
+      "owner": "paper-core-synthetic",
+      "recorded_at_utc": "2026-10-14T19:57:50.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": [
+        "0b970fce1e22ff8a9f0ed338935713e9f4a0bf07df08dba368ab474754e1e6cb"
+      ],
+      "stop_price": "99"
+    },
+    "posts": [
+      {
+        "client_order_id": "qb-0f5e57935b11d8743dc77b4a17f8de4725e93e64",
+        "created_at": "2026-10-14T19:57:50.020000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-0f5e57935b11d8743dc77b4a17f8de4725e93e642111e8b38018d88769976c33",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      },
+      {
+        "client_order_id": "qb-ba20997fcfe41d86f611445f95d941b4764243c4",
+        "created_at": "2026-10-14T19:58:00.120000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-exit-ba20997fcfe41d86f611445f95d941b4764243c43947a6105fbe2a9b98fc6737",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "SELL",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ],
+    "provider_now": "2026-10-14T19:58:00.120000+00:00",
+    "receipt": {
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_intent_ids": [
+        "core-exit-ba20997fcfe41d86f611445f95d941b4764243c43947a6105fbe2a9b98fc6737"
+      ],
+      "proof_id": "069c2a7c75d3ab5efd1fe921e024a0baecf06f6682035faa3d2dea2f8a6607c0",
+      "reasons": [
+        "TIME_ACQUISITION_RETRYABLE",
+        "TIME_SAMPLES_INCOMPLETE"
+      ],
+      "recorded_at_utc": "2026-10-14T19:58:00.120000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": []
+    }
+  },
+  {
+    "case": "close-monotonic-domain",
+    "elapsed": 11.9,
+    "offset": -1.9,
+    "plan": {
+      "clock_process_id": "m3-process-1",
+      "clock_profile": "PAPER_TIME_V2",
+      "deadline": "2026-10-14T19:58:00+00:00",
+      "decision_id": "c01b92dabd7e81a674425321c6ef0dc7a92d35ade7b7ff333c6748260a75161e",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_buffer_seconds": 120,
+      "exit_quantity_rule": "owned-filled-minus-owned-exited",
+      "generation": 1,
+      "inventory_generation": 2,
+      "monotonic_anchor": 21570.019999999997,
+      "monotonic_expiry": 21581.889999999996,
+      "owner": "paper-core-synthetic",
+      "recorded_at_utc": "2026-10-14T19:57:50.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": [
+        "c01b92dabd7e81a674425321c6ef0dc7a92d35ade7b7ff333c6748260a75161e"
+      ],
+      "stop_price": "99"
+    },
+    "posts": [
+      {
+        "client_order_id": "qb-0f5e57935b11d8743dc77b4a17f8de4725e93e64",
+        "created_at": "2026-10-14T19:57:50.020000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-0f5e57935b11d8743dc77b4a17f8de4725e93e642111e8b38018d88769976c33",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      },
+      {
+        "client_order_id": "qb-1127c84c4056978dea6cb83776cab5fcf69823f0",
+        "created_at": "2026-10-14T19:58:00.020000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-exit-1127c84c4056978dea6cb83776cab5fcf69823f017720e104700d08fcf6f9a9f",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "SELL",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ],
+    "provider_now": "2026-10-14T19:58:00.020000+00:00",
+    "receipt": {
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_intent_ids": [
+        "core-exit-1127c84c4056978dea6cb83776cab5fcf69823f017720e104700d08fcf6f9a9f"
+      ],
+      "proof_id": "9a94d86052d4e5d597ec5c0d8677da7ee6c9d47d1514cd127bd2e7664b8241ba",
+      "reasons": [
+        "TIME_ACQUISITION_RETRYABLE",
+        "TIME_SAMPLES_INCOMPLETE"
+      ],
+      "recorded_at_utc": "2026-10-14T19:58:00.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": []
+    }
+  },
+  {
+    "case": "unified-integrity-priority",
+    "first": {
+      "action": "WAIT",
+      "clock_process_id": "m3-process-1",
+      "config_id": "4cb6652c5f1e2504b897bbd9ac7631dd4db762e5cf759c0ec9e0c003a4207403",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "gates": [
+        "TIME_SESSION_BOUNDARY",
+        "SESSION_EXIT_BUFFER"
+      ],
+      "inventory_generation": 2,
+      "inventory_id": "3b6e9420101c3401f9dea1623b62acd350153e40633e5547483cd8b9e9ba6c23",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "model_id": "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+      "monotonic_anchor": 25300.019999999997,
+      "observation_id": "c20eb69587e29ba7bb26c2551d722ebeb5af172e4d967064d3153dd8c6407c5a",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "price": "100",
+      "provider_deadline": "2026-10-14T19:58:00+00:00",
+      "quantity": "5",
+      "recorded_at_utc": "2026-10-14T21:00:00.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "session_close": "2026-10-14T20:00:00+00:00",
+      "source_refs": [
+        "c20eb69587e29ba7bb26c2551d722ebeb5af172e4d967064d3153dd8c6407c5a",
+        "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+        "3b6e9420101c3401f9dea1623b62acd350153e40633e5547483cd8b9e9ba6c23",
+        "6dda74579f25d71ed9705b3e9755402b7bc099ef60db21f3516261c1ca7f63ed"
+      ],
+      "source_start": "2026-10-14T20:55:00+00:00",
+      "symbol": "XLE",
+      "time_evidence_id": "6dda74579f25d71ed9705b3e9755402b7bc099ef60db21f3516261c1ca7f63ed",
+      "time_projection": {
+        "evidence_id": "6dda74579f25d71ed9705b3e9755402b7bc099ef60db21f3516261c1ca7f63ed",
+        "monotonic_at": 25300.019999999997,
+        "objections": [],
+        "process_id": "m3-process-1",
+        "provider_earliest": "2026-10-14T21:00:00.020000+00:00",
+        "provider_latest": "2026-10-14T21:00:00.030000+00:00",
+        "wall_at": "2026-10-14T21:00:00.020000+00:00"
+      },
+      "valid_until": "2026-10-14T21:02:00+00:00"
+    },
+    "health": [
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "d2d0a105b33e8107794f528bc0741ccc7e2e59a2ed49c71c8766ff5c7d9719a8",
+          "5045597822810746a6ab2d9712feae7f1f83c640df1ab5768cc1fedafdb4f5c2"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 3,
+        "first_blocker": "CORE_EVIDENCE_QUARANTINED",
+        "first_seen": "2026-10-14T21:00:00.020000+00:00",
+        "last_seen": "2026-10-14T21:00:01.040000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T21:00:03.040000+00:00",
+        "objections": [
+          "CORE_EVIDENCE_QUARANTINED",
+          "TIME_SESSION_BOUNDARY",
+          "SESSION_EXIT_BUFFER"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T21:00:01.040000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 2,
+        "source_refs": [],
+        "state": "TEMPORARY_WAIT"
+      },
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "c20eb69587e29ba7bb26c2551d722ebeb5af172e4d967064d3153dd8c6407c5a",
+          "3b6e9420101c3401f9dea1623b62acd350153e40633e5547483cd8b9e9ba6c23"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 2,
+        "first_blocker": "TIME_SESSION_BOUNDARY",
+        "first_seen": "2026-10-14T21:00:00.020000+00:00",
+        "last_seen": "2026-10-14T21:00:00.020000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T21:00:01.020000+00:00",
+        "objections": [
+          "TIME_SESSION_BOUNDARY",
+          "SESSION_EXIT_BUFFER"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T21:00:00.020000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 1,
+        "source_refs": [],
+        "state": "TEMPORARY_WAIT"
+      }
+    ],
+    "second": {
+      "action": "WAIT",
+      "clock_process_id": "m3-process-1",
+      "config_id": "4cb6652c5f1e2504b897bbd9ac7631dd4db762e5cf759c0ec9e0c003a4207403",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "gates": [
+        "CORE_EVIDENCE_QUARANTINED",
+        "TIME_SESSION_BOUNDARY",
+        "SESSION_EXIT_BUFFER"
+      ],
+      "inventory_generation": 3,
+      "inventory_id": "5045597822810746a6ab2d9712feae7f1f83c640df1ab5768cc1fedafdb4f5c2",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "model_id": "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+      "monotonic_anchor": 25301.039999999994,
+      "observation_id": "d2d0a105b33e8107794f528bc0741ccc7e2e59a2ed49c71c8766ff5c7d9719a8",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "price": "100",
+      "provider_deadline": "2026-10-14T19:58:00+00:00",
+      "quantity": "5",
+      "recorded_at_utc": "2026-10-14T21:00:01.040000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "session_close": "2026-10-14T20:00:00+00:00",
+      "source_refs": [
+        "d2d0a105b33e8107794f528bc0741ccc7e2e59a2ed49c71c8766ff5c7d9719a8",
+        "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+        "5045597822810746a6ab2d9712feae7f1f83c640df1ab5768cc1fedafdb4f5c2",
+        "e292f193340e346e1ff2d5909cf302ff8eca07d845171be0bbcc0b7a74c260cb"
+      ],
+      "source_start": "2026-10-14T20:55:01.020000+00:00",
+      "symbol": "XLE",
+      "time_evidence_id": "e292f193340e346e1ff2d5909cf302ff8eca07d845171be0bbcc0b7a74c260cb",
+      "time_projection": {
+        "evidence_id": "e292f193340e346e1ff2d5909cf302ff8eca07d845171be0bbcc0b7a74c260cb",
+        "monotonic_at": 25301.039999999994,
+        "objections": [],
+        "process_id": "m3-process-1",
+        "provider_earliest": "2026-10-14T21:00:01.040000+00:00",
+        "provider_latest": "2026-10-14T21:00:01.050000+00:00",
+        "wall_at": "2026-10-14T21:00:01.040000+00:00"
+      },
+      "valid_until": "2026-10-14T21:02:01.020000+00:00"
+    }
+  },
+  {
+    "case": "old-v32-expiry-compatibility",
+    "decision": {
+      "action": "BUY",
+      "clock_process_id": "m3-process-1",
+      "config_id": "4cb6652c5f1e2504b897bbd9ac7631dd4db762e5cf759c0ec9e0c003a4207403",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "gates": [],
+      "inventory_generation": 2,
+      "inventory_id": "25ff149c8b99de8ea86933f67a560f47a13b7626e1ba38c3e163051f84d6aba8",
+      "learning_receipt_id": "M1_NO_LEARNING",
+      "model_id": "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+      "monotonic_anchor": 21570.019999999997,
+      "observation_id": "7bc8d86b98154fb7ffa33ad42a3d08e8230edead5b8b1783f5181e8a0b264331",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "price": "100",
+      "provider_deadline": "2026-10-14T19:58:00+00:00",
+      "quantity": "5",
+      "recorded_at_utc": "2026-10-14T19:57:50.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "session_close": "2026-10-14T20:00:00+00:00",
+      "source_refs": [
+        "7bc8d86b98154fb7ffa33ad42a3d08e8230edead5b8b1783f5181e8a0b264331",
+        "72eff8ad95b3c9af5f193620e3680d6b234de57a5bdf0a3efc93feb00bbe6106",
+        "25ff149c8b99de8ea86933f67a560f47a13b7626e1ba38c3e163051f84d6aba8",
+        "10cddbfefe173d1cf4dc87f4d1ac37f5b419e346855bb558e24ad6ff136fbd2b"
+      ],
+      "source_start": "2026-10-14T19:52:50+00:00",
+      "symbol": "XLE",
+      "time_evidence_id": "10cddbfefe173d1cf4dc87f4d1ac37f5b419e346855bb558e24ad6ff136fbd2b",
+      "valid_until": "2026-10-14T19:59:50+00:00"
+    },
+    "plan": {
+      "clock_process_id": "m3-process-1",
+      "clock_profile": "PAPER_TIME_V2",
+      "deadline": "2026-10-14T19:58:00+00:00",
+      "decision_id": "6ccbce1e51a5b2a8912b748bdfb81133bfffb6911fbedaf465bea73636c68110",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_buffer_seconds": 120,
+      "exit_quantity_rule": "owned-filled-minus-owned-exited",
+      "generation": 1,
+      "inventory_generation": 2,
+      "monotonic_anchor": 21570.019999999997,
+      "owner": "paper-core-synthetic",
+      "recorded_at_utc": "2026-10-14T19:57:50.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": [
+        "6ccbce1e51a5b2a8912b748bdfb81133bfffb6911fbedaf465bea73636c68110"
+      ],
+      "stop_price": "99"
+    },
+    "posts": [
+      {
+        "client_order_id": "qb-1d3c63482e19f8a690edc8b84885f612320fee8c",
+        "created_at": "2026-10-14T19:57:50.020000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-1d3c63482e19f8a690edc8b84885f612320fee8c6970e37ade9484689307eefc",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      },
+      {
+        "client_order_id": "qb-9aaf7fb720601e965bd9fb6dbb8dc3eda261f0fc",
+        "created_at": "2026-10-14T19:58:00.120000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-exit-9aaf7fb720601e965bd9fb6dbb8dc3eda261f0fc0bebf5c4285f67427f2ce732",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "SELL",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ]
+  },
+  {
+    "case": "exact-close-expiry",
+    "exit_monotonic": 21578.089999999997,
+    "offset": 1.9,
+    "plan": {
+      "clock_process_id": "m3-process-1",
+      "clock_profile": "PAPER_TIME_V2",
+      "deadline": "2026-10-14T19:58:00+00:00",
+      "decision_id": "0b970fce1e22ff8a9f0ed338935713e9f4a0bf07df08dba368ab474754e1e6cb",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_buffer_seconds": 120,
+      "exit_quantity_rule": "owned-filled-minus-owned-exited",
+      "generation": 1,
+      "inventory_generation": 2,
+      "monotonic_anchor": 21570.019999999997,
+      "monotonic_expiry": 21578.089999999997,
+      "owner": "paper-core-synthetic",
+      "recorded_at_utc": "2026-10-14T19:57:50.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": [
+        "0b970fce1e22ff8a9f0ed338935713e9f4a0bf07df08dba368ab474754e1e6cb"
+      ],
+      "stop_price": "99"
+    },
+    "posts": [
+      {
+        "client_order_id": "qb-0f5e57935b11d8743dc77b4a17f8de4725e93e64",
+        "created_at": "2026-10-14T19:57:50.020000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-0f5e57935b11d8743dc77b4a17f8de4725e93e642111e8b38018d88769976c33",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      },
+      {
+        "client_order_id": "qb-ba20997fcfe41d86f611445f95d941b4764243c4",
+        "created_at": "2026-10-14T19:57:59.990000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-exit-ba20997fcfe41d86f611445f95d941b4764243c43947a6105fbe2a9b98fc6737",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "SELL",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ],
+    "provider_now": "2026-10-14T19:57:59.990000+00:00"
+  },
+  {
+    "case": "exact-close-expiry",
+    "exit_monotonic": 21581.889999999996,
+    "offset": -1.9,
+    "plan": {
+      "clock_process_id": "m3-process-1",
+      "clock_profile": "PAPER_TIME_V2",
+      "deadline": "2026-10-14T19:58:00+00:00",
+      "decision_id": "c01b92dabd7e81a674425321c6ef0dc7a92d35ade7b7ff333c6748260a75161e",
+      "evidence_lane": "SYNTHETIC_TEST",
+      "exit_buffer_seconds": 120,
+      "exit_quantity_rule": "owned-filled-minus-owned-exited",
+      "generation": 1,
+      "inventory_generation": 2,
+      "monotonic_anchor": 21570.019999999997,
+      "monotonic_expiry": 21581.889999999996,
+      "owner": "paper-core-synthetic",
+      "recorded_at_utc": "2026-10-14T19:57:50.020000+00:00",
+      "release_id": "m1-synthetic-fixture",
+      "schema_version": 1,
+      "source_refs": [
+        "c01b92dabd7e81a674425321c6ef0dc7a92d35ade7b7ff333c6748260a75161e"
+      ],
+      "stop_price": "99"
+    },
+    "posts": [
+      {
+        "client_order_id": "qb-0f5e57935b11d8743dc77b4a17f8de4725e93e64",
+        "created_at": "2026-10-14T19:57:50.020000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-entry-0f5e57935b11d8743dc77b4a17f8de4725e93e642111e8b38018d88769976c33",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "BUY",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      },
+      {
+        "client_order_id": "qb-1127c84c4056978dea6cb83776cab5fcf69823f0",
+        "created_at": "2026-10-14T19:57:59.990000+00:00",
+        "extended_hours": false,
+        "intent_id": "core-exit-1127c84c4056978dea6cb83776cab5fcf69823f017720e104700d08fcf6f9a9f",
+        "limit_price": null,
+        "order_type": "MARKET",
+        "quantity": "5",
+        "side": "SELL",
+        "signal_date": "2026-10-14",
+        "state": "RISK_APPROVED",
+        "stop_price": null,
+        "strategy_id": "paper-core-synthetic",
+        "symbol": "XLE",
+        "time_in_force": "DAY"
+      }
+    ],
+    "provider_now": "2026-10-14T19:57:59.990000+00:00"
+  }
+]

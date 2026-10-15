@@ -1,0 +1,45 @@
+# M2 independent review
+
+Reviewer: independent `/root/m2_review` (Astra). Reviewed base `dcd0021944864800646d3b0ecb369ccf3cb7ced5` to head `0d9510e71af068c420d1c85ae7ffa2535f5ae70a`. Verdict: **REWORK — changes required**. Three important defects, no critical/P0 defect. Line numbers below refer to the reviewed head.
+
+## Findings
+
+1. **P1 — Late fee revisions leave obsolete cash authority usable for a new POST.** `outcomes.py:198` records a revised cost without invalidating full cash certification; `send_guard.py:108` checks stored proof self-consistency/identity without matching current cash evidence. A focused offline fixture certified 100000 after reported zero fees, then imported .10/fill corrections. Ledger expected 99999.8 while certified reader/proof still returned 100000; a fresh actual trader/coordinator/final-send cycle POSTed a third order. [Probe log](review-cash-probe.txt). Invalidate superseded cash authority transactionally or bind consumers to current evidence generation/digest. Retained certified readers and final send must refuse stale authority; an independently authoritative cash-activity path must remain valid.
+2. **P1 — Provably unsent restart cuts permanently reserve the entry slot.** `outcomes.py:567` changes absent orders only for SUBMITTING/SUBMISSION_UNKNOWN, leaving stale RISK_APPROVED/ORDER_CREATED claims. `trader.py:148` reserves the slot unless a round trip or precise definitive-unsent refusal exists; old observation replay returns its historical decision. `test_restart_matrix.py:45` proves zero POSTs but never tries a fresh observation after these cuts. Add durable race-safe retirement of demonstrably unsent stale claims, retaining IDs/history, and prove fresh observation progress. Possible-send states/ambiguous 404 remain reserved without retry.
+3. **P2 — One conflicting source quarantines unrelated outcomes in the batch.** `outcomes.py:108` collects every event client and lines 126–131 quarantine all associated outcomes. The two-lot TEMP probe altered one old fill digest; both outcomes became INTEGRITY_FAILURE and both were refused by process_outcomes. [Probe log](review-scope-probe.txt). Preserve atomic business rollback and rejected envelopes, but quarantine only actually implicated source/lot authority. Healthy outcome processing must continue.
+
+The two probes ran in temporary credential-free fixtures only. Their passing assertions demonstrate the incorrect behavior, not desired-behavior success. Source scripts remain at `C:\Users\leepa\AppData\Local\Temp\m2_review_cash_probe.py` and `C:\Users\leepa\AppData\Local\Temp\m2_review_scope_probe.py`. No suite rerun, source/index/HEAD/runtime mutation or reviewer delegation occurred.
+
+## Accepted evidence and limits
+
+The reviewer verified truthful fee missingness/legacy-zero preservation, whole durable cost-chain validation, immutable net revisions null→10→9.8 on one 5-share lot bought at 100 and sold at 102, and separate modeled economics. Guardian reservation evidence retains partial exit of 2 shares, late fill of 1, then permits a 2-share remainder only after terminal activity proof; inherited SPY quantity of 2 remains untouched. Populated-v30 replay preserves original payloads/digests/outcome, online backup has matching original SHA and integrity ok, and independent closed-session/manual-pause outcome processing constructs no broker/fresh observation, measured 0.016 s with whole process asserted below 15 s.
+
+Final focused 31-test pass and exact Ruff/Linux/Windows type logs are accepted as synthetic engineering evidence. Retained 373-test pass predates the final cost-chain fix and is separate; root full regression on 0d9510e remains pending. No provider fee/cash completeness, broker-PAPER acceptance or deployed scheduling claim. No separate minor remediation requested.
+
+Root also independently checked the exported typed canonical observation/decision IDs, complete outcome supersession chain and cost references. Decimal fill arithmetic yields owned quantity 0 and gross P&L 10; actual cost corrections total 0.2 and net P&L 9.8. Reproducible checker is `.superpowers/sdd/2026-10-13-paper-core/verify_m2_trace.py`. An initial raw-JSON hash probe was corrected to honor typed Decimal/datetime canonicalization; no product/evidence change was involved.
+
+## Next gate
+
+The root broad run on frozen `0d9510e` completed with **4,372 passed, 21 failed, 47 skipped**, one warning, in 1283.12 seconds. Failures concern adaptive-loop and owned-protection fee fixtures, PostgreSQL offline migration, staged SQLite migration and missing-fee dashboard rendering. The [full log](broad-initial.txt) and [encoding/hash metadata](broad-initial-metadata.json) preserve the result. Pytest completed normally; afterward, the wrapper's tail display failed decoding a Windows-1252 byte as UTF-8. This display error did not change the test result.
+
+The original freeze was released for a combined repair of the three findings and all broad failures. That repair is now committed and frozen for scoped re-review as recorded below. M2 is not accepted yet.
+
+## Repair round 1 submitted for scoped review
+
+Repair source: `63970bb3c375077ce99fd5fafea7c8e307e808e9`. The stable affected run passed **398 tests, with 26 skipped**, in 192.03 seconds, including all 21 original failed cases. The skips require disposable PostgreSQL infrastructure; offline PostgreSQL SQL generation and populated SQLite migration checks passed. Six exact CI lint/type commands passed on the same source. These results remain separate from the original full regression.
+
+Root independently checked [nine exported witnesses](fix1-repair-trace.json) and every source hash in [validation metadata](fix1-validation.json): both fresh-process unsent cuts preserve the old decision and produce one distinct new POST; delayed senders lose the durable state transition; current costs of 0.1 per fill reduce expected cash from 100000 to 99999.8 and fresh cash proof restores progress; only the implicated lot is quarantined; and both cash-import/send transaction orders have witnesses. Checker: `.superpowers/sdd/2026-10-13-paper-core/verify_m2_repair_trace.py`. This confirms the exports' internal joins and arithmetic, not provider behavior or deployed acceptance.
+
+## Scoped re-review of round 1
+
+Verdict at `63970bb`: **REWORK, one remaining P2**. Both original P1 findings and all broad-regression repairs are accepted. The reviewer verified pinned file hashes, six CI logs, the stable 398-pass/26-skip result and inclusion of all 21 originally failing cases. Ordinary mixed-batch isolation is repaired. The updated acceptance export preserves gross 10, net revisions null→10→9.8, modeled net 7, backup integrity, cancellation reservations and restart evidence; independent outcome processing measured 0.032 seconds.
+
+The remaining defect is canonical fill-ID collision scope at `outcomes.py:97`: a distinct source event reusing an existing fill ID under another lot's broker order is correctly rejected, but incident scope follows only the incoming fill binding. The original canonical owner stays COMPLETE rather than joining the implicated set. The [TEMP probe](review-fill-scope-probe.txt) reproduced this while confirming the original fill was unchanged. Resolve both the stored fill's owner and the incoming owner; retain atomic rollback and the full envelope. A distinct-source regression must also prove an unrelated third lot remains processable. No further finding was reported. Repair round 2 is limited to this scope and adjacent checks; no repeated full regression is required absent new risk.
+
+## Final scoped review — ACCEPT
+
+Independent reviewer ACCEPT at `800e67bf5d15e3cf1d878b46f50775dc0bdf6f82`; all findings are closed, with no new material regression. The six-line repair resolves the stored canonical fill alongside the incoming fill. The [collision trace](fix2-collision-trace.json) proves both implicated lots quarantine, the original fill stays unchanged, all rejected batch source/cursor writes roll back, and the full envelope remains recorded. The unrelated third lot replays its healthy subset and advances to a new COMPLETE outcome, revision 3, fees 0.2 and net −0.2.
+
+The reviewer verified exact source/test/log hashes, the expected-red failure, 16 adjacent passes, the final expanded regression's pass, and all six CI gates. A Decimal-versus-float test assertion error is recorded separately. Prior cash/send fencing, unsent recovery, migration and reporting repairs are unchanged. Root independently confirmed the final hashes, bounded owner set, rollback/preservation flags and third-lot revision arithmetic. No redundant suite or operational actions were performed.
+
+Acceptance is for local synthetic M2 engineering. The initial broad run, stable affected run and final narrow repair results remain separate. Actual provider fee/cash completeness, PostgreSQL backend execution and deployed behavior are not established by these artifacts. M3 may proceed; rollout remains unapproved.

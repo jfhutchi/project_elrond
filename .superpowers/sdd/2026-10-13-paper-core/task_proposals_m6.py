@@ -1,0 +1,27 @@
+import json,xml.etree.ElementTree as ET,hashlib
+from pathlib import Path
+root=Path.cwd(); out=root/'docs/evidence/paper-core/m6'; prep=out/'preparation'; m=json.loads((prep/'m6-task-archive/manifest.json').read_text(encoding='utf-8-sig')); t=next(t for t in m['tasks'] if t['name']=='Elrond Learner'); src=prep/'m6-task-archive'/Path(t['file']).name
+ns={'t':'http://schemas.microsoft.com/windows/2004/02/mit/task'}; ET.register_namespace('',ns['t']); records=[]
+for role in ['guardian','outcomes','trader']:
+ tree=ET.ElementTree(ET.fromstring(src.read_text(encoding='utf-8-sig'))); task=tree.getroot()
+ for trigger in list(task.find('t:Triggers',ns)): task.find('t:Triggers',ns).remove(trigger)
+ enabled=task.find('t:Settings/t:Enabled',ns)
+ if enabled is None: enabled=ET.SubElement(task.find('t:Settings',ns),'{'+ns['t']+'}Enabled')
+ enabled.text='false'
+ task.find('t:RegistrationInfo/t:URI',ns).text='\\Elrond Paper Core '+role.title()
+ task.find('t:RegistrationInfo/t:Description',ns).text='Prepared continuous PAPER core '+role+'; disabled submission-disabled proposal; not commissioned'
+ task.find('t:Settings/t:ExecutionTimeLimit',ns).text='PT0S'
+ principal=task.find('t:Principals/t:Principal',ns)
+ level=principal.find('t:RunLevel',ns)
+ if level is None: level=ET.SubElement(principal,'{'+ns['t']+'}RunLevel')
+ level.text='LeastPrivilege'
+ action=task.find('t:Actions/t:Exec',ns); action.find('t:Command',ns).text=r'D:\Elrond\state\service-host\1188bba2cb38de299aad0768\elrond-service-host.exe'
+ action.find('t:Arguments',ns).text=f'"D:\\Elrond\\logs\\paper-core-{role}-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -File "{root}\\deploy\\omen\\start-paper-core.ps1" -Repository "{root}" -Config "{out}\\prepared-config.json" -Manifest "{out}\\prepared-release.json" -Role {role} -SubmissionDisabled'
+ action.find('t:WorkingDirectory',ns).text=str(root)
+ p=out/f'task-proposal-{role}.xml'; tree.write(p,encoding='utf-8',xml_declaration=True)
+ records.append({'name':'Elrond Paper Core '+role.title(),'path':p.name,'sha256':hashlib.sha256(p.read_bytes()).hexdigest(),'continuous_role_execution_time_limit':'PT0S','lifetime_reason':'Continuous protection/outcomes cannot be terminated by inherited learner PT5M limit','enabled':False,'submission_disabled':True,'token':'leepa/Interactive/Limited','based_on_archive':t['sha256'],'runtime_token_verification':'NOT_PERFORMED'})
+(out/'task-proposals.json').write_text(json.dumps({'state':'PROPOSED_ONLY_NOT_REGISTERED','tasks':records},indent=2),encoding='utf-8')
+print(json.dumps(records))
+
+
+

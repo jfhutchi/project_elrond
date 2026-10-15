@@ -1,0 +1,30 @@
+{
+  "state": "PREPARED_WAITING_NOT_COMMISSIONED",
+  "repair_base": "fa7a1fb561ccd113e6d47d017c12bd1d89713426",
+  "old_release_id": "3ddda51746ff8d469a9bd2344129aaad658ac4ef9230a062335a7905f99fd034",
+  "new_release_id": "2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7",
+  "config_id": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "old_verification_on_repaired_source": {
+    "release_id": "3ddda51746ff8d469a9bd2344129aaad658ac4ef9230a062335a7905f99fd034",
+    "verified_at": "2026-10-15T00:50:51.026511+00:00",
+    "state": "REFUSED",
+    "objections": [
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/trader.py",
+      "EXECUTABLE_PIN_MISMATCH:src/quantbot/paper_core/work.py"
+    ],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "new_verification": {
+    "release_id": "2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7",
+    "verified_at": "2026-10-15T00:50:50.005134+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "config_bytes_unchanged": true,
+  "executable_pins": 364,
+  "distributions": 46,
+  "operational_release_transfer": "EXPLICIT_SAME_SCHEMA_CODE_ONLY_V1_SUPPORTED_NOT_PERFORMED"
+}

@@ -8,7 +8,7 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from quantbot.config import Settings
-from quantbot.reporting.performance import analyze_fills
+from quantbot.reporting.performance import analyze_gross_cycles
 from quantbot.reporting.weekly import NOT_YET_OBSERVED
 from quantbot.storage import Database, StorageRepository
 
@@ -165,7 +165,7 @@ def build_project_status(database: Database, context: ProjectStatusContext) -> P
     qualified_dates = sorted(
         record.trading_date for record in qualification_days if record.qualified
     )
-    fill_analysis = analyze_fills(fills)
+    completed_cycles = analyze_gross_cycles(fills)
     has_forward_trade_evidence = bool(fills or qualification_days)
     open_bugs = tuple(
         f"{incident.incident_id}: {incident.kind}"
@@ -200,12 +200,8 @@ def build_project_status(database: Database, context: ProjectStatusContext) -> P
         current_equity=equity_records[-1].equity if equity_records else None,
         paper_trading_start_date=(qualified_dates[0].isoformat() if qualified_dates else None),
         trading_days_observed=len(qualified_dates),
-        completed_trades=(
-            len(fill_analysis.completed_trades) if has_forward_trade_evidence else None
-        ),
-        current_drawdown=_current_drawdown(
-            tuple(record.equity for record in equity_records)
-        ),
+        completed_trades=(len(completed_cycles) if has_forward_trade_evidence else None),
+        current_drawdown=_current_drawdown(tuple(record.equity for record in equity_records)),
         open_bugs=open_bugs,
         known_limitations=context.known_limitations,
         research_underway=context.research_underway,

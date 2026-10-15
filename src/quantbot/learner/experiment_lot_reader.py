@@ -17,7 +17,7 @@ from quantbot.learner.experiment_lots import (
 )
 from quantbot.learner.experiment_store import ExperimentStore
 from quantbot.learner.paper_deadlines import CLOSED_EVENT, EXIT_EVENT, HEARTBEAT
-from quantbot.learner.trade_learning import _episode, _time
+from quantbot.learner.trade_learning import _episode, _known_fee, _time
 from quantbot.research.manifest import content_id
 from quantbot.storage.lot_ownership import PROTECTIVE_EXIT, REGISTRATION
 
@@ -275,7 +275,7 @@ def refresh_lot_journal(
                     fill_id=fill_id,
                     quantity=row["quantity"],
                     price=row["price"],
-                    fee=row["fee"],
+                    fee=_known_fee(row),
                 )
                 imported_fills.append(row)
             for order_id in {row["intent_id"] for row in imported_fills}:

@@ -1,0 +1,52 @@
+import os
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parents[3]
+scratch = Path(tempfile.mkdtemp(prefix='paper-core-check-'))
+env = {k: os.environ[k] for k in ('SystemRoot', 'WINDIR', 'COMSPEC',
+        'PROCESSOR_ARCHITECTURE', 'PROCESSOR_ARCHITEW6432', 'NUMBER_OF_PROCESSORS',
+        'PATHEXT') if k in os.environ}
+env['PATH'] = str(Path(sys.executable).parent) + ';C:\\Program Files\\Git\\cmd;C:\\Windows\\System32;C:\\Windows\\System32\\WindowsPowerShell\\v1.0;C:\\Users\\leepa\\.local\\bin;C:\\Users\\leepa\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\native\\powershell'
+env.update(TEMP=str(scratch), TMP=str(scratch), TRADING_MODE='PAPER',
+           USERPROFILE=str(scratch), LOCALAPPDATA=str(scratch/'Local'), APPDATA=str(scratch/'Roaming'),
+           BROKER_ENVIRONMENT='PAPER', LIVE_TRADING_ACKNOWLEDGED='false', KILL_SWITCH='true',
+           QUANTBOT_DB_PATH=str(scratch/'unused.db'), QUANTBOT_LOCK_PATH=str(scratch/'unused.lock'),
+           QUANTBOT_REPORTS_DIR=str(scratch/'reports'))
+bootstrap = '''
+import sys,socket
+original_pair, original_connect = socket.socketpair, socket.socket.connect
+original_bind = socket.socket.bind
+fixture_ports = set()
+def refuse(*a,**kw): raise OSError('NETWORK DISABLED BY OFFLINE CHECK')
+def bind_fixture(self, address):
+    result = original_bind(self, address)
+    if isinstance(address, tuple) and address[0] in ('127.0.0.1', '::1'):
+        fixture_ports.add(self.getsockname()[1])
+    return result
+def connect_fixture(self, address):
+    if isinstance(address, tuple) and address[0] in ('127.0.0.1', '::1') and address[1] in fixture_ports:
+        return original_connect(self, address)
+    return refuse()
+def self_pipe(*a,**kw):
+    socket.socket.connect=original_connect
+    try: return original_pair(*a,**kw)
+    finally: socket.socket.connect=connect_fixture
+socket.socketpair=self_pipe
+socket.socket.bind=bind_fixture
+socket.socket.connect=connect_fixture
+socket.socket.connect_ex=refuse
+import pytest
+raise SystemExit(pytest.main(sys.argv[1:]))
+'''
+log = scratch/'result.txt'
+print('LOG:', log, flush=True)
+with log.open('w', encoding='utf-8') as output:
+    r = subprocess.run([sys.executable, '-I', '-B', '-c', bootstrap, '-q', '-p', 'no:cacheprovider',
+                        '--basetemp', str(scratch/'pytest'), *sys.argv[1:]],
+                       cwd=root, env=env, text=True, stdout=output, stderr=subprocess.STDOUT)
+print(log.read_text(encoding='utf-8', errors='backslashreplace')[-12000:])
+print('LOG:', log)
+raise SystemExit(r.returncode)

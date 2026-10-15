@@ -1,0 +1,16 @@
+[
+  {
+    "independent": false,
+    "original_proof": "9de13cb1bc176e7f161d4dacaa2c8096f22aa38bf5ebd6cff9cd1aa75742d746",
+    "before": "6c7e4ee3a2843d601f00aaa75518391078d58742980d2e7e1d210dbec7f4bb85",
+    "after_cost_allocation": "d5d43f0ab94bb625392e2f006a5591c3d5d8668a0315557f3d8c35bc759d5f79",
+    "old_payload_unchanged": true
+  },
+  {
+    "independent": true,
+    "original_proof": "303cf0e9b01e715e702985cbba0b5aaae59768f268e23a1a26df6035a74e6dc0",
+    "before": "47a76a89622a41e9c9b445ac520462efbca95b6b2ba92bc9acddf645439d27e7",
+    "after_cost_allocation": "47a76a89622a41e9c9b445ac520462efbca95b6b2ba92bc9acddf645439d27e7",
+    "old_payload_unchanged": true
+  }
+]

@@ -1,0 +1,21 @@
+{
+  "stage": "final-frozen-missing-work-gate",
+  "exit_code": 0,
+  "result": "10 passed in17.25s",
+  "tests": 10,
+  "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-6whswg2_\\result.txt",
+  "archive": "covering-gate.txt.gz",
+  "raw_bytes": 6591,
+  "raw_sha256": "842fb986ea22144922a67b725acef73b5cbde0016f10b838f5d8e3d736159ac6",
+  "compressed_sha256": "011bfae6790e5f9a6f7601c5da6bef6bf062869752f4c0fbba2c98ec0f28cae6",
+  "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+  "command": [
+    ".venv/Scripts/python.exe",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    "-s",
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+    "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing"
+  ]
+}

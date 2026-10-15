@@ -1,0 +1,38 @@
+{
+  "pins": 419,
+  "pin_manifest_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+  "release_id": "2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7",
+  "config_id": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "independent_verify_release": {
+    "release_id": "2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7",
+    "verified_at": "2026-10-15T00:52:52.369956+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "ci_verified": 6,
+  "static_tasks": [
+    {
+      "name": "Elrond Paper Core Guardian",
+      "sha256": "85fa7cce21a29648416ad3e3630885f1bf470b9fe533a2fecd2d6a37837bda96",
+      "mode": "SUBMISSION_AND_ENTRY_DISABLED"
+    },
+    {
+      "name": "Elrond Paper Core Outcomes",
+      "sha256": "b3b65626deaa44beccb9100d5756973abdf3beb25777e1262b8fe1858629d80d",
+      "mode": "SUBMISSION_AND_ENTRY_DISABLED"
+    },
+    {
+      "name": "Elrond Paper Core Trader",
+      "sha256": "9434e6797e8bd8fc889b9096df94ce1953c7223cabd36127b465285ad034be6d",
+      "mode": "SUBMISSION_AND_ENTRY_DISABLED"
+    },
+    {
+      "name": "Elrond Paper Core Verify",
+      "sha256": "8f37fa3e3cfc8005834df73ad3eb3ca1942dcf3d01b710a12809d0b632e5db2b",
+      "mode": "VERIFY"
+    }
+  ],
+  "actual_token_execution": "NOT_PERFORMED"
+}

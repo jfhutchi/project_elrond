@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.3" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>PAPER read-only attribution, all-forecast market labels and frozen raw-DIA shadows. No entry, fit or promotion authority.</Description>
+    <URI>\Elrond Trade Learning Observer</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-21-1356967796-4143092225-2789699475-1001</UserId>
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <DisallowStartIfOnBatteries>true</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>true</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT1M30S</ExecutionTimeLimit>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <IdleSettings>
+      <Duration>PT10M</Duration>
+      <WaitTimeout>PT1H</WaitTimeout>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+  </Settings>
+  <Triggers>
+    <TimeTrigger>
+      <StartBoundary>2026-10-05T14:39:15-04:00</StartBoundary>
+      <Repetition>
+        <Interval>PT2M</Interval>
+        <StopAtDurationEnd>true</StopAtDurationEnd>
+      </Repetition>
+    </TimeTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>D:\Elrond\state\service-host\1188bba2cb38de299aad0768\elrond-service-host.exe</Command>
+      <Arguments>"D:\Elrond\releases\trade-learning-2ccd3d2\logs\windowless-tracking-launcher.log" -NoProfile -NonInteractive -WindowStyle Hidden -Command "$env:PYTHONPATH='D:\Elrond\releases\trade-learning-2ccd3d2\src'; &amp; 'D:\Elrond\releases\combined-paper-5c1db64\.venv\Scripts\python.exe' -m quantbot.learner.tracking_launch --config 'D:\Elrond\releases\trade-learning-2ccd3d2\tracking-config.json'; exit $LASTEXITCODE"</Arguments>
+      <WorkingDirectory>D:\Elrond\releases\trade-learning-2ccd3d2</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

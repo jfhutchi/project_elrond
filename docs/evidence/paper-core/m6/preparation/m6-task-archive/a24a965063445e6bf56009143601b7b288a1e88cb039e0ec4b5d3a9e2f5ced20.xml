@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-16"?>
+<Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
+  <RegistrationInfo>
+    <Description>Elrond frozen five-minute observations only; 054ed1ac2a07893a867fe75de5632e10e92b9bd9</Description>
+    <URI>\Elrond Five Minute Observations</URI>
+  </RegistrationInfo>
+  <Principals>
+    <Principal id="Author">
+      <UserId>S-1-5-21-1356967796-4143092225-2789699475-1001</UserId>
+      <LogonType>InteractiveToken</LogonType>
+    </Principal>
+  </Principals>
+  <Settings>
+    <DisallowStartIfOnBatteries>false</DisallowStartIfOnBatteries>
+    <StopIfGoingOnBatteries>false</StopIfGoingOnBatteries>
+    <ExecutionTimeLimit>PT2M</ExecutionTimeLimit>
+    <MultipleInstancesPolicy>IgnoreNew</MultipleInstancesPolicy>
+    <StartWhenAvailable>true</StartWhenAvailable>
+    <IdleSettings>
+      <StopOnIdleEnd>true</StopOnIdleEnd>
+      <RestartOnIdle>false</RestartOnIdle>
+    </IdleSettings>
+    <UseUnifiedSchedulingEngine>true</UseUnifiedSchedulingEngine>
+  </Settings>
+  <Triggers>
+    <CalendarTrigger>
+      <StartBoundary>2026-10-01T09:31:05</StartBoundary>
+      <Repetition>
+        <Interval>PT10M</Interval>
+        <Duration>PT6H40M</Duration>
+      </Repetition>
+      <ScheduleByWeek>
+        <WeeksInterval>1</WeeksInterval>
+        <DaysOfWeek>
+          <Monday />
+          <Tuesday />
+          <Wednesday />
+          <Thursday />
+          <Friday />
+        </DaysOfWeek>
+      </ScheduleByWeek>
+    </CalendarTrigger>
+  </Triggers>
+  <Actions Context="Author">
+    <Exec>
+      <Command>D:\Elrond\state\service-host\1188bba2cb38de299aad0768\elrond-service-host.exe</Command>
+      <Arguments>"D:\Elrond\learner-dia-five-minute-shadow\logs\host.log" -NoProfile -NonInteractive -WindowStyle Hidden -Command "$ErrorActionPreference='Stop'; $global:LASTEXITCODE=$null; $env:PYTHONPATH='D:\Elrond\releases\five-observer-054ed1a\src'; $env:PYTHONNOUSERSITE='1'; Remove-Item Env:PYTHONHOME,Env:PYTHONEXECUTABLE,Env:__PYVENV_LAUNCHER__ -ErrorAction SilentlyContinue; &amp; 'D:\Elrond\releases\five-observer-054ed1a\.venv\Scripts\python.exe' -m quantbot.learner.five_minute_launch --config 'D:\Elrond\config\five-minute-observer-054ed1a.json' --env-file 'C:\Users\leepa\.config\quantbot\quantbot.env'; if ($null -eq $LASTEXITCODE) { exit 2 }; exit $LASTEXITCODE"</Arguments>
+      <WorkingDirectory>D:\Elrond\releases\five-observer-054ed1a</WorkingDirectory>
+    </Exec>
+  </Actions>
+</Task>

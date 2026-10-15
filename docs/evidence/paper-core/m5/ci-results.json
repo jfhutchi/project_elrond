@@ -1,0 +1,91 @@
+[
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "src",
+      "tests"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m5\\ruff.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m5\\mypy-linux.txt",
+    "sha256": "061ded32acc828cb82a72fcf554e6ae0fc360b884561e62c384abb435ad8e38f"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m5\\mypy-win32.txt",
+    "sha256": "061ded32acc828cb82a72fcf554e6ae0fc360b884561e62c384abb435ad8e38f"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m5\\ruff-helpers.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m5\\mypy-linux-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  },
+  {
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\m5\\mypy-win32-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  }
+]

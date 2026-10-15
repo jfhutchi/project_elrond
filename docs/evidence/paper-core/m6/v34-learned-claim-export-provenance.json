@@ -1,0 +1,10 @@
+{
+  "scope": "READ_ONLY_EXPORT_FROM_EXISTING_FINAL_GATE_MIGRATION_FIXTURE_NO_SCENARIO_REGENERATION",
+  "fixture_db": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-__pjhcko\\pytest\\test_populated_v34_migration_p0\\prior.db",
+  "db_sha256_before_and_after": "b146eb95bb3b845f6d201d5f97b012958c666121eff29e8ef775c5b010ffe6d5",
+  "export_sha256": "26f66407f1f3f598a6fa80047d55b77de9b6384a3a6e2eb38e60c2d289efd646",
+  "learning_receipt_id": "df341b28d9a324b27a0f61745484f5eaffff4d8fc804def0ee80ec8c7e353a64",
+  "activation_id": "f6fc4de456cdbea62c2e10954623ecd89295e23e22cc6a510a2c0dfd181eda6c",
+  "fills": 1,
+  "plans": 1
+}

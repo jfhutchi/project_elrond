@@ -1,0 +1,18 @@
+{
+  "changed_paths": [
+    "src/quantbot/paper_core/release.py",
+    "tests/integration/paper_core/test_release_recovery.py"
+  ],
+  "stage1_freeze": "2026-10-14T20:41:23.556232+00:00",
+  "final_freeze": "2026-10-14T21:02:24.204305+00:00",
+  "config_identity_after_reload": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "release_identity_before_and_after_reload": "0c55ea726d4bfe6cf390379789d96527e89450f3b24a8c286e9b147926d08f9e",
+  "verify_release": {
+    "release_id": "0c55ea726d4bfe6cf390379789d96527e89450f3b24a8c286e9b147926d08f9e",
+    "verified_at": "2026-10-14T21:03:11.093548+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  }
+}

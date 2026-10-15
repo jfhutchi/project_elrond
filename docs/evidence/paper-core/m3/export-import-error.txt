@@ -1,0 +1,16 @@
+
+=================================== ERRORS ====================================
+____ ERROR collecting .superpowers/sdd/2026-10-13-paper-core/export_v31.py ____
+ImportError while importing test module 'C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\.superpowers\sdd\2026-10-13-paper-core\export_v31.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+D:\Elrond\tools\python\cpython-3.11.16-windows-x86_64-none\Lib\importlib\__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.superpowers\sdd\2026-10-13-paper-core\export_v31.py:6: in <module>
+    from tests.fixtures.core_m2 import NOW, fee_events, prepare
+E   ModuleNotFoundError: No module named 'tests'
+=========================== short test summary info ===========================
+ERROR .superpowers/sdd/2026-10-13-paper-core/export_v31.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 1 error during collection !!!!!!!!!!!!!!!!!!!!
+1 error in 0.96s

@@ -1,0 +1,31 @@
+decision WAIT ('INVENTORY_STALE',) 2026-10-14 14:00:00.020000+00:00
+proof 2026-10-14 14:00:00.022000+00:00 posts 0
+F
+================================== FAILURES ===================================
+________ test_positive_inventory_latency_keeps_healthy_entry_eligible _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-uwxna76o/pytest/test_positive_inventory_latenc0')
+
+    @pytest.mark.asyncio
+    async def test_positive_inventory_latency_keeps_healthy_entry_eligible(tmp_path):
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        original = broker.get_account
+        async def delayed():
+            clocks.advance(0.001)
+            broker.now = clocks.wall
+            return await original()
+        broker.get_account = delayed
+        try:
+            decision = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            print('decision', decision.action, decision.gates, decision.recorded_at_utc)
+            print('proof', store.latest_proof().recorded_at_utc, 'posts', len(broker.posts))
+>           assert decision.action == 'BUY' and len(broker.posts) == 1
+E           AssertionError: assert ('WAIT' == 'BUY'
+E             
+E             - BUY
+E             + WAIT)
+
+..\..\..\..\AppData\Local\Temp\m3-review-83d86309cc3d406092f0bb91d42e6696\test_m3_positive_inventory_latency.py:21: AssertionError
+=========================== short test summary info ===========================
+FAILED ::test_positive_inventory_latency_keeps_healthy_entry_eligible - Asser...
+1 failed in 2.80s

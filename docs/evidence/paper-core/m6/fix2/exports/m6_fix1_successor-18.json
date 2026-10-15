@@ -1,0 +1,10 @@
+{
+  "change": "quantity",
+  "phase": "send",
+  "claimed": false,
+  "decision_id": "fb507b96ea1ea081ebdc48dae784ff2598188be0296864f147795dda05b60d19",
+  "original_proof_id": "e296d3af13ca679beb86eb8681d07a0ca96734b37e8fd60e5782cda2acd5b759",
+  "current_proof_id": "e5909f62474523840e22c26474fc4d4e41f0b66f11ce77421237357a9d8bc5aa",
+  "ledger_before": "218aa9d5b39202e89777ffdd825d5b32efa343f5edd7cd9f1abf8ac4d70fa442",
+  "ledger_after": "36903b99dbb1bff8e58faf7197a0a97b1c7ca6051f83fd085478543c9b39524a"
+}

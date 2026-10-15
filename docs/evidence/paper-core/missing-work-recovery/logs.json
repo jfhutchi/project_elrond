@@ -1,0 +1,71 @@
+[
+  {
+    "stage": "reviewer-collection-setup",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-uo74lqsi\\result.txt",
+    "archive": "logs/reviewer-collection-setup.txt.gz",
+    "raw_bytes": 1061,
+    "raw_sha256": "425f0d3994ecd31515382c0553eb3e6374664bcdfab97d266cc3aa9f7ea84749",
+    "compressed_sha256": "08b4c4601439efeef58c81df23f3bb82acd638e6e7e6a167552dcb0ac72c90b0",
+    "result": "1 error in 1.75s",
+    "meaning": "Fixture import-path setup failure; no tests executed"
+  },
+  {
+    "stage": "reviewer-invariant-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-m0eqe6p2\\result.txt",
+    "archive": "logs/reviewer-invariant-red.txt.gz",
+    "raw_bytes": 6102,
+    "raw_sha256": "2012cfb702d84e6ba9ad1ce632475303a4ed7100b8c61358e2a71c64a397550e",
+    "compressed_sha256": "e23cd35b1a22141a9daec3b1df0066020e37c8e35ed38a0cf47f0492427510a5",
+    "result": "1 failed, 5 deselected in 3.89s",
+    "meaning": "Reviewed fa7a1fb5 production source;1/1 violates pending invariant"
+  },
+  {
+    "stage": "reviewer-bug-characterization",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-cu401oyw\\result.txt",
+    "archive": "logs/reviewer-bug-characterization.txt.gz",
+    "raw_bytes": 830,
+    "raw_sha256": "f2db960a4896b7408710bda5fdbf9b7d6e5c6ec364f0b3d04cf04738698812ba",
+    "compressed_sha256": "5ae464421b8f4072506f9f719afeccf9c970e2447b6d93a6435d5dfcf7b45567",
+    "result": "1 passed, 5 deselected in 3.40s",
+    "meaning": "Passing scratch assertions establish stale fees/selection bug, not repair success"
+  },
+  {
+    "stage": "missing-work-arrival-red",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-8lny99cy\\result.txt",
+    "archive": "logs/missing-work-arrival-red.txt.gz",
+    "raw_bytes": 5615,
+    "raw_sha256": "67bcf35a6ad4e292638c93f400cb82eaba470180afeca1d327334907e2a5f2b7",
+    "compressed_sha256": "972c341ed265ccd0b88fc6d057e09b8fae80a1d0aa388e14b4e275f3b2631201",
+    "result": "1 failed, 6 deselected in 3.28s",
+    "meaning": "Exact fa7a1fb5 production source plus preserved local RED test bytes;1/1 violates pending"
+  },
+  {
+    "stage": "focused-green",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-_8e6pa52\\result.txt",
+    "archive": "logs/focused-green.txt.gz",
+    "raw_bytes": 6212,
+    "raw_sha256": "2c436847b4249b51aaccf526853ddc6177d8bc2362b65aea3d6b90bea0aea122",
+    "compressed_sha256": "c388c24256f3bce5ebe47bf5f5b63f713c574e316e03793e4573a2a944884307",
+    "result": "7 passed in 10.88s",
+    "meaning": "Fixed production source before final EOL normalization/freeze;7 cutoff controls"
+  },
+  {
+    "stage": "final-frozen-missing-work-gate",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-6whswg2_\\result.txt",
+    "archive": "covering-gate.txt.gz",
+    "raw_bytes": 6591,
+    "raw_sha256": "842fb986ea22144922a67b725acef73b5cbde0016f10b838f5d8e3d736159ac6",
+    "compressed_sha256": "011bfae6790e5f9a6f7601c5da6bef6bf062869752f4c0fbba2c98ec0f28cae6",
+    "result": "10 passed in17.25s",
+    "source_pins_sha256": "e86de9cac1e76098abb37eae5a5b74229b89955e4ce113bc1ef5a85706fccd4c",
+    "command": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "-s",
+      "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+      "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+      "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing"
+    ]
+  }
+]

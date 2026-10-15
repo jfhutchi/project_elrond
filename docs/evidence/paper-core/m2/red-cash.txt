@@ -1,0 +1,17 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+__ test_independent_cash_activity_restores_entry_while_costs_remain_pending ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-7mv20_w6/pytest/test_independent_cash_activity0')
+
+    @pytest.mark.asyncio
+    async def test_independent_cash_activity_restores_entry_while_costs_remain_pending(tmp_path):
+        from decimal import Decimal
+
+>       from quantbot.paper_core.contracts import BrokerEvent, CashActivity
+E       ImportError: cannot import name 'CashActivity' from 'quantbot.paper_core.contracts' (C:\Users\leepa\.codex\worktrees\paper-core-m0\project_elrond\src\quantbot\paper_core\contracts.py)
+
+tests\fault\paper_core\test_outcomes_independent.py:87: ImportError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_outcomes_independent.py::test_independent_cash_activity_restores_entry_while_costs_remain_pending
+1 failed, 3 deselected in 1.85s

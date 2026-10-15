@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "release_id": "UNBOUND_PREPARED_RELEASE",
+  "evidence_lane": "BROKER_PAPER",
+  "recorded_at_utc": "2026-10-14T14:05:03Z",
+  "source_refs": [],
+  "capture_received_at": "2026-10-14T14:05:03Z",
+  "session_open": "2026-10-14T13:30:00Z",
+  "symbol": "XLE",
+  "feed": "alpaca",
+  "source_start": "2026-10-14T13:30:00Z",
+  "source_end": "2026-10-14T14:05:00Z",
+  "available_at": "2026-10-14T14:05:03Z",
+  "raw_data_digest": "3e02e8fdee46e470790c6417a0c01306849f5adbb9d72b56c2bc5cc7009930a8",
+  "price": "100",
+  "features": [
+    [
+      "return_5m",
+      0.0
+    ],
+    [
+      "return_15m",
+      0.0
+    ],
+    [
+      "return_30m",
+      0.0
+    ],
+    [
+      "realized_volatility_15m",
+      0.0
+    ],
+    [
+      "relative_strength_15m",
+      0.0
+    ],
+    [
+      "distance_sma_15m",
+      0.0
+    ],
+    [
+      "distance_sma_30m",
+      0.0
+    ],
+    [
+      "momentum_acceleration",
+      0.0
+    ],
+    [
+      "market_return_15m",
+      0.0
+    ],
+    [
+      "market_volatility_15m",
+      0.0
+    ]
+  ],
+  "feature_version": "five-minute-price-alpha-v1",
+  "dependencies": [
+    "SPY"
+  ],
+  "dependency_available_at": [
+    "2026-10-14T14:05:03Z"
+  ],
+  "sequence": 5973289,
+  "session_close": "2026-10-14T20:00:00Z"
+}

@@ -1,0 +1,122 @@
+{
+  "base": "6d796a62925145c35909225f34d9574264ce64ec",
+  "accepted_predecessor": "e7b1eae28c0e5e6e49173facda55ad9345e3a86a",
+  "evidence_lane": "SYNTHETIC_TEST",
+  "source_hashes": [
+    {
+      "path": "src/quantbot/paper_core/contracts.py",
+      "sha256": "1c1e6ce3e95a84e24cc9658e5f7b6e9c6051eb998b101cef073a242c894313d5"
+    },
+    {
+      "path": "src/quantbot/paper_core/features.py",
+      "sha256": "f3a9e02d07025594ee73b762d41fa36dfc1770dc06d8749cfabc5ba29f7a42e4"
+    },
+    {
+      "path": "src/quantbot/paper_core/guardian.py",
+      "sha256": "a1147de1ac30e8b384c7762002a401c65e7c22c8cc61613a6b20990b8a77260b"
+    },
+    {
+      "path": "src/quantbot/paper_core/health.py",
+      "sha256": "5101280b806b590eea8a68e1062946be2a15ed274d46eeba456b5ce39d68eaaa"
+    },
+    {
+      "path": "src/quantbot/paper_core/outcomes.py",
+      "sha256": "f4c947c232c3ee0e54720ad7ac2d6112f96809e141db15d1464cc5c500f72e8d"
+    },
+    {
+      "path": "src/quantbot/paper_core/send_guard.py",
+      "sha256": "43567db5bd90884b5cde7f9eb43776c11879d06fbd21cee104e1d2e821fe63ae"
+    },
+    {
+      "path": "src/quantbot/paper_core/simulation.py",
+      "sha256": "fe3a9e25e6d7edbf55a878dcef5c529543254b90fbcfb4cd49e184e5871a229a"
+    },
+    {
+      "path": "src/quantbot/paper_core/store.py",
+      "sha256": "dcab93452f86ff8c1764e66b4c2080a25cca7159200adc703be2cc21e1c49657"
+    },
+    {
+      "path": "src/quantbot/paper_core/time_evidence.py",
+      "sha256": "14be5c5425ff4410e003d8541bf78034912964bcb752487b0120a0008b36ff09"
+    },
+    {
+      "path": "src/quantbot/paper_core/trader.py",
+      "sha256": "24e9788f37457a946de865e68e16f0fc50d1bd72115e747cb1cf83b9b5161a31"
+    },
+    {
+      "path": "src/quantbot/storage/core_health_schema.py",
+      "sha256": "a46a5709c9b7ca83ec41c41f18383ec9add844d4725d0527ac5935c632a814e5"
+    },
+    {
+      "path": "src/quantbot/storage/database.py",
+      "sha256": "e6e571f171844bf25eedbeae66d8c57640be4d969baa0c53b532f29ae5d22d0c"
+    },
+    {
+      "path": "src/quantbot/storage/migrations/versions/0032_paper_core_health.py",
+      "sha256": "ee4b96ddfd59fcd03ab8956d3ec0b201dbe7d947d262194a65ac0a037527d74f"
+    },
+    {
+      "path": "src/quantbot/storage/schema.py",
+      "sha256": "3ea613f23716a279a6c554fa82531e4702c326030e4f473f0f12e017935a5630"
+    },
+    {
+      "path": "tests/fault/paper_core/test_health_authority.py",
+      "sha256": "64c75845c27d3f5d01ef06fcee8773f8f8f48aa46687fb008b0866bf71aaf767"
+    },
+    {
+      "path": "tests/fault/paper_core/test_m3_review_repairs.py",
+      "sha256": "75c261f8ba9643e66ba345022ff3d1125dcdd103e712e23bc8f2f6d9871ff2e2"
+    },
+    {
+      "path": "tests/fault/paper_core/test_timing.py",
+      "sha256": "ccd100326b44e441b87ce80f133eefe2811f366f20e62258fb173ecf6d969133"
+    },
+    {
+      "path": "tests/fault/paper_core/test_transient_recovery.py",
+      "sha256": "8013b0f21f2c842933aa7c3939b4e9bd5d06b1f511cf080a77bc1c72824902ba"
+    },
+    {
+      "path": "tests/fixtures/core_m3.py",
+      "sha256": "9b55835e627bfc2be3a955816d8bd5e4ca3f4213a36ced5a511bca8ef3a84378"
+    },
+    {
+      "path": "tests/fixtures/core_v31_m2.json",
+      "sha256": "b6f533c124dd16b6144d6c79991940541079d7e0870afcc7ab46e2bcdb46180d"
+    },
+    {
+      "path": "tests/integration/paper_core/test_scoped_progress.py",
+      "sha256": "ff5b534cfc861bb998f7bc9bdd0749d146edc1479a92c94bb8d0127a4894f991"
+    }
+  ],
+  "command": [
+    ".venv/Scripts/python.exe",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    "tests/integration/paper_core",
+    "tests/fault/paper_core",
+    "tests/integration/test_execution_coordinator.py",
+    "tests/integration/test_storage_parity.py",
+    "tests/unit/execution",
+    "tests/unit/test_storage.py",
+    "tests/unit/test_migration_authority.py",
+    "tests/unit/operations/test_observation.py",
+    "tests/unit/operations/test_position_protection_supervisor.py",
+    "tests/unit/operations/test_protection_runtime_wiring.py",
+    "tests/fault/test_stable_snapshot_recovery.py",
+    "tests/fault/test_deadline_presend_refusal.py",
+    "-s"
+  ],
+  "result": {
+    "passed": 424,
+    "skipped": 26,
+    "failed": 0,
+    "exit_code": 0,
+    "seconds": 200.31
+  },
+  "original_log": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-5ghn4h1t/result.txt",
+  "limits": [
+    "Synthetic authority only; no deployment/provider completeness or actual PostgreSQL execution.",
+    "Distinct-process-clock simulations remain one Python process; retained real M1/M2 subprocess evidence is separate.",
+    "Operational retry scheduling/jitter and M4 learning remain unwired.",
+    "Old v32 payloads retain IDs and protection derives the original provider bracket without rewriting plans."
+  ]
+}

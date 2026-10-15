@@ -1,0 +1,61 @@
+FF                                                                       [100%]
+================================== FAILURES ===================================
+_____ test_backward_wall_jump_recovery_uses_new_generation_not_utc_order ______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-i8bnmua2/pytest/test_backward_wall_jump_recove0')
+
+    @pytest.mark.asyncio
+    async def test_backward_wall_jump_recovery_uses_new_generation_not_utc_order(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            clocks.advance(10)
+            clocks.wall += timedelta(seconds=1)
+            wait = await trader_cycle(store, broker, fresh(observation, clocks), model, proof, now=clocks.wall)
+            assert wait.action == "WAIT" and not broker.posts
+            failed_at = clocks.wall
+            clocks.wall -= timedelta(seconds=1)
+            resumed = await trader_cycle(store, broker, fresh(observation, clocks, sequence=3), model, proof, now=clocks.wall)
+            assert clocks.wall < failed_at
+>           assert resumed.action == "BUY" and len(broker.posts) == 1
+E           AssertionError: assert ('WAIT' == 'BUY'
+E             
+E             - BUY
+E             + WAIT)
+
+tests\fault\paper_core\test_transient_recovery.py:81: AssertionError
+_ test_closed_lot_conflict_blocks_dependent_cash_but_independent_cash_allows_entry _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-i8bnmua2/pytest/test_closed_lot_conflict_block0')
+
+    @pytest.mark.asyncio
+    async def test_closed_lot_conflict_blocks_dependent_cash_but_independent_cash_allows_entry(tmp_path):
+        from quantbot.paper_core.trader import trader_cycle
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.outcomes import import_broker_events, process_outcomes
+        from quantbot.paper_core.contracts import CashActivity, BrokerEvent
+        from quantbot.storage import StorageRepository
+        from quantbot.research.manifest import content_id
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            first = await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            clocks.advance(1801)
+            await guardian_cycle(store, broker, now=broker.now)
+            import_broker_events(store, fee_events(store, broker))
+            assert process_outcomes(store, cutoff=broker.now).outcomes[0].status == "COMPLETE"
+            with db.transaction() as session:
+                StorageRepository(session).create_incident("synthetic-disputed-cost", severity="ERROR",
+                    kind="CORE_EVIDENCE_CONFLICT", message="disputed closed-lot fee source", occurred_at=broker.now,
+                    detail={"lot_ids": [first.id], "implicated_source_ids": [fee_events(store, broker)[0].id]})
+            refused = await trader_cycle(store, broker, fresh(observation, clocks), model, proof, now=clocks.wall)
+>           assert refused.action == "WAIT" and len(broker.posts) == 2
+E           AssertionError: assert ('BUY' == 'WAIT'
+E             
+E             - WAIT
+E             + BUY)
+
+tests\integration\paper_core\test_scoped_progress.py:148: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_transient_recovery.py::test_backward_wall_jump_recovery_uses_new_generation_not_utc_order
+FAILED tests/integration/paper_core/test_scoped_progress.py::test_closed_lot_conflict_blocks_dependent_cash_but_independent_cash_allows_entry
+2 failed in 2.93s

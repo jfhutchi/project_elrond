@@ -48,6 +48,7 @@ from quantbot.storage.database import decode_utc, encode_decimal, encode_utc
 from quantbot.storage.lot_ownership import link_protection_exit
 from quantbot.storage.schema import (
     incidents,
+    metadata,
     position_protection_action_evaluations,
     position_protection_actions,
     position_protection_cycles,
@@ -264,7 +265,7 @@ class PositionProtectionSupervisor:
 
         with self.database.transaction() as session:
             repository = StorageRepository(session)
-            local_snapshot = repository.get_latest_account_snapshot(account_id)
+            local_snapshot = repository.get_latest_account_snapshot(account_id, certified_only=True)
             snapshots = repository.list_account_snapshots(account_id=account_id)
             high_water = max(
                 (snapshot.account.equity for snapshot in snapshots),
@@ -451,6 +452,11 @@ class PositionProtectionSupervisor:
                     broker_positions,
                     captured_at=result.observed_at,
                 )
+                raw = metadata.tables["raw_account_snapshot_sources"]
+                if session.execute(select(raw.c.snapshot_id).where(
+                    raw.c.snapshot_id == broker_snapshot_id)).first() is None:
+                    session.execute(raw.insert().values(snapshot_id=broker_snapshot_id,
+                        source="POSITION_PROTECTION_RAW"))
             existing = session.execute(
                 select(position_protection_cycles.c.cycle_id).where(
                     position_protection_cycles.c.cycle_id == result.cycle_id

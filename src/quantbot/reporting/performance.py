@@ -55,6 +55,51 @@ class FillLedgerAnalysis(PerformanceModel):
     realized_movements: tuple[RealizedMovement, ...]
 
 
+class GrossCycle(PerformanceModel):
+    symbol: str
+    gross_pnl: Decimal
+    net_pnl: Decimal | None
+    costs: Decimal | None
+
+
+def analyze_gross_cycles(fills: tuple[Fill, ...]) -> tuple[GrossCycle, ...]:
+    """Quantity closure and actual gross remain facts while net costs are pending."""
+    if len({f.fill_id for f in fills}) != len(fills):
+        raise ReportingDataError("fill identifiers must be unique")
+    # symbol -> held quantity, weighted basis, cycle gross, proven costs or unknown
+    held: dict[str, tuple[Decimal, Decimal, Decimal, Decimal | None]] = {}
+    closed = []
+    for fill in sorted(fills, key=lambda f: (f.occurred_at, f.fill_id)):
+        quantity, basis, gross, costs = held.get(
+            fill.symbol, (Decimal(0), Decimal(0), Decimal(0), Decimal(0))
+        )
+        fee = fill.fee if fill.fee_source != "UNKNOWN" else None
+        costs = costs + fee if costs is not None and fee is not None else None
+        if fill.side is OrderSide.BUY:
+            basis = (quantity * basis + fill.quantity * fill.price) / (quantity + fill.quantity)
+            quantity += fill.quantity
+        else:
+            if fill.quantity > quantity:
+                raise ReportingDataError(
+                    f"sell fill exceeds the durable long position for {fill.symbol}"
+                )
+            gross += (fill.price - basis) * fill.quantity
+            quantity -= fill.quantity
+        if quantity == 0:
+            closed.append(
+                GrossCycle(
+                    symbol=fill.symbol,
+                    gross_pnl=gross,
+                    net_pnl=None if costs is None else gross - costs,
+                    costs=costs,
+                )
+            )
+            held.pop(fill.symbol, None)
+        else:
+            held[fill.symbol] = quantity, basis, gross, costs
+    return tuple(closed)
+
+
 class _OpenCycle:
     def __init__(self, fill: Fill) -> None:
         self.quantity = fill.quantity
@@ -62,7 +107,8 @@ class _OpenCycle:
         self.opened_at = fill.occurred_at
         self.entry_notional = fill.quantity * fill.price
         self.cycle_gross = Decimal("0")
-        self.cycle_costs = fill.fee
+        assert fill.fee is not None
+        self.cycle_costs: Decimal = fill.fee
 
 
 def analyze_fills(fills: tuple[Fill, ...]) -> FillLedgerAnalysis:
@@ -78,6 +124,8 @@ def analyze_fills(fills: tuple[Fill, ...]) -> FillLedgerAnalysis:
     trades: list[TradeOutcome] = []
 
     for fill in ordered:
+        if fill.fee is None or fill.fee_source == "UNKNOWN":
+            raise ReportingDataError("fee evidence unavailable; net performance cannot be reported")
         cycle = open_cycles.get(fill.symbol)
         if fill.side is OrderSide.BUY:
             movements.append(
@@ -89,9 +137,7 @@ def analyze_fills(fills: tuple[Fill, ...]) -> FillLedgerAnalysis:
             )
             if cycle is None:
                 open_cycles[fill.symbol] = _OpenCycle(fill)
-                entries.append(
-                    PositionTransition(symbol=fill.symbol, occurred_at=fill.occurred_at)
-                )
+                entries.append(PositionTransition(symbol=fill.symbol, occurred_at=fill.occurred_at))
                 continue
             total_notional = cycle.quantity * cycle.average_price + fill.quantity * fill.price
             cycle.quantity += fill.quantity

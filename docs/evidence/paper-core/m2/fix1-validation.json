@@ -1,0 +1,37 @@
+{
+  "base": "0d9510e71af068c420d1c85ae7ffa2535f5ae70a",
+  "ci": [
+    "uv run --frozen ruff check src tests",
+    "uv run --frozen mypy --platform linux src",
+    "uv run --frozen mypy --platform win32 src",
+    "uv run --frozen ruff check scripts/ci_checks.py scripts/local_ci.py scripts/ci_process.py",
+    "uv run --frozen mypy --platform linux scripts/ci_checks.py scripts/local_ci.py scripts/ci_process.py",
+    "uv run --frozen mypy --platform win32 scripts/ci_checks.py scripts/local_ci.py scripts/ci_process.py"
+  ],
+  "ci_result": "All six exit 0; 333 source files and 3 helper files per mypy platform.",
+  "command": ".venv/Scripts/python.exe .superpowers/sdd/2026-10-13-paper-core/check.py tests/integration/paper_core tests/fault/paper_core tests/integration/test_adaptive_paper_loop.py tests/integration/test_storage_parity.py tests/integration/test_execution_coordinator.py tests/unit/learner/test_lot_ownership.py tests/unit/learner/test_experiment_lot_reader.py tests/unit/learner/test_experiment_lots.py tests/unit/learner/test_trade_learning.py tests/unit/operations/test_observation.py tests/unit/test_dashboard.py tests/unit/reporting tests/unit/execution tests/unit/test_storage.py tests/unit/test_migration_authority.py -s",
+  "exit": 0,
+  "raw_log_path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-vcswcnri\\result.txt",
+  "raw_log_sha256": "ce270b48c96b5292bfb5e7ad68afa5cdef5a81cc39375f34e87097c8fdef83cb",
+  "result": "398 passed, 26 skipped in 192.03s",
+  "skips": "Disposable PostgreSQL parity infrastructure not configured; offline PostgreSQL SQL generation and populated SQLite prior-schema migration tests passed.",
+  "source_files_sha256": {
+    "scripts/dashboard.py": "957c9c2fcf910eba7c1a1cb7c34e70069e30e81ca34f9df115851660b433e47a",
+    "src/quantbot/execution/coordinator.py": "179937272d5b4c2f26410ad3fe24762323e86303b2a55f3cb2156f776ef54b03",
+    "src/quantbot/paper_core/outcomes.py": "d9cc4664afedc4fae74f78412dc38e1cbe51ec73ad368fc489085989f4c3852e",
+    "src/quantbot/paper_core/runtime.py": "d8027621adcda72fbfc811e827b6128270e5968ff1bed902af85b5068dda752f",
+    "src/quantbot/paper_core/send_guard.py": "f69901b312f609d9e69763857eafef2d82d9ed4d6041a1f14aa1301cbd17777a",
+    "src/quantbot/paper_core/store.py": "3427f33eb1c98f577cf71e6692541067bfb6b52927e805a49ca80daf6dc7f7f4",
+    "src/quantbot/paper_core/trader.py": "aa1150a783b77b104ba4af3aeb4a4666cf213f9ccdc862aea79297700de3a73d",
+    "src/quantbot/reporting/performance.py": "3e3352b53cb4b4fd927d2eba0d3f220a6c52d1ea84267f64744586c1280511ff",
+    "src/quantbot/reporting/status.py": "7dac6760ce7330631f42746ace0348806478e6194c1181fb38130adc93f65177",
+    "src/quantbot/storage/migrations/versions/0031_paper_core_costs.py": "d3e9258f86a3ba9ab32beb65256c2e4cfbca955160fa4ba59e5506e4040cc0bf",
+    "tests/fault/paper_core/test_final_send_authority.py": "a5261870a51a58c369939725e8bbf23dc98fb6f738c781040d3a16b5fb62f9fb",
+    "tests/fault/paper_core/test_review_repairs.py": "5c3c311466acfbf99f4c5a04fa531164861087cb39327912cb05d13c1ee820b7",
+    "tests/fixtures/core_unsent_recovery_worker.py": "663149d762011ee81ecb38d7cdb5fdfd5dafc969d5c353049468faeee4bb3e9f",
+    "tests/integration/test_adaptive_paper_loop.py": "67aac1db6ee17717a4052bd910a471b2098ab2d82754cb37af0558bc93ee9fd9",
+    "tests/unit/learner/test_lot_ownership.py": "5071e67cfdde14116d280904e69e36242c8b0412c0ccd6dc57da02828fb03e2e",
+    "tests/unit/reporting/test_pending_cost_status.py": "82c15280c0894feebf3347d39d0867300e6ff917fb7bb624e7b38627a47d34a8",
+    "tests/unit/test_dashboard.py": "7713d19a443e2e08bec981081eaf6f9948c9f366a47cd1b62ceb0ccec8df522a"
+  }
+}

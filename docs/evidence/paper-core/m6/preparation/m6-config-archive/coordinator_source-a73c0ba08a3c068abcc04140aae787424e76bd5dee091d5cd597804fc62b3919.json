@@ -1,0 +1,17 @@
+{
+  "root": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006",
+  "store": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db",
+  "manifest_path": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\project_elrond-trade-learning\\.superpowers\\sdd\\2026-10-06-adaptive-paper-coordinator\\prepared\\manifest.json",
+  "operations_database": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+  "declaration_database": "D:\\Elrond\\learner\\state\\learner.db",
+  "clock_receipt": "D:\\Elrond\\learner\\monitor\\receipt.json",
+  "code_commit": "b496109563656df820c80b993db9bda4e793f13c",
+  "manifest_hash": "5e03b7dc3cc6b5c7ad9345dfd1bc6202114e4c924520655ad82bdd9ef8245060",
+  "environment_file": "C:\\Users\\leepa\\.config\\quantbot\\quantbot.env",
+  "mode": "SHADOW",
+  "trading_enabled": false,
+  "maximum_workers": 2,
+  "research_sources": null,
+  "position_research_database": "D:\\Elrond\\position-research\\shadow.db",
+  "position_research_commit": "4ee6e5ff82355dfb2821f9f187406e661ae875ee"
+}

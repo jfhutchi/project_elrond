@@ -1,0 +1,1181 @@
+{
+  "captured_at_utc": "2026-10-14T01:37:12.529382+00:00",
+  "method": "SQLite mode=ro, query_only, bounded read transaction per store; no application imports or broker requests. Stores are separate snapshots, not an atomic cross-store view.",
+  "source_refs": {
+    "workspace": "9f5ece9e4df7f070947b4b315dbab8cadff8f104",
+    "main": "b812c64270f190b0518322abb08b9a17dfa3f1c0",
+    "pr287": "8bb84cf9e035771189d700247b99eec281888b94",
+    "pr288": "a6f9eb36c4bd632157fff166907c7bd50f70ef15"
+  },
+  "operations": {
+    "path": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+    "kill_switch": [
+      {
+        "engaged": 0,
+        "reason": "stop",
+        "updated_at": "2026-10-14T01:17:42.473747Z"
+      }
+    ],
+    "fill_count": 18,
+    "fees": [
+      {
+        "fee": "0",
+        "count": 18
+      }
+    ],
+    "recent_fills": [
+      {
+        "symbol": "XLF",
+        "side": "BUY",
+        "quantity": "0.045887",
+        "price": "54.168",
+        "occurred_at": "2026-10-08T18:15:47.811822Z",
+        "fee": "0"
+      },
+      {
+        "symbol": "XLF",
+        "side": "SELL",
+        "quantity": "0.045887",
+        "price": "54.212",
+        "occurred_at": "2026-10-08T18:45:05.817068Z",
+        "fee": "0"
+      },
+      {
+        "symbol": "XLF",
+        "side": "BUY",
+        "quantity": "0.045987",
+        "price": "54.348",
+        "occurred_at": "2026-10-09T14:06:14.920454Z",
+        "fee": "0"
+      },
+      {
+        "symbol": "XLF",
+        "side": "SELL",
+        "quantity": "0.045987",
+        "price": "54.382",
+        "occurred_at": "2026-10-09T14:35:02.442068Z",
+        "fee": "0"
+      },
+      {
+        "symbol": "XLI",
+        "side": "BUY",
+        "quantity": "0.014766",
+        "price": "169.404",
+        "occurred_at": "2026-10-09T15:16:36.201113Z",
+        "fee": "0"
+      },
+      {
+        "symbol": "XLI",
+        "side": "SELL",
+        "quantity": "0.014766",
+        "price": "169.116",
+        "occurred_at": "2026-10-09T15:45:08.190470Z",
+        "fee": "0"
+      }
+    ],
+    "recent_deployments": [
+      {
+        "role": "COORDINATOR",
+        "git_commit": "5c1db64f427c45f9ee99f8710568a1b82b59b3ef",
+        "observed_at": "2026-10-13T20:05:00Z",
+        "process_started_at": "2026-10-13T12:02:51.564064Z"
+      },
+      {
+        "role": "COORDINATOR",
+        "git_commit": "b496109563656df820c80b993db9bda4e793f13c",
+        "observed_at": "2026-10-13T19:31:41.602700Z",
+        "process_started_at": "2026-10-13T14:05:33.491348Z"
+      },
+      {
+        "role": "COORDINATOR",
+        "git_commit": "b496109563656df820c80b993db9bda4e793f13c",
+        "observed_at": "2026-10-13T18:51:17.140863Z",
+        "process_started_at": "2026-10-13T14:05:33.491348Z"
+      },
+      {
+        "role": "COORDINATOR",
+        "git_commit": "b496109563656df820c80b993db9bda4e793f13c",
+        "observed_at": "2026-10-13T18:46:19.911016Z",
+        "process_started_at": "2026-10-13T14:05:33.491348Z"
+      },
+      {
+        "role": "COORDINATOR",
+        "git_commit": "b496109563656df820c80b993db9bda4e793f13c",
+        "observed_at": "2026-10-13T18:41:18.118335Z",
+        "process_started_at": "2026-10-13T14:05:33.491348Z"
+      }
+    ],
+    "last_protection": [
+      {
+        "outcome": "HEALTHY",
+        "observed_at": "2026-10-13T19:45:24.423623Z",
+        "completed_at": "2026-10-13T19:45:24.423623Z",
+        "unprotected_count": 0
+      }
+    ],
+    "recent_reconciliations": [
+      {
+        "reconciliation_id": "run-20261013T200500Z:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T20:05:00Z",
+        "completed_at": "2026-10-13T20:05:00.644008Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "daily-close-e7a5f971-a7bf-45c2-a626-ab21a49f3b12",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T20:01:37.852307Z",
+        "completed_at": "2026-10-13T20:01:38.560510Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-3dad109807556f71f2da96770a8dbd1cce8dffb56a0829c78650aaabb1c88e93:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T19:31:41.602700Z",
+        "completed_at": "2026-10-13T19:31:43.518256Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [
+          "ACCOUNT_CHANGED_DURING_CAPTURE"
+        ],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-1655ab7ba64ea12746018c86ff4a23167039ad573b67efcee22b247d5b7c014b:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:51:17.140863Z",
+        "completed_at": "2026-10-13T18:51:18.503377Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-642cab6a56ddb69ea72a4842bfda2679b506681de5c940df4a2ce3cb1b06d1d4:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:46:19.911016Z",
+        "completed_at": "2026-10-13T18:46:21.167005Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-3e3a728d43cd3db2646d6c5af66ffd2d0b705617cdcf8f4a6ae7d3e143764a04:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:41:18.118335Z",
+        "completed_at": "2026-10-13T18:41:19.504161Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-5fdd4e3f189c6b18db6f7c30d20e408bcf05305117cea9d9548c814d59d816fe:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:36:20.176092Z",
+        "completed_at": "2026-10-13T18:36:21.541463Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-18df5e8f6fbfdee3991a2b228acb4e74c18d76d4ccc4e0df58e12a4313bc74ef:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:31:16.828240Z",
+        "completed_at": "2026-10-13T18:31:18.750651Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-5787c1dba95f3d388ecc96cd8760718b7c9cd144f24341bf63d24587806736a9:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:26:20.180190Z",
+        "completed_at": "2026-10-13T18:26:21.485234Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-52d5e65caa2f6070996bb19634a0403de65b83b9bd581b31a79acf9eda32b434:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:21:19.256021Z",
+        "completed_at": "2026-10-13T18:21:20.884812Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-2d88ceb0d50b34fca8372228207b4afd6517ada9409da6471aa0636b99c7f6fa:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:16:19.378429Z",
+        "completed_at": "2026-10-13T18:16:20.723447Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-e2fcffbb196085e4cf8a12788a262e7bc0b5c5aafcaf35b7fc1d54d856a73334:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:11:15.792691Z",
+        "completed_at": "2026-10-13T18:11:17.029247Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-1ab06f1345725ab264b3b93c2e6951dc1288383297bc7c9af8e0503424d18ea5:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:06:23.164443Z",
+        "completed_at": "2026-10-13T18:06:24.411345Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-1776f72ab420b893107f15bcc7e296c75cd7138fd61a9321cf5fd61d1c1b3b9a:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T18:01:19.218812Z",
+        "completed_at": "2026-10-13T18:01:21.073260Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-8f6a9b76b38d85d9af8354628c7f45fa257bfbd9fc57f0cc4a1226135c1ac98b:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:56:18.645418Z",
+        "completed_at": "2026-10-13T17:56:20.353785Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-a32e8209e6662952e769483bc1ad7f601e68f6796c61934c2439e423b977df7e:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:51:16.090894Z",
+        "completed_at": "2026-10-13T17:51:17.435072Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-9bc2748287a0b4672b1d82fadfa77419afb3ffca1f221af3e856fa0498cb39e1:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:46:19.819001Z",
+        "completed_at": "2026-10-13T17:46:21.244833Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-1f7a0666f2056a9e5c023117f1e19a389bdfd281b71b0184a93f86d04dba0336:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:41:18.306691Z",
+        "completed_at": "2026-10-13T17:41:19.650545Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-f40e67b6bf965b9d834a4481498b9fde5fe370f7c6c60bf2eeae0d41895d169b:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:36:19.153164Z",
+        "completed_at": "2026-10-13T17:36:20.466508Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-a9ceeecc4e7dd86ca6eb1d849eb6e43d1967b895e9c1fb4b475b173ce4ce6e3a:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:31:21.471765Z",
+        "completed_at": "2026-10-13T17:31:23.068911Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-82bd11bd77c625e6f55b290d9ab04fd61ee98920bcc31c884ea31f9c11d6f6c5:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:26:20.412356Z",
+        "completed_at": "2026-10-13T17:26:21.966312Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-20149ba67bbaed173cb34d601fa4598e5d899b03e98c6d157370565653a2fc9e:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:21:20.166906Z",
+        "completed_at": "2026-10-13T17:21:21.996936Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-f5eb401247a50adee672c02bdc90533179df4a8fae930a2559219a3c972bfcc4:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:16:22.966887Z",
+        "completed_at": "2026-10-13T17:16:24.586878Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-21991a41ad42d030a3e2b4996ebbed25086f2c600ef6207bf5e5390004084370:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:11:17.123515Z",
+        "completed_at": "2026-10-13T17:11:18.625548Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-40d5b5991e9a193697a9d5fb999903d870dd488e2da54bb97b53526505b7d4d9:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:06:19.558864Z",
+        "completed_at": "2026-10-13T17:06:20.830544Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-1b2db55bdb9e2171657cb933de6841f38376d880e5ad3d7e4a03cff967355d28:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T17:01:21.280533Z",
+        "completed_at": "2026-10-13T17:01:22.923554Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-8c4466a6115968b4c656e30d6edf47f3472ab18920d0adbc94b67804036ba4d4:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T16:56:18.208111Z",
+        "completed_at": "2026-10-13T16:56:19.381071Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-eab90cd443660ce6fa24fe7b663ab8c83d4f124d637d23ffbb613fbabd8f68b4:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T16:51:13.582844Z",
+        "completed_at": "2026-10-13T16:51:15.389832Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-8cf6a12ade9cab3833df347de5de3234c8f3e0cb4e4f905865a9cb439a0c9882:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T16:46:18.542185Z",
+        "completed_at": "2026-10-13T16:46:19.895916Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      },
+      {
+        "reconciliation_id": "exploration-50b09c39230a64c1406076fe984b3a3ca6c3ba90c777ba95b2bb88146dee35a4:reconciliation",
+        "status": "RECONCILED",
+        "started_at": "2026-10-13T16:41:13.536782Z",
+        "completed_at": "2026-10-13T16:41:14.845313Z",
+        "diff_count": 0,
+        "allows_new_orders": true,
+        "capture_reasons": [],
+        "capture_statuses": [
+          "ACQUIRED",
+          "ACQUIRED"
+        ]
+      }
+    ]
+  },
+  "experiment": {
+    "path": "C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db",
+    "kinds": [
+      {
+        "kind": "ActivationPackage",
+        "count": 1,
+        "first": "2026-10-06T06:20:29.141688+00:00",
+        "last": "2026-10-06T06:20:29.141688+00:00"
+      },
+      {
+        "kind": "CandidateArtifact",
+        "count": 2,
+        "first": "2026-10-06T06:19:32.923047+00:00",
+        "last": "2026-10-06T06:20:29.048212+00:00"
+      },
+      {
+        "kind": "DeadlineBrokerClockEvidence",
+        "count": 3,
+        "first": "2026-10-09T12:54:53.240246+00:00",
+        "last": "2026-10-09T15:45:32.473745+00:00"
+      },
+      {
+        "kind": "DecisionRecord",
+        "count": 4308,
+        "first": "2026-10-06T14:06:47.845040+00:00",
+        "last": "2026-10-13T19:30:34.196756+00:00"
+      },
+      {
+        "kind": "EvaluationCalendarEvidence",
+        "count": 20040,
+        "first": "2026-10-06T06:18:36.634319+00:00",
+        "last": "2026-10-14T01:34:48.692892+00:00"
+      },
+      {
+        "kind": "ExecutionReceipt",
+        "count": 3,
+        "first": "2026-10-08T18:15:48.401156+00:00",
+        "last": "2026-10-09T15:16:37.515065+00:00"
+      },
+      {
+        "kind": "ExperimentManifest",
+        "count": 1,
+        "first": "2026-10-06T06:15:55.985876+00:00",
+        "last": "2026-10-06T06:15:55.985876+00:00"
+      },
+      {
+        "kind": "ExperimentState",
+        "count": 7,
+        "first": "2026-10-06T06:18:36.736657+00:00",
+        "last": "2026-10-06T06:20:29.048212+00:00"
+      },
+      {
+        "kind": "ExplorationCommission",
+        "count": 7,
+        "first": "2026-10-08T15:21:40.494395+00:00",
+        "last": "2026-10-09T19:43:59.605219+00:00"
+      },
+      {
+        "kind": "ExplorationCycleReceipt",
+        "count": 162,
+        "first": "2026-10-08T15:37:02.359467+00:00",
+        "last": "2026-10-13T19:31:43.523258+00:00"
+      },
+      {
+        "kind": "ExplorationEntryRefusal",
+        "count": 15,
+        "first": "2026-10-08T17:22:00.256027+00:00",
+        "last": "2026-10-13T14:12:32.835320+00:00"
+      },
+      {
+        "kind": "ExplorationFeedback",
+        "count": 3,
+        "first": "2026-10-09T12:54:53.240246+00:00",
+        "last": "2026-10-09T15:45:32.473745+00:00"
+      },
+      {
+        "kind": "ExplorationObservation",
+        "count": 4,
+        "first": "2026-10-08T18:15:13.912917+00:00",
+        "last": "2026-10-09T15:50:30.172431+00:00"
+      },
+      {
+        "kind": "ExplorationPolicy",
+        "count": 7,
+        "first": "2026-10-08T15:21:39.968146+00:00",
+        "last": "2026-10-09T19:43:59.577338+00:00"
+      },
+      {
+        "kind": "FitReceipt",
+        "count": 2,
+        "first": "2026-10-06T06:19:32.923047+00:00",
+        "last": "2026-10-06T06:20:29.048212+00:00"
+      },
+      {
+        "kind": "FitRequest",
+        "count": 2,
+        "first": "2026-10-06T06:15:55.985876+00:00",
+        "last": "2026-10-06T06:15:55.985876+00:00"
+      },
+      {
+        "kind": "FitStart",
+        "count": 2,
+        "first": "2026-10-06T06:18:36.736657+00:00",
+        "last": "2026-10-06T06:19:32.996413+00:00"
+      },
+      {
+        "kind": "LotEvent",
+        "count": 482,
+        "first": "2026-10-08T18:15:45.619840+00:00",
+        "last": "2026-10-09T15:51:54.124981+00:00"
+      },
+      {
+        "kind": "LotOutcomeRevision",
+        "count": 25,
+        "first": "2026-10-09T12:54:53.240246+00:00",
+        "last": "2026-10-09T15:45:32.473745+00:00"
+      },
+      {
+        "kind": "NewsEvidence",
+        "count": 804,
+        "first": "2026-10-06T14:06:47.845040+00:00",
+        "last": "2026-10-13T19:25:30.910428+00:00"
+      },
+      {
+        "kind": "ObservationBatch",
+        "count": 2199,
+        "first": "2026-10-06T09:11:26.737236+00:00",
+        "last": "2026-10-14T01:34:48.718847+00:00"
+      },
+      {
+        "kind": "PendingLabelRecovery",
+        "count": 3847,
+        "first": "2026-10-07T04:01:57.904511+00:00",
+        "last": "2026-10-14T01:34:44.355931+00:00"
+      },
+      {
+        "kind": "PreSendRejection",
+        "count": 1,
+        "first": "2026-10-09T16:06:08.955157+00:00",
+        "last": "2026-10-09T16:06:08.955157+00:00"
+      },
+      {
+        "kind": "ResolvedMarketLabel",
+        "count": 1797,
+        "first": "2026-10-06T14:36:24.566948+00:00",
+        "last": "2026-10-13T20:00:32.919822+00:00"
+      },
+      {
+        "kind": "ThesisRecord",
+        "count": 1608,
+        "first": "2026-10-06T14:06:47.845040+00:00",
+        "last": "2026-10-13T19:25:30.910428+00:00"
+      },
+      {
+        "kind": "TickReceipt",
+        "count": 2195,
+        "first": "2026-10-06T09:11:26.761343+00:00",
+        "last": "2026-10-14T01:34:48.806320+00:00"
+      }
+    ],
+    "state": [
+      {
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "manifest_hash": "5e03b7dc3cc6b5c7ad9345dfd1bc6202114e4c924520655ad82bdd9ef8245060",
+        "state": "CANDIDATE_SHADOW",
+        "revision": 7,
+        "reason": "FRESH_SHADOW_EVALUATION_NOT_ACTIVATION",
+        "changed_at": "2026-10-06T06:20:29.048212Z",
+        "prospective_start_at": "2026-10-06T13:30:00Z",
+        "consent_recorded": false,
+        "activation_id": null
+      }
+    ],
+    "outbox_states": [
+      {
+        "state": "ACKNOWLEDGED",
+        "count": 4
+      }
+    ],
+    "ExplorationFeedback": [
+      {
+        "actual_fees": "0",
+        "actual_net_return": "-0.001700077920238010908833321527",
+        "baseline_executed_return_differences": {
+          "b39cdfac775b687a59e90fedc0edcebbdaac7c9fdef87ed292c1c3cf3116d6ea": "-0.002002267669572556078833321527",
+          "bab809b1f013bac6e15e42378d144808e84f6a0671441984ed992aa2213f3bf4": "-0.000677877824521692808833321527"
+        },
+        "comparison_scope": "EXECUTED_EXIT_NOT_FIXED_TARGET",
+        "executed_gross_return": "-0.001700077920238010908833321527",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "grants_execution": false,
+        "hypothesis": "ADVERSE_EXECUTED_PRICE_MOVE",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "net_pnl": "-0.004252608",
+        "observation_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "policy_id": "ddceb89b5363eb250288ccc4ea561a0854fd10a2a2eb121dc911a1848d475ef5",
+        "predictor_fit": false,
+        "recorded_at": "2026-10-09T15:45:32.473745Z",
+        "result": "LOSS",
+        "source_state_hash": "c3976ab983b38df7886659e2533a24e814ea8b01e56479bafee9bbdd42f6e800",
+        "synthetic": false
+      },
+      {
+        "actual_fees": "0",
+        "actual_net_return": "0.0006255979980864061235004047987",
+        "baseline_executed_return_differences": {
+          "b39cdfac775b687a59e90fedc0edcebbdaac7c9fdef87ed292c1c3cf3116d6ea": "0.002889631256792797823500404799",
+          "bab809b1f013bac6e15e42378d144808e84f6a0671441984ed992aa2213f3bf4": "0.001647798093802724223500404799"
+        },
+        "comparison_scope": "EXECUTED_EXIT_NOT_FIXED_TARGET",
+        "executed_gross_return": "0.0006255979980864061235004047987",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "grants_execution": false,
+        "hypothesis": "NET_GAIN_OBSERVED_NOT_PROOF_OF_EDGE",
+        "lot_id": "80af8dba7365958187bcb6bbca2b920d4e240cde176e2701cdc0ab6782d6a3e3",
+        "net_pnl": "0.001563558",
+        "observation_id": "3fc9edd94e5ba5e6a4b3a9586515582f5b06f63df6fb0a236855d785323ca01a",
+        "policy_id": "ddceb89b5363eb250288ccc4ea561a0854fd10a2a2eb121dc911a1848d475ef5",
+        "predictor_fit": false,
+        "recorded_at": "2026-10-09T14:35:30.936641Z",
+        "result": "WIN",
+        "source_state_hash": "6365b9ad38a3d6eca15d5bc7a014e69b8c11ce1881629d8863df5edb49e92daa",
+        "synthetic": false
+      },
+      {
+        "actual_fees": "0",
+        "actual_net_return": "0.0008122876975335991729434352385",
+        "baseline_executed_return_differences": {
+          "b39cdfac775b687a59e90fedc0edcebbdaac7c9fdef87ed292c1c3cf3116d6ea": "0.0009030177079420872829434352385",
+          "bab809b1f013bac6e15e42378d144808e84f6a0671441984ed992aa2213f3bf4": "0.001834487793249917272943435238"
+        },
+        "comparison_scope": "EXECUTED_EXIT_NOT_FIXED_TARGET",
+        "executed_gross_return": "0.0008122876975335991729434352385",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "grants_execution": false,
+        "hypothesis": "NET_GAIN_OBSERVED_NOT_PROOF_OF_EDGE",
+        "lot_id": "2bfc62143b1a4f841b287e45ec555746dd3761ecd4005cd5f8b3f4fd5bc7ac62",
+        "net_pnl": "0.002019028",
+        "observation_id": "6c816d69d5195c111ce3432dba7c25c75af9761a8c868f93da92536c40fd3677",
+        "policy_id": "be7842105b10aac6c917c7f73506ca8870678ef0a6d961500e5fb94914043400",
+        "predictor_fit": false,
+        "recorded_at": "2026-10-09T12:54:53.240246Z",
+        "result": "WIN",
+        "source_state_hash": "a51128129963159b0972b03385daea7788be7aea1d636ec7b966d1a4b8041aee",
+        "synthetic": false
+      }
+    ],
+    "ExplorationCycleReceipt": [
+      {
+        "commission_id": "8b43aaf8913e3c5d095317236e8ab8972f5f204c2755b7f8a77576e14c7c81b1",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "policy_id": "01b1343442993259f63392f321264329101fa25de6bcfc3f6407e509be6a9591",
+        "recorded_at": "2026-10-13T19:31:43.523258Z",
+        "result": {
+          "finished_at": "2026-10-13T19:31:43.523258Z",
+          "orders_submitted": 0,
+          "reasons": [
+            "KILL_SWITCH_ENGAGED"
+          ],
+          "run_id": "exploration-3dad109807556f71f2da96770a8dbd1cce8dffb56a0829c78650aaabb1c88e93",
+          "signals_evaluated": 0,
+          "started_at": "2026-10-13T19:31:41.602700Z",
+          "status": "HALTED"
+        },
+        "synthetic": false,
+        "tick_id": "3dad109807556f71f2da96770a8dbd1cce8dffb56a0829c78650aaabb1c88e93"
+      },
+      {
+        "commission_id": "8b43aaf8913e3c5d095317236e8ab8972f5f204c2755b7f8a77576e14c7c81b1",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "policy_id": "01b1343442993259f63392f321264329101fa25de6bcfc3f6407e509be6a9591",
+        "recorded_at": "2026-10-13T18:51:18.503377Z",
+        "result": {
+          "finished_at": "2026-10-13T18:51:18.503377Z",
+          "orders_submitted": 0,
+          "reasons": [
+            "KILL_SWITCH_ENGAGED"
+          ],
+          "run_id": "exploration-1655ab7ba64ea12746018c86ff4a23167039ad573b67efcee22b247d5b7c014b",
+          "signals_evaluated": 0,
+          "started_at": "2026-10-13T18:51:17.140863Z",
+          "status": "HALTED"
+        },
+        "synthetic": false,
+        "tick_id": "1655ab7ba64ea12746018c86ff4a23167039ad573b67efcee22b247d5b7c014b"
+      },
+      {
+        "commission_id": "8b43aaf8913e3c5d095317236e8ab8972f5f204c2755b7f8a77576e14c7c81b1",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "policy_id": "01b1343442993259f63392f321264329101fa25de6bcfc3f6407e509be6a9591",
+        "recorded_at": "2026-10-13T18:46:21.172523Z",
+        "result": {
+          "finished_at": "2026-10-13T18:46:21.172523Z",
+          "orders_submitted": 0,
+          "reasons": [
+            "KILL_SWITCH_ENGAGED"
+          ],
+          "run_id": "exploration-642cab6a56ddb69ea72a4842bfda2679b506681de5c940df4a2ce3cb1b06d1d4",
+          "signals_evaluated": 0,
+          "started_at": "2026-10-13T18:46:19.911016Z",
+          "status": "HALTED"
+        },
+        "synthetic": false,
+        "tick_id": "642cab6a56ddb69ea72a4842bfda2679b506681de5c940df4a2ce3cb1b06d1d4"
+      }
+    ],
+    "ExplorationEntryRefusal": [
+      {
+        "binding_hash": "12f05a248a7e5adabf86bbe8cd29a71f9ee6adc9ddcb28af7507f682b3d61a15",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "grants_execution": false,
+        "policy_id": "01b1343442993259f63392f321264329101fa25de6bcfc3f6407e509be6a9591",
+        "reasons": [
+          "DEADLINE_SUPERVISOR_UNHEALTHY"
+        ],
+        "recorded_at": "2026-10-13T14:12:32.835320Z",
+        "run_id": "exploration-4d5b1990df1b74ec112494de7612546ee3de8bfbcac58061dd8ca2f92a140ce2",
+        "synthetic": false
+      },
+      {
+        "binding_hash": "12f05a248a7e5adabf86bbe8cd29a71f9ee6adc9ddcb28af7507f682b3d61a15",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "grants_execution": false,
+        "policy_id": "01b1343442993259f63392f321264329101fa25de6bcfc3f6407e509be6a9591",
+        "reasons": [
+          "DEADLINE_SUPERVISOR_UNHEALTHY"
+        ],
+        "recorded_at": "2026-10-13T14:07:22.062191Z",
+        "run_id": "exploration-e7a42d099a128e668b667f1b1c2d2895cfc6195602f4c7598e82d679c535248a",
+        "synthetic": false
+      },
+      {
+        "binding_hash": "8f63b39e84e429b31f4ee511e1e76ecf7f4bc7d218b421e96e7b5596a6f5aa97",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "grants_execution": false,
+        "policy_id": "ddceb89b5363eb250288ccc4ea561a0854fd10a2a2eb121dc911a1848d475ef5",
+        "reasons": [
+          "FRESH_POST_EPISODE_COHORT_REQUIRED"
+        ],
+        "recorded_at": "2026-10-09T15:46:49.794524Z",
+        "run_id": "exploration-b947c2361867df29e8f0f246abced3f00774f4c40af81ca96515442e1920623f",
+        "synthetic": false
+      }
+    ],
+    "ExecutionReceipt": [
+      {
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "intent_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+        "recorded_at": "2026-10-09T15:16:37.515065Z",
+        "request_hash": "43c76e9fd26b467e76e16e3227fe451ae5017541a4b2fd4ab34450672aee2843",
+        "result": {
+          "broker_order": {
+            "broker_order_id": "1d08c75c-4dba-497c-9357-a0169eedafb2",
+            "client_order_id": "qb-79f37b6d041601048c441ef756dfd10c019c596f",
+            "filled_average_price": null,
+            "filled_quantity": "0",
+            "order_type": "MARKET",
+            "quantity": "0.014766",
+            "side": "BUY",
+            "status": "pending_new",
+            "submitted_at": "2026-10-09T15:16:36.197968Z",
+            "symbol": "XLI",
+            "time_in_force": "DAY"
+          },
+          "intent": {
+            "client_order_id": "qb-79f37b6d041601048c441ef756dfd10c019c596f",
+            "created_at": "2026-10-09T15:16:29.733663Z",
+            "extended_hours": false,
+            "intent_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+            "limit_price": null,
+            "order_type": "MARKET",
+            "quantity": "0.014766",
+            "side": "BUY",
+            "signal_date": "2026-10-09",
+            "state": "BROKER_ACCEPTED",
+            "stop_price": null,
+            "strategy_id": "learner-8f63b39e84e429b31f4ee511e1e76ecf7f4bc7d218b421e96e7b5596a6f5aa97",
+            "symbol": "XLI",
+            "time_in_force": "DAY"
+          },
+          "not_found_retries": 0,
+          "recovered_after_ambiguity": false
+        }
+      },
+      {
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "intent_id": "learner-entry-97a4b5d2bb4da74bb548fd8ee48b15e9010cdde51313e0de1f2be0e18ed108e2",
+        "recorded_at": "2026-10-09T14:06:16.130362Z",
+        "request_hash": "7d6f4497b0737ff9acd9c30a4e772fd6b968f02c037505a239849dfc73cb8242",
+        "result": {
+          "broker_order": {
+            "broker_order_id": "bf6af46f-fc55-4f4c-a2d9-dfe286195ced",
+            "client_order_id": "qb-97a4b5d2bb4da74bb548fd8ee48b15e9010cdde5",
+            "filled_average_price": null,
+            "filled_quantity": "0",
+            "order_type": "MARKET",
+            "quantity": "0.045987",
+            "side": "BUY",
+            "status": "pending_new",
+            "submitted_at": "2026-10-09T14:06:14.916999Z",
+            "symbol": "XLF",
+            "time_in_force": "DAY"
+          },
+          "intent": {
+            "client_order_id": "qb-97a4b5d2bb4da74bb548fd8ee48b15e9010cdde5",
+            "created_at": "2026-10-09T14:06:08.997315Z",
+            "extended_hours": false,
+            "intent_id": "learner-entry-97a4b5d2bb4da74bb548fd8ee48b15e9010cdde51313e0de1f2be0e18ed108e2",
+            "limit_price": null,
+            "order_type": "MARKET",
+            "quantity": "0.045987",
+            "side": "BUY",
+            "signal_date": "2026-10-09",
+            "state": "BROKER_ACCEPTED",
+            "stop_price": null,
+            "strategy_id": "learner-8f63b39e84e429b31f4ee511e1e76ecf7f4bc7d218b421e96e7b5596a6f5aa97",
+            "symbol": "XLF",
+            "time_in_force": "DAY"
+          },
+          "not_found_retries": 0,
+          "recovered_after_ambiguity": false
+        }
+      },
+      {
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "intent_id": "learner-entry-5ce271621e4f277020fbc93931ace0ca29d4083129d5d488d885cb62e0d30004",
+        "recorded_at": "2026-10-08T18:15:48.401156Z",
+        "request_hash": "b4786474e466d46aa4e3f61d55f4609cf10a7c1a1ae8b591588e6454b0cb364e",
+        "result": {
+          "broker_order": {
+            "broker_order_id": "88f137c4-ab05-44ce-9338-1971257f5df2",
+            "client_order_id": "qb-5ce271621e4f277020fbc93931ace0ca29d40831",
+            "filled_average_price": null,
+            "filled_quantity": "0",
+            "order_type": "MARKET",
+            "quantity": "0.045887",
+            "side": "BUY",
+            "status": "pending_new",
+            "submitted_at": "2026-10-08T18:15:47.807581Z",
+            "symbol": "XLF",
+            "time_in_force": "DAY"
+          },
+          "intent": {
+            "client_order_id": "qb-5ce271621e4f277020fbc93931ace0ca29d40831",
+            "created_at": "2026-10-08T18:15:41.917205Z",
+            "extended_hours": false,
+            "intent_id": "learner-entry-5ce271621e4f277020fbc93931ace0ca29d4083129d5d488d885cb62e0d30004",
+            "limit_price": null,
+            "order_type": "MARKET",
+            "quantity": "0.045887",
+            "side": "BUY",
+            "signal_date": "2026-10-08",
+            "state": "BROKER_ACCEPTED",
+            "stop_price": null,
+            "strategy_id": "learner-f422d5e5ece9783cc48305a085c34bc79100e877903b2f97407c0bd2c00d9933",
+            "symbol": "XLF",
+            "time_in_force": "DAY"
+          },
+          "not_found_retries": 0,
+          "recovered_after_ambiguity": false
+        }
+      }
+    ],
+    "example_lot": [
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": null,
+        "fill_id": null,
+        "kind": "ENTRY_DECLARED",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:16:33.929676Z",
+        "order_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+        "owner": null,
+        "position_before_entry": "0",
+        "price": null,
+        "quantity": "0",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:16:33.929676Z",
+        "side": null,
+        "source_hash": "68d04fad289d4cdfaa13d9f2a811435394c028e7b3e85e85f257cb7bdc65a91b",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": false
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": null,
+        "fill_id": null,
+        "kind": "ORDER_LINK",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:16:33.929676Z",
+        "order_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+        "owner": "ENTRY",
+        "position_before_entry": null,
+        "price": null,
+        "quantity": "0.014766",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:16:33.929676Z",
+        "side": "BUY",
+        "source_hash": "4c393b7bb2babfa47390403c28fd78db80f51b5185be3c43dae57e3093b4984f",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": false
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": "0",
+        "fill_id": "20261009111636201::feb69188-9b52-4448-b95f-495f0d015c88",
+        "kind": "FILL",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:16:36.201113Z",
+        "order_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+        "owner": "ENTRY",
+        "position_before_entry": null,
+        "price": "169.404",
+        "quantity": "0.014766",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:18:45.598546Z",
+        "side": "BUY",
+        "source_hash": "01edddfcaaee5307938d48a1ba234e7a1b3209e6671541812ab89720219ed664",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": false
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": null,
+        "fill_id": null,
+        "kind": "ORDER_TERMINAL",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:18:45.598546Z",
+        "order_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+        "owner": null,
+        "position_before_entry": null,
+        "price": null,
+        "quantity": "0.014766",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:18:45.598546Z",
+        "side": null,
+        "source_hash": "1c64b6fe8aa03c0cbdb7ecb1acddb0e2baf92027091f9093befac265d3998957",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": true
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": null,
+        "fill_id": null,
+        "kind": "PROTECTION_BOUND",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:16:42.025726Z",
+        "order_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+        "owner": null,
+        "position_before_entry": null,
+        "price": null,
+        "quantity": "0.014766",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:18:45.598546Z",
+        "side": null,
+        "source_hash": "8a158c6cd4b39eaee0c1c33b89d962c3c50cde0ad82522e9f52a36ac8d15ed36",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": false
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": null,
+        "fill_id": null,
+        "kind": "ORDER_LINK",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:45:09.092836Z",
+        "order_id": "deadline-exit-534be8fba5c7adf78755617771caea14f896ed769fe573ea131393d01bfa1991",
+        "owner": "DEADLINE",
+        "position_before_entry": null,
+        "price": null,
+        "quantity": "0.014766",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:45:32.473745Z",
+        "side": "SELL",
+        "source_hash": "fb71fbac7482e0ff103ee2dd245229e851665f267ab25d10c59f31387ff999e5",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": false
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": "0",
+        "fill_id": "20261009114508190::e50c7828-dc53-442b-b89c-ac772fb5d2bd",
+        "kind": "FILL",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:45:08.190470Z",
+        "order_id": "deadline-exit-534be8fba5c7adf78755617771caea14f896ed769fe573ea131393d01bfa1991",
+        "owner": "DEADLINE",
+        "position_before_entry": null,
+        "price": "169.116",
+        "quantity": "0.014766",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:45:32.473745Z",
+        "side": "SELL",
+        "source_hash": "fad1210156a6b2d848ae8540f050fa12068ea6d77d85e7bce8b8651decb8d415",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": false
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": null,
+        "fill_id": null,
+        "kind": "ORDER_TERMINAL",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:45:32.473745Z",
+        "order_id": "deadline-exit-534be8fba5c7adf78755617771caea14f896ed769fe573ea131393d01bfa1991",
+        "owner": null,
+        "position_before_entry": null,
+        "price": null,
+        "quantity": "0.014766",
+        "reconciled": false,
+        "recorded_at": "2026-10-09T15:45:32.473745Z",
+        "side": null,
+        "source_hash": "508feacda1a81e19d45ee73b48bfda2618acdb86a86e653b8a79d665899efb99",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": true
+      },
+      {
+        "decision_id": "753684705f414c5f2ba0034bd4ba657758071338b2d07410fd53e26f98625cdd",
+        "experiment_id": "adaptive-sector-raw-20261006-v1",
+        "fee": null,
+        "fill_id": null,
+        "kind": "RECONCILED_FLAT",
+        "lot_id": "aaed112ab59c1b415ec5c3910b240d9ff62ff23e03d920e80d6775478c4010d6",
+        "occurred_at": "2026-10-09T15:45:20.489623Z",
+        "order_id": "learner-entry-79f37b6d041601048c441ef756dfd10c019c596f245ef1b7a29146ed14dbf60c",
+        "owner": null,
+        "position_before_entry": null,
+        "price": null,
+        "quantity": "0",
+        "reconciled": true,
+        "recorded_at": "2026-10-09T15:45:32.473745Z",
+        "side": null,
+        "source_hash": "27e3669b2d74d02c9075c9f8d921d14c87a39f299268c0d1937e50ac58c828f3",
+        "symbol": "XLI",
+        "synthetic": false,
+        "terminal": false
+      }
+    ]
+  },
+  "windows_clock_query": {
+    "status_exit": 0,
+    "status": "Leap Indicator: 0(no warning)\nStratum: 5 (secondary reference - syncd by (S)NTP)\nPrecision: -23 (119.209ns per tick)\nRoot Delay: 0.0479589s\nRoot Dispersion: 5.3154870s\nLast Successful Sync Time: 10/13/2026 8:59:28 PM\nSource: time.windows.com,0x9 \nPoll Interval: 10 (1024s)\n\nPhase Offset: -0.3485926s\nClockRate: 0.0156251s\nState Machine: 2 (Sync)\nTime Source Flags: 0 (None)\nServer Role: 0 (None)\nLast Sync Error: 2 (The computer did not resync because only stale time data was available.)\nTime since Last Good Sync Time: 2264.2808376s\n",
+    "peers_exit": 0,
+    "peers": "#Peers: 1\n\nPeer: time.windows.com,0x9\nState: Active\nTime Remaining: 30503.4133945s\nMode: 3 (Client)\nStratum: 4 (secondary reference - syncd by (S)NTP)\nPeerPoll Interval: 10 (1024s)\nHostPoll Interval: 10 (1024s)\n",
+    "interpretation": "Read-only status only; no resync or configuration mutation. Sync status does not prove absolute UTC accuracy."
+  },
+  "focused_tests": {
+    "ref": "a6f9eb36c4bd632157fff166907c7bd50f70ef15",
+    "passed": 140,
+    "skipped": 0,
+    "seconds": 46.18,
+    "environment": "Existing workspace Python 3.11.16 venv; not a new frozen aggregate; stripped ALPACA/APCA_/QUANTBOT_ child variables.",
+    "log": "focused-regression.txt"
+  }
+}

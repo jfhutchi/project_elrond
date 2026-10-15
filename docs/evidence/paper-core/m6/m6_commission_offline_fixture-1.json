@@ -1,0 +1,8 @@
+{
+  "release_id": "c23ea95f992ebdb01c6c3aa40488d73cf64ea00caafdd1a841fecaf9f0d471b4",
+  "commission_id": "7c7caea265df8b10fe3ec7c1af86ac642ebf4c371c7508cefaba9d1c9afda81c",
+  "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+  "stop_preserved": true,
+  "provider_probe": "MOCK_ONLY_NOT_ACTUAL_BROKER",
+  "posts": 0
+}

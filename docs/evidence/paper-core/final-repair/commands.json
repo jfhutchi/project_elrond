@@ -1,0 +1,476 @@
+[
+  {
+    "stage": "fixed-source-focused-green",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "tests/integration/paper_core/test_final_repair.py",
+      "tests/fault/paper_core/test_outcomes_independent.py",
+      "tests/fault/paper_core/test_final_send_authority.py",
+      "-s"
+    ],
+    "result": "29 passed in 51.16s",
+    "log": "logs/fixed-source-focused-green.txt.gz",
+    "exit_code": 0,
+    "phase": "phase1"
+  },
+  {
+    "stage": "frozen-covering-gate",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "tests/integration/paper_core",
+      "tests/fault/paper_core",
+      "tests/integration/test_storage_parity.py",
+      "tests/unit/test_migration_authority.py",
+      "tests/unit/test_storage.py",
+      "tests/unit/research/test_registry.py",
+      "-s"
+    ],
+    "state": "COMPLETE_FAILED",
+    "original_log": "C:/Users/leepa/AppData/Local/Temp/paper-core-check-v5yf10bh/result.txt",
+    "phase": "phase1",
+    "exit_code": 1,
+    "result": "449 passed, 3 failed, 26 skipped in 582.74s",
+    "archive": "phase1/covering-gate.txt.gz"
+  },
+  {
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "src",
+      "tests"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\ruff.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "phase": "phase1"
+  },
+  {
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-linux.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b",
+    "phase": "phase1"
+  },
+  {
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-win32.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b",
+    "phase": "phase1"
+  },
+  {
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\ruff-helpers.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "phase": "phase1"
+  },
+  {
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-linux-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+    "phase": "phase1"
+  },
+  {
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-win32-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24",
+    "phase": "phase1"
+  },
+  {
+    "phase": "phase2",
+    "stage": "frozen-affected-gate",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "tests/integration/paper_core/test_release_recovery.py",
+      "tests/integration/paper_core/test_scoped_progress.py",
+      "tests/integration/paper_core/test_final_repair.py",
+      "tests/fault/paper_core/test_review_repairs.py",
+      "tests/fault/paper_core/test_outcomes_independent.py",
+      "tests/fault/paper_core/test_final_send_authority.py",
+      "tests/fault/paper_core/test_protection_authority.py",
+      "tests/fault/paper_core/test_learning_temporal.py",
+      "tests/integration/paper_core/test_operational_adapter.py",
+      "tests/integration/paper_core/test_migration.py",
+      "tests/integration/paper_core/test_inventory.py",
+      "tests/integration/paper_core/test_costed_loop.py",
+      "tests/integration/test_storage_parity.py",
+      "tests/unit/test_migration_authority.py",
+      "tests/unit/test_storage.py",
+      "tests/unit/research/test_registry.py",
+      "-s"
+    ],
+    "result": {
+      "exit_code": 0,
+      "summary": "296 passed, 26 skipped in 283.28s",
+      "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-cwwsp1xt\\result.txt",
+      "raw_bytes": 830140,
+      "raw_sha256": "638cdb9b5c237cc853cd98331087ee3d256bfc31adee9538b554f98f6877ba42",
+      "compressed_sha256": "afa3906d761b0516b1041593ca09d3a038c82595fc4d83338d17105cd9763786",
+      "source_pins_sha256": "d6d696496813f81e8a91d4d057142f7b8a3405cdac4d9a864d5932f5eb0bdc01",
+      "frozen_archive_sha256": "a36e605507e69e3566c517661f15eab4e622806c3060344754d31db5c0e15e36",
+      "capacity_witness": "NOT_REPEATED_PHASE1_PASSED"
+    },
+    "exit_code": 0
+  },
+  {
+    "phase": "phase2",
+    "stage": "fixed-byte-focused-green",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "tests/integration/paper_core/test_final_repair.py",
+      "tests/integration/paper_core/test_release_recovery.py::test_flat_runtime_independent_guardian_ack_submits_once_and_protects",
+      "-s"
+    ],
+    "result": "23 passed in 81.66s",
+    "exit_code": 0,
+    "archive": "logs/final-phase2-focused-green.txt.gz"
+  },
+  {
+    "phase": "phase2",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "src",
+      "tests"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\ruff.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "phase": "phase2",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-linux.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b"
+  },
+  {
+    "phase": "phase2",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-win32.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b"
+  },
+  {
+    "phase": "phase2",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\ruff-helpers.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "phase": "phase2",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-linux-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  },
+  {
+    "phase": "phase2",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-win32-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  },
+  {
+    "phase": "phase2",
+    "stage": "preparation",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/freeze_final_repair.py",
+      "--phase2"
+    ],
+    "note": "Local source preparation/static proposals only, no operating action."
+  },
+  {
+    "phase": "phase2",
+    "stage": "preparation",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/prepare_final_repair.py"
+    ],
+    "note": "Local source preparation/static proposals only, no operating action."
+  },
+  {
+    "phase": "phase2",
+    "stage": "preparation",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/task_proposals_final_repair.py"
+    ],
+    "note": "Local source preparation/static proposals only, no operating action."
+  },
+  {
+    "phase": "final-guard",
+    "stage": "frozen-guard-gate",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/check.py",
+      "tests/integration/paper_core/test_final_repair.py",
+      "tests/integration/paper_core/test_release_recovery.py",
+      "tests/integration/paper_core/test_scoped_progress.py",
+      "tests/fault/paper_core/test_review_repairs.py",
+      "tests/integration/paper_core/test_inventory.py",
+      "tests/fault/paper_core/test_final_send_authority.py",
+      "-s"
+    ],
+    "result": {
+      "phase": "final-guard",
+      "exit_code": 0,
+      "summary": "105 passed in 166.52s",
+      "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\result.txt",
+      "raw_bytes": 233940,
+      "raw_sha256": "8dc8993acdcce6bf6cd98032ede87e7c4b721911d5eec4aff656a795acca6c0f",
+      "compressed_sha256": "b2432390f003d367fe73d33370e28b994e732420f99973ba5d7900e6939a9825",
+      "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989",
+      "frozen_archive_sha256": "c0f5599ad37b1895af22ac8ba8650e8362975e243caec7b1ef26dea0bfa31dba",
+      "capacity_witness": "NOT_REPEATED_PHASE1_PASSED",
+      "affected_gate": "PHASE2_296_PASSED_26_SKIPPED_RETAINED"
+    },
+    "exit_code": 0
+  },
+  {
+    "phase": "final-guard",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "src",
+      "tests"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\ruff.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "phase": "final-guard",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-linux.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b"
+  },
+  {
+    "phase": "final-guard",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "src"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-win32.txt",
+    "sha256": "75525716acf8cabc1f8c44362b2c5cecca0dd00f7d31e7673ebf7b51f721800b"
+  },
+  {
+    "phase": "final-guard",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "ruff",
+      "check",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\ruff-helpers.txt",
+    "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+  },
+  {
+    "phase": "final-guard",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "linux",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-linux-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  },
+  {
+    "phase": "final-guard",
+    "stage": "six-exact-CI",
+    "command": [
+      "uv",
+      "run",
+      "--frozen",
+      "mypy",
+      "--platform",
+      "win32",
+      "scripts/ci_checks.py",
+      "scripts/local_ci.py",
+      "scripts/ci_process.py"
+    ],
+    "exit_code": 0,
+    "log": "docs\\evidence\\paper-core\\final-repair\\mypy-win32-helpers.txt",
+    "sha256": "281a094c39385b4d7b53e5db635f52158036861433c2a4975b9039e77a627a24"
+  },
+  {
+    "phase": "final-guard",
+    "stage": "preparation",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/freeze_final_repair.py",
+      "--guard"
+    ],
+    "note": "Local source preparation/static proposals only, no operating action."
+  },
+  {
+    "phase": "final-guard",
+    "stage": "preparation",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/prepare_final_repair.py"
+    ],
+    "note": "Local source preparation/static proposals only, no operating action."
+  },
+  {
+    "phase": "final-guard",
+    "stage": "preparation",
+    "argv": [
+      ".venv/Scripts/python.exe",
+      ".superpowers/sdd/2026-10-13-paper-core/task_proposals_final_repair.py"
+    ],
+    "note": "Local source preparation/static proposals only, no operating action."
+  }
+]

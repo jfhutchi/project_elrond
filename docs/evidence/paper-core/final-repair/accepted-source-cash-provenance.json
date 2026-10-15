@@ -1,0 +1,7 @@
+{
+  "source_commit": "bcc0f11841c08952c1e273bc9190b8a204e6e4c0",
+  "archive_sha256": "9b487e41f687639d19504b40cfebd41085428c2f253477f8df71246db5133511",
+  "existing_test": "tests/fault/paper_core/test_review_repairs.py::test_independent_cash_survives_fee_allocation_revision_and_allows_post",
+  "test_sha256": "5c3c311466acfbf99f4c5a04fa531164861087cb39327912cb05d13c1ee820b7",
+  "method": "sys.path explicit archived source; offline fixture only, no Git worktree or operating store"
+}

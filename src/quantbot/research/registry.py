@@ -2125,6 +2125,19 @@ class HypothesisRegistry:
         """
         conflicts: list[str] = []
         for window in draft.windows_for(DataRole.PROTECTED_EVALUATION):
+            # Canonical learner attempts spend inspected discovery/development data
+            # permanently, even if the fit fails. It cannot become an untouched
+            # holdout merely by changing hypothesis or dataset alias.
+            aliases = {*equivalent_datasets(window.dataset), observation_identity(window.dataset)}
+            inspected = self._session.execute(select(search_runs.c.search_id).where(
+                search_runs.c.search_id.like(f"{LEARNER_SEARCH_NAMESPACE}%"),
+                search_runs.c.dataset.in_(aliases),
+                search_runs.c.start_date <= window.end.isoformat(),
+                search_runs.c.end_date >= window.start.isoformat(),
+            )).scalars()
+            conflicts.extend(
+                f"permanently inspected learner range {identity}" for identity in inspected
+            )
             conflicts.extend(
                 f"its own {other.role.value} window on {other.dataset}"
                 for other in draft.windows_for(DataRole.DISCOVERY, DataRole.VALIDATION)

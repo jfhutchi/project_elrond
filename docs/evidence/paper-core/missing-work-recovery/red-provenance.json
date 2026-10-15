@@ -1,0 +1,15 @@
+{
+  "base": "fa7a1fb561ccd113e6d47d017c12bd1d89713426",
+  "production_source_archive": "../residual-cutoff/frozen-source.zip",
+  "production_source_pins_sha256": "0f2e071f5f44f3bcfe3f9425235d2de4a3672801400c9bb965b12d5f6da35eca",
+  "test_source": "missing-work-arrival-red-test.py",
+  "test_sha256": "2df825459bb368f688377244abb9bfad958578b8a27f4bce92c322568030eb88",
+  "command": [
+    ".venv/Scripts/python.exe",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    "tests\\integration\\paper_core\\test_outcome_cutoff_recovery.py",
+    "-k",
+    "missing_work_then_older_notification"
+  ],
+  "result": "1 failed,6 deselected in3.28s; unqualified missing work incorrectly acknowledges1/1 at old cutoff"
+}

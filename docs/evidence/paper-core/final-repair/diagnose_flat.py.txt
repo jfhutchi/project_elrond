@@ -1,0 +1,34 @@
+import sys, subprocess
+from pathlib import Path
+sys.path.insert(0,str(Path(__file__).resolve().parents[3]))
+
+def test_flat_trace(tmp_path,monkeypatch):
+ from tests.integration.paper_core import test_release_recovery as test
+ original=subprocess.Popen
+ code='''
+import sys,runpy
+from quantbot.paper_core import trader
+original=trader.claim_entry
+def trace(*args,**kwargs):
+ lines=[]
+ def tr(frame,event,arg):
+  if frame.f_code is original.__code__ and event=='line':lines.append(frame.f_lineno)
+  return tr
+ sys.settrace(tr)
+ try:r=original(*args,**kwargs)
+ finally:sys.settrace(None)
+ print('FLAT_CLAIM_TRACE',bool(r),lines[-12:],flush=True)
+ return r
+trader.claim_entry=trace
+runpy.run_module('quantbot.paper_core',run_name='__main__')
+'''
+ def popen(args,**kwargs):
+  args=list(args)
+  if '-m' in args and args[args.index('-m')+1]=='quantbot.paper_core':
+   i=args.index('-m');args[i:i+2]=['-c',code]
+  return original(args,**kwargs)
+ monkeypatch.setattr(subprocess,'Popen',popen)
+ try:test.test_flat_runtime_independent_guardian_ack_submits_once_and_protects(tmp_path)
+ finally:
+  for p in tmp_path.glob('flat-*.txt'):
+   print('FLAT_LOG',p.name, '\n'.join(s for s in p.read_text().splitlines() if 'TRACE' in s))

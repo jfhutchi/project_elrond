@@ -1,0 +1,38 @@
+import pytest
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[3]))
+
+
+@pytest.mark.asyncio
+async def test_existing_cash_control(tmp_path, monkeypatch):
+    from tests.fault.paper_core import test_review_repairs as original_test
+    from quantbot.paper_core import trader
+    from quantbot.paper_core.work import current_receipts
+    from quantbot.paper_core.store import table
+    from sqlalchemy import select
+
+    original = trader.claim_entry
+    def trace(store, decision, plan):
+        lines=[]
+        def lines_trace(frame,event,arg):
+            if frame.f_code is original.__code__ and event=='line': lines.append(frame.f_lineno)
+            return lines_trace
+        sys.settrace(lines_trace)
+        result = original(store, decision, plan)
+        sys.settrace(None)
+        with store.database.transaction() as session:
+            print("CASH_CLAIM:", decision.action, decision.gates, bool(result),
+                [r.model_dump(mode="json") for r in current_receipts(session)],
+                list(session.execute(select(table("core_guardian_current"))).mappings()),
+                'last lines',lines[-10:], 'roundtrips',store.documents('core_round_trips'))
+        return result
+    monkeypatch.setattr(trader, "claim_entry", trace)
+    cycle = original_test.trader_cycle
+    async def trace_cycle(*args, **kwargs):
+        decision = await cycle(*args, **kwargs)
+        print("CASH_DECISION:", decision.action, decision.gates)
+        return decision
+    monkeypatch.setattr(original_test, "trader_cycle", trace_cycle)
+    await original_test.test_independent_cash_survives_fee_allocation_revision_and_allows_post(tmp_path)

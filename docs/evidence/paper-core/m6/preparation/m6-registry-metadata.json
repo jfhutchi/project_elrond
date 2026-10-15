@@ -1,0 +1,181 @@
+{
+  "operational-restored.db": {
+    "windows": [],
+    "search_datasets": [
+      {
+        "dataset": "sip-us-equities-daily",
+        "start": "2025-06-24",
+        "end": "2026-09-11",
+        "count": 4,
+        "candidates": 4
+      },
+      {
+        "dataset": "us-equities-daily",
+        "start": "2016-01-04",
+        "end": "2026-10-05",
+        "count": 20,
+        "candidates": 20
+      }
+    ],
+    "declared_holdouts": [],
+    "schema_identity": {
+      "id": 1,
+      "version": 29,
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+    },
+    "source_path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\operational-restored.db",
+    "source_sha256": "b08a57121854102ecf86b33d166f539f47fd22f9b1c896fbc5fb512cf0455372"
+  },
+  "learner-restored.db": {
+    "windows": [],
+    "search_datasets": [
+      {
+        "dataset": "sip-us-equities-daily",
+        "start": "2025-06-24",
+        "end": "2026-09-11",
+        "count": 4,
+        "candidates": 4
+      },
+      {
+        "dataset": "us-equities-daily",
+        "start": "2016-01-04",
+        "end": "2026-08-21",
+        "count": 8,
+        "candidates": 8
+      }
+    ],
+    "declared_holdouts": [
+      {
+        "dataset_id": "16781deed8a12d69651c4b2d45462c79cd1ed8698416971170c20f75b42e5350",
+        "window": {
+          "dataset": "us-equities-daily",
+          "end": "2026-09-30",
+          "role": "PROTECTED_EVALUATION",
+          "snapshot": "077da40d6323b6cef394b86a6aed73aa3a8d3b55af59cab87d2293280e42f0f4",
+          "start": "2026-04-01"
+        }
+      }
+    ],
+    "schema_identity": {
+      "id": 1,
+      "version": 29,
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa"
+    },
+    "source_path": "C:\\Users\\leepa\\AppData\\Local\\Temp\\elrond-readonly-backups-ojtkzlr9\\learner-restored.db",
+    "source_sha256": "dbe6fe86215b63b5ded14cce207a9a79390987c6a04e8fc1702a8ec4e30924f1"
+  },
+  "experiment_event_kinds": [
+    [
+      "ActivationPackage",
+      1
+    ],
+    [
+      "CandidateArtifact",
+      2
+    ],
+    [
+      "DeadlineBrokerClockEvidence",
+      3
+    ],
+    [
+      "DecisionRecord",
+      4668
+    ],
+    [
+      "EvaluationCalendarEvidence",
+      22536
+    ],
+    [
+      "ExecutionReceipt",
+      3
+    ],
+    [
+      "ExperimentManifest",
+      1
+    ],
+    [
+      "ExperimentState",
+      7
+    ],
+    [
+      "ExplorationCommission",
+      7
+    ],
+    [
+      "ExplorationCycleReceipt",
+      190
+    ],
+    [
+      "ExplorationEntryRefusal",
+      43
+    ],
+    [
+      "ExplorationFeedback",
+      3
+    ],
+    [
+      "ExplorationObservation",
+      4
+    ],
+    [
+      "ExplorationPolicy",
+      7
+    ],
+    [
+      "FitReceipt",
+      2
+    ],
+    [
+      "FitRequest",
+      2
+    ],
+    [
+      "FitStart",
+      2
+    ],
+    [
+      "LotEvent",
+      482
+    ],
+    [
+      "LotOutcomeRevision",
+      25
+    ],
+    [
+      "NewsEvidence",
+      810
+    ],
+    [
+      "ObservationBatch",
+      2508
+    ],
+    [
+      "PendingLabelRecovery",
+      4471
+    ],
+    [
+      "PreSendRejection",
+      1
+    ],
+    [
+      "ResolvedMarketLabel",
+      1947
+    ],
+    [
+      "ThesisRecord",
+      1620
+    ],
+    [
+      "TickReceipt",
+      2503
+    ]
+  ],
+  "verified_at": "2026-10-14T20:11:04.025854+00:00",
+  "boundary": "Dated restored snapshot metadata only; no feature/target/document hydration. Refresh actual canonical registries before commissioning and each operational consideration.",
+  "canonical_identity": "us-equities-daily",
+  "known_aliases": [
+    "sip-us-equities-daily",
+    "alpaca-us-equities-daily"
+  ],
+  "existing_five_minute_guard": "src/quantbot/paper_core/local_simulation.py:guard_day uses canonical us-equities-daily across operations and learner declarations, include_forward_paper=True, actual UTC"
+}

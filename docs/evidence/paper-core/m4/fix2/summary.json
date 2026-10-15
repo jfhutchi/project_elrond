@@ -1,0 +1,21 @@
+{
+  "future_refusal": "FUTURE_CUTOFF_BEYOND_EXECUTION_TIME",
+  "requested_cutoff": "2026-10-30T20:00:00Z",
+  "refusal_availability": "2026-10-27T23:40:00Z",
+  "future_charge_count": 0,
+  "equal_recovery_charge_count": 1,
+  "recovery_raw_weights": {
+    "1": 18,
+    "2": 22
+  },
+  "ordinary_and_historical_raw_weights": {
+    "2": 40
+  },
+  "ordinary_candidate_and_input_export_ids": "exactly match immutable fix1 summary",
+  "activation_at": null,
+  "changed_paths": [
+    "src/quantbot/paper_core/learning.py",
+    "tests/fault/paper_core/test_learning_daily.py"
+  ],
+  "preserved_source_pins": 18
+}

@@ -1,0 +1,18 @@
+.F                                                                       [100%]
+================================== FAILURES ===================================
+_________ test_positive_provider_skew_never_extends_monotonic_horizon _________
+
+    def test_positive_provider_skew_never_extends_monotonic_horizon():
+        from quantbot.paper_core.time_evidence import exit_due
+        from quantbot.paper_core.contracts import ProtectionPlan
+        plan = ProtectionPlan(recorded_at_utc=NOW, decision_id="owned-fixture", owner="synthetic",
+            generation=1, inventory_generation=1, stop_price=99, deadline=NOW+timedelta(seconds=1802),
+            clock_profile="PAPER_TIME_V2")
+>       assert exit_due(plan, None, 1800)
+E       AssertionError: assert False
+E        +  where False = <function exit_due at 0x0000015F8FB9FBA0>(ProtectionPlan(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=da...4, 30, 2, tzinfo=datetime.timezone.utc), exit_buffer_seconds=120, exit_quantity_rule='owned-filled-minus-owned-exited'), None, 1800)
+
+tests\fault\paper_core\test_timing.py:197: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_timing.py::test_positive_provider_skew_never_extends_monotonic_horizon
+1 failed, 1 passed, 12 deselected in 2.30s

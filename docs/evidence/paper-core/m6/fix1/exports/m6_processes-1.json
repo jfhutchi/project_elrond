@@ -1,0 +1,111 @@
+{
+  "status": {
+    "schema": {
+      "id": 1,
+      "version": 35,
+      "store_identity": "156a5d4b-944a-4cf0-b7db-1ec191b53542"
+    },
+    "broker_state": "NOT_PROBED",
+    "roles": {
+      "trader": {
+        "config_id": "893d7a47d93baa34e96d959b3369526ad796875d4ae1b8bb1585c8758eb38772",
+        "cycle_seconds": 0.0,
+        "evidence_ids": [],
+        "first_blocker": "TIME_ACQUISITION_RETRYABLE",
+        "generation": 1,
+        "guardian_receipt_id": null,
+        "last_useful_progress": "2026-10-14T21:58:18.086950+00:00",
+        "objections": [
+          "TIME_ACQUISITION_RETRYABLE",
+          "TIME_SAMPLES_INCOMPLETE"
+        ],
+        "owner": "paper-core-synthetic",
+        "pid": 24992,
+        "process_epoch": "f9a8cd96-bed5-4178-99e3-780039d36a55",
+        "proof_age_seconds": 0.07456,
+        "recorded_at": "2026-10-14T21:58:18.086950+00:00",
+        "release_id": "90b4a27a4db8a34dfc2f8367ea38517b79abd680a18316c57a1b81ac604bb05a",
+        "role": "trader",
+        "store_identity": "156a5d4b-944a-4cf0-b7db-1ec191b53542",
+        "time_proof_age_seconds": 0.42199999999138527,
+        "valid_until": "2026-10-14T21:58:18.486950+00:00"
+      },
+      "guardian": {
+        "config_id": "893d7a47d93baa34e96d959b3369526ad796875d4ae1b8bb1585c8758eb38772",
+        "cycle_seconds": 0.07800000000861473,
+        "evidence_ids": [
+          "19ee7e9556379e590cfa86286264de4703c01f860b118ea063a02395544cf1d0"
+        ],
+        "first_blocker": null,
+        "generation": 1,
+        "guardian_receipt_id": "04c0b3d77989772186def81d23125dff1e3bbf6579607a451d2d4cb0f8325b16",
+        "last_useful_progress": "2026-10-14T21:58:22.987552+00:00",
+        "objections": [],
+        "owner": "paper-core-synthetic",
+        "pid": 3428,
+        "process_epoch": "225ffd68-0c28-4235-ba7a-150e26602686",
+        "proof_age_seconds": 0.02849,
+        "recorded_at": "2026-10-14T21:58:22.987552+00:00",
+        "release_id": "90b4a27a4db8a34dfc2f8367ea38517b79abd680a18316c57a1b81ac604bb05a",
+        "role": "guardian",
+        "store_identity": "156a5d4b-944a-4cf0-b7db-1ec191b53542",
+        "time_proof_age_seconds": 0.0470000000204891,
+        "valid_until": "2026-10-14T21:58:23.387552+00:00"
+      },
+      "outcomes": {
+        "config_id": "893d7a47d93baa34e96d959b3369526ad796875d4ae1b8bb1585c8758eb38772",
+        "cycle_seconds": 0.01600000000325963,
+        "evidence_ids": [],
+        "first_blocker": null,
+        "generation": 1,
+        "guardian_receipt_id": null,
+        "last_useful_progress": "2026-10-14T21:58:22.670794+00:00",
+        "objections": [],
+        "owner": "paper-core-synthetic",
+        "pid": 8792,
+        "process_epoch": "9ba1a308-7fd2-4ec7-b363-d5c3d2d0111b",
+        "proof_age_seconds": 0.124891,
+        "recorded_at": "2026-10-14T21:58:22.670794+00:00",
+        "release_id": "90b4a27a4db8a34dfc2f8367ea38517b79abd680a18316c57a1b81ac604bb05a",
+        "role": "outcomes",
+        "store_identity": "156a5d4b-944a-4cf0-b7db-1ec191b53542",
+        "time_proof_age_seconds": null,
+        "valid_until": "2026-10-14T21:58:23.070794+00:00"
+      }
+    },
+    "recorded_stop": {
+      "id": 1,
+      "engaged": 0,
+      "reason": "explicit synthetic fixture setup",
+      "updated_at": "2026-10-14T21:58:14.857534Z"
+    },
+    "active_model": [
+      {
+        "id": 1,
+        "activation_id": "c3b09b9ee61226c72545817dace6d4e48f14cf81e4e36fcaca3ab2c6f970bc6a",
+        "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+        "generation": 1,
+        "receipt_id": null
+      }
+    ],
+    "commissions": []
+  },
+  "release_id": "90b4a27a4db8a34dfc2f8367ea38517b79abd680a18316c57a1b81ac604bb05a",
+  "pids": [
+    25232,
+    7764,
+    24868,
+    24736
+  ],
+  "time_epochs": [
+    "19bd88dd-fb14-4cfd-a0c8-657d2a5c713b",
+    "225ffd68-0c28-4235-ba7a-150e26602686",
+    "58fba969-7f2d-4195-a316-e34e1940674e",
+    "f9a8cd96-bed5-4178-99e3-780039d36a55"
+  ],
+  "restarted_proof_objections": [
+    "TIME_ACQUISITION_RETRYABLE",
+    "TIME_SAMPLES_INCOMPLETE",
+    "TIME_PROCESS_CHANGED"
+  ]
+}

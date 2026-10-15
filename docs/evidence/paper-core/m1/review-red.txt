@@ -1,0 +1,31 @@
+DELAY_PROBE {'posts': 1, 'submitted_at': ['2026-10-14 14:31:00+00:00'], 'valid_until': '2026-10-14 14:02:00+00:00', 'deadline': '2026-10-14 14:30:00+00:00'}
+FCERT_PROBE {'latest_generation': 2, 'snapshot_id': 'core-certified-0d4dd95e70e44db06439a3193d90683ec6dbed9aa3d7c83412704c180e859326', 'proof_snapshot_id': 'core-certified-0d4dd95e70e44db06439a3193d90683ec6dbed9aa3d7c83412704c180e859326', 'positions': "(Position(symbol='XLE', quantity=Decimal('5'), market_price=Decimal('100'), market_value=Decimal('500'), average_entry_price=Decimal('100')),)"}
+.
+================================== FAILURES ===================================
+_________________ test_final_fetch_cannot_send_expired_entry __________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-1qrbkzhr/pytest/test_final_fetch_cannot_send_e0')
+
+    def test_final_fetch_cannot_send_expired_entry(tmp_path):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        original = broker.get_account
+        calls = 0
+        async def delayed_account():
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                broker.now = NOW + timedelta(minutes=31)
+            return await original()
+        broker.get_account = delayed_account
+        try:
+            asyncio.run(trader_cycle(store, broker, observation, model, proof, now=NOW))
+            print('DELAY_PROBE', {'posts':len(broker.posts), 'submitted_at':[str(o.submitted_at) for o in broker.orders.values()], 'valid_until':str(NOW+timedelta(seconds=120)), 'deadline':str(NOW+timedelta(minutes=30))})
+>           assert not broker.posts, 'entry posted after both validity and protected deadline'
+E           AssertionError: entry posted after both validity and protected deadline
+E           assert not [OrderIntent(symbol='XLE', intent_id='core-entry-698f5ae4fff6d6487a350a3ffc13104a4bff4991d31137594f3634b99a6571f2', cl...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))]
+E            +  where [OrderIntent(symbol='XLE', intent_id='core-entry-698f5ae4fff6d6487a350a3ffc13104a4bff4991d31137594f3634b99a6571f2', cl...tate.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc))] = <quantbot.paper_core.simulation.SyntheticBroker object at 0x0000024B399B8A10>.posts
+
+..\..\..\..\AppData\Local\Temp\paper-core-m1-review-519526f08f5c488dba69486b514f9095\test_m1_review_probe.py:26: AssertionError
+=========================== short test summary info ===========================
+FAILED ..\..\..\..\AppData\Local\Temp\paper-core-m1-review-519526f08f5c488dba69486b514f9095\test_m1_review_probe.py::test_final_fetch_cannot_send_expired_entry
+1 failed, 1 passed in 3.49s

@@ -1,0 +1,26 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_________ test_certification_keeps_non_100_fill_basis_and_owned_stop __________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-akfv1b0y/pytest/test_certification_keeps_non_10')
+
+    @pytest.mark.asyncio
+    async def test_certification_keeps_non_100_fill_basis_and_owned_stop(tmp_path):
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import trader_cycle
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            observation = observation.model_copy(update={"price": Decimal("125")})
+            broker.set_mark("XLE", Decimal("125"), as_of=NOW)
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            with db.transaction() as session:
+                baseline = StorageRepository(session).get_latest_account_snapshot(store.config.account_id, certified_only=True)
+>               assert baseline.positions[0].average_entry_price == Decimal("125")
+E               AssertionError: assert Decimal('100') == Decimal('125')
+E                +  where Decimal('100') = Position(symbol='XLE', quantity=Decimal('4'), market_price=Decimal('100'), market_value=Decimal('400'), average_entry_price=Decimal('100')).average_entry_price
+E                +  and   Decimal('125') = Decimal('125')
+
+tests\integration\paper_core\test_thin_loop.py:234: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_thin_loop.py::test_certification_keeps_non_100_fill_basis_and_owned_stop
+1 failed, 10 deselected in 2.33s

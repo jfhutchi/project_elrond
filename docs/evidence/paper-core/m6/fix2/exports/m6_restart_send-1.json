@@ -1,0 +1,20 @@
+{
+  "pid": 4232,
+  "epoch": "89874f82-b23c-4b69-9cb6-200a322e5391",
+  "original_epoch": "97c7b2a9-0afb-4937-a0a3-7b1092f014f2",
+  "time_objections": [
+    "TIME_PROCESS_CHANGED"
+  ],
+  "claim_refused": true,
+  "send_objections": [
+    "TIME_ACQUISITION_RETRYABLE",
+    "TIME_SAMPLES_INCOMPLETE",
+    "TIME_PROCESS_CHANGED",
+    "CORE_PROTECTION_DEADLINE_DUE",
+    "TIME_SESSION_BOUNDARY",
+    "CORE_CASH_AUTHORITY_UNAVAILABLE",
+    "CORE_ENTRY_AUTHORITY_MISMATCH",
+    "CORE_PROTECTION_DEADLINE_DUE",
+    "CORE_SESSION_EXIT_BUFFER_DUE"
+  ]
+}

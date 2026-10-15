@@ -1,0 +1,30 @@
+{
+  "future-refusal": {
+    "file": "future-refusal.json.gz",
+    "marker": "M4_FIX2_FUTURE_REFUSAL:",
+    "raw_sha256": "0ddaecc4fd2ece8ab91e512ccffe4c2055e5b49c2e1a99a95189167d481f8882",
+    "raw_bytes": 4765,
+    "compressed_sha256": "4cd7b7a5654639361ab44d30f877767e5f6371db09a2c50496613d98c7c20a7d"
+  },
+  "equal-recovery": {
+    "file": "equal-recovery.json.gz",
+    "marker": "M4_FIX2_EQUAL_RECOVERY:",
+    "raw_sha256": "aa91a4533804af0f25965f00a12eb1b32d9668a5f11782010bf525a12c37a946",
+    "raw_bytes": 54174,
+    "compressed_sha256": "98ad0ee5e21121d23486158021618d812ab1d167470decdee2622afbcdbb3dfc"
+  },
+  "ordinary-1": {
+    "file": "ordinary-1.json.gz",
+    "marker": "M4_FIX2_ORDINARY:",
+    "raw_sha256": "4d176f1dd8769dec93053aa410bc1ebbcc1ff6c2eefacdfb8f2c5338d5cb3c29",
+    "raw_bytes": 49417,
+    "compressed_sha256": "3ef554b361e13cf1ea187dda8b8f006c35c6018daf99b707b12ef1d8b428ea31"
+  },
+  "ordinary-2": {
+    "file": "ordinary-2.json.gz",
+    "marker": "M4_FIX2_ORDINARY:",
+    "raw_sha256": "4634183c00e4ad8cdf294ad6a8a0629d966452bdfac7e82dfac907cec1f93810",
+    "raw_bytes": 49416,
+    "compressed_sha256": "44b28187fab09495f3d9d7426b92e954265a83478bf282ac5c6871f16e543ee2"
+  }
+}

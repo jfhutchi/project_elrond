@@ -1,0 +1,9 @@
+{
+  "base": "6026f02fd2ca46c541f9e7c45117f4049ce102b0",
+  "original_artifact_index_sha256": "6930631f806dc279432d5aa90ff60d430514c2572baa6c1c0ac78c89fc4ce520",
+  "original_evidence_records_verified_unchanged": 123,
+  "fix1_evidence_records_verified_unchanged": 83,
+  "fix1_artifact_index_sha256": "5ece2fb9260f6ea1e96f5a767cf535613001150a76cd8a7cff1c9761ac5f0ae8",
+  "report": "ORIGINAL_TEXT_PRESERVED_REPAIR_APPENDED",
+  "original_release_executable_verification": "EXPECTED_REFUSAL_ON_REPAIRED_SOURCE"
+}

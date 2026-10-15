@@ -1,0 +1,101 @@
+[
+  {
+    "path": "process-logs/test_actual_three_role_process0--guardian0.txt.gz",
+    "fixture_path": "test_actual_three_role_process0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_actual_three_role_process0\\guardian0.txt",
+    "raw_bytes": 7018,
+    "raw_sha256": "9dc11f2b06860de6e577374796279aa952e764d46dbc86ac3707503ec7da188c",
+    "compressed_sha256": "d6d441d0788c68431ba12c912759133a62a74a79cbfedfe1ecc54d73d84615eb",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_actual_three_role_process0--guardian3.txt.gz",
+    "fixture_path": "test_actual_three_role_process0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_actual_three_role_process0\\guardian3.txt",
+    "raw_bytes": 2627,
+    "raw_sha256": "52b515203e70971ee004290b2d94510e8a4122e1dc6a0cbe899924de1e84595c",
+    "compressed_sha256": "baa0cfecdafaed3c2b18c47f55dd1b916a56b71031359d2913e15ad17ae0a51e",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_actual_three_role_process0--outcomes1.txt.gz",
+    "fixture_path": "test_actual_three_role_process0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_actual_three_role_process0\\outcomes1.txt",
+    "raw_bytes": 17177,
+    "raw_sha256": "273732b6a210b6c29a26f0b2ff868970af229f9b0ad26c64dd3220526ba028fe",
+    "compressed_sha256": "738e582177f5126bc60eb06c6271bb6b185320d40c67b3c32d14329443d66630",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_actual_three_role_process0--process-posts.jsonl.gz",
+    "fixture_path": "test_actual_three_role_process0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_actual_three_role_process0\\process-posts.jsonl",
+    "raw_bytes": 229,
+    "raw_sha256": "da4c2a75f35af5037149efe453bc3f29ac14a4a8eb9f6366df9030d8ab81a444",
+    "compressed_sha256": "18f5bd3d197d2ecb0c6d89327b2acd324013a53916bb6a67f96a787c8432ba7b",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_actual_three_role_process0--process-provider-journal.json.gz",
+    "fixture_path": "test_actual_three_role_process0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_actual_three_role_process0\\process-provider-journal.json",
+    "raw_bytes": 1562,
+    "raw_sha256": "3d73307ccd050eb70a1fa82a101731cfa5e2e687b0b6fdd202dc4b5d6abb5d92",
+    "compressed_sha256": "8db3407f939e69d943627ccf3d1ea48266344ca6832ee8eb6eaf8559e300c056",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_actual_three_role_process0--trader2.txt.gz",
+    "fixture_path": "test_actual_three_role_process0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_actual_three_role_process0\\trader2.txt",
+    "raw_bytes": 2889,
+    "raw_sha256": "b7b3e52926620ed75ea83bdd7642a65ac5a3e1a5ce11cd739547703a2c26080b",
+    "compressed_sha256": "1a6c315ae7f7ccfa4fe7665dc3d045c6205095be3f402d19c18d52cb332e9d58",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_flat_runtime_independent_0--flat-guardian.txt.gz",
+    "fixture_path": "test_flat_runtime_independent_0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_flat_runtime_independent_0\\flat-guardian.txt",
+    "raw_bytes": 61417,
+    "raw_sha256": "72d4495795b4887303ebb7efa8255e8980ed12343cf46e80f08106f2f4b275e2",
+    "compressed_sha256": "bf745eb73527e7aab7f142b55c8868375dba5737ac8ab4e33d714f65a3e61721",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_flat_runtime_independent_0--flat-outcomes.txt.gz",
+    "fixture_path": "test_flat_runtime_independent_0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_flat_runtime_independent_0\\flat-outcomes.txt",
+    "raw_bytes": 53790,
+    "raw_sha256": "13bac46cf1afc0f04b1f8310c6252ecfdb23ed011d5db3365fddd5ae47de9ae4",
+    "compressed_sha256": "7323139e75c35e10d6aff1ac98b6843e5d1c1c5223831ba34d376628a5db3fb2",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_flat_runtime_independent_0--flat-trader.txt.gz",
+    "fixture_path": "test_flat_runtime_independent_0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_flat_runtime_independent_0\\flat-trader.txt",
+    "raw_bytes": 18694,
+    "raw_sha256": "268e6e0bfdb1f2fa92a70a988ed9c789aeeae4b14e633eac0f97c676a054eb14",
+    "compressed_sha256": "4174a5215119dac155d581ca6f7f955edf1f77ca9ca0f5343cd691f0d2b5b415",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_flat_runtime_independent_0--process-posts.jsonl.gz",
+    "fixture_path": "test_flat_runtime_independent_0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_flat_runtime_independent_0\\process-posts.jsonl",
+    "raw_bytes": 233,
+    "raw_sha256": "50548386043e822655f52b0ddebdf8b7fa8b9badc36d304587ba0c714becdc9a",
+    "compressed_sha256": "ab08c85b874faea98e8fc75f5a368226a19bf29bc0b32b42e51d1f5373c05ac0",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  },
+  {
+    "path": "process-logs/test_flat_runtime_independent_0--process-provider-journal.json.gz",
+    "fixture_path": "test_flat_runtime_independent_0",
+    "original": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-obeq_mma\\pytest\\test_flat_runtime_independent_0\\process-provider-journal.json",
+    "raw_bytes": 1562,
+    "raw_sha256": "a99f22c657c5de0745a62da5816651b3f8a51f18c22b1953940044c634698008",
+    "compressed_sha256": "c79515825d2a18e58f9cbc1bc8de7c64678dac17de42a246874bbf602dcc2c68",
+    "source_pins_sha256": "00ac1542dbe892e80aae5e642b3fb3ee9525b9ce58d0a474c71996a1bcf54989"
+  }
+]

@@ -1,0 +1,27 @@
+
+=================================== ERRORS ====================================
+___________ ERROR collecting tests/unit/test_migration_authority.py ___________
+tests\unit\test_migration_authority.py:34: in <module>
+    from tests.unit.test_storage import NOW
+<frozen importlib._bootstrap>:1176: in _find_and_load
+    ???
+<frozen importlib._bootstrap>:1147: in _find_and_load_unlocked
+    ???
+<frozen importlib._bootstrap>:690: in _load_unlocked
+    ???
+.venv\Lib\site-packages\_pytest\assertion\rewrite.py:188: in exec_module
+    exec(co, module.__dict__)
+tests\unit\test_storage.py:56: in <module>
+    HEAD_REVISION = REVISION_FOR_SCHEMA_VERSION[SCHEMA_VERSION]
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 33
+_________________ ERROR collecting tests/unit/test_storage.py _________________
+tests\unit\test_storage.py:56: in <module>
+    HEAD_REVISION = REVISION_FOR_SCHEMA_VERSION[SCHEMA_VERSION]
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   KeyError: 33
+=========================== short test summary info ===========================
+ERROR tests/unit/test_migration_authority.py - KeyError: 33
+ERROR tests/unit/test_storage.py - KeyError: 33
+!!!!!!!!!!!!!!!!!!! Interrupted: 2 errors during collection !!!!!!!!!!!!!!!!!!!
+2 errors in 3.91s

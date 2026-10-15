@@ -1,0 +1,150 @@
+FFFFFF                                                                   [100%]
+================================== FAILURES ===================================
+_ test_copied_ledger_is_not_a_second_trade_and_reads_do_not_change_newer_schema _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-aq6bh0rz/pytest/test_copied_ledger_is_not_a_se0')
+
+    def test_copied_ledger_is_not_a_second_trade_and_reads_do_not_change_newer_schema(tmp_path):
+>       cfg = config(tmp_path)
+              ^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_inventory.py:92:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\paper_core\test_inventory.py:81: in config
+    CoreConfig, _, _ = api()
+                       ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def api():
+>       assert importlib.util.find_spec("quantbot.paper_core") is not None, "M0 exporter missing"
+E       AssertionError: M0 exporter missing
+E       assert None is not None
+E        +  where None = <function find_spec at 0x000001E9E650A020>('quantbot.paper_core')
+E        +    where <function find_spec at 0x000001E9E650A020> = <module 'importlib.util' (frozen)>.find_spec
+E        +      where <module 'importlib.util' (frozen)> = importlib.util
+
+tests\integration\paper_core\test_inventory.py:19: AssertionError
+_________ test_stale_deployment_file_never_overrides_recorded_runtime _________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-aq6bh0rz/pytest/test_stale_deployment_file_nev0')
+
+    def test_stale_deployment_file_never_overrides_recorded_runtime(tmp_path):
+>       cfg = config(tmp_path)
+              ^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_inventory.py:118:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\paper_core\test_inventory.py:81: in config
+    CoreConfig, _, _ = api()
+                       ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def api():
+>       assert importlib.util.find_spec("quantbot.paper_core") is not None, "M0 exporter missing"
+E       AssertionError: M0 exporter missing
+E       assert None is not None
+E        +  where None = <function find_spec at 0x000001E9E650A020>('quantbot.paper_core')
+E        +    where <function find_spec at 0x000001E9E650A020> = <module 'importlib.util' (frozen)>.find_spec
+E        +      where <module 'importlib.util' (frozen)> = importlib.util
+
+tests\integration\paper_core\test_inventory.py:19: AssertionError
+_______________ test_missing_store_is_a_gap_and_is_not_created ________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-aq6bh0rz/pytest/test_missing_store_is_a_gap_an0')
+
+    def test_missing_store_is_a_gap_and_is_not_created(tmp_path):
+>       CoreConfig, inspect, trace = api()
+                                     ^^^^^
+
+tests\integration\paper_core\test_inventory.py:131:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def api():
+>       assert importlib.util.find_spec("quantbot.paper_core") is not None, "M0 exporter missing"
+E       AssertionError: M0 exporter missing
+E       assert None is not None
+E        +  where None = <function find_spec at 0x000001E9E650A020>('quantbot.paper_core')
+E        +    where <function find_spec at 0x000001E9E650A020> = <module 'importlib.util' (frozen)>.find_spec
+E        +      where <module 'importlib.util' (frozen)> = importlib.util
+
+tests\integration\paper_core\test_inventory.py:19: AssertionError
+_______ test_conflicting_copy_is_reported_without_overwriting_authority _______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-aq6bh0rz/pytest/test_conflicting_copy_is_repor0')
+
+    def test_conflicting_copy_is_reported_without_overwriting_authority(tmp_path):
+>       cfg = config(tmp_path)
+              ^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_inventory.py:142:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\paper_core\test_inventory.py:81: in config
+    CoreConfig, _, _ = api()
+                       ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def api():
+>       assert importlib.util.find_spec("quantbot.paper_core") is not None, "M0 exporter missing"
+E       AssertionError: M0 exporter missing
+E       assert None is not None
+E        +  where None = <function find_spec at 0x000001E9E650A020>('quantbot.paper_core')
+E        +    where <function find_spec at 0x000001E9E650A020> = <module 'importlib.util' (frozen)>.find_spec
+E        +      where <module 'importlib.util' (frozen)> = importlib.util
+
+tests\integration\paper_core\test_inventory.py:19: AssertionError
+________ test_cutoff_uses_instants_and_missing_observation_is_explicit ________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-aq6bh0rz/pytest/test_cutoff_uses_instants_and_0')
+
+    def test_cutoff_uses_instants_and_missing_observation_is_explicit(tmp_path):
+>       cfg = config(tmp_path)
+              ^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_inventory.py:153:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\paper_core\test_inventory.py:81: in config
+    CoreConfig, _, _ = api()
+                       ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def api():
+>       assert importlib.util.find_spec("quantbot.paper_core") is not None, "M0 exporter missing"
+E       AssertionError: M0 exporter missing
+E       assert None is not None
+E        +  where None = <function find_spec at 0x000001E9E650A020>('quantbot.paper_core')
+E        +    where <function find_spec at 0x000001E9E650A020> = <module 'importlib.util' (frozen)>.find_spec
+E        +      where <module 'importlib.util' (frozen)> = importlib.util
+
+tests\integration\paper_core\test_inventory.py:19: AssertionError
+____________ test_tampered_event_cannot_be_used_as_trade_evidence _____________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-aq6bh0rz/pytest/test_tampered_event_cannot_be_0')
+
+    def test_tampered_event_cannot_be_used_as_trade_evidence(tmp_path):
+>       cfg = config(tmp_path)
+              ^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_inventory.py:166:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\integration\paper_core\test_inventory.py:81: in config
+    CoreConfig, _, _ = api()
+                       ^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+    def api():
+>       assert importlib.util.find_spec("quantbot.paper_core") is not None, "M0 exporter missing"
+E       AssertionError: M0 exporter missing
+E       assert None is not None
+E        +  where None = <function find_spec at 0x000001E9E650A020>('quantbot.paper_core')
+E        +    where <function find_spec at 0x000001E9E650A020> = <module 'importlib.util' (frozen)>.find_spec
+E        +      where <module 'importlib.util' (frozen)> = importlib.util
+
+tests\integration\paper_core\test_inventory.py:19: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_inventory.py::test_copied_ledger_is_not_a_second_trade_and_reads_do_not_change_newer_schema
+FAILED tests/integration/paper_core/test_inventory.py::test_stale_deployment_file_never_overrides_recorded_runtime
+FAILED tests/integration/paper_core/test_inventory.py::test_missing_store_is_a_gap_and_is_not_created
+FAILED tests/integration/paper_core/test_inventory.py::test_conflicting_copy_is_reported_without_overwriting_authority
+FAILED tests/integration/paper_core/test_inventory.py::test_cutoff_uses_instants_and_missing_observation_is_explicit
+FAILED tests/integration/paper_core/test_inventory.py::test_tampered_event_cannot_be_used_as_trade_evidence
+6 failed in 0.72s

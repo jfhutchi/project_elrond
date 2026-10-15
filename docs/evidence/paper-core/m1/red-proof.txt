@@ -1,0 +1,44 @@
+FF.                                                                      [100%]
+================================== FAILURES ===================================
+_ test_forged_proof_provenance_or_duplicate_quantity_cannot_certify[baseline_id] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ubyxpkx3/pytest/test_forged_proof_provenance_o0')
+field = 'baseline_id'
+
+    @pytest.mark.parametrize("field", ["baseline_id", "order_ids", "actual_quantities"])
+    def test_forged_proof_provenance_or_duplicate_quantity_cannot_certify(tmp_path, field):
+        from quantbot.paper_core.store import certify_inventory
+        from quantbot.storage import StateConflictError
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            fresh = store.proof(broker.snapshot().account, (), positions=(), now=NOW,
+                acquisition_id="synthetic-read")
+            replacement = {"baseline_id": "unrelated-baseline", "order_ids": ("unknown-order",),
+                "actual_quantities": (("XLE", Decimal("1")), ("XLE", Decimal("0")))}[field]
+>           with pytest.raises(StateConflictError):
+E           Failed: DID NOT RAISE StateConflictError
+
+tests\integration\paper_core\test_thin_loop.py:444: Failed
+_ test_forged_proof_provenance_or_duplicate_quantity_cannot_certify[order_ids] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-ubyxpkx3/pytest/test_forged_proof_provenance_o1')
+field = 'order_ids'
+
+    @pytest.mark.parametrize("field", ["baseline_id", "order_ids", "actual_quantities"])
+    def test_forged_proof_provenance_or_duplicate_quantity_cannot_certify(tmp_path, field):
+        from quantbot.paper_core.store import certify_inventory
+        from quantbot.storage import StateConflictError
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            fresh = store.proof(broker.snapshot().account, (), positions=(), now=NOW,
+                acquisition_id="synthetic-read")
+            replacement = {"baseline_id": "unrelated-baseline", "order_ids": ("unknown-order",),
+                "actual_quantities": (("XLE", Decimal("1")), ("XLE", Decimal("0")))}[field]
+>           with pytest.raises(StateConflictError):
+E           Failed: DID NOT RAISE StateConflictError
+
+tests\integration\paper_core\test_thin_loop.py:444: Failed
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_thin_loop.py::test_forged_proof_provenance_or_duplicate_quantity_cannot_certify[baseline_id]
+FAILED tests/integration/paper_core/test_thin_loop.py::test_forged_proof_provenance_or_duplicate_quantity_cannot_certify[order_ids]
+2 failed, 1 passed, 16 deselected in 3.01s

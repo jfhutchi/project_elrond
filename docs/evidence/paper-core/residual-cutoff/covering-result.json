@@ -1,0 +1,21 @@
+{
+  "stage": "final-frozen-guard-gate",
+  "exit_code": 0,
+  "result": "9 passed in 16.31s",
+  "tests": 9,
+  "original_log": "C:\\Users\\leepa\\AppData\\Local\\Temp\\paper-core-check-ia8afqjw\\result.txt",
+  "archive": "covering-gate.txt.gz",
+  "raw_bytes": 5343,
+  "raw_sha256": "4f616efe6b3cdab48a73913317becd3b3685a2c9e625afe8f41d53939b45496c",
+  "compressed_sha256": "f03079a2c3f617a0dfb5b29bbbb74c48a6c586cec3ff8cd5bc3ba3f46e8d6702",
+  "source_pins_sha256": "0f2e071f5f44f3bcfe3f9425235d2de4a3672801400c9bb965b12d5f6da35eca",
+  "command": [
+    ".venv/Scripts/python.exe",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    "-s",
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+    "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing"
+  ]
+}

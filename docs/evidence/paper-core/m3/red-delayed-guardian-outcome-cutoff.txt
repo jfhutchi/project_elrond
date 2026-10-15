@@ -1,0 +1,63 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+_ test_separate_guardian_projects_clock_past_deadline_after_awaited_acquisition _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-7i786f7b/pytest/test_separate_guardian_project0')
+
+    @pytest.mark.asyncio
+    async def test_separate_guardian_projects_clock_past_deadline_after_awaited_acquisition(tmp_path):
+        from tests.fixtures.core_m2 import NOW
+        from tests.fixtures.core_m3 import Clocks
+    
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.store import CoreStore
+        from quantbot.paper_core.time_evidence import BrokerTime
+        from quantbot.paper_core.trader import trader_cycle
+    
+        db, store, broker, proof, observation, model, clocks = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=clocks.wall)
+            independent = Clocks()
+            independent.process_id = "guardian-independent-deadline"
+            independent.wall = NOW + timedelta(seconds=1798)
+            independent.mono = 9999999
+    
+            async def sample():
+                independent.advance(0.01)
+                broker.now = independent.wall
+                return BrokerTime(
+                    timestamp=broker.now,
+                    account_id=broker.account_id,
+                    provider=broker.provider,
+                    session_id="2026-10-14",
+                    session_open=NOW - timedelta(hours=1),
+                    session_close=observation.session_close,
+                    resolution_seconds=0.001,
+                )
+    
+            broker.get_clock = sample
+            original = broker.get_account
+            first = True
+    
+            async def delayed():
+                nonlocal first
+                if first:
+                    independent.advance(3)
+                    broker.now = independent.wall
+                    first = False
+                return await original()
+    
+            broker.get_account = delayed
+            peer = CoreStore(db, store.config, clocks=independent)
+            assert (await guardian_cycle(peer, broker, now=independent.wall)).exit_intent_ids
+            assert len(broker.posts) == 2 and broker.posts[-1].quantity == 5
+>           assert len(store.documents("core_round_trips")) == 1
+E           AssertionError: assert 0 == 1
+E            +  where 0 = len([])
+E            +    where [] = documents('core_round_trips')
+E            +      where documents = <quantbot.paper_core.store.CoreStore object at 0x00000202C155C290>.documents
+
+tests\fault\paper_core\test_health_authority.py:204: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_health_authority.py::test_separate_guardian_projects_clock_past_deadline_after_awaited_acquisition
+1 failed in 2.47s

@@ -1,0 +1,39 @@
+F                                                                        [100%]
+================================== FAILURES ===================================
+___ test_cancel_ack_and_late_fill_keep_reservation_until_complete_watermark ___
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-2bihdws8/pytest/test_cancel_ack_and_late_fill_0')
+
+    @pytest.mark.asyncio
+    async def test_cancel_ack_and_late_fill_keep_reservation_until_complete_watermark(tmp_path):
+        from decimal import Decimal
+
+        from quantbot.domain import Fill, OrderSide
+        from quantbot.paper_core.guardian import guardian_cycle
+        from quantbot.paper_core.trader import trader_cycle
+
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.partial = Decimal(2)
+            broker.now = NOW + timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            assert len(broker.posts) == 2
+            exit_order = broker.orders[broker.posts[-1].client_order_id]
+            broker.partial = None
+            broker.orders[exit_order.client_order_id] = exit_order.model_copy(update={"status": "canceled"})
+            async def incomplete_watermark():
+                return None
+            broker.get_activity_watermark = incomplete_watermark
+            broker.now += timedelta(seconds=1)
+            await guardian_cycle(store, broker, now=broker.now)
+>           assert len(broker.posts) == 2, "cancel ack alone cannot release potentially filling quantity"
+E           AssertionError: cancel ack alone cannot release potentially filling quantity
+E           assert 3 == 2
+E            +  where 3 = len([OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cl....RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 30, 1, tzinfo=datetime.timezone.utc))])
+E            +    where [OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cl....RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 30, 1, tzinfo=datetime.timezone.utc))] = <tests.fixtures.core_m2.JournalBroker object at 0x000001B19F6E7D90>.posts
+
+tests\fault\paper_core\test_restart_matrix.py:110: AssertionError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_restart_matrix.py::test_cancel_ack_and_late_fill_keep_reservation_until_complete_watermark
+1 failed, 8 deselected in 2.72s

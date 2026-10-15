@@ -1,0 +1,184 @@
+FFFF                                                                     [100%]
+================================== FAILURES ===================================
+_ test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender[RISK_APPROVED] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-m7lslu7z/pytest/test_stale_unsent_recovery_fre0')
+state = <IntentState.RISK_APPROVED: 'RISK_APPROVED'>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("state", [IntentState.RISK_APPROVED, IntentState.ORDER_CREATED])
+    async def test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender(tmp_path, state):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            record_observation(store, observation)
+            decision = evaluate_entry(store.config, observation, model, proof)
+            entry = claim_entry(store, decision, ProtectionPlan.for_decision(decision, store.config))
+            if state is IntentState.ORDER_CREATED:
+                with db.transaction() as session:
+                    entry = entry.model_copy(update={"intent": StorageRepository(session).transition_order_intent(
+                        entry.intent.intent_id, state, expected_current=IntentState.RISK_APPROVED
+                    )})
+            waiting, resume = asyncio.Event(), asyncio.Event()
+            original = broker.get_account
+            old_task = None
+    
+            async def delayed():
+                result = await original()
+                if asyncio.current_task() is old_task:
+                    waiting.set()
+                    await resume.wait()
+                return result
+    
+            broker.get_account = delayed
+            old_task = asyncio.create_task(coordinator(store, broker).submit_durable(
+                entry.intent, purpose=OrderPurpose.ENTRY, market_eligible=True,
+                drawdown=None, risk_approved=True,
+            ))
+            await waiting.wait()
+            broker.now = decision.valid_until
+            await recover_intents(store, broker)
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+>               assert definitively_unsent(repo, entry.intent.intent_id)
+E               AssertionError: assert False
+E                +  where False = definitively_unsent(<quantbot.storage.repositories.StorageRepository object at 0x00000179C640C5D0>, 'core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3')
+E                +    where 'core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3' = OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cli...State.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc)).intent_id
+E                +      where OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cli...State.RISK_APPROVED: 'RISK_APPROVED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc)) = EntryIntent(intent=OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37c...eee2c21fed20b9c5915cf8d804b5da449bd', protection_id='fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d').intent
+
+tests\fault\paper_core\test_review_repairs.py:66: AssertionError
+_ test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender[ORDER_CREATED] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-m7lslu7z/pytest/test_stale_unsent_recovery_fre1')
+state = <IntentState.ORDER_CREATED: 'ORDER_CREATED'>
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("state", [IntentState.RISK_APPROVED, IntentState.ORDER_CREATED])
+    async def test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender(tmp_path, state):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            record_observation(store, observation)
+            decision = evaluate_entry(store.config, observation, model, proof)
+            entry = claim_entry(store, decision, ProtectionPlan.for_decision(decision, store.config))
+            if state is IntentState.ORDER_CREATED:
+                with db.transaction() as session:
+                    entry = entry.model_copy(update={"intent": StorageRepository(session).transition_order_intent(
+                        entry.intent.intent_id, state, expected_current=IntentState.RISK_APPROVED
+                    )})
+            waiting, resume = asyncio.Event(), asyncio.Event()
+            original = broker.get_account
+            old_task = None
+    
+            async def delayed():
+                result = await original()
+                if asyncio.current_task() is old_task:
+                    waiting.set()
+                    await resume.wait()
+                return result
+    
+            broker.get_account = delayed
+            old_task = asyncio.create_task(coordinator(store, broker).submit_durable(
+                entry.intent, purpose=OrderPurpose.ENTRY, market_eligible=True,
+                drawdown=None, risk_approved=True,
+            ))
+            await waiting.wait()
+            broker.now = decision.valid_until
+            await recover_intents(store, broker)
+            with db.transaction() as session:
+                repo = StorageRepository(session)
+>               assert definitively_unsent(repo, entry.intent.intent_id)
+E               AssertionError: assert False
+E                +  where False = definitively_unsent(<quantbot.storage.repositories.StorageRepository object at 0x00000179C689D410>, 'core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3')
+E                +    where 'core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3' = OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cli...State.ORDER_CREATED: 'ORDER_CREATED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc)).intent_id
+E                +      where OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37cf14cb28f62df3', cli...State.ORDER_CREATED: 'ORDER_CREATED'>, created_at=datetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc)) = EntryIntent(intent=OrderIntent(symbol='XLE', intent_id='core-entry-e236da596872e8980b271e708dcec0fbcc09d9611598c82f37c...eee2c21fed20b9c5915cf8d804b5da449bd', protection_id='fd42907079b4a0da6b25aa8e2bd182d7d6af49999b10831d3677cbb93e71e93d').intent
+
+tests\fault\paper_core\test_review_repairs.py:66: AssertionError
+______ test_late_cost_revokes_both_cash_readers_and_prevents_fresh_post _______
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-m7lslu7z/pytest/test_late_cost_revokes_both_ca0')
+
+    @pytest.mark.asyncio
+    async def test_late_cost_revokes_both_cash_readers_and_prevents_fresh_post(tmp_path):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            zero = fee_events(store, broker)
+            import_broker_events(store, zero)
+            await synchronize(store, broker, now=broker.now)
+            old = store.latest_proof()
+            revisions = fee_events(store, broker, amount=".10", revision=2,
+                supersedes={e.cost.fill_id: e.cost.id for e in zero})
+            import_broker_events(store, revisions)
+            broker.cash -= Decimal(".20")
+            with db.transaction() as session:
+                assert store.ledger(session)[1] == Decimal("99999.8")
+>               assert StorageRepository(session).get_latest_account_snapshot(store.config.account_id, certified_only=True) is None
+E               AssertionError: assert AccountSnapshotRecord(snapshot_id='core-certified-68c78796eb8f8d37e6d1d16deab6058d04de0d965731256f8e33f55d790c526d', r...quantity=Decimal('2'), market_price=Decimal('100'), market_value=Decimal('200'), average_entry_price=Decimal('100')),)) is None
+E                +  where AccountSnapshotRecord(snapshot_id='core-certified-68c78796eb8f8d37e6d1d16deab6058d04de0d965731256f8e33f55d790c526d', r...quantity=Decimal('2'), market_price=Decimal('100'), market_value=Decimal('200'), average_entry_price=Decimal('100')),)) = get_latest_account_snapshot('synthetic-account', certified_only=True)
+E                +    where get_latest_account_snapshot = <quantbot.storage.repositories.StorageRepository object at 0x00000179C63CD6D0>.get_latest_account_snapshot
+E                +      where <quantbot.storage.repositories.StorageRepository object at 0x00000179C63CD6D0> = StorageRepository(<sqlalchemy.orm.session.Session object at 0x00000179C63BD7D0>)
+E                +    and   'synthetic-account' = CoreConfig(account_id='synthetic-account', symbol='XLE', release_id='m1-synthetic-fixture', policy_id='collect-owned-3...ion_bps=50, entry_risk_bps=25, stop_bps=100, horizon_minutes=30, exit_buffer_seconds=120, buying_power_reserve_bps=500).account_id
+E                +      where CoreConfig(account_id='synthetic-account', symbol='XLE', release_id='m1-synthetic-fixture', policy_id='collect-owned-3...ion_bps=50, entry_risk_bps=25, stop_bps=100, horizon_minutes=30, exit_buffer_seconds=120, buying_power_reserve_bps=500) = <quantbot.paper_core.store.CoreStore object at 0x00000179C678E6D0>.config
+
+tests\fault\paper_core\test_review_repairs.py:104: AssertionError
+_ test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-m7lslu7z/pytest/test_conflicting_batch_only_qu0')
+
+    @pytest.mark.asyncio
+    async def test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors(tmp_path):
+        db, store, broker, proof, observation, model = prepare(tmp_path)
+        try:
+            first = await trader_cycle(store, broker, observation, model, proof, now=NOW)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+            import_broker_events(store, fee_events(store, broker))
+            await synchronize(store, broker, now=broker.now)
+            broker.now += timedelta(seconds=1)
+            second = await trader_cycle(store, broker, fresh_observation(observation, broker.now), model, store.latest_proof(), now=broker.now)
+            broker.now += timedelta(minutes=30)
+            await guardian_cycle(store, broker, now=broker.now)
+>           import_broker_events(store, fee_events(store, broker))
+
+tests\fault\paper_core\test_review_repairs.py:131: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src\quantbot\paper_core\outcomes.py:90: in import_broker_events
+    return _import_events(store, events)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\paper_core\outcomes.py:205: in _import_events
+    record_cost(session, event.cost, fill)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+session = <sqlalchemy.orm.session.Session object at 0x00000179C6850590>
+item = CostItem(schema_version=1, release_id='m1-synthetic-fixture', evidence_lane='SYNTHETIC_TEST', recorded_at_utc=datetime...datetime(2026, 10, 15, 14, 0, tzinfo=datetime.timezone.utc), allocation_rule='EXACT_FILL', revision=1, supersedes=None)
+fill = Fill(symbol='XLE', fill_id='synthetic-fill-qb-e236da596872e8980b271e708dcec0fbcc09d961', broker_order_id='synthetic-qb...tetime.datetime(2026, 10, 14, 14, 0, tzinfo=datetime.timezone.utc), fee=None, fee_source='UNKNOWN', fee_reference=None)
+
+    def record_cost(session: Session, item: CostItem, fill: Fill) -> None:
+        if not item.effective_start <= fill.occurred_at <= item.effective_end:
+            raise StateConflictError("cost authority does not apply to fill time")
+        # Writes must extend the whole durable chain. A historical receipt cutoff
+        # is for reads; using it here could fork an already-recorded later revision.
+        old = current_costs(session, cutoff=datetime.max.replace(tzinfo=UTC)).get(
+            (item.fill_id, item.component)
+        )
+        if old is not None and old.id == item.id:
+            return
+        if old is None:
+            if item.revision != 1 or item.supersedes is not None:
+                raise StateConflictError("cost predecessor missing")
+        elif (
+            item.revision != old.revision + 1
+            or item.supersedes != old.id
+            or item.recorded_at_utc < old.recorded_at_utc
+        ):
+>           raise StateConflictError("cost revision conflicts with current predecessor")
+E           quantbot.storage.repositories.StateConflictError: cost revision conflicts with current predecessor
+
+src\quantbot\paper_core\costs.py:44: StateConflictError
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_review_repairs.py::test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender[RISK_APPROVED]
+FAILED tests/fault/paper_core/test_review_repairs.py::test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender[ORDER_CREATED]
+FAILED tests/fault/paper_core/test_review_repairs.py::test_late_cost_revokes_both_cash_readers_and_prevents_fresh_post
+FAILED tests/fault/paper_core/test_review_repairs.py::test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors
+4 failed in 3.85s

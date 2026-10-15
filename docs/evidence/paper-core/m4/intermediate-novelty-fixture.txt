@@ -1,0 +1,148 @@
+........................F.                                               [100%]
+================================== FAILURES ===================================
+_ test_permanent_failed_learner_consumption_blocks_untouched_claims_across_aliases[independent-False] _
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-v44y2ghv/pytest/test_permanent_failed_learner_3')
+dataset = 'independent', overlap = False
+
+    @pytest.mark.parametrize(
+        "dataset,overlap",
+        [
+            ("sip-us-equities-daily", True),
+            ("alpaca-us-equities-daily", True),
+            ("us-equities-daily", True),
+            ("independent", False),
+        ],
+    )
+    def test_permanent_failed_learner_consumption_blocks_untouched_claims_across_aliases(
+        tmp_path, dataset, overlap
+    ):
+        from datetime import date
+    
+        from tests.unit.research.test_learner_burden import record_learner_attempt
+        from tests.unit.research.test_registry import make_draft, register, window
+    
+        from quantbot.research.registry import (
+            DataRole,
+            HypothesisRegistry,
+            RefusalReason,
+            RegistrationRefused,
+        )
+        from quantbot.storage import Database
+    
+        with Database.create(tmp_path / "claims.db") as db:
+            with db.transaction() as session:
+                record_learner_attempt(session, "failed-before-fit")
+            with db.transaction() as session:
+                registry = HypothesisRegistry(session)
+                candidate = make_draft(
+                    windows=(
+                        window(
+                            DataRole.PROTECTED_EVALUATION, "2024-01-01", "2024-12-31", dataset=dataset
+                        ),
+                    )
+                )
+                if overlap:
+                    with pytest.raises(RegistrationRefused) as refusal:
+                        register(registry, candidate)
+                    assert refusal.value.reason is RefusalReason.CONTAMINATED_WINDOW
+                    assert "permanently inspected learner" in refusal.value.detail
+                else:
+                    assert register(registry, candidate)
+            with db.transaction() as session:
+                registry = HypothesisRegistry(session)
+                assert registry.learner_trials_spent() == 1
+                later = make_draft(
+                    hypothesis_id="H-NONOVERLAP",
+                    windows=(
+                        window(
+                            DataRole.PROTECTED_EVALUATION,
+                            "2026-01-01",
+                            "2026-07-31",
+                            dataset="alpaca-us-equities-daily",
+                        ),
+                    ),
+                )
+>               assert register(registry, later)
+                       ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\fault\paper_core\test_learning_boundaries.py:212: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\unit\research\test_registry.py:93: in register
+    return registry.register(candidate, **kwargs)  # type: ignore[arg-type]
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <quantbot.research.registry.HypothesisRegistry object at 0x0000022E1D762CD0>
+draft = HypothesisDraft(hypothesis_id='H-NONOVERLAP', version=1, family_id='trend-following', parent_hypothesis_id=None, paren...SOURCE: 'DATA_DRIVEN_NO_EXTERNAL_SOURCE'>), proposed_by='claude-opus-5', prompt_version=None, validation_campaign=None)
+now = datetime.datetime(2026, 8, 18, 14, 30, tzinfo=datetime.timezone.utc)
+critique = Critique(hypothesis_id='H-NONOVERLAP', hypothesis_version=1, critic='deterministic', verdict=<CriticVerdict.PROCEED: '...s=(), confidence=None, unassessed=(), produced_at=datetime.datetime(2026, 8, 18, 14, 30, tzinfo=datetime.timezone.utc))
+override = None, observed = None
+
+    def register(
+        self,
+        draft: HypothesisDraft,
+        *,
+        now: datetime,
+        critique: Critique,
+        override: PowerOverride | None = None,
+        observed: ObservedSample | None = None,
+    ) -> Registration:
+        """Freeze a hypothesis, or refuse it. Refusal is the useful half.
+    
+        `override` lets an operator accept an underpowered hypothesis. It is audited in the
+        assessment record and leaves the verdict at `OVERRIDDEN`, so the evidence stays
+        labelled wherever it is displayed. It cannot rescue an `UNECONOMIC` verdict: an effect
+        that cannot pay its own costs is not a measurement problem.
+    
+        `critique` is required. A hypothesis reaching protected data without an adversarial
+        review is the situation #7 exists to prevent, and making the argument optional would
+        make it the first thing skipped under time pressure.
+        """
+        if (critique.hypothesis_id, critique.hypothesis_version) != (
+            draft.hypothesis_id,
+            draft.version,
+        ):
+            raise RegistrationRefused(
+                RefusalReason.CRITIQUE_MISMATCHED,
+                f"the critique reviews {critique.hypothesis_id} "
+                f"v{critique.hypothesis_version}, not {draft.hypothesis_id} v{draft.version}",
+            )
+        if critique.blocking:
+            raise RegistrationRefused(
+                RefusalReason.CRITIQUE_BLOCKS,
+                f"{critique.critic} returned {critique.verdict.value}: "
+                + "; ".join(objection.finding for objection in critique.objections),
+            )
+    
+        existing = self.get(draft.hypothesis_id, draft.version)
+        if existing is not None:
+            raise RegistrationRefused(
+                RefusalReason.ALREADY_REGISTERED,
+                f"{draft.hypothesis_id} v{draft.version} is frozen at {existing.content_hash};"
+                " material changes require a new version",
+            )
+    
+        self._verify_lineage(draft)
+    
+        contamination = self._contamination(draft, now=now.date())
+        if contamination:
+            raise RegistrationRefused(
+                RefusalReason.CONTAMINATED_WINDOW,
+                "protected evaluation window is already claimed by " + "; ".join(contamination),
+            )
+    
+        novelty = self.novelty_report(draft)
+        if not novelty.novel and draft.materially_different is None:
+>           raise RegistrationRefused(
+                RefusalReason.DUPLICATE,
+                f"{draft.hypothesis_id} overlaps {', '.join(novelty.nearest)} by "
+                f"{novelty.highest_overlap:.2f} on universe and features; state what is "
+                "materially different or register it as a new version of that hypothesis",
+            )
+E           quantbot.research.registry.RegistrationRefused: DUPLICATE: H-NONOVERLAP overlaps H-2026-001 v1 by 1.00 on universe and features; state what is materially different or register it as a new version of that hypothesis
+
+src\quantbot\research\registry.py:654: RegistrationRefused
+=========================== short test summary info ===========================
+FAILED tests/fault/paper_core/test_learning_boundaries.py::test_permanent_failed_learner_consumption_blocks_untouched_claims_across_aliases[independent-False]
+1 failed, 25 passed in 7.64s

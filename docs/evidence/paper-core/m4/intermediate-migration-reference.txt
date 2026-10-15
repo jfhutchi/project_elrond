@@ -1,0 +1,279 @@
+FF............
+================================== FAILURES ===================================
+_________________ test_actual_costed_episodes_fit_and_export __________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-yikfez33/pytest/test_actual_costed_episodes_fi0')
+
+    @pytest.mark.asyncio
+    async def test_actual_costed_episodes_fit_and_export(tmp_path):
+        from quantbot.paper_core.contracts import LearningPolicy, ModelArtifact
+        from quantbot.paper_core.learning import consider_learning, predict_bps
+        from quantbot.research.registry import HypothesisRegistry
+    
+>       db, store, broker, parent, trips, joins = await episodes(tmp_path)
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_learning_receipts.py:16: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\fixtures\core_m4.py:19: in episodes
+    db, store, broker, proof, _, collect = prepare(path)
+                                           ^^^^^^^^^^^^^
+tests\fixtures\core_m2.py:77: in prepare
+    db = Database.create(path / "core.db")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:264: in create
+    return cls(
+src\quantbot\storage\database.py:214: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:426: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0033_paper_core_learning.py:16: in upgrade
+    table.create(op.get_bind(), checkfirst=True)
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1529: in _execute_ddl
+    compiled = ddl.compile(
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:311: in compile
+    return self._compiler(dialect, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:77: in _compiler
+    return dialect.ddl_compiler(dialect, self, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:902: in __init__
+    self.string = self.process(self.statement, **compile_kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:948: in process
+    return obj._compiler_dispatch(self, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:138: in _compiler_dispatch
+    return meth(self, **kw)  # type: ignore  # noqa: E501
+           ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6883: in visit_create_table
+    const = self.create_table_constraints(
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6931: in create_table_constraints
+    return ", \n\t".join(
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6931: in <genexpr>
+    return ", \n\t".join(
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6934: in <genexpr>
+    self.process(constraint)
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:948: in process
+    return obj._compiler_dispatch(self, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:138: in _compiler_dispatch
+    return meth(self, **kw)  # type: ignore  # noqa: E501
+           ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\base.py:1835: in visit_foreign_key_constraint
+    remote_table = constraint.elements[0].column.table
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:1132: in __get__
+    obj.__dict__[self.__name__] = result = self.fget(obj)
+                                           ^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:3202: in column
+    return self._resolve_column()
+           ^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = ForeignKey('search_runs.search_id'), raiseerr = True
+
+    def _resolve_column(
+        self, *, raiseerr: bool = True
+    ) -> Optional[Column[Any]]:
+        _column: Column[Any]
+    
+        if isinstance(self._colspec, str):
+            parenttable, tablekey, colname = self._resolve_col_tokens()
+    
+            if self._unresolvable or tablekey not in parenttable.metadata:
+                if not raiseerr:
+                    return None
+>               raise exc.NoReferencedTableError(
+                    f"Foreign key associated with column "
+                    f"'{self.parent}' could not find "
+                    f"table '{tablekey}' with which to generate a "
+                    f"foreign key to target column '{colname}'",
+                    tablekey,
+E                   sqlalchemy.exc.NoReferencedTableError: Foreign key associated with column 'core_learning_attempts.search_id' could not find table 'search_runs' with which to generate a foreign key to target column 'search_id'
+
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:3225: NoReferencedTableError
+___________________________ test_truthful_no_change ___________________________
+
+tmp_path = WindowsPath('C:/Users/leepa/AppData/Local/Temp/paper-core-check-yikfez33/pytest/test_truthful_no_change0')
+
+    @pytest.mark.asyncio
+    async def test_truthful_no_change(tmp_path):
+        from quantbot.paper_core.contracts import LearningPolicy
+        from quantbot.paper_core.learning import consider_learning
+    
+>       db, store, broker, parent, trips, joins = await episodes(tmp_path, 2)
+                                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests\integration\paper_core\test_learning_receipts.py:45: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+tests\fixtures\core_m4.py:19: in episodes
+    db, store, broker, proof, _, collect = prepare(path)
+                                           ^^^^^^^^^^^^^
+tests\fixtures\core_m2.py:77: in prepare
+    db = Database.create(path / "core.db")
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src\quantbot\storage\database.py:264: in create
+    return cls(
+src\quantbot\storage\database.py:214: in __init__
+    self._initialize_schema()
+src\quantbot\storage\database.py:426: in _initialize_schema
+    command.upgrade(config, "head")
+.venv\Lib\site-packages\alembic\command.py:487: in upgrade
+    script.run_env()
+.venv\Lib\site-packages\alembic\script\base.py:550: in run_env
+    util.load_python_file(self.dir, "env.py")
+.venv\Lib\site-packages\alembic\util\pyfiles.py:114: in load_python_file
+    module = load_module_py(module_id, path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\alembic\util\pyfiles.py:132: in load_module_py
+    spec.loader.exec_module(module)  # type: ignore
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+<frozen importlib._bootstrap_external>:940: in exec_module
+    ???
+<frozen importlib._bootstrap>:241: in _call_with_frames_removed
+    ???
+src\quantbot\storage\migrations\env.py:80: in <module>
+    run_migrations_online()
+src\quantbot\storage\migrations\env.py:51: in run_migrations_online
+    run_with_connection(supplied_connection)
+src\quantbot\storage\migrations\env.py:74: in run_with_connection
+    context.run_migrations()
+<string>:8: in run_migrations
+    ???
+.venv\Lib\site-packages\alembic\runtime\environment.py:970: in run_migrations
+    self.get_context().run_migrations(**kw)
+.venv\Lib\site-packages\alembic\runtime\migration.py:616: in run_migrations
+    step.migration_fn(**kw)
+src\quantbot\storage\migrations\versions\0033_paper_core_learning.py:16: in upgrade
+    table.create(op.get_bind(), checkfirst=True)
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:1289: in create
+    bind._run_ddl_visitor(ddl.SchemaGenerator, self, checkfirst=checkfirst)
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:2469: in _run_ddl_visitor
+    ).traverse_single(element)
+      ^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:661: in traverse_single
+    return meth(obj, **kw)
+           ^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:1023: in visit_table
+    )._invoke_with(self.connection)
+      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:322: in _invoke_with
+    return bind.execute(self)
+           ^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1421: in execute
+    return meth(
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:188: in _execute_on_connection
+    return connection._execute_ddl(
+.venv\Lib\site-packages\sqlalchemy\engine\base.py:1529: in _execute_ddl
+    compiled = ddl.compile(
+.venv\Lib\site-packages\sqlalchemy\sql\elements.py:311: in compile
+    return self._compiler(dialect, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\ddl.py:77: in _compiler
+    return dialect.ddl_compiler(dialect, self, **kw)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:902: in __init__
+    self.string = self.process(self.statement, **compile_kwargs)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:948: in process
+    return obj._compiler_dispatch(self, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:138: in _compiler_dispatch
+    return meth(self, **kw)  # type: ignore  # noqa: E501
+           ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6883: in visit_create_table
+    const = self.create_table_constraints(
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6931: in create_table_constraints
+    return ", \n\t".join(
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6931: in <genexpr>
+    return ", \n\t".join(
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:6934: in <genexpr>
+    self.process(constraint)
+.venv\Lib\site-packages\sqlalchemy\sql\compiler.py:948: in process
+    return obj._compiler_dispatch(self, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\visitors.py:138: in _compiler_dispatch
+    return meth(self, **kw)  # type: ignore  # noqa: E501
+           ^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\dialects\sqlite\base.py:1835: in visit_foreign_key_constraint
+    remote_table = constraint.elements[0].column.table
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\util\langhelpers.py:1132: in __get__
+    obj.__dict__[self.__name__] = result = self.fget(obj)
+                                           ^^^^^^^^^^^^^^
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:3202: in column
+    return self._resolve_column()
+           ^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = ForeignKey('search_runs.search_id'), raiseerr = True
+
+    def _resolve_column(
+        self, *, raiseerr: bool = True
+    ) -> Optional[Column[Any]]:
+        _column: Column[Any]
+    
+        if isinstance(self._colspec, str):
+            parenttable, tablekey, colname = self._resolve_col_tokens()
+    
+            if self._unresolvable or tablekey not in parenttable.metadata:
+                if not raiseerr:
+                    return None
+>               raise exc.NoReferencedTableError(
+                    f"Foreign key associated with column "
+                    f"'{self.parent}' could not find "
+                    f"table '{tablekey}' with which to generate a "
+                    f"foreign key to target column '{colname}'",
+                    tablekey,
+E                   sqlalchemy.exc.NoReferencedTableError: Foreign key associated with column 'core_learning_attempts.search_id' could not find table 'search_runs' with which to generate a foreign key to target column 'search_id'
+
+.venv\Lib\site-packages\sqlalchemy\sql\schema.py:3225: NoReferencedTableError
+=========================== short test summary info ===========================
+FAILED tests/integration/paper_core/test_learning_receipts.py::test_actual_costed_episodes_fit_and_export
+FAILED tests/integration/paper_core/test_learning_receipts.py::test_truthful_no_change
+2 failed, 12 passed in 4.18s

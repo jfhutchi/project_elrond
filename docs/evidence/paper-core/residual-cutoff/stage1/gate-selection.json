@@ -1,0 +1,30 @@
+{
+  "command": [
+    ".venv/Scripts/python.exe",
+    ".superpowers/sdd/2026-10-13-paper-core/check.py",
+    "-s",
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+    "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing",
+    "tests/fault/paper_core/test_outcomes_independent.py",
+    "tests/fault/paper_core/test_review_repairs.py",
+    "tests/fault/paper_core/test_learning_temporal.py::test_no_change_completion_is_execution_time_and_replay_is_immutable",
+    "tests/fault/paper_core/test_learning_temporal.py::test_later_recovery_has_later_availability_without_recharging",
+    "tests/fault/paper_core/test_learning_temporal.py::test_future_cutoff_does_not_expire_live_reservation_before_data",
+    "tests/fault/paper_core/test_learning_temporal.py::test_materialization_recheck_uses_fresh_execution_time"
+  ],
+  "selection": [
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py",
+    "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input",
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing",
+    "tests/fault/paper_core/test_outcomes_independent.py",
+    "tests/fault/paper_core/test_review_repairs.py",
+    "tests/fault/paper_core/test_learning_temporal.py::test_no_change_completion_is_execution_time_and_replay_is_immutable",
+    "tests/fault/paper_core/test_learning_temporal.py::test_later_recovery_has_later_availability_without_recharging",
+    "tests/fault/paper_core/test_learning_temporal.py::test_future_cutoff_does_not_expire_live_reservation_before_data",
+    "tests/fault/paper_core/test_learning_temporal.py::test_materialization_recheck_uses_fresh_execution_time"
+  ],
+  "scope": "Residual cutoff acknowledgement, owned legacy recovery, pending learning exclusion, cash revocation, existing resolution CAS, temporal learning guards; no full fit/capacity/independent-role witness repeat."
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "path": "task-proposal-guardian.xml",
+    "sha256": "83fb1a6523c990d5ae275662a860459a636b6d328aeafd0d4ebfc912f92cf0ab",
+    "disabled": true,
+    "zero_triggers": true,
+    "least_privilege": true,
+    "exact_current_config_manifest": true,
+    "verifier": false
+  },
+  {
+    "path": "task-proposal-outcomes.xml",
+    "sha256": "fca952c96a8977c0b7270302b2052bd0c9561098eec871cf009faf6303c5a65c",
+    "disabled": true,
+    "zero_triggers": true,
+    "least_privilege": true,
+    "exact_current_config_manifest": true,
+    "verifier": false
+  },
+  {
+    "path": "task-proposal-trader.xml",
+    "sha256": "9b953fc2b087d4b7525d96296b6e585fcd8704978b70f3d628481264d8c7f007",
+    "disabled": true,
+    "zero_triggers": true,
+    "least_privilege": true,
+    "exact_current_config_manifest": true,
+    "verifier": false
+  },
+  {
+    "path": "task-proposal-verify.xml",
+    "sha256": "f10e587f33e736d36ae074a9256bd2fbceb533bca962fe7d6eb1e33cce6d3f41",
+    "disabled": true,
+    "zero_triggers": true,
+    "least_privilege": true,
+    "exact_current_config_manifest": true,
+    "verifier": true
+  }
+]

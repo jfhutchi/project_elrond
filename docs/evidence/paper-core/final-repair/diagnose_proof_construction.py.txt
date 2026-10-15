@@ -1,0 +1,17 @@
+import sys
+from pathlib import Path
+import pytest
+sys.path.insert(0,str(Path(__file__).resolve().parents[3]))
+@pytest.mark.asyncio
+async def test_construction_refusal_propagates(tmp_path,monkeypatch):
+ from tests.fixtures.core_m6 import broker as fixture_broker
+ from tests.integration.paper_core.test_release_recovery import make_process_release
+ from quantbot.paper_core.guardian import synchronize
+ from quantbot.storage import StateConflictError
+ db,store,config,*_=make_process_release(tmp_path)
+ def refuse(*args,**kwargs):raise StateConflictError('EXACT_PROOF_CONSTRUCTION_REFUSED')
+ monkeypatch.setattr(store,'proof',refuse)
+ try:
+  with pytest.raises(StateConflictError,match='EXACT_PROOF_CONSTRUCTION_REFUSED'):
+   await synchronize(store,fixture_broker(store,config),now=store.clocks.sample()[0])
+ finally:db.close()

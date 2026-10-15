@@ -1,0 +1,3 @@
+COMMAND: uv run --frozen ruff check scripts/ci_checks.py scripts/local_ci.py scripts/ci_process.py
+All checks passed!
+EXIT: 0

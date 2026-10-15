@@ -1,0 +1,16 @@
+import sys
+from pathlib import Path
+
+import pytest
+
+root = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(root))
+sys.path.insert(0, str(Path(__file__).with_name("accepted-source-diagnostic") / "src"))
+
+
+@pytest.mark.asyncio
+async def test_accepted_independent_cash(tmp_path):
+    import quantbot.paper_core.store as source
+    print("ACCEPTED_SOURCE:", source.__file__)
+    from tests.fault.paper_core.test_review_repairs import test_independent_cash_survives_fee_allocation_revision_and_allows_post
+    await test_independent_cash_survives_fee_allocation_revision_and_allows_post(tmp_path)

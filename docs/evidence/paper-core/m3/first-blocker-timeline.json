@@ -1,0 +1,357 @@
+[
+  {
+    "active_health": [],
+    "at": "2026-10-14T14:00:00.020000+00:00",
+    "decision_id": "af1ec59e381d44f6bed1697a22ccca3e759380b8c53a41a37d70a1d61accb6e2",
+    "gates": [],
+    "posts": 1,
+    "stage": "valid-entry"
+  },
+  {
+    "active_health": [
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "7522cf00f88bf774af420d6c981b0470926f131d4b8bc54d1adc32b6642cdc73",
+          "00ee36d0a07fce30fa124c55b070d9f7c92dcb24c7c6bdd9d9ca9ba054e1d769"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 3,
+        "first_blocker": "TIME_ACQUISITION_RETRYABLE",
+        "first_seen": "2026-10-14T14:00:01.020000+00:00",
+        "health_event_id": "a923d154a168c838f4f1e0bfb6096e9849fa9c7b6a515c551765bdcf39ed114f",
+        "last_seen": "2026-10-14T14:00:01.020000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T14:00:02.020000+00:00",
+        "objections": [
+          "TIME_ACQUISITION_RETRYABLE",
+          "TIME_SAMPLES_INCOMPLETE"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T14:00:01.020000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 1,
+        "source_refs": [],
+        "state": "RETRYABLE_FAILURE"
+      }
+    ],
+    "at": "2026-10-14T14:00:00.020000+00:00",
+    "decision_id": "133be3788441afd8c260cc7315f8af382a36b0ac0ae7893a81c92deaac068305",
+    "gates": [
+      "TIME_ACQUISITION_RETRYABLE",
+      "TIME_SAMPLES_INCOMPLETE"
+    ],
+    "posts": 1,
+    "stage": "provider-timeout"
+  },
+  {
+    "active_health": [
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "7522cf00f88bf774af420d6c981b0470926f131d4b8bc54d1adc32b6642cdc73",
+          "00ee36d0a07fce30fa124c55b070d9f7c92dcb24c7c6bdd9d9ca9ba054e1d769"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 3,
+        "first_blocker": "TIME_ACQUISITION_RETRYABLE",
+        "first_seen": "2026-10-14T14:00:01.020000+00:00",
+        "health_event_id": "a923d154a168c838f4f1e0bfb6096e9849fa9c7b6a515c551765bdcf39ed114f",
+        "last_seen": "2026-10-14T14:00:01.020000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T14:00:02.020000+00:00",
+        "objections": [
+          "TIME_ACQUISITION_RETRYABLE",
+          "TIME_SAMPLES_INCOMPLETE"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T14:00:01.020000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 1,
+        "source_refs": [],
+        "state": "RETRYABLE_FAILURE"
+      }
+    ],
+    "at": "2026-10-14T14:30:01.020000+00:00",
+    "decision_id": null,
+    "gates": [],
+    "posts": 2,
+    "stage": "independent-exit-and-costed-outcome"
+  },
+  {
+    "active_health": [],
+    "at": "2026-10-14T14:30:02.040000+00:00",
+    "decision_id": "e15df34253a8138e81da64287730ddf30a93843f08144a8ad46a8a52914073d5",
+    "gates": [],
+    "posts": 3,
+    "stage": "unrelated-stale-symbol-fresh-recovery"
+  },
+  {
+    "active_health": [
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "b056a977acfddd0aae2ad3abecc19edf2e5d47a5ae74037a85698078e578f3f7",
+          "1a8b386f7497a387b53f2d4729e1ace415530e42493c22df34b2727fe65ea474"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 8,
+        "first_blocker": "TIME_SESSION_BOUNDARY",
+        "first_seen": "2026-10-14T20:30:02.060000+00:00",
+        "health_event_id": "625c4d74d307de6b00e2c4aeb51ac714bfbc5f57b4f74232bd382152af6fd92d",
+        "last_seen": "2026-10-14T20:30:02.060000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T20:30:03.060000+00:00",
+        "objections": [
+          "TIME_SESSION_BOUNDARY",
+          "INVENTORY_UNCERTIFIED",
+          "SYMBOL_ALREADY_HELD",
+          "SESSION_EXIT_BUFFER"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T20:30:02.060000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 3,
+        "source_refs": [],
+        "state": "TEMPORARY_WAIT"
+      }
+    ],
+    "at": "2026-10-14T20:30:02.060000+00:00",
+    "decision_id": "3b95aab9c5aec50f02f01b591b6096f29f0ddd3d66eb8fd05813023db3c0b817",
+    "gates": [
+      "TIME_SESSION_BOUNDARY",
+      "INVENTORY_UNCERTIFIED",
+      "SYMBOL_ALREADY_HELD",
+      "SESSION_EXIT_BUFFER"
+    ],
+    "posts": 3,
+    "stage": "market-close"
+  },
+  {
+    "active_health": [
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "b056a977acfddd0aae2ad3abecc19edf2e5d47a5ae74037a85698078e578f3f7",
+          "1a8b386f7497a387b53f2d4729e1ace415530e42493c22df34b2727fe65ea474"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 8,
+        "first_blocker": "TIME_SESSION_BOUNDARY",
+        "first_seen": "2026-10-14T20:30:02.060000+00:00",
+        "health_event_id": "625c4d74d307de6b00e2c4aeb51ac714bfbc5f57b4f74232bd382152af6fd92d",
+        "last_seen": "2026-10-14T20:30:02.060000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T20:30:03.060000+00:00",
+        "objections": [
+          "TIME_SESSION_BOUNDARY",
+          "INVENTORY_UNCERTIFIED",
+          "SYMBOL_ALREADY_HELD",
+          "SESSION_EXIT_BUFFER"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T20:30:02.060000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 3,
+        "source_refs": [],
+        "state": "TEMPORARY_WAIT"
+      },
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "dc456a71e17d49870ee91fb6612963a03e2292c7df4efff668febebc3d1db729",
+          "00ee36d0a07fce30fa124c55b070d9f7c92dcb24c7c6bdd9d9ca9ba054e1d769"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 8,
+        "first_blocker": "TIME_SKEW_OUT_OF_BOUNDS",
+        "first_seen": "2026-10-14T19:30:02.080000+00:00",
+        "health_event_id": "c046fd2dad0020c442c70f9b34c145eb164f09e561e79985b7497493b27bee3b",
+        "last_seen": "2026-10-14T19:30:02.080000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T19:30:03.080000+00:00",
+        "objections": [
+          "TIME_SKEW_OUT_OF_BOUNDS"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T19:30:02.080000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 4,
+        "source_refs": [],
+        "state": "RETRYABLE_FAILURE"
+      }
+    ],
+    "at": "2026-10-14T20:30:02.080000+00:00",
+    "decision_id": "3876db695c8cdce2acc8fbf4e9f9321e629021c1014a3255c6ce975c7584f8d6",
+    "gates": [
+      "TIME_SKEW_OUT_OF_BOUNDS",
+      "TIME_SESSION_BOUNDARY",
+      "INVENTORY_UNCERTIFIED",
+      "SYMBOL_ALREADY_HELD",
+      "SESSION_EXIT_BUFFER",
+      "TIME_OBSERVATION_BOUNDARY",
+      "INVENTORY_STALE"
+    ],
+    "posts": 3,
+    "stage": "wall-jump"
+  },
+  {
+    "active_health": [
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "b056a977acfddd0aae2ad3abecc19edf2e5d47a5ae74037a85698078e578f3f7",
+          "1a8b386f7497a387b53f2d4729e1ace415530e42493c22df34b2727fe65ea474"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 8,
+        "first_blocker": "TIME_SESSION_BOUNDARY",
+        "first_seen": "2026-10-14T20:30:02.060000+00:00",
+        "health_event_id": "625c4d74d307de6b00e2c4aeb51ac714bfbc5f57b4f74232bd382152af6fd92d",
+        "last_seen": "2026-10-14T20:30:02.060000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T20:30:03.060000+00:00",
+        "objections": [
+          "TIME_SESSION_BOUNDARY",
+          "INVENTORY_UNCERTIFIED",
+          "SYMBOL_ALREADY_HELD",
+          "SESSION_EXIT_BUFFER"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T20:30:02.060000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 3,
+        "source_refs": [],
+        "state": "TEMPORARY_WAIT"
+      },
+      {
+        "escalated": false,
+        "evidence_age_seconds": null,
+        "evidence_ids": [
+          "dc456a71e17d49870ee91fb6612963a03e2292c7df4efff668febebc3d1db729",
+          "00ee36d0a07fce30fa124c55b070d9f7c92dcb24c7c6bdd9d9ca9ba054e1d769"
+        ],
+        "evidence_lane": "SYNTHETIC_TEST",
+        "failed_generation": 8,
+        "first_blocker": "TIME_SKEW_OUT_OF_BOUNDS",
+        "first_seen": "2026-10-14T19:30:02.080000+00:00",
+        "health_event_id": "c046fd2dad0020c442c70f9b34c145eb164f09e561e79985b7497493b27bee3b",
+        "last_seen": "2026-10-14T19:30:02.080000+00:00",
+        "last_useful_progress": null,
+        "new_proof_id": null,
+        "next_retry": "2026-10-14T19:30:03.080000+00:00",
+        "objections": [
+          "TIME_SKEW_OUT_OF_BOUNDS"
+        ],
+        "protection_blocked": false,
+        "recorded_at_utc": "2026-10-14T19:30:02.080000+00:00",
+        "recovered_from": [],
+        "recovery_requirements": [
+          "NEW_COMPLETE_PROOF",
+          "FRESH_TIME_AND_DEPENDENCIES",
+          "GUARDIAN_ACK",
+          "NO_IN_SCOPE_PAUSE_OR_QUARANTINE"
+        ],
+        "release_id": "m1-synthetic-fixture",
+        "role": "TRADER",
+        "schema_version": 1,
+        "scope": "SYMBOL",
+        "scope_id": "XLE",
+        "sequence": 4,
+        "source_refs": [],
+        "state": "RETRYABLE_FAILURE"
+      }
+    ],
+    "at": "2026-10-14T20:30:02.100000+00:00",
+    "decision_id": null,
+    "gates": [],
+    "posts": 4,
+    "stage": "closed-session-owned-exit-and-outcome"
+  },
+  {
+    "active_health": [],
+    "at": "2026-10-15T14:00:00.020000+00:00",
+    "decision_id": "0ca9148ac0a8ad207f09bfe50d85af478e33c814878411e9d2b3e2eeb9f0d3db",
+    "gates": [],
+    "posts": 5,
+    "stage": "fresh-next-session-recovery"
+  }
+]

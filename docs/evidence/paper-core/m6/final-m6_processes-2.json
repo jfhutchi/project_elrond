@@ -1,0 +1,111 @@
+{
+  "status": {
+    "schema": {
+      "id": 1,
+      "version": 35,
+      "store_identity": "61ea6370-4d44-463c-b164-50f2098545fb"
+    },
+    "broker_state": "NOT_PROBED",
+    "roles": {
+      "trader": {
+        "config_id": "8445dd35f2cff305e3c0f5a41621086611fb8f43c390bc2d4484a561c023faf7",
+        "cycle_seconds": 0.01600000000325963,
+        "evidence_ids": [],
+        "first_blocker": "TIME_ACQUISITION_RETRYABLE",
+        "generation": 1,
+        "guardian_receipt_id": null,
+        "last_useful_progress": "2026-10-14T21:02:39.247092+00:00",
+        "objections": [
+          "TIME_ACQUISITION_RETRYABLE",
+          "TIME_SAMPLES_INCOMPLETE"
+        ],
+        "owner": "paper-core-synthetic",
+        "pid": 19952,
+        "process_epoch": "2865d012-a4da-483a-8634-ae5831138f05",
+        "proof_age_seconds": 0.089316,
+        "recorded_at": "2026-10-14T21:02:39.247092+00:00",
+        "release_id": "e9117ae7b7123333841d5dedc266a090bbd9c2e6f3f59b549e0c7cb1fe8c8d84",
+        "role": "trader",
+        "store_identity": "61ea6370-4d44-463c-b164-50f2098545fb",
+        "time_proof_age_seconds": 0.4379999999946449,
+        "valid_until": "2026-10-14T21:02:39.647092+00:00"
+      },
+      "guardian": {
+        "config_id": "8445dd35f2cff305e3c0f5a41621086611fb8f43c390bc2d4484a561c023faf7",
+        "cycle_seconds": 0.0629999999946449,
+        "evidence_ids": [
+          "83a9262a2d911d2fc7462b57fd6e913b22e3106af02449e0aebc1bb1eba96506"
+        ],
+        "first_blocker": null,
+        "generation": 1,
+        "guardian_receipt_id": "2332a13538259d46531490cde8475e27842396c81334e28b9a5392c5abd3a857",
+        "last_useful_progress": "2026-10-14T21:02:44.176197+00:00",
+        "objections": [],
+        "owner": "paper-core-synthetic",
+        "pid": 24464,
+        "process_epoch": "158a454a-fa69-418a-a242-bad3fde01008",
+        "proof_age_seconds": 0.023868,
+        "recorded_at": "2026-10-14T21:02:44.176197+00:00",
+        "release_id": "e9117ae7b7123333841d5dedc266a090bbd9c2e6f3f59b549e0c7cb1fe8c8d84",
+        "role": "guardian",
+        "store_identity": "61ea6370-4d44-463c-b164-50f2098545fb",
+        "time_proof_age_seconds": 0.03200000000651926,
+        "valid_until": "2026-10-14T21:02:44.576197+00:00"
+      },
+      "outcomes": {
+        "config_id": "8445dd35f2cff305e3c0f5a41621086611fb8f43c390bc2d4484a561c023faf7",
+        "cycle_seconds": 0.0159999999741558,
+        "evidence_ids": [],
+        "first_blocker": null,
+        "generation": 1,
+        "guardian_receipt_id": null,
+        "last_useful_progress": "2026-10-14T21:02:43.832350+00:00",
+        "objections": [],
+        "owner": "paper-core-synthetic",
+        "pid": 2312,
+        "process_epoch": "b578f623-4fe4-41fe-9120-c9ab629134d3",
+        "proof_age_seconds": 0.098142,
+        "recorded_at": "2026-10-14T21:02:43.832350+00:00",
+        "release_id": "e9117ae7b7123333841d5dedc266a090bbd9c2e6f3f59b549e0c7cb1fe8c8d84",
+        "role": "outcomes",
+        "store_identity": "61ea6370-4d44-463c-b164-50f2098545fb",
+        "time_proof_age_seconds": null,
+        "valid_until": "2026-10-14T21:02:44.232350+00:00"
+      }
+    },
+    "recorded_stop": {
+      "id": 1,
+      "engaged": 0,
+      "reason": "explicit synthetic fixture setup",
+      "updated_at": "2026-10-14T21:02:35.885738Z"
+    },
+    "active_model": [
+      {
+        "id": 1,
+        "activation_id": "7631bd6535bd5f9e9a1f3d1e9cc684b5fb82c2a7f19e425a37bffa19b834eaca",
+        "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+        "generation": 1,
+        "receipt_id": null
+      }
+    ],
+    "commissions": []
+  },
+  "release_id": "e9117ae7b7123333841d5dedc266a090bbd9c2e6f3f59b549e0c7cb1fe8c8d84",
+  "pids": [
+    4944,
+    1880,
+    5568,
+    18300
+  ],
+  "time_epochs": [
+    "158a454a-fa69-418a-a242-bad3fde01008",
+    "2865d012-a4da-483a-8634-ae5831138f05",
+    "d0d07528-6bfe-4af9-a21f-7536b4877402",
+    "f4f9a980-14a5-4eae-9af6-27a79d004e5d"
+  ],
+  "restarted_proof_objections": [
+    "TIME_ACQUISITION_RETRYABLE",
+    "TIME_SAMPLES_INCOMPLETE",
+    "TIME_PROCESS_CHANGED"
+  ]
+}

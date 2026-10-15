@@ -1,0 +1,37 @@
+{
+  "state": "PREPARED_NOT_DEPLOYED",
+  "advisory": "GHSA-5639-2j2p-m4mx",
+  "dependency_versions_changed": {
+    "mako": [
+      "1.4.1",
+      "1.4.3"
+    ]
+  },
+  "old_release_id": "2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7",
+  "new_release_id": "79e9155a7b54dd542b422cf2b3d11f71bb3616154de122fc7f27bc8f59147791",
+  "config_id": "8c95e278bc674c64557bb0485957d1b6666546e1d67a20e43d30d2079b085c8c",
+  "config_bytes_unchanged": true,
+  "application_and_launcher_source_unchanged": true,
+  "schema_version": 36,
+  "old_verification": {
+    "release_id": "2377ee8f1c8f00baa7c441e8eea56c257df201d86f704fa89ab802222ff35fc7",
+    "verified_at": "2026-10-15T01:27:22.492676+00:00",
+    "state": "REFUSED",
+    "objections": [
+      "EXECUTABLE_PIN_MISMATCH:pyproject.toml",
+      "EXECUTABLE_PIN_MISMATCH:uv.lock",
+      "INSTALLED_DISTRIBUTIONS_MISMATCH"
+    ],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "new_verification": {
+    "release_id": "79e9155a7b54dd542b422cf2b3d11f71bb3616154de122fc7f27bc8f59147791",
+    "verified_at": "2026-10-15T01:27:21.354474+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "operational_effects": "No task, store, credential, broker or commission operations"
+}
