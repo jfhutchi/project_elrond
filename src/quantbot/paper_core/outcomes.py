@@ -720,6 +720,15 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
             session.execute(
                 update(work).where(work.c.lot_id == lot).values(attempted_at=encode_utc(cutoff))
             )
+            from quantbot.paper_core.send_guard import definitively_unsent
+
+            entry_ids = session.execute(
+                select(links.c.intent_id).where(links.c.lot_id == lot, links.c.role == "ENTRY")
+            ).scalars()
+            if any(definitively_unsent(StorageRepository(session), i) for i in entry_ids):
+                # A refused entry has no economic outcome or learning label. Keep
+                # attempted_at for fair bounded work selection without inventing one.
+                continue
             try:
                 trip = _resolve(store, session, lot, cutoff)
             except OutcomeIncomplete as error:

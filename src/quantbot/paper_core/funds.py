@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from quantbot.brokers.base import BrokerAccountSnapshot
-from quantbot.domain import BrokerOrder, Position
+from quantbot.domain import Account, BrokerOrder, Position
 from quantbot.paper_core.contracts import CoreConfig, Evidence, ReconciliationProof
 from quantbot.paper_core.store import CoreStore, latest_certification, table
 from quantbot.storage import StateConflictError, StorageRepository
@@ -41,6 +41,28 @@ def paper_balance_policy(config: CoreConfig) -> bool:
         and config.evidence_lane == "BROKER_PAPER"
         and config.clock_profile == "PAPER_TIME_V2"
     )
+
+
+def same_spending_authority(first: Account, second: Account) -> bool:
+    """Market equity can move without changing certified spending authority."""
+    return all(
+        getattr(first, field) == getattr(second, field)
+        for field in ("account_id", "currency", "cash", "buying_power")
+    )
+
+
+def stable_account_reads(first: BrokerAccountSnapshot, second: BrokerAccountSnapshot) -> bool:
+    return (
+        same_spending_authority(first.account, second.account)
+        and first.model_copy(update={"account": second.account}) == second
+    )
+
+
+def stable_position_reads(first: tuple[Position, ...], second: tuple[Position, ...]) -> bool:
+    def basis(positions: tuple[Position, ...]):
+        return sorted((p.symbol, p.quantity, p.average_entry_price) for p in positions)
+
+    return basis(first) == basis(second)
 
 
 def structural_funds_allowed(config: CoreConfig, proof: ReconciliationProof) -> bool:
@@ -137,8 +159,8 @@ def entry_inventory_objections(
         or receipt.config_id != store.config_id
         or receipt.commission_id != commission.id
         or receipt.endpoint != commission.endpoint
-        or receipt.first_account != receipt.second_account
-        or receipt.first_positions != receipt.second_positions
+        or not stable_account_reads(receipt.first_account, receipt.second_account)
+        or not stable_position_reads(receipt.first_positions, receipt.second_positions)
         or receipt.first_account.account != proof.account
         or receipt.first_positions != proof.positions
         or receipt.recorded_at_utc != proof.recorded_at_utc

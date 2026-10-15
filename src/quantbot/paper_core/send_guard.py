@@ -24,6 +24,39 @@ from quantbot.storage import StorageRepository
 REFUSAL = "CORE_ENTRY_SEND_REFUSED"
 
 
+def record_pre_send_refusal(
+    session: Session,
+    intent: OrderIntent,
+    purpose: OrderPurpose,
+    reasons: tuple[str, ...],
+    *,
+    clock: Callable[[], datetime],
+) -> None:
+    """Latch a known pre-POST refusal in the same transaction as its ERROR state."""
+    if purpose is not OrderPurpose.ENTRY:
+        return
+    repo = StorageRepository(session)
+    stored = repo.get_order_intent(intent.intent_id)
+    if stored is None or stored.state is not IntentState.ORDER_CREATED:
+        raise ValueError("pre-send refusal requires ORDER_CREATED")
+    if any(e.event_type == REFUSAL for e in repo.list_order_events(intent_id=intent.intent_id)):
+        return
+    repo.record_order_event(
+        "core-send-refused-" + content_id({"intent": intent.intent_id}),
+        event_type=REFUSAL,
+        occurred_at=clock(),
+        intent_id=intent.intent_id,
+        detail={
+            "guard_contract": "core-final-send-v1",
+            "reasons": tuple(dict.fromkeys(reasons)),
+            "definitively_unsent": repo.get_broker_order_by_client_order_id(intent.client_order_id)
+            is None,
+            "state_at_refusal": stored.state.value,
+            "source": "coordinator-pre-post-gate",
+        },
+    )
+
+
 def compatible_successor(
     store: CoreStore,
     session: Session,
