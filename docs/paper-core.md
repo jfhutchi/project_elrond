@@ -1,6 +1,6 @@
 # PAPER core: baseline, approved successor and acceptance
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
 
 The merged baseline replaces the operational path incrementally with three independent roles:
 **trader**, **guardian**, and **outcomes with daily learning**. It retains the existing broker,

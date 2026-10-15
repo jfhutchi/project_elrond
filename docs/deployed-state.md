@@ -1,10 +1,10 @@
 # Deployed state: what is actually running
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
 
 ## Current deployment boundary — October 15, 2026
 
-The core is commissioned; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. The [readiness repair](evidence/paper-core/readiness-2026-10-15/README.md) records exact pins and checks.
+The core is commissioned; guardian, outcomes and trader are active after fresh independent progress and protection checks. The [readiness repair](evidence/paper-core/readiness-2026-10-15/README.md) records exact pins and checks.
 
 ## Earlier staging snapshot — October 14, 2026
 

@@ -1,6 +1,6 @@
 # Current direction: the PAPER trading and learning core
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
 
 The implemented foundation as of October 14, 2026 is the smaller [PAPER core](paper-core.md).
 PR289 is merged to `main` at `7889f576`; functional rollout and natural

@@ -1,6 +1,6 @@
 # Documentation map
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
 
 Reviewed October 15, 2026, America/New_York. Start with the [PAPER core overview](paper-core.md), [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md), [direction](intraday-paper-direction.md), and [measured handover](evidence/paper-core/handover.md).
 

@@ -4,8 +4,12 @@
     "sha256": "308a40fa1d89ae5ea4390b4c9b46a0108b09f171f07898f25d451fa0c69c4e9f"
   },
   {
+    "file": "activation-complete.json",
+    "sha256": "cc8de9275c1ba5678b956944a6ab13ed2455195bd539f8fd58865c42b00c8e4d"
+  },
+  {
     "file": "activation-state.json",
-    "sha256": "318e9c25cc20d6683560d7514cb3a4428dfcc48832ae3267c01f831407ca3e52"
+    "sha256": "b41d8741861233d5d82fa40f4a46b629065129a568736eb251404638b2a63e3d"
   },
   {
     "file": "activation_attempt.py.txt",
@@ -37,7 +41,7 @@
   },
   {
     "file": "measured-status.json",
-    "sha256": "09a6745c220e0982f9ec7c724704c9a470ac6d77bde5b5a11cbcc12de32a25ce"
+    "sha256": "0dee6f4cda4d0d74fbd3e1d90ff71703d2d156a45c8f1513e3297c57499fe6ea"
   },
   {
     "file": "original-reconciliation.json",
@@ -45,7 +49,7 @@
   },
   {
     "file": "README.md",
-    "sha256": "e4f8f9baa6753a2cf02f8d702ca15567e05cda5fdb200bf2b7c14833843824be"
+    "sha256": "ea29b8e2cc4eb87210ff5ffb17ed2fd0b96fd642a5f897b506741ce41ec8aa8a"
   },
   {
     "file": "reconcile_original.py.txt",
@@ -65,6 +69,6 @@
   },
   {
     "file": "verification.json",
-    "sha256": "b0ebf46e25426f787436cd456c91476f3f081f5fb7df3f927b07c85efca08d85"
+    "sha256": "5916baa76b9fef21fd006b102e6bc838090c0642088cffb970be781bc21df511"
   }
 ]

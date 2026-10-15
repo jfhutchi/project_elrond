@@ -1,6 +1,6 @@
 # Project Elrond
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. See the [measured readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md).
 
 An autonomous quantitative research and PAPER trading platform that tries hard not to fool itself.
 
@@ -12,7 +12,7 @@ trustworthy outcome processing remain independent of entry and learning failures
 
 The local upgrade includes both schema-36 migrations, the obsolete-writer fence, the paper desk,
 and repaired retained services. The original IWM exit filled and was reconciled using actual
-broker evidence. The unchanged core is commissioned. guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending.
+broker evidence. The unchanged core is commissioned. guardian, outcomes and trader are active after fresh independent progress and protection checks.
 See the [readiness repair](docs/evidence/paper-core/readiness-2026-10-15/README.md)
 for measured state, verification, source pins and local evidence paths.
 

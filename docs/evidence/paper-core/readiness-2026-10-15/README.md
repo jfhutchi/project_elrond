@@ -1,6 +1,6 @@
-# Readiness repair â€” October 15, 2026
+# Readiness repair — October 15, 2026
 
-Core commissioning succeeded. Guardian/outcomes are running and inherited protection was measured healthy. Trader remains disabled while the legacy deadline clock check is unhealthy. Windows Time reported unsynchronized; three independent NTP samples measured the host approximately 1.03 seconds behind. The normal resync returned access denied; the elevated Windows prompt was cancelled. Administrator resynchronization remains required.
+Guardian, outcomes and trader passed two advancing useful-progress polls, with independent processes. Inherited protection was measured healthy before trader was started.
 
 The 09:30 Eastern handover failed when its retained-service check sampled a service outside
 Running state. Protection logged ValueError at the opening boundary. Regression tests reproduce
@@ -40,23 +40,15 @@ remain under D:/Elrond/review/readiness-20261015. Private commission/account doc
 excluded from this package. Text helper copies are retained for review, not executable inputs.
 `measured-status.json` is a dated capture, not a promise of future health or daily profitability.
 
-## Remaining release blocker
+## Final activation capture — 11:21 Eastern
 
-The bounded readiness phase refused at 11:11 Eastern with
-PROTECTION_READINESS_REQUIRED_TRADER_REMAINS_DISABLED. Its latest position assessment
-was HEALTHY with eight protected positions; the specific remaining objection is
-DEADLINE_SUPERVISOR_UNHEALTHY / DEADLINE_BROKER_CLOCK_STALE. The deployment task is now
-disabled, while guardian/outcomes and retained services continue independently.
+The deadline heartbeat recovered after the operator's time-service attempt. Following the
+operator's request to get the trader running, fresh checks passed with no override or removed
+time gate. Activation completed at 11:21:55 Eastern. Guardian, outcomes and trader each
+showed advancing useful progress in distinct processes. The one-time deployment task disabled
+itself; role login/recovery triggers remain installed. Earlier clock/refusal files are retained
+as dated history and are superseded by activation-complete.json and measured-status.json.
 
-Run `w32tm /resync /rediscover` from an Administrator terminal, verify synchronization
-and a healthy deadline heartbeat, then rerun fresh readiness before enabling trader.
-Do not change the computer clock manually, relax the deadline gate or reuse old acquisition
-approval. The recorded retry window expires at noon Eastern; any later attempt needs a
-new explicitly bounded window and fresh evidence.
-
-Subsequent clock investigation found a fixed 32,768-second polling interval (about 9h6m),
-one configured server, and an October12 DNS resolution failure for that server. Prior-boot
-operational records show successful synchronization earlier on October15. The 10:48 Eastern
-reboot is followed by unsynchronized status. Direct NTP probes currently reach the server.
-The existing Windows ForceSynchronizeTime task also denies this token access. These findings
-support missed resynchronization/infrequent correction, rather than proving a hardware defect.
+The clock service's long-term reliability was not changed or certified by this activation.
+Provider interruptions can still produce scoped entry waits; running roles do not promise a
+fill or profit. Daily learning continues under the existing ten-session/all-history policy.

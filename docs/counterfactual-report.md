@@ -1,6 +1,6 @@
 # Counterfactual operator report
 
-> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian/outcomes are running and eight inherited positions were measured protected. Trader remains disabled pending the deadline clock check; Windows Time is unsynchronized and administrator resync is pending. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
+> **Readiness repair, October 15:** the original IWM exit is filled and reconciled. The unchanged core was commissioned at 11:05 Eastern; guardian, outcomes and trader are active after fresh independent progress and protection checks. See the [measured readiness repair](evidence/paper-core/readiness-2026-10-15/README.md).
 
 > **Hypothetical research scope.** These retained reports are separate from the [PAPER core](paper-core.md) executed-outcome learner. Counterfactual returns and untraded observations never become broker fills or owned labels. V2 requires actual cost completeness; the [approved V3 successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md) uses established executed gross outcomes and permits only a fee-unavailable gap in an otherwise closed, owned, reconciled lot. Fees stay unknown and net stays null. The successor is merged in PR #290 and locally installed, but not commissioned; this report grants no execution/model authority or evidence of daily hybrid stock trading.
 
