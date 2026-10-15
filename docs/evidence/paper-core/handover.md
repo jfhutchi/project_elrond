@@ -1,6 +1,6 @@
 # PAPER core implementation and handover
 
-**Isolated implementation and preparation ACCEPTED; operational acceptance WAITING.** Implemented source: commit d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0 on codex/paper-core-m0. The branch remains local and unpushed; no deployment has occurred.
+**Isolated implementation and preparation ACCEPTED; operational acceptance WAITING.** Implemented source: commit d56ff4dcfcdb55bd060aa8898d65c1ff97df89c0 on codex/paper-core-m0. No deployment has occurred.
 
 The replacement has three independent roles: trader, guardian, and outcomes with daily learning. Ordinary provider or clock interruptions cause scoped waits and recovery after fresh evidence. Manual stops and genuine ownership/accounting failures retain their explicit controls.
 
