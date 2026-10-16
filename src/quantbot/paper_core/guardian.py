@@ -84,34 +84,59 @@ def _pending_owned_activity(
         ):
             return False
         repo = StorageRepository(session)
-        if session.execute(
-            select(table("order_intents").c.intent_id)
-            .where(table("order_intents").c.state.in_(("SUBMITTING", "SUBMISSION_UNKNOWN")))
-            .limit(1)
-        ).first():
-            return False
+        ambiguous = set(
+            session.execute(
+                select(table("order_intents").c.intent_id).where(
+                    table("order_intents").c.state.in_(("SUBMITTING", "SUBMISSION_UNKNOWN"))
+                )
+            ).scalars()
+        )
+        acknowledged = set()
         pending: dict[str, Decimal] = {}
         buy_basis: dict[str, Decimal] = {}
         for payload in document.get("pending_owned_orders", ()):
             order = BrokerOrder.model_validate(payload)
-            linked = session.execute(
-                select(table("core_intent_links").c.intent_id)
-                .join(
-                    table("order_intents"),
-                    table("order_intents").c.intent_id == table("core_intent_links").c.intent_id,
+            linked = (
+                session.execute(
+                    select(table("core_intent_links"))
+                    .join(
+                        table("order_intents"),
+                        table("order_intents").c.intent_id
+                        == table("core_intent_links").c.intent_id,
+                    )
+                    .where(table("order_intents").c.client_order_id == order.client_order_id)
                 )
-                .where(table("order_intents").c.client_order_id == order.client_order_id)
-            ).scalar_one_or_none()
-            intent = repo.get_order_intent(linked) if linked else None
+                .mappings()
+                .one_or_none()
+            )
+            intent = repo.get_order_intent(linked["intent_id"]) if linked else None
             if (
                 intent is None
                 or intent.strategy_id != store.config.owner
-                or intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}
                 or (intent.symbol, intent.side, intent.quantity)
                 != (order.symbol, order.side, order.quantity)
-                or repo.get_broker_order_by_client_order_id(order.client_order_id) != order
+                or (intent.order_type, intent.time_in_force)
+                != (order.order_type, order.time_in_force)
             ):
                 return False
+            assert linked is not None and intent is not None
+            stored_order = repo.get_broker_order_by_client_order_id(order.client_order_id)
+            if stored_order != order:
+                if stored_order is not None or intent.intent_id not in ambiguous:
+                    return False
+                # The independent GET can finish before the original POST response.
+                # Keep the reservation; require the original locked send and plan.
+                if not any(
+                    e.event_type == "CORE_LOCKED_SEND_AUTHORIZED"
+                    and e.occurred_at <= now
+                    and e.detail.get("contract") == "core-final-send-v1"
+                    and e.detail.get("config_id") == store.config_id
+                    and e.detail.get("decision_id") == linked["decision_id"]
+                    and e.detail.get("protection_id") == linked["protection_id"]
+                    for e in repo.list_order_events(intent_id=intent.intent_id)
+                ):
+                    return False
+            acknowledged.add(intent.intent_id)
             missing = order.filled_quantity - sum(
                 (f.quantity for f in repo.list_fills(broker_order_id=order.broker_order_id)),
                 Decimal(0),
@@ -131,7 +156,13 @@ def _pending_owned_activity(
             for s in expected.keys() | actual.keys()
             if actual.get(s, 0) != expected.get(s, 0)
         }
-        if not delta or delta != {s: q for s, q in pending.items() if q}:
+        # A stable exact owned acknowledgement can precede the POST response/outbox
+        # transition. This only explains a retry; it grants no fill or inventory authority.
+        if (
+            ambiguous - acknowledged
+            or not delta
+            or delta != {s: q for s, q in pending.items() if q}
+        ):
             return False
         certification = latest_certification(session)
         if certification is None:
@@ -446,8 +477,10 @@ async def guardian_cycle(
         if order is None:
             continue
         with store.database.transaction() as session:
-            if any(
-                h.state == "INTEGRITY_FAILURE"
+            blocked = [
+                h
+                for h in active_health(session)
+                if h.state == "INTEGRITY_FAILURE"
                 and h.protection_blocked
                 and (
                     h.scope == "ACCOUNT"
@@ -457,8 +490,9 @@ async def guardian_cycle(
                     or h.scope == "LOT"
                     and h.scope_id == entry["lot_id"]
                 )
-                for h in active_health(session)
-            ):
+            ]
+            if blocked:
+                reasons = (*reasons, *("OWNED_PROTECTION_QUARANTINED:" + h.id for h in blocked))
                 continue
         owned = sum((f.quantity for f in entry_fills), Decimal(0))
         average = sum((f.quantity * f.price for f in entry_fills), Decimal(0)) / owned

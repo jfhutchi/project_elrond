@@ -56,6 +56,27 @@ def core_position_protection(
     if len(links) != 1:
         return True, False, ()
     link = links[0]
+    from quantbot.paper_core.health import active_health
+
+    blocked = tuple(
+        h.id
+        for h in active_health(session)
+        if (
+            h.state == "INTEGRITY_FAILURE"
+            and h.protection_blocked
+            and (
+                h.scope == "ACCOUNT"
+                and h.scope_id == account_id
+                or h.scope == "SYMBOL"
+                and h.scope_id == position.symbol
+                or h.scope == "LOT"
+                and h.scope_id == link["lot_id"]
+            )
+        )
+    )
+    if blocked:
+        # A previous healthy heartbeat cannot override a newly recorded quarantine.
+        return True, False, blocked
     try:
         encoded = session.execute(
             select(table("core_runtime_commissions").c.payload)
