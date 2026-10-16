@@ -823,6 +823,7 @@ async def recover_intents(
     if isinstance(broker, AlpacaCoreBroker):
         operational_events = await broker.owned_events(store)
         import_broker_events(store, operational_events)
+        acquisition_ids = (broker.pending_progress[1],) if broker.pending_progress else ()
         broker.accept_activity_cursor(store)
         with store.database.transaction() as session:
             repo = StorageRepository(session)
@@ -841,6 +842,7 @@ async def recover_intents(
             recorded_at_utc=broker.now,
             evidence_lane=store.config.evidence_lane,
             release_id=store.config.release_id,
+            source_refs=acquisition_ids,
             reasons=tuple(reasons),
         )
         store.record("core_cycle_receipts", receipt)

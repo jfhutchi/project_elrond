@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 from decimal import Decimal
 
 from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, BrokerTransportError
 from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType, TimeInForce
@@ -42,7 +44,13 @@ from quantbot.storage import StateConflictError, StorageRepository
 
 
 def _pending_owned_activity(
-    store: CoreStore, proof: ReconciliationProof, *, capture_started: datetime, now: datetime
+    store: CoreStore,
+    proof: ReconciliationProof,
+    *,
+    capture_started: datetime,
+    now: datetime,
+    activity_document_id: str | None = None,
+    session: Session | None = None,
 ) -> bool:
     """Defer only a quantity delta explained by this poll's stable owned acknowledgements."""
     import json
@@ -51,34 +59,41 @@ def _pending_owned_activity(
 
     if proof.account.account_id != store.config.account_id:
         return False
-    with store.database.transaction() as session:
-        progress = (
-            session.execute(
-                select(table("core_provider_progress")).where(
-                    table("core_provider_progress").c.account_id == store.config.account_id
+    with store.database.transaction() if session is None else nullcontext(session) as session:
+        if activity_document_id is None:
+            progress = (
+                session.execute(
+                    select(table("core_provider_progress")).where(
+                        table("core_provider_progress").c.account_id == store.config.account_id
+                    )
                 )
+                .mappings()
+                .one_or_none()
             )
-            .mappings()
-            .one_or_none()
-        )
-        if progress is None:
-            return False
+            if progress is None:
+                return False
+            activity_document_id = progress["document_id"]
+            watermark = progress["watermark"]
+        else:
+            watermark = None
         encoded = session.execute(
             select(table("core_provider_acquisitions").c.payload).where(
-                table("core_provider_acquisitions").c.id == progress["document_id"]
+                table("core_provider_acquisitions").c.id == activity_document_id
             )
         ).scalar_one_or_none()
         if encoded is None:
             return False
         document = json.loads(encoded)
         if (
-            content_id(document) != progress["document_id"]
+            content_id(document) != activity_document_id
             or document.get("account_id") != store.config.account_id
             or document.get("release_id") != store.config.release_id
             or document.get("endpoint") != AlpacaCoreBroker.endpoint
             or not capture_started <= datetime.fromisoformat(document["until"]) <= now
-            or datetime.fromisoformat(progress["watermark"])
-            != datetime.fromisoformat(document["until"])
+            or (
+                watermark is not None
+                and datetime.fromisoformat(watermark) != datetime.fromisoformat(document["until"])
+            )
             or session.execute(select(table("core_fixture_baselines").c.id)).scalar_one_or_none()
             != proof.baseline_id
         ):
@@ -192,9 +207,12 @@ async def synchronize(
     capture_started, start = store.clocks.sample()
     funds_capture = paper_balance_policy(store.config)
     open_orders = second_open_orders = None
+    activity_document_id = None
     if store.config.clock_profile == "PAPER_TIME_V2":
         async with asyncio.timeout(5):
-            await recover_intents(store, broker)
+            recovery = await recover_intents(store, broker)
+            if len(recovery.source_refs) == 1:
+                activity_document_id = recovery.source_refs[0]
             account = await broker.get_account()
             positions = await broker.get_positions()
             if funds_capture:
@@ -306,74 +324,109 @@ async def synchronize(
         if proof is None:
             raise  # Construction refusal retains its original exception and rollback.
         if store.config.clock_profile == "PAPER_TIME_V2":
-            with store.database.transaction() as session:
-                latest = latest_certification(session)
-                quantities, cash, fills = store.ledger(session)
-            if (
-                latest is not None
-                and proof.generation != latest[0] + 1
-                or tuple(sorted(quantities.items())) != proof.expected_quantities
-                or cash != proof.expected_cash
-                or fills != proof.fill_ids
-            ):
-                report(
-                    store,
-                    role="GUARDIAN",
-                    state="RETRYABLE_FAILURE",
-                    reasons=("RECONCILIATION_AUTHORITY_CHANGED",),
-                    now=now,
-                    evidence_ids=(proof.id,),
-                )
-                raise TimeoutError("RECONCILIATION_AUTHORITY_CHANGED") from None
-            mismatched = {
-                s
-                for s in set(dict(proof.actual_quantities)) | set(dict(proof.expected_quantities))
-                if dict(proof.actual_quantities).get(s, 0)
-                != dict(proof.expected_quantities).get(s, 0)
-            }
-            if mismatched and _pending_owned_activity(
-                store, proof, capture_started=capture_started, now=now
-            ):
-                report(
-                    store,
-                    role="GUARDIAN",
-                    state="RETRYABLE_FAILURE",
-                    reasons=("OWNED_FILL_ACTIVITY_PENDING",),
-                    now=now,
-                    scope="ACCOUNT",
-                    scope_id=store.config.account_id,
-                    evidence_ids=(proof.id,),
-                )
-                raise TimeoutError("OWNED_FILL_ACTIVITY_PENDING") from None
-            if proof.account.account_id != store.config.account_id or (
-                proof.cash_complete and proof.account.cash != proof.expected_cash
-            ):
-                report(
-                    store,
-                    role="GUARDIAN",
-                    state="INTEGRITY_FAILURE",
-                    scope="ACCOUNT",
-                    scope_id=store.config.account_id,
-                    reasons=("INVENTORY_CASH_OR_IDENTITY_CONTRADICTION",),
-                    now=now,
-                    evidence_ids=(proof.id,),
-                    protection_blocked=proof.account.account_id != store.config.account_id,
-                )
-            else:
-                for symbol in mismatched or {store.config.symbol}:
-                    report(
-                        store,
-                        role="GUARDIAN",
-                        state="INTEGRITY_FAILURE",
-                        scope="SYMBOL",
-                        scope_id=symbol,
-                        reasons=("INVENTORY_OWNERSHIP_CONTRADICTION",),
-                        now=now,
-                        evidence_ids=(proof.id,),
-                        protection_blocked=True,
-                    )
+            retry = _classify_reconciliation_failure(
+                store,
+                proof,
+                capture_started=capture_started,
+                now=now,
+                activity_document_id=activity_document_id,
+            )
+            if retry:
+                raise TimeoutError(retry) from None
         raise
     return proof.id
+
+
+def _classify_reconciliation_failure(
+    store: CoreStore,
+    proof: ReconciliationProof,
+    *,
+    capture_started: datetime,
+    now: datetime,
+    activity_document_id: str | None,
+) -> str | None:
+    """Classify and append under one writer lock; stale refusals cannot quarantine."""
+    with store.database.transaction() as session:
+        session.execute(text("BEGIN IMMEDIATE"))
+        latest = latest_certification(session)
+        quantities, cash, fills = store.ledger(session)
+        if (
+            latest is not None
+            and proof.generation != latest[0] + 1
+            or tuple(sorted(quantities.items())) != proof.expected_quantities
+            or cash != proof.expected_cash
+            or fills != proof.fill_ids
+            or store.ledger_state_id(session) != proof.ledger_state_id
+            or tuple(
+                sorted(o.broker_order_id for o in StorageRepository(session).list_broker_orders())
+            )
+            != tuple(sorted(proof.order_ids))
+        ):
+            report(
+                store,
+                session=session,
+                role="GUARDIAN",
+                state="RETRYABLE_FAILURE",
+                reasons=("RECONCILIATION_AUTHORITY_CHANGED",),
+                now=now,
+                evidence_ids=(proof.id,),
+            )
+            return "RECONCILIATION_AUTHORITY_CHANGED"
+        mismatched = {
+            s
+            for s in set(dict(proof.actual_quantities)) | set(dict(proof.expected_quantities))
+            if dict(proof.actual_quantities).get(s, 0) != dict(proof.expected_quantities).get(s, 0)
+        }
+        if mismatched and _pending_owned_activity(
+            store,
+            proof,
+            capture_started=capture_started,
+            now=now,
+            activity_document_id=activity_document_id,
+            session=session,
+        ):
+            report(
+                store,
+                session=session,
+                role="GUARDIAN",
+                state="RETRYABLE_FAILURE",
+                reasons=("OWNED_FILL_ACTIVITY_PENDING",),
+                now=now,
+                scope="ACCOUNT",
+                scope_id=store.config.account_id,
+                evidence_ids=(proof.id,),
+            )
+            return "OWNED_FILL_ACTIVITY_PENDING"
+        if proof.account.account_id != store.config.account_id or (
+            proof.cash_complete and proof.account.cash != proof.expected_cash
+        ):
+            report(
+                store,
+                session=session,
+                role="GUARDIAN",
+                state="INTEGRITY_FAILURE",
+                scope="ACCOUNT",
+                scope_id=store.config.account_id,
+                reasons=("INVENTORY_CASH_OR_IDENTITY_CONTRADICTION",),
+                now=now,
+                evidence_ids=(proof.id,),
+                protection_blocked=proof.account.account_id != store.config.account_id,
+            )
+        else:
+            for symbol in mismatched or {store.config.symbol}:
+                report(
+                    store,
+                    session=session,
+                    role="GUARDIAN",
+                    state="INTEGRITY_FAILURE",
+                    scope="SYMBOL",
+                    scope_id=symbol,
+                    reasons=("INVENTORY_OWNERSHIP_CONTRADICTION",),
+                    now=now,
+                    evidence_ids=(proof.id,),
+                    protection_blocked=True,
+                )
+    return None
 
 
 def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:

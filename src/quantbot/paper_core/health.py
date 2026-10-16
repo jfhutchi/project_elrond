@@ -1,6 +1,7 @@
 """Append-only scoped health, independent of the historical kill-switch ledger."""
 
 import json
+from contextlib import nullcontext
 from datetime import datetime, timedelta
 from typing import Any, Literal, TypeVar
 
@@ -26,9 +27,12 @@ def active_health(session: Session) -> tuple[Health, ...]:
     return tuple(h for h in events if h.state != "READY" and h.id not in resolved)
 
 
-def record_health(store: CoreStore, event: Health) -> str:
-    with store.database.transaction() as session:
-        session.execute(text("BEGIN IMMEDIATE"))
+def record_health(store: CoreStore, event: Health, *, session: Session | None = None) -> str:
+    owns_session = session is None
+    with store.database.transaction() if owns_session else nullcontext(session) as session:
+        assert session is not None
+        if owns_session:
+            session.execute(text("BEGIN IMMEDIATE"))
         existing = [
             Health.model_validate_json(p)
             for p in session.execute(select(table("core_health_events").c.payload)).scalars()
@@ -51,8 +55,13 @@ def report(
     scope_id: str | None = None,
     evidence_ids: tuple[str, ...] = (),
     protection_blocked: bool = False,
+    session: Session | None = None,
 ) -> str:
-    with store.database.transaction() as session:
+    owns_session = session is None
+    with store.database.transaction() if owns_session else nullcontext(session) as session:
+        assert session is not None
+        if owns_session:
+            session.execute(text("BEGIN IMMEDIATE"))
         previous = [
             h
             for h in active_health(session)
@@ -62,36 +71,37 @@ def report(
             and h.state == state
         ]
         latest = latest_certification(session)
-    first = min((h.first_seen for h in previous), default=now)
-    attempt = len(previous)
-    delay = min(15, 2 ** min(attempt, 4))
-    return record_health(
-        store,
-        Health(
-            recorded_at_utc=now,
-            evidence_lane=store.config.evidence_lane,
-            release_id=store.config.release_id,
-            role=role,
-            scope=scope,
-            scope_id=scope_id or store.config.symbol,
-            state=state,
-            objections=reasons,
-            first_blocker=reasons[0] if reasons else None,
-            first_seen=first,
-            last_seen=now,
-            evidence_ids=evidence_ids,
-            next_retry=now + timedelta(seconds=delay),
-            failed_generation=latest[0] if latest else 0,
-            protection_blocked=protection_blocked,
-            escalated=(now - first).total_seconds() >= 300,
-            recovery_requirements=(
-                "NEW_COMPLETE_PROOF",
-                "FRESH_TIME_AND_DEPENDENCIES",
-                "GUARDIAN_ACK",
-                "NO_IN_SCOPE_PAUSE_OR_QUARANTINE",
+        first = min((h.first_seen for h in previous), default=now)
+        attempt = len(previous)
+        delay = min(15, 2 ** min(attempt, 4))
+        return record_health(
+            store,
+            Health(
+                recorded_at_utc=now,
+                evidence_lane=store.config.evidence_lane,
+                release_id=store.config.release_id,
+                role=role,
+                scope=scope,
+                scope_id=scope_id or store.config.symbol,
+                state=state,
+                objections=reasons,
+                first_blocker=reasons[0] if reasons else None,
+                first_seen=first,
+                last_seen=now,
+                evidence_ids=evidence_ids,
+                next_retry=now + timedelta(seconds=delay),
+                failed_generation=latest[0] if latest else 0,
+                protection_blocked=protection_blocked,
+                escalated=(now - first).total_seconds() >= 300,
+                recovery_requirements=(
+                    "NEW_COMPLETE_PROOF",
+                    "FRESH_TIME_AND_DEPENDENCIES",
+                    "GUARDIAN_ACK",
+                    "NO_IN_SCOPE_PAUSE_OR_QUARANTINE",
+                ),
             ),
-        ),
-    )
+            session=session,
+        )
 
 
 def entry_health_objections(store: CoreStore, session: Session, symbol: str) -> tuple[str, ...]:

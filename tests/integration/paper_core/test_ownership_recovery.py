@@ -19,6 +19,114 @@ from quantbot.storage import StorageRepository
 
 
 @pytest.mark.asyncio
+async def test_own_pending_acquisition_survives_lost_shared_cursor_cas(tmp_path, monkeypatch):
+    import sqlite3
+    from datetime import timedelta
+
+    import quantbot.paper_core.guardian as guardian_module
+    from quantbot.paper_core.store import put
+    from quantbot.research.manifest import content_id
+
+    class Lag(DailyProvider):
+        def __init__(self, clocks):
+            super().__init__(clocks)
+            self.activity_lag_seconds = 60
+
+    db, store, broker, _, clocks = await prepare(tmp_path, provider_factory=Lag)
+    try:
+        await enter(store, broker)
+        accept = broker.accept_activity_cursor
+
+        def competing_poll_wins(store):
+            _, identity, _, _ = broker.pending_progress
+            with db.transaction() as session:
+                document = json.loads(
+                    session.execute(
+                        select(table("core_provider_acquisitions").c.payload).where(
+                            table("core_provider_acquisitions").c.id == identity
+                        )
+                    ).scalar_one()
+                )
+                older = dict(document, until=(clocks.wall - timedelta(seconds=1)).isoformat())
+                older_id = content_id(older)
+                put(session, "core_provider_acquisitions", older_id, older)
+                session.execute(
+                    table("core_provider_progress")
+                    .update()
+                    .values(document_id=older_id, watermark=older["until"])
+                )
+            accept(store)
+
+        monkeypatch.setattr(broker, "accept_activity_cursor", competing_poll_wins)
+        pending = guardian_module._pending_owned_activity
+
+        def classify_under_writer_lock(*args, **kwargs):
+            assert kwargs["session"].in_transaction()
+            competing = sqlite3.connect(db.path, timeout=0.01)
+            try:
+                with pytest.raises(sqlite3.OperationalError, match="locked"):
+                    competing.execute("BEGIN IMMEDIATE")
+            finally:
+                competing.close()
+            return pending(*args, **kwargs)
+
+        monkeypatch.setattr(guardian_module, "_pending_owned_activity", classify_under_writer_lock)
+        with pytest.raises(TimeoutError, match="OWNED_FILL_ACTIVITY_PENDING"):
+            await synchronize(store, broker, now=clocks.wall)
+        assert not any(
+            h["state"] == "INTEGRITY_FAILURE" for h in store.documents("core_health_events")
+        )
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("change", ["canonical-fill", "order-state"])
+async def test_crossed_ledger_authority_cannot_create_integrity_quarantine(tmp_path, change):
+    from quantbot.paper_core.guardian import _classify_reconciliation_failure
+    from quantbot.paper_core.outcomes import recover_intents
+
+    class Lag(DailyProvider):
+        def __init__(self, clocks):
+            super().__init__(clocks)
+            self.activity_lag_seconds = 60
+
+    db, store, broker, _, clocks = await prepare(tmp_path, provider_factory=Lag)
+    try:
+        await enter(store, broker)
+        with pytest.raises(TimeoutError, match="OWNED_FILL_ACTIVITY_PENDING"):
+            await synchronize(store, broker, now=clocks.wall)
+        event = store.documents("core_health_events")[-1]
+        proof = store.read(
+            "core_reconciliation_proofs", event["evidence_ids"][0], ReconciliationProof
+        )
+        with db.transaction() as session:
+            before = store.ledger(session)
+        if change == "canonical-fill":
+            clocks.advance(60)
+            await recover_intents(store, broker)
+        else:
+            with db.transaction() as session:
+                session.execute(table("broker_orders").update().values(status="accepted"))
+                assert store.ledger(session) == before
+        assert (
+            _classify_reconciliation_failure(
+                store,
+                proof,
+                capture_started=clocks.wall,
+                now=clocks.wall,
+                activity_document_id=None,
+            )
+            == "RECONCILIATION_AUTHORITY_CHANGED"
+        )
+        assert not any(
+            h["state"] == "INTEGRITY_FAILURE" for h in store.documents("core_health_events")
+        )
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize("state", ["SUBMITTING", "SUBMISSION_UNKNOWN", "NO_LOCAL_ORDER"])
 async def test_exact_pending_ack_is_retryable_during_submission(tmp_path, state):
     class Lag(DailyProvider):
