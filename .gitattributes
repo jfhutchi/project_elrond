@@ -10,3 +10,6 @@
 # actually sent, and their bytes are content-hashed, so no end-of-line conversion may touch
 # them on checkout.
 tests/fixtures/arxiv_*   -text
+
+# Runtime evidence is sealed by byte hashes and must survive Windows checkout unchanged.
+docs/evidence/paper-core/ownership-recovery-2026-10-16/*.json -text

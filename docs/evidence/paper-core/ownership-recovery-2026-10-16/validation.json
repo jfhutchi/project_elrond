@@ -1,0 +1,28 @@
+{
+  "at": "2026-10-16T19:03:48.198636+00:00",
+  "source_commit": "37dfaa4",
+  "distinct_tests": 60,
+  "groups": [
+    {
+      "scope": "ownership_recovery",
+      "passed": 19
+    },
+    {
+      "scope": "daily_loop",
+      "passed": 12
+    },
+    {
+      "scope": "retained_bridge_protection_and_final_send",
+      "passed": 25
+    },
+    {
+      "scope": "health_authority",
+      "passed": 4
+    }
+  ],
+  "supplemental_repeated_test": "lost-cursor regression also asserts competing SQLite writer is locked out",
+  "ruff": "PASS",
+  "mypy": "PASS: four changed source files",
+  "independent_review": "APPROVED: exact-poll acquisition, atomic classifier, explicit recovery, manual entry pause preservation",
+  "paid_ci_triggered": false
+}

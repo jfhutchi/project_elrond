@@ -1,6 +1,6 @@
 # Project Elrond — Persistent Development Goal
 
-> **Current PAPER runtime, October 16:** The approved policy is active with a bounded trader data-read correction. One of ten completed-session warmup sessions has elapsed; completed wins/losses supply gross targets while actual fees/net remain unknown. Preserve strategy, risk, freshness and history. See the [current audit](docs/evidence/paper-core/runtime-check-2026-10-16/README.md).
+> **Current PAPER runtime, October 16 at 15:03 Eastern:** Exact-poll fill recovery and atomic quarantine classification are deployed. GOOGL is closed; META is owned and protected. Preserve strategy, risk, stops, unknown costs, all compatible history and the ten-completed-session warmup (currently 1/10; zero fits). Persistent protection blocks must be checked independently of process liveness. See the [current handover](docs/evidence/paper-core/ownership-recovery-2026-10-16/README.md).
 
 Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` paper-trading system into an autonomous quantitative research and trading platform whose ultimate purpose is to discover, validate, and eventually exploit durable market edges that can compound real capital.
 

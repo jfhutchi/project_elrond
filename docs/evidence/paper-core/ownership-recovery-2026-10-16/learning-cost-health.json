@@ -1,0 +1,105 @@
+{
+  "at": "2026-10-16T19:02:55.357433+00:00",
+  "current_executable": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+  "learning_calendar": {
+    "origin": "2026-10-15T13:30:00+00:00",
+    "completed_count": 1,
+    "completed_sessions": [
+      "2026-10-15"
+    ]
+  },
+  "current_learning_selection": {
+    "eligible_count": 1,
+    "excluded": [
+      [
+        "04591e5b42cdb772f1d6b560a45a7e165bd6300fa1071ad75f9a765b7a82469f",
+        "SESSION_NOT_COMPLETED"
+      ],
+      [
+        "6f992d29584aeb8380fcc15913e860a54090cb639d36d4cf159aac54227e8731",
+        "SESSION_NOT_COMPLETED"
+      ],
+      [
+        "f1e9bebb5b45410f6dac9c47598a27ac369358a6a402f62ca6d53e2bfb795812",
+        "SESSION_NOT_COMPLETED"
+      ]
+    ],
+    "considered_count": 4,
+    "gross_targets_bps": [
+      15.595703296125606
+    ]
+  },
+  "round_trips": [
+    {
+      "symbol": "AAPL",
+      "gross_pnl": "0.003859752",
+      "fees": null,
+      "net_pnl": null,
+      "gross_target_bps": 15.595703296125606,
+      "cost_reason": "FEE_UNAVAILABLE",
+      "status": "COSTS_PENDING",
+      "fully_closed": true
+    },
+    {
+      "symbol": "MSFT",
+      "gross_pnl": "-0.006046708",
+      "fees": null,
+      "net_pnl": null,
+      "gross_target_bps": -24.679851622644325,
+      "cost_reason": "FEE_UNAVAILABLE",
+      "status": "COSTS_PENDING",
+      "fully_closed": true
+    },
+    {
+      "symbol": "AMZN",
+      "gross_pnl": "0.000328338",
+      "fees": null,
+      "net_pnl": null,
+      "gross_target_bps": 1.3380137579296991,
+      "cost_reason": "FEE_UNAVAILABLE",
+      "status": "COSTS_PENDING",
+      "fully_closed": true
+    },
+    {
+      "symbol": "GOOGL",
+      "gross_pnl": "-0.034052256",
+      "fees": null,
+      "net_pnl": null,
+      "gross_target_bps": -139.04619191162377,
+      "cost_reason": "FEE_UNAVAILABLE",
+      "status": "COSTS_PENDING",
+      "fully_closed": true
+    }
+  ],
+  "provider_fees": [
+    {
+      "activity_type": "FEE",
+      "net_amount": "-0.01",
+      "has_order_id": false,
+      "has_fill_id": false,
+      "creation": "2026-10-15"
+    },
+    {
+      "activity_type": "FEE",
+      "net_amount": "-0.01",
+      "has_order_id": false,
+      "has_fill_id": false,
+      "creation": "2026-10-15"
+    }
+  ],
+  "learning_counts": {
+    "core_learning_runs": 3,
+    "core_learning_attempts": 0,
+    "core_learning_inputs": 0
+  },
+  "active_health": [],
+  "retained_protection": {
+    "observed_at": "2026-10-16T19:02:28.729620Z",
+    "outcome": "HEALTHY",
+    "position_count": 9,
+    "evaluated_count": 9,
+    "unprotected_count": 0,
+    "exit_required_count": 0,
+    "reason": ""
+  }
+}

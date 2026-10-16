@@ -1,0 +1,17 @@
+{
+  "at": "2026-10-16T19:03:03.910901+00:00",
+  "proof_id": "7d411e9bf59b7a184e46c5b718c5556f56e8d903e552c384b31573c0ee85e18a",
+  "proof_at": "2026-10-16T19:03:01.812626+00:00",
+  "complete": true,
+  "quantities_match": true,
+  "GOOGL_quantity": "0",
+  "META_quantity": "0.003456",
+  "META_reserved": true,
+  "META_delegated": true,
+  "META_evidence_ids": [
+    "12a7196a0a1f9b508eb41896da987c3d41e9162ae2ed3bc99a9446162153ad50",
+    "e221da6ec6a2b8bb265fb6e3e80e644088b0d9e6cd9a945aaa593fb73ee1fd91",
+    "fcbbba97d2130b6ccab39f41975db99c589bdcf4fac47d23c3f4b7f8ec08dc10",
+    "a25f5ebfbf76ac7bedf0b7406b198e07a1b1cb5fd37ef1758b5ba086c949dad9"
+  ]
+}

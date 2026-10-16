@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-16T19:01:28.010458+00:00",
+  "old_release_id": "b5a279c92550c0ea0bc49ac9b335a351fdc80cccc8d4ba98f4d563d3894b7644",
+  "new_release_id": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+  "manifest": "D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json",
+  "source_base": "37dfaa4279e08c7a5ddbfd25d409338bf6713585",
+  "config_unchanged": true,
+  "changes": [
+    {
+      "path": "src/quantbot/paper_core/guardian.py",
+      "old_sha256": "a4376dfe7644f50d8b5328d2bf27ef7ccf128865f393d31af2788b37442d2cae",
+      "new_sha256": "efe7401c77f6030938a92847237477547b891fd2bd09a4941d868525635c6ba2"
+    },
+    {
+      "path": "src/quantbot/paper_core/health.py",
+      "old_sha256": "ef92e36c5bfbd1437ee5e22270b6d257582d077dc96f431cab1828a1e8939c3a",
+      "new_sha256": "efd78c668024775ff9030fca0583836421a32c1a326ae8c813851dd4c2adf696"
+    },
+    {
+      "path": "src/quantbot/paper_core/protection_bridge.py",
+      "old_sha256": "be835c9205854de07fd0323847d8d5c4f1708a1772b5a811c33581384caa1b84",
+      "new_sha256": "be835c9205854de07fd0323847d8d5c4f1708a1772b5a811c33581384caa1b84"
+    },
+    {
+      "path": "src/quantbot/paper_core/outcomes.py",
+      "old_sha256": "81fbd4b74be234947846fa95f246fca658fe8f995cab8951b554844026ec0d97",
+      "new_sha256": "a9887234c01f41c0bfc0d34fc1ab130f07e68312c561e94da48b76f6cd44125a"
+    }
+  ]
+}

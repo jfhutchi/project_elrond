@@ -1,0 +1,15 @@
+{
+  "at": "2026-10-16T18:57:30.965154+00:00",
+  "receipt_id": "6218b0451f49efb628270367d56b87cdaf70839fe639dd9327d0296bfb63e777",
+  "approval": {
+    "health_id": "e68aadebd9d504d0d0ab5ae2ae691c3da16e670dadc9faf6a06b64a1532f1232",
+    "failed_proof_id": "49a748c7c91091215936afb74f380e42f10705aa67f166cc62c327b13a9944a9",
+    "proof_id": "ca9fa78978cde86e8c48577d57455af8e47fd7e7db9742416fc7b7cbe55761c2",
+    "binding_id": "854600812505b8b9062e4c83b39538d20e495f66cf63c13de4f55e82fc076d27",
+    "commission_id": "df1a8d06519c329f7131a588b94bdda8b49d3107990ea1842de0356630f2db8f",
+    "runtime_release_id": "b5a279c92550c0ea0bc49ac9b335a351fdc80cccc8d4ba98f4d563d3894b7644",
+    "approved_at": "2026-10-16T18:57:30.746128+00:00",
+    "approval_reference": "USER_AUTHORIZED_GOOGL_QUARANTINE_FIX_OWNED_EXIT_PRESERVE_RISK_TEN_SESSION_WARMUP_20261016"
+  },
+  "provider_post_performed": false
+}

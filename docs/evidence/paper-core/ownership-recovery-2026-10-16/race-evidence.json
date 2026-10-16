@@ -1,0 +1,17 @@
+{
+  "historical_GOOGL_replay": {
+    "FILLED": true,
+    "SUBMITTING": false,
+    "SUBMISSION_UNKNOWN": false
+  },
+  "interpretation": "Submission-state race reproduced as sufficient cause; retained timestamps cannot uniquely establish original transaction interleaving. META live recurrence established a separate shared-progress CAS race, corrected by exact-poll binding.",
+  "GOOGL_health_id": "ef9b20f8573fb6c943c7907c2a794c0a925c1f5f811f10425518eb7165076b7a",
+  "GOOGL_failed_proof_id": "c1eaedf1bb790d4307519bee81f26fc2c802c75017ecb26203958ef4c03ac38b",
+  "META_health_id": "e68aadebd9d504d0d0ab5ae2ae691c3da16e670dadc9faf6a06b64a1532f1232",
+  "META_failed_proof_id": "49a748c7c91091215936afb74f380e42f10705aa67f166cc62c327b13a9944a9",
+  "META_capture_started": "2026-10-16T18:55:46.888539+00:00",
+  "META_competing_activity_until": "2026-10-16T18:55:46.689761+00:00",
+  "META_own_activity_until": "2026-10-16T18:55:46.919484+00:00",
+  "META_competing_acquisition_id": "b12b8a466dde96e7ff00177c59122f35658e9e32a895934f62248c940ca42873",
+  "META_own_acquisition_id": "6567a39c9490ac4d8d45ce3100abf0407780fa61ea2e537847ac0f31e72707ff"
+}

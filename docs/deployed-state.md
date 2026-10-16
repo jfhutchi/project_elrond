@@ -1,6 +1,6 @@
 # Deployed state: what is actually running
 
-> **Current PAPER runtime, October 16:** All six services are running with the bounded entry-data correction. MSFT and AMZN completed today; GOOGL filled after deployment. Warmup is one completed session out of ten, with no fit yet and fees/net unknown. See the [current runtime audit](evidence/paper-core/runtime-check-2026-10-16/README.md).
+> **Current PAPER runtime, October 16 at 15:03 Eastern:** Final ownership correction `37dfaa4` is deployed as executable `6a1672214339`. GOOGL fully exited at 14:55:03; META remains owned and protected. All six services run, with no active quarantine. Warmup remains 1/10; costs are unknown and no fit is claimed. See the [current handover](evidence/paper-core/ownership-recovery-2026-10-16/README.md).
 
 ## Current deployment boundary — October 15, 2026
 

@@ -1,6 +1,6 @@
 # Project Elrond
 
-> **Current PAPER runtime, October 16:** The Omen is trading under the approved entry policy. A bounded entry-data latency correction is deployed; MSFT and AMZN completed today, and GOOGL filled after the correction. One of ten warmup sessions is complete; no model fit is claimed. Fees/net remain unknown. See the [current runtime audit](docs/evidence/paper-core/runtime-check-2026-10-16/README.md).
+> **Current PAPER runtime, October 16 at 15:03 Eastern:** The ownership-quarantine repair is deployed. GOOGL fully exited through its guardian at 14:55:03; META remains owned and protected, with no active quarantine. All six services run. Risk controls and the 1-of-10 completed-session warmup are unchanged; no fit is claimed. See the [current recovery and handover evidence](docs/evidence/paper-core/ownership-recovery-2026-10-16/README.md).
 
 An autonomous quantitative research and PAPER trading platform that tries hard not to fool itself.
 

@@ -1,5 +1,7 @@
 # PAPER runtime audit and entry-data correction â€” October 16, 2026
 
+> **Correction, 15:03 Eastern:** The protection-health conclusion below was incomplete: GOOGL’s integrity quarantine persisted and blocked its exit. The [later audited repair](../ownership-recovery-2026-10-16/README.md) records the corrected reporting, concurrency fix, actual 14:55:03 exit and current runtime. Original JSON captures remain unchanged.
+
 Measured at 11:13 Eastern on the HP Omen. This package follows the
 [October 15 policy handover](../whole-share-2026-10-15/README.md); that sealed package
 remains historical evidence. Source correction: `f934d16` on `hutch/whole-share-fallback`.

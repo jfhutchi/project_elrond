@@ -1,0 +1,30 @@
+{
+  "at": "2026-10-16T19:03:04.1097510Z",
+  "dashboard_http": 200,
+  "services": [
+    {
+      "TaskName": "Elrond Console",
+      "state": "Running"
+    },
+    {
+      "TaskName": "Elrond Paper Core Guardian",
+      "state": "Running"
+    },
+    {
+      "TaskName": "Elrond Paper Core Outcomes",
+      "state": "Running"
+    },
+    {
+      "TaskName": "Elrond Paper Core Trader",
+      "state": "Running"
+    },
+    {
+      "TaskName": "Elrond Paper Deadline",
+      "state": "Running"
+    },
+    {
+      "TaskName": "Elrond Protection",
+      "state": "Running"
+    }
+  ]
+}

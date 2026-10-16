@@ -1,0 +1,12 @@
+{
+  "at": "2026-10-16T19:02:15.7145006Z",
+  "old_repository": "D:\\Elrond\\releases\\support-ownership-f5be9c1-20261016",
+  "new_repository": "D:\\Elrond\\releases\\support-ownership-37dfaa4-20261016",
+  "source_commit": "37dfaa4279e08c7a5ddbfd25d409338bf6713585",
+  "clean_source": true,
+  "environment_unchanged": true,
+  "database_unchanged": true,
+  "old_processes_remaining": 0,
+  "core_guardian_retained": true,
+  "retained_deadline_running": true
+}

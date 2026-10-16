@@ -1,0 +1,499 @@
+{
+  "at": "2026-10-16T19:03:01.990514+00:00",
+  "binding_id": "12a7196a0a1f9b508eb41896da987c3d41e9162ae2ed3bc99a9446162153ad50",
+  "release_id": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+  "manifest": "D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json",
+  "repository": "D:\\Elrond\\releases\\paper-core-14352cc-20261015",
+  "interpreter": "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+  "entry_policy_id": "ded04e1a1559a55731c452e283f2a29420ddafd1be083b9f6d2a3a8d14b645a4",
+  "symbols": [
+    "AAPL",
+    "MSFT",
+    "AMZN",
+    "GOOGL",
+    "META",
+    "NVDA",
+    "JPM",
+    "JNJ",
+    "XOM",
+    "PG",
+    "F",
+    "T",
+    "PFE",
+    "VZ",
+    "HPQ",
+    "SOFI",
+    "UBER"
+  ],
+  "runtime_action": "RESUME_ENTRY",
+  "roles": {
+    "outcomes": {
+      "role": "outcomes",
+      "release_id": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "owner": "paper-core",
+      "generation": 1,
+      "process_epoch": "c31e4731-47ac-43a5-8556-eb17a303bd46",
+      "pid": 19620,
+      "recorded_at": "2026-10-16T19:03:00.222847Z",
+      "valid_until": "2026-10-16T19:03:30.222847Z",
+      "last_useful_progress": "2026-10-16T19:03:00.222847Z",
+      "objections": [
+        "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:NONEMPTY_OWNED_FLAT_UNAVAILABLE"
+      ],
+      "evidence_ids": [],
+      "proof_age_seconds": 14.737008,
+      "guardian_receipt_id": null,
+      "first_blocker": "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:NONEMPTY_OWNED_FLAT_UNAVAILABLE",
+      "time_proof_age_seconds": null,
+      "cycle_seconds": 0.7810000000026776,
+      "current_release": true,
+      "fresh": true
+    },
+    "guardian": {
+      "role": "guardian",
+      "release_id": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "owner": "paper-core",
+      "generation": 1,
+      "process_epoch": "d75dec8a-0199-4447-864e-faa7304626d8",
+      "pid": 15852,
+      "recorded_at": "2026-10-16T19:03:01.954597Z",
+      "valid_until": "2026-10-16T19:03:31.954597Z",
+      "last_useful_progress": "2026-10-16T19:03:01.954597Z",
+      "objections": [],
+      "evidence_ids": [
+        "b428fe11bc49a36a160ac82ec199926cdf6086d4c26f97e8e2dbfa5d9f4cf335",
+        "323e2974c241881da2fe8f383a9cfc0db7e2815bc3b3da9e170d80735745d980"
+      ],
+      "proof_age_seconds": 0.141971,
+      "guardian_receipt_id": "a25f5ebfbf76ac7bedf0b7406b198e07a1b1cb5fd37ef1758b5ba086c949dad9",
+      "first_blocker": null,
+      "time_proof_age_seconds": 2.202999999994063,
+      "cycle_seconds": 2.5,
+      "current_release": true,
+      "fresh": true
+    },
+    "trader": {
+      "role": "trader",
+      "release_id": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "owner": "paper-core",
+      "generation": 1,
+      "process_epoch": "37b01452-8e95-4fa8-a308-8271ae527eca",
+      "pid": 5680,
+      "recorded_at": "2026-10-16T19:02:47.880548Z",
+      "valid_until": "2026-10-16T19:03:17.880548Z",
+      "last_useful_progress": null,
+      "objections": [
+        "CORE_ENTRY_SLOT_RESERVED:core-entry-850e0307daaeb534f9faa2cc29f17b996ea85dbc6f30b6d3fc5b6f4af43f8b4e",
+        "NO_ELIGIBLE_COHORT_MEMBERS:(('AAPL', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('MSFT', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('AMZN', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('GOOGL', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('META', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('NVDA', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('JPM', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('JNJ', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('XOM', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('PG', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('F', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('T', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('PFE', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('VZ', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('HPQ', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('SOFI', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('UBER', 'FRESH_COMPLETE_BAR_UNAVAILABLE'))"
+      ],
+      "evidence_ids": [],
+      "proof_age_seconds": null,
+      "guardian_receipt_id": null,
+      "first_blocker": "CORE_ENTRY_SLOT_RESERVED:core-entry-850e0307daaeb534f9faa2cc29f17b996ea85dbc6f30b6d3fc5b6f4af43f8b4e",
+      "time_proof_age_seconds": null,
+      "cycle_seconds": 3.5,
+      "current_release": true,
+      "fresh": true
+    }
+  },
+  "entries": [
+    {
+      "intent_id": "core-entry-850e0307daaeb534f9faa2cc29f17b996ea85dbc6f30b6d3fc5b6f4af43f8b4e",
+      "symbol": "META",
+      "side": "BUY",
+      "quantity": "0.003456",
+      "state": "FILLED",
+      "created_at": "2026-10-16T18:55:06.431658Z"
+    },
+    {
+      "intent_id": "core-exit-c522f3b435cbd266277cca3b18d67168f8290ada2f1ba65e810e413f78371ba0",
+      "symbol": "GOOGL",
+      "side": "SELL",
+      "quantity": "0.007112",
+      "state": "FILLED",
+      "created_at": "2026-10-16T18:55:03.055961Z"
+    },
+    {
+      "intent_id": "core-entry-c56f27aed20788181542a64066c562d8dab2f04ef2d8ae9c83a60c8e433bc8dc",
+      "symbol": "GOOGL",
+      "side": "BUY",
+      "quantity": "0.007112",
+      "state": "FILLED",
+      "created_at": "2026-10-16T15:10:58.534385Z"
+    },
+    {
+      "intent_id": "core-exit-1535636854e9c953086e5c6e7acf4f68eed9eaa992c81620c63af32194a03a0e",
+      "symbol": "AMZN",
+      "side": "SELL",
+      "quantity": "0.009657",
+      "state": "FILLED",
+      "created_at": "2026-10-16T15:10:06.295340Z"
+    },
+    {
+      "intent_id": "core-entry-0cf7a2595843cac3b91424b5f18cc83f8e29642d0edb5f77f5d308aefe32ce97",
+      "symbol": "AMZN",
+      "side": "BUY",
+      "quantity": "0.009657",
+      "state": "FILLED",
+      "created_at": "2026-10-16T14:40:03.631376Z"
+    },
+    {
+      "intent_id": "core-exit-a46cebc29799228ffdd0db64c35b5aa900cbaf333fa8fe1c145a246fffc576b5",
+      "symbol": "MSFT",
+      "side": "SELL",
+      "quantity": "0.004567",
+      "state": "FILLED",
+      "created_at": "2026-10-16T14:35:19.792853Z"
+    },
+    {
+      "intent_id": "core-entry-5321196b7dbe410538a2235934f34e263ddfb0a1730a137ca70682dceabb91d0",
+      "symbol": "MSFT",
+      "side": "BUY",
+      "quantity": "0.004567",
+      "state": "FILLED",
+      "created_at": "2026-10-16T14:05:17.464991Z"
+    },
+    {
+      "intent_id": "core-exit-11d8a13b4b22b708c75b166f7ea1af1121fc738dcceb0f18a0e1032ed21ea0e9",
+      "symbol": "AAPL",
+      "side": "SELL",
+      "quantity": "0.007228",
+      "state": "FILLED",
+      "created_at": "2026-10-15T19:30:10.136998Z"
+    },
+    {
+      "intent_id": "core-entry-681489527b2e2ceff3d58854edc7e8146588d2282523456a20490eac0bd0890a",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007228",
+      "state": "FILLED",
+      "created_at": "2026-10-15T19:00:03.747410Z"
+    },
+    {
+      "intent_id": "core-entry-2f0cf4c3ebef72136bbbb65b0f40e4a89ff34f38e1689e084490ff16eb72f90f",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007226",
+      "state": "ERROR",
+      "created_at": "2026-10-15T18:55:02.822032Z"
+    }
+  ],
+  "core_fills": [
+    {
+      "fill_id": "20261015150031289::bbddb5e5-dd80-4a1f-9272-143ad0dfa21e",
+      "broker_order_id": "312f2533-a091-4a5c-80a1-3d2ad5392326",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007228",
+      "price": "342.402",
+      "occurred_at": "2026-10-15T19:00:31.289065Z"
+    },
+    {
+      "fill_id": "20261015153010465::36f94d3d-3fce-439d-a426-2cda54f940e8",
+      "broker_order_id": "104f617a-1451-436b-8d49-c7dcda2e8ff3",
+      "symbol": "AAPL",
+      "side": "SELL",
+      "quantity": "0.007228",
+      "price": "342.936",
+      "occurred_at": "2026-10-15T19:30:10.465970Z"
+    },
+    {
+      "fill_id": "20261016100543982::9161ff5f-bc7a-43df-865f-071e5a10a2b8",
+      "broker_order_id": "ec8a1cbf-79ac-434c-bb9f-017586c262c2",
+      "symbol": "MSFT",
+      "side": "BUY",
+      "quantity": "0.004567",
+      "price": "536.47",
+      "occurred_at": "2026-10-16T14:05:43.982122Z"
+    },
+    {
+      "fill_id": "20261016103518916::cb13e91e-beee-47f2-b634-71890b73a613",
+      "broker_order_id": "cd037050-a74d-4f42-ac53-ebf907eeeb3d",
+      "symbol": "MSFT",
+      "side": "SELL",
+      "quantity": "0.004567",
+      "price": "535.146",
+      "occurred_at": "2026-10-16T14:35:18.916495Z"
+    },
+    {
+      "fill_id": "20261016104030274::a3951fb3-277d-4fe6-b074-12b5d5f8164f",
+      "broker_order_id": "ae98e094-4192-4804-b2e0-cba7bf339ce4",
+      "symbol": "AMZN",
+      "side": "BUY",
+      "quantity": "0.009657",
+      "price": "254.108",
+      "occurred_at": "2026-10-16T14:40:30.274159Z"
+    },
+    {
+      "fill_id": "20261016111005558::0de75360-6cff-49cb-bd5b-7d0369ef0bf5",
+      "broker_order_id": "6acce09f-9c77-408d-9739-696fbd42cd4c",
+      "symbol": "AMZN",
+      "side": "SELL",
+      "quantity": "0.009657",
+      "price": "254.142",
+      "occurred_at": "2026-10-16T15:10:05.558090Z"
+    },
+    {
+      "fill_id": "20261016111125090::69011e70-5b4a-4293-bc62-3584ca3fcd60",
+      "broker_order_id": "2f526f3d-6cf7-4da9-8acf-0802274617a7",
+      "symbol": "GOOGL",
+      "side": "BUY",
+      "quantity": "0.007112",
+      "price": "344.346",
+      "occurred_at": "2026-10-16T15:11:25.090744Z"
+    },
+    {
+      "fill_id": "20261016145503377::12f12664-247b-4615-99ea-911e6a94c3f2",
+      "broker_order_id": "536aee54-10bc-4235-8e8e-f383aeef3bb8",
+      "symbol": "GOOGL",
+      "side": "SELL",
+      "quantity": "0.007112",
+      "price": "339.558",
+      "occurred_at": "2026-10-16T18:55:03.377503Z"
+    },
+    {
+      "fill_id": "20261016145547181::48a498b4-765b-4889-8dd8-e6d58ba6cd96",
+      "broker_order_id": "2b0be0b4-4d0d-461d-a008-6a3e6224088e",
+      "symbol": "META",
+      "side": "BUY",
+      "quantity": "0.003456",
+      "price": "705.498",
+      "occurred_at": "2026-10-16T18:55:47.181261Z"
+    }
+  ],
+  "core_round_trips": [
+    {
+      "actual_fees": null,
+      "available_at": "2026-10-16T07:37:21.825039+00:00",
+      "cost_item_ids": [],
+      "cost_reason": "FEE_UNAVAILABLE",
+      "dataset": "ALPACA_PAPER_OWNED",
+      "decision_id": "a613bf0894e4659601359fe8c756c1628c893cb106d375ce04be69cf18b14d59",
+      "entry_fill_ids": [
+        "20261015150031289::bbddb5e5-dd80-4a1f-9272-143ad0dfa21e"
+      ],
+      "entry_notional": "2.474881656",
+      "evidence_lane": "BROKER_PAPER",
+      "exit_fill_ids": [
+        "20261015153010465::36f94d3d-3fce-439d-a426-2cda54f940e8"
+      ],
+      "gross_pnl": "0.003859752",
+      "lot_id": "a613bf0894e4659601359fe8c756c1628c893cb106d375ce04be69cf18b14d59",
+      "modeled_costs": null,
+      "modeled_net_pnl": null,
+      "net_pnl": null,
+      "open_quantity": "0",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "protection_id": "886d364088c3315ec442162374658e4aab2cea292f2eb5a2aa6bd45b66457028",
+      "reconciliation_id": "385fcabf58012e760d35968802460d03becf5160da7a2a22aba860dd66a570c7",
+      "recorded_at_utc": "2026-10-16T07:37:21.825039+00:00",
+      "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+      "revision": 2,
+      "schema_version": 1,
+      "source_end": "2026-10-15T19:30:10.465970+00:00",
+      "source_refs": [
+        "20261015150031289::bbddb5e5-dd80-4a1f-9272-143ad0dfa21e",
+        "20261015153010465::36f94d3d-3fce-439d-a426-2cda54f940e8",
+        "34b0902b85220e3a3dfbe6844341fa52ab61555649e3e53a5bf8e9181c58c179",
+        "385fcabf58012e760d35968802460d03becf5160da7a2a22aba860dd66a570c7",
+        "4105b4df5b401d452df8a428bc64856f04b9b5a4f5b34121e9ec0a68848a8c09",
+        "669c83dac11ac4fbddc10153d491165661706248608f94ac0a96dd364f421871",
+        "886d364088c3315ec442162374658e4aab2cea292f2eb5a2aa6bd45b66457028"
+      ],
+      "source_start": "2026-10-15T18:25:00+00:00",
+      "source_state_hash": "8176db7cd685bb6b77af89037b525903178f88139870aaad64b0dc4ad211a4fe",
+      "status": "COSTS_PENDING",
+      "supersedes": "0b1b1b829f56ed35e5102402b105000887701141df80251576a68f7f48c06c67",
+      "terminal_order_ids": [
+        "104f617a-1451-436b-8d49-c7dcda2e8ff3",
+        "312f2533-a091-4a5c-80a1-3d2ad5392326"
+      ]
+    },
+    {
+      "actual_fees": null,
+      "available_at": "2026-10-16T14:35:35.025660+00:00",
+      "cost_item_ids": [],
+      "cost_reason": "FEE_UNAVAILABLE",
+      "dataset": "ALPACA_PAPER_OWNED",
+      "decision_id": "2c3dbec844907a31b49b3b60dde3f1202dfd3f7687ecf9e1420fb28b5dc9b953",
+      "entry_fill_ids": [
+        "20261016100543982::9161ff5f-bc7a-43df-865f-071e5a10a2b8"
+      ],
+      "entry_notional": "2.45005849",
+      "entry_policy_id": "ded04e1a1559a55731c452e283f2a29420ddafd1be083b9f6d2a3a8d14b645a4",
+      "evidence_lane": "BROKER_PAPER",
+      "exit_fill_ids": [
+        "20261016103518916::cb13e91e-beee-47f2-b634-71890b73a613"
+      ],
+      "gross_pnl": "-0.006046708",
+      "lot_id": "2c3dbec844907a31b49b3b60dde3f1202dfd3f7687ecf9e1420fb28b5dc9b953",
+      "modeled_costs": null,
+      "modeled_net_pnl": null,
+      "net_pnl": null,
+      "open_quantity": "0",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "protection_id": "f2599837ec7b3b42ea1dcddd221370025819b1d6aa89bfe9ad10c8b0366c84ab",
+      "reconciliation_id": "036a95625a5967f44d549f48aead0f27dfafb0c494bec33df9f86370fe050550",
+      "recorded_at_utc": "2026-10-16T14:35:35.025660+00:00",
+      "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+      "revision": 1,
+      "schema_version": 1,
+      "source_end": "2026-10-16T14:35:18.916495+00:00",
+      "source_refs": [
+        "036a95625a5967f44d549f48aead0f27dfafb0c494bec33df9f86370fe050550",
+        "20261016100543982::9161ff5f-bc7a-43df-865f-071e5a10a2b8",
+        "20261016103518916::cb13e91e-beee-47f2-b634-71890b73a613",
+        "434ff419e026548404fbfa57771582e64669fce958010dca953d0e6fa60d61d8",
+        "8a142010f8d9b086c390268d8d0009fd7d34bc843f18a01e3465f3c965f9b94c",
+        "d60d5a36b1606f7ac5e9546f8aa3e98efde62190c1b2d7b98ed1389ef4d6a1e2",
+        "f2599837ec7b3b42ea1dcddd221370025819b1d6aa89bfe9ad10c8b0366c84ab"
+      ],
+      "source_start": "2026-10-16T13:30:00+00:00",
+      "source_state_hash": "ab561a54074b40fcb7b53794f9b18f35a881bef7b0c37b3fe5ab00b83568ad08",
+      "status": "COSTS_PENDING",
+      "supersedes": null,
+      "terminal_order_ids": [
+        "cd037050-a74d-4f42-ac53-ebf907eeeb3d",
+        "ec8a1cbf-79ac-434c-bb9f-017586c262c2"
+      ]
+    },
+    {
+      "actual_fees": null,
+      "available_at": "2026-10-16T15:10:21.157721+00:00",
+      "cost_item_ids": [],
+      "cost_reason": "FEE_UNAVAILABLE",
+      "dataset": "ALPACA_PAPER_OWNED",
+      "decision_id": "b0c225709bc4c5653fc89144d18fd8006df8e63680b982dc5642893c7f789469",
+      "entry_fill_ids": [
+        "20261016104030274::a3951fb3-277d-4fe6-b074-12b5d5f8164f"
+      ],
+      "entry_notional": "2.453920956",
+      "entry_policy_id": "ded04e1a1559a55731c452e283f2a29420ddafd1be083b9f6d2a3a8d14b645a4",
+      "evidence_lane": "BROKER_PAPER",
+      "exit_fill_ids": [
+        "20261016111005558::0de75360-6cff-49cb-bd5b-7d0369ef0bf5"
+      ],
+      "gross_pnl": "0.000328338",
+      "lot_id": "b0c225709bc4c5653fc89144d18fd8006df8e63680b982dc5642893c7f789469",
+      "modeled_costs": null,
+      "modeled_net_pnl": null,
+      "net_pnl": null,
+      "open_quantity": "0",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "protection_id": "5e8ad9b7e4112195f0e85f3e51b741e7212436d3210f2e3d447d50b7e7fd7579",
+      "reconciliation_id": "aa7041e9f084a202a5ce2160e86621537d8be6647d1d69d9b9d820a3d33a56ed",
+      "recorded_at_utc": "2026-10-16T15:10:21.157721+00:00",
+      "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+      "revision": 1,
+      "schema_version": 1,
+      "source_end": "2026-10-16T15:10:05.558090+00:00",
+      "source_refs": [
+        "20261016104030274::a3951fb3-277d-4fe6-b074-12b5d5f8164f",
+        "20261016111005558::0de75360-6cff-49cb-bd5b-7d0369ef0bf5",
+        "5e8ad9b7e4112195f0e85f3e51b741e7212436d3210f2e3d447d50b7e7fd7579",
+        "a049490f04782ffe046c8cec5e30a43be3697674b4bf21f59cea0e98d2d230df",
+        "aa7041e9f084a202a5ce2160e86621537d8be6647d1d69d9b9d820a3d33a56ed",
+        "e04c7c07aa52db72ecc8fed9790fec4781782c470be536db4ad5e3978b4227c8",
+        "ffe2397fa4ec804efe11ed77d93d62dfc1fd34f7bf897f0933ce5f50999623fd"
+      ],
+      "source_start": "2026-10-16T14:05:00+00:00",
+      "source_state_hash": "66090bb23d7c2571ae40f2bbd4add9a9da1477293b808708014f2017a9cd9f62",
+      "status": "COSTS_PENDING",
+      "supersedes": null,
+      "terminal_order_ids": [
+        "6acce09f-9c77-408d-9739-696fbd42cd4c",
+        "ae98e094-4192-4804-b2e0-cba7bf339ce4"
+      ]
+    },
+    {
+      "actual_fees": null,
+      "available_at": "2026-10-16T18:55:05.907625+00:00",
+      "cost_item_ids": [],
+      "cost_reason": "FEE_UNAVAILABLE",
+      "dataset": "ALPACA_PAPER_OWNED",
+      "decision_id": "b78e942c8a11b20f3aa000790cc8eddfddaa1612dd6def3a7be3e7ca0f15bb65",
+      "entry_fill_ids": [
+        "20261016111125090::69011e70-5b4a-4293-bc62-3584ca3fcd60"
+      ],
+      "entry_notional": "2.448988752",
+      "entry_policy_id": "ded04e1a1559a55731c452e283f2a29420ddafd1be083b9f6d2a3a8d14b645a4",
+      "evidence_lane": "BROKER_PAPER",
+      "exit_fill_ids": [
+        "20261016145503377::12f12664-247b-4615-99ea-911e6a94c3f2"
+      ],
+      "gross_pnl": "-0.034052256",
+      "lot_id": "b78e942c8a11b20f3aa000790cc8eddfddaa1612dd6def3a7be3e7ca0f15bb65",
+      "modeled_costs": null,
+      "modeled_net_pnl": null,
+      "net_pnl": null,
+      "open_quantity": "0",
+      "policy_id": "collect-owned-30m-stop100-v1",
+      "protection_id": "1c43b512eabc54dbed48495ed7355d5913139952cc215caaa6fb101685b5ed35",
+      "reconciliation_id": "8b04f715b885c50e47f49900a08fc3379779b31ef1db62c60f210d852a8579ef",
+      "recorded_at_utc": "2026-10-16T18:55:05.907625+00:00",
+      "release_id": "0734974b39088b449abe1279a385c89202756b61f3420aa910d6b2d772a46d4c",
+      "revision": 1,
+      "schema_version": 1,
+      "source_end": "2026-10-16T18:55:03.377503+00:00",
+      "source_refs": [
+        "1c43b512eabc54dbed48495ed7355d5913139952cc215caaa6fb101685b5ed35",
+        "20261016111125090::69011e70-5b4a-4293-bc62-3584ca3fcd60",
+        "20261016145503377::12f12664-247b-4615-99ea-911e6a94c3f2",
+        "62442737a5c96913b4d1e33d0ea96203a8418779c11cead867d25effa2de73a3",
+        "8b04f715b885c50e47f49900a08fc3379779b31ef1db62c60f210d852a8579ef",
+        "c8919d1418fe482d86c5baed9ff6efe6b26a3a8fb51ae2410f666157468d6e90",
+        "c99346daf9f426431f7ea56734e3a787daf1b63d51aa2346b0645d646390ff02"
+      ],
+      "source_start": "2026-10-16T14:35:00+00:00",
+      "source_state_hash": "64179fc56807905668c3978c0aecd3de3036bfc2c9552bc40258c91ad447753e",
+      "status": "COSTS_PENDING",
+      "supersedes": null,
+      "terminal_order_ids": [
+        "2f526f3d-6cf7-4da9-8acf-0802274617a7",
+        "536aee54-10bc-4235-8e8e-f383aeef3bb8"
+      ]
+    }
+  ],
+  "learning_counts": {
+    "core_learning_runs": 3,
+    "core_learning_attempts": 0,
+    "core_learning_inputs": 0
+  },
+  "active_model": [
+    {
+      "id": 1,
+      "activation_id": "8923837a5773b26c3e891ce2b9cf934d1ffb383ba22eafd8d69652454afa22fa",
+      "model_id": "8a160f52b4086ba3f62269b2fb653c635fc45abc5acdc1a32b85a2c1aa77ac01",
+      "generation": 4,
+      "receipt_id": "958dbd4876bfd7f3ad08e0ff1f41e9cae2a5a38698c59ddd3246ab240195f013"
+    }
+  ],
+  "stop": {
+    "id": 1,
+    "engaged": 0,
+    "reason": "stop",
+    "updated_at": "2026-10-14T01:17:42.473747Z"
+  },
+  "retained_protection": {
+    "observed_at": "2026-10-16T19:02:28.729620Z",
+    "outcome": "HEALTHY",
+    "position_count": 9,
+    "evaluated_count": 9,
+    "unprotected_count": 0,
+    "exit_required_count": 0,
+    "reason": ""
+  },
+  "quantity_proof": {
+    "generation": 6608,
+    "recorded_at_utc": "2026-10-16T19:03:01.812626+00:00",
+    "complete": true,
+    "cash_complete": false,
+    "funds_authority": "BROKER_PAPER_BALANCE_V1"
+  }
+}

@@ -1,0 +1,50 @@
+{
+  "at": "2026-10-16T19:01:54.257453+00:00",
+  "old_release_id": "b5a279c92550c0ea0bc49ac9b335a351fdc80cccc8d4ba98f4d563d3894b7644",
+  "new_release_id": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+  "binding_id": "12a7196a0a1f9b508eb41896da987c3d41e9162ae2ed3bc99a9446162153ad50",
+  "config_unchanged": true,
+  "backup_integrity": "ok",
+  "preserved_tables": {
+    "schema_version": {
+      "count": 1,
+      "sha256": "f5a7599b60ba9ed5a8ff09c2dcd875d41f94dd4b8a0458b390839175affb3829"
+    },
+    "core_identities": {
+      "count": 1,
+      "sha256": "453347e41b3bedca68821930dab37d7b71fc67b5bcfac4c02d806d2b72e212b4"
+    },
+    "core_fixture_baselines": {
+      "count": 1,
+      "sha256": "abc70021340492660900a88444f24cc1612951249a3f2a798f40a8cd4d344acd"
+    },
+    "core_runtime_commissions": {
+      "count": 1,
+      "sha256": "ed8f7a40e5e6e0100a130cbf70d1ebf040857e02b1c3af2e4a943a1af37ead6f"
+    },
+    "core_active_model": {
+      "count": 1,
+      "sha256": "3928d06f14d794fb914514503cb63c062535d3c273c246600801697269a4b26a"
+    },
+    "core_models": {
+      "count": 1,
+      "sha256": "a31e65f68ec6fa77db23d82f0e1ecf934baf34c447be793f219039c32c19f5f8"
+    },
+    "core_activations": {
+      "count": 3,
+      "sha256": "0ecb6c9fd86804f9900007f02d5578aaace4760c2aca8ea8a65bab2373eb7e30"
+    },
+    "kill_switch_state": {
+      "count": 1,
+      "sha256": "8e6bdbac1dde54afee7bbc41f430e05de0171afdaaf9198455d93e60166ddc26"
+    }
+  },
+  "verification": {
+    "release_id": "6a1672214339009b26f04cc6f1a2c2f3439dcdb9d09dfc9611af0e1a8c9cc773",
+    "verified_at": "2026-10-16T19:01:53.111320+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  }
+}
