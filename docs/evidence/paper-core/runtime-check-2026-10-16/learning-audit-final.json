@@ -1,0 +1,56 @@
+{
+  "at": "2026-10-16T15:12:44.167660+00:00",
+  "eligible_from_completed_sessions": 1,
+  "exclusions": [
+    [
+      "04591e5b42cdb772f1d6b560a45a7e165bd6300fa1071ad75f9a765b7a82469f",
+      "SESSION_NOT_COMPLETED"
+    ],
+    [
+      "6f992d29584aeb8380fcc15913e860a54090cb639d36d4cf159aac54227e8731",
+      "SESSION_NOT_COMPLETED"
+    ]
+  ],
+  "considered_count": 3,
+  "completed_round_trips": [
+    {
+      "symbol": "AAPL",
+      "gross_pnl": "0.003859752",
+      "actual_fees": null,
+      "net_pnl": null,
+      "cost_reason": "FEE_UNAVAILABLE",
+      "source_end": "2026-10-15T19:30:10.465970+00:00",
+      "valid_gross_target_bps": 15.595703296125606,
+      "closed": true
+    },
+    {
+      "symbol": "MSFT",
+      "gross_pnl": "-0.006046708",
+      "actual_fees": null,
+      "net_pnl": null,
+      "cost_reason": "FEE_UNAVAILABLE",
+      "source_end": "2026-10-16T14:35:18.916495+00:00",
+      "valid_gross_target_bps": -24.679851622644325,
+      "closed": true
+    },
+    {
+      "symbol": "AMZN",
+      "gross_pnl": "0.000328338",
+      "actual_fees": null,
+      "net_pnl": null,
+      "cost_reason": "FEE_UNAVAILABLE",
+      "source_end": "2026-10-16T15:10:05.558090+00:00",
+      "valid_gross_target_bps": 1.3380137579296991,
+      "closed": true
+    }
+  ],
+  "active_model_mode": "COLLECT",
+  "completed_session_count": 1,
+  "warmup_required": 10,
+  "fit_attempts": 0,
+  "learning_receipts": 2,
+  "receipt_reasons": [
+    "TEN_COMPLETED_SESSION_WARMUP",
+    "TEN_COMPLETED_SESSION_WARMUP"
+  ]
+}

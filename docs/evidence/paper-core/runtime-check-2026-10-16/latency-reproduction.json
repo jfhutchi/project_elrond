@@ -1,0 +1,41 @@
+{
+  "at": "2026-10-16T15:00:41.620762+00:00",
+  "market_requests": [
+    {
+      "timeout_seconds": 2,
+      "elapsed_seconds": 2.0780000000086147,
+      "error_type": "MarketDataRequestError",
+      "cause_type": "MarketDataTransportError"
+    },
+    {
+      "timeout_seconds": 5,
+      "elapsed_seconds": 3.452999999994063,
+      "bars": 144,
+      "symbols": 18,
+      "latest": "2026-10-16T14:55:00+00:00"
+    }
+  ],
+  "verified_learning_calendar": {
+    "origin": "2026-10-15T13:30:00+00:00",
+    "completed_count": 1,
+    "completed_sessions": [
+      "2026-10-15"
+    ]
+  },
+  "unallocated_fee_activities": [
+    {
+      "activity_type": "FEE",
+      "net_amount": "-0.01",
+      "has_order_id": false,
+      "has_fill_id": false,
+      "creation": "2026-10-15"
+    },
+    {
+      "activity_type": "FEE",
+      "net_amount": "-0.01",
+      "has_order_id": false,
+      "has_fill_id": false,
+      "creation": "2026-10-15"
+    }
+  ]
+}

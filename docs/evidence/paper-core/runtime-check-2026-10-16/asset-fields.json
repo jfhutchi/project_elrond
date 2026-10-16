@@ -1,0 +1,104 @@
+{
+  "assets": [
+    {
+      "symbol": "AAPL",
+      "fields": {
+        "class": {
+          "present": true,
+          "type": "str",
+          "value": "us_equity"
+        },
+        "status": {
+          "present": true,
+          "type": "str",
+          "value": "active"
+        },
+        "tradable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        },
+        "fractionable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        }
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "fields": {
+        "class": {
+          "present": true,
+          "type": "str",
+          "value": "us_equity"
+        },
+        "status": {
+          "present": true,
+          "type": "str",
+          "value": "active"
+        },
+        "tradable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        },
+        "fractionable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        }
+      }
+    },
+    {
+      "symbol": "F",
+      "fields": {
+        "class": {
+          "present": true,
+          "type": "str",
+          "value": "us_equity"
+        },
+        "status": {
+          "present": true,
+          "type": "str",
+          "value": "active"
+        },
+        "tradable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        },
+        "fractionable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        }
+      }
+    },
+    {
+      "symbol": "AMZN",
+      "fields": {
+        "class": {
+          "present": true,
+          "type": "str",
+          "value": "us_equity"
+        },
+        "status": {
+          "present": true,
+          "type": "str",
+          "value": "active"
+        },
+        "tradable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        },
+        "fractionable": {
+          "present": true,
+          "type": "bool",
+          "value": true
+        }
+      }
+    }
+  ]
+}

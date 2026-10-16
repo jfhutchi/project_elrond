@@ -1,6 +1,6 @@
 # Project Elrond — Persistent Development Goal
 
-> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](docs/evidence/paper-core/whole-share-2026-10-15/README.md).
+> **Current PAPER runtime, October 16:** The approved policy is active with a bounded trader data-read correction. One of ten completed-session warmup sessions has elapsed; completed wins/losses supply gross targets while actual fees/net remain unknown. Preserve strategy, risk, freshness and history. See the [current audit](docs/evidence/paper-core/runtime-check-2026-10-16/README.md).
 
 Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` paper-trading system into an autonomous quantitative research and trading platform whose ultimate purpose is to discover, validate, and eventually exploit durable market edges that can compound real capital.
 

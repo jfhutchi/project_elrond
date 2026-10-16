@@ -1,0 +1,26 @@
+[
+  {
+    "TaskName": "Elrond Console",
+    "State": "Running"
+  },
+  {
+    "TaskName": "Elrond Paper Core Guardian",
+    "State": "Running"
+  },
+  {
+    "TaskName": "Elrond Paper Core Outcomes",
+    "State": "Running"
+  },
+  {
+    "TaskName": "Elrond Paper Core Trader",
+    "State": "Running"
+  },
+  {
+    "TaskName": "Elrond Paper Deadline",
+    "State": "Running"
+  },
+  {
+    "TaskName": "Elrond Protection",
+    "State": "Running"
+  }
+]

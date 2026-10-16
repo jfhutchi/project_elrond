@@ -1,6 +1,6 @@
 # Deployed state: what is actually running
 
-> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](evidence/paper-core/whole-share-2026-10-15/README.md).
+> **Current PAPER runtime, October 16:** All six services are running with the bounded entry-data correction. MSFT and AMZN completed today; GOOGL filled after deployment. Warmup is one completed session out of ten, with no fit yet and fees/net unknown. See the [current runtime audit](evidence/paper-core/runtime-check-2026-10-16/README.md).
 
 ## Current deployment boundary — October 15, 2026
 

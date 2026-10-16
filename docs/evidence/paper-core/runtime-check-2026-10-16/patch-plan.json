@@ -1,0 +1,21 @@
+{
+  "at": "2026-10-16T11:07:13.122613-04:00",
+  "old_release_id": "a93b508b76f318a030fb1813f8f0a06eae98cd919fadddcefa65df574bfce61e",
+  "new_release_id": "f3f65d4023f41fe25e40560fa7eb7727c665f93857343b6fd4e5db16d60e4a1c",
+  "manifest": "D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json",
+  "source_base": "9d9a909df382089cbc1d5a625a05b67282df16e5",
+  "config_unchanged": true,
+  "changes": [
+    {
+      "path": "src/quantbot/paper_core/__main__.py",
+      "old_sha256": "e4b843b154deba4a4659f15803d1e09408081971adbaf933dc7726810af31c9c",
+      "new_sha256": "8b17133f76e3984bab07b1b50b46dcd97cf0719487c8bbb49ba207ecf71a68cd"
+    },
+    {
+      "path": "src/quantbot/paper_core/roles.py",
+      "old_sha256": "eb1bf8a65d5409b0397b471fbceef4b0dc030d49b0443d0b9eadfa0e2093b84d",
+      "new_sha256": "8aa81c5e011ae245086cd63818e518f15898166879915d8d48289d06abb3d0bf"
+    }
+  ],
+  "source_code_commit": "f934d167b37fa922d7f17da81a56a2511391f143"
+}

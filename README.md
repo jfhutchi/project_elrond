@@ -1,6 +1,6 @@
 # Project Elrond
 
-> **Current PAPER runtime, October 15:** The approved affordable-stock/whole-share entry policy is active on the Omen. Fractions remain preferred; an exact one-share fallback keeps the existing loss budget. The first AAPL round trip is verified; fees/net remain unknown and no learner fit is claimed. See the [current handover](docs/evidence/paper-core/whole-share-2026-10-15/README.md).
+> **Current PAPER runtime, October 16:** The Omen is trading under the approved entry policy. A bounded entry-data latency correction is deployed; MSFT and AMZN completed today, and GOOGL filled after the correction. One of ten warmup sessions is complete; no model fit is claimed. Fees/net remain unknown. See the [current runtime audit](docs/evidence/paper-core/runtime-check-2026-10-16/README.md).
 
 An autonomous quantitative research and PAPER trading platform that tries hard not to fool itself.
 

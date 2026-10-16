@@ -1,0 +1,40 @@
+{
+  "new_regressions": {
+    "passed": 6,
+    "elapsed_seconds": 35.04
+  },
+  "independent_review": {
+    "findings": [],
+    "passed": 6,
+    "elapsed_seconds": 35.13
+  },
+  "trade_cost_learning_gate": {
+    "passed": 103,
+    "elapsed_seconds": 254.2
+  },
+  "ruff_changed_files": "PASS",
+  "baseline_reproduced": [
+    "production trader market read above two seconds timed out",
+    "valid cohort taking 5.1 seconds aborted before decision"
+  ],
+  "fix": {
+    "trader_market_read_seconds": 5,
+    "trader_cohort_budget_seconds": 10,
+    "broker_calendar_guardian_outcomes_seconds": 2
+  },
+  "unchanged": [
+    "120 second source freshness",
+    "locked final-send freshness",
+    "one concurrent core lot",
+    "six session reservations",
+    "stop and deadline rules",
+    "risk budgets",
+    "ten completed exchange-session warmup",
+    "all eligible compatible history with recent ten-session weighting"
+  ],
+  "paid_ci_triggered": false,
+  "send_protection_gate": {
+    "passed": 23,
+    "elapsed_seconds": 32.35
+  }
+}

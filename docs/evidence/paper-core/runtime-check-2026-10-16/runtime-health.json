@@ -1,0 +1,163 @@
+{
+  "at": "2026-10-16T15:13:38.157311+00:00",
+  "binding_id": "256340fc54c62372bb20bda45fb2758f1a1fdde05451f525990cb60d53b1460e",
+  "release_id": "f3f65d4023f41fe25e40560fa7eb7727c665f93857343b6fd4e5db16d60e4a1c",
+  "entry_policy_id": "ded04e1a1559a55731c452e283f2a29420ddafd1be083b9f6d2a3a8d14b645a4",
+  "runtime_action": "RESUME_ENTRY",
+  "roles": {
+    "outcomes": {
+      "role": "outcomes",
+      "release_id": "f3f65d4023f41fe25e40560fa7eb7727c665f93857343b6fd4e5db16d60e4a1c",
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "owner": "paper-core",
+      "generation": 1,
+      "process_epoch": "a7f48adb-e763-418b-85f7-ffe73fc1c160",
+      "pid": 7576,
+      "recorded_at": "2026-10-16T15:13:26.381517Z",
+      "valid_until": "2026-10-16T15:13:56.381517Z",
+      "last_useful_progress": "2026-10-16T15:13:26.381517Z",
+      "objections": [
+        "b78e942c8a11b20f3aa000790cc8eddfddaa1612dd6def3a7be3e7ca0f15bb65:NONEMPTY_OWNED_FLAT_UNAVAILABLE"
+      ],
+      "evidence_ids": [],
+      "proof_age_seconds": 13.293486,
+      "guardian_receipt_id": null,
+      "first_blocker": "b78e942c8a11b20f3aa000790cc8eddfddaa1612dd6def3a7be3e7ca0f15bb65:NONEMPTY_OWNED_FLAT_UNAVAILABLE",
+      "time_proof_age_seconds": null,
+      "cycle_seconds": 0.6410000000032596,
+      "current_release": true,
+      "fresh": true
+    },
+    "guardian": {
+      "role": "guardian",
+      "release_id": "f3f65d4023f41fe25e40560fa7eb7727c665f93857343b6fd4e5db16d60e4a1c",
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "owner": "paper-core",
+      "generation": 1,
+      "process_epoch": "d93ab76f-b4da-431b-920b-c4f688f1e625",
+      "pid": 2120,
+      "recorded_at": "2026-10-16T15:13:26.991011Z",
+      "valid_until": "2026-10-16T15:13:56.991011Z",
+      "last_useful_progress": "2026-10-16T15:13:26.991011Z",
+      "objections": [],
+      "evidence_ids": [
+        "326ecd8b50bf267e1674be3b29c24fe218953f8da184b6f7810690061dee1432",
+        "8c4d8c86cac481a3c07467cf481268ee2b3e27a4f710edca89b90a07532a9158"
+      ],
+      "proof_age_seconds": 0.146919,
+      "guardian_receipt_id": "a81ca58194e2b054c2de539cd20f08903c833ef7e1bc3dbd46e6d57285356f79",
+      "first_blocker": null,
+      "time_proof_age_seconds": 0.75,
+      "cycle_seconds": 1.2179999999934807,
+      "current_release": true,
+      "fresh": true
+    },
+    "trader": {
+      "role": "trader",
+      "release_id": "f3f65d4023f41fe25e40560fa7eb7727c665f93857343b6fd4e5db16d60e4a1c",
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "owner": "paper-core",
+      "generation": 1,
+      "process_epoch": "40dd00d4-5a0a-42fe-9756-47b21eff518a",
+      "pid": 8160,
+      "recorded_at": "2026-10-16T15:13:26.311801Z",
+      "valid_until": "2026-10-16T15:13:56.311801Z",
+      "last_useful_progress": "2026-10-16T15:13:26.311801Z",
+      "objections": [
+        "CORE_ENTRY_SLOT_RESERVED:core-entry-c56f27aed20788181542a64066c562d8dab2f04ef2d8ae9c83a60c8e433bc8dc"
+      ],
+      "evidence_ids": [
+        "52a3e82a477ce2308fa12d9d495c4cfef69c9b882b1bde4c3a3f6a741d98a1fa"
+      ],
+      "proof_age_seconds": 13.22377,
+      "guardian_receipt_id": null,
+      "first_blocker": "CORE_ENTRY_SLOT_RESERVED:core-entry-c56f27aed20788181542a64066c562d8dab2f04ef2d8ae9c83a60c8e433bc8dc",
+      "time_proof_age_seconds": 148.43700000000536,
+      "cycle_seconds": 0.5930000000080327,
+      "current_release": true,
+      "fresh": true
+    }
+  },
+  "core_fills": [
+    {
+      "fill_id": "20261015150031289::bbddb5e5-dd80-4a1f-9272-143ad0dfa21e",
+      "broker_order_id": "312f2533-a091-4a5c-80a1-3d2ad5392326",
+      "symbol": "AAPL",
+      "side": "BUY",
+      "quantity": "0.007228",
+      "price": "342.402",
+      "occurred_at": "2026-10-15T19:00:31.289065Z"
+    },
+    {
+      "fill_id": "20261015153010465::36f94d3d-3fce-439d-a426-2cda54f940e8",
+      "broker_order_id": "104f617a-1451-436b-8d49-c7dcda2e8ff3",
+      "symbol": "AAPL",
+      "side": "SELL",
+      "quantity": "0.007228",
+      "price": "342.936",
+      "occurred_at": "2026-10-15T19:30:10.465970Z"
+    },
+    {
+      "fill_id": "20261016100543982::9161ff5f-bc7a-43df-865f-071e5a10a2b8",
+      "broker_order_id": "ec8a1cbf-79ac-434c-bb9f-017586c262c2",
+      "symbol": "MSFT",
+      "side": "BUY",
+      "quantity": "0.004567",
+      "price": "536.47",
+      "occurred_at": "2026-10-16T14:05:43.982122Z"
+    },
+    {
+      "fill_id": "20261016103518916::cb13e91e-beee-47f2-b634-71890b73a613",
+      "broker_order_id": "cd037050-a74d-4f42-ac53-ebf907eeeb3d",
+      "symbol": "MSFT",
+      "side": "SELL",
+      "quantity": "0.004567",
+      "price": "535.146",
+      "occurred_at": "2026-10-16T14:35:18.916495Z"
+    },
+    {
+      "fill_id": "20261016104030274::a3951fb3-277d-4fe6-b074-12b5d5f8164f",
+      "broker_order_id": "ae98e094-4192-4804-b2e0-cba7bf339ce4",
+      "symbol": "AMZN",
+      "side": "BUY",
+      "quantity": "0.009657",
+      "price": "254.108",
+      "occurred_at": "2026-10-16T14:40:30.274159Z"
+    },
+    {
+      "fill_id": "20261016111005558::0de75360-6cff-49cb-bd5b-7d0369ef0bf5",
+      "broker_order_id": "6acce09f-9c77-408d-9739-696fbd42cd4c",
+      "symbol": "AMZN",
+      "side": "SELL",
+      "quantity": "0.009657",
+      "price": "254.142",
+      "occurred_at": "2026-10-16T15:10:05.558090Z"
+    },
+    {
+      "fill_id": "20261016111125090::69011e70-5b4a-4293-bc62-3584ca3fcd60",
+      "broker_order_id": "2f526f3d-6cf7-4da9-8acf-0802274617a7",
+      "symbol": "GOOGL",
+      "side": "BUY",
+      "quantity": "0.007112",
+      "price": "344.346",
+      "occurred_at": "2026-10-16T15:11:25.090744Z"
+    }
+  ],
+  "learning_counts": {
+    "core_learning_runs": 2,
+    "core_learning_attempts": 0,
+    "core_learning_inputs": 0
+  },
+  "retained_protection": {
+    "observed_at": "2026-10-16T15:00:30.304673Z",
+    "outcome": "HEALTHY",
+    "position_count": 9,
+    "evaluated_count": 9,
+    "unprotected_count": 0,
+    "exit_required_count": 0,
+    "reason": ""
+  }
+}

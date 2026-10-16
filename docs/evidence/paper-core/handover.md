@@ -1,6 +1,6 @@
 # PAPER core implementation and handover
 
-> **Current handover, October 15 afternoon:** the commissioned hybrid core and approved affordable-stock/whole-share amendment are running locally. The first AAPL round trip is recorded; unknown fees/net and ten-session learner warmup remain. Use the [current handover package](whole-share-2026-10-15/README.md) for executable, policy, console/protection pins and acceptance limits. The dated installation captures below are historical.
+> **Current handover, October 16 at 11:13 Eastern:** a code-only entry-data latency correction is running on the Omen, with two completed trades today and a subsequent GOOGL fill. Strategy, risk and ten-session warmup remain unchanged. Use the [current runtime audit](runtime-check-2026-10-16/README.md) for the exact executable, worker checks, costs and usable-outcome evidence. The [October 15 policy handover](whole-share-2026-10-15/README.md) supplies the retained policy and support-service pins. Dated captures below are historical.
 
 > **Runtime handover, October 15 at 08:13 Eastern:** both stores are now schema 36; upgraded dashboard, inherited protection and deadline services are running. The bounded deployment task waits for the original IWM exit before commissioning guardian/outcomes and enabling trader after fresh protection checks. Trading is not active at this capture. See the [measured runtime handover](runtime-handover-2026-10-15/README.md).
 
