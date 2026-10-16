@@ -351,7 +351,9 @@ async def run_role(
                     decision = None
                     if boundary != last_boundary:
                         pending_candidate = None
-                        async with asyncio.timeout(5):
+                        # Allow the cohort's bounded read plus clock/calendar and asset checks.
+                        # Original 120-second observation and final-send freshness still apply.
+                        async with asyncio.timeout(10):
                             observation = (
                                 await broker.observation_cohort()
                                 if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"

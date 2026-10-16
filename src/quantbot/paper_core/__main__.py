@@ -248,7 +248,8 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
                 api_secret=secret,
                 transport=market_transport,
                 max_retries=0,
-                timeout_seconds=Decimal(2),
+                # Entry cohorts are larger reads; independent protection keeps its short bound.
+                timeout_seconds=Decimal(5) if args.role == "trader" else Decimal(2),
             )
             calendar = AlpacaMarketCalendar(
                 api_key=key,
