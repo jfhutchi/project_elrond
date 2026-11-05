@@ -596,3 +596,121 @@ def test_verified_receipt_mismatch_fails_without_integrity_fallback(
     )
     with pytest.raises(ValueError, match="receipt"):
         preflight(path, verified_backup_receipt=receipt)
+
+
+def test_capacity_refuses_before_expensive_audit(closed_refusal, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    path, *_ = closed_refusal
+    monkeypatch.setattr(
+        cleanup.shutil,
+        "disk_usage",
+        lambda directory: SimpleNamespace(free=2 * path.stat().st_size),
+    )
+    monkeypatch.setattr(
+        cleanup, "_audit", lambda *args: pytest.fail("capacity refused after audit")
+    )
+    with pytest.raises(ValueError, match="capacity|space"):
+        cleanup_copy(path, tmp_path / "candidate.db", vacuum=True)
+
+
+def test_vacuum_peak_is_three_sizes_plus_headroom_and_split_by_volume(tmp_path, monkeypatch):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    size = 1024 * 1024 * 1024
+    candidate, scratch = tmp_path / "candidate", tmp_path / "scratch"
+    candidate.mkdir()
+    scratch.mkdir()
+    monkeypatch.setattr(cleanup, "volume_key", lambda path: "shared")
+    plan = cleanup.capacity_requirements(size, candidate, scratch, vacuum=True)
+    assert plan["volumes"]["shared"]["required_bytes"] == 3 * size + plan["headroom_bytes"]
+    monkeypatch.setattr(
+        cleanup, "volume_key", lambda path: "candidate" if path == candidate else "scratch"
+    )
+    plan = cleanup.capacity_requirements(size, candidate, scratch, vacuum=True)
+    assert plan["volumes"]["candidate"]["required_bytes"] == 2 * size + plan["headroom_bytes"]
+    assert plan["volumes"]["scratch"]["required_bytes"] == size + plan["headroom_bytes"]
+
+
+def test_postcopy_space_drop_refuses_before_deletion(closed_refusal, tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    path, *_ = closed_refusal
+    partial = tmp_path / "candidate.db.unverified"
+    monkeypatch.setattr(
+        cleanup.shutil,
+        "disk_usage",
+        lambda directory: SimpleNamespace(free=0 if partial.exists() else 10**15),
+    )
+    monkeypatch.setattr(
+        cleanup, "delete_selected", lambda *args: pytest.fail("delete started after capacity drop")
+    )
+    with pytest.raises(ValueError, match="capacity|space"):
+        cleanup_copy(path, tmp_path / "candidate.db")
+    assert not (tmp_path / "candidate.db").exists()
+
+
+def test_candidate_digest_is_bound_to_existing_verification_lease(
+    closed_refusal, tmp_path, monkeypatch
+):
+    import hashlib
+
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    path, *_ = closed_refusal
+    real_digest, seen = cleanup.candidate_digest, []
+
+    def checked_digest(candidate, budget):
+        # The same Windows lease must still deny mutation after integrity/row verification.
+        with pytest.raises(PermissionError):
+            candidate.open("r+b")
+        with pytest.raises(PermissionError):
+            candidate.unlink()
+        result = real_digest(candidate, budget)
+        seen.append(result)
+        return result
+
+    monkeypatch.setattr(cleanup, "candidate_digest", checked_digest)
+    candidate = tmp_path / "candidate.db"
+    report = cleanup_copy(path, candidate)
+    assert seen
+    assert report["candidate_sha256"] == hashlib.sha256(candidate.read_bytes()).hexdigest()
+    assert report["candidate_bytes"] == candidate.stat().st_size
+    with candidate.open("ab") as output:
+        output.write(b"changed after lease release")
+    assert report["candidate_sha256"] != hashlib.sha256(candidate.read_bytes()).hexdigest()
+    assert report["candidate_bytes"] != candidate.stat().st_size
+
+
+def test_vacuum_rechecks_additional_space_after_delete_journal_is_gone(
+    closed_refusal, tmp_path, monkeypatch
+):
+    import hashlib
+
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    path, *_ = closed_refusal
+    candidate = tmp_path / "vacuum.db"
+    partial = tmp_path / "vacuum.db.unverified"
+    actual_capacity, checked = cleanup.require_capacity, []
+
+    def observe_capacity(plan):
+        if plan["phase"] == "vacuum":
+            assert not (tmp_path / "vacuum.db.unverified-journal").exists()
+            assert len(plan["volumes"]) == 1
+            assert (
+                next(iter(plan["volumes"].values()))["required_bytes"]
+                == 2 * partial.stat().st_size + plan["headroom_bytes"]
+            )
+            checked.append("vacuum")
+        actual_capacity(plan)
+
+    monkeypatch.setattr(cleanup, "require_capacity", observe_capacity)
+    report = cleanup_copy(path, candidate, vacuum=True)
+    assert checked == ["vacuum"]
+    assert report["candidate_bytes"] == candidate.stat().st_size
+    assert report["candidate_sha256"] == hashlib.sha256(candidate.read_bytes()).hexdigest()

@@ -699,6 +699,96 @@ def delete_selected(connection, selected, *, window_size=4096):
                 )
 
 
+def volume_key(directory):
+    """Identify the underlying Windows volume, including mounted-folder aliases."""
+    directory = Path(directory).resolve()
+    if not directory.is_dir():
+        raise ValueError("existing capacity-check directory required")
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    mount, identity = ctypes.create_unicode_buffer(1024), ctypes.create_unicode_buffer(1024)
+    mount_path = kernel.GetVolumePathNameW
+    mount_path.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
+    volume_name = kernel.GetVolumeNameForVolumeMountPointW
+    volume_name.argtypes = [ctypes.c_wchar_p, ctypes.c_wchar_p, ctypes.c_uint]
+    if not mount_path(str(directory), mount, len(mount)) or not volume_name(
+        mount.value, identity, len(identity)
+    ):
+        raise ctypes.WinError(ctypes.get_last_error())
+    return identity.value.lower()
+
+
+def capacity_requirements(
+    source_bytes,
+    candidate_directory,
+    scratch_directory,
+    *,
+    vacuum=False,
+    rebuild_extra=0,
+    phase="initial",
+    candidate_bytes=None,
+):
+    """Peak *additional* bytes per volume for sequential audit/copy/mutation/VACUUM phases.
+
+    SQLite VACUUM section 3 requires up to two database sizes free: one transient
+    database and one rollback journal. The already-copied candidate is counted only
+    in the initial plan; the DELETE journal is gone before VACUUM begins.
+    https://www.sqlite.org/lang_vacuum.html#how_vacuum_works
+    """
+    candidate_directory, scratch_directory = Path(candidate_directory), Path(scratch_directory)
+    candidate_volume, scratch_volume = (
+        volume_key(candidate_directory),
+        volume_key(scratch_directory),
+    )
+    upper = max(source_bytes + rebuild_extra, candidate_bytes or 0)
+    headroom = max(64 * 1024 * 1024, (upper + 19) // 20)
+    window_temp = min(8 * 1024 * 1024, source_bytes)
+    if phase == "initial":
+        allocations = [
+            (0, source_bytes),
+            (source_bytes, 0),
+            (2 * source_bytes + rebuild_extra, window_temp),
+            (upper, window_temp),
+        ]
+        if vacuum:
+            allocations.append((2 * upper, upper))
+    elif phase == "mutation":
+        allocations = [(source_bytes + rebuild_extra, window_temp)]
+    elif phase == "vacuum":
+        allocations = [(candidate_bytes, candidate_bytes)]
+    else:
+        raise ValueError("unknown capacity phase")
+    volumes = {}
+    for candidate_need, scratch_need in allocations:
+        current = {}
+        for key, directory, needed in (
+            (candidate_volume, candidate_directory, candidate_need),
+            (scratch_volume, scratch_directory, scratch_need),
+        ):
+            current[key] = current.get(key, 0) + needed
+            volumes.setdefault(key, {"path": str(directory), "required_bytes": 0})
+        for key, needed in current.items():
+            volumes[key]["required_bytes"] = max(volumes[key]["required_bytes"], needed + headroom)
+    return {"phase": phase, "headroom_bytes": headroom, "volumes": volumes}
+
+
+def require_capacity(plan):
+    for volume in plan["volumes"].values():
+        if shutil.disk_usage(volume["path"]).free < volume["required_bytes"]:
+            raise ValueError("insufficient capacity before " + plan["phase"] + " phase")
+
+
+def candidate_digest(candidate, budget):
+    """Called after verification while the SAME candidate deny-write/delete lease is held."""
+    budget.tick(phase="candidate_sha256")
+    digest, count = hashlib.sha256(), 0
+    with candidate.open("rb") as reader:
+        while chunk := reader.read(8 * 1024 * 1024):
+            digest.update(chunk)
+            count += len(chunk)
+            budget.tick(count)
+    return {"candidate_sha256": digest.hexdigest(), "candidate_bytes": count}
+
+
 def _candidate_copy(
     source,
     destination,
@@ -715,6 +805,15 @@ def _candidate_copy(
     partial = destination.with_name(destination.name + ".unverified")
     if destination.exists() or partial.exists():
         raise ValueError("candidate must be a new path")
+    source = standalone(Path(source))
+    scratch_root = Path(scratch_directory or source.parent).resolve()
+    # Refuse an impossible baseline before hashing/scanning a large backup. Rebuild
+    # expansion is added and checked once its raw receipt witness is available.
+    require_capacity(
+        capacity_requirements(
+            source.stat().st_size, destination.parent, scratch_root, vacuum=vacuum
+        )
+    )
     selected = set(selected) if selected is not None else None
     budget = Budget(seconds, progress, scratch_directory, verified_backup_receipt)
     with _audited_source(source, budget, (selected or ()) if rebuild else ()) as (
@@ -731,20 +830,25 @@ def _candidate_copy(
         rebuilt_rows = sum(proofs[plan]["count"] for plan in selected) if rebuild else 0
         # Separate conservative expansion allowance: four SQLite pages per restored row,
         # in addition to copy+journal. Never infer rebuild capacity from compacted bytes alone.
-        required = (3 if vacuum else 2) * source.stat().st_size + rebuilt_rows * 4 * page_size
-        scratch_required = source.stat().st_size * (2 if vacuum else 1)
-        shared_volume = destination.drive.lower() == budget.scratch.drive.lower()
-        if (
-            shutil.disk_usage(destination.parent).free
-            < required + (scratch_required if shared_volume else 0)
-            or shutil.disk_usage(budget.scratch).free < scratch_required
-        ):
-            raise ValueError("insufficient candidate/journal/rebuild expansion scratch space")
+        source_bytes, expansion = source.stat().st_size, rebuilt_rows * 4 * page_size
+        capacity = capacity_requirements(
+            source_bytes, destination.parent, budget.scratch, vacuum=vacuum, rebuild_extra=expansion
+        )
+        require_capacity(capacity)
         budget.tick(phase="copy_source")
         with partial.open("xb") as output, source.open("rb") as original:
             while chunk := original.read(1024 * 1024):
                 output.write(chunk)
                 budget.tick()
+        require_capacity(
+            capacity_requirements(
+                source_bytes,
+                destination.parent,
+                budget.scratch,
+                phase="mutation",
+                rebuild_extra=expansion,
+            )
+        )
         with closing(sqlite3.connect(partial)) as connection:
             budget.attach(connection)
             connection.execute("PRAGMA journal_mode=DELETE")
@@ -764,6 +868,18 @@ def _candidate_copy(
             else:
                 delete_selected(connection, selected)
             if vacuum:
+                if Path(str(partial) + "-journal").exists():
+                    raise ValueError("mutation rollback journal still exists before VACUUM")
+                require_capacity(
+                    capacity_requirements(
+                        source_bytes,
+                        destination.parent,
+                        budget.scratch,
+                        phase="vacuum",
+                        candidate_bytes=partial.stat().st_size,
+                        rebuild_extra=expansion,
+                    )
+                )
                 budget.tick(phase="vacuum_candidate")
                 connection.execute("VACUUM")
         with read_lease(partial), closing(connect(partial)) as new:
@@ -771,18 +887,22 @@ def _candidate_copy(
             budget.tick(phase="candidate_integrity")
             check(new)
             tables = _verify_rows(old, new, selected, proofs, budget, rebuilt=rebuild)
+            digest = candidate_digest(partial, budget)
         if destination.exists():
             raise ValueError("destination already exists")
         partial.rename(destination)
         budget.tick(phase="complete")
         return {
             **report,
+            **digest,
             "candidate": str(destination),
             "selected_plan_ids": sorted(selected),
             "removed_memberships": 0 if rebuild else sum(proofs[p]["count"] for p in selected),
             "rebuild_memberships": rebuilt_rows,
-            "required_scratch_bytes": required,
-            "sqlite_temp_scratch_bytes": scratch_required,
+            "capacity_plan": capacity,
+            "required_scratch_bytes": sum(
+                volume["required_bytes"] for volume in capacity["volumes"].values()
+            ),
             "rebuilt": rebuild,
             "dry_run": False,
             "verified": True,
