@@ -19,11 +19,14 @@
     },
     "projection-phase-reviewed": {
       "PASSED": 5
+    },
+    "cleanup-progress-final": {
+      "PASSED": 44
     }
   },
-  "unique_nodes": 5019,
+  "unique_nodes": 5021,
   "unique_results": {
-    "PASSED": 4971,
+    "PASSED": 4973,
     "SKIPPED": 48
   },
   "first_batch": "1800-second runner limit; no completed node rerun in remainder",
@@ -5055,6 +5058,8 @@
     "tests/unit/test_offline_guardian_projection_cleanup.py::test_vacuum_peak_is_three_sizes_plus_headroom_and_split_by_volume": "PASSED",
     "tests/unit/test_offline_guardian_projection_cleanup.py::test_postcopy_space_drop_refuses_before_deletion": "PASSED",
     "tests/unit/test_offline_guardian_projection_cleanup.py::test_candidate_digest_is_bound_to_existing_verification_lease": "PASSED",
-    "tests/unit/test_offline_guardian_projection_cleanup.py::test_vacuum_rechecks_additional_space_after_delete_journal_is_gone": "PASSED"
+    "tests/unit/test_offline_guardian_projection_cleanup.py::test_vacuum_rechecks_additional_space_after_delete_journal_is_gone": "PASSED",
+    "tests/unit/test_offline_guardian_projection_cleanup.py::test_deletion_progress_counts_scanned_rows_and_preserves_atomic_rollback": "PASSED",
+    "tests/unit/test_offline_guardian_projection_cleanup.py::test_sql_heartbeat_retains_latest_count_until_next_phase": "PASSED"
   }
 }

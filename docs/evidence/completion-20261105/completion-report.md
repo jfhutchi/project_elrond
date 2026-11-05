@@ -65,7 +65,7 @@ task definitions remain available for recovery, without an enabled second engine
 
 The comparable preserved-component baseline contains 118,614 maintainable lines
 in 488 files. After the maintenance-tool corrections, the result contains
-120,385 lines in 492 files: 2,250 physical lines added and 333 removed. Safety,
+120,407 lines in 492 files: 2,272 physical lines added and 333 removed. Safety,
 diagnostic, and verified-cleanup code accounts for growth. There is no claimed
 net source reduction or achievement of the aspirational 20–40% target.
 
@@ -128,7 +128,7 @@ requires measured runtime evidence; narrower transactions alone do not prove it.
 
 ## G. Tests
 
-Recorded unique results including the final maintenance-tool followup: 4,971 passed,
+Recorded unique results including the final maintenance-tool followup: 4,973 passed,
 48 skipped, zero failures. The full run reached its 1,800-second process cap;
 a continuation deselected all completed nodes and ran the remainder. The cap
 was not reported as a completed full run. Node-level results are in
