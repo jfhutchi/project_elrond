@@ -712,13 +712,23 @@ def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:
     if store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER":
         with store.database.transaction() as session:
             links = table("core_intent_links")
-            active = list(
+            entries = list(
                 session.execute(
-                    select(links.c.protection_id).where(
+                    select(links.c.intent_id, links.c.protection_id).where(
                         links.c.role == "ENTRY",
                         links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
                     )
-                ).scalars()
+                ).all()
+            )
+            from quantbot.paper_core.settlement import definitively_unsent_many
+
+            # ERROR alone can mean a lost POST acknowledgement. Retire only the
+            # shared durable pre-I/O refusal proof, never a guessed terminal state.
+            unsent = definitively_unsent_many(
+                StorageRepository(session), [row.intent_id for row in entries]
+            )
+            active = list(
+                dict.fromkeys(row.protection_id for row in entries if not unsent[row.intent_id])
             )
             plans = table("core_protection_plans")
             retained: dict[str, str] = {}
@@ -744,6 +754,25 @@ def acknowledge_handoffs(store: CoreStore, *, now: datetime) -> GuardianReceipt:
                 protection_ids.append(plan.id)
     else:
         protection_ids = [content_id(p) for p in store.documents("core_protection_plans")]
+    with store.database.transaction() as session:
+        receipts, current = table("core_guardian_receipts"), table("core_guardian_current")
+        payload = session.execute(
+            select(receipts.c.payload).join(current, current.c.receipt_id == receipts.c.id)
+        ).scalar_one_or_none()
+        previous = GuardianReceipt.model_validate_json(payload) if payload else None
+        # Immutable receipts retain their original identities and historical joins.
+        # Renew halfway through validity, and publish changed coverage immediately.
+        if (
+            previous is not None
+            and previous.evidence_lane == store.config.evidence_lane
+            and previous.release_id == store.config.release_id
+            and previous.owner == store.config.owner
+            and previous.generation == store.config.generation
+            and set(previous.protection_ids) == set(protection_ids)
+            and previous.recorded_at_utc <= now
+            and now + timedelta(seconds=60) <= previous.valid_until
+        ):
+            return previous
     receipt = GuardianReceipt(
         recorded_at_utc=now,
         evidence_lane=store.config.evidence_lane,
