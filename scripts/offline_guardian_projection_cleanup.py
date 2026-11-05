@@ -82,8 +82,18 @@ def read_lease(source):
 
 class Budget:
     def __init__(
-        self, seconds=None, progress=None, scratch_directory=None, verified_backup_receipt=None
+        self,
+        seconds=None,
+        progress=None,
+        scratch_directory=None,
+        verified_backup_receipt=None,
+        source_check="full",
     ):
+        if source_check not in {"full", "derived-proof"} or (
+            source_check != "full" and verified_backup_receipt is not None
+        ):
+            raise ValueError("unsupported or conflicting source validation")
+        self.source_check = source_check
         self.deadline = None if seconds is None else time.monotonic() + seconds
         self.progress = progress or (
             lambda item: print(json.dumps(item), file=sys.stderr, flush=True)
@@ -467,11 +477,51 @@ def _verified_source_receipt(source, receipt_path, budget):
     }
 
 
+def check_source_with_derived_proof(connection, budget):
+    """Fully check eligibility/history indexes; defer only the redundant projection index.
+
+    quick_check alone is insufficient: a wrong broker lookup index can falsely
+    classify a submitted order as unsent. Every other table gets its full check
+    BEFORE any eligibility query. The unchanged raw receipt witness and complete
+    projection check below remain mandatory, as does full candidate integrity.
+    """
+    budget.tick(phase="source_quick_check")
+    if connection.execute("PRAGMA quick_check").fetchall() != [("ok",)]:
+        raise ValueError("SQLite source quick check failed")
+    budget.tick(phase="source_foreign_keys")
+    if connection.execute("PRAGMA foreign_key_check").fetchone() is not None:
+        raise ValueError("SQLite source foreign key check failed")
+    names = [
+        row[0]
+        for row in connection.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name<>? ORDER BY name",
+            (MEMBERSHIPS,),
+        )
+    ]
+    for name in names:
+        budget.tick(phase="source_integrity_" + name)
+        if connection.execute("PRAGMA integrity_check(" + quote(name) + ")").fetchall() != [
+            ("ok",)
+        ]:
+            raise ValueError("SQLite source table integrity check failed: " + name)
+    return {
+        "source_check": "derived-proof",
+        "source_quick_check": "ok",
+        "source_foreign_key_check": "ok",
+        "source_fully_checked_tables": names,
+        "source_deferred_index_check": MEMBERSHIPS,
+        "source_integrity_reused": False,
+    }
+
+
 def _audit(source, connection, budget, removed=()):
     if budget.verified_backup_receipt is None:
-        budget.tick(phase="source_integrity")
-        check(connection)
-        provenance = {"source_integrity_reused": False}
+        if budget.source_check == "derived-proof":
+            provenance = check_source_with_derived_proof(connection, budget)
+        else:
+            budget.tick(phase="source_integrity")
+            check(connection)
+            provenance = {"source_integrity_reused": False, "source_check": "full"}
     else:
         provenance = _verified_source_receipt(source, budget.verified_backup_receipt, budget)
     proofs = receipt_witness(connection, budget)
@@ -818,6 +868,7 @@ def _candidate_copy(
     progress=None,
     scratch_directory=None,
     verified_backup_receipt=None,
+    source_check="full",
 ):
     destination = Path(destination).absolute()
     partial = destination.with_name(destination.name + ".unverified")
@@ -833,7 +884,7 @@ def _candidate_copy(
         )
     )
     selected = set(selected) if selected is not None else None
-    budget = Budget(seconds, progress, scratch_directory, verified_backup_receipt)
+    budget = Budget(seconds, progress, scratch_directory, verified_backup_receipt, source_check)
     with _audited_source(source, budget, (selected or ()) if rebuild else ()) as (
         source,
         old,
@@ -944,6 +995,7 @@ def cleanup_copy(
     progress=None,
     scratch_directory=None,
     verified_backup_receipt=None,
+    source_check="full",
 ):
     return _candidate_copy(
         source,
@@ -953,6 +1005,7 @@ def cleanup_copy(
         progress=progress,
         scratch_directory=scratch_directory,
         verified_backup_receipt=verified_backup_receipt,
+        source_check=source_check,
     )
 
 

@@ -586,6 +586,94 @@ def verified_receipt(path, output):
     return output
 
 
+def test_derived_proof_checks_other_source_indexes_and_full_candidate(
+    closed_refusal, tmp_path, monkeypatch
+):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    source, *_ = closed_refusal
+    actual_connect, queries = cleanup.connect, []
+
+    def observed(path):
+        connection = actual_connect(path)
+        connection.set_trace_callback(lambda sql: queries.append((path, sql)))
+        return connection
+
+    monkeypatch.setattr(cleanup, "connect", observed)
+    candidate = tmp_path / "candidate.db"
+    report = cleanup_copy(source, candidate, vacuum=True, source_check="derived-proof")
+    assert report["source_integrity_reused"] is False
+    assert report["source_check"] == "derived-proof"
+    assert "broker_orders" in report["source_fully_checked_tables"]
+    assert "core_guardian_memberships" not in report["source_fully_checked_tables"]
+    source_queries = [sql for path, sql in queries if path == source]
+    assert "PRAGMA quick_check" in source_queries
+    assert 'PRAGMA integrity_check("broker_orders")' in source_queries
+    assert 'PRAGMA integrity_check("core_guardian_memberships")' not in source_queries
+    assert "PRAGMA integrity_check" not in source_queries
+    assert any(path != source and sql == "PRAGMA integrity_check" for path, sql in queries)
+    assert report["removed_memberships"] == 2 and report["verified"]
+
+
+def test_derived_proof_refuses_missing_financial_index_entry_before_eligibility(
+    closed_refusal, tmp_path, monkeypatch
+):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    source, entry, *_ = closed_refusal
+    original_sql = "CREATE INDEX fault_broker_lookup ON broker_orders(client_order_id)"
+    with closing(sqlite3.connect(source)) as db, db:
+        db.execute(
+            "INSERT INTO broker_orders VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            (
+                "broker-proof",
+                entry.intent.client_order_id,
+                entry.intent.symbol,
+                "BUY",
+                "MARKET",
+                "DAY",
+                "1",
+                "1",
+                "filled",
+                NOW.isoformat(),
+                "100",
+            ),
+        )
+        db.execute(original_sql)
+        db.execute("PRAGMA writable_schema=ON")
+        db.execute(
+            "UPDATE sqlite_master SET sql=? WHERE name='fault_broker_lookup'",
+            (original_sql.replace("(client_order_id)", "(client_order_id || '-wrong')"),),
+        )
+    with closing(sqlite3.connect(source)) as db, db:
+        db.execute("REINDEX fault_broker_lookup")
+        db.execute("PRAGMA writable_schema=ON")
+        db.execute(
+            "UPDATE sqlite_master SET sql=? WHERE name='fault_broker_lookup'", (original_sql,)
+        )
+    with closing(sqlite3.connect(source)) as db:
+        assert db.execute("PRAGMA quick_check").fetchall() == [("ok",)]
+        assert db.execute("PRAGMA integrity_check('broker_orders')").fetchall() != [("ok",)]
+    monkeypatch.setattr(cleanup, "eligible", lambda *args: pytest.fail("unsafe eligibility query"))
+    candidate = tmp_path / "candidate.db"
+    with pytest.raises(ValueError, match="broker_orders"):
+        cleanup_copy(source, candidate, source_check="derived-proof")
+    assert (
+        not candidate.exists() and not candidate.with_name(candidate.name + ".unverified").exists()
+    )
+
+
+def test_derived_proof_still_refuses_incomplete_membership_history(closed_refusal, tmp_path):
+    source, _, plan, first, _ = closed_refusal
+    with closing(sqlite3.connect(source)) as db, db:
+        db.execute(
+            "DELETE FROM core_guardian_memberships WHERE plan_id=? AND receipt_id=?",
+            (plan.id, first.id),
+        )
+    with pytest.raises(ValueError, match="projection"):
+        cleanup_copy(source, tmp_path / "candidate.db", source_check="derived-proof")
+
+
 def test_verified_source_receipt_rechecks_hash_and_only_skips_source_integrity(
     closed_refusal, tmp_path, monkeypatch
 ):
