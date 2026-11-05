@@ -846,3 +846,231 @@ def test_vacuum_rechecks_additional_space_after_delete_journal_is_gone(
     assert checked == ["vacuum"]
     assert report["candidate_bytes"] == candidate.stat().st_size
     assert report["candidate_sha256"] == hashlib.sha256(candidate.read_bytes()).hexdigest()
+
+
+def test_copy_retained_candidate_keeps_source_and_uses_full_verification(
+    closed_refusal, tmp_path, monkeypatch
+):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    source, _, plan, *_ = closed_refusal
+    before = source.read_bytes()
+    checked, real_check = [], cleanup.check
+
+    def check(connection):
+        checked.append(connection.execute("PRAGMA database_list").fetchone()[2])
+        real_check(connection)
+
+    monkeypatch.setattr(cleanup, "check", check)
+    monkeypatch.setattr(
+        cleanup, "delete_selected", lambda *a, **k: pytest.fail("opt-in used row deletion")
+    )
+    candidate = tmp_path / "retained.db"
+    result = cleanup.cleanup_copy(source, candidate, copy_retained=True)
+    assert source.read_bytes() == before
+    assert result["removed_memberships"] == 2
+    assert result["copy_retained_memberships"] is True
+    assert result["retained_memberships"] == 0
+    assert any(name.endswith("retained.db.unverified") for name in checked)
+    assert result["table_equality"] == (
+        "literal ordered rows except complete selected membership delta"
+    )
+    cleanup.verify_cleanup(source, candidate, [plan.id])
+
+
+def membership_rewrite_fixture(tmp_path):
+    from sqlalchemy.dialects import sqlite
+    from sqlalchemy.schema import CreateTable
+
+    from quantbot.storage.schema import metadata
+
+    connection = sqlite3.connect(tmp_path / "candidate.db.unverified")
+    connection.execute("PRAGMA foreign_keys=ON")
+    connection.execute("CREATE TABLE core_guardian_receipts(id VARCHAR(64) PRIMARY KEY)")
+    connection.execute(
+        str(
+            CreateTable(metadata.tables["core_guardian_memberships"]).compile(
+                dialect=sqlite.dialect()
+            )
+        )
+    )
+    connection.execute("CREATE TABLE financial_history(id INTEGER PRIMARY KEY,amount TEXT)")
+    connection.executemany("INSERT INTO core_guardian_receipts VALUES(?)", [("a",), ("b",)])
+    connection.executemany(
+        "INSERT INTO core_guardian_memberships VALUES(?,?)",
+        [("remove", "a"), ("remove", "b"), ("keep", "a")],
+    )
+    connection.execute("INSERT INTO financial_history VALUES(1,'1.2300')")
+    connection.commit()
+    return connection
+
+
+def rewrite_snapshot(connection):
+    return (
+        connection.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name"
+        ).fetchall(),
+        connection.execute(
+            "SELECT * FROM core_guardian_memberships ORDER BY plan_id,receipt_id"
+        ).fetchall(),
+        connection.execute("SELECT * FROM financial_history").fetchall(),
+        connection.execute("SELECT * FROM core_guardian_receipts ORDER BY id").fetchall(),
+    )
+
+
+@pytest.mark.parametrize("phase", [None, "recreate_memberships", "copied_memberships"])
+def test_copy_retained_exact_complement_and_atomic_callback_rollback(tmp_path, phase):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    with closing(membership_rewrite_fixture(tmp_path)) as connection:
+        before = rewrite_snapshot(connection)
+
+        def interrupt(item):
+            if item["phase"] == phase:
+                raise RuntimeError("injected candidate rewrite interruption")
+
+        budget = cleanup.Budget(progress=interrupt)
+        budget.attach(connection)
+        if phase:
+            with pytest.raises(RuntimeError, match="injected"):
+                cleanup._copy_retained_memberships(
+                    connection, {"remove"}, expected_before=3, expected_removed=2, budget=budget
+                )
+            assert rewrite_snapshot(connection) == before
+        else:
+            assert (
+                cleanup._copy_retained_memberships(
+                    connection, {"remove"}, expected_before=3, expected_removed=2, budget=budget
+                )
+                == 1
+            )
+            after = rewrite_snapshot(connection)
+            assert after[0] == before[0] and after[1] == [("keep", "a")]
+            assert after[2:] == before[2:]
+        assert not connection.in_transaction
+        assert connection.execute("PRAGMA foreign_keys").fetchone()[0] == 1
+        assert connection.execute("PRAGMA integrity_check").fetchall() == [("ok",)]
+        assert connection.execute("PRAGMA foreign_key_check").fetchall() == []
+
+
+@pytest.mark.parametrize("unsupported", ["incoming", "trigger", "view", "index", "stats", "extra"])
+def test_copy_retained_refuses_unsupported_schema_without_mutation(tmp_path, unsupported):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    with closing(membership_rewrite_fixture(tmp_path)) as connection:
+        statement = {
+            "incoming": (
+                "CREATE TABLE incoming(plan_id TEXT,receipt_id TEXT,"
+                "FOREIGN KEY(plan_id,receipt_id) REFERENCES "
+                "core_guardian_memberships(plan_id,receipt_id))"
+            ),
+            "trigger": (
+                "CREATE TRIGGER observed AFTER DELETE ON core_guardian_memberships "
+                "BEGIN SELECT 1; END"
+            ),
+            "view": "CREATE VIEW observed AS SELECT * FROM core_guardian_memberships",
+            "index": "CREATE INDEX observed ON core_guardian_memberships(receipt_id)",
+            "stats": "ANALYZE",
+            "extra": "ALTER TABLE core_guardian_memberships ADD COLUMN extra TEXT",
+        }[unsupported]
+        connection.execute(statement)
+        connection.commit()
+        before = rewrite_snapshot(connection)
+        with pytest.raises(ValueError, match="unsupported|incoming"):
+            cleanup._copy_retained_memberships(
+                connection,
+                {"remove"},
+                expected_before=3,
+                expected_removed=2,
+                budget=cleanup.Budget(),
+            )
+        assert rewrite_snapshot(connection) == before
+
+
+def test_copy_retained_refuses_wrong_independent_count_and_non_candidate(tmp_path):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    with closing(membership_rewrite_fixture(tmp_path)) as connection:
+        before = rewrite_snapshot(connection)
+        with pytest.raises(ValueError, match="retained count"):
+            cleanup._copy_retained_memberships(
+                connection,
+                {"remove"},
+                expected_before=3,
+                expected_removed=1,
+                budget=cleanup.Budget(),
+            )
+        assert rewrite_snapshot(connection) == before
+    path = tmp_path / "candidate.db.unverified"
+    path.rename(tmp_path / "source.db")
+    with closing(sqlite3.connect(tmp_path / "source.db")) as connection:
+        with pytest.raises(ValueError, match="candidate"):
+            cleanup._copy_retained_memberships(
+                connection,
+                {"remove"},
+                expected_before=3,
+                expected_removed=2,
+                budget=cleanup.Budget(),
+            )
+
+
+def test_copy_retained_cli_passes_opt_in_only_to_cleanup(monkeypatch, tmp_path, capsys):
+    import sys
+
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    observed = []
+    monkeypatch.setattr(cleanup, "cleanup_copy", lambda *a, **k: observed.append(k) or {})
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanup",
+            "--offline-copy",
+            str(tmp_path / "source.db"),
+            "--candidate",
+            str(tmp_path / "candidate.db"),
+            "--copy-retained-memberships",
+        ],
+    )
+    cleanup.main()
+    assert observed[0]["copy_retained"] is True
+    capsys.readouterr()
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "cleanup",
+            "--offline-copy",
+            str(tmp_path / "source.db"),
+            "--copy-retained-memberships",
+        ],
+    )
+    with pytest.raises(SystemExit, match="2"):
+        cleanup.main()
+
+
+def test_copy_retained_capacity_reserves_complement_file_without_extra_sort(tmp_path, monkeypatch):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    size = 1024 * 1024 * 1024
+    monkeypatch.setattr(cleanup, "volume_key", lambda path: "shared")
+    plain = cleanup.capacity_requirements(size, tmp_path, tmp_path, phase="mutation")
+    copied = cleanup.capacity_requirements(
+        size, tmp_path, tmp_path, phase="mutation", copy_retained=True
+    )
+    assert copied["volumes"]["shared"]["required_bytes"] == (
+        plain["volumes"]["shared"]["required_bytes"] + size
+    )
+    with closing(membership_rewrite_fixture(tmp_path)) as connection:
+        statements = []
+        connection.set_trace_callback(statements.append)
+        cleanup._copy_retained_memberships(
+            connection,
+            {"remove"},
+            expected_before=3,
+            expected_removed=2,
+            budget=cleanup.Budget(),
+        )
+        insertion = next(s for s in statements if s.startswith("INSERT INTO main."))
+        assert "ORDER BY" not in insertion

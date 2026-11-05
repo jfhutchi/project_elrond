@@ -767,6 +767,89 @@ def delete_selected(connection, selected, *, window_size=4096, progress=None):
                 progress(scanned, deleted)
 
 
+def _copy_retained_memberships(connection, selected, *, expected_before, expected_removed, budget):
+    """Rewrite only a freshly copied, audited candidate; never infer eligibility here."""
+    from sqlalchemy.dialects import sqlite
+    from sqlalchemy.schema import CreateTable
+
+    databases = connection.execute("PRAGMA database_list").fetchall()
+    main = next((row[2] for row in databases if row[1] == "main"), "")
+    if (
+        not main.endswith(".unverified")
+        or connection.in_transaction
+        or connection.execute("PRAGMA foreign_keys").fetchone()[0] != 1
+    ):
+        raise ValueError("closed unverified candidate with foreign keys enabled required")
+    if not 0 <= expected_removed <= expected_before:
+        raise ValueError("invalid independent membership counts")
+    schema_sql = "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name"
+    schema = connection.execute(schema_sql).fetchall()
+    if (
+        any(
+            kind in {"trigger", "view"} or name.startswith("sqlite_stat")
+            for kind, name, _, _ in schema
+        )
+        or connection.execute("SELECT 1 FROM sqlite_temp_master LIMIT 1").fetchone()
+    ):
+        raise ValueError("unsupported triggers, views, statistics or temporary schema")
+    definition = next(
+        (sql for kind, name, _, sql in schema if kind == "table" and name == MEMBERSHIPS), None
+    )
+    expected_ddl = str(CreateTable(table(MEMBERSHIPS)).compile(dialect=sqlite.dialect()))
+    if not definition or " ".join(definition.split()) != " ".join(expected_ddl.split()):
+        raise ValueError("unsupported membership table definition")
+    columns = connection.execute("PRAGMA table_xinfo(" + quote(MEMBERSHIPS) + ")").fetchall()
+    if [(r[1], r[2], r[3], r[4], r[5], r[6]) for r in columns] != [
+        ("plan_id", "VARCHAR(64)", 1, None, 1, 0),
+        ("receipt_id", "VARCHAR(64)", 1, None, 2, 0),
+    ]:
+        raise ValueError("unsupported membership columns")
+    indexes = connection.execute("PRAGMA index_list(" + quote(MEMBERSHIPS) + ")").fetchall()
+    if len(indexes) != 1 or indexes[0][2:] != (1, "pk", 0):
+        raise ValueError("unsupported membership indexes")
+    if connection.execute("PRAGMA index_info(" + quote(indexes[0][1]) + ")").fetchall() != [
+        (0, 0, "plan_id"),
+        (1, 1, "receipt_id"),
+    ]:
+        raise ValueError("unsupported membership primary index")
+    for kind, name, _, _ in schema:
+        if kind == "table" and any(
+            row[2].casefold() == MEMBERSHIPS.casefold()
+            for row in connection.execute("PRAGMA foreign_key_list(" + quote(name) + ")")
+        ):
+            raise ValueError("incoming membership foreign keys unsupported")
+    retained = expected_before - expected_removed
+    with connection:
+        connection.execute("BEGIN IMMEDIATE")
+        connection.execute("CREATE TEMP TABLE cleanup_selected(plan_id TEXT PRIMARY KEY)")
+        connection.executemany(
+            "INSERT INTO cleanup_selected VALUES(?)", ((identity,) for identity in sorted(selected))
+        )
+        budget.tick(phase="retain_memberships")
+        connection.execute(
+            "CREATE TEMP TABLE cleanup_retained AS SELECT m.plan_id,m.receipt_id "
+            "FROM main.core_guardian_memberships m WHERE NOT EXISTS "
+            "(SELECT 1 FROM cleanup_selected s WHERE s.plan_id=m.plan_id)"
+        )
+        actual = connection.execute("SELECT count(*) FROM cleanup_retained").fetchone()[0]
+        if actual != retained:
+            raise ValueError("retained count differs from independently audited removal")
+        budget.tick(actual, phase="replace_memberships")
+        connection.execute("DROP TABLE main.core_guardian_memberships")
+        budget.tick(phase="recreate_memberships")
+        connection.execute(definition)
+        inserted = connection.execute(
+            "INSERT INTO main.core_guardian_memberships "
+            "SELECT plan_id,receipt_id FROM cleanup_retained"
+        ).rowcount
+        if inserted != retained or connection.execute(schema_sql).fetchall() != schema:
+            raise ValueError("membership schema or retained count changed")
+        budget.tick(retained, phase="copied_memberships", deleted=expected_removed)
+        connection.execute("DROP TABLE temp.cleanup_retained")
+        connection.execute("DROP TABLE temp.cleanup_selected")
+    return retained
+
+
 def volume_key(directory):
     """Identify the underlying Windows volume, including mounted-folder aliases."""
     directory = Path(directory).resolve()
@@ -794,6 +877,7 @@ def capacity_requirements(
     rebuild_extra=0,
     phase="initial",
     candidate_bytes=None,
+    copy_retained=False,
 ):
     """Peak *additional* bytes per volume for sequential audit/copy/mutation/VACUUM phases.
 
@@ -810,17 +894,18 @@ def capacity_requirements(
     upper = max(source_bytes + rebuild_extra, candidate_bytes or 0)
     headroom = max(64 * 1024 * 1024, (upper + 19) // 20)
     window_temp = min(8 * 1024 * 1024, source_bytes)
+    retained_temp = source_bytes if copy_retained else 0
     if phase == "initial":
         allocations = [
             (0, source_bytes),
             (source_bytes, 0),
-            (2 * source_bytes + rebuild_extra, window_temp),
+            (2 * source_bytes + rebuild_extra, window_temp + retained_temp),
             (upper, window_temp),
         ]
         if vacuum:
             allocations.append((2 * upper, upper))
     elif phase == "mutation":
-        allocations = [(source_bytes + rebuild_extra, window_temp)]
+        allocations = [(source_bytes + rebuild_extra, window_temp + retained_temp)]
     elif phase == "vacuum":
         allocations = [(candidate_bytes, candidate_bytes)]
     else:
@@ -869,7 +954,10 @@ def _candidate_copy(
     scratch_directory=None,
     verified_backup_receipt=None,
     source_check="full",
+    copy_retained=False,
 ):
+    if rebuild and copy_retained:
+        raise ValueError("copy-retained is incompatible with rebuilding selected memberships")
     destination = Path(destination).absolute()
     partial = destination.with_name(destination.name + ".unverified")
     if destination.exists() or partial.exists():
@@ -880,7 +968,11 @@ def _candidate_copy(
     # expansion is added and checked once its raw receipt witness is available.
     require_capacity(
         capacity_requirements(
-            source.stat().st_size, destination.parent, scratch_root, vacuum=vacuum
+            source.stat().st_size,
+            destination.parent,
+            scratch_root,
+            vacuum=vacuum,
+            copy_retained=copy_retained,
         )
     )
     selected = set(selected) if selected is not None else None
@@ -901,7 +993,12 @@ def _candidate_copy(
         # in addition to copy+journal. Never infer rebuild capacity from compacted bytes alone.
         source_bytes, expansion = source.stat().st_size, rebuilt_rows * 4 * page_size
         capacity = capacity_requirements(
-            source_bytes, destination.parent, budget.scratch, vacuum=vacuum, rebuild_extra=expansion
+            source_bytes,
+            destination.parent,
+            budget.scratch,
+            vacuum=vacuum,
+            rebuild_extra=expansion,
+            copy_retained=copy_retained,
         )
         require_capacity(capacity)
         budget.tick(phase="copy_source")
@@ -916,6 +1013,7 @@ def _candidate_copy(
                 budget.scratch,
                 phase="mutation",
                 rebuild_extra=expansion,
+                copy_retained=copy_retained,
             )
         )
         with closing(sqlite3.connect(partial)) as connection:
@@ -935,11 +1033,21 @@ def _candidate_copy(
                             [(plan, identity) for plan in plans if plan in selected],
                         )
             else:
-                delete_selected(
-                    connection,
-                    selected,
-                    progress=lambda scanned, deleted: budget.tick(scanned, deleted=deleted),
-                )
+                if copy_retained:
+                    connection.execute("PRAGMA foreign_keys=ON")
+                    retained = _copy_retained_memberships(
+                        connection,
+                        selected,
+                        expected_before=report["memberships_before"],
+                        expected_removed=sum(proofs[p]["count"] for p in selected),
+                        budget=budget,
+                    )
+                else:
+                    delete_selected(
+                        connection,
+                        selected,
+                        progress=lambda scanned, deleted: budget.tick(scanned, deleted=deleted),
+                    )
             if vacuum:
                 if Path(str(partial) + "-journal").exists():
                     raise ValueError("mutation rollback journal still exists before VACUUM")
@@ -971,6 +1079,8 @@ def _candidate_copy(
             "candidate": str(destination),
             "selected_plan_ids": sorted(selected),
             "removed_memberships": 0 if rebuild else sum(proofs[p]["count"] for p in selected),
+            "copy_retained_memberships": copy_retained,
+            "retained_memberships": retained if copy_retained else None,
             "rebuild_memberships": rebuilt_rows,
             "capacity_plan": capacity,
             "required_scratch_bytes": sum(
@@ -996,6 +1106,7 @@ def cleanup_copy(
     scratch_directory=None,
     verified_backup_receipt=None,
     source_check="full",
+    copy_retained=False,
 ):
     return _candidate_copy(
         source,
@@ -1006,6 +1117,7 @@ def cleanup_copy(
         scratch_directory=scratch_directory,
         verified_backup_receipt=verified_backup_receipt,
         source_check=source_check,
+        copy_retained=copy_retained,
     )
 
 
@@ -1036,6 +1148,11 @@ def main():
     parser.add_argument("--offline-copy", type=Path, required=True)
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--vacuum", action="store_true")
+    parser.add_argument(
+        "--copy-retained-memberships",
+        action="store_true",
+        help="opt-in exact-schema candidate membership rewrite; unsupported schemas refuse",
+    )
     parser.add_argument("--dry-run-seconds", type=float, default=30)
     parser.add_argument(
         "--scratch-directory",
@@ -1051,6 +1168,8 @@ def main():
     args = parser.parse_args()
     if args.rebuild_selected and not args.candidate:
         parser.error("rebuild requires a new --candidate")
+    if args.copy_retained_memberships and (args.rebuild_selected or not args.candidate):
+        parser.error("copy-retained memberships requires a new cleanup --candidate")
     if args.rebuild_selected:
         result = rebuild_selected(
             args.offline_copy,
@@ -1066,6 +1185,7 @@ def main():
             vacuum=args.vacuum,
             scratch_directory=args.scratch_directory,
             verified_backup_receipt=args.verified_backup_receipt,
+            copy_retained=args.copy_retained_memberships,
         )
     else:
         result = preflight(
