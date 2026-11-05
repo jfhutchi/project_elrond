@@ -1,18 +1,18 @@
 <style>
   :root {
-    --performance-canvas: var(--bg);
-    --performance-card: var(--panel);
-    --performance-text: var(--ink);
-    --performance-secondary: var(--ink-faint);
-    --performance-profit: var(--ok);
-    --performance-profit-bg: #e8f1e9;
-    --performance-loss: var(--crit);
-    --performance-loss-bg: #fae9e7;
-    --performance-flat: var(--panel-2);
-    --performance-summary: var(--panel);
-    --performance-lime: var(--accent);
-    --performance-ui: var(--sans);
-    --performance-mono: var(--mono);
+    --performance-canvas: #0E171B;
+    --performance-card: #152329;
+    --performance-text: #EDF4F1;
+    --performance-secondary: #A0B2AE;
+    --performance-profit: #90E4AF;
+    --performance-profit-bg: #17392B;
+    --performance-loss: #FFA298;
+    --performance-loss-bg: #402729;
+    --performance-flat: #243239;
+    --performance-summary: #112E29;
+    --performance-lime: #C2EF8D;
+    --performance-ui: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --performance-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Menlo, monospace;
   }
   .performance-layout {
     display: grid; grid-template-columns: minmax(0, 1fr) 270px; gap: 1.25rem;
@@ -22,7 +22,7 @@
   .performance-calendar th { color: var(--performance-secondary); border: 0; padding: .5rem; }
   .performance-calendar td { padding: 0; vertical-align: top; border: 0; }
   .performance-day {
-    min-height: 112px; padding: .65rem; border-radius: 4px;
+    min-height: 120px; padding: .65rem; border-radius: 8px;
     border: 1px solid var(--performance-flat); background: var(--performance-card);
     color: var(--performance-text);
   }
@@ -30,8 +30,6 @@
   .performance-day--negative { background: var(--performance-loss-bg); }
   .performance-day--neutral { background: var(--performance-flat); }
   .performance-day--unknown { border-style: dashed; }
-  .day-note { margin-top:8px; font-size:9px; color:var(--ink-faint); }
-  .day-note > summary { cursor:pointer; }
   .performance-day--closed { background: transparent; }
   .performance-calendar .amount {
     margin: .65rem 0 .2rem; font: 600 .9rem/1.4 var(--performance-mono);

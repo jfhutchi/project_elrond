@@ -284,15 +284,18 @@ class AlpacaPaperBrokerAdapter:
         return self._account_from_payload(_object_payload(response))
 
     async def get_performance_account(self) -> PaperPerformanceAccount:
-        payload = _object_payload(await self._request('GET', '/v2/account'))
+        payload = _object_payload(await self._request("GET", "/v2/account"))
         return PaperPerformanceAccount(
             account=self._account_from_payload(payload).account,
-            created_at=_timestamp(payload, 'created_at'),
-            previous_close_equity=_decimal(payload, 'last_equity'),
+            created_at=_timestamp(payload, "created_at"),
+            previous_close_equity=_decimal(payload, "last_equity"),
         )
 
     async def get_performance_close_history(
-        self, *, start: datetime, end: datetime,
+        self,
+        *,
+        start: datetime,
+        end: datetime,
     ) -> PortfolioCloseHistory:
         validate_history_interval(start, end)
         windows = []
@@ -300,43 +303,55 @@ class AlpacaPaperBrokerAdapter:
         # the actual exact-close points pass; a daily label or nearest minute cannot.
         for close_at in (start, end):
             query = close_window_query(close_at)
-            response = await self._request('GET', '/v2/account/portfolio/history', params=query)
-            raw = response.content.decode('utf-8')
+            response = await self._request("GET", "/v2/account/portfolio/history", params=query)
+            raw = response.content.decode("utf-8")
             if len(raw.encode()) > 131072:
-                raise ValueError('bounded intraday close document required')
-            window = dict(close_at=close_at.isoformat(), query=query, response_document=raw,
-                          response_hash=hashlib.sha256(raw.encode()).hexdigest())
+                raise ValueError("bounded intraday close document required")
+            window = dict(
+                close_at=close_at.isoformat(),
+                query=query,
+                response_document=raw,
+                response_hash=hashlib.sha256(raw.encode()).hexdigest(),
+            )
             intraday_window_equity(window, close_at, required=close_at == end)
             windows.append(window)
-        return PortfolioCloseHistory(start, end, json.dumps(
-            dict(schema=INTRADAY_SCHEMA, windows=windows), sort_keys=True))
+        return PortfolioCloseHistory(
+            start, end, json.dumps(dict(schema=INTRADAY_SCHEMA, windows=windows), sort_keys=True)
+        )
 
     async def get_performance_activities(
-        self, *, after: datetime, until: datetime,
+        self,
+        *,
+        after: datetime,
+        until: datetime,
     ) -> tuple[Mapping[str, object], ...]:
         """All activities, bounded pagination; never infer empty from a partial page."""
         if until <= after:
-            raise ValueError('performance activity interval must increase')
+            raise ValueError("performance activity interval must increase")
         rows: list[Mapping[str, object]] = []
         tokens: set[str] = set()
-        params = {'after': _utc_parameter(after), 'until': _utc_parameter(until),
-                  'direction': 'asc', 'page_size': '100'}
-        for _ in range(10):
-            page = _array_payload(await self._request(
-                'GET', '/v2/account/activities', params=params))
+        params = {
+            "after": _utc_parameter(after),
+            "until": _utc_parameter(until),
+            "direction": "asc",
+            "page_size": "100",
+        }
+        while True:
+            page = _array_payload(
+                await self._request("GET", "/v2/account/activities", params=params)
+            )
             if len(page) > 100:
-                raise BrokerProtocolError('performance activity page exceeds bound')
+                raise BrokerProtocolError("performance activity page exceeds bound")
             if any(not isinstance(item, dict) for item in page):
-                raise BrokerProtocolError('invalid performance activity')
+                raise BrokerProtocolError("invalid performance activity")
             rows.extend(cast(list[Mapping[str, object]], page))
             if len(page) < 100:
                 return tuple(rows)
-            token = _text(rows[-1], 'id')
+            token = _text(rows[-1], "id")
             if token in tokens:
-                raise BrokerProtocolError('repeated performance activity page')
+                raise BrokerProtocolError("repeated performance activity page")
             tokens.add(token)
-            params['page_token'] = token
-        raise BrokerProtocolError('performance activity page limit exceeded')
+            params["page_token"] = token
 
     async def connect(self) -> BrokerHealth:
         return await self.health_check()
@@ -451,17 +466,29 @@ class AlpacaPaperBrokerAdapter:
             raise BrokerProtocolError("broker order failed domain validation") from error
 
     async def get_open_orders(self) -> tuple[BrokerOrder, ...]:
+        return await self._list_orders("open")
+
+    async def get_orders(self, *, after: datetime) -> tuple[BrokerOrder, ...]:
+        if after.tzinfo is None:
+            raise ValueError("aware order acquisition lower bound required")
+        return await self._list_orders("all", after=after)
+
+    async def _list_orders(
+        self, status: str, *, after: datetime | None = None
+    ) -> tuple[BrokerOrder, ...]:
         orders: list[BrokerOrder] = []
         seen_ids: set[str] = set()
         after_order_id: str | None = None
         while True:
             params = {
-                "status": "open",
+                "status": status,
                 "direction": "asc",
                 "limit": str(self._order_page_size),
             }
             if after_order_id is not None:
                 params["after_order_id"] = after_order_id
+            elif after is not None:
+                params["after"] = _utc_parameter(after)
             response = await self._request("GET", "/v2/orders", params=params)
             page = _array_payload(response)
             for item in page:

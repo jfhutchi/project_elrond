@@ -13,6 +13,8 @@ from quantbot.brokers.base import BrokerModel
 from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, Position
 from quantbot.learner.estimators import FittedEstimator
 from quantbot.learner.five_minute import FEATURE_NAMES
+from quantbot.paper_core.discovery import DiscoveryEvidence
+from quantbot.paper_core.entry_policy import AssetEligibility
 from quantbot.research.manifest import content_id
 from quantbot.strategy import XNYSSessionSequence
 
@@ -34,7 +36,8 @@ class CoreConfig(BrokerModel):
     evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA", "BROKER_PAPER"] = (
         "SYNTHETIC_TEST"
     )
-    max_positions: Literal[1] = 1
+    economic_profile: Literal["LEGACY_30M_V1", "RESOURCE_BOUNDED_PAPER_V1"] = "LEGACY_30M_V1"
+    max_positions: Literal[1] | None = 1
     position_bps: Literal[50] = 50
     entry_risk_bps: Literal[25] = 25
     stop_bps: Literal[100] = 100
@@ -46,7 +49,12 @@ class CoreConfig(BrokerModel):
     @model_serializer(mode="wrap")
     def preserve_v31_config(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         payload = dict(handler(self))
-        for name in {"clock_profile", "symbols", "selection_policy"} - self.model_fields_set:
+        for name in {
+            "clock_profile",
+            "symbols",
+            "selection_policy",
+            "economic_profile",
+        } - self.model_fields_set:
             payload.pop(name, None)
         return payload
 
@@ -56,6 +64,18 @@ class CoreConfig(BrokerModel):
 
     @model_validator(mode="after")
     def stock_universe(self) -> Self:
+        from quantbot.paper_core.economics import THROUGHPUT_POLICY, THROUGHPUT_PROFILE
+
+        new_profile = self.economic_profile == THROUGHPUT_PROFILE
+        expected = (None, 50, 30) if new_profile else (1, 50, 30)
+        if (self.max_positions, self.position_bps, self.horizon_minutes) != expected:
+            raise ValueError("economic fields must match the exact versioned profile")
+        if new_profile and (
+            self.policy_id != THROUGHPUT_POLICY
+            or self.selection_policy != "SIGNAL_OR_EXPLORE_V1"
+            or self.evidence_lane == "SYNTHETIC_TEST"
+        ):
+            raise ValueError("new economics require their own explicit policy and evidence lane")
         if self.symbols or self.selection_policy == "SIGNAL_OR_EXPLORE_V1":
             if (
                 len(self.entry_symbols) > 32
@@ -98,8 +118,84 @@ class Evidence(BrokerModel):
         return content_id(self)
 
 
+class PortfolioEvidence(Evidence):
+    """Explicit binding carried by every document of the new economic policy."""
+
+    account_id: str = Field(min_length=1)
+    store_identity: str = Field(min_length=1)
+    config_id: str = Field(min_length=1)
+    policy_id: Literal["collect-owned-30m-stop100-v1"] = "collect-owned-30m-stop100-v1"
+
+
+class SessionOpening(PortfolioEvidence):
+    session_date: date
+    session_open: datetime
+    captured_at: datetime
+    equity: Positive
+    proof_id: str = Field(min_length=1)
+    time_evidence_id: str = Field(min_length=1)
+    source_store_identity: str = Field(min_length=1)
+    source_release_id: str = Field(min_length=1)
+
+
+class BatchPlan(PortfolioEvidence):
+    session_date: date
+    boundary_id: str
+    cohort_id: str
+    model_id: str
+    proof_id: str
+    opening_id: str
+    decision_ids: tuple[str, ...] = Field(min_length=1)
+    abstentions: tuple[tuple[str, str], ...] = ()
+
+    @model_validator(mode="after")
+    def distinct_members(self) -> Self:
+        if len(self.decision_ids) != len(set(self.decision_ids)):
+            raise ValueError("batch decisions must be distinct")
+        return self
+
+
+class EntryReservation(PortfolioEvidence):
+    session_date: date
+    batch_id: str
+    decision_id: str
+    intent_id: str
+    client_order_id: str
+    symbol: str
+    quantity: Positive
+    reserved_notional: Positive
+    stop_risk: Annotated[Decimal, Field(ge=0, allow_inf_nan=False)]
+
+
+class HoldingDeadline(PortfolioEvidence):
+    lot_id: str
+    protection_id: str
+    entry_fill_id: str | None
+    entry_filled_at: datetime
+    deadline: datetime
+    session_close: datetime
+    time_evidence_id: str
+    basis: Literal["CANONICAL_FIRST_FILL", "ORIGINAL_SEND_CONSERVATIVE"]
+    supersedes: str | None = None
+
+    @model_validator(mode="after")
+    def bounded_deadline(self) -> Self:
+        cap = min(
+            self.entry_filled_at + timedelta(seconds=300),
+            self.session_close - timedelta(seconds=120),
+        )
+        if self.deadline > cap or self.deadline < self.entry_filled_at:
+            raise ValueError("holding deadline must preserve the five-minute/session cap")
+        if self.basis == "CANONICAL_FIRST_FILL" and not self.entry_fill_id:
+            raise ValueError("canonical deadline requires the original fill identity")
+        return self
+
+
 class Observation(Evidence):
-    legacy_optional_fields = frozenset({"time_evidence_id", "session_open", "capture_received_at"})
+    legacy_optional_fields = frozenset(
+        {"time_evidence_id", "session_open", "capture_received_at", "asset_eligibility"}
+    )
+    asset_eligibility: AssetEligibility | None = None
     capture_received_at: datetime | None = None
     time_evidence_id: str | None = None
     session_open: datetime | None = None
@@ -231,6 +327,14 @@ class ObservationCohort(BrokerModel):
     session_close: datetime
     observations: tuple[Observation, ...]
     unavailable: tuple[tuple[str, str], ...] = ()
+    discovery: DiscoveryEvidence | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_pre_discovery(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if "discovery" not in self.model_fields_set:
+            payload.pop("discovery", None)
+        return payload
 
 
 class SelectionEvidence(BrokerModel):
@@ -258,6 +362,7 @@ class Decision(Evidence):
             "prediction_bps",
             "model_mode",
             "selection",
+            "entry_policy_id",
         }
     )
     time_evidence_id: str | None = None
@@ -271,6 +376,7 @@ class Decision(Evidence):
     prediction_bps: Annotated[float, Field(allow_inf_nan=False)] | None = None
     model_mode: Literal["COLLECT", "PREDICT"] | None = None
     selection: SelectionEvidence | None = None
+    entry_policy_id: str | None = None
     observation_id: str
     policy_id: str
     model_id: str
@@ -385,9 +491,11 @@ class RoundTrip(Evidence):
             "source_start",
             "source_end",
             "available_at",
+            "entry_policy_id",
         }
     )
     lot_id: str
+    entry_policy_id: str | None = None
     decision_id: str
     entry_fill_ids: tuple[str, ...]
     exit_fill_ids: tuple[str, ...]

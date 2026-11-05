@@ -352,13 +352,28 @@ def commission_fixture_authority(store: CoreStore, authority: ActivationAuthorit
 def _boundary(session: Session, *, cutoff: datetime) -> None:
     from quantbot.paper_core.outcomes import terminal_evidence
     from quantbot.paper_core.send_guard import definitively_unsent
+    from quantbot.paper_core.settlement import definitively_unsent_many
 
     repo = StorageRepository(session)
-    for link in session.execute(select(table("core_intent_links"))).mappings():
-        intent = repo.get_order_intent(link["intent_id"])
+    links = session.execute(select(table("core_intent_links"))).mappings().all()
+    identities = [link["intent_id"] for link in links]
+    try:
+        intents = repo.get_order_intents(identities)
+        unsent = definitively_unsent_many(repo, identities)
+    except (ValueError, KeyError, TypeError):
+        # Corrupt later rows must not hide an earlier ordinary refusal. Replay the
+        # original read-only traversal on the same caller-owned snapshot.
+        intents = None
+        unsent = {}
+    for index, link in enumerate(links):
+        intent = intents[index] if intents is not None else repo.get_order_intent(link["intent_id"])
         if intent is None:
             raise StateConflictError("ACTIVATION_UNRESOLVED_CLAIM")
-        if definitively_unsent(repo, intent.intent_id):
+        if (
+            unsent[intent.intent_id]
+            if intents is not None
+            else definitively_unsent(repo, intent.intent_id)
+        ):
             continue
         if intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
             raise StateConflictError("ACTIVATION_UNRESOLVED_SUBMISSION")

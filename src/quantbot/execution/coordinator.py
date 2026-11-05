@@ -443,8 +443,10 @@ class ExecutionCoordinator:
         )
 
     async def reconcile_durable(self, intent: OrderIntent) -> SubmissionResult:
-        """Refresh an accepted durable order without creating a new broker mutation."""
+        """Look up a possible or accepted send without creating a broker mutation."""
         stored = self._stored_intent(intent)
+        if stored.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
+            return await self._recover_persisted_submission(stored)
         if stored.state not in {
             IntentState.BROKER_ACCEPTED,
             IntentState.PARTIALLY_FILLED,
@@ -548,6 +550,9 @@ class ExecutionCoordinator:
             vetoes=vetoes,
         )
 
+    async def _acquire_send_constraints(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
+        """Optional provider constraints acquired before the final account/position reads."""
+
     async def _submit_order_created(
         self,
         intent: OrderIntent,
@@ -562,6 +567,7 @@ class ExecutionCoordinator:
         if intent.state is not IntentState.ORDER_CREATED:
             raise ValueError("submission requires an ORDER_CREATED intent")
 
+        await self._acquire_send_constraints(intent, purpose)
         fresh_account = await self._broker.get_account()
         fresh_positions = tuple(await self._broker.get_positions())
         fresh_gate = self._gate(

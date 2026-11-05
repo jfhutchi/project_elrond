@@ -1,6 +1,7 @@
 """Narrow PAPER sizing authority; never independent cash or fee reconciliation."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
 from pydantic import Field, ValidationError
@@ -59,7 +60,7 @@ def stable_account_reads(first: BrokerAccountSnapshot, second: BrokerAccountSnap
 
 
 def stable_position_reads(first: tuple[Position, ...], second: tuple[Position, ...]) -> bool:
-    def basis(positions: tuple[Position, ...]):
+    def basis(positions: tuple[Position, ...]) -> list[tuple[str, Decimal, Decimal]]:
         return sorted((p.symbol, p.quantity, p.average_entry_price) for p in positions)
 
     return basis(first) == basis(second)
@@ -76,6 +77,94 @@ def structural_funds_allowed(config: CoreConfig, proof: ReconciliationProof) -> 
         and not proof.cash_complete
         and proof.expected_cash is None
     )
+
+
+def open_order_objections(
+    store: CoreStore, session: Session, orders: tuple[BrokerOrder, ...]
+) -> tuple[str, ...]:
+    """Only exact durable, quantity-accounted batch ownership can explain an open order."""
+    from quantbot.domain import IntentState
+    from quantbot.paper_core.batch import member_objections
+    from quantbot.paper_core.contracts import Decision
+    from quantbot.paper_core.send_guard import owned_exit_objections
+
+    if not orders:
+        return ()
+    if not store.parallel_entries:
+        return ("CORE_COMPETING_OPEN_ORDER",)
+    repo = StorageRepository(session)
+    seen_clients, seen_symbols = set(), set()
+    for order in orders:
+        link = (
+            session.execute(
+                select(table("core_intent_links"))
+                .join(
+                    table("order_intents"),
+                    table("order_intents").c.intent_id == table("core_intent_links").c.intent_id,
+                )
+                .where(table("order_intents").c.client_order_id == order.client_order_id)
+            )
+            .mappings()
+            .one_or_none()
+        )
+        intent = repo.get_order_intent(link["intent_id"]) if link else None
+        if (
+            link is None
+            or intent is None
+            or intent.strategy_id != store.config.owner
+            or order.client_order_id in seen_clients
+            or order.symbol in seen_symbols
+            or repo.get_broker_order_by_client_order_id(order.client_order_id) != order
+            or (order.symbol, order.side, order.quantity, order.order_type, order.time_in_force)
+            != (
+                intent.symbol,
+                intent.side,
+                intent.quantity,
+                intent.order_type,
+                intent.time_in_force,
+            )
+            or intent.state
+            not in {
+                IntentState.SUBMITTING,
+                IntentState.SUBMISSION_UNKNOWN,
+                IntentState.BROKER_ACCEPTED,
+                IntentState.PARTIALLY_FILLED,
+            }
+            or not 0 <= order.filled_quantity < order.quantity
+            or order.status in {"filled", "canceled", "rejected", "expired"}
+            or sum(
+                (f.quantity for f in repo.list_fills(broker_order_id=order.broker_order_id)),
+                Decimal(0),
+            )
+            != order.filled_quantity
+        ):
+            return ("CORE_UNEXPLAINED_OPEN_ORDER",)
+        decision = Decision.model_validate_json(
+            session.execute(
+                select(table("core_decisions").c.payload).where(
+                    table("core_decisions").c.id == link["lot_id"]
+                )
+            ).scalar_one()
+        )
+        entry_link = session.execute(
+            select(table("core_intent_links").c.intent_id).where(
+                table("core_intent_links").c.role == "ENTRY",
+                table("core_intent_links").c.lot_id == link["lot_id"],
+            )
+        ).scalar_one_or_none()
+        if member_objections(store, session, decision, entry_link):
+            return ("CORE_UNEXPLAINED_OPEN_ORDER",)
+        if link["role"] == "EXIT" and owned_exit_objections(
+            store,
+            session,
+            intent.model_copy(update={"quantity": order.quantity - order.filled_quantity}),
+        ):
+            return ("CORE_UNEXPLAINED_OPEN_ORDER",)
+        if link["role"] not in {"ENTRY", "EXIT"}:
+            return ("CORE_UNEXPLAINED_OPEN_ORDER",)
+        seen_clients.add(order.client_order_id)
+        seen_symbols.add(order.symbol)
+    return ()
 
 
 def entry_inventory_objections(
@@ -166,8 +255,9 @@ def entry_inventory_objections(
         or receipt.recorded_at_utc != proof.recorded_at_utc
         or not 0 <= (receipt.recorded_at_utc - receipt.capture_started).total_seconds() <= 5
         or not 0 <= (now - receipt.recorded_at_utc).total_seconds() <= 120
-        or receipt.first_open_orders
-        or receipt.second_open_orders
+        or sorted(receipt.first_open_orders, key=lambda o: o.client_order_id)
+        != sorted(receipt.second_open_orders, key=lambda o: o.client_order_id)
+        or open_order_objections(store, session, receipt.first_open_orders)
         or not receipt.first_account.order_entry_allowed
         or receipt.first_account.restrictions
         or proof.account.equity <= 0

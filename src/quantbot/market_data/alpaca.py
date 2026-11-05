@@ -141,13 +141,22 @@ class AlpacaMarketDataClient:
             "Accept": "application/json",
         }
 
-    async def _request_page(self, params: Mapping[str, str]) -> TransportResponse:
+    async def _request_page(
+        self, params: Mapping[str, str], *, endpoint: str = ALPACA_STOCK_BARS_URL
+    ) -> TransportResponse:
+        if endpoint not in {
+            ALPACA_STOCK_BARS_URL,
+            "https://data.alpaca.markets/v2/stocks/quotes/latest",
+            "https://data.alpaca.markets/v2/stocks/snapshots",
+            "https://data.alpaca.markets/v1beta1/news",
+        }:
+            raise ValueError("unsupported market-data endpoint")
         attempt = 0
         while True:
             try:
                 response = await self._transport.request(
                     "GET",
-                    ALPACA_STOCK_BARS_URL,
+                    endpoint,
                     headers=self._headers,
                     params=params,
                     timeout_seconds=self._timeout_seconds,
@@ -188,6 +197,18 @@ class AlpacaMarketDataClient:
         if not delay.is_finite() or delay < 0:
             raise MarketDataProtocolError("Retry-After header is invalid")
         return delay
+
+    async def get_stock_snapshots(self, symbols: tuple[str, ...]) -> dict[str, object]:
+        if not symbols or len(set(symbols)) != len(symbols):
+            raise ValueError("unique nonempty snapshot symbols required")
+        response = await self._request_page(
+            {"symbols": ",".join(sorted(symbols)), "feed": "iex"},
+            endpoint="https://data.alpaca.markets/v2/stocks/snapshots",
+        )
+        payload = _decode_payload(response)
+        if set(payload) - set(symbols) or any(not isinstance(v, dict) for v in payload.values()):
+            raise MarketDataProtocolError("snapshot response scope or pagination invalid")
+        return dict(payload)
 
     async def get_historical_bars(self, query: BarQuery) -> MarketDataBatch:
         base_params = {
@@ -233,6 +254,22 @@ class AlpacaMarketDataClient:
             bars=tuple(sorted(bars, key=lambda bar: (bar.timestamp, bar.symbol))),
             page_count=page_count,
         )
+
+    async def get_latest_quotes(self, symbols: tuple[str, ...]) -> dict[str, Mapping[str, object]]:
+        if not symbols or len(set(symbols)) != len(symbols):
+            raise ValueError("distinct requested quote symbols required")
+        response = await self._request_page(
+            {"symbols": ",".join(sorted(symbols)), "feed": "iex"},
+            endpoint="https://data.alpaca.markets/v2/stocks/quotes/latest",
+        )
+        raw = _decode_payload(response).get("quotes")
+        if (
+            not isinstance(raw, dict)
+            or set(raw) - set(symbols)
+            or any(not isinstance(v, dict) for v in raw.values())
+        ):
+            raise MarketDataProtocolError("invalid requested IEX quote mapping")
+        return raw
 
     async def get_latest_completed_daily_bars(
         self,

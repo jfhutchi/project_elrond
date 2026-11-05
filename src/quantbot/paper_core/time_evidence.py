@@ -22,6 +22,7 @@ from quantbot.paper_core.contracts import (
     ProtectionPlan,
     TimeProjection,
 )
+from quantbot.research.manifest import content_id
 
 
 class Clocks(Protocol):
@@ -78,7 +79,13 @@ class TimeEvidence(Evidence):
     objections: tuple[str, ...]
 
 
-async def acquire_time_evidence(broker: TimeBroker, clocks: Clocks) -> TimeEvidence:
+async def acquire_time_evidence(
+    broker: TimeBroker, clocks: Clocks, *, context: CoreConfig | None = None
+) -> TimeEvidence:
+    # Context labels this new envelope; provider samples retain their original
+    # account/session/timing checks. It never relabels an already retained document.
+    if context is not None and context.account_id != broker.account_id:
+        raise ValueError("TIME_PROVENANCE_ACCOUNT_MISMATCH")
     start_wall, start_mono = clocks.sample()
     samples: list[TimeSample] = []
     reasons: list[str] = []
@@ -151,7 +158,7 @@ async def acquire_time_evidence(broker: TimeBroker, clocks: Clocks) -> TimeEvide
             reasons.append("TIME_IDENTITY_CHANGED")
         if max(s.offset_lower for s in samples) > min(s.offset_upper for s in samples):
             reasons.append("TIME_SAMPLES_DISAGREE")
-    return TimeEvidence(
+    evidence = TimeEvidence(
         recorded_at_utc=wall,
         process_id=clocks.process_id,
         samples=tuple(samples),
@@ -161,6 +168,16 @@ async def acquire_time_evidence(broker: TimeBroker, clocks: Clocks) -> TimeEvide
         offset_upper=max((s.offset_upper for s in samples), default=0),
         objections=tuple(dict.fromkeys(reasons)),
     )
+    if context is not None:
+        evidence = evidence.model_copy(
+            update={
+                "release_id": context.release_id,
+                "evidence_lane": context.evidence_lane,
+                # A persisted configuration reference, not raw-response provenance.
+                "source_refs": (content_id(context),),
+            }
+        )
+    return evidence
 
 
 def _projection_at(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
@@ -23,6 +24,14 @@ from quantbot.paper_core.contracts import (
     ProtectionPlan,
     ReconciliationProof,
     TimeProjection,
+)
+from quantbot.paper_core.entry_policy import (
+    EntryPolicy,
+    decision_entry_authority,
+    eligibility_objections,
+    entry_policy_in_session,
+    entry_quantity,
+    symbols,
 )
 from quantbot.paper_core.features import observation_objections
 from quantbot.paper_core.funds import entry_inventory_objections, structural_funds_allowed
@@ -46,6 +55,34 @@ def record_observation(store: CoreStore, observation: Observation) -> str:
     return store.record("core_observations", observation)
 
 
+def _emit_inventory_diagnostic(payload: str, *, flush: bool = True) -> None:
+    try:
+        print(payload, flush=flush)
+    except (OSError, ValueError):
+        pass  # Output availability cannot grant or refuse acquisition authority.
+
+
+def evaluate_batch(
+    store: CoreStore,
+    cohort: ObservationCohort,
+    model: ModelArtifact,
+    proof: ReconciliationProof,
+    *,
+    now: datetime,
+) -> tuple[Decision, ...]:
+    from quantbot.paper_core.batch import evaluate_batch as evaluate
+
+    return evaluate(store, cohort, model, proof, now=now)
+
+
+def claim_batch(
+    store: CoreStore, decisions: tuple[Decision, ...], *, now: datetime
+) -> tuple[EntryIntent, ...]:
+    from quantbot.paper_core.batch import claim_batch as claim
+
+    return claim(store, decisions, now=now)
+
+
 def evaluate_entry(
     config: CoreConfig,
     observation: Observation,
@@ -56,6 +93,8 @@ def evaluate_entry(
     time_projection: TimeProjection | None = None,
     activation: object | None = None,
     _cohort_member: bool = False,
+    entry_policy: EntryPolicy | None = None,
+    available_notional: Decimal | None = None,
 ) -> Decision:
     objections = list(
         observation_objections(
@@ -81,7 +120,12 @@ def evaluate_entry(
     ):
         objections.append("TIME_CALENDAR_MISMATCH")
     if (
-        observation.symbol not in (config.entry_symbols if hybrid else (config.symbol,))
+        not (
+            entry_policy.permits(observation.symbol)
+            if hybrid and entry_policy
+            else observation.symbol
+            in (symbols(config, entry_policy) if hybrid else (config.symbol,))
+        )
         or model.feature_version != observation.feature_version
     ):
         objections.append("CONTRACT_MISMATCH")
@@ -126,8 +170,21 @@ def evaluate_entry(
         objections.append("INVENTORY_STALE")
     if dict(inventory.actual_quantities).get(observation.symbol, Decimal(0)) != 0:
         objections.append("SYMBOL_ALREADY_HELD")
-    notional = inventory.account.equity * Decimal("0.005")
-    quantity = (notional / observation.price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN")
+    eligibility = observation.asset_eligibility
+    if entry_policy is not None:
+        objections.extend(
+            eligibility_objections(
+                eligibility, symbol=observation.symbol, now=evaluated_at, policy_id=entry_policy.id
+            )
+        )
+    quantity = entry_quantity(
+        inventory.account,
+        observation.price,
+        policy=entry_policy,
+        fractionable=eligibility.fractionable if eligibility else None,
+        config=config,
+        available_notional=available_notional,
+    )
     if quantity <= 0 or quantity * observation.price * Decimal(
         "0.01"
     ) > inventory.account.equity * Decimal("0.0025"):
@@ -140,6 +197,8 @@ def evaluate_entry(
     if observation.recorded_at_utc >= observation.session_close - timedelta(seconds=120):
         objections.append("SESSION_EXIT_BUFFER")
     timing: dict[str, Any] = {}
+    if entry_policy is not None:
+        timing["entry_policy_id"] = entry_policy.id
     if selection is not None:
         timing.update(
             activation_id=selection.id,
@@ -165,7 +224,7 @@ def evaluate_entry(
                         else time_evidence.wall_anchor
                         + timedelta(seconds=time_evidence.offset_lower)
                     )
-                    + timedelta(seconds=1800),
+                    + timedelta(minutes=config.horizon_minutes),
                     observation.session_close - timedelta(seconds=120),
                 ),
             }
@@ -178,7 +237,8 @@ def evaluate_entry(
         evidence_lane=config.evidence_lane,
         release_id=config.release_id,
         source_refs=(observation.id, model.id, inventory.id)
-        + ((time_evidence.id,) if time_evidence else ()),
+        + ((time_evidence.id,) if time_evidence else ())
+        + ((entry_policy.id,) if entry_policy else ()),
         observation_id=observation.id,
         policy_id=config.policy_id,
         model_id=model.id,
@@ -208,11 +268,18 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             return None
         if not store.runtime_entry_enabled:
             return None
+        entry_policy = entry_policy_in_session(store, session)
+        policy_reasons, minimum_share = decision_entry_authority(
+            store, session, decision, now=store.clocks.sample()[0]
+        )
+        if policy_reasons:
+            return None
         from quantbot.paper_core.activation import active_in_session, decision_model_objections
 
         if decision_model_objections(store, session, decision):
             return None
         from quantbot.paper_core.selection import (
+            cohort_symbols,
             evaluate_cohort,
             reservation_objections,
             reservation_state,
@@ -271,7 +338,10 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             return None
         if store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER":
             if not current_risk_allowed(
-                certified, quantity=decision.quantity, price=decision.price
+                certified,
+                quantity=decision.quantity,
+                price=decision.price,
+                minimum_whole_share=minimum_share,
             ):
                 return None
         original = ReconciliationProof.model_validate_json(
@@ -301,6 +371,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             time_evidence=time_evidence,
             time_projection=decision.time_projection,
             activation=selection[1] if selection else None,
+            entry_policy=entry_policy,
         )
         model = (
             selection[0] if selection else ModelArtifact(feature_version=observed.feature_version)
@@ -337,7 +408,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
                 prior_counts=prior,
                 health_reasons={
                     s: entry_health_objections(store, session, s)
-                    for s in store.config.entry_symbols
+                    for s in cohort_symbols(store.config, cohort, entry_policy)
                 },
                 **authority,
             )
@@ -377,9 +448,13 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             store, session, entry=True
         ):
             return None
+        # A receipt can be published after the decision projection. Relative-time
+        # claims use the current execution clock, including standalone fixtures.
         readiness_at = (
             store.clocks.sample()[0]
-            if store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER"
+            if time_evidence is not None
+            or store.runtime_role is not None
+            or store.config.evidence_lane == "BROKER_PAPER"
             else decision.recorded_at_utc
         )
         if (store.runtime_role is not None or store.config.evidence_lane == "BROKER_PAPER") and (
@@ -436,37 +511,25 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
         return wrapper
 
 
-async def trader_cycle(
+async def _acquire_entry_authority(
     store: CoreStore,
     broker: SyntheticBroker | AlpacaCoreBroker,
-    observation: Observation | ObservationCohort,
-    model: ModelArtifact,
+    observation: Observation,
+    cohort: ObservationCohort | None,
     inventory: ReconciliationProof,
-    *,
-    now: datetime,
-) -> Decision:
-    require_runtime_broker(store, broker)
-    cohort = observation if isinstance(observation, ObservationCohort) else None
-    if cohort is not None:
-        from quantbot.paper_core.selection import record_cohort, validate_cohort
-
-        validate_cohort(store.config, cohort)
-        record_cohort(store, cohort)
-        if not cohort.observations:
-            raise ValueError("NO_ELIGIBLE_COHORT_MEMBERS:" + repr(cohort.unavailable))
-        observation = cohort.observations[0]
-    assert isinstance(observation, Observation)
+) -> tuple[ReconciliationProof, TimeEvidence | None, TimeProjection | None, tuple[str, ...]]:
     time_evidence = None
     time_projection = None
     acquisition_reasons: tuple[str, ...] = ()
     if store.config.clock_profile == "PAPER_TIME_V2":
-        time_evidence = await acquire_time_evidence(broker, store.clocks)
+        time_evidence = await acquire_time_evidence(broker, store.clocks, context=store.config)
         store.record("core_time_evidence", time_evidence)
         store.runtime_time_evidence_id = time_evidence.id
         acquisition_reasons = time_evidence.objections
         if not acquisition_reasons:
             from quantbot.paper_core.guardian import synchronize
 
+            acquisition_started = store.clocks.sample()[1]
             try:
                 async with asyncio.timeout(5):
                     for attempt in range(2):
@@ -477,8 +540,50 @@ async def trader_cycle(
                             if attempt or str(error) != "RECONCILIATION_AUTHORITY_CHANGED":
                                 raise
                 inventory = store.latest_proof()
-            except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError):
+                _emit_inventory_diagnostic(
+                    json.dumps(
+                        {
+                            "event": "TRADER_INVENTORY_ACQUISITION_COMPLETE",
+                            "at": store.clocks.sample()[0].isoformat(),
+                            "elapsed_seconds": max(
+                                0, store.clocks.sample()[1] - acquisition_started
+                            ),
+                            "phases": [
+                                {"phase": phase, "after_seconds": max(0, at - acquisition_started)}
+                                for phase, at in getattr(broker, "inventory_diagnostic_trace", ())
+                            ],
+                        }
+                    ),
+                    flush=True,
+                )
+            except (TimeoutError, OSError, BrokerRequestError, BrokerTransportError) as error:
                 acquisition_reasons = ("INVENTORY_ACQUISITION_RETRYABLE",)
+                detail = str(error) if isinstance(error, TimeoutError) else ""
+                _emit_inventory_diagnostic(
+                    json.dumps(
+                        {
+                            "event": "TRADER_INVENTORY_ACQUISITION_REFUSED",
+                            "at": store.clocks.sample()[0].isoformat(),
+                            "exception": type(error).__name__,
+                            "reason": detail
+                            if detail
+                            in {
+                                "INVENTORY_ACQUISITION_UNSTABLE",
+                                "RECONCILIATION_AUTHORITY_CHANGED",
+                                "INVENTORY_CAPTURE_CROSSED_OWNED_SEND",
+                            }
+                            else None,
+                            "elapsed_seconds": max(
+                                0, store.clocks.sample()[1] - acquisition_started
+                            ),
+                            "phases": [
+                                {"phase": phase, "after_seconds": max(0, at - acquisition_started)}
+                                for phase, at in getattr(broker, "inventory_diagnostic_trace", ())
+                            ],
+                        }
+                    ),
+                    flush=True,
+                )
             except (ValueError, BrokerProtocolError):
                 acquisition_reasons = ("INVENTORY_PROTOCOL_INVALID",)
             except StateConflictError as error:
@@ -520,6 +625,64 @@ async def trader_cycle(
                     recover_health(
                         store, inventory, now=store.clocks.sample()[0], symbol=member.symbol
                     )
+    return inventory, time_evidence, time_projection, acquisition_reasons
+
+
+async def trader_batch_cycle(
+    store: CoreStore,
+    broker: SyntheticBroker | AlpacaCoreBroker,
+    cohort: ObservationCohort,
+    model: ModelArtifact,
+    *,
+    now: datetime,
+) -> tuple[Decision, ...]:
+    """Capture one full cohort, acquire ordinary authority and prepare original batch claims."""
+    from quantbot.paper_core.activation import active_in_session
+    from quantbot.paper_core.selection import record_cohort, validate_cohort
+
+    require_runtime_broker(store, broker)
+    if not store.parallel_entries:
+        raise ValueError("batch requires the resource-bounded PAPER admission policy")
+    validate_cohort(store.config, cohort, entry_policy=store.entry_policy)
+    record_cohort(store, cohort)
+    if not cohort.observations:
+        return ()
+    inventory, _, _, _ = await _acquire_entry_authority(
+        store, broker, cohort.observations[0], cohort, store.latest_proof()
+    )
+    with store.database.transaction() as session:
+        active = active_in_session(store, session)
+    if active:
+        model = active[0]
+    decisions = evaluate_batch(store, cohort, model, inventory, now=store.clocks.sample()[0])
+    claim_batch(store, decisions, now=store.clocks.sample()[0])
+    # A separate guardian must acknowledge each durable plan; dispatch owns submission.
+    return decisions
+
+
+async def trader_cycle(
+    store: CoreStore,
+    broker: SyntheticBroker | AlpacaCoreBroker,
+    observation: Observation | ObservationCohort,
+    model: ModelArtifact,
+    inventory: ReconciliationProof,
+    *,
+    now: datetime,
+) -> Decision:
+    require_runtime_broker(store, broker)
+    cohort = observation if isinstance(observation, ObservationCohort) else None
+    if cohort is not None:
+        from quantbot.paper_core.selection import record_cohort, validate_cohort
+
+        validate_cohort(store.config, cohort, entry_policy=store.entry_policy)
+        record_cohort(store, cohort)
+        if not cohort.observations:
+            raise ValueError("NO_ELIGIBLE_COHORT_MEMBERS:" + repr(cohort.unavailable))
+        observation = cohort.observations[0]
+    assert isinstance(observation, Observation)
+    inventory, time_evidence, time_projection, acquisition_reasons = await _acquire_entry_authority(
+        store, broker, observation, cohort, inventory
+    )
     if cohort is None:
         record_observation(store, observation)
     previous = next(
@@ -547,14 +710,18 @@ async def trader_cycle(
         time_evidence=time_evidence,
         time_projection=time_projection,
         activation=selection[1] if selection else None,
+        entry_policy=store.entry_policy,
     )
     if cohort is not None:
         from quantbot.paper_core.selection import evaluate_cohort, reservation_state
 
         with store.database.transaction() as session:
             daily, prior, _ = reservation_state(store, session, cohort)
+            from quantbot.paper_core.selection import cohort_symbols
+
             health = {
-                s: entry_health_objections(store, session, s) for s in store.config.entry_symbols
+                s: entry_health_objections(store, session, s)
+                for s in cohort_symbols(store.config, cohort, store.entry_policy)
             }
         decision = evaluate_cohort(
             store.config,

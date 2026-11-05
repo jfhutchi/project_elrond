@@ -7,7 +7,6 @@ from typing import Any
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from quantbot.domain import IntentState
 from quantbot.paper_core.contracts import (
     CoreConfig,
     Decision,
@@ -16,9 +15,10 @@ from quantbot.paper_core.contracts import (
     ReconciliationProof,
     SelectionEvidence,
 )
+from quantbot.paper_core.entry_policy import EntryPolicy, entry_policy_in_session, symbols
 from quantbot.paper_core.store import CoreStore, table
 from quantbot.research.manifest import content_id
-from quantbot.storage import StorageRepository
+from quantbot.storage import StateConflictError, StorageRepository
 
 SIGNAL_OR_EXPLORE_SESSION_LIMIT = 6
 
@@ -42,7 +42,7 @@ def cohort_document(store: CoreStore, cohort: ObservationCohort) -> dict[str, An
 def record_cohort(store: CoreStore, cohort: ObservationCohort) -> str:
     from quantbot.paper_core.store import put
 
-    validate_cohort(store.config, cohort)
+    validate_cohort(store.config, cohort, entry_policy=store.entry_policy)
     document = cohort_document(store, cohort)
     identity = content_id(document)
     with store.database.transaction() as session:
@@ -52,11 +52,36 @@ def record_cohort(store: CoreStore, cohort: ObservationCohort) -> str:
     return identity
 
 
-def validate_cohort(config: CoreConfig, cohort: ObservationCohort) -> None:
+def validate_cohort(
+    config: CoreConfig, cohort: ObservationCohort, *, entry_policy: EntryPolicy | None = None
+) -> None:
     members = [o.symbol for o in cohort.observations] + [s for s, _ in cohort.unavailable]
+    if entry_policy is not None and entry_policy.dynamic:
+        d = cohort.discovery
+        if (
+            d is None
+            or len(d.symbols) != len(set(d.symbols))
+            or set(d.symbols) != set(members)
+            or {s.symbol for s in d.samples} != set(members)
+            or len(d.samples) != len(members)
+            or not d.scan_receipt_ids
+            or any(s.scan_receipt_id not in d.scan_receipt_ids for s in d.samples)
+            or d.eligible_count < len(members)
+            or not 0 <= (d.recorded_at - d.catalog_at).total_seconds() <= 3600
+            or not 0 <= (d.recorded_at - cohort.source_end).total_seconds() <= 120
+            or any(not entry_policy.permits(s) for s in members)
+            or any(
+                not 0 <= (d.recorded_at - s.source_at).total_seconds() <= 90
+                or not 0 <= (d.recorded_at - s.received_at).total_seconds() <= 90
+                or s.dollar_volume <= 0
+                or not 0 <= s.spread_bps <= 10
+                for s in d.samples
+            )
+        ):
+            raise ValueError("discovery cohort requires exact fresh captured membership")
     if (
         len(members) != len(set(members))
-        or set(members) != set(config.entry_symbols)
+        or set(members) != set(cohort_symbols(config, cohort, entry_policy))
         or any(not reason for _, reason in cohort.unavailable)
         or any(
             t.tzinfo is None for t in (cohort.source_end, cohort.session_open, cohort.session_close)
@@ -73,6 +98,16 @@ def validate_cohort(config: CoreConfig, cohort: ObservationCohort) -> None:
         raise ValueError("cohort must capture the complete universe at one verified boundary")
 
 
+def cohort_symbols(
+    config: CoreConfig, cohort: ObservationCohort, policy: EntryPolicy | None
+) -> tuple[str, ...]:
+    if policy is not None and policy.dynamic:
+        if cohort.discovery is None:
+            raise ValueError("discovery cohort evidence required")
+        return cohort.discovery.symbols
+    return symbols(config, policy)
+
+
 def reservation_state(
     store: CoreStore,
     session: Session,
@@ -81,7 +116,13 @@ def reservation_state(
     exclude_intent: str | None = None,
 ) -> tuple[tuple[tuple[str, int], ...], tuple[tuple[str, int], ...], frozenset[str]]:
     """Only definitive unsent proof releases usage; completion never releases daily usage."""
-    from quantbot.paper_core.send_guard import definitively_unsent
+    from quantbot.paper_core.settlement import definitively_unsent_many
+
+    connection = session.connection()
+    driver = connection.connection.driver_connection
+    assert driver is not None, "SQLITE_DRIVER_UNAVAILABLE"
+    if not driver.in_transaction:
+        connection.exec_driver_sql("BEGIN")
 
     links, intents, decisions = (
         table(n) for n in ("core_intent_links", "order_intents", "core_decisions")
@@ -91,33 +132,34 @@ def reservation_state(
     prior: Counter[str] = Counter()
     boundaries = set()
     # Hydrate scalar selection metadata only, rather than every historic cohort's features.
-    rows = session.execute(
-        select(
-            links.c.intent_id,
-            intents.c.state,
-            func.json_extract(decisions.c.payload, "$.symbol"),
-            func.json_extract(decisions.c.payload, "$.recorded_at_utc"),
-            func.json_extract(decisions.c.payload, "$.selection.cohort.session_open"),
-            func.json_extract(decisions.c.payload, "$.selection.cohort.session_close"),
-            func.json_extract(decisions.c.payload, "$.selection.boundary_id"),
-        )
-        .outerjoin(intents, intents.c.intent_id == links.c.intent_id)
-        .join(decisions, decisions.c.id == links.c.decision_id)
-        .where(
-            links.c.role == "ENTRY",
-            or_(intents.c.strategy_id == store.config.owner, intents.c.intent_id.is_(None)),
-            or_(
-                intents.c.created_at < cohort.session_close.isoformat(),
-                intents.c.intent_id.is_(None),
-            ),
+    rows = list(
+        session.execute(
+            select(
+                links.c.intent_id,
+                intents.c.state,
+                func.json_extract(decisions.c.payload, "$.symbol"),
+                func.json_extract(decisions.c.payload, "$.recorded_at_utc"),
+                func.json_extract(decisions.c.payload, "$.selection.cohort.session_open"),
+                func.json_extract(decisions.c.payload, "$.selection.cohort.session_close"),
+                func.json_extract(decisions.c.payload, "$.selection.boundary_id"),
+            )
+            .outerjoin(intents, intents.c.intent_id == links.c.intent_id)
+            .join(decisions, decisions.c.id == links.c.decision_id)
+            .where(
+                links.c.role == "ENTRY",
+                or_(intents.c.strategy_id == store.config.owner, intents.c.intent_id.is_(None)),
+                or_(
+                    intents.c.created_at < cohort.session_close.isoformat(),
+                    intents.c.intent_id.is_(None),
+                ),
+            )
         )
     )
-    for identity, state, symbol, recorded_at, session_open, session_close, boundary in rows:
-        if (
-            identity == exclude_intent
-            or state == IntentState.ERROR.value
-            and definitively_unsent(repo, identity)
-        ):
+    unsent_by_id = definitively_unsent_many(
+        repo, [row[0] for row in rows if row[0] != exclude_intent]
+    )
+    for identity, _state, symbol, recorded_at, session_open, session_close, boundary in rows:
+        if identity == exclude_intent or unsent_by_id[identity]:
             continue
         if session_open is not None and session_close is not None:
             opening, closing = (
@@ -145,24 +187,32 @@ def evaluate_cohort(
     session_counts: tuple[tuple[str, int], ...] = (),
     prior_counts: tuple[tuple[str, int], ...] = (),
     health_reasons: dict[str, tuple[str, ...]] | None = None,
+    entry_policy: EntryPolicy | None = None,
     **authority: Any,
 ) -> Decision:
     from quantbot.paper_core.trader import evaluate_entry
 
-    validate_cohort(config, cohort)
+    validate_cohort(config, cohort, entry_policy=entry_policy)
+    universe = cohort_symbols(config, cohort, entry_policy)
     if config.selection_policy != "SIGNAL_OR_EXPLORE_V1":
         raise ValueError("cohort requires SIGNAL_OR_EXPLORE_V1")
     health = health_reasons or {}
     members = {
-        o.symbol: evaluate_entry(config, o, model, inventory, _cohort_member=True, **authority)
+        o.symbol: evaluate_entry(
+            config, o, model, inventory, _cohort_member=True, entry_policy=entry_policy, **authority
+        )
         for o in cohort.observations
     }
     exclusions: dict[str, tuple[str, ...]] = {s: (reason,) for s, reason in cohort.unavailable}
     for symbol, decision in members.items():
         reasons = tuple(dict.fromkeys((*decision.gates, *health.get(symbol, ()))))
+        if cohort.discovery is not None and entry_policy is not None and entry_policy.dynamic:
+            sample = next(s for s in cohort.discovery.samples if s.symbol == symbol)
+            if decision.quantity * decision.price > sample.dollar_volume / 10000:
+                reasons += ("DISCOVERY_LIQUIDITY_CAPACITY",)
         if reasons:
             exclusions[symbol] = reasons
-    eligible = [s for s in config.entry_symbols if s in members and s not in exclusions]
+    eligible = [s for s in universe if s in members and s not in exclusions]
     daily, prior = dict(session_counts), dict(prior_counts)
     predictions = {s: d.prediction_bps for s, d in members.items() if d.prediction_bps is not None}
     strong = [s for s in eligible if s in predictions and predictions[s] > 10]
@@ -174,7 +224,7 @@ def evaluate_cohort(
                 daily.get(s, 0),
                 -predictions[s],
                 prior.get(s, 0),
-                config.entry_symbols.index(s),
+                universe.index(s),
             ),
         )
         kind = "SIGNAL"
@@ -184,7 +234,7 @@ def evaluate_cohort(
             key=lambda s: (
                 daily.get(s, 0),
                 prior.get(s, 0),
-                config.entry_symbols.index(s),
+                universe.index(s),
             ),
         )
         kind = "EXPLORATION"
@@ -192,10 +242,13 @@ def evaluate_cohort(
         # Keep an actual observed member as the WAIT anchor, with every exclusion retained.
         if not members:
             raise ValueError("cohort has no available observation: " + repr(cohort.unavailable))
-        chosen, kind = next(s for s in config.entry_symbols if s in members), "UNAVAILABLE"
+        chosen, kind = next(s for s in universe if s in members), "UNAVAILABLE"
     decision = members[chosen]
     gates = exclusions.get(chosen, ())
-    if sum(daily.values()) >= SIGNAL_OR_EXPLORE_SESSION_LIMIT:
+    from quantbot.paper_core.economics import limits
+
+    daily_limit = limits(config, entry_policy=entry_policy).daily_entry_limit
+    if daily_limit is not None and sum(daily.values()) >= daily_limit:
         gates = (*gates, "SESSION_RESERVATION_LIMIT")
     evidence = SelectionEvidence(
         kind=kind,
@@ -203,7 +256,7 @@ def evaluate_cohort(
         boundary_id=boundary_id(config, cohort),
         session_counts=session_counts,
         prior_counts=prior_counts,
-        exclusions=tuple((s, exclusions[s]) for s in config.entry_symbols if s in exclusions),
+        exclusions=tuple((s, exclusions[s]) for s in universe if s in exclusions),
     )
     return decision.model_copy(
         update={"selection": evidence, "gates": gates, "action": "WAIT" if gates else "BUY"}
@@ -219,10 +272,27 @@ def reservation_objections(
 ) -> tuple[str, ...]:
     if store.config.selection_policy != "SIGNAL_OR_EXPLORE_V1":
         return ()
-    if decision.selection is None or decision.symbol not in store.config.entry_symbols:
+
+    if store.parallel_entries:
+        from quantbot.paper_core.batch import member_objections
+
+        return member_objections(store, session, decision, intent_id)
+    try:
+        policy = entry_policy_in_session(store, session)
+    except StateConflictError:
+        return ("CORE_RUNTIME_BINDING_MISMATCH",)
+    if (
+        decision.selection is None
+        or not (
+            policy.permits(decision.symbol)
+            if policy
+            else decision.symbol in symbols(store.config, policy)
+        )
+        or decision.entry_policy_id != (policy.id if policy else None)
+    ):
         return ("SELECTION_AUTHORITY_MISSING",)
     cohort = decision.selection.cohort
-    validate_cohort(store.config, cohort)
+    validate_cohort(store.config, cohort, entry_policy=policy)
     daily, _, boundaries = reservation_state(store, session, cohort, exclude_intent=intent_id)
     reasons = []
     if boundary_id(store.config, cohort) != decision.selection.boundary_id:

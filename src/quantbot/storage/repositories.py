@@ -12,6 +12,7 @@ from typing import TypeAlias, cast
 
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import RowMapping
+from sqlalchemy.exc import MultipleResultsFound
 from sqlalchemy.orm import Session
 
 from quantbot.domain import (
@@ -1150,6 +1151,22 @@ class StorageRepository:
         )
         return None if row is None else self._intent_from_row(row)
 
+    def get_order_intents(self, intent_ids: Sequence[str]) -> list[OrderIntent | None]:
+        """Equivalent ordered lookups in this transaction, without per-intent SQL."""
+        unique = list(dict.fromkeys(intent_ids))
+        found: dict[str, OrderIntent] = {}
+        # Bound SQL parameters, not the number of requested or eligible intents.
+        for offset in range(0, len(unique), 500):
+            rows = self._session.execute(
+                select(order_intents).where(
+                    order_intents.c.intent_id.in_(unique[offset : offset + 500])
+                )
+            ).mappings()
+            for row in rows:
+                intent = self._intent_from_row(row)
+                found[str(row["intent_id"])] = intent
+        return [found.get(identity) for identity in intent_ids]
+
     def list_unresolved_order_intents(self) -> list[OrderIntent]:
         terminal_values = [state.value for state in TERMINAL_INTENT_STATES]
         rows = (
@@ -1345,6 +1362,34 @@ class StorageRepository:
         )
         return None if row is None else self._broker_order_from_row(row)
 
+    def get_broker_orders_by_client_order_ids(
+        self, client_order_ids: Sequence[str]
+    ) -> list[BrokerOrder | None]:
+        """Ordered fresh lookups in this transaction, retaining raw SQL key semantics."""
+        unique = list(dict.fromkeys(client_order_ids))
+        found: dict[str, RowMapping] = {}
+        duplicates: set[str] = set()
+        for offset in range(0, len(unique), 500):
+            rows = self._session.execute(
+                select(broker_orders).where(
+                    broker_orders.c.client_order_id.in_(unique[offset : offset + 500])
+                )
+            ).mappings()
+            for row in rows:
+                identity = str(row["client_order_id"])
+                if identity in found:
+                    duplicates.add(identity)
+                found[identity] = row
+        result: list[BrokerOrder | None] = []
+        for identity in client_order_ids:
+            if identity in duplicates:
+                raise MultipleResultsFound("Multiple broker orders for client order ID")
+            selected_row = found.get(identity)
+            result.append(
+                None if selected_row is None else self._broker_order_from_row(selected_row)
+            )
+        return result
+
     def list_broker_orders(self) -> list[BrokerOrder]:
         """Return every immutable broker observation in deterministic order."""
         rows = (
@@ -1504,6 +1549,22 @@ class StorageRepository:
         )
         return [self._order_event_from_row(row) for row in rows]
 
+    def get_order_events_for_intents(
+        self, intent_ids: Sequence[str]
+    ) -> dict[str, list[OrderEventRecord]]:
+        """Fresh per-intent histories in the caller's transaction; SQL batches only."""
+        unique = list(dict.fromkeys(intent_ids))
+        result: dict[str, list[OrderEventRecord]] = {identity: [] for identity in unique}
+        for offset in range(0, len(unique), 500):
+            rows = self._session.execute(
+                select(order_events)
+                .where(order_events.c.intent_id.in_(unique[offset : offset + 500]))
+                .order_by(order_events.c.occurred_at, order_events.c.event_id)
+            ).mappings()
+            for row in rows:
+                result[str(row["intent_id"])].append(self._order_event_from_row(row))
+        return result
+
     @staticmethod
     def _order_event_from_row(row: RowMapping) -> OrderEventRecord:
         intent_raw = row["intent_id"]
@@ -1591,10 +1652,23 @@ class StorageRepository:
 
     def get_latest_account_snapshot(
         self, account_id: str, *, certified_only: bool = False,
+        position_certified_only: bool = False,
     ) -> AccountSnapshotRecord | None:
         from quantbot.storage.schema import metadata
         certifications = metadata.tables["core_inventory_certifications"]
         statement = select(account_snapshots).where(account_snapshots.c.account_id == account_id)
+        if certified_only and position_certified_only:
+            raise ValueError("cash and position certification modes are distinct")
+        if position_certified_only:
+            from sqlalchemy import union_all
+            quantities = metadata.tables["core_quantity_certifications"]
+            current = union_all(
+                select(certifications.c.generation, certifications.c.snapshot_id),
+                select(quantities.c.generation, quantities.c.snapshot_id),
+            ).subquery()
+            statement = statement.where(account_snapshots.c.snapshot_id == (
+                select(current.c.snapshot_id).order_by(current.c.generation.desc()).limit(1)
+            ).scalar_subquery())
         if certified_only:
             statement = statement.where(account_snapshots.c.snapshot_id.in_(
                 select(certifications.c.snapshot_id)),

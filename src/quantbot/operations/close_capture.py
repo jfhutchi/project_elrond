@@ -77,8 +77,14 @@ def _retain_validation(directory: Path, document: Mapping[str, Any]) -> None:
 
 
 def _reconciled(operational: Path, account: PaperPerformanceAccount,
-                *, close_at: datetime, captured_at: datetime) -> tuple[bool, str, dict[str, str]]:
+                *, close_at: datetime, captured_at: datetime,
+                core_store: Any = None) -> tuple[bool, str, dict[str, str]]:
     """A timely completed reconciliation and matching durable account, one RO snapshot."""
+    if core_store is not None:
+        from quantbot.paper_core.close_evidence import native_reconciled
+
+        return native_reconciled(core_store, operational, account,
+                                 close_at=close_at, captured_at=captured_at)
     with closing(sqlite3.connect(operational.resolve().as_uri() + '?mode=ro',
                                 uri=True, timeout=5)) as c:
         c.execute('PRAGMA query_only=ON')
@@ -119,6 +125,8 @@ async def capture_close(
     now: datetime, clock: Callable[[], datetime] | None = None,
     prepare_reconciliation: Callable[[], Awaitable[None]] | None = None,
     broker_close_reference: bool = False,
+    core_store: Any = None,
+    stage: Callable[[str], None] | None = None,
 ) -> dict[str, str]:
     """One bounded pass. Outside close window never requests account/activities."""
     if now.tzinfo is None or not directory.is_absolute() or not operational.is_absolute():
@@ -134,13 +142,21 @@ async def capture_close(
     if operational.resolve() in {baselines.resolve(), closes.resolve()}:
         raise ValueError('performance store aliases operational store')
     today = now.astimezone(XNYS_TIMEZONE).date()
+
+    def mark(name: str) -> None:
+        if stage is not None:
+            stage(name)
+
+    mark('ACQUIRE_CAPTURE_LOCK')
     with SingleWriterLock(directory / 'capture.lock'):
+        mark('READ_BASELINE_METADATA')
         with closing(sqlite3.connect(baselines.as_uri() + '?mode=ro', uri=True)) as c:
             oldest = c.execute(
                 'SELECT MIN(session_date) FROM paper_close_baselines_v1').fetchone()[0]
         start = min(today - timedelta(days=40), datetime.fromisoformat(oldest).date()
                     if oldest else today)
         end = today + timedelta(days=62)
+        mark('READ_CALENDAR')
         sessions = await calendar.get_sessions(start, end)
         _write(directory, 'calendar.json', dict(calendar='XNYS', start=start.isoformat(),
                end=end.isoformat(), sessions=[dict(session_date=s.session_date.isoformat(),
@@ -183,23 +199,41 @@ async def capture_close(
                 return dict(session_date=today.isoformat(), status='FINAL', reason='CAPTURED')
             return status(day.status, 'BASELINE_MISSING' if day.status == 'MISSING'
                           else 'CAPTURE_UNAVAILABLE')
-        if now > current.close_at + timedelta(minutes=5):
+        last_observed = now
+
+        def checkpoint() -> datetime | None:
+            nonlocal last_observed
+            observed = clock() if clock is not None else now
+            if (observed.tzinfo is None or observed < last_observed
+                    or not current.close_at <= observed <= current.close_at + timedelta(minutes=5)):
+                return None
+            last_observed = observed
+            return observed
+
+        if checkpoint() is None:
             return status('INVALID', 'CLOSE_NOT_CAPTURED')
         prior_sessions = [s for s in sessions if s.session_date < today]
         if not prior_sessions:
             return status('MISSING', 'CALENDAR_UNAVAILABLE')
         previous_session = prior_sessions[-1]
         if prepare_reconciliation is not None:
+            if checkpoint() is None:
+                return status('INVALID', 'CLOSE_NOT_CAPTURED')
+            mark('PREPARE_RECONCILIATION')
             await prepare_reconciliation()
+        if checkpoint() is None:
+            return status('INVALID', 'CLOSE_NOT_CAPTURED')
+        mark('READ_ACCOUNT')
         account = await broker.get_performance_account()
-        captured_at = clock() if clock is not None else now
-        if (captured_at.tzinfo is None or captured_at < now
-                or captured_at > current.close_at + timedelta(minutes=5)):
+        captured_at = checkpoint()
+        if captured_at is None:
             return status('INVALID', 'CLOSE_NOT_CAPTURED')
         if account.account.account_id != expected_account_id:
             return status('INVALID', 'ACCOUNT_EPOCH_CHANGED')
+        mark('VALIDATE_NATIVE_BALANCE')
         reconciled, epoch, reconciliation = _reconciled(
-            operational, account, close_at=current.close_at, captured_at=captured_at)
+            operational, account, close_at=current.close_at, captured_at=captured_at,
+            core_store=core_store)
         if not reconciled:
             return status('INVALID', 'RECONCILIATION_UNVERIFIED')
         with closing(sqlite3.connect(baselines.as_uri() + '?mode=ro', uri=True)) as c:
@@ -211,28 +245,44 @@ async def capture_close(
         close_equity = account.account.equity
         history_mark_matches = True
         if broker_close_reference:
+            if checkpoint() is None:
+                return status('INVALID', 'CLOSE_NOT_CAPTURED')
+            mark('READ_EXACT_CLOSE_HISTORY')
             history = await broker.get_performance_close_history(
                 start=previous_session.close_at, end=current.close_at)
+            if checkpoint() is None:
+                return status('INVALID', 'CLOSE_NOT_CAPTURED')
             if history.start != previous_session.close_at or history.end != current.close_at:
                 return status('INVALID', 'CAPTURE_UNAVAILABLE')
             # Exact session closes only; no nearest point or timestamp reinterpretation.
             close_equity = history.equity_at(current.close_at)
             prior_mark = history.points().get(previous_session.close_at)
+            if checkpoint() is None:
+                return status('INVALID', 'CLOSE_NOT_CAPTURED')
+            mark('CONFIRM_ACCOUNT')
             confirmed = await broker.get_performance_account()
-            captured_at = clock() if clock is not None else now
-            if (captured_at.tzinfo is None or captured_at < now
-                    or captured_at > current.close_at + timedelta(minutes=5)):
+            captured_at = checkpoint()
+            if captured_at is None:
                 return status('INVALID', 'CLOSE_NOT_CAPTURED')
             if confirmed != account:
                 return status('INVALID', 'RECONCILIATION_UNVERIFIED')
+            mark('VALIDATE_CONFIRMED_BALANCE')
             reconciled, confirmed_epoch, reconciliation = _reconciled(
-                operational, confirmed, close_at=current.close_at, captured_at=captured_at)
+                operational, confirmed, close_at=current.close_at, captured_at=captured_at,
+                core_store=core_store)
             if not reconciled or confirmed_epoch != epoch:
                 return status('INVALID', 'RECONCILIATION_UNVERIFIED')
             # Reconciliation reflects the close holdings only if no later economic change occurred.
-            if captured_at > current.close_at and await broker.get_performance_activities(
-                    after=current.close_at, until=captured_at):
-                return status('INVALID', 'RECONCILIATION_UNVERIFIED')
+            if captured_at > current.close_at:
+                if checkpoint() is None:
+                    return status('INVALID', 'CLOSE_NOT_CAPTURED')
+                mark('READ_POST_CLOSE_ACTIVITIES')
+                post_close = await broker.get_performance_activities(
+                    after=current.close_at, until=captured_at)
+                if checkpoint() is None:
+                    return status('INVALID', 'CLOSE_NOT_CAPTURED')
+                if post_close:
+                    return status('INVALID', 'RECONCILIATION_UNVERIFIED')
             if baseline:
                 prior_evidence = _decode_evidence(baseline[3])
                 if (prior_evidence.session_date != previous_session.session_date
@@ -251,23 +301,31 @@ async def capture_close(
         flow = Decimal(0)
         rows: Sequence[Mapping[str, object]] | None = None
         if same_epoch:
+            if checkpoint() is None:
+                return status('INVALID', 'CLOSE_NOT_CAPTURED')
+            mark('READ_SESSION_ACTIVITIES')
             rows = await broker.get_performance_activities(
                 after=previous_session.close_at if history else datetime.fromisoformat(baseline[2]),
                 until=current.close_at if history else captured_at)
+            if checkpoint() is None:
+                return status('INVALID', 'CLOSE_NOT_CAPTURED')
             try:
                 flow = external_flow(rows)
                 flows_verified = True
             except (ValueError, KeyError, ArithmeticError):
                 pass
         if history is not None:
-            completed_at = clock() if clock is not None else now
-            if (completed_at.tzinfo is None or completed_at < captured_at
-                    or completed_at > current.close_at + timedelta(minutes=5)):
+            completed_at = checkpoint()
+            if completed_at is None:
                 return status('INVALID', 'CLOSE_NOT_CAPTURED')
+            mark('VALIDATE_FINAL_BALANCE')
             still_reconciled, final_epoch, _ = _reconciled(
-                operational, account, close_at=current.close_at, captured_at=completed_at)
+                operational, account, close_at=current.close_at, captured_at=completed_at,
+                core_store=core_store)
             if not still_reconciled or final_epoch != epoch:
                 return status('INVALID', 'RECONCILIATION_UNVERIFIED')
+        if checkpoint() is None:
+            return status('INVALID', 'CLOSE_NOT_CAPTURED')
         evidence = CloseEvidence(
             session_date=today, close_at=current.close_at, captured_at=captured_at,
             previous_close_equity=Decimal(baseline[0]) if baseline else None,
@@ -277,6 +335,7 @@ async def capture_close(
             flows_verified=flows_verified, same_account_epoch=same_epoch, reconciled=reconciled,
         )
         day = evaluate_day(evidence)
+        mark('RETAIN_CLOSE_REFERENCE')
         if history is not None:
             retain_reference(directory, evidence, epoch=epoch, history=history,
                              reconciliation=reconciliation, activities=rows)
@@ -294,6 +353,7 @@ async def capture_close(
         document = json.dumps(asdict(evidence), default=str, sort_keys=True)
         record = (today.isoformat(), current.close_at.isoformat(), captured_at.isoformat(),
                   str(evidence.close_equity), epoch, document)
+        mark('PUBLISH_BASELINE')
         with closing(sqlite3.connect(baselines, timeout=5)) as c, c:
             c.execute('BEGIN IMMEDIATE')
             old = c.execute('SELECT session_date,close_at,captured_at,equity,epoch,evidence_json '
@@ -303,6 +363,7 @@ async def capture_close(
                 return status('INVALID', 'CAPTURE_UNAVAILABLE')
             c.execute('INSERT OR IGNORE INTO paper_close_baselines_v1 VALUES (?,?,?,?,?,?)', record)
         if day.status == 'FINAL':
+            mark('FINALIZE_ACCOUNT_CLOSE')
             CloseLedger(closes).finalize(evidence)
             return dict(session_date=today.isoformat(), status='FINAL', reason='CAPTURED')
         return status(day.status, 'BASELINE_MISSING' if not baseline else

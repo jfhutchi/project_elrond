@@ -3,12 +3,16 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import random
+import sqlite3
+from contextlib import suppress
 from datetime import date, datetime, timedelta
 from typing import Any, Literal
 
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from quantbot.domain import IntentState
 from quantbot.paper_core import activation
@@ -25,13 +29,14 @@ from quantbot.paper_core.contracts import (
     LearningReceipt,
     ProtectionPlan,
 )
-from quantbot.paper_core.guardian import acknowledge_handoffs, guardian_cycle
+from quantbot.paper_core.guardian import acknowledge_handoffs, guardian_cycle, owned_deadline_wait
 from quantbot.paper_core.outcomes import process_outcomes, recover_intents
 from quantbot.paper_core.release import RuntimeConfig
 from quantbot.paper_core.runtime import coordinator, require_runtime_broker
 from quantbot.paper_core.send_guard import definitively_unsent
 from quantbot.paper_core.store import CoreStore, table
-from quantbot.paper_core.trader import claim_entry, trader_cycle
+from quantbot.paper_core.trader import claim_batch, claim_entry, trader_batch_cycle, trader_cycle
+from quantbot.research.manifest import content_id
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
 
@@ -54,7 +59,17 @@ def claim_objections(store: CoreStore, decision: Decision | None = None) -> tupl
             from quantbot.paper_core.health import universe_health_objections
 
             reasons.extend(universe_health_objections(store, session))
-        for link in store.links():
+
+        throughput = store.parallel_entries
+        if throughput:
+            from quantbot.paper_core.portfolio import portfolio_budget
+
+            reasons.extend(
+                portfolio_budget(
+                    store, session, store.latest_proof(), now=store.clocks.sample()[0]
+                ).objections
+            )
+        for link in () if throughput else store.links():
             if link["role"] != "ENTRY":
                 continue
             intent = repo.get_order_intent(link["intent_id"])
@@ -90,23 +105,25 @@ def owned_open_symbols(store: CoreStore) -> tuple[str, ...]:
         repo = StorageRepository(session)
         links = table("core_intent_links")
         symbols = set()
-        for link in session.execute(
+        rows = list(session.execute(
             select(links).where(
                 links.c.role == "ENTRY",
                 links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
             )
-        ).mappings():
-            intent = repo.get_order_intent(link["intent_id"])
-            order = (
-                repo.get_broker_order_by_client_order_id(intent.client_order_id) if intent else None
-            )
+        ).mappings())
+        intents = repo.get_order_intents([link["intent_id"] for link in rows])
+        orders = iter(repo.get_broker_orders_by_client_order_ids(
+            [intent.client_order_id for intent in intents if intent is not None]
+        ))
+        for intent in intents:
+            order = next(orders) if intent is not None else None
             if intent and order and repo.list_fills(broker_order_id=order.broker_order_id):
                 symbols.add(intent.symbol)
     return tuple(sorted(symbols))
 
 
 async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
-    reasons = []
+    reasons: list[str] = []
     with store.database.transaction() as session:
         links, intents = table("core_intent_links"), table("order_intents")
         prepared = list(
@@ -130,6 +147,18 @@ async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
         }:
             continue
         now = store.clocks.sample()[0]
+        if store.parallel_entries:
+            from quantbot.paper_core.portfolio import portfolio_budget
+
+            with store.database.transaction() as session:
+                budget = portfolio_budget(
+                    store, session, store.latest_proof(), now=now, exclude_intent=intent.intent_id
+                )
+            if budget.objections:
+                # Account-wide current authority must catch up after an earlier fill.
+                # Keep the other original intents prepared; never relabel this as a quota.
+                reasons.extend(budget.objections)
+                break
         plan = store.read("core_protection_plans", link["protection_id"], ProtectionPlan)
         # Give guardian its bounded next poll to acknowledge the original durable plan.
         with store.database.transaction() as session:
@@ -158,10 +187,29 @@ async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
                 risk_approved=None,
                 vetoes=None,
             )
+
         except Exception as error:
             gate = getattr(error, "decision", None)
-            reasons.extend(getattr(gate, "reasons", (type(error).__name__,)))
+            fallback: tuple[str, ...] = (type(error).__name__,)
+            if store.parallel_entries and str(error):
+                fallback += (str(error),)
+            reasons.extend(getattr(gate, "reasons", fallback))
     return tuple(dict.fromkeys(reasons))
+
+
+def retry_batch_candidates(
+    store: CoreStore, candidates: tuple[Decision, ...]
+) -> tuple[Decision, ...]:
+    """Retry the original atomic prefix, never manufacture replacement member identities."""
+    now = store.clocks.sample()[0]
+    if not candidates or any(
+        d.action != "BUY"
+        or not d.recorded_at_utc <= now < d.valid_until
+        or now >= ProtectionPlan.for_decision(d, store.config).deadline
+        for d in candidates
+    ):
+        return ()
+    return () if claim_batch(store, candidates, now=now) else candidates
 
 
 def retry_entry_candidate(store: CoreStore, candidate: Decision | None) -> Decision | None:
@@ -283,8 +331,33 @@ async def run_role(
     count, failures = 0, 0
     last_boundary = None
     pending_candidate: Decision | None = None
+    pending_batch: tuple[Decision, ...] = ()
     learning_task: asyncio.Task[tuple[str, ...]] | None = None
-    last_learning_session = None
+    last_learning_key: tuple[date, str] | None = None
+    pending_learning_key: tuple[date, str] | None = None
+    discovery_task = None
+    close_capture = None
+    if role == "outcomes" and isinstance(broker, AlpacaCoreBroker):
+        from pathlib import Path
+
+        from quantbot.paper_core.close_evidence import OutcomesCloseCapture, configured_directory
+
+        try:
+            directory = configured_directory(
+                config.environment_file_reference, Path(store.database.path)
+            )
+            if directory is not None:
+                close_capture = OutcomesCloseCapture(store, broker, directory)
+        except (OSError, ValueError):
+            print(json.dumps({"event": "PAPER_CLOSE_CONFIGURATION_UNAVAILABLE"}), flush=True)
+    if (
+        role == "trader"
+        and isinstance(broker, AlpacaCoreBroker)
+        and broker.discovery_state is not None
+    ):
+        from quantbot.paper_core.discovery import run_discovery
+
+        discovery_task = asyncio.create_task(run_discovery(broker, broker.discovery_state))
     try:
         while cycles is None or count < cycles:
             cycle_started = store.clocks.sample()[1]
@@ -300,12 +373,22 @@ async def run_role(
                     refresh(store)
                 if role == "guardian":
                     if isinstance(broker, AlpacaCoreBroker):
-                        for symbol in owned_open_symbols(store):
+                        deadline_wait = owned_deadline_wait(store)
+                        if deadline_wait is not None and deadline_wait <= 0:
+                            pass  # Deadline sends take priority over discretionary bar reads.
+                        elif store.parallel_entries:
                             try:
                                 async with asyncio.timeout(5):
-                                    await broker.refresh_mark(symbol)
+                                    await broker.refresh_marks(owned_open_symbols(store))
                             except Exception:
                                 pass  # Deadline/ownership recovery remains scheduled.
+                        else:
+                            for symbol in owned_open_symbols(store):
+                                try:
+                                    async with asyncio.timeout(5):
+                                        await broker.refresh_mark(symbol)
+                                except Exception:
+                                    pass
                     receipt = await guardian_cycle(store, broker, now=store.clocks.sample()[0])
                     guardian_receipt = acknowledge_handoffs(store, now=store.clocks.sample()[0]).id
                     reasons, evidence_ids = receipt.reasons, (receipt.id,)
@@ -314,12 +397,6 @@ async def run_role(
                     batch = process_outcomes(store, cutoff=store.clocks.sample()[0])
                     evidence_ids = tuple(o.id for o in batch.outcomes)
                     reasons = batch.reasons
-                    try:
-                        async with asyncio.timeout(5):
-                            recovery = await recover_intents(store, broker)
-                        reasons += recovery.reasons
-                    except Exception as error:
-                        reasons = ("OUTCOME_PROVIDER_RETRY:" + type(error).__name__,)
                     if learning_task is not None and learning_task.done():
                         try:
                             learning_result = learning_task.result()
@@ -327,13 +404,36 @@ async def run_role(
                             if learning_result and learning_result[0].startswith(
                                 "CONSIDERED_SESSION:"
                             ):
-                                last_learning_session = date.fromisoformat(
+                                considered_session = date.fromisoformat(
                                     learning_result[0].split(":", 1)[1]
                                 )
+                                if pending_learning_key and (
+                                    considered_session == pending_learning_key[0]
+                                ):
+                                    # Retain the requested snapshot, not a newer input set that
+                                    # may have arrived while this consideration was running.
+                                    last_learning_key = pending_learning_key
                         except Exception as error:
                             reasons += ("LEARNING_RETRY:" + type(error).__name__,)
                         learning_task = None
-                    if learning_task is None:
+                    # Complete any existing learning job before starting capture.
+                    # Canonical outcomes above keep progressing; independent Guardian
+                    # and protection roles retain their original schedules and budgets.
+                    if close_capture is not None and learning_task is None:
+                        close_capture.poll()
+                    close_provider_lane = (
+                        close_capture is not None and close_capture.needs_provider_lane()
+                    )
+                    if close_provider_lane:
+                        reasons += ("PAPER_CLOSE_CAPTURE_PENDING",)
+                    else:
+                        try:
+                            async with asyncio.timeout(5):
+                                recovery = await recover_intents(store, broker)
+                            reasons += recovery.reasons
+                        except Exception as error:
+                            reasons = ("OUTCOME_PROVIDER_RETRY:" + type(error).__name__,)
+                    if learning_task is None and not close_provider_lane:
                         calendar = await broker.learning_calendar()
                         completed = [
                             s
@@ -342,7 +442,19 @@ async def run_role(
                             and s.open_at >= config.learning_origin
                         ]
                         session_key = completed[-1].session_date if completed else None
-                        if session_key is not None and last_learning_session != session_key:
+                        with store.database.transaction() as session:
+                            pointer = table("core_outcome_index")
+                            revisions = tuple(
+                                tuple(row)
+                                for row in session.execute(
+                                    select(pointer.c.outcome_id, pointer.c.status).order_by(
+                                        pointer.c.lot_id
+                                    )
+                                )
+                            )
+                        learning_key = (session_key, content_id(revisions)) if session_key else None
+                        if learning_key is not None and last_learning_key != learning_key:
+                            pending_learning_key = learning_key
                             learning_task = asyncio.create_task(
                                 daily_consideration(store, broker, config)
                             )
@@ -351,24 +463,37 @@ async def run_role(
                     decision = None
                     if boundary != last_boundary:
                         pending_candidate = None
-                        async with asyncio.timeout(5):
+                        pending_batch = ()
+                        # Allow the cohort's bounded read plus clock/calendar and asset checks.
+                        # Original 120-second observation and final-send freshness still apply.
+                        async with asyncio.timeout(10):
                             observation = (
                                 await broker.observation_cohort()
                                 if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
                                 else await broker.observation()
                             )
                         model = activation.read_active_model(store)
-                        decision = await trader_cycle(
-                            store,
-                            broker,
-                            observation,
-                            model,
-                            store.latest_proof(),
-                            now=store.clocks.sample()[0],
-                        )
+
+                        if store.parallel_entries:
+                            decisions = await trader_batch_cycle(
+                                store, broker, observation, model, now=store.clocks.sample()[0]
+                            )
+                            evidence_ids = tuple(d.id for d in decisions)
+                            pending_batch = decisions
+                            decision = decisions[0] if decisions else None
+                        else:
+                            decision = await trader_cycle(
+                                store,
+                                broker,
+                                observation,
+                                model,
+                                store.latest_proof(),
+                                now=store.clocks.sample()[0],
+                            )
+                            evidence_ids = (decision.id,)
+                            pending_candidate = decision if decision.action == "BUY" else None
                         last_boundary = boundary
-                        evidence_ids = (decision.id,)
-                        pending_candidate = decision if decision.action == "BUY" else None
+                    pending_batch = retry_batch_candidates(store, pending_batch)
                     pending_candidate = retry_entry_candidate(store, pending_candidate)
                     send_reasons = await dispatch_entries(store, broker)
                     reasons = tuple(
@@ -417,14 +542,45 @@ async def run_role(
                 time_proof_age_seconds=time_proof_age,
                 guardian_receipt_id=guardian_receipt,
             )
-            publish_heartbeat(store, heartbeat)
-            print(heartbeat.model_dump_json(), flush=True)
+            try:
+                publish_heartbeat(store, heartbeat)
+            except OperationalError as error:
+                code = getattr(error.orig, "sqlite_errorcode", 0)
+                if not isinstance(error.orig, sqlite3.OperationalError) or code & 255 not in {
+                    sqlite3.SQLITE_BUSY,
+                    sqlite3.SQLITE_LOCKED,
+                }:
+                    raise
+                # Never print/publish an uncommitted heartbeat or retry its old time.
+                # The next bounded role cycle must re-evaluate actual work/readiness.
+                failures += 1
+                print(
+                    json.dumps({"role": role, "event": "HEARTBEAT_PUBLICATION_BUSY", "code": code}),
+                    flush=True,
+                )
+            else:
+                print(heartbeat.model_dump_json(), flush=True)
             # Backoff is per role; outcome polling has priority over fitting.
             delay = period if not failures else max(period, min(15, 2 ** min(failures - 1, 4)))
             if failures:
                 delay = min(15, delay + random.uniform(0, min(0.25, delay * 0.1)))
             if cycles is None or count < cycles:
-                await asyncio.sleep(max(0.001, delay - (store.clocks.sample()[1] - cycle_started)))
+                remaining = max(0.001, delay - (store.clocks.sample()[1] - cycle_started))
+                if role == "guardian" and not failures:
+                    try:
+                        deadline_wait = owned_deadline_wait(store)
+                        if deadline_wait is not None:
+                            # No tight retry loop: shared broker budgets/cooldowns still win.
+                            remaining = min(remaining, deadline_wait if deadline_wait > 0 else 5)
+                    except Exception:
+                        pass  # Advisory wake calculation cannot stop the protection loop.
+                await asyncio.sleep(max(0.001, remaining))
     finally:
+        if close_capture is not None:
+            await close_capture.aclose()
+        if discovery_task is not None:
+            discovery_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await discovery_task
         if learning_task is not None:
             await learning_task

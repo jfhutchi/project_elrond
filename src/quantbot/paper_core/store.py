@@ -6,7 +6,7 @@ import json
 from contextlib import nullcontext
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel
 from sqlalchemy import Table, select, text, union_all
@@ -20,6 +20,9 @@ from quantbot.storage import Database, StateConflictError, StorageRepository
 from quantbot.storage.schema import SCHEMA_VERSION, metadata
 
 T = TypeVar("T", bound=BaseModel)
+
+if TYPE_CHECKING:
+    from quantbot.paper_core.entry_policy import EntryPolicy
 
 
 def table(name: str) -> Table:
@@ -58,6 +61,8 @@ class CoreStore:
     runtime_submission_enabled: bool = False
     runtime_entry_enabled: bool = True
     runtime_settings: Any = None
+    runtime_account_control: Any = None
+    runtime_account_lease: Any = None
 
     def __init__(
         self,
@@ -90,6 +95,25 @@ class CoreStore:
         with self.database.transaction() as session:
             put(session, name, value.id, value)
         return value.id
+
+    @property
+    def entry_policy(self) -> EntryPolicy | None:
+        from quantbot.paper_core.entry_policy import entry_policy_in_session
+
+        with self.database.transaction() as session:
+            return entry_policy_in_session(self, session)
+
+    @property
+    def entry_symbols(self) -> tuple[str, ...]:
+        from quantbot.paper_core.entry_policy import symbols
+
+        return symbols(self.config, self.entry_policy)
+
+    @property
+    def parallel_entries(self) -> bool:
+        from quantbot.paper_core.economics import parallel_policy
+
+        return parallel_policy(self.config, self.entry_policy)
 
     def documents(self, name: str) -> list[dict[str, Any]]:
         with self.database.transaction() as session:
@@ -200,8 +224,8 @@ class CoreStore:
         totals: dict[str, Decimal] = {}
         intents_by_client = {
             intent.client_order_id: intent
-            for i in links
-            if (intent := repo.get_order_intent(i)) is not None
+            for intent in repo.get_order_intents(list(links))
+            if intent is not None
         }
         orders_by_id = {o.broker_order_id: o for o in repo.list_broker_orders()}
         fills = repo.list_fills()
@@ -467,10 +491,13 @@ def certify_inventory(
                 )
             ).mappings()
         )
-        for entry in (link for link in links if link["role"] == "ENTRY"):
-            intent = repo.get_order_intent(entry["intent_id"])
+        entries = [link for link in links if link["role"] == "ENTRY"]
+        entry_intents = repo.get_order_intents([entry["intent_id"] for entry in entries])
+        client_ids = [intent.client_order_id for intent in entry_intents if intent is not None]
+        entry_orders = iter(repo.get_broker_orders_by_client_order_ids(client_ids))
+        for entry, intent in zip(entries, entry_intents, strict=True):
             assert intent is not None
-            order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+            order = next(entry_orders)
             if order is None:
                 continue
             entry_fills = repo.list_fills(broker_order_id=order.broker_order_id)

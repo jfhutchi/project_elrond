@@ -83,7 +83,9 @@ class RoleHeartbeat(BrokerModel):
 
 
 class ExecutableBinding(BrokerModel):
-    kind: Literal["CODE_ONLY_EXECUTABLE_BINDING_V1"] = "CODE_ONLY_EXECUTABLE_BINDING_V1"
+    kind: Literal["CODE_ONLY_EXECUTABLE_BINDING_V1", "ENTRY_POLICY_EXECUTABLE_BINDING_V1"] = (
+        "CODE_ONLY_EXECUTABLE_BINDING_V1"
+    )
     commission_id: str
     sequence: int = Field(ge=1)
     previous_id: str | None
@@ -414,6 +416,111 @@ def transition_release(
         if cast(CursorResult[Any], result).rowcount != 1:
             raise StateConflictError("TRANSITION_STALE_BINDING")
     return binding.id
+
+
+def transition_entry_policy(
+    store: CoreStore, successor: PreparedRelease, approval: dict[str, Any]
+) -> str:
+    """Explicit universe/minimum-share amendment; never a code-only policy bypass."""
+    from quantbot.paper_core.activation import active_in_session
+    from quantbot.paper_core.contracts import RoundTrip
+    from quantbot.paper_core.handover import compatible_schema_transition
+    from quantbot.paper_core.outcomes import settled_zero_entry
+    from quantbot.paper_core.release import verify_release
+    from quantbot.paper_core.send_guard import definitively_unsent
+    from quantbot.storage import StorageRepository
+
+    if verify_release(successor)["objections"]:
+        raise StateConflictError("ENTRY_POLICY_EXECUTABLE_UNVERIFIED")
+    with store.database.transaction() as session:
+        session.execute(text("BEGIN IMMEDIATE"))
+        commission = commission_in_session(store, session)
+        prior = executable_in_session(session)
+        event = current_runtime_event(session)
+        active = active_in_session(store, session)
+        policy = successor.config.entry_policy
+        if (
+            prior is None
+            or active is None
+            or approval.get("expected_binding_id") != prior.id
+            or approval.get("old_release_id") != prior.release.id
+            or approval.get("new_release_id") != successor.id
+            or approval.get("commission_id") != commission.id
+            or approval.get("expected_fence_id") != event.id
+            or event.action != "FENCE_ENTRY"
+            or approval.get("expected_activation_id") != active[1].id
+            or "entry_policy_id" not in approval
+            or approval.get("entry_policy_id") != (policy.id if policy else None)
+            or not approval.get("approval_reference")
+            or not approval.get("old_writer_fence_evidence_ids")
+            or not compatible_schema_transition(store, session, prior, successor, approval)
+            or (
+                prior.release.config.entry_policy == policy
+                and prior.release.config.request_control == successor.config.request_control
+                and prior.release.schema_version == successor.schema_version
+            )
+            or prior.release.config.model_copy(
+                update={
+                    "entry_policy": policy,
+                    "request_control": successor.config.request_control,
+                }
+            )
+            != successor.config
+            or not 0
+            <= (
+                store.clocks.sample()[0] - datetime.fromisoformat(approval["approved_at"])
+            ).total_seconds()
+            <= 120
+        ):
+            raise StateConflictError("ENTRY_POLICY_EXACT_APPROVAL_REQUIRED")
+        repo = StorageRepository(session)
+        if repo.list_unresolved_order_intents():
+            raise StateConflictError("ENTRY_POLICY_CORE_NOT_FLAT")
+        links, trips = table("core_intent_links"), table("core_round_trips")
+        rows = session.execute(
+            select(links.c.intent_id, trips.c.payload)
+            .outerjoin(trips, trips.c.id == links.c.lot_id)
+            .where(links.c.role == "ENTRY")
+        ).all()
+        for intent_id, payload in rows:
+            if definitively_unsent(repo, intent_id):
+                continue
+            intent = repo.get_order_intent(intent_id)
+            if (
+                intent is not None
+                and settled_zero_entry(store, session, intent, cutoff=store.clocks.sample()[0])
+                is not None
+            ):
+                continue
+            if payload is None or RoundTrip.model_validate_json(payload).open_quantity != 0:
+                raise StateConflictError("ENTRY_POLICY_CORE_NOT_FLAT")
+        binding = ExecutableBinding(
+            kind="ENTRY_POLICY_EXECUTABLE_BINDING_V1",
+            commission_id=commission.id,
+            sequence=prior.sequence + 1,
+            previous_id=prior.id,
+            release=successor,
+            approved_at=datetime.fromisoformat(approval["approved_at"]),
+            approval_reference=approval["approval_reference"],
+            fence_id=event.id,
+            activation_id=active[1].id,
+            evidence_ids=tuple(approval["old_writer_fence_evidence_ids"])
+            + (
+                (approval["migration_evidence_id"],)
+                if approval.get("migration_evidence_id")
+                else ()
+            ),
+        )
+        approval_id = content_id(approval)
+        put(session, "core_runtime_config_history", approval_id, approval)
+        put(session, "core_runtime_config_history", binding.id, binding)
+        pointer = table("core_runtime_current")
+        result = session.execute(
+            update(pointer).where(pointer.c.document_id == prior.id).values(document_id=binding.id)
+        )
+        if cast(CursorResult[Any], result).rowcount != 1:
+            raise StateConflictError("ENTRY_POLICY_STALE_BINDING")
+        return binding.id
 
 
 def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:

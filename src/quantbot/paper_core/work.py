@@ -5,7 +5,8 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import func, select, update
+from sqlalchemy import bindparam, func, select, text, update
+from sqlalchemy.engine import RowMapping
 from sqlalchemy.orm import Session
 from sqlalchemy.sql import Select
 
@@ -72,15 +73,37 @@ def dirty(
     _initial_claim: bool = False,
 ) -> None:
     work, index = table("core_outcome_work"), table("core_document_index")
-    for lot in set(lots):
-        previous = (
-            session.execute(select(work).where(work.c.lot_id == lot)).mappings().one_or_none()
+    identities = sorted(set(lots))
+    if not identities:
+        return
+    connection = session.connection()
+    if connection.dialect.name == "sqlite" and not getattr(
+        connection.connection.driver_connection, "in_transaction", False
+    ):
+        # SQLAlchemy autobegin alone does not establish a SQLite SELECT snapshot.
+        # Preserve the caller's real BEGIN/BEGIN IMMEDIATE and never cache across calls.
+        session.execute(text("BEGIN"))
+    previous_rows: dict[str, RowMapping] = {}
+    watermarks: dict[str, RowMapping] = {}
+    for offset in range(0, len(identities), 500):
+        chunk = identities[offset : offset + 500]
+        previous_rows.update(
+            (row["lot_id"], row)
+            for row in session.execute(select(work).where(work.c.lot_id.in_(chunk))).mappings()
         )
-        watermark = (
-            session.execute(select(index).where(index.c.kind == NOTIFICATIONS, index.c.id == lot))
-            .mappings()
-            .one_or_none()
+        watermarks.update(
+            (row["id"], row)
+            for row in session.execute(
+                select(index).where(index.c.kind == NOTIFICATIONS, index.c.id.in_(chunk))
+            ).mappings()
         )
+    new_indexes: list[dict[str, Any]] = []
+    changed_indexes: list[dict[str, Any]] = []
+    new_work: list[dict[str, Any]] = []
+    changed_work: list[dict[str, Any]] = []
+    for lot in identities:
+        previous = previous_rows.get(lot)
+        watermark = watermarks.get(lot)
         version = 1 if previous is None else previous["version"] + 1
         known = available_at is not None and (
             previous is None
@@ -97,19 +120,33 @@ def dirty(
             available_at=encode_utc(max(times)) if times else "",
         )
         if watermark is None:
-            session.execute(index.insert().values(kind=NOTIFICATIONS, id=lot, **values))
+            new_indexes.append(dict(kind=NOTIFICATIONS, id=lot, **values))
         else:
-            session.execute(
-                update(index)
-                .where(index.c.kind == NOTIFICATIONS, index.c.id == lot)
-                .values(**values)
+            changed_indexes.append(
+                dict(_lot=lot, _reference=values["reference"], _available_at=values["available_at"])
             )
         if previous is None:
-            session.execute(
-                work.insert().values(lot_id=lot, version=1, processed_version=0, attempted_at="")
-            )
+            new_work.append(dict(lot_id=lot, version=1, processed_version=0, attempted_at=""))
         else:
-            session.execute(update(work).where(work.c.lot_id == lot).values(version=version))
+            changed_work.append(dict(_lot=lot, _version=version))
+    if new_indexes:
+        session.execute(index.insert(), new_indexes)
+    if changed_indexes:
+        session.execute(
+            update(index)
+            .where(index.c.kind == NOTIFICATIONS, index.c.id == bindparam("_lot"))
+            .values(reference=bindparam("_reference"), available_at=bindparam("_available_at")),
+            changed_indexes,
+        )
+    if new_work:
+        session.execute(work.insert(), new_work)
+    if changed_work:
+        session.execute(
+            update(work)
+            .where(work.c.lot_id == bindparam("_lot"))
+            .values(version=bindparam("_version")),
+            changed_work,
+        )
 
 
 def covered_version(
@@ -218,8 +255,15 @@ def notify_document(session: Session, name: str, identity: str, payload: str) ->
     data = json.loads(payload)
     if name == "core_guardian_receipts":
         memberships, current = table("core_guardian_memberships"), table("core_guardian_current")
-        for plan in data["protection_ids"]:
-            session.execute(memberships.insert().values(plan_id=plan, receipt_id=identity))
+        plans = data["protection_ids"]
+        for offset in range(0, len(plans), 500):
+            session.execute(
+                memberships.insert(),
+                [
+                    {"plan_id": plan, "receipt_id": identity}
+                    for plan in plans[offset : offset + 500]
+                ],
+            )
         previous = session.execute(select(current.c.receipt_id)).scalar_one_or_none()
         if previous is None:
             session.execute(current.insert().values(id="current", receipt_id=identity))

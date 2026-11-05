@@ -13,6 +13,7 @@ from decimal import Decimal
 from sqlalchemy import and_, literal, or_, select, text, update
 from sqlalchemy.orm import Session
 
+from quantbot.brokers.base import BrokerProtocolError
 from quantbot.domain import BrokerOrder, Fill, IntentState, OrderIntent, OrderSide
 from quantbot.execution.coordinator import _ack_terminal_target, _assert_ack_matches_intent
 from quantbot.execution.recovery import is_open_order
@@ -385,9 +386,13 @@ def _import_events(store: CoreStore, events: tuple[BrokerEvent, ...]) -> tuple[s
                 imported_at.append(event.recorded_at_utc)
             except _EvidenceRejected:
                 raise
-            except StateConflictError as error:
+            except (StateConflictError, BrokerProtocolError) as error:
                 raise _EvidenceRejected(
-                    str(error), _implicated_clients(repo, event), (_source_id(event),)
+                    ("broker evidence contradicts durable authority: " + str(error))
+                    if isinstance(error, BrokerProtocolError)
+                    else str(error),
+                    _implicated_clients(repo, event),
+                    (_source_id(event),),
                 ) from error
         for order in repo.list_broker_orders():
             total = sum(
@@ -435,6 +440,15 @@ def terminal_evidence(session: Session, order: BrokerOrder, *, cutoff: datetime)
     return min(candidates)[1] if candidates else None
 
 
+def settled_zero_entry(
+    store: CoreStore, session: Session, intent: OrderIntent, *, cutoff: datetime
+) -> BrokerEvent | None:
+    """Canonical zero-fill closure is operational evidence, never a learning sample."""
+    from quantbot.paper_core.settlement import settled_zero_for_config
+
+    return settled_zero_for_config(store.config, session, intent, cutoff=cutoff)
+
+
 def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -> RoundTrip:
     if lot_id in quarantined_lots(session):
         raise OutcomeIncomplete("SOURCE_EVIDENCE_QUARANTINED")
@@ -455,6 +469,19 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     for link in sorted(links, key=lambda row: row["intent_id"]):
         intent = repo.get_order_intent(link["intent_id"])
         assert intent is not None
+        if link["role"] == "EXIT":
+            from quantbot.paper_core.send_guard import EXIT_REFUSAL, definitively_unsent
+
+            if definitively_unsent(repo, intent.intent_id):
+                local = [
+                    e
+                    for e in repo.list_order_events(intent_id=intent.intent_id)
+                    if e.event_type in {EXIT_REFUSAL, "CORE_LOCAL_SEND_NOT_ATTEMPTED"}
+                    and e.occurred_at <= as_of
+                ]
+                if local:
+                    source_ids.extend(e.event_id for e in local)
+                    continue
         order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
         if order is None:
             raise OutcomeIncomplete("ORDER_UNAVAILABLE")
@@ -627,6 +654,7 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         source_refs=sources,
         lot_id=lot_id,
         decision_id=decision.id,
+        **({"entry_policy_id": decision.entry_policy_id} if decision.entry_policy_id else {}),
         entry_fill_ids=tuple(sorted(f.fill_id for f in buys)),
         exit_fill_ids=tuple(sorted(f.fill_id for f in sells)),
         terminal_order_ids=tuple(sorted(terminal_ids)),
@@ -816,18 +844,21 @@ async def recover_intents(
         "STALE_UNSENT_REFUSED:" + i for i in retire_stale_entries(store, clock=lambda: broker.now)
     ]
     with store.database.transaction() as session:
-        intents = [
-            StorageRepository(session).get_order_intent(link["intent_id"]) for link in store.links()
-        ]
+        intents = StorageRepository(session).get_order_intents(
+            [link["intent_id"] for link in store.links()]
+        )
     if isinstance(broker, AlpacaCoreBroker):
         operational_events = await broker.owned_events(store)
         import_broker_events(store, operational_events)
+        acquisition_ids = (broker.pending_progress[1],) if broker.pending_progress else ()
         broker.accept_activity_cursor(store)
         with store.database.transaction() as session:
             repo = StorageRepository(session)
+            client_ids = [intent.client_order_id for intent in intents if intent is not None]
+            orders = iter(repo.get_broker_orders_by_client_order_ids(client_ids))
             for intent in intents:
                 assert intent is not None
-                if repo.get_broker_order_by_client_order_id(intent.client_order_id) is None:
+                if next(orders) is None:
                     if intent.state in {IntentState.SUBMITTING, IntentState.SUBMISSION_UNKNOWN}:
                         if intent.state is IntentState.SUBMITTING:
                             repo.transition_order_intent(
@@ -840,6 +871,7 @@ async def recover_intents(
             recorded_at_utc=broker.now,
             evidence_lane=store.config.evidence_lane,
             release_id=store.config.release_id,
+            source_refs=acquisition_ids,
             reasons=tuple(reasons),
         )
         store.record("core_cycle_receipts", receipt)

@@ -1,28 +1,23 @@
 # Project Elrond — Persistent Development Goal
 
-> **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](docs/evidence/paper-core/submission-2026-10-15/README.md).
-
 Your job is to evolve `jfhutchi/project_elrond` from the preserved `version_01` paper-trading system into an autonomous quantitative research and trading platform whose ultimate purpose is to discover, validate, and eventually exploit durable market edges that can compound real capital.
 
 **The objective is not to finish issues. The objective is to build a system capable of making money without fooling itself.**
 
-The October 15 paper desk refresh adds an account-scoped read model. Keep displayed
-heartbeats bound to the current release, configuration, store, owner and generation.
-Missing or incompatible evidence remains unknown or unverified. Console availability is
-not a trading health dependency. See [dashboard access](docs/dashboard-access.md) and
-[UI handover evidence](docs/evidence/paper-core/dashboard-2026-10-15/README.md).
-
 ## Primary Mission
 
-**Current delivery priority (October 15, 2026 EDT):** operate the merged daily hybrid PAPER
-core and preserve its measured handover. PRs #289–#292 are merged. Both operating
-and learner stores are schema 36. The original IWM exit filled and is reconciled. Unchanged
-core release0734974b was commissioned at 11:05 Eastern. The same-config submission repair
-now runs as executable aaa40bdbc8f4. Guardian/outcomes readiness and inherited protection
-pass. Entries are resumed, but IEX bars are stale and no new core fill or learning run is
-verified. Read the [submission repair](docs/evidence/paper-core/submission-2026-10-15/README.md) before
-acting. Do not rerun migrations, enable old entry tasks, clear explicit stops, or rebuild
-completed implementation. Older staging records remain dated evidence rather than current state.
+**Current delivery priority (October 14, 2026 EDT):** finish the operational handover of the
+[PAPER core](docs/paper-core.md) and finish the
+[approved daily hybrid successor](docs/superpowers/specs/2026-10-14-daily-paper-exploration-design.md).
+The core has independent trader, guardian, and outcomes roles; the outcomes role also performs
+bounded daily learning. The baseline implementation merged in
+[PR #289](https://github.com/jfhutchi/project_elrond/pull/289) on October 15 at 01:50 UTC, but the
+prepared runtime has not been commissioned or activated. That older configuration selects XLE.
+The hybrid/V3/current-funds successor is implemented and locally tested on its feature branch,
+including the ten-session collection/fit/activation witness and later signal/exploration.
+It is published in [PR #290](https://github.com/jfhutchi/project_elrond/pull/290), not merged to main or commissioned. Read the
+[successor evidence](docs/evidence/paper-core/daily-exploration/README.md) for exact source-review
+and candidate-preparation status; do not rebuild completed implementation after a context reset.
 
 The operator now wants daily PAPER attempts even when model confidence or an ordinary no-signal
 decision would otherwise prevent a trade, and learning from eligible wins and losses. Preserve

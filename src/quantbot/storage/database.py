@@ -25,6 +25,7 @@ from quantbot.storage.schema import (
     schema_version,
 )
 from quantbot.storage.target import DatabaseTarget, coerce_target
+from quantbot.storage.transaction_diagnostics import TransactionObserver, observe_transaction
 
 #: The Alembic revision whose upgrade produces each schema version. Databases written before
 #: Alembic was introduced carry only the `schema_version` marker, so they are stamped at the
@@ -67,6 +68,7 @@ REVISION_FOR_SCHEMA_VERSION: dict[int, str] = {
     34: "0034",
     35: "0035",
     36: "0036",
+    37: "0037",
 }
 
 
@@ -174,6 +176,7 @@ class Database:
         busy_timeout_ms: int = 5000,
         may_migrate: bool = False,
         may_create: bool = False,
+        transaction_observer: TransactionObserver | None = None,
     ) -> None:
         """Open an existing store. Creates nothing and upgrades nothing.
 
@@ -201,6 +204,7 @@ class Database:
         self.target.require_enabled()
         self.path = self.target.path.resolve()
         self.busy_timeout_ms = busy_timeout_ms
+        self.transaction_observer = transaction_observer
         existed = self.path.exists() and self.path.stat().st_size > 0
         if not existed and not may_create:
             # Before `mkdir` and before `create_engine`, so a failed open leaves the filesystem
@@ -223,7 +227,10 @@ class Database:
 
     @classmethod
     @contextmanager
-    def read_only(cls, path: str | Path | DatabaseTarget) -> Iterator[Session]:
+    def read_only(
+        cls, path: str | Path | DatabaseTarget, *,
+        transaction_observer: TransactionObserver | None = None,
+    ) -> Iterator[Session]:
         """Read a current store without initialization, repair, stamping or journal changes.
 
         SQLite enforces the read-only capability, including on callers' SQL. An explicit
@@ -238,19 +245,30 @@ class Database:
             "sqlite://",
             creator=lambda: sqlite3.connect(location.as_uri() + "?mode=ro", uri=True),
         )
-        try:
-            with engine.connect() as connection:
-                connection.exec_driver_sql("BEGIN")
-                actual = connection.execute(select(schema_version.c.version)).scalar_one()
-                if actual < SCHEMA_VERSION:
-                    raise MigrationRequiredError(location, actual)
-                if actual != SCHEMA_VERSION:
-                    raise UnsupportedSchemaVersionError(actual)
-                cls._compare_against_metadata(connection)
-                with Session(bind=connection) as session:
-                    yield session
-        finally:
-            engine.dispose()
+        with observe_transaction(transaction_observer, location, read_only=True) as timing:
+            if timing is not None and transaction_observer is not None:
+                transaction_observer.watch_engine(engine)
+            try:
+                with engine.connect() as connection:
+                    if timing is not None and transaction_observer is not None:
+                        transaction_observer.watch_connection(connection, timing)
+                    try:
+                        connection.exec_driver_sql("BEGIN")
+                        actual = connection.execute(select(schema_version.c.version)).scalar_one()
+                        if actual < SCHEMA_VERSION:
+                            raise MigrationRequiredError(location, actual)
+                        if actual != SCHEMA_VERSION:
+                            raise UnsupportedSchemaVersionError(actual)
+                        cls._compare_against_metadata(connection)
+                        with Session(bind=connection) as session:
+                            if timing is not None and transaction_observer is not None:
+                                transaction_observer.watch_session(session, timing)
+                            yield session
+                    finally:
+                        if timing is not None:
+                            timing.mark_closing()
+            finally:
+                engine.dispose()
 
     @classmethod
     def create(
@@ -477,13 +495,23 @@ class Database:
         exception. `BaseException` is caught rather than `Exception` so a `KeyboardInterrupt` or
         a cancellation rolls back rather than leaving the transaction dangling.
         """
-        with Session(self.engine, expire_on_commit=False) as session:
-            try:
-                yield session
-            except BaseException:
-                session.rollback()
-                raise
-            session.commit()
+        with observe_transaction(
+            self.transaction_observer, self.path, store_identity=self.store_identity
+        ) as timing:
+            with Session(self.engine, expire_on_commit=False) as session:
+                if timing is not None and self.transaction_observer is not None:
+                    self.transaction_observer.watch_engine(self.engine)
+                    self.transaction_observer.watch_session(session, timing)
+                try:
+                    try:
+                        yield session
+                        session.commit()
+                    except BaseException:
+                        session.rollback()
+                        raise
+                finally:
+                    if timing is not None:
+                        timing.mark_closing()
 
     def close(self) -> None:
         """Dispose pooled connections while leaving the durable file intact."""

@@ -6,7 +6,8 @@ import asyncio
 import json
 from datetime import datetime, timedelta
 from decimal import Decimal
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
 
 from sqlalchemy import func, select, text, update
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Session
 
 from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter, _object_payload
 from quantbot.brokers.base import BrokerProtocolError
-from quantbot.domain import OrderSide
+from quantbot.domain import IntentState, OrderIntent, OrderSide
 from quantbot.learner.five_minute import FEATURE_NAMES, build_features
 from quantbot.market_data.alpaca import AlpacaMarketDataClient
 from quantbot.market_data.base import AdjustmentMode, BarQuery, MarketDataFeed
@@ -25,14 +26,21 @@ from quantbot.paper_core.contracts import (
     LearningCalendar,
     Observation,
     ObservationCohort,
+    ReconciliationProof,
+    RoundTrip,
 )
 from quantbot.paper_core.costs import current_costs
+from quantbot.paper_core.entry_policy import AssetEligibility
 from quantbot.paper_core.operational_costs import pending_cost_revision_source
 from quantbot.paper_core.release import RuntimeConfig
 from quantbot.paper_core.store import CoreStore, put, table
 from quantbot.paper_core.time_evidence import BrokerTime, Clocks
 from quantbot.research.manifest import canonical_result_json, content_id
 from quantbot.storage import StateConflictError, StorageRepository
+
+if TYPE_CHECKING:
+    from quantbot.paper_core.discovery import DiscoveryStore
+    from quantbot.paper_core.portfolio import EntryQuoteEvidence
 
 
 class AlpacaCoreBroker:
@@ -58,6 +66,21 @@ class AlpacaCoreBroker:
         self._marks: dict[str, tuple[Decimal, datetime]] = {}
         self.store: CoreStore | None = None
         self.pending_progress: tuple[str, str, str | None, str | None] | None = None
+        self.inventory_diagnostic_trace: list[tuple[str, float]] = []
+        self.entry_source_objections: tuple[str, ...] = ()
+        self._discovery_state: DiscoveryStore | None = None
+        self._research_state: DiscoveryStore | None = None
+
+    @property
+    def discovery_state(self) -> DiscoveryStore | None:
+        policy = self.config.entry_policy
+        if policy is not None and policy.dynamic and self._discovery_state is None:
+            from quantbot.paper_core.discovery import DiscoveryStore
+
+            self._discovery_state = DiscoveryStore(
+                Path(self.config.store_path).with_suffix(".discovery.db")
+            )
+        return self._discovery_state
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.adapter, name)
@@ -68,6 +91,91 @@ class AlpacaCoreBroker:
 
     def mark(self, symbol: str) -> tuple[Decimal, datetime] | None:
         return self._marks.get(symbol)
+
+    def reserve_submission(self, client_order_id: str) -> None:
+        from quantbot.paper_core.account_control import BudgetedTransport
+
+        if isinstance(self.adapter._transport, BudgetedTransport):
+            self.adapter._transport.reserve_send(client_order_id)
+
+    async def entry_price_evidence(self, symbol: str) -> EntryQuoteEvidence:
+        from quantbot.paper_core.portfolio import EntryQuoteEvidence
+
+        policy = self.config.entry_policy
+        if self.store is None or not (
+            policy.permits(symbol) if policy else symbol in self.store.entry_symbols
+        ):
+            raise ValueError("ENTRY_QUOTE_SCOPE_UNAVAILABLE")
+        async with asyncio.timeout(5):
+            rows = await self.market.get_latest_quotes((symbol,))
+        raw = rows.get(symbol)
+        if raw is None:
+            raise ValueError("ENTRY_PRICE_UNAVAILABLE_OR_STALE")
+        ask, bid = Decimal(str(raw.get("ap"))), Decimal(str(raw.get("bp")))
+        at = datetime.fromisoformat(str(raw.get("t")).replace("Z", "+00:00"))
+        if (
+            not ask.is_finite()
+            or not bid.is_finite()
+            or min(ask, bid) <= 0
+            or ask < bid
+            or at.tzinfo is None
+            or not 0 <= (self.now - at).total_seconds() <= 5
+        ):
+            raise ValueError("ENTRY_PRICE_UNAVAILABLE_OR_STALE")
+        if policy is not None and policy.dynamic and (ask - bid) / bid * 10000 > 10:
+            raise ValueError("DISCOVERY_SPREAD_EXCEEDS_COST_RESERVE")
+        document = EntryQuoteEvidence(
+            recorded_at_utc=self.now,
+            evidence_lane="BROKER_PAPER",
+            release_id=self.store.config.release_id,
+            account_id=self.account_id,
+            store_identity=self.store.database.store_identity,
+            config_id=self.store.config_id,
+            policy_id=self.store.config.policy_id,
+            symbol=symbol,
+            ask=ask,
+            bid=bid,
+            source_at=at,
+            raw_digest=content_id(raw),
+        )
+        self.store.record("core_provider_acquisitions", document)
+        return document
+
+    async def refresh_marks(self, symbols: tuple[str, ...]) -> None:
+        if not symbols:
+            return
+        now = self.now
+        end = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 5)
+        async with asyncio.timeout(5):
+            batch = await self.market.get_historical_bars(
+                BarQuery(
+                    symbols=symbols,
+                    start=end - timedelta(minutes=10),
+                    end=end - timedelta(microseconds=1),
+                    timeframe="5Min",
+                    feed=MarketDataFeed.IEX,
+                    adjustment=AdjustmentMode.ALL,
+                    limit=max(4, 4 * len(symbols)),
+                )
+            )
+        for symbol in symbols:
+            bars = [
+                b
+                for b in batch.bars
+                if b.symbol == symbol and b.timestamp + timedelta(minutes=5) <= end
+            ]
+            if not bars:
+                continue  # A missing symbol never receives a fabricated fresh mark.
+            last = max(bars, key=lambda b: b.timestamp)
+            self._marks[symbol] = (last.close, last.timestamp + timedelta(minutes=5))
+
+    async def refresh_session_capital(self, proof: ReconciliationProof) -> str | None:
+        from quantbot.paper_core.capital import acquire_session_capital
+
+        if self.store is None:
+            raise ValueError("SESSION_CAPITAL_STORE_UNAVAILABLE")
+        async with asyncio.timeout(5):
+            return await acquire_session_capital(self, self.store, proof)
 
     async def get_clock(self) -> BrokerTime:
         clock = await self.adapter.get_market_clock()
@@ -105,7 +213,56 @@ class AlpacaCoreBroker:
         return captured.observations[0]
 
     async def observation_cohort(self) -> ObservationCohort:
-        return await self._acquire_cohort(self.config.core.entry_symbols, verify_assets=True)
+        if self.discovery_state is not None:
+            evidence = self.discovery_state.select_candidates(
+                now=self.now, boundary=str(int(self.now.timestamp() // 300))
+            )
+            cohort = await self._acquire_cohort(evidence.symbols, verify_assets=True)
+            from quantbot.paper_core.discovery_research import research_context
+
+            try:
+                if self._research_state is None:
+                    from quantbot.paper_core.discovery import DiscoveryStore
+
+                    self._research_state = DiscoveryStore(
+                        Path(self.config.store_path).with_suffix(".research.db")
+                    )
+                refs, gaps = research_context(self._research_state, evidence.symbols, now=self.now)
+            except Exception as error:
+                # Observational research never grants or removes stock entry authority.
+                refs, gaps = (), ("RESEARCH_UNAVAILABLE:" + type(error).__name__,)
+            evidence = evidence.model_copy(update={"research_refs": refs, "research_gaps": gaps})
+            return cohort.model_copy(update={"discovery": evidence})
+        return await self._acquire_cohort(self.config.entry_symbols, verify_assets=True)
+
+    async def entry_asset_eligibility(self, symbol: str) -> AssetEligibility:
+        policy = self.config.entry_policy
+        if policy is None or not policy.permits(symbol):
+            raise ValueError("ASSET_ELIGIBILITY_POLICY_MISMATCH")
+        payload = _object_payload(
+            await self.adapter._request("GET", "/v2/assets/" + quote(symbol, safe=""))
+        )
+        if (
+            payload.get("symbol") != symbol
+            or payload.get("class") != "us_equity"
+            or payload.get("status") != "active"
+            or payload.get("tradable") is not True
+            or type(payload.get("fractionable")) is not bool
+        ):
+            raise ValueError("ASSET_ELIGIBILITY_INVALID")
+        return AssetEligibility(
+            symbol=symbol,
+            fractionable=payload["fractionable"],
+            observed_at=self.now,
+            raw_digest=content_id(payload),
+            entry_policy_id=policy.id,
+        )
+
+    async def _policy_asset_result(self, symbol: str) -> tuple[str | None, AssetEligibility | None]:
+        try:
+            return None, await self.entry_asset_eligibility(symbol)
+        except (ValueError, OSError, TimeoutError, RuntimeError) as error:
+            return "ASSET_ELIGIBILITY_UNAVAILABLE:" + type(error).__name__, None
 
     async def _asset_objection(self, symbol: str) -> str | None:
         try:
@@ -151,9 +308,19 @@ class AlpacaCoreBroker:
         session = next(s for s in sessions if s.open_at <= end < s.close_at)
         restrictions = (
             await asyncio.gather(*(self._asset_objection(s) for s in symbols))
-            if verify_assets
+            if verify_assets and self.config.entry_policy is None
             else [None] * len(symbols)
         )
+        asset_receipts: dict[str, AssetEligibility] = {}
+        if self.config.entry_policy is not None:
+            results = await asyncio.gather(*(self._policy_asset_result(s) for s in symbols))
+            restrictions = [reason for reason, _ in results]
+            asset_receipts = {
+                s: receipt
+                for s, (_, receipt) in zip(symbols, results, strict=True)
+                if receipt is not None
+            }
+            received = self.now
         observations = []
         unavailable = []
         for symbol, restriction in zip(symbols, restrictions, strict=True):
@@ -204,6 +371,11 @@ class AlpacaCoreBroker:
                     sequence=int(end.timestamp() // 300),
                     session_open=session.open_at,
                     session_close=session.close_at,
+                    **(
+                        {"asset_eligibility": asset_receipts[symbol]}
+                        if symbol in asset_receipts
+                        else {}
+                    ),
                 )
             )
         return ObservationCohort(
@@ -238,6 +410,7 @@ class AlpacaCoreBroker:
         from quantbot.storage import StorageRepository
 
         with store.database.transaction() as session:
+            session.execute(text("BEGIN"))
             commission = commission_in_session(store, session)
             repo = StorageRepository(session)
             progress = (
@@ -254,29 +427,6 @@ class AlpacaCoreBroker:
                 if progress
                 else commission.approved_at
             )
-            relevant = session.execute(
-                select(table("core_intent_links").c.intent_id)
-                .join(
-                    table("order_intents"),
-                    table("order_intents").c.intent_id == table("core_intent_links").c.intent_id,
-                )
-                .where(
-                    (
-                        table("order_intents").c.created_at
-                        >= (self.now - timedelta(days=2)).isoformat()
-                    )
-                    | table("order_intents").c.state.not_in(
-                        ("FILLED", "CANCELLED", "EXPIRED", "REJECTED", "ERROR")
-                    )
-                )
-            ).scalars()
-            from quantbot.paper_core.send_guard import definitively_unsent
-
-            intents = [
-                repo.get_order_intent(identity)
-                for identity in relevant
-                if not definitively_unsent(repo, identity)
-            ]
         # Replay overlaps creation dates to retain late fees. No empty-day zero inference.
         until = min(self.now, cursor + timedelta(hours=6))
         after = max(commission.approved_at - timedelta(days=2), cursor - timedelta(days=2))
@@ -285,18 +435,115 @@ class AlpacaCoreBroker:
             fills = tuple(
                 self.adapter._fill_from_payload(r) for r in rows if r.get("activity_type") == "FILL"
             )
+            # An order may be durably created/sent while activities are in flight.
+            # Snapshot intent state after those activities, so every newly visible
+            # owned fill is eligible for its normal paired acknowledgement reads.
+            with store.database.transaction() as session:
+                session.execute(text("BEGIN"))
+                repo = StorageRepository(session)
+                relevant = session.execute(
+                    select(table("core_intent_links").c.intent_id)
+                    .join(
+                        table("order_intents"),
+                        table("order_intents").c.intent_id
+                        == table("core_intent_links").c.intent_id,
+                    )
+                    .where(
+                        (
+                            table("order_intents").c.created_at
+                            >= (self.now - timedelta(days=2)).isoformat()
+                        )
+                        | table("order_intents").c.state.not_in(
+                            ("FILLED", "CANCELLED", "EXPIRED", "REJECTED", "ERROR")
+                        )
+                        | table("core_intent_links").c.lot_id.not_in(
+                            select(table("core_round_trips").c.id)
+                        )
+                    )
+                ).scalars()
+                from quantbot.paper_core.settlement import definitively_unsent_many
+
+                current_intents = repo.get_order_intents(list(relevant))
+                unsent = definitively_unsent_many(
+                    repo, [intent.intent_id for intent in current_intents if intent is not None]
+                )
+                intents = [
+                    intent
+                    for intent in current_intents
+                    if intent is None or not unsent[intent.intent_id]
+                ]
+                settled = {
+                    intent.intent_id: event
+                    for intent in intents
+                    if intent is not None
+                    and (event := self._settled_order_event(store, session, intent)) is not None
+                }
             events = []
             pending_owned_orders = []
+            batch_reads = None
+            if store.parallel_entries:
+                active = [
+                    i
+                    for i in intents
+                    if i is not None
+                    and i.intent_id not in settled
+                    and i.state not in {IntentState.RISK_APPROVED, IntentState.ORDER_CREATED}
+                ]
+                if active:
+                    lower = min(i.created_at for i in active) - timedelta(seconds=1)
+                    first_batch = await self.adapter.get_orders(after=lower)
+                    second_batch = await self.adapter.get_orders(after=lower)
+                    if len({o.client_order_id for o in first_batch}) != len(first_batch) or len(
+                        {o.client_order_id for o in second_batch}
+                    ) != len(second_batch):
+                        raise BrokerProtocolError("DUPLICATE_BULK_ORDER_CLIENT_ID")
+                    batch_reads = (
+                        dict((o.client_order_id, o) for o in first_batch),
+                        dict((o.client_order_id, o) for o in second_batch),
+                    )
             for intent in intents:
                 assert intent is not None
-                first = await self.adapter.get_order_by_client_id(
-                    intent.client_order_id, expected=intent
-                )
+                contradiction = None
+                if intent.intent_id in settled:
+                    historical = settled[intent.intent_id]
+                    acquired = (
+                        [batch.get(intent.client_order_id) for batch in batch_reads]
+                        if batch_reads
+                        else []
+                    )
+                    if all(order is None or order == historical.order for order in acquired):
+                        # Replay proof only when no actually acquired order contradicts it.
+                        # A contradiction must reach the normal scoped import/quarantine path.
+                        events.append(historical)
+                        continue
+                    contradiction = next(
+                        order
+                        for order in acquired
+                        if order is not None and order != historical.order
+                    )
+                if store.parallel_entries:
+                    if intent.state in {IntentState.RISK_APPROVED, IntentState.ORDER_CREATED}:
+                        continue  # Retained pre-send lifecycle proves no order exists yet.
+                    first = batch_reads[0].get(intent.client_order_id) if batch_reads else None
+                    second = batch_reads[1].get(intent.client_order_id) if batch_reads else None
+                    if first is None and second is not None:
+                        first = second
+                        second = None  # One acknowledgement never establishes stable completion.
+                    if contradiction is not None:
+                        first, second = contradiction, None
+                else:
+                    first = await self.adapter.get_order_by_client_id(
+                        intent.client_order_id, expected=intent
+                    )
+                    second = (
+                        await self.adapter.get_order_by_client_id(
+                            intent.client_order_id, expected=intent
+                        )
+                        if first is not None
+                        else None
+                    )
                 if first is None:
                     continue  # Recovery keeps its original reservation and client ID.
-                second = await self.adapter.get_order_by_client_id(
-                    intent.client_order_id, expected=intent
-                )
                 owned = tuple(f for f in fills if f.broker_order_id == first.broker_order_id)
                 complete = (
                     first == second
@@ -326,17 +573,48 @@ class AlpacaCoreBroker:
                         activity_fill_ids=tuple(f.fill_id for f in owned),
                     )
                 )
-                for fill in owned:
+            # Activities are independent of the order-poll selection. In particular,
+            # a reused fill ID under another order must reach immutable conflict checks.
+            acquired_orders = {
+                event.order.broker_order_id: event.order for event in events if event.order
+            }
+            with store.database.transaction() as session:
+                repo = StorageRepository(session)
+                clients = set(
+                    session.execute(
+                        select(table("order_intents").c.client_order_id)
+                        .join(
+                            table("core_intent_links"),
+                            table("core_intent_links").c.intent_id
+                            == table("order_intents").c.intent_id,
+                        )
+                        .where(table("order_intents").c.strategy_id == store.config.owner)
+                    ).scalars()
+                )
+                for fill in fills:
+                    canonical = repo.get_fill(fill.fill_id)
+                    original = (
+                        repo.get_broker_order(canonical.broker_order_id) if canonical else None
+                    )
+                    incoming = acquired_orders.get(fill.broker_order_id) or repo.get_broker_order(
+                        fill.broker_order_id
+                    )
+                    order = next(
+                        (o for o in (original, incoming) if o and o.client_order_id in clients),
+                        None,
+                    )
+                    if order is None:
+                        continue  # Inherited/foreign activity retains its separate owner path.
                     events.append(
                         BrokerEvent(
-                            recorded_at_utc=at,
+                            recorded_at_utc=self.now,
                             occurred_at=fill.occurred_at,
                             evidence_lane="BROKER_PAPER",
                             release_id=store.config.release_id,
                             account_id=self.account_id,
                             provider="alpaca",
                             endpoint=self.endpoint + "/v2/account/activities",
-                            client_order_id=intent.client_order_id,
+                            client_order_id=order.client_order_id,
                             event_id=fill.fill_id,
                             raw_digest=content_id(fill),
                             fill=fill,
@@ -352,6 +630,7 @@ class AlpacaCoreBroker:
             "cost_authority": "UNKNOWN_ALL_IN_COMPONENTS",
             "cash_authority": "NOT_CERTIFIED",
             "release_id": store.config.release_id,
+            **({"bulk_order_reads": batch_reads} if batch_reads is not None else {}),
         }
         with store.database.transaction() as session:
             session.execute(text("BEGIN IMMEDIATE"))
@@ -498,6 +777,93 @@ class AlpacaCoreBroker:
                             )
                         )
         return tuple(events)
+
+    def _settled_order_event(
+        self, store: CoreStore, session: Session, intent: OrderIntent
+    ) -> BrokerEvent | None:
+        """Reuse only terminal evidence already establishing an owned closed outcome."""
+        from quantbot.execution.coordinator import _assert_ack_matches_intent
+        from quantbot.paper_core.outcomes import (
+            _source_id,
+            quarantined_lots,
+            settled_zero_entry,
+            terminal_evidence,
+        )
+
+        repo = StorageRepository(session)
+        if intent.strategy_id != store.config.owner or intent.state not in {
+            IntentState.FILLED,
+            IntentState.CANCELLED,
+            IntentState.EXPIRED,
+            IntentState.REJECTED,
+        }:
+            return None
+        zero = settled_zero_entry(store, session, intent, cutoff=self.now)
+        if zero is not None:
+            return zero
+        link = (
+            session.execute(
+                select(table("core_intent_links")).where(
+                    table("core_intent_links").c.intent_id == intent.intent_id
+                )
+            )
+            .mappings()
+            .one()
+        )
+        encoded = session.execute(
+            select(table("core_round_trips").c.payload).where(
+                table("core_round_trips").c.id == link["lot_id"]
+            )
+        ).scalar_one_or_none()
+        if encoded is None or link["lot_id"] in quarantined_lots(session):
+            return None
+        trip = RoundTrip.model_validate_json(encoded)
+        order = repo.get_broker_order_by_client_order_id(intent.client_order_id)
+        if (
+            order is None
+            or trip.lot_id != link["lot_id"]
+            or trip.decision_id != link["decision_id"]
+            or trip.release_id != store.config.release_id
+            or trip.evidence_lane != store.config.evidence_lane
+            or trip.open_quantity != 0
+            or not trip.entry_fill_ids
+            or not trip.exit_fill_ids
+            or trip.available_at is None
+            or trip.available_at > self.now
+            or order.broker_order_id not in trip.terminal_order_ids
+        ):
+            return None
+        try:
+            _assert_ack_matches_intent(intent, order)
+        except BrokerProtocolError:
+            return None
+        fills = repo.list_fills(broker_order_id=order.broker_order_id)
+        membership = trip.entry_fill_ids if link["role"] == "ENTRY" else trip.exit_fill_ids
+        if not {f.fill_id for f in fills} <= set(membership):
+            return None
+        identity = terminal_evidence(session, order, cutoff=self.now)
+        if identity is None or identity not in trip.source_refs:
+            return None
+        payload = session.execute(
+            select(table("core_broker_event_sources").c.payload).where(
+                table("core_broker_event_sources").c.id == identity
+            )
+        ).scalar_one()
+        event = BrokerEvent.model_validate_json(payload)
+        if (
+            _source_id(event) != identity
+            or event.account_id != store.config.account_id
+            or event.evidence_lane != store.config.evidence_lane
+            or event.release_id != store.config.release_id
+            or event.provider != self.provider
+            or event.endpoint != self.endpoint + "/v2/orders"
+            or event.client_order_id != intent.client_order_id
+            or event.order != order
+            or event.correction_of is not None
+            or event.raw_digest != content_id(order)
+        ):
+            return None
+        return event
 
     @staticmethod
     def record_external(session: Session, external: dict[str, Any]) -> None:

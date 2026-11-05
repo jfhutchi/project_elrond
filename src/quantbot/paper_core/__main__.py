@@ -11,6 +11,8 @@ from decimal import Decimal
 from pathlib import Path
 from typing import Any, cast
 
+from sqlalchemy import select
+
 from quantbot.config import Settings
 from quantbot.paper_core.authority import RuntimeCommission, commission_runtime
 from quantbot.paper_core.contracts import CoreConfig
@@ -22,7 +24,7 @@ from quantbot.paper_core.release import (
     read_status,
     verify_release,
 )
-from quantbot.paper_core.store import CoreStore
+from quantbot.paper_core.store import CoreStore, table
 from quantbot.paper_core.time_evidence import SystemClocks
 from quantbot.research.manifest import content_id
 from quantbot.storage import Database
@@ -49,6 +51,7 @@ def parser() -> argparse.ArgumentParser:
             "fence",
             "rollback-model",
             "transition-release",
+            "transition-entry-policy",
             "resume",
         ),
     )
@@ -186,7 +189,12 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
     from quantbot.paper_core.authority import commission_in_session
     from quantbot.paper_core.roles import Role, run_role
 
+    transport: Any
+    market_transport: Any
     config = release.config
+    from quantbot.paper_core.account_control import require_resource_control
+
+    require_resource_control(config.entry_policy, config.request_control)
     clocks = SystemClocks()
     clocks.execution_domain = config.core.evidence_lane + ":HOST_UTC_RUNTIME_V1"
     settings = None
@@ -217,7 +225,19 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
         if config.core.evidence_lane == "BROKER_PAPER"
         else derived_core(release, account_id)
     )
-    with Database(Path(config.store_path)) as db:
+    observer = None
+    if config.core.evidence_lane == "BROKER_PAPER":
+        from quantbot.paper_core.sqlite_diagnostics import configured_diagnostics_deadline
+        from quantbot.storage.transaction_diagnostics import stdout_transaction_observer
+
+        deadline = configured_diagnostics_deadline(
+            config.environment_file_reference, now=clocks.sample()[0]
+        )
+        if deadline is not None:
+            observer = stdout_transaction_observer(
+                expires_at_utc=deadline, process_epoch=clocks.process_id, role=args.role
+            )
+    with Database(Path(config.store_path), transaction_observer=observer) as db:
         if db.store_identity != config.store_identity:
             raise ValueError("store lineage mismatch")
         store = CoreStore(db, core, clocks=clocks, runtime_release_id=release.id)
@@ -227,6 +247,7 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
         )
         store.runtime_entry_enabled = not args.entry_disabled
         store.runtime_settings = settings
+        store.runtime_account_control = config.request_control
         if settings is not None:
             with db.transaction() as session:
                 commission_in_session(store, session)
@@ -235,6 +256,13 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
                 raise ValueError("existing PAPER credentials unavailable")
             transport, market_transport = HttpxBrokerTransport(), HttpxMarketDataTransport()
             resources = [transport, market_transport]
+            if config.request_control is not None:
+                from quantbot.paper_core.account_control import BudgetedTransport
+
+                transport = BudgetedTransport(transport, config.request_control, args.role, clocks)
+                market_transport = BudgetedTransport(
+                    market_transport, config.request_control, args.role, clocks
+                )
             adapter = AlpacaPaperBrokerAdapter(
                 api_key=key,
                 api_secret=secret,
@@ -247,7 +275,8 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
                 api_secret=secret,
                 transport=market_transport,
                 max_retries=0,
-                timeout_seconds=Decimal(2),
+                # Entry cohorts are larger reads; independent protection keeps its short bound.
+                timeout_seconds=Decimal(5) if args.role == "trader" else Decimal(2),
             )
             calendar = AlpacaMarketCalendar(
                 api_key=key,
@@ -263,10 +292,27 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
         else:
             module, name = args.fixture_driver.split(":", 1)
             broker = getattr(importlib.import_module(module), name)(store, config)
+        lease = None
         try:
+            if args.role == "trader" and config.request_control is not None:
+                from quantbot.paper_core.account_control import AccountEntryLease
+
+                lease = AccountEntryLease(config.request_control, db.store_identity, release.id)
+                lease.acquire()
+                with db.transaction() as session:
+                    history = table("core_runtime_config_history")
+                    encoded_binding = session.execute(
+                        select(history.c.payload).where(history.c.id == lease.binding_id)
+                    ).scalar_one()
+                recorded_binding = json.loads(encoded_binding)
+                if recorded_binding != lease.document:
+                    raise ValueError("ACCOUNT_ENTRY_BINDING_AUDIT_MISMATCH")
+                store.runtime_account_lease = lease
             with SingleWriterLock(Path(config.store_path + "." + args.role + ".lock")):
                 await run_role(store, broker, config, cast(Role, args.role), cycles=args.cycles)
         finally:
+            if lease is not None:
+                lease.release()
             for resource in resources:
                 await resource.aclose()
 
@@ -311,7 +357,14 @@ def main() -> None:
                     }
                 )
             )
-    elif args.command in {"commission", "fence", "rollback-model", "transition-release", "resume"}:
+    elif args.command in {
+        "commission",
+        "fence",
+        "rollback-model",
+        "transition-release",
+        "transition-entry-policy",
+        "resume",
+    }:
         if args.approval_document is None or not args.approval_document.is_absolute():
             raise ValueError("explicit exact approved nonsecret document required")
         document = json.loads(args.approval_document.read_text(encoding="utf-8"))
@@ -324,7 +377,7 @@ def main() -> None:
             core = CoreConfig.model_validate(recorded["economic_configs"][0])
             executable_id = recorded["executable_binding"]["release"]
             executable_id = PreparedRelease.model_validate(executable_id).id
-            if args.command != "transition-release":
+            if args.command not in {"transition-release", "transition-entry-policy"}:
                 commissioned_core(release, recorded)
         with Database(Path(config.store_path)) as db:
             store = CoreStore(db, core, runtime_release_id=executable_id)
@@ -343,6 +396,10 @@ def main() -> None:
                 from quantbot.paper_core.authority import transition_release
 
                 print(transition_release(store, release, document))
+            elif args.command == "transition-entry-policy":
+                from quantbot.paper_core.authority import transition_entry_policy
+
+                print(transition_entry_policy(store, release, document))
             elif args.command == "resume":
                 from quantbot.paper_core.authority import resume_entries
 
