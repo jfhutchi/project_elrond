@@ -147,6 +147,13 @@
       "source_sha256": "c93a9aecd69c51242f3213f0c1cc2bb8c7ade2465bae664aef9bac24a766f16d",
       "previous_sha256": "c93a9aecd69c51242f3213f0c1cc2bb8c7ade2465bae664aef9bac24a766f16d",
       "changed": false
+    },
+    {
+      "path": "src/quantbot/learner/execution_worker.py",
+      "source": "D:\\Elrond\\releases\\deadline-retry-20261103\\src\\quantbot\\learner\\execution_worker.py",
+      "source_sha256": "f55bc3ea39f298cb91431503c31c47faab4f1487a407cef56cd8eb1aa85e86a4",
+      "previous_sha256": "d7afd3f94124dc3a221bffb1cddcc982902370a6e4191a10a901e76fa7ff799b",
+      "changed": true
     }
   ]
 }

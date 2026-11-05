@@ -408,6 +408,7 @@ def main() -> int:
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
     repository = Path(__file__).resolve().parents[3]
+    stage = "STARTUP"
     try:
         commit = subprocess.check_output(
             ["git", "rev-parse", "HEAD"], cwd=repository, text=True, timeout=30
@@ -435,11 +436,14 @@ def main() -> int:
             if args.check:
                 print("PAPER_DEADLINE_LAUNCH_CHECK_OK")
             else:
+                stage = "SERVE"
                 asyncio.run(serve_deadlines(settings))
     except KeyboardInterrupt:
         return 0
-    except Exception:
-        print("PAPER_DEADLINE_START_FAILED")
+    except Exception as error:
+        # Class/stage only: exception text may contain SQL, parameters or secrets.
+        print(f"PAPER_DEADLINE_START_FAILED stage={stage} "
+              f"error_class={type(error).__name__}", flush=True)
         return 1
     return 0
 

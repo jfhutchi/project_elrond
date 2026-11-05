@@ -310,15 +310,15 @@ class PaperDeadlineSupervisor:
                     != self.identity
                 ):
                     raise ValueError("deadline audit identity must already be deployed")
+                # Hydrate historical handoffs before the first write so a large
+                # replay never lengthens the SQLite writer interval.
+                records = repository.list_signals(payload_kind=HANDOFF)
                 repository.create_run(
                     run_id,
                     self.identity,
                     started_at=now,
                     detail={"role": "PAPER_DEADLINE_SUPERVISOR"},
                 )
-                records = [
-                    row for row in repository.list_signals() if row.payload.get("kind") == HANDOFF
-                ]
             reasons: list[str] = []
             failed_handoffs: list[str] = []
             submitted = 0
@@ -537,12 +537,11 @@ class PaperDeadlineSupervisor:
     async def _reconcile_confirmed_fills(self) -> None:
         with self.database.transaction() as session:
             repository = StorageRepository(session)
-            pending = [event for event in repository.list_order_events()
-                       if event.event_type == "PAPER_FILL_RECONCILIATION_REQUEST_V1"
-                       and event.detail.get("account_id_hash") == PaperDeadline.account_hash(
-                           self.account_id)
-                       and repository.get_order_event("fill-reconciled-" + event.event_id)
-                       is None]
+            pending = repository.list_order_events(
+                event_type="PAPER_FILL_RECONCILIATION_REQUEST_V1",
+                detail_equals={"account_id_hash": PaperDeadline.account_hash(self.account_id)},
+                without_acknowledgement_prefix="fill-reconciled-",
+            )
         if not pending:
             return
         assert self.reconcile_fills is not None
@@ -577,12 +576,9 @@ class PaperDeadlineSupervisor:
                 return 0
             if entry.model_copy(update={"state": IntentState.RISK_APPROVED}) != record.entry_intent:
                 raise DeadlineStateError("DEADLINE_INTENT_MISMATCH")
-            events = [
-                event
-                for event in repository.list_order_events()
-                if event.event_type == EXIT_EVENT
-                and event.detail.get("handoff_id") == record.handoff_id
-            ]
+            events = repository.list_order_events(
+                event_type=EXIT_EVENT, detail_equals={"handoff_id": record.handoff_id},
+            )
             exits = [
                 repository.get_order_intent(event.intent_id) if event.intent_id else None
                 for event in events

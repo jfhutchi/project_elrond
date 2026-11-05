@@ -695,3 +695,117 @@ async def test_deduplication_does_not_hide_a_different_handoff_or_resolve_histor
         assert len(repo.list_incidents(unresolved_only=True)) == 2
         assert len(repo.list_signals(symbol="PAPER_DEADLINES")) == 3
     assert broker.submitted == []
+
+
+@pytest.mark.asyncio
+async def test_deadline_cycle_hydrates_only_scoped_history_outside_writer_transaction(
+    setup, monkeypatch,
+):
+    from sqlalchemy import event
+
+    record, broker, supervisor = prepare(setup)
+    fill_entry(setup, record, broker)
+    database = setup[0]
+    with database.transaction() as session:
+        repo = StorageRepository(session)
+        for index in range(200):
+            repo.record_signal(
+                f"unrelated-signal-{index}", run_id="entry-run",
+                strategy_id=record.identity.strategy_id, symbol="OTHER", occurred_at=NOW,
+                payload={"kind": "OTHER", "history": "x" * 2048},
+            )
+            repo.record_order_event(
+                f"unrelated-event-{index}", event_type="OTHER", occurred_at=NOW,
+                detail={"history": "x" * 2048},
+            )
+        # Foreign and already acknowledged requests must not be hydrated/reconciled.
+        for name, account in (("foreign", "other-account"), ("done", "paper-1")):
+            repo.record_order_event(
+                name, event_type="PAPER_FILL_RECONCILIATION_REQUEST_V1", occurred_at=NOW,
+                detail={"account_id_hash": PaperDeadline.account_hash(account)},
+            )
+        repo.record_order_event(
+            "fill-reconciled-done", event_type="PAPER_FILL_RECONCILED_V1",
+            occurred_at=NOW, detail={},
+        )
+    hydrated_signals, hydrated_events, writer_reads, plans = [], [], [], []
+    signal_reader = StorageRepository._signal_from_row
+    event_reader = StorageRepository._order_event_from_row
+
+    def read_signal(row):
+        hydrated_signals.append(row["signal_id"])
+        return signal_reader(row)
+
+    def read_event(row):
+        hydrated_events.append(row["event_id"])
+        return event_reader(row)
+
+    def inspect_query(connection, cursor, statement, parameters, context, executemany):
+        if statement.startswith("SELECT signals."):
+            writer_reads.append(connection.connection.driver_connection.in_transaction)
+        if statement.startswith(("SELECT signals.", "SELECT order_events.")):
+            plans.extend(connection.connection.driver_connection.execute(
+                "EXPLAIN QUERY PLAN " + statement, parameters,
+            ).fetchall())
+
+    monkeypatch.setattr(StorageRepository, "_signal_from_row", staticmethod(read_signal))
+    monkeypatch.setattr(StorageRepository, "_order_event_from_row", staticmethod(read_event))
+    event.listen(database.engine, "before_cursor_execute", inspect_query)
+    reconciliations = []
+
+    async def reconcile(now):
+        reconciliations.append(now)
+        return ()
+
+    supervisor.reconcile_fills = reconcile
+    try:
+        assert (await supervisor.run_once()).healthy
+        broker.now += timedelta(seconds=10)
+        assert (await supervisor.run_once()).healthy
+    finally:
+        event.remove(database.engine, "before_cursor_execute", inspect_query)
+    assert not any(str(value).startswith("unrelated-") for value in hydrated_signals)
+    assert not any(str(value).startswith("unrelated-") for value in hydrated_events)
+    assert "foreign" not in hydrated_events and "done" not in hydrated_events
+    assert writer_reads and not any(writer_reads)
+    assert len(reconciliations) == 1 and broker.submitted == []
+    print("DEADLINE_SCOPED_QUERY_PLANS", sorted({row[3] for row in plans}))
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("case", ["closed", "foreign", "malformed-foreign"])
+async def test_scoped_handoff_read_preserves_closed_foreign_and_invalid_authority(setup, case):
+    from sqlalchemy import update
+
+    from quantbot.learner.paper_deadlines import HANDOFF, _signal_id
+    from quantbot.storage.schema import signals
+
+    record, broker, supervisor = prepare(setup)
+    if case == "closed":
+        with setup[0].transaction() as session:
+            StorageRepository(session).record_order_event(
+                "deadline-closed-" + record.handoff_id,
+                event_type="LEARNER_PAPER_DEADLINE_CLOSED_V1", occurred_at=NOW, detail={},
+            )
+    else:
+        import json
+
+        foreign = record.model_copy(update={
+            "account_id_hash": PaperDeadline.account_hash("foreign-account"),
+        })
+        payload = {"kind": HANDOFF, "document": foreign.model_dump(mode="json"),
+                   "document_hash": foreign.handoff_id}
+        if case == "malformed-foreign":
+            payload["document_hash"] = "tampered"
+        with setup[0].transaction() as session:
+            session.execute(update(signals).where(
+                signals.c.signal_id == _signal_id(record.entry_intent.intent_id),
+            ).values(payload_json=json.dumps(payload)))
+
+    async def forbidden(*args, **kwargs):
+        raise AssertionError("closed/foreign handoff cannot acquire broker order authority")
+
+    supervisor._sync_order = forbidden
+    result = await supervisor.run_once()
+    assert result.healthy == (case != "malformed-foreign")
+    assert broker.submitted == []

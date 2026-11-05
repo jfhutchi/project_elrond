@@ -1066,6 +1066,7 @@ class StorageRepository:
         run_id: str | None = None,
         strategy_id: str | None = None,
         symbol: str | None = None,
+        payload_kind: str | None = None,
     ) -> list[SignalRecord]:
         statement = select(signals)
         if run_id is not None:
@@ -1074,6 +1075,10 @@ class StorageRepository:
             statement = statement.where(signals.c.strategy_id == strategy_id)
         if symbol is not None:
             statement = statement.where(signals.c.symbol == symbol)
+        if payload_kind is not None:
+            statement = statement.where(
+                func.json_extract(signals.c.payload_json, "$.kind") == payload_kind
+            )
         rows = (
             self._session.execute(statement.order_by(signals.c.occurred_at, signals.c.signal_id))
             .mappings()
@@ -1534,12 +1539,30 @@ class StorageRepository:
         *,
         intent_id: str | None = None,
         broker_order_id: str | None = None,
+        event_type: str | None = None,
+        detail_equals: Mapping[str, str] | None = None,
+        without_acknowledgement_prefix: str | None = None,
     ) -> list[OrderEventRecord]:
+        """Filter before ordering/hydration; acknowledgement identity alone is authoritative."""
         statement = select(order_events)
         if intent_id is not None:
             statement = statement.where(order_events.c.intent_id == intent_id)
         if broker_order_id is not None:
             statement = statement.where(order_events.c.broker_order_id == broker_order_id)
+        if event_type is not None:
+            statement = statement.where(order_events.c.event_type == event_type)
+        for key, value in (detail_equals or {}).items():
+            statement = statement.where(
+                func.json_extract(order_events.c.detail_json, "$." + key) == value
+            )
+        if without_acknowledgement_prefix is not None:
+            acknowledgement = order_events.alias("acknowledgement")
+            statement = statement.where(
+                ~select(acknowledgement.c.event_id).where(
+                    acknowledgement.c.event_id
+                    == without_acknowledgement_prefix + order_events.c.event_id
+                ).exists()
+            )
         rows = (
             self._session.execute(
                 statement.order_by(order_events.c.occurred_at, order_events.c.event_id)

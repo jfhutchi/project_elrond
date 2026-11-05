@@ -1,7 +1,6 @@
 """Real SQLite contention must not kill independent PAPER exit supervision."""
 import asyncio
 import sqlite3
-import time
 from datetime import timedelta
 
 import pytest
@@ -35,6 +34,15 @@ async def test_real_busy_retries_fresh_cycle_without_false_heartbeat_or_duplicat
     original_signal = StorageRepository.record_signal
     attempts = []
     failures = []
+    waits = []
+    original_wait_for = asyncio.wait_for
+
+    async def observed_wait_for(awaitable, timeout):
+        if timeout == 0.02:
+            waits.append(len(attempts))
+        return await original_wait_for(awaitable, timeout=timeout)
+
+    monkeypatch.setattr(asyncio, "wait_for", observed_wait_for)
 
     if not after_exit:
         writer.execute("BEGIN IMMEDIATE")
@@ -46,7 +54,7 @@ async def test_real_busy_retries_fresh_cycle_without_false_heartbeat_or_duplicat
         monkeypatch.setattr(StorageRepository, "record_signal", blocked_publication)
 
     async def observed_run():
-        attempts.append(time.monotonic())
+        attempts.append(broker.now)
         broker.now += timedelta(seconds=10)
         try:
             result = await original_run()
@@ -69,7 +77,9 @@ async def test_real_busy_retries_fresh_cycle_without_false_heartbeat_or_duplicat
         writer.close()
     assert failures == [sqlite3.SQLITE_BUSY]
     assert len(attempts) == 2
-    assert attempts[1] - attempts[0] >= 0.02
+    # Windows monotonic resolution can be 15.6ms. Prove each attempt awaits
+    # the configured interruptible interval instead of timing two coarse samples.
+    assert waits == [1, 2]
     with database.transaction() as session:
         heartbeats = [s for s in StorageRepository(session).list_signals()
                       if s.symbol == "PAPER_DEADLINES"]
