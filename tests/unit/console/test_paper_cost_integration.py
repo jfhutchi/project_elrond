@@ -30,7 +30,9 @@ def test_normal_api_dashboard_and_reports_refresh_after_late_fee(tmp_path, monke
             return read_report(cost_path, as_of=data["as_of"])
 
         monkeypatch.setattr(performance_reader, "read_paper_cost_report", read, raising=False)
-        final = PerformanceData(rows=(DailyPerformance(date(2026, 10, 27), "FINAL", Decimal("7.00")),))
+        final = PerformanceData(
+            rows=(DailyPerformance(date(2026, 10, 27), "FINAL", Decimal("7.00")),)
+        )
         client = TestClient(create_app(database, daily_performance=lambda: final))
         first = client.get("/api/state").json()["paper_costs"]
         assert first["available"] is True

@@ -133,3 +133,16 @@ def test_inspector_records_free_pages_and_budget_without_writes(ledger):
     assert report["additional_compaction_space_budget"] == 2 * len(before)
     assert report["dbstat_complete"] or report["dbstat_error"]
     assert ledger.read_bytes() == before
+
+
+def test_guardian_cleanup_refuses_unsupported_platform_before_opening_store(tmp_path, monkeypatch):
+    from types import SimpleNamespace
+
+    from scripts import offline_guardian_projection_cleanup as cleanup
+
+    source = tmp_path / "closed-copy.db"
+    source.write_bytes(b"")
+    monkeypatch.setattr(cleanup, "os", SimpleNamespace(name="posix"))
+    with pytest.raises(ValueError, match="Windows deny-write/delete"):
+        with cleanup.read_lease(source):
+            pytest.fail("unsupported platform acquired a cleanup lease")

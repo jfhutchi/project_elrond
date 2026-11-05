@@ -1,6 +1,7 @@
 """Cleanup is restricted to complete membership histories of proven pre-POST refusals."""
 
 import json
+import os
 import sqlite3
 from contextlib import closing
 from datetime import timedelta
@@ -21,6 +22,10 @@ from quantbot.paper_core.send_guard import record_pre_send_refusal
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
 from tests.unit.paper_core.test_guardian_retention import NOW, claimed
+
+pytestmark = pytest.mark.skipif(
+    os.name != "nt", reason="cleanup requires the Windows deny-write/delete file lease"
+)
 
 
 @pytest.fixture
