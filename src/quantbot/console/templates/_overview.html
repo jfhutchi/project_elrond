@@ -25,7 +25,8 @@
     {% elif state.health.reconciliation_clean %}<div class="v"><span class="pill pill--ok">CLEAN</span></div><div class="n">Latest recorded broker check</div>
     {% else %}<div class="v"><span class="pill pill--crit">{{ state.health.reconciliation_diffs }} DIFFS</span></div><div class="n">Review account differences</div>{% endif %}
   </div>
-  <div class="card"><div class="k">Position protection</div>
+  <div class="card"><div class="k">{{ 'Legacy protection record' if state.overview.roles else 'Position protection' }}</div>
+    {% if state.overview.roles %}<div class="n">Current core protection is shown in Guardian status below.</div>{% endif %}
     {% if state.health.last_protection_at %}
     <div class="v"><span class="pill {% if state.health.last_protection_outcome == 'HEALTHY' %}pill--ok{% elif state.health.last_protection_outcome == 'ACTION_REQUIRED' %}pill--warn{% else %}pill--crit{% endif %}">{{ state.health.last_protection_outcome }}</span></div>
     <div class="n">{{ state.health.protected_positions }} protected · {{ state.health.unprotected_positions }} unprotected</div>
