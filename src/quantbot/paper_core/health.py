@@ -209,44 +209,63 @@ def universe_health_objections(store: CoreStore, session: Session) -> tuple[str,
 def recover_health(
     store: CoreStore, proof: ReconciliationProof, *, now: datetime, symbol: str | None = None
 ) -> None:
-    symbol = symbol or store.config.symbol
+    recover_health_many(store, proof, now=now, symbols=(symbol or store.config.symbol,))
+
+
+def recover_health_many(
+    store: CoreStore, proof: ReconciliationProof, *, now: datetime, symbols: tuple[str, ...]
+) -> None:
+    """Recover one cohort against current locked authority, retaining per-symbol receipts."""
+    if not symbols:
+        return
     with store.database.transaction() as session:
-        failures = [
-            h
-            for h in active_health(session)
-            if h.state in {"TEMPORARY_WAIT", "RETRYABLE_FAILURE", "PROTOCOL_FAILURE"}
-            and h.role in {"TRADER", "GUARDIAN"}
-            and (
-                h.scope == "SYMBOL"
-                and h.scope_id == symbol
-                or h.scope == "ACCOUNT"
-                and h.scope_id == store.config.account_id
-            )
-            and proof.generation > h.failed_generation
-            and proof.id not in h.evidence_ids
-        ]
+        session.execute(text("BEGIN IMMEDIATE"))
+        events = sorted(
+            (
+                Health.model_validate_json(p)
+                for p in session.execute(select(table("core_health_events").c.payload)).scalars()
+            ),
+            key=lambda h: h.sequence,
+        )
+        sequence = max((h.sequence for h in events), default=0)
+        resolved = {identity for h in events for identity in h.recovered_from}
+        active = tuple(h for h in events if h.state != "READY" and h.id not in resolved)
+        if store.config.clock_profile == "PAPER_TIME_V2":
+            now = max(now, store.clocks.sample()[0])
         from quantbot.paper_core.funds import entry_inventory_objections
 
         if entry_inventory_objections(store, session, proof, now=now):
             return
-        # Quarantines remain until an explicit audited resolver supplies authority.
-        if any(
-            h.state in {"INTEGRITY_FAILURE", "MANUAL_PAUSE"}
-            and (
-                h.scope == "ACCOUNT"
-                and h.scope_id == store.config.account_id
-                or h.scope == "SYMBOL"
-                and h.scope_id == symbol
-            )
-            for h in active_health(session)
-        ):
-            return
         if StorageRepository(session).get_kill_switch_state().engaged:
             return
-    if failures:
-        record_health(
-            store,
-            Health(
+
+        for symbol in dict.fromkeys(symbols):
+            scoped = tuple(
+                h
+                for h in active
+                if h.id not in resolved
+                and (
+                    h.scope == "SYMBOL"
+                    and h.scope_id == symbol
+                    or h.scope == "ACCOUNT"
+                    and h.scope_id == store.config.account_id
+                )
+            )
+            # Quarantines remain until an explicit audited resolver supplies authority.
+            if any(h.state in {"INTEGRITY_FAILURE", "MANUAL_PAUSE"} for h in scoped):
+                continue
+            failures = tuple(
+                h
+                for h in scoped
+                if h.state in {"TEMPORARY_WAIT", "RETRYABLE_FAILURE", "PROTOCOL_FAILURE"}
+                and h.role in {"TRADER", "GUARDIAN"}
+                and proof.generation > h.failed_generation
+                and proof.id not in h.evidence_ids
+            )
+            if not failures:
+                continue
+            sequence += 1
+            recovered = Health(
                 recorded_at_utc=now,
                 evidence_lane=store.config.evidence_lane,
                 release_id=store.config.release_id,
@@ -262,8 +281,10 @@ def recover_health(
                 new_proof_id=proof.id,
                 evidence_ids=(proof.id,),
                 recovered_from=tuple(h.id for h in failures),
-            ),
-        )
+                sequence=sequence,
+            )
+            put(session, "core_health_events", recovered.id, recovered)
+            resolved.update(recovered.recovered_from)
 
 
 def resolve_delayed_owned_buy(store: CoreStore, approval: dict[str, Any]) -> str:

@@ -35,7 +35,7 @@ from quantbot.paper_core.entry_policy import (
 )
 from quantbot.paper_core.features import observation_objections
 from quantbot.paper_core.funds import entry_inventory_objections, structural_funds_allowed
-from quantbot.paper_core.health import entry_health_objections, recover_health, report
+from quantbot.paper_core.health import entry_health_objections, report
 from quantbot.paper_core.runtime import coordinator, require_runtime_broker
 from quantbot.paper_core.send_guard import definitively_unsent
 from quantbot.paper_core.simulation import SyntheticBroker
@@ -618,13 +618,19 @@ async def _acquire_entry_authority(
                 and store.config.evidence_lane != "BROKER_PAPER"
             ):
                 acknowledge_handoffs(store, now=store.clocks.sample()[0])
-            for member in cohort.observations if cohort else (observation,):
+            from quantbot.paper_core.health import recover_health_many
+
+            fresh_symbols = tuple(
+                member.symbol
+                for member in (cohort.observations if cohort else (observation,))
                 if not entry_time_objections(
                     member, time_evidence, store.config, projection=time_projection
-                ) and not observation_objections(member, dependency_freshness=True):
-                    recover_health(
-                        store, inventory, now=store.clocks.sample()[0], symbol=member.symbol
-                    )
+                )
+                and not observation_objections(member, dependency_freshness=True)
+            )
+            recover_health_many(
+                store, inventory, now=store.clocks.sample()[0], symbols=fresh_symbols
+            )
     return inventory, time_evidence, time_projection, acquisition_reasons
 
 
