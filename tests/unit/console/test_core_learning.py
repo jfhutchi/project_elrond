@@ -23,7 +23,9 @@ def put(session, name, document):
     )
 
 
-def fixture(database, *, fitted=False, reason="VALIDATION_GATE_FAILED", attempt=True):
+def fixture(
+    database, *, fitted=False, reason="VALIDATION_GATE_FAILED", attempt=True, acknowledgement_at=NOW
+):
     from quantbot.learner.estimators import FittedEstimator
     from quantbot.learner.five_minute import FEATURE_NAMES
 
@@ -82,7 +84,7 @@ def fixture(database, *, fitted=False, reason="VALIDATION_GATE_FAILED", attempt=
     reuse = receipt.model_copy(
         update={
             "run_id": "b" * 64,
-            "recorded_at_utc": NOW - timedelta(minutes=1),
+            "recorded_at_utc": acknowledgement_at - timedelta(minutes=1),
             "parent_model_id": model.id,
             "resulting_model_id": model.id,
             "status": "NO_CHANGE",
@@ -104,7 +106,7 @@ def fixture(database, *, fitted=False, reason="VALIDATION_GATE_FAILED", attempt=
         model_digest=model.id,
         receipt_id=reuse.id,
         authority_id="authority",
-        at=NOW,
+        at=acknowledgement_at,
         action="ACKNOWLEDGE",
         reason=reuse.reason,
         learning_run_id=reuse.run_id,
@@ -200,6 +202,65 @@ def test_fitted_model_and_empty_attempt(tmp_path):
         panel = read(database)
     assert panel.available and panel.model_status == "PREDICT · fitted model"
     assert panel.attempt_verdict == "No evaluated attempt recorded"
+
+
+def test_newer_rejected_attempt_is_separate_from_active_model_receipt(tmp_path, monkeypatch):
+    monkeypatch.setenv("EXPECTED_ACCOUNT_ID", "private-account")
+    with Database.create(tmp_path / "test.db") as database:
+        fixture(database, acknowledgement_at=NOW - timedelta(minutes=3))
+        core_role_fixture(database, NOW)
+        panel = read(database)
+        page = TestClient(create_app(database)).get("/").text
+    assert panel.available
+    assert panel.consideration_at == NOW - timedelta(minutes=4)
+    assert panel.consideration_reason == "SESSION_BUDGET_OR_INPUT_REUSED"
+    assert panel.attempt_at == NOW - timedelta(minutes=2)
+    assert panel.attempt_verdict == "CANDIDATE_REJECTED"
+    assert "Active model learning receipt: 2026-11-05 13:56:00 UTC" in page
+    assert "Attempt recorded 2026-11-05 13:58:00 UTC" in page
+    assert "Last consideration" not in page
+
+
+def test_initialization_has_no_learning_receipt(tmp_path, monkeypatch):
+    monkeypatch.setenv("EXPECTED_ACCOUNT_ID", "private-account")
+    model = ModelArtifact()
+    activation = Activation(
+        config_id="config",
+        evidence_lane="BROKER_PAPER",
+        generation=1,
+        previous_activation_id=None,
+        previous_model_id=None,
+        model_id=model.id,
+        model_digest=model.id,
+        receipt_id=None,
+        authority_id=None,
+        at=NOW,
+        action="INITIALIZE",
+        reason="private-token initialization",
+    )
+    with Database.create(tmp_path / "test.db") as database:
+        core_role_fixture(database, NOW)
+        with database.transaction() as session:
+            put(session, "core_models", model)
+            put(session, "core_activations", activation)
+            session.execute(
+                metadata.tables["core_active_model"]
+                .insert()
+                .values(
+                    id=1,
+                    activation_id=activation.id,
+                    model_id=model.id,
+                    generation=1,
+                    receipt_id=None,
+                )
+            )
+        panel = read(database)
+        page = TestClient(create_app(database)).get("/").text
+    assert panel.available and panel.activation_at == NOW
+    assert panel.consideration_at is None
+    assert panel.consideration_reason is None
+    assert "Active model learning receipt: None recorded (initial selection)." in page
+    assert "private-token" not in page
 
 
 def test_fitted_model_requires_accepted_final_training_receipt(tmp_path):
@@ -368,5 +429,5 @@ def test_api_and_template_withhold_private_reasons_and_keep_roles(tmp_path, monk
     assert "private-token" not in api.text + page.text
     assert "Unrecognized reason; inspect private receipts" in page.text
     assert "Prediction checks do not establish profitable trading." in page.text
-    assert "Latest charged attempt" in page.text and "Last consideration" in page.text
+    assert "Latest charged attempt" in page.text and "Active model learning receipt" in page.text
     assert "Legacy learner records" in page.text

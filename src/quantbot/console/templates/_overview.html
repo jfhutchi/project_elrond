@@ -100,7 +100,7 @@
         {% if learning.available %}
         <p class="n">{{ learning.model_status }} · <code>{{ learning.model_id[:12] }}</code></p>
         <div class="n">Recorded selection: {{ learning.activation_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}.</div>
-        <p class="n">Last consideration: {{ learning.consideration_at.strftime('%Y-%m-%d %H:%M:%S UTC') }} · {{ learning.consideration_reason }}</p>
+        <p class="n">Active model learning receipt: {% if learning.consideration_at %}{{ learning.consideration_at.strftime('%Y-%m-%d %H:%M:%S UTC') }} · {{ learning.consideration_reason }}{% else %}None recorded (initial selection).{% endif %}</p>
         <p class="n">Latest charged attempt: {% if learning.attempt_session %}{{ learning.attempt_session }} · {% endif %}{{ learning.attempt_verdict }}{% if learning.attempt_reason %} · {{ learning.attempt_reason }}{% endif %}</p>
         {% if learning.attempt_at %}<div class="n">Attempt recorded {{ learning.attempt_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}.</div>{% endif %}
         <div class="n">Initial training samples: {{ learning.training_samples if learning.training_samples is not none else 'Unavailable' }} · validation samples: {{ learning.validation_samples if learning.validation_samples is not none else 'Unavailable' }} · validation sessions: {{ learning.validation_sessions if learning.validation_sessions is not none else 'Unavailable' }}.</div>

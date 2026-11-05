@@ -40,6 +40,7 @@ class CoreLearning(BaseModel):
     model_id: str | None = None
     model_status: str = "Evidence unavailable"
     activation_at: datetime | None = None
+    # Receipt associated with the active selection, not a globally latest consideration.
     consideration_at: datetime | None = None
     consideration_reason: str | None = None
     attempt_session: date | None = None
@@ -250,10 +251,8 @@ def read_core_learning(session: Session, *, config_id: str, now: datetime) -> Co
                 else "PREDICT · fixture model"
             ),
             activation_at=activation.at,
-            consideration_at=consideration.recorded_at_utc if consideration else activation.at,
-            consideration_reason=_reason(
-                consideration.reason if consideration else activation.reason
-            ),
+            consideration_at=consideration.recorded_at_utc if consideration else None,
+            consideration_reason=_reason(consideration.reason) if consideration else None,
             attempt_session=attempt_session,
             attempt_at=evaluated.recorded_at_utc if evaluated else None,
             attempt_verdict=evaluated.status if evaluated else "No evaluated attempt recorded",
