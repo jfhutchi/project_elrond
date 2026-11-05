@@ -1,0 +1,360 @@
+"""Read-only PAPER daily fees: observed account charges are not exact per-fill costs.
+
+Run this file directly, or use python -m quantbot.reporting.paper_costs. No broker,
+credentials, database initialization, order interfaces or third-party dependencies.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import sqlite3
+from collections import defaultdict
+from contextlib import closing
+from datetime import UTC, datetime
+from decimal import Decimal
+from pathlib import Path
+from typing import Any
+from zoneinfo import ZoneInfo
+
+NY = ZoneInfo("America/New_York")
+ENDPOINT = "https://paper-api.alpaca.markets"
+
+
+def _time(value: str) -> datetime:
+    moment = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    if moment.tzinfo is None:
+        raise ValueError("AWARE_TIMESTAMP_REQUIRED")
+    return moment
+
+
+def _money(value: Any) -> Decimal:
+    amount = Decimal(str(value))
+    if not amount.is_finite():
+        raise ValueError("FINITE_AMOUNT_REQUIRED")
+    return amount
+
+
+def _digest(document: Any) -> str:
+    encoded = json.dumps(document, sort_keys=True, ensure_ascii=True, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode()).hexdigest()
+
+
+def build_report(
+    *,
+    trips: list[dict[str, Any]],
+    fills: list[dict[str, Any]],
+    documents: list[dict[str, Any]],
+    sessions: list[dict[str, Any]],
+    account_id: str,
+    as_of: datetime,
+) -> dict[str, Any]:
+    """No absence-as-zero, fee allocation guesses, or model-to-actual promotion."""
+    if as_of.tzinfo is None:
+        raise ValueError("AWARE_TIMESTAMP_REQUIRED")
+    by_fill = {f["fill_id"]: f for f in fills}
+    if len(by_fill) != len(fills):
+        raise ValueError("DUPLICATE_OWNED_FILL")
+    by_day: dict[str, list[dict[str, Any]]] = defaultdict(list)
+    for trip in trips:
+        if trip.get("evidence_lane") != "BROKER_PAPER":
+            continue
+        day = _time(trip["source_end"]).astimezone(NY).date().isoformat()
+        by_day[day].append(trip)
+    eligible_docs = []
+    activities: dict[str, dict[str, Any]] = {}
+    sources: dict[str, set[str]] = defaultdict(set)
+    for source in documents:
+        doc = source["document"]
+        if _digest(doc) != source["id"]:
+            raise ValueError("SOURCE_DIGEST_MISMATCH")
+        if doc.get("account_id") != account_id or doc.get("endpoint") != ENDPOINT:
+            continue
+        if _time(doc["until"]) > as_of:
+            continue
+        eligible_docs.append(source)
+        for row in doc["rows"]:
+            identity = row.get("id")
+            if not isinstance(identity, str) or not identity:
+                raise ValueError("ACTIVITY_ID_REQUIRED")
+            if identity in activities and activities[identity] != row:
+                raise ValueError("CONFLICTING_ACTIVITY")
+            activities[identity] = row
+            sources[identity].add(source["id"])
+    calendar = {s["session_date"]: s for s in sessions}
+    capture_until = max((_time(s["document"]["until"]) for s in eligible_docs), default=None)
+    days: list[dict[str, Any]] = []
+    for day, owned in sorted(by_day.items()):
+        session = calendar.get(day)
+        coverage = (
+            []
+            if session is None
+            else [
+                d
+                for d in eligible_docs
+                if _time(d["document"]["after"]) <= _time(session["session_open"])
+                and _time(d["document"]["until"]) >= _time(session["session_close"])
+                and _time(session["session_close"]) <= as_of
+            ]
+        )
+        covered_ids = {d["id"] for d in coverage}
+        owned_ids: set[str] = set()
+        gross = Decimal(0)
+        entry_notional = Decimal(0)
+        exit_notional = Decimal(0)
+        intraday = True
+        per_trade = []
+        for trip in owned:
+            buys = [by_fill[i] for i in trip["entry_fill_ids"]]
+            sells = [by_fill[i] for i in trip["exit_fill_ids"]]
+            selected = buys + sells
+            ids = {f["fill_id"] for f in selected}
+            if owned_ids.intersection(ids):
+                raise ValueError("FILL_REUSED_BY_OWNED_LOTS")
+            owned_ids.update(ids)
+            bought = sum((_money(f["quantity"]) * _money(f["price"]) for f in buys), Decimal(0))
+            sold = sum((_money(f["quantity"]) * _money(f["price"]) for f in sells), Decimal(0))
+            if sold - bought != _money(trip["gross_pnl"]):
+                raise ValueError("GROSS_FILL_MISMATCH")
+            intraday &= all(
+                _time(f["occurred_at"]).astimezone(NY).date().isoformat() == day for f in selected
+            )
+            gross += sold - bought
+            entry_notional += bought
+            exit_notional += sold
+            per_trade.append(
+                dict(
+                    lot_id=trip["lot_id"],
+                    symbol=buys[0]["symbol"],
+                    entry_notional=str(bought),
+                    gross_realized=str(sold - bought),
+                    actual_fees=trip.get("actual_fees"),
+                    native_net=trip.get("net_pnl"),
+                    exact_fee_allocation="UNAVAILABLE"
+                    if trip.get("net_pnl") is None
+                    else "NATIVE_ATTRIBUTED",
+                )
+            )
+        account_fills = {
+            i: row
+            for i, row in activities.items()
+            if row.get("activity_type") == "FILL"
+            and _time(row["transaction_time"]).astimezone(NY).date().isoformat() == day
+        }
+        same = bool(coverage) and intraday and set(account_fills) == owned_ids
+        if same:
+            same = all(
+                row["symbol"] == by_fill[i]["symbol"]
+                and row["side"].upper() == by_fill[i]["side"].upper()
+                and row["order_id"] == by_fill[i]["broker_order_id"]
+                and _money(row["qty"]) == _money(by_fill[i]["quantity"])
+                and _money(row["price"]) == _money(by_fill[i]["price"])
+                for i, row in account_fills.items()
+            )
+        fees = []
+        invalid_fees = []
+        for identity, row in activities.items():
+            if row.get("activity_type") not in {"FEE", "CFEE"} or row.get("date") != day:
+                continue
+            created = row.get("created_at")
+            if not created or row.get("currency") != "USD" or row.get("status") != "executed":
+                invalid_fees.append(identity)
+                continue
+            if _time(created) <= as_of:
+                fees.append(
+                    dict(
+                        id=identity,
+                        cash_flow=str(_money(row["net_amount"])),
+                        component=row.get("activity_sub_type") or row.get("activity_subtype"),
+                        created_at=created,
+                        source_document_ids=sorted(sources[identity]),
+                    )
+                )
+        fee_cash = sum((_money(f["cash_flow"]) for f in fees), Decimal(0)) if fees else None
+        usable = same and not invalid_fees
+        observed_net = gross + fee_cash if usable and fee_cash is not None else None
+        scenario = None
+        prior = next(
+            (
+                d
+                for d in reversed(days)
+                if d["scope_verified"]
+                and d["observed_fee_cash_flow"] is not None
+                and _money(d["observed_fee_cash_flow"]) < 0
+            ),
+            None,
+        )
+        if usable and prior and not any(_money(f["cash_flow"]) > 0 for f in fees):
+            baseline = -_money(prior["observed_fee_cash_flow"])
+            observed_debit = -fee_cash if fee_cash is not None else Decimal(0)
+            remainder = max(Decimal(0), baseline - observed_debit)
+            if remainder:
+                scenario = dict(
+                    kind="EMPIRICAL_PRIOR_SESSION_FEE_SCENARIO",
+                    reference_session=prior["session_date"],
+                    reference_fee_activity_ids=[f["id"] for f in prior["fee_activities"]],
+                    assumed_daily_fee=str(baseline),
+                    modeled_additional_fee=str(remainder),
+                    modeled_net=str(gross - observed_debit - remainder),
+                    actual_cost_authority=False,
+                    learning_label_authority=False,
+                )
+        days.append(
+            dict(
+                session_date=day,
+                round_trips=len(owned),
+                gross_realized=str(gross),
+                entry_notional=str(entry_notional),
+                exit_notional=str(exit_notional),
+                opening_equity=session.get("equity") if session else None,
+                scope_verified=usable,
+                scope_reason="EXACT_ACCOUNT_FILL_MATCH_FULL_SESSION"
+                if usable
+                else "INCOMPLETE_OR_MISMATCHED_ACTIVITY_SCOPE",
+                source_document_ids=sorted(covered_ids),
+                activity_capture_until=capture_until.isoformat() if capture_until else None,
+                activity_capture_lag_seconds=(as_of - capture_until).total_seconds()
+                if capture_until
+                else None,
+                fee_status="POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION"
+                if fees
+                else "NO_FEE_ACTIVITY_OBSERVED_BY_CAPTURE",
+                observed_fee_cash_flow=str(fee_cash) if fee_cash is not None else None,
+                net_after_observed_fees=str(observed_net) if observed_net is not None else None,
+                all_in_verified_net=None,
+                fee_activities=fees,
+                invalid_fee_activity_ids=invalid_fees,
+                fee_scenario=scenario,
+                trades=per_trade,
+            )
+        )
+    return dict(
+        contract="PAPER_DAILY_OBSERVED_FEES_V1",
+        as_of=as_of.isoformat(),
+        account_hash=hashlib.sha256(account_id.encode()).hexdigest(),
+        days=days,
+        limitations=[
+            "Daily fees do not establish exact fill-level allocation or fee finality; "
+            "unknown costs remain unknown.",
+            "Fee scenarios reuse the latest earlier session's observed debit once per day "
+            "and are not verified actual costs or live fee forecasts.",
+            "Gross uses execution prices; no additional spread or fill slippage is deducted. "
+            "Unsimulated latency, impact and other unobserved costs remain excluded.",
+            "Execution-price arithmetic can differ from cent-rounded account cash. "
+            "This report does not replace account reconciliation or claim account net return.",
+        ],
+        production_database_writes=0,
+        provider_calls=0,
+    )
+
+
+def read_report(path: Path, *, as_of: datetime) -> dict[str, Any]:
+    """Read an existing core store without constructing Database or modifying a ledger."""
+    path = path.resolve()
+    with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=2)) as c:
+        c.row_factory = sqlite3.Row
+        c.execute("PRAGMA query_only=ON")
+        c.execute("BEGIN")
+        identities = c.execute("SELECT payload FROM core_identities").fetchall()
+        if len(identities) != 1:
+            raise ValueError("EXACT_PAPER_IDENTITY_REQUIRED")
+        identity = json.loads(identities[0][0])
+        if identity["evidence_lane"] != "BROKER_PAPER":
+            raise ValueError("PAPER_ONLY_REPORT")
+        trips = [
+            json.loads(r[0]) for r in c.execute("SELECT payload FROM core_round_trips").fetchall()
+        ]
+        ids = sorted({i for t in trips for i in (*t["entry_fill_ids"], *t["exit_fill_ids"])})
+        fills: list[dict[str, Any]] = []
+        for start in range(0, len(ids), 400):
+            chunk = ids[start : start + 400]
+            fills.extend(
+                dict(r)
+                for r in c.execute(
+                    "SELECT * FROM fills WHERE fill_id IN (" + ",".join("?" for _ in chunk) + ")",
+                    chunk,
+                ).fetchall()
+            )
+        external = [
+            json.loads(r[0])
+            for r in c.execute("SELECT payload FROM core_external_owner_events").fetchall()
+        ]
+        documents = {
+            e["source_document"]
+            for e in external
+            if e.get("activity_type") in {"FEE", "CFEE"} and e.get("source_document")
+        }
+        documents.update(
+            r[0] for r in c.execute("SELECT document_id FROM core_provider_progress").fetchall()
+        )
+        sources = []
+        for doc_id in sorted(documents):
+            row = c.execute(
+                "SELECT payload FROM core_provider_acquisitions WHERE id=?", (doc_id,)
+            ).fetchone()
+            if row is None:
+                raise ValueError("FEE_SOURCE_DOCUMENT_UNAVAILABLE")
+            sources.append(dict(id=doc_id, document=json.loads(row[0])))
+        sessions = []
+        for row in c.execute(
+            "SELECT d.id,d.payload FROM core_session_opening_index i "
+            "JOIN core_session_openings d ON d.id=i.document_id"
+        ).fetchall():
+            opening = json.loads(row[1])
+            if _digest(opening) != row[0]:
+                raise ValueError("SESSION_SOURCE_DIGEST_MISMATCH")
+            timing = c.execute(
+                "SELECT payload FROM core_time_evidence WHERE id=?", (opening["time_evidence_id"],)
+            ).fetchone()
+            if timing:
+                doc = json.loads(timing[0])
+                if _digest(doc) != opening["time_evidence_id"]:
+                    raise ValueError("CLOCK_SOURCE_DIGEST_MISMATCH")
+                samples = doc.get("samples", [])
+                if len(samples) == 2 and not doc.get("objections"):
+                    provider = samples[-1]["provider"]
+                    if (
+                        opening.get("account_id") == identity["account_id"]
+                        and _time(samples[0]["provider"]["timestamp"])
+                        < _time(provider["timestamp"])
+                        and _time(provider["session_close"]) > _time(opening["session_open"])
+                        and all(
+                            s["provider"].get("provider") == "alpaca"
+                            and s["provider"]["account_id"] == identity["account_id"]
+                            and s["provider"]["session_id"] == opening["session_date"]
+                            and _time(s["provider"]["session_open"])
+                            == _time(opening["session_open"])
+                            and _time(s["provider"]["session_close"])
+                            == _time(provider["session_close"])
+                            for s in samples
+                        )
+                    ):
+                        sessions.append(dict(opening, session_close=provider["session_close"]))
+    return build_report(
+        trips=trips,
+        fills=fills,
+        documents=sources,
+        sessions=sessions,
+        account_id=identity["account_id"],
+        as_of=as_of,
+    )
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--database", type=Path, required=True)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    report = read_report(args.database, as_of=datetime.now(UTC))
+    encoded = json.dumps(report, indent=2)
+    if args.output:
+        if args.output.resolve() == args.database.resolve():
+            raise ValueError("OUTPUT_ALIASES_DATABASE")
+        with args.output.open("x", encoding="utf-8") as output:
+            output.write(encoded)
+    print(encoded)
+
+
+if __name__ == "__main__":
+    main()

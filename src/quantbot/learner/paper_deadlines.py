@@ -8,6 +8,7 @@ coordinator's risk-reducing exit authority. It complements position protection.
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
@@ -16,6 +17,7 @@ from typing import Self
 
 from pydantic import Field, model_validator
 from sqlalchemy import select
+from sqlalchemy.exc import OperationalError
 
 from quantbot.brokers import BrokerAdapter
 from quantbot.domain import (
@@ -420,6 +422,19 @@ class PaperDeadlineSupervisor:
                 # Another legitimate cycle owns the same writer lock. Never bypass
                 # it or issue a fictional heartbeat; try again at the next poll.
                 pass
+            except OperationalError as error:
+                code = getattr(error.orig, "sqlite_errorcode", None)
+                if (
+                    not isinstance(error.orig, sqlite3.Error)
+                    or not isinstance(code, int)
+                    or code & 255 not in (sqlite3.SQLITE_BUSY, sqlite3.SQLITE_LOCKED)
+                ):
+                    raise
+                # The failed transaction has rolled back. Do not publish a healthy
+                # receipt or replay a POST here: the next normal poll reconstructs
+                # durable order/fill state and rechecks all original exit guards.
+                # Never print SQL, parameters, or arbitrary exception messages.
+                print(f"PAPER_DEADLINE_SQLITE_RETRY sqlite_code={code}", flush=True)
             try:
                 await asyncio.wait_for(stop.wait(), timeout=interval_seconds)
             except TimeoutError:

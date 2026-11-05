@@ -1,0 +1,152 @@
+{
+  "scope": "Exact active dashboard delta and deadline retry implementation/tests; no operating data/config/secrets copied, no older shared storage copied over newer core baseline.",
+  "files": [
+    {
+      "path": "src/quantbot/reporting/paper_costs.py",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\reporting\\paper_costs.py",
+      "source_sha256": "4bd2bed214ebb7dc6f7172ec770e663d13d7301de94d86dfd408ad98cde4c750",
+      "previous_sha256": null,
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/_paper_costs.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\_paper_costs.html",
+      "source_sha256": "f219f2559762d02ca586c14f3bf460b4fed106d65f6ba080c8ede8f72c4277df",
+      "previous_sha256": null,
+      "changed": true
+    },
+    {
+      "path": "tests/unit/reporting/test_paper_costs.py",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\tests\\unit\\reporting\\test_paper_costs.py",
+      "source_sha256": "ff9656266e30fe14ad9e260ef2ab8bb31d6d6668a985e1373efcd2f6bb166c43",
+      "previous_sha256": null,
+      "changed": true
+    },
+    {
+      "path": "tests/unit/console/test_paper_cost_integration.py",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\tests\\unit\\console\\test_paper_cost_integration.py",
+      "source_sha256": "d0fe86bcf30c2f3e3731e4a2444444746810c90d983e657bfa93a807f6a7075b",
+      "previous_sha256": null,
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/app.py",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\app.py",
+      "source_sha256": "2ce1733ee30f72648b42454ee7dcf0a1e095b65d98fd6f2353d5c27de1322fea",
+      "previous_sha256": "aa61024e017e41d5fd23647579d140e7713a5e66bc69aaca51489ba8a1f82986",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/calendar.py",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\calendar.py",
+      "source_sha256": "fe7a31a1a24cd0ddb75a93273bb4578144a5f5546e0ffe55eb8692338a7fcbdc",
+      "previous_sha256": "e883f9108c52b213956f3819ecfac2799a81bdad4edd107654e3e12f03764ec0",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/performance_reader.py",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\performance_reader.py",
+      "source_sha256": "c3d773238d551184a954b065a5e19c3787b40bbe3673a00f009c580acb4671a4",
+      "previous_sha256": "548be8366ba7cdc6a15d065137192635929c46b701524b1ac1a834ea11816fa6",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/state.py",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\state.py",
+      "source_sha256": "fbaee171150a6245fd59842e56abfa02ade20dc192da0728f0dc7df02604c7be",
+      "previous_sha256": "ca1cbacd8551139d0a648fde66fefd8e644e970139b3479b268e3a6291a995ea",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/_overview.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\_overview.html",
+      "source_sha256": "3a337cc8fca81c6af0c483cc73215e3fd958dd46c53b1a2feb8435f24baa53b9",
+      "previous_sha256": "1a766aa1a9251589e87a29cf5ba615daa149be11af3a3f0eee5a6063b8aad8a8",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/_performance_styles.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\_performance_styles.html",
+      "source_sha256": "93ac2a4b34fb904097d0b5438e11ac9557d5aa3185cd9874ecc26691dc411aee",
+      "previous_sha256": "0f7a10cf0f78804aa895f1c09c93cadec33022d9835861c109d29b10ce49a914",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/base.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\base.html",
+      "source_sha256": "4fecda2dfcbe9a1e2bea3c51cfb0ece94a319f6094182ec331118ad8f6f677b9",
+      "previous_sha256": "6f293fecbed0554dfa449524c2e9dac8f7fbe11afa92a714fc53c5318dac683c",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/calendar.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\calendar.html",
+      "source_sha256": "a1b9b843333abbf0e278406ddf5e8d35c9b2b382f8070537f12208c7be582b07",
+      "previous_sha256": "8ec40eae79162a48be35ddce020a7372e2c9c3e305b76fd222c9b84818c5a50b",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/history.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\history.html",
+      "source_sha256": "c928daf98af00360ed5ba7a9e3c799566564ef8118e02a82582dadc776cb379b",
+      "previous_sha256": "bd055312d279f7539d331c2d3df7e9467e835528c4d2cd9b13ef54f754f21770",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/learner.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\learner.html",
+      "source_sha256": "591f96e065145313ab75401250e50d2f6c59a7f73b86cd7e3b322da82ad837c8",
+      "previous_sha256": "9cc6fef8f876e5b05965ef4e9a47f660320f69d2b1a7f297f1bf9658e7dddb24",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/operations.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\operations.html",
+      "source_sha256": "dad25daa813965b93a7704cc8ea877ed644b157e498ed59d4cf094e06a27e2c8",
+      "previous_sha256": "5ca0ea3ecdc5928e9a53e658c43d6029d9af57ba8457d9d4e2b9e08eb39ef533",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/console/templates/reports.html",
+      "source": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\src\\quantbot\\console\\templates\\reports.html",
+      "source_sha256": "644e82c5872eb99636d7a0ee04c6879863b939da114f94944efb4491bf5b22f6",
+      "previous_sha256": "66e0092f1d6fd91cb8f45d3847ef6ed1afd1645a3a1c840223c7a6a4cdaee377",
+      "changed": true
+    },
+    {
+      "path": "src/quantbot/learner/paper_deadlines.py",
+      "source": "D:\\Elrond\\releases\\deadline-retry-20261103\\src\\quantbot\\learner\\paper_deadlines.py",
+      "source_sha256": "674d030abf626dc1938ba18d77fa855b9eeac9e45318633bb7945011ce0dddc9",
+      "previous_sha256": "ea9a92072d16ac9a1e3111ffd2e38fceb1105045d73f21e51afba82654b187bc",
+      "changed": true
+    },
+    {
+      "path": "tests/fault/test_deadline_presend_refusal.py",
+      "source": "D:\\Elrond\\releases\\deadline-retry-20261103\\tests\\fault\\test_deadline_presend_refusal.py",
+      "source_sha256": "a65613f7b9b7e6d43a9d28915bb0f0f9e9c1f4c77d48d8ae176f9161ccc33368",
+      "previous_sha256": "a65613f7b9b7e6d43a9d28915bb0f0f9e9c1f4c77d48d8ae176f9161ccc33368",
+      "changed": false
+    },
+    {
+      "path": "tests/unit/learner/test_deadline_publication_retry.py",
+      "source": "D:\\Elrond\\releases\\deadline-retry-20261103\\tests\\unit\\learner\\test_deadline_publication_retry.py",
+      "source_sha256": "18cbdf3e8dcba7dddbfe7af9614b44405d7db5d5b677502e81bc8551c2c201db",
+      "previous_sha256": null,
+      "changed": true
+    },
+    {
+      "path": "tests/unit/learner/test_deadline_fill_sync.py",
+      "source": "D:\\Elrond\\releases\\deadline-retry-20261103\\tests\\unit\\learner\\test_deadline_fill_sync.py",
+      "source_sha256": "d4717231511e2f9bd30ea02ca358989ae64e985d523529e34766658d178685be",
+      "previous_sha256": "d4717231511e2f9bd30ea02ca358989ae64e985d523529e34766658d178685be",
+      "changed": false
+    },
+    {
+      "path": "tests/unit/learner/test_paper_deadlines.py",
+      "source": "D:\\Elrond\\releases\\deadline-retry-20261103\\tests\\unit\\learner\\test_paper_deadlines.py",
+      "source_sha256": "c93a9aecd69c51242f3213f0c1cc2bb8c7ade2465bae664aef9bac24a766f16d",
+      "previous_sha256": "c93a9aecd69c51242f3213f0c1cc2bb8c7ade2465bae664aef9bac24a766f16d",
+      "changed": false
+    }
+  ]
+}

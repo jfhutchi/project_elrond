@@ -1,16 +1,5 @@
 {% extends "base.html" %}
 {% set title = "P&L calendar" %}
-{% block page_styles %}
-<style>
-  :root {
-    --bg: var(--performance-canvas); --panel: var(--performance-card);
-    --panel-2: var(--performance-flat); --ink: var(--performance-text);
-    --ink-dim: var(--performance-secondary); --ink-faint: var(--performance-secondary);
-    --accent: var(--performance-lime);
-  }
-  body { font-family: var(--performance-ui); }
-</style>
-{% endblock %}
 {% block body %}
 <h1>P&L calendar</h1>
 <p class="sub">Recorded daily net P&L. Finalized observations only; cumulative totals include all observed months.</p>
@@ -31,10 +20,21 @@
 <div>{{ cell.day }}</div>
 {% if cell.amount %}<div class="amount performance-{{ cell.tone }}">{{ cell.amount }}</div>{% endif %}
 <div class="day-status">{% if cell.status == 'FINAL' and cell.tone == 'neutral' %}Flat{% else %}{{ cell.status.capitalize() }}{% endif %}</div>
-{% if cell.reason %}<div class="day-status">{{ cell.reason }}</div>{% endif %}
+{% if cell.paper_costs %}
+<details class="day-note"><summary>Executed PAPER cost details</summary>
+<div class="day-status">Gross realized: ${{ cell.paper_costs.gross_realized }}</div>
+<div class="day-status">Observed fee cash flow: {{ '$' ~ cell.paper_costs.observed_fee_cash_flow if cell.paper_costs.observed_fee_cash_flow is not none else 'Not observed' }}</div>
+<div class="day-status">Net after observed fees: {{ '$' ~ cell.paper_costs.net_after_observed_fees if cell.paper_costs.net_after_observed_fees is not none else 'Unknown' }}</div>
+{% if cell.paper_costs.fee_scenario %}<div class="day-status">Modeled fee scenario (not verified): ${{ cell.paper_costs.fee_scenario.modeled_net }}</div>{% endif %}
+<div class="day-status">Provisional; final all-in net unknown. Excluded from finalized calendar totals. {{ 'Matched full-session account fills.' if cell.paper_costs.scope_verified else 'Incomplete or mismatched source scope.' }}</div>
+<div class="day-status">Activity capture: {{ cell.paper_costs.activity_capture_until or 'unavailable' }}</div>
+</details>
+{% endif %}
+{% if cell.reason %}<details class="day-note"><summary>Details</summary><div class="day-status">{{ cell.reason }}</div></details>{% endif %}
 </div>
 {% endif %}</td>{% endfor %}</tr>{% endfor %}</tbody>
 </table></div>
 <aside aria-label="Cumulative performance">{% include "_performance_summary.html" %}</aside>
 </div>
+{% include "_paper_costs.html" %}
 {% endblock %}

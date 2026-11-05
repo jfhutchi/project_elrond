@@ -39,9 +39,10 @@ import json
 import re
 import sqlite3
 from collections.abc import Awaitable, Callable, Mapping
+from dataclasses import replace
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from urllib.parse import parse_qsl
 
 from fastapi import FastAPI, HTTPException, Request
@@ -64,7 +65,7 @@ from quantbot.console.experiments import ExperimentPanel, read_experiment_panel
 from quantbot.console.glossary import GLOSSARY, anchor, terms_in
 from quantbot.console.learner import LearnerPanel, read_learner_panel, read_monitor_panel
 from quantbot.console.market_status import MarketStatus, MarketStatusCache
-from quantbot.console.performance_reader import exchange_today
+from quantbot.console.performance_reader import exchange_today, read_paper_costs
 from quantbot.console.state import (
     ConsoleState,
     ReportsPanel,
@@ -168,7 +169,7 @@ def create_app(
             await market_cache.refresh()
         return await call_next(request)
 
-    def snapshot(history_range: str = 'ALL') -> ConsoleState:
+    def snapshot(history_range: str = "ALL") -> ConsoleState:
         with database.transaction() as session:
             state = read_console_state(
                 session,
@@ -177,11 +178,15 @@ def create_app(
                 reports=reports,
                 market=market_cache.current(),
             )
-        panel = read_learner_panel(learner_directory,history_range=history_range).model_copy(
-            update={'monitor': read_monitor_panel(learner_directory)})
-        return state.model_copy(update={"learner": panel})
+        panel = read_learner_panel(learner_directory, history_range=history_range).model_copy(
+            update={"monitor": read_monitor_panel(learner_directory)}
+        )
+        costs = read_paper_costs(database.path, now=datetime.now(UTC))
+        return state.model_copy(update={"learner": panel, "paper_costs": costs})
 
-    def performance_panel(month: str | None = None) -> CalendarPanel:
+    def performance_panel(
+        month: str | None = None, costs: dict[str, Any] | None = None
+    ) -> CalendarPanel:
         if month is None:
             current = exchange_today()
         else:
@@ -198,7 +203,17 @@ def create_app(
                 available=False, reason="No authoritative daily performance reader configured"
             )
         )
-        return build_calendar(current.year, current.month, data)
+        panel = build_calendar(current.year, current.month, data)
+        if costs is None:
+            costs = read_paper_costs(database.path, now=datetime.now(UTC))
+        days = {day["session_date"]: day for day in costs.get("days", [])}
+        return replace(
+            panel,
+            weeks=tuple(
+                tuple(replace(cell, paper_costs=days.get(cell.session_date)) for cell in week)
+                for week in panel.weeks
+            ),
+        )
 
     def page_with_notice(request: Request, notice: str) -> HTMLResponse:
         """Operations, with something the operator has to read.
@@ -222,9 +237,11 @@ def create_app(
         )
 
     def page(request: Request, template: str, active: str) -> HTMLResponse:
-        selected=request.query_params.get('history_range','ALL') if active=='/learner' else 'ALL'
-        if selected!='ALL' and re.fullmatch(r'20[0-9]{2}-(0[1-9]|1[0-2])',selected) is None:
-            raise HTTPException(status_code=422,detail='Invalid historical range')
+        selected = (
+            request.query_params.get("history_range", "ALL") if active == "/learner" else "ALL"
+        )
+        if selected != "ALL" and re.fullmatch(r"20[0-9]{2}-(0[1-9]|1[0-2])", selected) is None:
+            raise HTTPException(status_code=422, detail="Invalid historical range")
         state = snapshot(selected)
         return TEMPLATES.TemplateResponse(
             request=request,
@@ -259,9 +276,14 @@ def create_app(
             if supplied.available:
                 for row in supplied.rows:
                     if row.status in ("FINAL", "PENDING", "MISSING", "INVALID"):
-                        days.append(DailyPerformance(
-                            row.session_date, cast(DayStatus, row.status), row.net_pnl, row.reason
-                        ))
+                        days.append(
+                            DailyPerformance(
+                                row.session_date,
+                                cast(DayStatus, row.status),
+                                row.net_pnl,
+                                row.reason,
+                            )
+                        )
         return read_experiment_panel(
             experiment_store, experiment_id=experiment_id, now=datetime.now(UTC), account_days=days
         )
@@ -269,8 +291,9 @@ def create_app(
     def require_experiment(experiment_id: str) -> ExperimentPanel:
         panel = experiment_panel(experiment_id)
         if not panel.available:
-            raise HTTPException(404 if panel.reason == "EXPERIMENT_NOT_FOUND" else 503,
-                                detail=panel.reason)
+            raise HTTPException(
+                404 if panel.reason == "EXPERIMENT_NOT_FOUND" else 503, detail=panel.reason
+            )
         return panel
 
     @app.get("/api/experiments")
@@ -284,9 +307,15 @@ def create_app(
     def experiment_page(request: Request, panel: ExperimentPanel, template: str) -> HTMLResponse:
         state = snapshot()
         return TEMPLATES.TemplateResponse(
-            request=request, name=template,
-            context={"state": state, "navigation": NAVIGATION, "active": "/experiments",
-                     "attention": state.attention, "experiments": panel},
+            request=request,
+            name=template,
+            context={
+                "state": state,
+                "navigation": NAVIGATION,
+                "active": "/experiments",
+                "attention": state.attention,
+                "experiments": panel,
+            },
         )
 
     @app.get("/experiments", response_class=HTMLResponse)
@@ -308,7 +337,7 @@ def create_app(
                 "navigation": NAVIGATION,
                 "active": "/calendar",
                 "attention": state.attention,
-                "performance": performance_panel(month),
+                "performance": performance_panel(month, state.paper_costs),
                 "experiments": experiment_panel() if experiment_store is not None else None,
             },
         )
@@ -326,31 +355,38 @@ def create_app(
         return page(request, "learner.html", "/learner")
 
     @app.get("/api/learner")
-    def api_learner(history_range: str = 'ALL') -> LearnerPanel:
-        return read_learner_panel(learner_directory,history_range=history_range).model_copy(
-            update={'monitor': read_monitor_panel(learner_directory)})
+    def api_learner(history_range: str = "ALL") -> LearnerPanel:
+        return read_learner_panel(learner_directory, history_range=history_range).model_copy(
+            update={"monitor": read_monitor_panel(learner_directory)}
+        )
 
-    @app.post('/learner/alerts/{source}/{code}/acknowledge')
+    @app.post("/learner/alerts/{source}/{code}/acknowledge")
     def acknowledge_alert(request: Request, source: str, code: str) -> RedirectResponse:
         # Acknowledgement changes only the dedicated alert store. Require a local,
         # same-origin browser request; never let an external page silently acknowledge it.
-        if (request.client is None or request.client.host not in ('127.0.0.1', '::1')
-                or request.url.hostname not in ('127.0.0.1', 'localhost', '::1')
-                or request.headers.get('origin') != str(request.base_url).rstrip('/')):
-            raise HTTPException(403, 'Local same-origin acknowledgement required')
-        if (learner_directory is None or source not in ('learner', 'monitor')
-                or re.fullmatch(r'[A-Z][A-Z0-9_]{0,79}', code) is None):
-            raise HTTPException(404, 'Alert store or code unavailable')
-        folder = 'state' if source == 'learner' else 'monitor'
-        path = learner_directory / folder / 'alerts.db'
+        if (
+            request.client is None
+            or request.client.host not in ("127.0.0.1", "::1")
+            or request.url.hostname not in ("127.0.0.1", "localhost", "::1")
+            or request.headers.get("origin") != str(request.base_url).rstrip("/")
+        ):
+            raise HTTPException(403, "Local same-origin acknowledgement required")
+        if (
+            learner_directory is None
+            or source not in ("learner", "monitor")
+            or re.fullmatch(r"[A-Z][A-Z0-9_]{0,79}", code) is None
+        ):
+            raise HTTPException(404, "Alert store or code unavailable")
+        folder = "state" if source == "learner" else "monitor"
+        path = learner_directory / folder / "alerts.db"
         if not path.is_file():
-            raise HTTPException(404, 'Existing alert store required')
+            raise HTTPException(404, "Existing alert store required")
         try:
             with AlertStore(path) as store:
                 store.acknowledge(code, now=datetime.now(UTC))
         except (OSError, ValueError, sqlite3.Error) as error:
-            raise HTTPException(409, 'Active alert could not be acknowledged') from error
-        return RedirectResponse('/learner?alert_acknowledged=1', status_code=303)
+            raise HTTPException(409, "Active alert could not be acknowledged") from error
+        return RedirectResponse("/learner?alert_acknowledged=1", status_code=303)
 
     @app.get("/market-data", response_class=HTMLResponse)
     def market_data(request: Request) -> HTMLResponse:

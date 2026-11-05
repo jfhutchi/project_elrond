@@ -11,13 +11,28 @@ from dataclasses import fields
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
 from pydantic import AwareDatetime, BaseModel, ConfigDict, TypeAdapter
 
 from quantbot.console.calendar import PerformanceData
 from quantbot.operations.daily_performance import CloseEvidence, DailyPerformance, evaluate_day
+from quantbot.reporting.paper_costs import read_report as read_paper_cost_report
+
+
+def read_paper_costs(path: Path, *, now: datetime) -> dict[str, Any]:
+    """Fresh observational accounting; failures never become gross-as-net or block controls."""
+    try:
+        report = read_paper_cost_report(path, as_of=now)
+        return dict(available=True, **{k: v for k, v in report.items() if k != "account_hash"})
+    except Exception:
+        # The cost reader is not a control authority. Do not leak paths/account IDs,
+        # retain an old snapshot as current, or prevent the operator pausing entries.
+        return dict(
+            available=False, reason="Retained cost evidence unavailable or invalid.", days=[]
+        )
+
 
 REASONS = {
     "BASELINE_MISSING": "Previous close baseline unavailable.",

@@ -35,6 +35,8 @@
   </div>
 </section>
 
+{% include "_paper_costs.html" %}
+
 {% if attention %}
 <details class="attention-panel" aria-label="Needs attention" open><summary>{{ attention|length }} checks require attention</summary>
   <ul class="attention">{% for item in attention %}<li>{{ item }}</li>{% endfor %}</ul>

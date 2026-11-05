@@ -8,7 +8,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
-from typing import Protocol
+from typing import Any, Protocol
 
 
 class PerformanceRow(Protocol):
@@ -52,6 +52,7 @@ class CalendarCell:
     amount: str | None = None
     tone: str = "neutral"
     reason: str | None = None
+    paper_costs: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)

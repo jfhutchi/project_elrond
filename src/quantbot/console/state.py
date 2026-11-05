@@ -25,7 +25,7 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
 from pydantic import BaseModel, ConfigDict, StringConstraints
 from sqlalchemy import func, select
@@ -372,6 +372,7 @@ class ResearchRuntimePanel(FrozenModel):
 
 
 class ConsoleState(FrozenModel):
+    paper_costs: dict[str, Any] | None = None
     overview: OverviewPanel = OverviewPanel()
     """Everything the read-only console renders, assembled in one pass."""
 

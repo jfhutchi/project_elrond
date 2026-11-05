@@ -7,113 +7,12 @@
   means "not measured" is styled as absence, never as a neutral or passing value.
 #}
 <!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="stone">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{{ title|default("Elrond") }} — Elrond console</title>
-<style>
-  :root {
-    --bg: #0E171B; --panel: #152329; --panel-2: #243239; --line: #2a423d;
-    --ink: #EDF4F1; --ink-dim: #A0B2AE; --ink-faint: #90a39d;
-    --accent: #C2EF8D; --ok: #90E4AF; --warn: #e5c57e; --crit: #FFA298;
-    --absent: #7d8590;
-    --radius: 8px; --gap: 1rem;
-    --mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", "SF Mono", Menlo, monospace;
-  }
-  * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
-  }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-
-  /* Danger strip. Always first in the document, never collapsible, never scrolled past. */
-  .strip {
-    display: flex; gap: .75rem; align-items: center; flex-wrap: wrap;
-    padding: .6rem 1.25rem; font-size: .85rem; border-bottom: 1px solid var(--line);
-    background: var(--panel-2);
-  }
-  .strip .tag { font-weight: 600; letter-spacing: .02em; }
-  .strip--danger { background: #3d1418; border-bottom-color: var(--crit); }
-
-  .shell { display: grid; grid-template-columns: 210px 1fr; min-height: calc(100vh - 44px); }
-  nav { border-right: 1px solid var(--line); padding: 1.25rem 0; background: var(--panel); }
-  nav .brand {
-    padding: 0 1.25rem 1rem; font-weight: 650; letter-spacing: .04em; color: var(--ink-dim);
-    font-size: .78rem; text-transform: uppercase;
-  }
-  nav a {
-    display: block; padding: .5rem 1.25rem; color: var(--ink-dim); border-left: 2px solid transparent;
-  }
-  nav a:hover { color: var(--ink); background: var(--panel-2); text-decoration: none; }
-  nav a.on { color: var(--ink); border-left-color: var(--accent); background: var(--panel-2); }
-
-  main { padding: 1.5rem 1.75rem 4rem; max-width: 1180px; min-width: 0; }
-  code, h1 { overflow-wrap: anywhere; }
-  h1 { font-size: 1.35rem; margin: 0 0 .35rem; }
-  h2 { font-size: .95rem; margin: 2rem 0 .75rem; color: var(--ink-dim); font-weight: 600; }
-  .sub { color: var(--ink-faint); font-size: .85rem; margin: 0 0 1.5rem; }
-
-  .grid { display: grid; gap: var(--gap); grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
-  .card {
-    background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
-    padding: 1rem 1.1rem;
-  }
-  .card .k { color: var(--ink-faint); font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; }
-  .card .v { font-size: 1.45rem; margin-top: .35rem; font-variant-numeric: tabular-nums; }
-  .card .n { color: var(--ink-faint); font-size: .78rem; margin-top: .3rem; }
-
-  /* Absence is styled as absence. A dash in the value slot must never read as a zero. */
-  .absent { color: var(--absent); font-style: italic; }
-  /* Native disclosure rather than a scripted tooltip: keyboard reachable, screen-reader
-     announced, and it works with JavaScript disabled -- which a control surface should. */
-  details.hint { display: inline-block; margin-top: .25rem; }
-  details.hint > summary {
-    cursor: pointer; color: var(--ink-faint); font-size: .95rem;
-    list-style: none; display: inline-block; padding: 0 .15rem;
-  }
-  details.hint > summary::-webkit-details-marker { display: none; }
-  details.hint > summary:hover, details.hint > summary:focus { color: var(--accent); }
-  details.hint > p {
-    margin: .4rem 0 0; max-width: 34rem; color: var(--ink-faint);
-    font-size: .78rem; line-height: 1.45;
-  }
-
-  table { width: 100%; border-collapse: collapse; font-size: .87rem; }
-  .scroll { overflow-x: auto; }
-  th, td { text-align: left; padding: .5rem .7rem; border-bottom: 1px solid var(--line); }
-  th { color: var(--ink-faint); font-weight: 600; font-size: .74rem; text-transform: uppercase; letter-spacing: .04em; }
-  td.mono, .mono { font-family: var(--mono); font-size: .82rem; }
-
-  .pill {
-    display: inline-block; padding: .12rem .5rem; border-radius: 999px;
-    font-size: .72rem; font-weight: 600; letter-spacing: .03em;
-  }
-  .pill--ok { background: #10331b; color: var(--ok); }
-  .pill--warn { background: #3a2d0c; color: var(--warn); }
-  .pill--crit { background: #3d1418; color: var(--crit); }
-  .pill--absent { background: #22272e; color: var(--absent); }
-
-  .attention { list-style: none; padding: 0; margin: 0 0 1.5rem; }
-  .attention li {
-    background: var(--panel); border: 1px solid var(--line); border-left: 3px solid var(--warn);
-    border-radius: var(--radius); padding: .65rem .9rem; margin-bottom: .5rem; font-size: .88rem;
-  }
-  .quiet { color: var(--ink-faint); font-size: .85rem; }
-  footer { margin-top: 3rem; color: var(--ink-faint); font-size: .78rem; }
-  @media (max-width: 720px) {
-    .shell { grid-template-columns: minmax(0, 1fr); }
-    nav { display: flex; overflow-x: auto; align-items: center; padding: .35rem 0;
-          border-right: 0; border-bottom: 1px solid var(--line); }
-    nav .brand { flex: 0 0 auto; padding: .5rem 1rem; }
-    nav a { flex: 0 0 auto; border-left: 0; border-bottom: 2px solid transparent; }
-    nav a.on { border-bottom-color: var(--accent); }
-    main { padding: 1rem 1rem 3rem; }
-    .grid { grid-template-columns: minmax(0, 1fr); }
-  }
-</style>
+{% include "_desk_styles.html" %}
 {% include "_performance_styles.html" %}
 {% block page_styles %}{% endblock %}
 </head>
@@ -121,7 +20,7 @@
 
 {# The most important fact on the page cannot be scrolled past. #}
 <div class="strip {% if state.health.kill_switch_engaged %}strip--danger{% endif %}">
-  <span class="tag">KILL SWITCH</span>
+  <span class="tag">MANUAL STOP</span>
   {% if state.health.kill_switch_engaged %}
     <span class="pill pill--crit">ENGAGED</span>
     <span class="quiet">{{ state.health.kill_switch_reason }}</span>
@@ -131,26 +30,45 @@
   <span class="quiet">·</span>
   <span class="quiet">{{ state.health.trading_mode }} / {{ state.health.broker_environment }}</span>
   <span class="quiet">·</span>
-  <span class="quiet">no surface here can enable live trading or move capital</span>
+  <span class="quiet boundary-note">no surface here can enable live trading or move capital</span>
 </div>
 
 <div class="shell">
-  <nav>
-    <div class="brand">Elrond</div>
-    {% for href, label in navigation %}
-      <a href="{{ href }}" class="{% if href == active %}on{% endif %}">{{ label }}</a>
-    {% endfor %}
+  <nav class="workspace-nav" aria-label="Main navigation">
+    <div class="brand"><strong>ELROND</strong><small>Paper<br>desk</small></div>
+    <details class="nav-disclosure" open><summary>Navigation</summary><div class="nav-links">
+      {% for href, label in navigation %}{% if href in ['/', '/calendar', '/learner', '/session', '/risk'] %}
+      <a href="{{ href }}" class="{% if href == active %}on{% endif %}" {% if href == active %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endif %}{% endfor %}
+      {% for group, paths in [('Research', ['/research', '/experiments', '/market-data', '/capacity', '/discovery']), ('System', ['/config', '/config/policy', '/reports', '/runtime', '/kill-switch', '/glossary'])] %}
+      <details class="nav-menu"><summary>{{ group }}</summary><div class="nav-menu-links">
+      {% for href, label in navigation %}{% if href in paths %}
+        <a href="{{ href }}" class="{% if href == active %}on{% endif %}" {% if href == active %}aria-current="page"{% endif %}>{{ label }}</a>
+      {% endif %}{% endfor %}
+      </div></details>{% endfor %}
+    </div></details>
   </nav>
   <main>
-    {% if active in ['/', '/learner', '/research', '/calendar'] and experiments is defined and experiments %}
-      {% include "_experiment_panels.html" %}
-    {% endif %}
     {% block body %}{% endblock %}
+    {% if active in ['/', '/learner', '/research', '/calendar'] and experiments is defined and experiments %}
+    <details class="disclosure"><summary>Research records <small>Coordinator receipts and experiment evidence</small></summary>
+      <div class="disclosure-body">{% include "_experiment_panels.html" %}</div>
+    </details>
+    {% endif %}
     <footer>
       Generated {{ state.generated_at.strftime("%Y-%m-%d %H:%M:%S") }} UTC ·
       paper trading only · <code class="mono">LIVE_TRADING</code> is not reachable from this surface
     </footer>
   </main>
 </div>
+<script>
+  (() => {
+    const navigation = document.querySelector('.nav-disclosure');
+    const desktop = window.matchMedia('(min-width: 761px)');
+    const update = () => { navigation.open = desktop.matches; };
+    update();
+    desktop.addEventListener('change', update);
+  })();
+</script>
 </body>
 </html>
