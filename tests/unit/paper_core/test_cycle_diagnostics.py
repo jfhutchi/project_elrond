@@ -248,3 +248,43 @@ async def test_real_dispatch_observes_failure_without_diagnostic_rejection(
             assert "FILL_CONFIRMED" not in event["outcomes"]
     finally:
         db.close()
+
+
+@pytest.mark.parametrize("code", ["INVENTORY_ACQUISITION_RETRYABLE", "INVENTORY_PROTOCOL_INVALID"])
+def test_inventory_acquisition_reasons_are_exact_unavailable_authority(code):
+    from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics, reason_codes
+
+    assert reason_codes((code + ":private provider suffix",)) == (code,)
+    result = TraderCycleDiagnostics().snapshot(
+        cycle_id="cycle", now=NOW, waiting=False, reasons=(code,), failure=False
+    )
+    assert "AUTHORITY_ACQUISITION_UNAVAILABLE" in result["outcomes"]
+    assert "NO_QUALIFYING_CANDIDATE" not in result["outcomes"]
+    assert "OPERATIONAL_FAILURE" not in result["outcomes"]
+
+
+def test_reviewed_time_catalog_is_preserved_without_wildcards():
+    from quantbot.console.overview import TIME_BLOCKERS
+    from quantbot.paper_core.cycle_diagnostics import reason_codes
+
+    for code in TIME_BLOCKERS:
+        assert reason_codes((code + ":private suffix",)) == (code,)
+    assert reason_codes(("TIME_PRIVATE_TOKEN_ABC123",)) == ("UNCLASSIFIED_REASON",)
+
+
+@pytest.mark.parametrize(
+    "code", ["MARKET_CLOSED", "TIME_SESSION_BOUNDARY", "TIME_OBSERVATION_BOUNDARY"]
+)
+def test_expected_session_timing_is_not_no_opportunity_or_operational_failure(code):
+    from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics
+
+    result = TraderCycleDiagnostics().snapshot(
+        cycle_id="cycle", now=NOW, waiting=False, reasons=(code,), failure=False
+    )
+    assert (
+        "MARKET_CLOSED" in result["outcomes"]
+        if code == "MARKET_CLOSED"
+        else "AWAITING_SESSION_BOUNDARY" in result["outcomes"]
+    )
+    assert "NO_QUALIFYING_CANDIDATE" not in result["outcomes"]
+    assert "OPERATIONAL_FAILURE" not in result["outcomes"]

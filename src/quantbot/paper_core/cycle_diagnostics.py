@@ -15,63 +15,99 @@ _DATA_REASONS = frozenset(
         "NONCAUSAL_OBSERVATION",
     }
 )
-_KNOWN_REASONS = _DATA_REASONS | frozenset(
+_TIME_REASONS = frozenset(
     {
-        "UNCLASSIFIED_REASON",
-        "ASSET_NOT_FRACTIONABLE",
-        "ASSET_NOT_TRADABLE",
-        "ASSET_ELIGIBILITY_UNVERIFIED",
-        "ASSET_ELIGIBILITY_STALE_OR_MISMATCHED",
-        "ASSET_WHOLE_QUANTITY_REQUIRED",
-        "ASSET_CAPABILITY_CHANGED",
-        "ENTRY_RISK_LIMIT",
-        "BUYING_POWER_RESERVE",
-        "PREDICT_NET_RESERVE",
-        "INVENTORY_UNCERTIFIED",
-        "INVENTORY_STALE",
-        "CURRENT_PROOF_UNAVAILABLE",
-        "CORE_MODEL_UNCOMMISSIONED",
-        "ACTIVE_MODEL_UNCOMMISSIONED",
-        "CORE_INDEPENDENT_GUARDIAN_NOT_READY",
-        "CORE_MANUAL_ENTRY_PAUSE",
-        "CORE_ENTRY_FENCED",
-        "CORE_UNRESOLVED_SUBMISSION",
-        "CORE_ENTRY_SLOT_RESERVED",
-        "CORE_RUNTIME_BINDING_MISMATCH",
-        "CORE_RUNTIME_EVENT_INVALID",
-        "CORE_EVIDENCE_QUARANTINED",
-        "CORE_PROTECTION_DEADLINE_DUE",
-        "CORE_GUARDIAN_RECEIPT_EXPIRED",
-        "CORE_CASH_AUTHORITY_UNAVAILABLE",
-        "CORE_ENTRY_DECISION_EXPIRED",
-        "CORE_ENTRY_AUTHORITY_MISMATCH",
-        "CORE_FIXED_RISK_ENVELOPE",
-        "CORE_SESSION_EXIT_BUFFER_DUE",
-        "CORE_ENTRY_HANDOFF_MISSING",
-        "CORE_ENTRY_ALREADY_REFUSED",
-        "NO_ELIGIBLE_COHORT_MEMBERS",
-        "SYMBOL_ALREADY_HELD",
-        "SYMBOL_ALREADY_RESERVED",
-        "BATCH_MEMBER_ALREADY_SELECTED",
-        "SESSION_EXIT_BUFFER",
-        "CONTRACT_MISMATCH",
-        "PORTFOLIO_SYMBOL_CAPACITY",
-        "PORTFOLIO_CURRENT_MARKS_UNAVAILABLE",
-        "PORTFOLIO_MARKS_STALE_OR_MISMATCHED",
-        "PORTFOLIO_INVENTORY_STALE",
-        "PORTFOLIO_EXPOSURE_LIMIT",
-        "PORTFOLIO_UNATTRIBUTED_POSITION",
-        "SESSION_RESERVATION_LIMIT",
-        "SESSION_DAILY_LOSS_HALT",
-        "MANUAL_ENTRY_STOP",
-        "SESSION_OPENING_UNVERIFIED",
-        "SESSION_CAPITAL_UNVERIFIED",
-        "SESSION_EXTERNAL_CAPITAL_FLOW",
+        "TIME_EVIDENCE_EXPIRED",
         "TIME_EVIDENCE_MISSING",
-        "TIME_OBSERVATION_BOUNDARY",
+        "TIME_ACQUISITION_RETRYABLE",
+        "TIME_ACQUISITION_BUDGET",
+        "TIME_PROTOCOL_INVALID",
+        "TIME_DISCONTINUITY",
+        "TIME_SKEW_OUT_OF_BOUNDS",
+        "TIME_SAMPLES_INCOMPLETE",
+        "TIME_SAMPLES_NOT_ADVANCING",
+        "TIME_IDENTITY_CHANGED",
+        "TIME_SAMPLES_DISAGREE",
+        "TIME_PROCESS_CHANGED",
+        "TIME_PROJECTION_INVALID",
+        "TIME_ACCOUNT_MISMATCH",
         "TIME_SESSION_BOUNDARY",
         "TIME_CALENDAR_MISMATCH",
+        "TIME_OBSERVATION_BOUNDARY",
     }
+)
+_SESSION_WAIT_REASONS = frozenset(
+    {
+        "MARKET_CLOSED",
+        "TIME_SESSION_BOUNDARY",
+        "TIME_OBSERVATION_BOUNDARY",
+    }
+)
+_ACQUISITION_REASONS = (_TIME_REASONS - _SESSION_WAIT_REASONS) | frozenset(
+    {
+        "INVENTORY_ACQUISITION_RETRYABLE",
+        "INVENTORY_PROTOCOL_INVALID",
+    }
+)
+_KNOWN_REASONS = (
+    _DATA_REASONS
+    | _TIME_REASONS
+    | _ACQUISITION_REASONS
+    | frozenset(
+        {
+            "UNCLASSIFIED_REASON",
+            "MARKET_CLOSED",
+            "ASSET_NOT_FRACTIONABLE",
+            "ASSET_NOT_TRADABLE",
+            "ASSET_ELIGIBILITY_UNVERIFIED",
+            "ASSET_ELIGIBILITY_STALE_OR_MISMATCHED",
+            "ASSET_WHOLE_QUANTITY_REQUIRED",
+            "ASSET_CAPABILITY_CHANGED",
+            "ENTRY_RISK_LIMIT",
+            "BUYING_POWER_RESERVE",
+            "PREDICT_NET_RESERVE",
+            "INVENTORY_UNCERTIFIED",
+            "INVENTORY_STALE",
+            "CURRENT_PROOF_UNAVAILABLE",
+            "CORE_MODEL_UNCOMMISSIONED",
+            "ACTIVE_MODEL_UNCOMMISSIONED",
+            "CORE_INDEPENDENT_GUARDIAN_NOT_READY",
+            "CORE_MANUAL_ENTRY_PAUSE",
+            "CORE_ENTRY_FENCED",
+            "CORE_UNRESOLVED_SUBMISSION",
+            "CORE_ENTRY_SLOT_RESERVED",
+            "CORE_RUNTIME_BINDING_MISMATCH",
+            "CORE_RUNTIME_EVENT_INVALID",
+            "CORE_EVIDENCE_QUARANTINED",
+            "CORE_PROTECTION_DEADLINE_DUE",
+            "CORE_GUARDIAN_RECEIPT_EXPIRED",
+            "CORE_CASH_AUTHORITY_UNAVAILABLE",
+            "CORE_ENTRY_DECISION_EXPIRED",
+            "CORE_ENTRY_AUTHORITY_MISMATCH",
+            "CORE_FIXED_RISK_ENVELOPE",
+            "CORE_SESSION_EXIT_BUFFER_DUE",
+            "CORE_ENTRY_HANDOFF_MISSING",
+            "CORE_ENTRY_ALREADY_REFUSED",
+            "NO_ELIGIBLE_COHORT_MEMBERS",
+            "SYMBOL_ALREADY_HELD",
+            "SYMBOL_ALREADY_RESERVED",
+            "BATCH_MEMBER_ALREADY_SELECTED",
+            "SESSION_EXIT_BUFFER",
+            "CONTRACT_MISMATCH",
+            "PORTFOLIO_SYMBOL_CAPACITY",
+            "PORTFOLIO_CURRENT_MARKS_UNAVAILABLE",
+            "PORTFOLIO_MARKS_STALE_OR_MISMATCHED",
+            "PORTFOLIO_INVENTORY_STALE",
+            "PORTFOLIO_EXPOSURE_LIMIT",
+            "PORTFOLIO_UNATTRIBUTED_POSITION",
+            "SESSION_RESERVATION_LIMIT",
+            "SESSION_DAILY_LOSS_HALT",
+            "MANUAL_ENTRY_STOP",
+            "SESSION_OPENING_UNVERIFIED",
+            "SESSION_CAPITAL_UNVERIFIED",
+            "SESSION_EXTERNAL_CAPITAL_FLOW",
+        }
+    )
 )
 
 
@@ -149,12 +185,16 @@ class TraderCycleDiagnostics:
         outcomes = []
         if waiting:
             outcomes.append("AWAITING_EVALUATION_BOUNDARY")
-        if (
+        if "MARKET_CLOSED" in codes or (
             self.session_open is not None
             and self.session_close is not None
             and not (self.session_open <= now < self.session_close)
         ):
             outcomes.append("MARKET_CLOSED")
+        if _SESSION_WAIT_REASONS.intersection(codes) - {"MARKET_CLOSED"}:
+            outcomes.append("AWAITING_SESSION_BOUNDARY")
+        if _ACQUISITION_REASONS.intersection(codes):
+            outcomes.append("AUTHORITY_ACQUISITION_UNAVAILABLE")
         if _DATA_REASONS.intersection(codes):
             outcomes.append("DATA_UNAVAILABLE")
         if self.excluded:
@@ -162,7 +202,8 @@ class TraderCycleDiagnostics:
         if any("GUARDIAN" in code for code in codes):
             outcomes.append("AWAITING_GUARDIAN")
         if any(
-            code not in _DATA_REASONS and code != "UNCLASSIFIED_REASON"
+            code not in _DATA_REASONS | _ACQUISITION_REASONS | _SESSION_WAIT_REASONS
+            and code != "UNCLASSIFIED_REASON"
             for code in reason_codes(reasons)
         ) or any(
             code
