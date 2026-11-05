@@ -1140,7 +1140,9 @@ async def guardian_cycle(
                     side=OrderSide.SELL,
                     quantity=remaining,
                     order_type=OrderType.MARKET,
-                    time_in_force=TimeInForce.DAY,
+                    time_in_force=(
+                        intent.time_in_force if store.config.asset_capabilities else TimeInForce.DAY
+                    ),
                     created_at=now,
                 )
                 StorageRepository(session).create_order_intent(exit_intent)

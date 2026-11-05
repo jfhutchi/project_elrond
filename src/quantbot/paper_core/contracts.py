@@ -13,6 +13,7 @@ from quantbot.brokers.base import BrokerModel
 from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, Position
 from quantbot.learner.estimators import FittedEstimator
 from quantbot.learner.five_minute import FEATURE_NAMES
+from quantbot.paper_core.asset_capability import AssetCapability, AssetSession
 from quantbot.paper_core.discovery import DiscoveryEvidence
 from quantbot.paper_core.entry_policy import AssetEligibility
 from quantbot.research.manifest import content_id
@@ -45,6 +46,7 @@ class CoreConfig(BrokerModel):
     exit_buffer_seconds: Literal[120] = 120
     buying_power_reserve_bps: Literal[500] = 500
     clock_profile: Literal["STRICT_V0", "PAPER_TIME_V2"] = "STRICT_V0"
+    asset_capabilities: tuple[AssetCapability, ...] = ()
 
     @model_serializer(mode="wrap")
     def preserve_v31_config(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
@@ -54,17 +56,35 @@ class CoreConfig(BrokerModel):
             "symbols",
             "selection_policy",
             "economic_profile",
+            "asset_capabilities",
         } - self.model_fields_set:
             payload.pop(name, None)
         return payload
 
     @property
     def entry_symbols(self) -> tuple[str, ...]:
+        if self.asset_capabilities:
+            return tuple(c.symbol for c in self.asset_capabilities)
         return self.symbols or (self.symbol,)
 
     @model_validator(mode="after")
     def stock_universe(self) -> Self:
         from quantbot.paper_core.economics import THROUGHPUT_POLICY, THROUGHPUT_PROFILE
+
+        if self.asset_capabilities:
+            if (
+                self.evidence_lane != "SYNTHETIC_TEST"
+                or self.selection_policy != "MODEL_ONLY_V1"
+                or self.economic_profile != "LEGACY_30M_V1"
+                or self.clock_profile != "STRICT_V0"
+                or self.symbols
+                or self.symbol not in self.entry_symbols
+                or len(self.entry_symbols) != len(set(self.entry_symbols))
+                or len(self.entry_symbols) > 32
+            ):
+                raise ValueError(
+                    "asset capabilities require explicit single-slot synthetic mechanics"
+                )
 
         new_profile = self.economic_profile == THROUGHPUT_PROFILE
         expected = (None, 50, 30) if new_profile else (1, 50, 30)
@@ -193,8 +213,12 @@ class HoldingDeadline(PortfolioEvidence):
 
 class Observation(Evidence):
     legacy_optional_fields = frozenset(
-        {"time_evidence_id", "session_open", "capture_received_at", "asset_eligibility"}
+        {
+            "time_evidence_id", "session_open", "capture_received_at",
+            "asset_eligibility", "asset_session",
+        }
     )
+    asset_session: AssetSession | None = None
     asset_eligibility: AssetEligibility | None = None
     capture_received_at: datetime | None = None
     time_evidence_id: str | None = None

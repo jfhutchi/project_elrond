@@ -1,0 +1,60 @@
+OFFLINE CRYPTO VERTICAL SLICE - 2026-11-05
+
+Implemented opt-in OFFLINE_ASSET_CAPABILITY_V1 and AssetSession, plus narrow branches in
+CoreConfig, Observation, trader, entry authority and guardian. New optional fields are
+omitted when absent, preserving historical document/content identities. No operational
+config, provider, database, schema, economics, process, commission or deployment changes.
+
+Capability config is accepted ONLY for SYNTHETIC_TEST + MODEL_ONLY_V1 + LEGACY_30M_V1 +
+STRICT_V0. BROKER_PAPER, LOCAL_SIM_REAL_DATA, parallel policy and predictive model use are
+deliberately unavailable. This preserves the existing single-position account risk limit;
+it is the first joined mechanics slice, not completed runtime crypto support.
+
+Proven integration: one CoreStore/database/config, AAPL entry and guardian exit, close and
+reopen the same store, BTC/USD fractional entry and GTC guardian exit through the existing
+coordinator/outbox/outcomes. The existing single slot refuses overlapping second-asset
+submission. Shared cash is conserved. Artificial synthetic 25-cent fee evidence creates
+two synthetic -0.50 outcomes; this is fixture arithmetic, not real profitability evidence.
+A separate weekend BTC loop leaves fees UNKNOWN/COSTS_PENDING and net null.
+
+Session evidence binds capability ID, symbol, feed, calendar, benchmark dependency, exact
+observation timestamp, open/close and ET account risk day. Crypto sessions retain exact
+UTC boundaries, including when UTC market day differs from ET account day. No XNYS clock
+is relabeled or forced open. Quantity rounds down to capability steps and abstains below
+minimum. Existing sizing/risk/deadline/stop constraints remain unchanged. Entry authority
+rechecks retained capability evidence during existing transactional send validation.
+
+Verification: 60 tests passed in offline-assets-final runner, comprising 13 new integration
+cases, 3 existing capability boundary cases, and existing thin-loop/daily-selection equity
+regressions. Existing 31 crypto client/calendar/config tests previously passed. Ruff clean;
+focused mypy passed for all five changed source modules. The final 13 new integration tests
+passed again after the type correction and narrowing guardian TIF selection to opt-in
+capability configs. Full release review remains parent-owned.
+Logs .superpowers/sdd/runtime-recovery/offline-assets-final-test-output.txt and
+     .superpowers/sdd/runtime-recovery/offline-assets-postcheck-test-output.txt.
+
+REVIEW FOLLOWUP: PRECISION AND NON-UTC INPUT
+Fixed capability sizing to round the unrounded existing target/price ratio directly to
+the capability step; the legacy six-decimal path is unchanged. The regression first
+failed with ENTRY_RISK_LIMIT at quantity zero, then passed a BTC/USD 0.0000001 entry and
+owned exit with step/minimum 0.00000001 through the existing core. No budget/risk change.
+A non-UTC observation at 20:00 ET correctly normalizes to 01:00 UTC the following market
+day while retaining the prior ET risk day; BrokerModel already provided normalization,
+so no new time behavior was required. XNYS bounds remain caller-supplied synthetic fixture
+evidence, not an exchange-calendar attestation.
+Focused review verification: 43 tests passed (15 offline capability integration cases,
+3 capability boundary cases, 25 existing equity daily-selection cases); Ruff passed;
+mypy passed all five changed source modules; git diff --check clean. Log:
+.superpowers/sdd/runtime-recovery/offline-precision-green-test-output.txt.
+
+Remaining integration gaps before the user's complete real-data PAPER capability:
+1. Real-data evidence lane and crypto acquisition/quote/mark/discovery adapters; this slice
+   uses explicit synthetic observations, not recorded or online crypto market data.
+2. Instrument-specific cohort/session scheduling with ONE account ET risk-day opening,
+   daily-loss baseline and capital authority. Parallel admission remains unsupported;
+   portfolio.py/schema were intentionally untouched, no separate asset loss allowances.
+3. Distinct truthful crypto feature/benchmark/dataset/model/learning authority and validated
+   activation. BTC benchmark is explicit but no new feature builder or model was invented.
+4. Supported provider quantity/order/TIF and fee authority; unknown fees remain unknown.
+5. Mixed-asset concurrency/partial fills/ambiguous recovery and broader authority fault
+   coverage before operational commissioning. Existing shared ownership remains in place.

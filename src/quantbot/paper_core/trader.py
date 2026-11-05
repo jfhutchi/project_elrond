@@ -14,6 +14,7 @@ from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, Broke
 from quantbot.domain import OrderIntent, OrderSide, OrderType, TimeInForce
 from quantbot.execution.coordinator import OrderSubmissionBlocked
 from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
+from quantbot.paper_core.asset_capability import capability_for, observation_capability_objections
 from quantbot.paper_core.contracts import (
     CoreConfig,
     Decision,
@@ -101,6 +102,10 @@ def evaluate_entry(
             observation, dependency_freshness=config.clock_profile == "PAPER_TIME_V2"
         )
     )
+    objections.extend(observation_capability_objections(config, observation))
+    capability = capability_for(config, observation.symbol)
+    if capability is not None and model.mode != "COLLECT":
+        objections.append("OFFLINE_CAPABILITY_COLLECT_ONLY")
     if config.clock_profile == "PAPER_TIME_V2":
         objections.extend(
             ("TIME_EVIDENCE_MISSING",)
@@ -124,7 +129,11 @@ def evaluate_entry(
             entry_policy.permits(observation.symbol)
             if hybrid and entry_policy
             else observation.symbol
-            in (symbols(config, entry_policy) if hybrid else (config.symbol,))
+            in (
+                symbols(config, entry_policy)
+                if hybrid or config.asset_capabilities
+                else (config.symbol,)
+            )
         )
         or model.feature_version != observation.feature_version
     ):
@@ -184,7 +193,10 @@ def evaluate_entry(
         fractionable=eligibility.fractionable if eligibility else None,
         config=config,
         available_notional=available_notional,
+        capability=capability,
     )
+    if capability is not None:
+        objections.extend(observation_capability_objections(config, observation, quantity=quantity))
     if quantity <= 0 or quantity * observation.price * Decimal(
         "0.01"
     ) > inventory.account.equity * Decimal("0.0025"):
@@ -479,6 +491,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             if decision.selection is not None
             else content_id({"binding": store.config_id, "observation": decision.observation_id})
         )
+        capability = capability_for(store.config, decision.symbol)
         intent = OrderIntent(
             intent_id="core-entry-" + digest,
             client_order_id="qb-" + digest[:40],
@@ -487,7 +500,11 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             symbol=decision.symbol,
             side=OrderSide.BUY,
             order_type=OrderType.MARKET,
-            time_in_force=TimeInForce.DAY,
+            time_in_force=(
+                capability.time_in_force
+                if capability is not None
+                else TimeInForce.DAY
+            ),
             quantity=decision.quantity,
             created_at=decision.recorded_at_utc,
         )

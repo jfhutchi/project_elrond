@@ -23,6 +23,7 @@ from quantbot.storage import StateConflictError
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
 
+    from quantbot.paper_core.asset_capability import AssetCapability
     from quantbot.paper_core.contracts import CoreConfig, Decision, Observation
     from quantbot.paper_core.store import CoreStore
 
@@ -103,6 +104,7 @@ def entry_quantity(
     fractionable: bool | None,
     config: CoreConfig | None = None,
     available_notional: Decimal | None = None,
+    capability: AssetCapability | None = None,
 ) -> Decimal:
     from quantbot.paper_core.economics import limits, parallel_policy
 
@@ -115,14 +117,25 @@ def entry_quantity(
                 available_notional if available_notional is not None else account.cash,
             ),
         )
-        normal = entry_quantity(account, price, policy=policy, fractionable=fractionable)
+        normal = entry_quantity(
+            account, price, policy=policy, fractionable=fractionable, capability=capability
+        )
         if fractionable is False:
             return normal if normal * price <= available else Decimal(0)
-        return min(normal, (available / price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN"))
+        available_quantity = (
+            capability.bound_quantity(available / price)
+            if capability is not None
+            else (available / price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN")
+        )
+        return min(normal, available_quantity)
     target = account.equity * Decimal("0.005")
     if policy is not None:
         target *= Decimal(10000 - policy.sizing_headroom_bps) / 10000
-    normal = (target / price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN")
+    normal = (
+        capability.bound_quantity(target / price)
+        if capability is not None
+        else (target / price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN")
+    )
     if policy is not None and fractionable is False:
         return max(Decimal(1), normal.to_integral_value(rounding="ROUND_DOWN"))
     return normal
@@ -223,6 +236,24 @@ def decision_entry_authority(
     except StateConflictError:
         return ("CORE_RUNTIME_BINDING_MISMATCH",), False
     if policy is None:
+        if store.config.asset_capabilities:
+            from quantbot.paper_core.asset_capability import observation_capability_objections
+            from quantbot.paper_core.contracts import Observation
+
+            payload = session.execute(
+                select(table("core_observations").c.payload).where(
+                    table("core_observations").c.id == decision.observation_id
+                )
+            ).scalar_one_or_none()
+            if payload is None:
+                return ("ASSET_CAPABILITY_OR_SESSION_MISSING",), False
+            observed = Observation.model_validate_json(payload)
+            capability_reasons = observation_capability_objections(
+                store.config, observed, quantity=decision.quantity
+            )
+            if decision.entry_policy_id is not None or decision.symbol != observed.symbol:
+                capability_reasons = (*capability_reasons, "ENTRY_POLICY_MISMATCH")
+            return capability_reasons, False
         return (("ENTRY_POLICY_MISMATCH",) if decision.entry_policy_id else ()), False
     if decision.entry_policy_id != policy.id or not policy.permits(decision.symbol):
         return ("ENTRY_POLICY_MISMATCH",), False
