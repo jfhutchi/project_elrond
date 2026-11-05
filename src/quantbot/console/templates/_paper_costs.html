@@ -9,10 +9,10 @@
     {% for day in state.paper_costs.days|reverse %}
     <tr>
       <td>{{ day.session_date }}</td><td>{{ day.round_trips }}</td>
-      <td>${{ day.gross_realized }}</td>
+      <td>{{ '$' ~ day.gross_realized if day.gross_realized is not none else 'No completed owned round trips' }}</td>
       <td>
         {{ '$' ~ day.observed_fee_cash_flow if day.observed_fee_cash_flow is not none else 'Not observed' }}
-        <br><span class="n">{% if day.invalid_fee_activity_ids %}Fee activity observed, but its status or details are unverified; no usable fee amount.{% elif day.fee_status == 'POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION' %}Account fees observed; exact trade allocation unavailable.{% else %}No fee activity observed by this capture; completeness unknown.{% endif %}</span>
+        <br><span class="n">{% if day.invalid_fee_activity_ids and day.fee_activities %}Posted account fees observed; additional fee activity has unverified status or details. Completeness and exact trade allocation remain unknown.{% elif day.invalid_fee_activity_ids %}Fee activity observed, but its status or details are unverified; no usable fee amount.{% elif day.fee_status == 'POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION' %}Account fees observed; exact trade allocation unavailable.{% else %}No fee activity observed by this capture; completeness unknown.{% endif %}</span>
         {% if day.invalid_fee_activity_ids %}<details><summary>{{ day.invalid_fee_activity_ids|length }} unverified fee activities</summary>{{ day.invalid_fee_activity_ids|join(', ') }}</details>{% endif %}
         {% if day.fee_activities %}
         <details><summary>{{ day.fee_activities|length }} retained fee activities</summary>
@@ -22,11 +22,11 @@
       </td>
       <td>{{ '$' ~ day.net_after_observed_fees if day.net_after_observed_fees is not none else 'Unknown' }}</td>
       <td>{% if day.fee_scenario %}${{ day.fee_scenario.modeled_net }}<br><span class="n">Assumes ${{ day.fee_scenario.assumed_daily_fee }} daily fees from {{ day.fee_scenario.reference_session }}; additional modeled amount ${{ day.fee_scenario.modeled_additional_fee }}.</span>{% else %}None{% endif %}</td>
-      <td>{{ 'Matched full-session account fills' if day.scope_verified else 'Incomplete or mismatched' }}<br><span class="n">Activity capture {{ day.activity_capture_until or 'unavailable' }}{% if day.activity_capture_lag_seconds is not none %}; lag {{ day.activity_capture_lag_seconds }} seconds{% endif %}.</span></td>
+      <td>{% if day.scope_reason == 'NO_COMPLETED_OWNED_ROUND_TRIPS' %}No completed owned round trips; account cash evidence only{% else %}{{ 'Matched full-session account fills' if day.scope_verified else 'Incomplete or mismatched' }}{% endif %}<br><span class="n">Activity capture {{ day.activity_capture_until or 'unavailable' }}{% if day.activity_capture_lag_seconds is not none %}; lag {{ day.activity_capture_lag_seconds }} seconds{% endif %}.</span></td>
     </tr>
     {% endfor %}
   </table></div>
-  {% else %}<p>No completed PAPER round trips recorded.</p>{% endif %}
+  {% else %}<p>No completed PAPER round trips or dated account fee activities recorded.</p>{% endif %}
   <p class="n">Final all-in net remains unverified. Observed daily fees do not establish exact per-fill allocation or fee finality. Modeled scenarios never become actual fees or learning labels. Execution prices already include fill economics; no second spread or slippage charge is deducted.</p>
   {% else %}
   <p>Cost accounting unavailable.</p><p class="n">Unknown costs are not zero. No gross-as-net fallback is used.</p>

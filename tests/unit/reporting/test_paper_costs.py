@@ -476,3 +476,136 @@ def test_reader_rejects_tampered_calendar_source(tmp_path, table_name):
         c.execute(f"UPDATE {table_name} SET payload=? WHERE id=?", (json.dumps(document), identity))
     with pytest.raises(ValueError, match="SOURCE_DIGEST"):
         module().read_report(path, as_of=data["as_of"])
+
+
+def fee_only_fixture():
+    data = fixture()
+    data["trips"] = data["trips"][1:]
+    data["fills"] = [f for f in data["fills"] if not f["fill_id"].startswith("27-")]
+    doc = data["documents"][0]["document"]
+    doc["rows"] = [r for r in doc["rows"] if not r["id"].startswith("27-")]
+    data["documents"][0]["id"] = digest(doc)
+    return data
+
+
+@pytest.mark.parametrize("kind", ["executed", "pending", "mixed"])
+def test_fee_only_dates_preserve_cash_evidence_without_inventing_trade_economics(kind):
+    from types import SimpleNamespace
+
+    from quantbot.console.app import TEMPLATES
+
+    data = fee_only_fixture()
+    doc = data["documents"][0]["document"]
+    fees = [r for r in doc["rows"] if r.get("activity_type") == "FEE"]
+    if kind == "pending":
+        for fee in fees:
+            fee["status"] = "pending"
+    elif kind == "mixed":
+        fees[0]["status"] = "pending"
+    data["documents"][0]["id"] = digest(doc)
+    costs = report(data)
+    assert [d["session_date"] for d in costs["days"]] == ["2026-10-27", "2026-10-28"]
+    day = costs["days"][0]
+    assert day["round_trips"] == 0 and day["trades"] == []
+    assert day["gross_realized"] is None
+    assert day["entry_notional"] is None and day["exit_notional"] is None
+    assert day["net_after_observed_fees"] is None and day["all_in_verified_net"] is None
+    assert day["scope_verified"] is False
+    assert day["scope_reason"] == "NO_COMPLETED_OWNED_ROUND_TRIPS"
+    assert day["fee_scenario"] is None and costs["days"][1]["fee_scenario"] is None
+    assert (
+        day["observed_fee_cash_flow"]
+        == {"executed": "-0.02", "pending": None, "mixed": "-0.01"}[kind]
+    )
+    assert bool(day["invalid_fee_activity_ids"]) == (kind != "executed")
+    for fee in day["fee_activities"]:
+        assert fee["source_document_ids"] == [data["documents"][0]["id"]]
+    html = TEMPLATES.get_template("_paper_costs.html").render(
+        state=SimpleNamespace(paper_costs={"available": True, **costs})
+    )
+    row = html.split("<td>2026-10-27</td>", 1)[1].split("</tr>", 1)[0]
+    assert "$None" not in row and "$0" not in row
+    assert "No completed owned round trips" in row
+    if kind == "mixed":
+        assert "$-0.01" in row and "additional fee activity" in row
+        assert "no usable fee amount" not in row
+
+
+@pytest.mark.parametrize("fault", ["account", "endpoint", "future_capture", "future_posting"])
+def test_fee_only_dates_require_eligible_account_evidence(fault):
+    data = fee_only_fixture()
+    doc = data["documents"][0]["document"]
+    if fault == "account":
+        doc["account_id"] = "other"
+    elif fault == "endpoint":
+        doc["endpoint"] = "https://api.alpaca.markets"
+    elif fault == "future_capture":
+        doc["until"] = "2026-10-29T22:00:00Z"
+    else:
+        for row in doc["rows"]:
+            if row.get("activity_type") == "FEE":
+                row["created_at"] = "2026-10-29T00:15:00Z"
+    data["documents"][0]["id"] = digest(doc)
+    assert [d["session_date"] for d in report(data)["days"]] == ["2026-10-28"]
+
+
+def test_fee_only_retained_external_source_is_read_only_and_tampering_refused(tmp_path):
+    data = fee_only_fixture()
+    data["trips"] = []
+    data["fills"] = []
+    data["sessions"] = []
+    path = tmp_path / "fees.db"
+    database_fixture(path, data)
+    with sqlite3.connect(path) as connection:
+        connection.execute("DELETE FROM core_provider_progress")
+        connection.execute(
+            "INSERT INTO core_external_owner_events VALUES (?,?)",
+            (
+                "fee",
+                json.dumps(dict(activity_type="FEE", source_document=data["documents"][0]["id"])),
+            ),
+        )
+    before = path.read_bytes()
+    result = module().read_report(path, as_of=data["as_of"])
+    assert result["days"][0]["session_date"] == "2026-10-27"
+    assert result["days"][0]["observed_fee_cash_flow"] == "-0.02"
+    assert result["days"][0]["gross_realized"] is None
+    assert path.read_bytes() == before
+    with sqlite3.connect(path) as connection:
+        doc = deepcopy(data["documents"][0]["document"])
+        doc["rows"][-1]["net_amount"] = "-999"
+        connection.execute("UPDATE core_provider_acquisitions SET payload=?", (json.dumps(doc),))
+    with pytest.raises(ValueError, match="SOURCE_DIGEST_MISMATCH"):
+        module().read_report(path, as_of=data["as_of"])
+
+
+def test_fee_only_calendar_details_do_not_become_final_performance(tmp_path, monkeypatch):
+    from datetime import date
+    from decimal import Decimal
+
+    from fastapi.testclient import TestClient
+
+    from quantbot.console import performance_reader
+    from quantbot.console.app import create_app
+    from quantbot.console.calendar import PerformanceData
+    from quantbot.operations.daily_performance import DailyPerformance
+    from quantbot.storage import Database
+
+    data = fee_only_fixture()
+    costs = report(data)
+    monkeypatch.setattr(performance_reader, "read_paper_cost_report", lambda *a, **k: costs)
+    final = PerformanceData(rows=(DailyPerformance(date(2026, 10, 28), "FINAL", Decimal("7.00")),))
+    with Database.create(tmp_path / "console.db") as database:
+        client = TestClient(create_app(database, daily_performance=lambda: final))
+        calendar = client.get("/api/calendar?month=2026-10").json()
+        cell = next(c for w in calendar["weeks"] for c in w if c["session_date"] == "2026-10-27")
+        assert cell["paper_costs"]["observed_fee_cash_flow"] == "-0.02"
+        assert cell["paper_costs"]["gross_realized"] is None
+        assert cell["amount"] is None and cell["status"] != "FINAL"
+        assert calendar["summary"]["sample_size"] == 1
+        assert "7.00" in calendar["summary"]["total"]
+        page = client.get("/calendar?month=2026-10")
+        assert page.status_code == 200
+        assert "$None" not in page.text
+        assert "Gross realized: No completed owned round trips" in page.text
+        assert "account cash evidence only" in page.text

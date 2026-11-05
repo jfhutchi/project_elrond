@@ -83,6 +83,14 @@ def build_report(
                 raise ValueError("CONFLICTING_ACTIVITY")
             activities[identity] = row
             sources[identity].add(source["id"])
+    # Account charges can post on dates with no completed owned trades. Keep
+    # those cash dates visible without manufacturing zero trade economics.
+    for row in activities.values():
+        if row.get("activity_type") not in {"FEE", "CFEE"} or not row.get("date"):
+            continue
+        if row.get("created_at") and _time(row["created_at"]) > as_of:
+            continue
+        by_day.setdefault(row["date"], [])
     calendar = {s["session_date"]: s for s in sessions}
     capture_until = max((_time(s["document"]["until"]) for s in eligible_docs), default=None)
     days: list[dict[str, Any]] = []
@@ -143,7 +151,7 @@ def build_report(
             if row.get("activity_type") == "FILL"
             and _time(row["transaction_time"]).astimezone(NY).date().isoformat() == day
         }
-        same = bool(coverage) and intraday and set(account_fills) == owned_ids
+        same = bool(owned) and bool(coverage) and intraday and set(account_fills) == owned_ids
         if same:
             same = all(
                 row["symbol"] == by_fill[i]["symbol"]
@@ -205,12 +213,14 @@ def build_report(
             dict(
                 session_date=day,
                 round_trips=len(owned),
-                gross_realized=str(gross),
-                entry_notional=str(entry_notional),
-                exit_notional=str(exit_notional),
+                gross_realized=str(gross) if owned else None,
+                entry_notional=str(entry_notional) if owned else None,
+                exit_notional=str(exit_notional) if owned else None,
                 opening_equity=session.get("equity") if session else None,
                 scope_verified=usable,
-                scope_reason="EXACT_ACCOUNT_FILL_MATCH_FULL_SESSION"
+                scope_reason="NO_COMPLETED_OWNED_ROUND_TRIPS"
+                if not owned
+                else "EXACT_ACCOUNT_FILL_MATCH_FULL_SESSION"
                 if usable
                 else "INCOMPLETE_OR_MISMATCHED_ACTIVITY_SCOPE",
                 source_document_ids=sorted(covered_ids),
@@ -218,7 +228,11 @@ def build_report(
                 activity_capture_lag_seconds=(as_of - capture_until).total_seconds()
                 if capture_until
                 else None,
-                fee_status="POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION"
+                fee_status="OBSERVED_FEES_WITH_UNVERIFIED_ACTIVITY"
+                if fees and invalid_fees
+                else "UNVERIFIED_FEE_ACTIVITY"
+                if invalid_fees
+                else "POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION"
                 if fees
                 else "NO_FEE_ACTIVITY_OBSERVED_BY_CAPTURE",
                 observed_fee_cash_flow=str(fee_cash) if fee_cash is not None else None,
