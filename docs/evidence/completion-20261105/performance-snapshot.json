@@ -1,0 +1,32 @@
+{
+  "captured_at": "2026-11-05T12:36:21.971267+00:00",
+  "scope": "current closed core round trips, excluding legacy trades; gross realized outcomes are not net profitability",
+  "closed_trades": 147,
+  "gross_pnl": "-0.016007592",
+  "gross_wins": 74,
+  "gross_losses": 73,
+  "gross_profit_factor": "0.9668529850548500791753031150",
+  "known_net_trades": 0,
+  "net_pnl": null,
+  "median_entry_notional": "2.451941184",
+  "mean_gross_pnl_per_trade": "-0.0001088951836734693877551020408",
+  "gross_daily_pnl": {
+    "2026-10-15": "0.003859752",
+    "2026-10-16": "-0.037600258",
+    "2026-10-19": "0.009189710",
+    "2026-10-20": "0.019994376",
+    "2026-10-21": "0.011870814",
+    "2026-10-22": "-0.034516964",
+    "2026-10-23": "-0.043108430",
+    "2026-10-26": "-0.010734752",
+    "2026-10-27": "-0.019664220",
+    "2026-10-28": "0.018675204",
+    "2026-10-30": "0.072642802",
+    "2026-11-02": "-0.006615626"
+  },
+  "gross_positive_days": 6,
+  "gross_negative_days": 6,
+  "gross_zero_days": 0,
+  "cost_status": "unknown per-trade fees remain unknown; account fees are separate cash evidence",
+  "method": "read-only SQLite snapshot; exact decimal sums; ET realized exit date; no mark-to-market or deposits inferred"
+}

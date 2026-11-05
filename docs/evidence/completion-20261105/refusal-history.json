@@ -1,0 +1,97 @@
+{
+  "counts": {
+    "decision_id,definitively_unsent,guard_contract,guardian_receipt_id,protection_id,reasons,state_at_refusal": 3354,
+    "approval_reference,audited_at,authorization_event_id,authorization_sha256,broker_probe_id,definitively_unsent,fence_id,guard_contract,heartbeat_id,intent_id,process_epoch,reasons,source,source_commit,source_release_id,state_at_refusal": 1,
+    "decision_id,definitively_unsent,entry_policy_id,evidence_ids,guard_contract,guardian_receipt_id,protection_id,reasons,state_at_refusal": 90,
+    "definitively_unsent,evidence_ids,guard_contract,purpose,reasons,source,state_at_refusal": 73,
+    "definitively_unsent,evaluation_scope,evidence_ids,guard_contract,purpose,reasons,source,state_at_refusal": 486
+  },
+  "examples": {
+    "decision_id,definitively_unsent,guard_contract,guardian_receipt_id,protection_id,reasons,state_at_refusal": {
+      "guard_contract": "core-final-send-v1",
+      "state_at_refusal": "ORDER_CREATED",
+      "definitively_unsent": true,
+      "source": null,
+      "purpose": null
+    },
+    "approval_reference,audited_at,authorization_event_id,authorization_sha256,broker_probe_id,definitively_unsent,fence_id,guard_contract,heartbeat_id,intent_id,process_epoch,reasons,source,source_commit,source_release_id,state_at_refusal": {
+      "guard_contract": "core-final-send-v1",
+      "state_at_refusal": "ORDER_CREATED",
+      "definitively_unsent": true,
+      "source": "AUDITED_HISTORICAL_PREPOST_RECONSTRUCTION",
+      "purpose": null
+    },
+    "decision_id,definitively_unsent,entry_policy_id,evidence_ids,guard_contract,guardian_receipt_id,protection_id,reasons,state_at_refusal": {
+      "guard_contract": "core-final-send-v1",
+      "state_at_refusal": "ORDER_CREATED",
+      "definitively_unsent": true,
+      "source": null,
+      "purpose": null
+    },
+    "definitively_unsent,evidence_ids,guard_contract,purpose,reasons,source,state_at_refusal": {
+      "guard_contract": "core-final-send-v1",
+      "state_at_refusal": "ORDER_CREATED",
+      "definitively_unsent": true,
+      "source": "coordinator-pre-post-gate",
+      "purpose": "ENTRY"
+    },
+    "definitively_unsent,evaluation_scope,evidence_ids,guard_contract,purpose,reasons,source,state_at_refusal": {
+      "guard_contract": "core-final-send-v1",
+      "state_at_refusal": "ORDER_CREATED",
+      "definitively_unsent": true,
+      "source": "core-stale-entry-retirement-v1",
+      "purpose": "ENTRY"
+    }
+  },
+  "all_reason_counts": {
+    "ENTRY_PRICE_UNAVAILABLE_OR_STALE": 3403,
+    "CORE_ENTRY_DISABLED": 3347,
+    "TIME_PROCESS_CHANGED": 3347,
+    "PORTFOLIO_CURRENT_MARKS_UNAVAILABLE": 3344,
+    "CORE_ACCOUNT_ENTRY_LEASE_UNAVAILABLE": 3340,
+    "TIME_OBSERVATION_BOUNDARY": 3302,
+    "CORE_ENTRY_DECISION_EXPIRED": 3301,
+    "TIME_EVIDENCE_EXPIRED": 2624,
+    "CORE_INDEPENDENT_GUARDIAN_NOT_READY": 2539,
+    "DISCOVERY_AUTHORITY_MISSING_OR_INVALID": 2018,
+    "ASSET_ELIGIBILITY_UNVERIFIED": 1369,
+    "ASSET_ELIGIBILITY_STALE_OR_MISMATCHED": 1055,
+    "CORE_CASH_AUTHORITY_UNAVAILABLE": 723,
+    "DISCOVERY_AUTHORITY_EXPIRED": 486,
+    "SESSION_CAPITAL_UNVERIFIED": 379,
+    "CORE_INVENTORY_AUTHORITY_UNAVAILABLE": 278,
+    "CORE_GUARDIAN_RECEIPT_EXPIRED": 236,
+    "CORE_PAPER_FUNDS_SOURCE_INVALID": 187,
+    "PORTFOLIO_INVENTORY_STALE": 116,
+    "INVENTORY_ACQUISITION_RETRYABLE": 105,
+    "PORTFOLIO_MARKS_STALE_OR_MISMATCHED": 50,
+    "INVENTORY_CAPTURE_CROSSED_OWNED_SEND": 44,
+    "OWNED_FILL_ACTIVITY_PENDING": 30,
+    "CORE_FIXED_RISK_ENVELOPE": 23,
+    "CORE_ENTRY_FENCED": 22,
+    "INVENTORY_ACQUISITION_UNSTABLE": 8,
+    "CORE_CURRENT_CASH_OR_ACCOUNT_UNCERTIFIED": 1
+  },
+  "reason_counts_since_20261029": {
+    "ENTRY_PRICE_UNAVAILABLE_OR_STALE": 1213,
+    "DISCOVERY_AUTHORITY_MISSING_OR_INVALID": 1211,
+    "PORTFOLIO_CURRENT_MARKS_UNAVAILABLE": 1191,
+    "CORE_ENTRY_DISABLED": 1187,
+    "CORE_ACCOUNT_ENTRY_LEASE_UNAVAILABLE": 1187,
+    "TIME_PROCESS_CHANGED": 1187,
+    "TIME_OBSERVATION_BOUNDARY": 1123,
+    "CORE_ENTRY_DECISION_EXPIRED": 1123,
+    "TIME_EVIDENCE_EXPIRED": 948,
+    "CORE_INDEPENDENT_GUARDIAN_NOT_READY": 860,
+    "DISCOVERY_AUTHORITY_EXPIRED": 486,
+    "CORE_GUARDIAN_RECEIPT_EXPIRED": 156,
+    "CORE_CASH_AUTHORITY_UNAVAILABLE": 75,
+    "SESSION_CAPITAL_UNVERIFIED": 58,
+    "INVENTORY_CAPTURE_CROSSED_OWNED_SEND": 20,
+    "PORTFOLIO_MARKS_STALE_OR_MISMATCHED": 16,
+    "CORE_PAPER_FUNDS_SOURCE_INVALID": 16,
+    "CORE_FIXED_RISK_ENVELOPE": 7,
+    "PORTFOLIO_INVENTORY_STALE": 7,
+    "ASSET_ELIGIBILITY_STALE_OR_MISMATCHED": 4
+  }
+}

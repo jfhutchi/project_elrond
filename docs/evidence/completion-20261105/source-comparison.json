@@ -1,0 +1,20 @@
+{
+  "baseline_commit": "f2d9639",
+  "baseline_note": "Preserved active component baseline, supersedes initial source inventory for change comparison.",
+  "definition": "src/scripts/deploy code/assets; LOC excludes blank/full-line comments, includes docstrings; tests and docs excluded",
+  "before": {
+    "source_files": 488,
+    "physical_lines": 137784,
+    "maintainable_loc": 118614
+  },
+  "after": {
+    "source_files": 492,
+    "physical_lines": 139701,
+    "maintainable_loc": 120385
+  },
+  "physical_lines_added": 2250,
+  "physical_lines_removed": 333,
+  "services_eliminated": 0,
+  "production_dependencies_removed": 0,
+  "deployed": false
+}
