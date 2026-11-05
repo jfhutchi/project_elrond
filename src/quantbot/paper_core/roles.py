@@ -29,6 +29,7 @@ from quantbot.paper_core.contracts import (
     LearningReceipt,
     ProtectionPlan,
 )
+from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics, emit_cycle
 from quantbot.paper_core.guardian import acknowledge_handoffs, guardian_cycle, owned_deadline_wait
 from quantbot.paper_core.outcomes import process_outcomes, recover_intents
 from quantbot.paper_core.release import RuntimeConfig
@@ -122,7 +123,9 @@ def owned_open_symbols(store: CoreStore) -> tuple[str, ...]:
     return tuple(sorted(symbols))
 
 
-async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
+async def dispatch_entries(
+    store: CoreStore, broker: Any, *, observed: TraderCycleDiagnostics | None = None
+) -> tuple[str, ...]:
     reasons: list[str] = []
     with store.database.transaction() as session:
         links, intents = table("core_intent_links"), table("order_intents")
@@ -179,7 +182,9 @@ async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
                 reasons.append("CORE_INDEPENDENT_GUARDIAN_NOT_READY")
                 continue
         try:
-            await coordinator(store, broker).submit_durable(
+            if observed is not None:
+                observed.submission_requests += 1
+            result = await coordinator(store, broker).submit_durable(
                 intent,
                 purpose=OrderPurpose.ENTRY,
                 market_eligible=True,
@@ -187,13 +192,18 @@ async def dispatch_entries(store: CoreStore, broker: Any) -> tuple[str, ...]:
                 risk_approved=None,
                 vetoes=None,
             )
-
         except Exception as error:
             gate = getattr(error, "decision", None)
+            if gate is None and observed is not None:
+                observed.dispatch_failed = True
             fallback: tuple[str, ...] = (type(error).__name__,)
             if store.parallel_entries and str(error):
                 fallback += (str(error),)
             reasons.extend(getattr(gate, "reasons", fallback))
+        else:
+            if observed is not None:
+                with suppress(Exception):
+                    observed.acknowledge(result, now=store.clocks.sample()[0])
     return tuple(dict.fromkeys(reasons))
 
 
@@ -337,6 +347,7 @@ async def run_role(
     pending_learning_key: tuple[date, str] | None = None
     discovery_task = None
     close_capture = None
+    observed = TraderCycleDiagnostics()
     if role == "outcomes" and isinstance(broker, AlpacaCoreBroker):
         from pathlib import Path
 
@@ -367,6 +378,10 @@ async def run_role(
             proof_age = None
             time_proof_age = None
             guardian_receipt = None
+            waiting = False
+            cycle_failed = False
+            observed.submission_requests = observed.acknowledgements = observed.confirmed_fills = 0
+            observed.dispatch_failed = False
             try:
                 refresh = getattr(broker, "refresh_fixture", None)
                 if refresh:
@@ -460,6 +475,7 @@ async def run_role(
                             )
                 else:
                     boundary = int(store.clocks.sample()[0].timestamp() // 300)
+                    waiting = boundary == last_boundary
                     decision = None
                     if boundary != last_boundary:
                         pending_candidate = None
@@ -471,6 +487,19 @@ async def run_role(
                                 await broker.observation_cohort()
                                 if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
                                 else await broker.observation()
+                            )
+                        from quantbot.paper_core.contracts import ObservationCohort
+                        from quantbot.paper_core.selection import cohort_document
+
+                        observation_ids = (
+                            (content_id(cohort_document(store, observation)),)
+                            if isinstance(observation, ObservationCohort)
+                            else (observation.id,)
+                        )
+                        with suppress(Exception):
+                            observed.evaluate(
+                                observation, (), evidence_ids=observation_ids,
+                                now=store.clocks.sample()[0],
                             )
                         model = activation.read_active_model(store)
 
@@ -492,10 +521,17 @@ async def run_role(
                             )
                             evidence_ids = (decision.id,)
                             pending_candidate = decision if decision.action == "BUY" else None
+                        with suppress(Exception):
+                            observed.evaluate(
+                                observation,
+                                decisions if store.parallel_entries else (decision,),
+                                evidence_ids=(*observation_ids, *evidence_ids),
+                                now=store.clocks.sample()[0],
+                            )
                         last_boundary = boundary
                     pending_batch = retry_batch_candidates(store, pending_batch)
                     pending_candidate = retry_entry_candidate(store, pending_candidate)
-                    send_reasons = await dispatch_entries(store, broker)
+                    send_reasons = await dispatch_entries(store, broker, observed=observed)
                     reasons = tuple(
                         dict.fromkeys((*claim_objections(store, decision), *send_reasons))
                     )
@@ -509,6 +545,7 @@ async def run_role(
                 last_progress = store.clocks.sample()[0]
                 failures = 0
             except Exception as error:
+                cycle_failed = True
                 failures += 1
                 reasons = tuple(
                     dict.fromkeys((*claim_objections(store), str(error) or type(error).__name__))
@@ -542,6 +579,12 @@ async def run_role(
                 time_proof_age_seconds=time_proof_age,
                 guardian_receipt_id=guardian_receipt,
             )
+            if role == "trader":
+                with suppress(Exception):
+                    emit_cycle(observed.snapshot(
+                        cycle_id=content_id((heartbeat.id, count)), now=now, waiting=waiting,
+                        reasons=reasons, failure=cycle_failed,
+                    ))
             try:
                 publish_heartbeat(store, heartbeat)
             except OperationalError as error:
