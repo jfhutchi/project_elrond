@@ -1,0 +1,92 @@
+CRYPTO CAPABILITY BOUNDARY: SOURCE AND OFFLINE TEST EVIDENCE
+2026-11-05. Checkout D:/Elrond/worktrees/runtime-repair.
+
+Scope: source inspection and credential-free tests only. No broker requests, operational
+database access, operational configuration changes, task/process changes or commissioning.
+No claim of deployed crypto support or positive expected return.
+
+RESULT
+The existing lower-level SyntheticBroker can hold equity and fractional crypto symbols in
+ONE cash/position/fill journal. Existing domain OrderIntent/Fill/Position support their
+symbols and Decimal quantities. It is safe to reuse this simulator as a dependency; its
+acceptance of a symbol does NOT prove the commissioned core can select/execute that asset.
+Do not start the legacy crypto strategy as a second authoritative writer.
+
+The current core cannot truthfully execute a mixed equity/crypto PAPER lane by changing a
+whitelist or plugging in AlpacaCryptoDataClient alone. The source requires contracts below.
+
+EXACT DEPENDENCIES / MINIMAL SAFE IMPLEMENTATION SEQUENCE
+1. Versioned asset capability and provenance contract, shared by observations, decision,
+   entry eligibility and final send. Keep old serialized IDs stable and unsupported assets
+   fail closed. entry_policy.py: AssetEligibility is us_equity-only; configured stock
+   validator and dynamic supported_symbol reject BTC/USD. CoreConfig hybrid validator in
+   contracts.py rejects mixed configured symbols. Add asset identity, source/feed, calendar,
+   benchmark, quantity increment/minimum and supported order/TIF semantics. Do not infer
+   crypto precision from the equity fractionable boolean or six-decimal sizing.
+2. Reuse market_data/crypto.py and market_data/calendar.py crypto_sessions instead of a new
+   data engine. alpaca_adapter.py cohort/mark/quote paths use stock/IEX endpoints, SPY,
+   adjustment ALL and broker stock clock.is_open. discovery.py filters us_equity and has
+   explicitly equity/IEX coverage evidence. Add bounded crypto acquisition with truthful
+   feed/source identity and independent missing/stale evidence, including weekend data.
+   Reuse the existing account request budgets. No broker transport is needed for local sim.
+3. Separate instrument session from ACCOUNT risk-day identity before mixed calendars.
+   selection.validate_cohort requires all members to have exactly one session open/close;
+   partition cohorts by compatible asset session but claim against the SAME portfolio
+   cash/gross/open-risk/reservation transaction and durable outbox. Never reset allowances
+   independently for equity and crypto. portfolio.record_session_opening checks opening
+   date in America/New_York; crypto daily sessions start at UTC midnight, the prior ET day.
+   portfolio_budget selects opening by current ET day; opening index is account/policy/day.
+   capital.py derives date from UTC opening. These identities need an explicit coherent
+   risk-day contract. Preserve all existing economic limits and holding/close-buffer gates;
+   a 24/7 session must not silently turn off deadlines or create new daily loss allowances.
+4. Add capability-selected order/TIF/quantity semantics through trader.py, batch.py and
+   guardian.py (all currently construct DAY orders). Domain already has GTC but simulator
+   accepts arbitrary legal enum values without proving venue support. Preserve shared
+   runtime.py ExecutionCoordinator/send_guard.py authority, original retry identity,
+   protection ownership and same durable ledger; no second trading engine.
+5. Add separate crypto feature/model/learning identities. learner/five_minute.py always
+   requires SPY and a 30-minute within-session target. Existing strategy-crypto-v2.yaml uses
+   BTC/USD but is a different daily adaptive-momentum strategy with DIFFERENT risk limits;
+   importing that config would change policy. contracts.LearningCalendar only names XNYS
+   authorities, even though underlying XNYSSessionSequence can represent CRYPTO24. Require
+   coherence of authority, sequence calendar, dataset, benchmark and model contract. Do not
+   relabel CRYPTO24 as an XNYS authority or mix crypto learning into existing equity model.
+6. Keep fees truthful. operational_costs.PaperCostContract is US_LISTED_EQUITY and zero-only;
+   it cannot be reused as crypto fee authority. costs.py already distinguishes modeled and
+   actual cost chains. Missing fees remain UNKNOWN/COSTS_PENDING and actual net stays null.
+   Local simulated assumptions stay MODELED. Preserve SYNTHETIC_TEST, LOCAL_SIM_REAL_DATA
+   and BROKER_PAPER evidence separation; never commission broker PAPER from a local replay.
+
+FIRST SAFE VERTICAL SLICE FOR IMPLEMENTER
+Implement the explicit capability/session/risk-day contracts and then an entirely offline
+mixed-assets core integration fixture: one CoreStore/database/account, existing coordinator,
+portfolio reservations, guardian and outcomes, SyntheticBroker or LocalSimulationBroker,
+injected recorded/fake crypto data transport and advancing clock. Exercise AAPL and BTC/USD
+through decision -> claim -> submit -> owned exit -> reconciliation -> outcome on that same
+ledger. No new runtime entry process. Only after this works can real-data adapter acquisition
+be added; operational commissioning remains separate. This is a coordinated cross-module
+feature, not a safe isolated helper patch. No broad partial implementation was introduced.
+
+REQUIRED ACCEPTANCE TESTS
+- Shared mixed-asset cash, gross exposure, reserve, open-risk and daily loss limits; concurrent
+  equity and crypto claims cannot each spend the same availability.
+- Weekend crypto available while equities remain closed; original UTC/ET risk-day and DST
+  boundaries; midnight rollover cannot reset account loss twice; compatible cohorts only.
+- Capability/asset/feed/calendar/benchmark/quantity/TIF mismatches refuse at decision and
+  final send; insufficient precision/minimum size abstains rather than rounds upward.
+- Restart, ambiguous submission, duplicate retry, partial fill/cancel, overdue owned exit and
+  inherited ownership remain exact and idempotent across both assets on the existing ledger.
+- Missing crypto bars/benchmark/marks/fees refuse or remain unknown; no stale equity/SPY
+  substitution; modeled costs never create actual net; no profitable model claim.
+- Preserve old serialization/content IDs and prove old equity behavior and all economic
+  bounds unchanged. Existing integration/fault paper_core suites remain regression basis.
+
+VERIFIED THIS TASK
+31 existing tests passed in test_crypto_client.py, test_crypto_calendar.py and
+strategy/test_crypto_config.py using isolated test interpreter and bounded run_checks runner.
+3 new tests in tests/unit/paper_core/test_crypto_capability_boundary.py passed; Ruff passed.
+They prove lower-level same-journal arithmetic/unknown fees and explicit unsupported core
+contract boundaries. They do NOT establish commissioned mixed-asset execution, live adapter
+capability, expected return or real-data profitability.
+Logs: .superpowers/sdd/runtime-recovery/crypto-capability-test-output.txt and
+      .superpowers/sdd/runtime-recovery/crypto-capability-boundary-test-output.txt.

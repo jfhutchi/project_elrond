@@ -1,0 +1,12 @@
+[
+  {
+    "path": "D:\\Elrond\\releases\\deadline-retry-20261103\\.git\\objects\\info\\alternates",
+    "before": "C:/Users/leepa/OneDrive/Documents/GitHub/project_elrond/.git/objects\n",
+    "after": "D:/Elrond/App/.git/objects"
+  },
+  {
+    "path": "D:\\Elrond\\releases\\support-readiness-20261015\\.git\\objects\\info\\alternates",
+    "before": "C:/Users/leepa/OneDrive/Documents/GitHub/project_elrond/.git/objects\n",
+    "after": "D:/Elrond/App/.git/objects"
+  }
+]
