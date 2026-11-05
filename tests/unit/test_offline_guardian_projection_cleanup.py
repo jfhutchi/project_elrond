@@ -522,6 +522,50 @@ def test_sql_progress_emits_heartbeat_during_long_phase(monkeypatch):
     assert progress[-1]["phase"] == "source_integrity"
 
 
+def test_deletion_progress_counts_scanned_rows_and_preserves_atomic_rollback():
+    with closing(sqlite3.connect(":memory:")) as connection:
+        connection.execute(
+            "CREATE TABLE core_guardian_memberships(plan_id TEXT,receipt_id TEXT,"
+            "PRIMARY KEY(plan_id,receipt_id))"
+        )
+        rows = [("remove" if i % 2 else "keep", str(i)) for i in range(7)]
+        connection.executemany("INSERT INTO core_guardian_memberships VALUES(?,?)", rows)
+        connection.commit()
+        samples = []
+
+        def interrupted(scanned, deleted):
+            samples.append((scanned, deleted))
+            raise TimeoutError("budget expired after a bounded window")
+
+        with pytest.raises(TimeoutError, match="bounded window"):
+            delete_selected(connection, {"remove"}, window_size=3, progress=interrupted)
+        assert samples == [(3, 1)]
+        assert connection.execute("SELECT * FROM core_guardian_memberships").fetchall() == rows
+        samples.clear()
+        delete_selected(
+            connection,
+            {"remove"},
+            window_size=3,
+            progress=lambda scanned, deleted: samples.append((scanned, deleted)),
+        )
+        assert samples == [(3, 1), (6, 3), (7, 3)]
+
+
+def test_sql_heartbeat_retains_latest_count_until_next_phase(monkeypatch):
+    import scripts.offline_guardian_projection_cleanup as cleanup
+
+    clock, samples = [0.0], []
+    monkeypatch.setattr(cleanup.time, "monotonic", lambda: clock[0])
+    budget = cleanup.Budget(progress=samples.append)
+    budget.tick(phase="delete_memberships")
+    budget.tick(4096, deleted=3500)
+    clock[0] = 6.0
+    budget.tick()
+    assert samples[-1]["rows"] == 4096 and samples[-1]["deleted_rows"] == 3500
+    budget.tick(phase="vacuum_candidate")
+    assert samples[-1]["rows"] == 0 and samples[-1]["deleted_rows"] == 0
+
+
 def verified_receipt(path, output):
     import hashlib
 

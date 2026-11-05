@@ -90,6 +90,7 @@ class Budget:
         )
         self.last_progress = 0.0
         self.phase = "starting"
+        self.rows = self.deleted_rows = 0
         self.scratch_root = scratch_directory
         self.scratch = None
         self.scratch_bytes = 0
@@ -98,12 +99,25 @@ class Budget:
     def expired(self):
         return self.deadline is not None and time.monotonic() >= self.deadline
 
-    def tick(self, rows=0, *, phase=None):
+    def tick(self, rows=None, *, phase=None, deleted=None):
         if self.expired():
             raise TimeoutError("incomplete offline audit: time budget expired")
+        if phase is not None:
+            self.phase = phase
+            self.rows = self.deleted_rows = 0
+        if rows is not None:
+            self.rows = rows
+        if deleted is not None:
+            self.deleted_rows = deleted
         if phase is not None or time.monotonic() - self.last_progress >= 5:
-            self.phase = phase or self.phase
-            self.progress({"event": "OFFLINE_CLEANUP_PROGRESS", "phase": self.phase, "rows": rows})
+            self.progress(
+                {
+                    "event": "OFFLINE_CLEANUP_PROGRESS",
+                    "phase": self.phase,
+                    "rows": self.rows,
+                    "deleted_rows": self.deleted_rows,
+                }
+            )
             self.last_progress = time.monotonic()
 
     def attach(self, connection):
@@ -667,10 +681,11 @@ def verify_cleanup(
             return _verify_rows(old, new, selected, proofs, budget, rebuilt=rebuilt)
 
 
-def delete_selected(connection, selected, *, window_size=4096):
+def delete_selected(connection, selected, *, window_size=4096, progress=None):
     if not 1 <= window_size <= 4096:
         raise ValueError("bounded rowid window required")
     selected, last = set(selected), None
+    scanned = deleted = 0
     with connection:
         connection.execute("BEGIN IMMEDIATE")
         while True:
@@ -688,15 +703,18 @@ def delete_selected(connection, selected, *, window_size=4096):
             if not rows:
                 break
             last = rows[-1][0]  # Advance even across windows containing no selected rows.
+            scanned += len(rows)
             matching = [rowid for rowid, plan in rows if plan in selected]
             for offset in range(0, len(matching), 500):
                 chunk = matching[offset : offset + 500]
-                connection.execute(
+                deleted += connection.execute(
                     "DELETE FROM core_guardian_memberships WHERE rowid IN ("
                     + ",".join("?" for _ in chunk)
                     + ")",
                     chunk,
-                )
+                ).rowcount
+            if progress is not None:
+                progress(scanned, deleted)
 
 
 def volume_key(directory):
@@ -866,7 +884,11 @@ def _candidate_copy(
                             [(plan, identity) for plan in plans if plan in selected],
                         )
             else:
-                delete_selected(connection, selected)
+                delete_selected(
+                    connection,
+                    selected,
+                    progress=lambda scanned, deleted: budget.tick(scanned, deleted=deleted),
+                )
             if vacuum:
                 if Path(str(partial) + "-journal").exists():
                     raise ValueError("mutation rollback journal still exists before VACUUM")
