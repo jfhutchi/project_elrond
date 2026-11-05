@@ -5,12 +5,21 @@
   <p class="n">Report time {{ state.paper_costs.as_of }}.</p>
   {% if state.paper_costs.days %}
   <div class="scroll"><table>
-    <tr><th>Eastern session</th><th>Round trips</th><th>Gross realized</th><th>Observed fee cash flow</th><th>Net after observed fees</th><th>Modeled fee scenario (not verified)</th><th>Source scope</th></tr>
+    <tr><th>Eastern session</th><th>Round trips</th><th>Gross realized</th><th>Observed account fee cash flow</th><th>Net after observed fees</th><th>Modeled fee scenario (not verified)</th><th>Source scope</th></tr>
     {% for day in state.paper_costs.days|reverse %}
     <tr>
       <td>{{ day.session_date }}</td><td>{{ day.round_trips }}</td>
       <td>${{ day.gross_realized }}</td>
-      <td>{{ '$' ~ day.observed_fee_cash_flow if day.observed_fee_cash_flow is not none else 'Not observed' }}</td>
+      <td>
+        {{ '$' ~ day.observed_fee_cash_flow if day.observed_fee_cash_flow is not none else 'Not observed' }}
+        <br><span class="n">{% if day.invalid_fee_activity_ids %}Fee activity observed, but its status or details are unverified; no usable fee amount.{% elif day.fee_status == 'POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION' %}Account fees observed; exact trade allocation unavailable.{% else %}No fee activity observed by this capture; completeness unknown.{% endif %}</span>
+        {% if day.invalid_fee_activity_ids %}<details><summary>{{ day.invalid_fee_activity_ids|length }} unverified fee activities</summary>{{ day.invalid_fee_activity_ids|join(', ') }}</details>{% endif %}
+        {% if day.fee_activities %}
+        <details><summary>{{ day.fee_activities|length }} retained fee activities</summary>
+          <ul>{% for fee in day.fee_activities %}<li>{{ fee.component or 'Unspecified' }} {{ fee.cash_flow }} USD, posted {{ fee.created_at }}; activity {{ fee.id }}; source {{ fee.source_document_ids|join(', ') }}</li>{% endfor %}</ul>
+        </details>
+        {% endif %}
+      </td>
       <td>{{ '$' ~ day.net_after_observed_fees if day.net_after_observed_fees is not none else 'Unknown' }}</td>
       <td>{% if day.fee_scenario %}${{ day.fee_scenario.modeled_net }}<br><span class="n">Assumes ${{ day.fee_scenario.assumed_daily_fee }} daily fees from {{ day.fee_scenario.reference_session }}; additional modeled amount ${{ day.fee_scenario.modeled_additional_fee }}.</span>{% else %}None{% endif %}</td>
       <td>{{ 'Matched full-session account fills' if day.scope_verified else 'Incomplete or mismatched' }}<br><span class="n">Activity capture {{ day.activity_capture_until or 'unavailable' }}{% if day.activity_capture_lag_seconds is not none %}; lag {{ day.activity_capture_lag_seconds }} seconds{% endif %}.</span></td>

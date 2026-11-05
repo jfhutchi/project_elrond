@@ -11,6 +11,7 @@ route table rather than trusted to reviewers noticing a new POST.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,13 @@ from fastapi.testclient import TestClient
 
 from quantbot.console.app import NAVIGATION, create_app
 from quantbot.storage import Database, StorageRepository
+
+local_client = partial(
+    TestClient,
+    base_url="http://127.0.0.1",
+    client=("127.0.0.1", 50000),
+    headers={"Origin": "http://127.0.0.1"},
+)
 
 SECRET_KEY = "pk-do-not-print"
 SECRET_ACCOUNT = "acct-0123456789-should-never-render"
@@ -35,7 +43,7 @@ def client(database: Database, monkeypatch: pytest.MonkeyPatch) -> TestClient:
     monkeypatch.setenv("EXPECTED_ACCOUNT_ID", SECRET_ACCOUNT)
     monkeypatch.setenv("ALPACA_PAPER_API_KEY", SECRET_KEY)
     monkeypatch.setenv("ALPACA_PAPER_API_SECRET", "sk-do-not-print")
-    return TestClient(create_app(database))
+    return local_client(create_app(database))
 
 
 def everything(client: TestClient) -> str:
@@ -516,7 +524,7 @@ def test_a_console_without_a_broker_refuses_to_reconcile(database) -> None:
     """
     from quantbot.console.app import create_app
 
-    response = TestClient(create_app(database, reconcile=None)).post(
+    response = local_client(create_app(database, reconcile=None)).post(
         "/operations/reconcile", follow_redirects=False
     )
 
@@ -535,7 +543,7 @@ def test_a_failed_reconciliation_is_reported_rather_than_swallowed(database) -> 
     async def explode():
         raise RuntimeError("the broker refused the connection")
 
-    response = TestClient(create_app(database, reconcile=explode)).post(
+    response = local_client(create_app(database, reconcile=explode)).post(
         "/operations/reconcile", follow_redirects=False
     )
 
@@ -554,7 +562,7 @@ def test_a_successful_reconciliation_redirects(database) -> None:
         called.append(True)
         return {"ok": True, "status": "RECONCILED", "diff_count": 0, "reasons": []}
 
-    response = TestClient(create_app(database, reconcile=succeed)).post(
+    response = local_client(create_app(database, reconcile=succeed)).post(
         "/operations/reconcile", follow_redirects=False
     )
 

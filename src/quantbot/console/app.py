@@ -45,7 +45,7 @@ from pathlib import Path
 from typing import Any, cast
 from urllib.parse import parse_qsl
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from starlette.middleware.base import RequestResponseEndpoint
@@ -92,6 +92,23 @@ TEMPLATES = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 #: Loopback, deliberately. See the module docstring.
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8787
+
+
+def require_local_control_origin(request: Request) -> None:
+    """Require explicit local browser intent before any POST handler can act."""
+    if request.method != "POST":
+        return
+    origins = request.headers.getlist("origin")
+    if (
+        request.client is None
+        or request.client.host not in ("127.0.0.1", "::1")
+        or len(request.headers.getlist("host")) != 1
+        or request.url.hostname not in ("127.0.0.1", "localhost", "::1")
+        or len(origins) != 1
+        or origins[0] != str(request.base_url).rstrip("/")
+    ):
+        raise HTTPException(403, "Local same-origin control request required")
+
 
 #: The pages the console offers, in navigation order. Declared once so the shell and the router
 #: cannot disagree about what exists.
@@ -153,6 +170,7 @@ def create_app(
     app = FastAPI(
         title="Elrond operator console",
         version="0.2",
+        dependencies=[Depends(require_local_control_origin)],
         description=(
             "Renders authoritative state with bounded operator controls. Paper trading only; "
             "no surface here can enable live trading."
@@ -362,15 +380,7 @@ def create_app(
 
     @app.post("/learner/alerts/{source}/{code}/acknowledge")
     def acknowledge_alert(request: Request, source: str, code: str) -> RedirectResponse:
-        # Acknowledgement changes only the dedicated alert store. Require a local,
-        # same-origin browser request; never let an external page silently acknowledge it.
-        if (
-            request.client is None
-            or request.client.host not in ("127.0.0.1", "::1")
-            or request.url.hostname not in ("127.0.0.1", "localhost", "::1")
-            or request.headers.get("origin") != str(request.base_url).rstrip("/")
-        ):
-            raise HTTPException(403, "Local same-origin acknowledgement required")
+        # The shared POST guard also protects this dedicated acknowledgement store.
         if (
             learner_directory is None
             or source not in ("learner", "monitor")

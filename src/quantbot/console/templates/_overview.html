@@ -83,10 +83,16 @@
       <div class="role-list">
       {% if state.overview.roles %}{% for role in state.overview.roles %}
         <div class="role-row"><span class="role-name">{{ role.role }}</span><span class="quiet">{{ role.status }}</span></div>
+        {% if role.blocker_code %}<div class="n">Recorded blocker: <code>{{ role.blocker_code }}</code></div>{% endif %}
         {% if role.reason %}<div class="n mono">{{ role.reason }}</div>{% endif %}
+        {% if role.action %}<div class="n">Next step: {{ role.action }}</div>{% endif %}
+        <div class="n">Heartbeat age: {{ '%.0f seconds'|format(role.heartbeat_age_seconds) if role.heartbeat_age_seconds is not none else 'Unavailable' }}.</div>
+        {% if role.valid_until %}<div class="n">{{ 'Expired' if role.expired else 'Expires' }} {{ role.valid_until.strftime('%Y-%m-%d %H:%M:%S UTC') }}.</div>{% endif %}
+        <div class="n">Last useful progress: {% if role.progress_age_seconds is not none %}{{ '%.0f seconds ago'|format(role.progress_age_seconds) }}{% else %}Unavailable{% endif %}.</div>
       {% endfor %}{% else %}
         {% for role in ['Trader','Guardian','Outcomes'] %}<div class="role-row"><span>{{ role }}</span><span class="quiet">No verified heartbeat</span></div>{% endfor %}
       {% endif %}</div>
+      <p class="n">Role evidence is recorded state, not entry permission. Stale records do not establish current readiness.</p>
       <p class="n">Learning baseline: ten completed sessions. Daily updates use all eligible history, with extra weight on the latest ten sessions.</p>
       <details class="hint"><summary>Legacy learner records</summary>
         <p><a href="/learner">{{ state.learner.status.replace('_', ' ').capitalize() }}</a>. {{ state.learner.reason }}</p>

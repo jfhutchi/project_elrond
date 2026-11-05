@@ -9,6 +9,7 @@ would leave the suite green while the console misled the person using it.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,13 @@ from fastapi.testclient import TestClient
 from quantbot.console.app import create_app
 from quantbot.risk.policy_versions import active_policy_version
 from quantbot.storage import Database, StorageRepository
+
+local_client = partial(
+    TestClient,
+    base_url="http://127.0.0.1",
+    client=("127.0.0.1", 50000),
+    headers={"Origin": "http://127.0.0.1"},
+)
 
 
 @pytest.fixture
@@ -30,7 +38,7 @@ def database(tmp_path: Path):
 
 @pytest.fixture
 def client(database: Database) -> TestClient:
-    return TestClient(create_app(database))
+    return local_client(create_app(database))
 
 
 def versions(database: Database) -> list[dict[str, object]]:

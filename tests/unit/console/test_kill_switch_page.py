@@ -12,7 +12,8 @@ the measurement, not the caller.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+from functools import partial
 from pathlib import Path
 
 import pytest
@@ -20,9 +21,17 @@ from fastapi.testclient import TestClient
 
 from quantbot.brokers.base import BrokerHealth
 from quantbot.console.app import create_app
+from quantbot.domain import Bar, ReconciliationStatus
 from quantbot.operations.kill_switch import KillSwitchController
 from quantbot.operations.readiness import measure_readiness
 from quantbot.storage import Database, StorageRepository
+
+local_client = partial(
+    TestClient,
+    base_url="http://127.0.0.1",
+    client=("127.0.0.1", 50000),
+    headers={"Origin": "http://127.0.0.1"},
+)
 
 NOW = datetime(2026, 8, 30, 12, 0, tzinfo=UTC)
 
@@ -84,7 +93,7 @@ def state(database: Database):
 
 def test_engaging_needs_only_a_reason(database: Database) -> None:
     """No measurement, no probe, no ceremony. Stopping must never be gated."""
-    client = TestClient(create_app(database, measure=None))
+    client = local_client(create_app(database, measure=None))
 
     response = client.post(
         "/kill-switch/engage", data={"reason": "unexpected fills"}, follow_redirects=False
@@ -104,13 +113,39 @@ def test_engaging_without_a_reason_is_refused(database: Database) -> None:
     default rather than against this route.
     """
     before = state(database)
-    client = TestClient(create_app(database, measure=None))
+    client = local_client(create_app(database, measure=None))
 
     response = client.post("/kill-switch/engage", data={"reason": "  "})
 
     assert response.status_code == 200
     assert "needs a reason" in response.text
     assert state(database).reason == before.reason, "a blank reason was recorded"
+
+
+def test_local_stop_and_measured_resume_remain_available(database: Database) -> None:
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        repository.save_reconciliation(
+            "console-ready", status=ReconciliationStatus.RECONCILED,
+            started_at=NOW - timedelta(minutes=1), completed_at=NOW, diffs=(),
+        )
+        repository.save_bars(
+            [Bar(symbol="SPY", timestamp=NOW, open="100", high="110", low="95",
+                 close="105", volume="1000", adjustment="1")],
+            provider="alpaca",
+        )
+    client = local_client(create_app(database, measure=probe_for(database, HealthyBroker())))
+    stopped = client.post(
+        "/kill-switch/engage", data={"reason": "operator stop"}, follow_redirects=False
+    )
+    assert stopped.status_code == 303
+    assert state(database).engaged is True
+    resumed = client.post(
+        "/kill-switch/clear", data={"reason": "measured recovery"}, follow_redirects=False
+    )
+    assert resumed.status_code == 303
+    assert state(database).engaged is False
+    assert state(database).reason == "measured recovery"
 
 
 # --- resuming is not ------------------------------------------------------------------------------
@@ -121,7 +156,7 @@ def test_a_console_that_cannot_measure_does_not_offer_to_clear(database: Databas
     there is no button.
     """
     engaged(database)
-    client = TestClient(create_app(database, measure=None))
+    client = local_client(create_app(database, measure=None))
 
     body = client.get("/kill-switch").text
 
@@ -138,7 +173,7 @@ def test_clearing_without_a_probe_is_refused_even_if_posted_directly(
     refusal is the control.
     """
     engaged(database)
-    client = TestClient(create_app(database, measure=None))
+    client = local_client(create_app(database, measure=None))
 
     response = client.post("/kill-switch/clear", data={"reason": "looks fine to me"})
 
@@ -152,7 +187,7 @@ def test_an_unhealthy_broker_blocks_the_clear_and_says_which_condition(
 ) -> None:
     """The refusal is the useful part. An operator needs to know what to go and fix."""
     engaged(database)
-    client = TestClient(
+    client = local_client(
         create_app(database, measure=probe_for(database, SickBroker()))
     )
 
@@ -173,7 +208,7 @@ def test_an_unprobed_condition_blocks_exactly_as_an_unmet_one_does(
     satisfied is how a system resumes into the fault that stopped it.
     """
     engaged(database)
-    client = TestClient(create_app(database, measure=probe_for(database, None)))
+    client = local_client(create_app(database, measure=probe_for(database, None)))
 
     response = client.post("/kill-switch/clear", data={"reason": "no broker configured"})
 
@@ -185,7 +220,7 @@ def test_an_unprobed_condition_blocks_exactly_as_an_unmet_one_does(
 def test_clearing_without_a_reason_is_refused(database: Database) -> None:
     """The reason is recorded permanently beside the change; there is no blank one to record."""
     engaged(database)
-    client = TestClient(
+    client = local_client(
         create_app(database, measure=probe_for(database, HealthyBroker()))
     )
 
@@ -203,7 +238,7 @@ def test_the_page_never_claims_it_can_reach_live_trading(database: Database) -> 
     consequential-looking control in the console, and the one most likely to be mistaken for a
     capital control.
     """
-    client = TestClient(create_app(database, measure=None))
+    client = local_client(create_app(database, measure=None))
 
     body = client.get("/kill-switch").text
 
@@ -217,7 +252,7 @@ def test_the_route_table_gains_exactly_two_mutations(database: Database) -> None
     A future edit that adds a third kill-switch route should have to come past this test and the
     allowlist both.
     """
-    client = TestClient(create_app(database, measure=None))
+    client = local_client(create_app(database, measure=None))
     routes = {
         (route.path, method)
         for route in client.app.routes

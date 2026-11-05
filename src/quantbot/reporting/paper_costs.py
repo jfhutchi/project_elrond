@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 import sqlite3
+import time
 from collections import defaultdict
 from contextlib import closing
 from datetime import UTC, datetime
@@ -249,64 +250,94 @@ def build_report(
     )
 
 
-def read_report(path: Path, *, as_of: datetime) -> dict[str, Any]:
+def read_report(
+    path: Path,
+    *,
+    as_of: datetime,
+    max_read_seconds: float = 4,
+    max_rows: int = 25_000,
+    max_bytes: int = 32_000_000,
+) -> dict[str, Any]:
     """Read an existing core store without constructing Database or modifying a ledger."""
     path = path.resolve()
+    deadline = time.monotonic() + max_read_seconds
+    read_rows = 0
+    read_bytes = 0
+
+    def check_budget() -> None:
+        if time.monotonic() >= deadline or read_rows > max_rows or read_bytes > max_bytes:
+            raise ValueError("PAPER_COST_READ_BUDGET_EXCEEDED")
+
     with closing(sqlite3.connect(path.as_uri() + "?mode=ro", uri=True, timeout=2)) as c:
         c.row_factory = sqlite3.Row
         c.execute("PRAGMA query_only=ON")
+        c.set_progress_handler(lambda: int(time.monotonic() >= deadline), 1000)
+
+        def rows(sql: str, params: list[str] | tuple[str, ...] = ()) -> list[sqlite3.Row]:
+            nonlocal read_rows, read_bytes
+            check_budget()
+            result = []
+            try:
+                for row in c.execute(sql, params):
+                    read_rows += 1
+                    read_bytes += sum(
+                        len(str(value).encode()) for value in row if value is not None
+                    )
+                    check_budget()
+                    result.append(row)
+            except sqlite3.OperationalError as error:
+                if time.monotonic() >= deadline:
+                    raise ValueError("PAPER_COST_READ_BUDGET_EXCEEDED") from error
+                raise
+            return result
+
         c.execute("BEGIN")
-        identities = c.execute("SELECT payload FROM core_identities").fetchall()
+        identities = rows("SELECT payload FROM core_identities")
         if len(identities) != 1:
             raise ValueError("EXACT_PAPER_IDENTITY_REQUIRED")
         identity = json.loads(identities[0][0])
         if identity["evidence_lane"] != "BROKER_PAPER":
             raise ValueError("PAPER_ONLY_REPORT")
-        trips = [
-            json.loads(r[0]) for r in c.execute("SELECT payload FROM core_round_trips").fetchall()
-        ]
+        trips = [json.loads(r[0]) for r in rows("SELECT payload FROM core_round_trips")]
         ids = sorted({i for t in trips for i in (*t["entry_fill_ids"], *t["exit_fill_ids"])})
         fills: list[dict[str, Any]] = []
         for start in range(0, len(ids), 400):
             chunk = ids[start : start + 400]
             fills.extend(
                 dict(r)
-                for r in c.execute(
+                for r in rows(
                     "SELECT * FROM fills WHERE fill_id IN (" + ",".join("?" for _ in chunk) + ")",
                     chunk,
-                ).fetchall()
+                )
             )
         external = [
-            json.loads(r[0])
-            for r in c.execute("SELECT payload FROM core_external_owner_events").fetchall()
+            json.loads(r[0]) for r in rows("SELECT payload FROM core_external_owner_events")
         ]
         documents = {
             e["source_document"]
             for e in external
             if e.get("activity_type") in {"FEE", "CFEE"} and e.get("source_document")
         }
-        documents.update(
-            r[0] for r in c.execute("SELECT document_id FROM core_provider_progress").fetchall()
-        )
+        documents.update(r[0] for r in rows("SELECT document_id FROM core_provider_progress"))
         sources = []
         for doc_id in sorted(documents):
-            row = c.execute(
-                "SELECT payload FROM core_provider_acquisitions WHERE id=?", (doc_id,)
-            ).fetchone()
+            found = rows("SELECT payload FROM core_provider_acquisitions WHERE id=?", (doc_id,))
+            row = found[0] if found else None
             if row is None:
                 raise ValueError("FEE_SOURCE_DOCUMENT_UNAVAILABLE")
             sources.append(dict(id=doc_id, document=json.loads(row[0])))
         sessions = []
-        for row in c.execute(
+        for row in rows(
             "SELECT d.id,d.payload FROM core_session_opening_index i "
             "JOIN core_session_openings d ON d.id=i.document_id"
-        ).fetchall():
+        ):
             opening = json.loads(row[1])
             if _digest(opening) != row[0]:
                 raise ValueError("SESSION_SOURCE_DIGEST_MISMATCH")
-            timing = c.execute(
+            found = rows(
                 "SELECT payload FROM core_time_evidence WHERE id=?", (opening["time_evidence_id"],)
-            ).fetchone()
+            )
+            timing = found[0] if found else None
             if timing:
                 doc = json.loads(timing[0])
                 if _digest(doc) != opening["time_evidence_id"]:
@@ -331,7 +362,8 @@ def read_report(path: Path, *, as_of: datetime) -> dict[str, Any]:
                         )
                     ):
                         sessions.append(dict(opening, session_close=provider["session_close"]))
-    return build_report(
+    check_budget()
+    report = build_report(
         trips=trips,
         fills=fills,
         documents=sources,
@@ -339,6 +371,8 @@ def read_report(path: Path, *, as_of: datetime) -> dict[str, Any]:
         account_id=identity["account_id"],
         as_of=as_of,
     )
+    check_budget()
+    return report
 
 
 def main() -> None:

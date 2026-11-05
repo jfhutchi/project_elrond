@@ -11,12 +11,20 @@ is almost always "fetch the bars" -- which currently needs a terminal.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from functools import partial
 
 import pytest
 from fastapi.testclient import TestClient
 
 from quantbot.console.app import create_app
 from quantbot.storage import Database
+
+local_client = partial(
+    TestClient,
+    base_url="http://127.0.0.1",
+    client=("127.0.0.1", 50000),
+    headers={"Origin": "http://127.0.0.1"},
+)
 
 
 @pytest.fixture
@@ -32,7 +40,7 @@ def test_the_action_calls_the_injected_sync_and_shows_the_result(database) -> No
         calls.append("sync")
         return {"ok": True, "bars_stored": 23}
 
-    client = TestClient(create_app(database, sync_data=sync))
+    client = local_client(create_app(database, sync_data=sync))
     response = client.post("/operations/sync-data", follow_redirects=False)
 
     assert response.status_code == 200
@@ -45,7 +53,7 @@ def test_an_up_to_date_sync_explains_why_the_page_has_not_changed(database) -> N
     async def sync() -> Mapping[str, object]:
         return {"ok": True, "bars_stored": 0, "completed_through": "2026-09-04"}
 
-    client = TestClient(create_app(database, sync_data=sync))
+    client = local_client(create_app(database, sync_data=sync))
     response = client.post("/operations/sync-data")
 
     assert "No new bars were added" in response.text
@@ -65,7 +73,7 @@ def test_an_unhealthy_result_shows_failure_and_any_partial_progress(database) ->
             "stale_symbols": ["SPY"],
         }
 
-    client = TestClient(create_app(database, sync_data=sync))
+    client = local_client(create_app(database, sync_data=sync))
     response = client.post("/operations/sync-data")
 
     assert "Market data sync needs attention" in response.text
@@ -85,7 +93,7 @@ def test_a_console_without_credentials_says_so_rather_than_offering_a_dead_contr
     A surface that cannot reach the provider must not offer to fetch from it, and it must say
     why rather than failing with something nobody can read.
     """
-    client = TestClient(create_app(database, sync_data=None))
+    client = local_client(create_app(database, sync_data=None))
     response = client.post("/operations/sync-data", follow_redirects=False)
 
     assert response.status_code == 200
@@ -102,7 +110,7 @@ def test_a_provider_failure_is_reported_rather_than_swallowed(database) -> None:
     async def sync() -> Mapping[str, object]:
         raise RuntimeError("provider returned 502")
 
-    client = TestClient(create_app(database, sync_data=sync))
+    client = local_client(create_app(database, sync_data=sync))
     response = client.post("/operations/sync-data", follow_redirects=False)
 
     assert response.status_code == 200
@@ -116,7 +124,7 @@ def test_the_button_is_on_the_market_data_page(database) -> None:  # type: ignor
     async def sync() -> Mapping[str, object]:
         return {"ok": True}
 
-    client = TestClient(create_app(database, sync_data=sync))
+    client = local_client(create_app(database, sync_data=sync))
     body = client.get("/market-data").text
 
     assert 'action="/operations/sync-data"' in body

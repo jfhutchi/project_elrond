@@ -218,6 +218,27 @@ def test_fee_absence_has_capture_timestamp_and_lag_not_implied_live_freshness():
     assert today["activity_capture_lag_seconds"] == 3600
 
 
+def test_cost_panel_identifies_observed_but_unverified_fee_activities():
+    from types import SimpleNamespace
+
+    from quantbot.console.app import TEMPLATES
+
+    data = fixture()
+    document = data["documents"][0]["document"]
+    for row in document["rows"]:
+        if row.get("activity_type") == "FEE":
+            row["status"] = "pending"
+    data["documents"][0]["id"] = digest(document)
+    costs = report(data)
+    assert costs["days"][0]["invalid_fee_activity_ids"]
+    html = TEMPLATES.get_template("_paper_costs.html").render(
+        state=SimpleNamespace(paper_costs={"available": True, **costs})
+    )
+    first_day = html.split("<td>2026-10-27</td>", 1)[1].split("</tr>", 1)[0]
+    assert "Fee activity observed, but its status or details are unverified" in first_day
+    assert "No fee activity observed by this capture" not in first_day
+
+
 def test_refund_is_a_signed_observed_credit_and_not_a_modeled_cost():
     data = fixture()
     doc = data["documents"][0]["document"]
@@ -374,6 +395,49 @@ def test_query_only_reader_is_repeatable_and_late_posting_never_rewrites_native_
     assert updated["days"][1]["fee_scenario"] is None
     with sqlite3.connect(path) as c:
         assert c.execute("SELECT * FROM core_round_trips ORDER BY id").fetchall() == native_before
+
+
+@pytest.mark.parametrize("budget", ["rows", "bytes", "time"])
+def test_cost_read_budget_refuses_incomplete_history_without_changing_evidence(tmp_path, budget):
+    data = fixture()
+    path = tmp_path / "paper.db"
+    database_fixture(path, data)
+    with sqlite3.connect(path) as c:
+        for index in range(100):
+            c.execute(
+                "INSERT INTO core_external_owner_events VALUES (?,?)",
+                (f"unrelated-{index}", json.dumps({"activity_type": "OTHER", "id": index})),
+            )
+    before = path.read_bytes()
+    limits = {
+        "rows": {"max_rows": 25},
+        "bytes": {"max_bytes": 100},
+        "time": {"max_read_seconds": 0},
+    }[budget]
+    with pytest.raises(ValueError, match="PAPER_COST_READ_BUDGET_EXCEEDED"):
+        module().read_report(path, as_of=data["as_of"], **limits)
+    assert path.read_bytes() == before
+
+
+def test_cost_deadline_expiring_during_history_read_never_returns_partial_days(
+    tmp_path, monkeypatch
+):
+    import itertools
+
+    data = fixture()
+    path = tmp_path / "paper.db"
+    database_fixture(path, data)
+    with sqlite3.connect(path) as c:
+        for index in range(100):
+            c.execute(
+                "INSERT INTO core_external_owner_events VALUES (?,?)",
+                (f"other-{index}", json.dumps({"activity_type": "OTHER", "id": index})),
+            )
+    ticks = itertools.count()
+    monkeypatch.setattr(module().time, "monotonic", lambda: next(ticks) / 1000)
+    with pytest.raises(ValueError, match="PAPER_COST_READ_BUDGET_EXCEEDED"):
+        module().read_report(path, as_of=data["as_of"], max_read_seconds=0.03)
+    assert next(ticks) > 8  # Budget expired after the reader had begun loading rows.
 
 
 def test_cli_refuses_existing_output_and_nonpaper_database(tmp_path, monkeypatch):
