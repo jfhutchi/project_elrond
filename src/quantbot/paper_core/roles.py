@@ -8,7 +8,7 @@ import os
 import random
 import sqlite3
 from contextlib import suppress
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from typing import Any, Literal
 
 from sqlalchemy import select
@@ -26,7 +26,6 @@ from quantbot.paper_core.authority import (
 from quantbot.paper_core.contracts import (
     Decision,
     LearningPolicy,
-    LearningReceipt,
     ProtectionPlan,
 )
 from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics, emit_cycle
@@ -263,15 +262,6 @@ async def daily_consideration(
     if selection is None:
         return ("ACTIVE_MODEL_UNCOMMISSIONED",)
     parent, current = selection
-    if current.receipt_id:
-        previous = store.read("core_learning_runs", current.receipt_id, LearningReceipt)
-        with store.database.transaction() as session:
-            revisions = set(
-                session.execute(select(table("core_outcome_index").c.outcome_id)).scalars()
-            )
-        known = set(previous.considered_ids) | {identity for identity, _ in previous.exclusions}
-        if previous.completed_session == completed[-1].session_date and revisions <= known:
-            return ("CONSIDERED_SESSION:" + completed[-1].session_date.isoformat(), previous.reason)
     gross = store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
     policy = LearningPolicy(
         procedure_version=(
@@ -343,8 +333,6 @@ async def run_role(
     pending_candidate: Decision | None = None
     pending_batch: tuple[Decision, ...] = ()
     learning_task: asyncio.Task[tuple[str, ...]] | None = None
-    last_learning_key: tuple[date, str] | None = None
-    pending_learning_key: tuple[date, str] | None = None
     discovery_task = None
     close_capture = None
     observed = TraderCycleDiagnostics()
@@ -414,20 +402,7 @@ async def run_role(
                     reasons = batch.reasons
                     if learning_task is not None and learning_task.done():
                         try:
-                            learning_result = learning_task.result()
-                            reasons += learning_result
-                            if learning_result and learning_result[0].startswith(
-                                "CONSIDERED_SESSION:"
-                            ):
-                                considered_session = date.fromisoformat(
-                                    learning_result[0].split(":", 1)[1]
-                                )
-                                if pending_learning_key and (
-                                    considered_session == pending_learning_key[0]
-                                ):
-                                    # Retain the requested snapshot, not a newer input set that
-                                    # may have arrived while this consideration was running.
-                                    last_learning_key = pending_learning_key
+                            reasons += learning_task.result()
                         except Exception as error:
                             reasons += ("LEARNING_RETRY:" + type(error).__name__,)
                         learning_task = None
@@ -449,30 +424,11 @@ async def run_role(
                         except Exception as error:
                             reasons = ("OUTCOME_PROVIDER_RETRY:" + type(error).__name__,)
                     if learning_task is None and not close_provider_lane:
-                        calendar = await broker.learning_calendar()
-                        completed = [
-                            s
-                            for s in calendar.sequence.sessions
-                            if s.close_at <= store.clocks.sample()[0]
-                            and s.open_at >= config.learning_origin
-                        ]
-                        session_key = completed[-1].session_date if completed else None
-                        with store.database.transaction() as session:
-                            pointer = table("core_outcome_index")
-                            revisions = tuple(
-                                tuple(row)
-                                for row in session.execute(
-                                    select(pointer.c.outcome_id, pointer.c.status).order_by(
-                                        pointer.c.lot_id
-                                    )
-                                )
-                            )
-                        learning_key = (session_key, content_id(revisions)) if session_key else None
-                        if learning_key is not None and last_learning_key != learning_key:
-                            pending_learning_key = learning_key
-                            learning_task = asyncio.create_task(
-                                daily_consideration(store, broker, config)
-                            )
+                        # The learner's immutable run identity includes eligibility
+                        # exclusions, which can change without new outcome revisions.
+                        learning_task = asyncio.create_task(
+                            daily_consideration(store, broker, config)
+                        )
                 else:
                     boundary = int(store.clocks.sample()[0].timestamp() // 300)
                     waiting = boundary == last_boundary
