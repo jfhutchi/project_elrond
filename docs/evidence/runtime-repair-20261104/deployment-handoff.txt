@@ -1,0 +1,41 @@
+EXACT CODE-ONLY DEPLOYMENT HANDOFF — pending valid open-session evidence
+
+Stage: D:/Elrond/deploy/runtime-repair-20261104
+Config: D:/Elrond/config/paper-core-14352cc-20261015/runtime-config.json
+Manifest: D:/Elrond/config/paper-core-14352cc-20261015/runtime-manifest.json
+Predecessor: 5cee6ebd4fcec939c1fce8d9e7c8b472038fe3f4db812a51d71e5c37dc1e424f
+Successor: 2b53a23687b28c91dc2afe883f544adc27bf6462fcce447888bcfc2878a2c850
+Changed runtime files: paper_core/guardian.py, health.py, trader.py only.
+
+This handoff does not grant a new trading mode, account, policy, model or risk limit.
+User authorized the repair and restoration of the PAPER trading/learning loop.
+Keep the current entry stop and all unrelated manual/integrity controls intact.
+
+1. Verify committed source hashes and predecessor manifest again. Recheck actual
+   task/process identities, current runtime event, outstanding sends, owned exposure,
+   current broker state and required independent protection. Do not use this
+   historical status document as current operational readiness.
+2. Record the exact predecessor binding, activation, commission and prior stop.
+   Use authority.fence_entries with the scoped user-repair reference and staged
+   predecessor/successor IDs. Do not clear another stop.
+3. Stop only the three PAPER core roles and verify their process trees have exited.
+   Retain independently trustworthy legacy protection/deadline responsibilities.
+4. Keep the staged predecessor files and manifest. Copy the three reviewed source
+   files and successor manifest, then run verify_release in the existing runtime
+   interpreter. No schema migration or another full operating-database copy is
+   required for this code-only patch.
+5. Call authority.transition_release with exact current binding/fence/activation,
+   old/new release IDs, commission, fresh approval timestamp, user-repair reference
+   and explicit old-writer-fence evidence. Its binding update is an audited CAS.
+6. Restart guardian and outcomes. Wait for fresh independently generated current
+   receipt/heartbeat, inventory/funds/ledger and time evidence under the successor.
+7. Call authority.resume_entries for that exact maintenance fence only when its
+   existing checks accept real current open-session evidence. Restart trader and
+   verify all role identities, real order/outcome behavior and daily learning verdict.
+
+If install fails before the binding transition, restore staged predecessor code and
+manifest while roles stay stopped, verify the predecessor and its unchanged binding.
+If the binding has already transitioned, rollback requires another audited code-only
+transition while fenced; never overwrite authority rows or invent time evidence.
+Do not schedule an unattended force-resume, weaken guards, or assert a live fill from
+the synthetic verification suite.

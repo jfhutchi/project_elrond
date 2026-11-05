@@ -98,8 +98,8 @@ async def test_current_projection_never_revives_expired_discontinuous_or_future_
 
     original_acquire = trader.acquire_time_evidence
 
-    async def acquire(broker, clocks):
-        value = await original_acquire(broker, clocks)
+    async def acquire(broker, clocks, *, context=None):
+        value = await original_acquire(broker, clocks, context=context)
         if fault == "future-proof":
             return value.model_copy(
                 update={

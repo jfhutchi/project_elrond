@@ -47,13 +47,15 @@ async def test_recorded_real_market_archives_local_simulation(tmp_path):
     config = Path(
         "C:/Users/leepa/Documents/Codex/2026-09-30/task/exploration-commission-b496109/source.json"
     )
-    if not config.is_file():
-        pytest.skip("authorized existing local archive unavailable on this host")
+    index = (
+        Path(__file__).parents[3] / ".superpowers/sdd/2026-10-13-paper-core/m5-archive-index.json"
+    )
+    if not config.is_file() or not index.is_file():
+        pytest.skip("authorized local archive configuration or index unavailable on this host")
     evidence = await demonstrate_recorded_archives(
         tmp_path,
         source_config=config,
-        index_path=Path(__file__).parents[3]
-        / ".superpowers/sdd/2026-10-13-paper-core/m5-archive-index.json",
+        index_path=index,
     )
     assert evidence["evidence_lane"] == "LOCAL_SIM_REAL_DATA"
     assert evidence["learning_receipt"]["status"] == "NO_CHANGE"

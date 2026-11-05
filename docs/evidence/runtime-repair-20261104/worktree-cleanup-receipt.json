@@ -1,0 +1,98 @@
+{
+  "removed_checkouts": 13,
+  "ignored_files_validated_as": "Python environments, bytecode and test/typecheck caches only",
+  "no_active_runtime_references": true,
+  "worktrees": [
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\deploy-evidence",
+      "head": "d0dde8ab8ccae888650226db34ea74451b93784d",
+      "branch": "refs/heads/claude/omen-deploy-evidence-2026-09-13",
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\integration-0913",
+      "head": "cd57f7bdfc0e18fd00c955afe2bf48054623a410",
+      "branch": "refs/heads/claude/integration-verify-2026-09-13",
+      "preserved_in_main": false,
+      "branch_retained": true
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\integration-verify",
+      "head": "b6db2ff413f080e61c27592136c10d7491bc78b9",
+      "branch": "refs/heads/claude/integration-verify",
+      "preserved_in_main": false,
+      "branch_retained": true
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\main-198e10d",
+      "head": "198e10d9b913e07af25fb9f433af1cddb0be54a6",
+      "branch": null,
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\main-92c49d4",
+      "head": "92c49d4c5b674438ca0ebf32ccccd12c63086dd8",
+      "branch": null,
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\pr229-market-hours",
+      "head": "c45be7ecf18908da264b038d054b037083ce8d52",
+      "branch": null,
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\pr230-equity",
+      "head": "9b448856671ed6d2dcd11977ef9c1838f39a28de",
+      "branch": null,
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\proof-run",
+      "head": "ac546f3afae1fcc04d543a1245ffee7019c82742",
+      "branch": null,
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\research-proposer",
+      "head": "068869b6f13dda85e3dc319e34c95bbe99d0e8ab",
+      "branch": "refs/heads/claude/research-proposer",
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\status-deadlock",
+      "head": "4f4c28b9d11584c205c9a1f38f8359829caedddd",
+      "branch": "refs/heads/claude/status-file-deadlock",
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\trial-integration",
+      "head": "adccca0967a0d82d52e2bbfc27615f29f894fedf",
+      "branch": "refs/heads/claude/trial-runtime-integration",
+      "preserved_in_main": false,
+      "branch_retained": true
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\typecheck-fix",
+      "head": "ab180044fd2af8f0cb7413026936b3e42b4fd2e3",
+      "branch": "refs/heads/claude/sandbox-linux-typecheck",
+      "preserved_in_main": true,
+      "branch_retained": false
+    },
+    {
+      "path": "D:\\GitHub\\_elrond_wt\\windows-sandbox",
+      "head": "88d2f6a251114c79f991ad738f28e4a3cc9aae9c",
+      "branch": "refs/heads/claude/windows-sandbox-backend",
+      "preserved_in_main": true,
+      "branch_retained": false
+    }
+  ]
+}

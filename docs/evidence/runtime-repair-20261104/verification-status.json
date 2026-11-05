@@ -1,0 +1,1911 @@
+{
+  "production_commits": [
+    "396f525",
+    "92c75c6"
+  ],
+  "suite": "tests/unit/paper_core + tests/integration/paper_core + tests/fault/paper_core",
+  "counts": {
+    "PASSED": 458,
+    "FAILED": 0,
+    "SKIPPED": 1
+  },
+  "total_cases": 459,
+  "runs": [
+    {
+      "name": "core-integrated",
+      "command": "+ D:\\Elrond\\App\\.venv\\Scripts\\python.exe -B -m pytest tests/unit/paper_core tests/integration/paper_core tests/fault/paper_core -v --tb=short -p no:cacheprovider --basetemp C:\\Users\\leepa\\.codex\\worktrees\\elrond-runtime-repair\\App\\.superpowers\\sdd\\runtime-recovery\\pytest-core-integrated",
+      "sha256": "ed749c768987b8b7bb0cb117f03ae5c38d2548dd83b41ec5fed21bb16b79a352",
+      "completed_cases": 263
+    },
+    {
+      "name": "core-remainder",
+      "command": "+ D:\\Elrond\\review\\runtime-repair-20261104\\test-python\\Scripts\\python.exe -B -m pytest tests/fault/paper_core tests/integration/paper_core/test_thin_loop.py::test_separate_guardian_process_exits_while_trader_activity_stalls tests/integration/paper_core/test_thin_loop.py::test_same_observation_cannot_reenter_after_immediate_completed_stop tests/integration/paper_core/test_thin_loop.py::test_export_joined_synthetic_evidence_from_fixture_store tests/integration/paper_core/test_thin_loop.py::test_forged_proof_provenance_or_duplicate_quantity_cannot_certify tests/integration/paper_core/test_daily_paper_loop.py::test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration tests/integration/paper_core/test_learning_changes_decision.py::test_accepted_daily_refit_changes_same_later_observation -v --tb=short -p no:cacheprovider --basetemp D:\\Elrond\\review\\runtime-repair-20261104\\t\\core-remainder",
+      "sha256": "39b3e1dcc329897cb068888f9634289d79d90c5d333fbeeef626d476f57fecfd",
+      "completed_cases": 198
+    },
+    {
+      "name": "fixture-repair",
+      "command": "+ D:\\Elrond\\review\\runtime-repair-20261104\\test-python\\Scripts\\python.exe -B -m pytest tests/integration/paper_core/test_final_repair.py::test_populated_v35_migration_preserves_all_prior_rows_and_typed_ids tests/integration/paper_core/test_final_repair.py::test_new_guardian_publication_does_not_replace_attested_current_receipt tests/integration/paper_core/test_final_repair.py::test_fence_owned_exit_bad_resume_fresh_resume_new_claim_and_stale_send tests/integration/paper_core/test_learning_receipts.py::test_actual_costed_episodes_fit_and_export -v --tb=short -p no:cacheprovider --basetemp D:\\Elrond\\review\\runtime-repair-20261104\\t\\fixture-repair",
+      "sha256": "ff9ceba83c6f68af6ac6ea969226252d2fdcaaf7022b5748248a8dd43225831e",
+      "completed_cases": 4
+    },
+    {
+      "name": "fixture-final",
+      "command": "+ D:\\Elrond\\review\\runtime-repair-20261104\\test-python\\Scripts\\python.exe -B -m pytest tests/integration/paper_core/test_final_repair.py::test_new_guardian_publication_does_not_replace_attested_current_receipt tests/integration/paper_core/test_final_repair.py::test_fence_owned_exit_bad_resume_fresh_resume_new_claim_and_stale_send tests/integration/paper_core/test_real_data_simulation.py::test_recorded_real_market_archives_local_simulation -v --tb=short -p no:cacheprovider --basetemp D:\\Elrond\\review\\runtime-repair-20261104\\t\\fixture-final",
+      "sha256": "b04aa4a65a30c46cb489277aedca954f94c3f35f6dd93faf781d46c6c44002ea",
+      "completed_cases": 3
+    },
+    {
+      "name": "repaired-regressions",
+      "command": "+ D:\\Elrond\\review\\runtime-repair-20261104\\test-python\\Scripts\\python.exe -B -m pytest tests/integration/paper_core/test_final_repair.py::test_fence_owned_exit_bad_resume_fresh_resume_new_claim_and_stale_send tests/fault/paper_core/test_m3_review_repairs.py::test_current_projection_never_revives_expired_discontinuous_or_future_evidence tests/fault/paper_core/test_learning_gross.py::test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract tests/integration/paper_core/test_real_data_simulation.py::test_recorded_real_market_archives_local_simulation -v --tb=short -p no:cacheprovider --basetemp D:\\Elrond\\review\\runtime-repair-20261104\\t\\repaired-regressions",
+      "sha256": "bb4da0b46b5422af9694ea93b40b31abc3eed3783c16f955def598b246e1eeee",
+      "completed_cases": 8
+    },
+    {
+      "name": "fence-recovery-final",
+      "command": "+ D:\\Elrond\\review\\runtime-repair-20261104\\test-python\\Scripts\\python.exe -B -m pytest tests/integration/paper_core/test_final_repair.py::test_fence_owned_exit_bad_resume_fresh_resume_new_claim_and_stale_send -v --tb=short -p no:cacheprovider --basetemp D:\\Elrond\\review\\runtime-repair-20261104\\t\\fence-recovery-final",
+      "sha256": "cbaa4ed9c191726991ceb6cd695ab51f84c9592dc04c018f2b756d7b8eaf32d8",
+      "completed_cases": 1
+    },
+    {
+      "name": "isolated-child-final",
+      "command": "+ D:\\Elrond\\review\\runtime-repair-20261104\\test-python\\Scripts\\python.exe -B -m pytest tests/integration/paper_core/test_activation_capacity.py::test_fifty_synthetic_round_trips_and_guardian_progress_during_fit tests/integration/paper_core/test_inventory.py::test_cli_reads_wal_and_marks_missing_artifact_without_writing_source tests/integration/paper_core/test_final_repair.py::test_new_guardian_publication_does_not_replace_attested_current_receipt -v --tb=short -p no:cacheprovider --basetemp D:\\Elrond\\review\\runtime-repair-20261104\\t\\isolated-child-final",
+      "sha256": "7b2b6aac0f5263d3e931593d6272c3f0f91af933d4926ab2dd5041c073b74885",
+      "completed_cases": 3
+    }
+  ],
+  "cases": {
+    "tests/unit/paper_core/test_guardian_retention.py::test_retire_only_durably_unsent_entries[refused-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_guardian_retention.py::test_retire_only_durably_unsent_entries[rejected_local-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_guardian_retention.py::test_retire_only_durably_unsent_entries[rejected_only-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_guardian_retention.py::test_retire_only_durably_unsent_entries[error_only-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_guardian_retention.py::test_retire_only_durably_unsent_entries[unknown-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_guardian_retention.py::test_retire_only_durably_unsent_entries[refused_with_order-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_guardian_retention.py::test_retire_only_durably_unsent_entries[held-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_guardian_retention.py::test_unchanged_acknowledgements_reuse_memberships_then_renew_readiness": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_preserves_sequential_scope_provenance_and_reads_history_once": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_writer_cannot_interleave_recovery_or_sequence": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_preserves_active_quarantine_scope[ACCOUNT-INTEGRITY_FAILURE]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_preserves_active_quarantine_scope[ACCOUNT-MANUAL_PAUSE]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_preserves_active_quarantine_scope[SYMBOL-INTEGRITY_FAILURE]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_preserves_active_quarantine_scope[SYMBOL-MANUAL_PAUSE]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_does_not_recover_without_new_current_certification[same_generation]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_does_not_recover_without_new_current_certification[same_evidence]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_does_not_recover_without_new_current_certification[uncertified]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_does_not_recover_without_new_current_certification[superseded]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_checks_current_funds_once_and_observes_prelock_quarantine": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_batch_manual_kill_switch_and_single_symbol_wrapper": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_health_batch_recovery.py::test_trader_recovers_only_fresh_members_in_one_batch": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_account_read_stability[equity-value0-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_account_read_stability[cash-value1-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_account_read_stability[buying_power-value2-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_account_read_stability[account_id-other-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_account_read_stability[currency-GBP-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_position_read_stability[market_price-value0-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_position_read_stability[market_value-value1-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_position_read_stability[quantity-value2-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_position_read_stability[average_entry_price-value3-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/unit/paper_core/test_market_mark_stability.py::test_position_read_stability[symbol-MSFT-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_activation_capacity.py::test_fifty_synthetic_round_trips_and_guardian_progress_during_fit": {
+      "status": "PASSED",
+      "run": "isolated-child-final"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_provider_missing_fee_is_unknown_and_zero_requires_authority": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_accounting_unknown_zero_never_becomes_cash_or_net": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_late_fees_replace_current_outcome_and_preserve_revisions": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_event_batch_is_atomic_and_conflicting_replay_refused": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_modeled_slippage_never_deducted_from_actual_net_and_restore_replays": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_outcome_index_exposes_feature_window_before_target_materialization": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_older_receipt_cannot_branch_an_existing_cost_revision": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[1]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[26]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[27]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[28]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[29]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_fixture_legacy_migration_keeps_numeric_zero_unknown_and_online_backup[30]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_costed_loop.py::test_populated_accepted_m1_v30_migration_preserves_all_document_ids_and_payloads": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_cohort_adapter.py::test_one_bounded_bar_cohort_preserves_missing_and_restricted_members": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_cohort_adapter.py::test_trader_role_acquires_cohort_and_guardian_refreshes_owned_actual_symbol": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_cohort_adapter.py::test_cost_contract_must_cover_whole_trade_universe": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_fractional_exit_activity_is_recovered_before_inventory_certification": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_delayed_exit_activity_stays_retryable_until_actual_fill_arrives": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_first_buy_activity_delay_waits_without_certifying_partial_cash[False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_first_buy_activity_delay_waits_without_certifying_partial_cash[True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_partial_first_buy_activity_waits_without_restoring_revoked_cash": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_delayed_owned_fill_cannot_explain_an_unrelated_symbol_delta": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[None]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[forged]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[future]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[wrong-target]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_collect_history_requires_exact_past_warmup_acknowledgement[wrong-model]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_paper_loop.py::test_daily_hybrid_collect_fit_activate_signal_then_negative_exploration": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_legacy_config_payload_and_hash_are_unchanged": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_universe_rejects_unsupported_duplicates_and_benchmark[symbols0]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_universe_rejects_unsupported_duplicates_and_benchmark[symbols1]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_universe_rejects_unsupported_duplicates_and_benchmark[symbols2]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_universe_rejects_unsupported_duplicates_and_benchmark[symbols3]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_signal_beats_weak_even_when_only_qualifying_stock_was_used": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values0-daily0-prior0-AAPL]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values1-daily1-prior1-AAPL]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values2-daily2-prior2-AAPL]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values3-daily3-prior3-MSFT]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_signal_rank_is_today_count_prediction_prior_count_then_universe[values4-daily4-prior4-AAPL]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_exploration_today_count_precedes_prior_history": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_cross_day_exploration_resets_today_usage_and_retains_prior_rotation": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_six_completed_or_unknown_reservations_block_seventh[False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_six_completed_or_unknown_reservations_block_seventh[True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_concurrent_claimers_with_different_receipt_times_reserve_one_boundary": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_only_definitive_unsent_releases_reservation": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_negative_prediction_is_retained_and_invalid_activation_cannot_explore": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_nondefault_health_recovery_does_not_clear_another_symbol": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_collect_without_commissioned_activation_cannot_claim_exploration": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_all_unavailable_members_retain_truthful_durable_wait_evidence": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_missing_and_held_members_allow_collect_exploration": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_forged_fallback_and_incomplete_cohort_cannot_claim": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_substituting_unavailable_reason_cannot_hide_captured_member": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_daily_selection.py::test_nondefault_stop_and_restart_rotation_and_boundary_dedup": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_idle_closed_history_avoids_resolving_unchanged_lots": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_exact_commission_replay_preserves_only_original_collect": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_interrupted_initial_model_write_rolls_back_commission_then_exact_retry": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_supported_recovery_commands_are_explicit": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_historical_authority_is_not_daily_learning_input": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_precommission_verifier_needs_no_store_env_provider_or_role": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_populated_v35_migration_preserves_all_prior_rows_and_typed_ids": {
+      "status": "PASSED",
+      "run": "fixture-repair"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_code_only_successor_preserves_economics_and_rejects_old_send_authority": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_dirty_closed_cost_restart_revocation_and_notification_during_processing": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_new_guardian_publication_does_not_replace_attested_current_receipt": {
+      "status": "PASSED",
+      "run": "isolated-child-final"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_cash_fingerprint_exempts_only_independently_authoritative_allocation[False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_cash_fingerprint_exempts_only_independently_authoritative_allocation[True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_original_candidate_retries_fresh_heartbeat_without_extending_authority[fresh]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_original_candidate_retries_fresh_heartbeat_without_extending_authority[expired]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_original_candidate_retries_fresh_heartbeat_without_extending_authority[fenced]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_trader_exact_certification_cas_retry_has_one_shared_budget[once]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_trader_exact_certification_cas_retry_has_one_shared_budget[repeated]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_trader_exact_certification_cas_retry_has_one_shared_budget[unrelated]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_trader_exact_certification_cas_retry_has_one_shared_budget[budget]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_acquired_proof_generation_and_certification_share_writer_lock[False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_acquired_proof_generation_and_certification_share_writer_lock[True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_proof_construction_refusal_keeps_original_error_and_no_authority": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_final_repair.py::test_fence_owned_exit_bad_resume_fresh_resume_new_claim_and_stale_send": {
+      "status": "PASSED",
+      "run": "fence-recovery-final"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_copied_ledger_is_not_a_second_trade_and_reads_do_not_change_newer_schema": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_stale_deployment_file_never_overrides_recorded_runtime": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_missing_store_is_a_gap_and_is_not_created": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_conflicting_copy_is_reported_without_overwriting_authority": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_cutoff_uses_instants_and_missing_observation_is_explicit": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_tampered_event_cannot_be_used_as_trade_evidence": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_task_pin_exposes_stale_deployment_claim_and_future_metadata_is_rejected": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_cli_reads_wal_and_marks_missing_artifact_without_writing_source": {
+      "status": "PASSED",
+      "run": "isolated-child-final"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_future_occurrence_cannot_supply_flat_evidence": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_standalone_bundle_retains_account_and_recorded_entry_wait": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_accountless_or_mismatched_lot_evidence_is_rejected[None]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_accountless_or_mismatched_lot_evidence_is_rejected[bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_malformed_host_collections_do_not_discard_store_evidence[None]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_malformed_host_collections_do_not_discard_store_evidence[tasks1]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_inventory.py::test_malformed_host_collections_do_not_discard_store_evidence[unexpected]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_learning_changes_decision.py::test_v2_time_and_model_binding_reaches_claim_and_locked_send[initialized]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_learning_changes_decision.py::test_v2_time_and_model_binding_reaches_claim_and_locked_send[learned]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_learning_changes_decision.py::test_accepted_daily_refit_changes_same_later_observation": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_learning_changes_decision.py::test_populated_accepted_v33_migration_and_old_claim_replay": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_learning_receipts.py::test_actual_costed_episodes_fit_and_export": {
+      "status": "PASSED",
+      "run": "fixture-repair"
+    },
+    "tests/integration/paper_core/test_learning_receipts.py::test_populated_accepted_v32_migration_preserves_payload_ids_and_claim_replay": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_learning_receipts.py::test_truthful_no_change": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_migration.py::test_explicit_v29_fixture_migration_is_additive_and_does_not_adopt_or_resume": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_migration.py::test_v30_refuses_destructive_downgrade_and_preserves_evidence": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_migration.py::test_migration_does_not_accept_malformed_preexisting_core_table": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_operational_features_accept_real_receipt_after_bar_boundary": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_documented_partial_paper_zero_does_not_become_all_in_zero": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_fee_only_after_overlap_revises_retained_contract_bounded_restart[False-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_fee_only_after_overlap_revises_retained_contract_bounded_restart[False-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_fee_only_after_overlap_revises_retained_contract_bounded_restart[True-True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_fee_only_after_overlap_revises_retained_contract_bounded_restart[True-False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_zero_import_admission_is_exact_and_replay_safe[None]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_zero_import_admission_is_exact_and_replay_safe[ACCOUNT]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_operational_adapter.py::test_zero_import_admission_is_exact_and_replay_safe[CONTRACT]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py::test_cutoff_before_late_fee_notification_before_lock_stays_pending[normal]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py::test_cutoff_before_late_fee_notification_before_lock_stays_pending[missing_watermark]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py::test_cutoff_before_late_fee_notification_before_lock_stays_pending[missing_work]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py::test_cutoff_before_late_fee_notification_before_lock_stays_pending[missing_work_then_older_notification]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py::test_cutoff_before_late_fee_notification_before_lock_stays_pending[preacknowledged]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py::test_cutoff_before_late_fee_notification_before_lock_stays_pending[preacknowledged_then_older_notification]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_outcome_cutoff_recovery.py::test_archived_learning_corpus_without_runtime_entry_notifications_retains_eligibility": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_real_adapter_repeats_entries_without_fabricating_cash_or_fees": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_direct_uncertified_proof_and_unmarked_incomplete_cash_cannot_claim": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_quantity_successor_keeps_original_source_binding[False]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_quantity_successor_keeps_original_source_binding[True]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_balance_receipt_age_is_local_and_bounded_across_processes": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_legacy_strict_mode_stays_blocked_after_unknown_fee_exit": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_acquisition_and_inventory_contradictions_never_grant_funds[slow]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_acquisition_and_inventory_contradictions_never_grant_funds[unstable]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_acquisition_and_inventory_contradictions_never_grant_funds[known_cash]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_acquisition_and_inventory_contradictions_never_grant_funds[quantity]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_acquisition_and_inventory_contradictions_never_grant_funds[basis]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[cash]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[buying_power]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[equity]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[restricted]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[open_order]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[manual]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[quarantine]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[source_race]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[ledger_race]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_actual_coordinator_rechecks_funds_and_locked_source_before_post[unknown_send]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_protection_and_outcomes_continue_without_entry_funds": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_operational_recovery_requires_certified_funds_and_preserves_integrity": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_explicit_resume_uses_current_funds_without_resolving_cash_history": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[missing]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[digest]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[source]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[endpoint]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[account_id]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[store_identity]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[config_id]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[commission_id]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[evidence_lane]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[stale]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[slow]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[unstable_account]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[unstable_positions]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[restricted]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[open_order]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_paper_funds.py::test_source_receipt_is_bound_at_claim_and_locked_send[baseline]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_real_data_simulation.py::test_canonical_guard_refuses_archive_before_open[protected]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_real_data_simulation.py::test_canonical_guard_refuses_archive_before_open[forward]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_real_data_simulation.py::test_recorded_real_market_archives_local_simulation": {
+      "status": "SKIPPED",
+      "run": "repaired-regressions"
+    },
+    "tests/integration/paper_core/test_real_data_simulation.py::test_wrong_day_locator_is_refused_before_archive_hydration": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_real_data_simulation.py::test_local_replay_stale_or_missing_dependency_abstains[stale]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_real_data_simulation.py::test_local_replay_stale_or_missing_dependency_abstains[missing_dependency]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_release_preparation_is_supported": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_forward_model_rollback_is_explicit_supported_command": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_operational_lane_alone_cannot_authorize_adapter": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_acknowledgement_uses_current_immutable_intent": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_populated_v34_capture_has_real_activation_and_claim": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_populated_v34_migration_preserves_ids_omissions_claim_and_owner": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_cli_status_must_not_migrate_or_write": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_fixture_model_bootstrap_cannot_commission_paper": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_release_identity_detects_extra_executable_and_mutation": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_default_config_and_release_identity_survive_json_reload": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_actual_three_role_processes_restart_fence_and_continue_outcomes": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_flat_runtime_independent_guardian_ack_submits_once_and_protects": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-refresh]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-marks]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-low_bp]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-low_equity]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-cash]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-quantity]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-order]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-reservation]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-revoked]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-expired_decision]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-expired_plan]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[claim-expired_guardian]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-refresh]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-marks]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-low_bp]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-low_equity]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-cash]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-quantity]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-order]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-reservation]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-revoked]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-expired_decision]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-expired_plan]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_release_recovery.py::test_runtime_locked_claim_accepts_only_safe_successor[send-expired_guardian]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_runtime_canonical.py::test_underlying_canonical_holdout_cannot_be_evaded_by_owned_cohort_name": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_runtime_canonical.py::test_external_owner_replay_is_inert_without_adopting_exit_ownership": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_runtime_canonical.py::test_operational_lane_refuses_fixture_broker_and_unowned_exit": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_runtime_canonical.py::test_isolated_paper_commission_requires_explicit_source_then_keeps_stop": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_runtime_canonical.py::test_daily_warmup_considers_new_close_and_retries_calendar_failure": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_same_observation_replay_cannot_post_again_after_completed_exit": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_joined_timeline_waits_preserve_exit_outcome_and_fresh_recovery": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_missing_spy_dependency_blocks_only_its_decision": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_unrelated_unowned_symbol_does_not_disable_known_owned_exit": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_manual_pause_remains_first_blocker_alongside_market_close": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_restart_guardian_uses_fresh_own_process_clock_and_durable_deadline": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_closed_lot_conflict_blocks_dependent_cash_but_independent_cash_allows_entry": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_scoped_progress.py::test_populated_accepted_v31_migration_preserves_payload_ids_and_claim_replay": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_submission_readiness.py::test_equity_mark_change_preserves_verified_cash_and_current_risk_limits": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_submission_readiness.py::test_pre_send_refusal_rolls_back_with_failed_state_transition": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_submission_readiness.py::test_post_protocol_failure_remains_ambiguous_and_reserves_slot": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_submission_readiness.py::test_paired_inventory_reads_allow_market_marks_but_keep_cash_certification": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_submission_readiness.py::test_final_cash_change_is_atomically_recorded_as_unsent_and_releases_slot": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending[deadline]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_observation_to_guardian_exit_is_owned_terminal_flat_and_costs_pending[stop]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_duplicate_observation_has_one_entry_post_and_immutable_decision": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_manual_pause_after_decision_before_claim_prevents_post": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_pause_arriving_during_final_account_fetch_prevents_post": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_unowned_quantity_never_certifies_by_repetition_or_exits": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_durable_decision_protection_and_guardian_ack_exist_before_post": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_forged_oversized_decision_cannot_claim": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_stale_stop_mark_waits_but_independent_deadline_still_exits": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_full_round_trip_releases_single_position_slot": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_certification_keeps_non_100_fill_basis_and_owned_stop": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot[manual_pause]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_fixture_initialization_cannot_clear_historical_stop_or_adopt_snapshot[snapshot]": {
+      "status": "PASSED",
+      "run": "core-integrated"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_terminal_status_requires_recovered_complete_activities_at_switch_cutoff[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_terminal_status_requires_recovered_complete_activities_at_switch_cutoff[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_missing_or_mismatched_canonical_permanent_charge_cannot_activate[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_missing_or_mismatched_canonical_permanent_charge_cannot_activate[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_active_predictor_with_missing_feature_abstains_without_post": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_competing_activation_and_aba_never_revive_old_approval": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_process_death_at_activation_commit_edges_reloads_only_committed_model[before_event]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_process_death_at_activation_commit_edges_reloads_only_committed_model[after_event]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_process_death_at_activation_commit_edges_reloads_only_committed_model[after_pointer]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_process_death_at_activation_commit_edges_reloads_only_committed_model[before_commit]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_process_death_at_activation_commit_edges_reloads_only_committed_model[after_commit]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_two_writers_have_one_atomic_winner": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_unresolved_claim_and_unknown_submission_remain_reserved[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_unresolved_claim_and_unknown_submission_remain_reserved[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_invalid_approval_cannot_change_pointer[wrong_digest]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_invalid_approval_cannot_change_pointer[stale]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_invalid_approval_cannot_change_pointer[uncommissioned]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_invalid_approval_cannot_change_pointer[future_receipt]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_invalid_approval_cannot_change_pointer[wrong_receipt]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_corrupt_pointer_fences_entries_but_guardian_keeps_working": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_exact_receipt_requires_fixed_qualifying_result_and_lane[failed]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_exact_receipt_requires_fixed_qualifying_result_and_lane[missing_completion]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_exact_receipt_requires_fixed_qualifying_result_and_lane[bad_scores]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_exact_receipt_requires_fixed_qualifying_result_and_lane[lane]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_aba_model_hash_does_not_resurrect_stale_claim": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_activation_races.py::test_final_send_refuses_ambiguous_pointer_and_definitive_unsent_frees_activation": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_fill_collision_scope.py::test_new_source_fill_id_collision_quarantines_both_owners_and_keeps_third_lot": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence[get_account]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_final_acquisition_delay_refuses_expired_entry_and_keeps_unsent_evidence[get_positions]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_decision_expiry_is_exclusive_at_actual_send[119999999-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_decision_expiry_is_exclusive_at_actual_send[120000000-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_latest_guardian_ack_expiry_is_exclusive_even_with_older_valid_ack[59999999-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_latest_guardian_ack_expiry_is_exclusive_even_with_older_valid_ack[60000000-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_session_protection_deadline_is_exclusive_at_send[59999999-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_session_protection_deadline_is_exclusive_at_send[60000000-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_unsent_expiry_frees_slot_for_fresh_observation_but_never_replays_old_claim": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_expiry_never_releases_submitting_or_unknown_exposure[SUBMITTING]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_expiry_never_releases_submitting_or_unknown_exposure[SUBMISSION_UNKNOWN]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_expired_entry_and_guardian_receipt_never_prevent_owned_deadline_exit": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_protocol_error_after_send_attempt_does_not_free_slot": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_final_send_authority.py::test_refusal_before_error_commit_latches_against_clock_reversed_retry": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_health_authority.py::test_reconciliation_generation_race_is_retryable_not_integrity": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_health_authority.py::test_disputed_current_cash_cannot_borrow_an_older_independent_authority": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_health_authority.py::test_separate_guardian_projects_clock_past_deadline_after_awaited_acquisition": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_health_authority.py::test_legacy_post_entry_preserves_original_reconciliation_exception": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_shadow_predictive_artifact_cannot_authorize_entry": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[alpha-2]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[seed-1]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[clip_bps-101]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[fit_timeout_seconds-31]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[max_sessions-61]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_training-29]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_training_sessions-4]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_validation-9]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_validation_sessions-4]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[embargo_minutes-29]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[min_improvement-0.04]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_envelope_is_fixed[fits_per_session-2]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[protected]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[forward]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[declared]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[unavailable]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[costs]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[lane]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[policy]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_canary_is_excluded_before_any_materialization[features]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_permanent_failed_learner_consumption_blocks_untouched_claims_across_aliases[sip-us-equities-daily-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_permanent_failed_learner_consumption_blocks_untouched_claims_across_aliases[alpaca-us-equities-daily-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_permanent_failed_learner_consumption_blocks_untouched_claims_across_aliases[us-equities-daily-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_permanent_failed_learner_consumption_blocks_untouched_claims_across_aliases[independent-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_prediction_clip_and_frozen_parameters": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_zero_baseline_error_is_not_a_five_percent_improvement": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_all_history_and_legacy_sixty_session_intersections_are_metadata_only[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_boundaries.py::test_all_history_and_legacy_sixty_session_intersections_are_metadata_only[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_procedure_five_past_only_folds_then_all_history_fit": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_policy_requires_calendar_and_ten_completed_sessions": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_later_lot_conflict_excludes_stale_complete_pointer_metadata_only[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_later_lot_conflict_excludes_stale_complete_pointer_metadata_only[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_modern_default_and_legacy_new_fit_refusal": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_asof_fold_uses_original_cost_revision_final_refit_uses_late_revision": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_quiet_completed_session_is_unchanged_without_second_charge": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_exact_historical_predictive_availability_and_acknowledgement[valid]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_exact_historical_predictive_availability_and_acknowledgement[fit-future]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_exact_historical_predictive_availability_and_acknowledgement[valid-no-change]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_exact_historical_predictive_availability_and_acknowledgement[ack-future]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_exact_historical_predictive_availability_and_acknowledgement[ack-wrong-model]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_exact_historical_predictive_availability_and_acknowledgement[target-mismatch]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_old_history_beyond_sixty_sessions_affects_weighted_fit_and_quiet_holiday_recency[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_old_history_beyond_sixty_sessions_affects_weighted_fit_and_quiet_holiday_recency[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_holdout_canary_covers_folds_and_final_without_materialization[False-PROTECTED_EVALUATION]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_holdout_canary_covers_folds_and_final_without_materialization[False-FORWARD_PAPER]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_holdout_canary_covers_folds_and_final_without_materialization[False-DECLARED]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_holdout_canary_covers_folds_and_final_without_materialization[True-PROTECTED_EVALUATION]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_holdout_canary_covers_folds_and_final_without_materialization[True-FORWARD_PAPER]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_daily_holdout_canary_covers_folds_and_final_without_materialization[True-DECLARED]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_new_conflict_at_data_boundary_refuses_without_hydration": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_future_cutoff_refuses_before_materialization_fit_and_charge[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_future_cutoff_refuses_before_materialization_fit_and_charge[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_future_refusal_recovers_at_equal_execution_cutoff_without_rewriting_receipt": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_equal_and_historical_cutoffs_keep_completed_calendar_weights[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_daily.py::test_equal_and_historical_cutoffs_keep_completed_calendar_weights[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V3-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-DAILY_BOUNDED_V2-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[MODEL_ONLY_V1-DAILY_BOUNDED_V3-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[MODEL_ONLY_V1-DAILY_BOUNDED_V2-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_runtime_envelope_matches_selected_learning_mode[SIGNAL_OR_EXPLORE_V1-REVIEW_EACH_CANDIDATE-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[False]": {
+      "status": "PASSED",
+      "run": "repaired-regressions"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract[True]": {
+      "status": "PASSED",
+      "run": "repaired-regressions"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_gross_fit_accepts_only_fee_pending_and_preserves_original_economics": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_pure_gross_procedure_refuses_noncausal_fold_inputs[future-validation]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_pure_gross_procedure_refuses_noncausal_fold_inputs[wrong-session]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_pure_gross_procedure_refuses_noncausal_fold_inputs[training-crosses-fold]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_gross.py::test_day_ten_actual_gross_outcomes_fit_and_activate_with_exact_authority": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_no_change_completion_is_execution_time_and_replay_is_immutable": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_delayed_fit_has_actual_charge_start_and_completion": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_later_recovery_has_later_availability_without_recharging[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_later_recovery_has_later_availability_without_recharging[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_future_cutoff_does_not_expire_live_reservation_before_data[PROTECTED_EVALUATION]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_future_cutoff_does_not_expire_live_reservation_before_data[FORWARD_PAPER]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_materialization_recheck_uses_fresh_execution_time": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_populated_old_v33_receipts_and_artifacts_keep_ids_and_unknown_availability": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_failed_and_rejected_fits_have_completion_availability[FIT_FAILED]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_failed_and_rejected_fits_have_completion_availability[CANDIDATE_REJECTED]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_learning_temporal.py::test_busy_refusal_has_actual_completion_availability": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_positive_inventory_latency_enters_with_reproducible_current_projection[0.001-0]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_positive_inventory_latency_enters_with_reproducible_current_projection[0-0.001]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_positive_inventory_latency_enters_with_reproducible_current_projection[0.25-0.25]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_current_projection_never_revives_expired_discontinuous_or_future_evidence[expired]": {
+      "status": "PASSED",
+      "run": "repaired-regressions"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_current_projection_never_revives_expired_discontinuous_or_future_evidence[wall-jump]": {
+      "status": "PASSED",
+      "run": "repaired-regressions"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_current_projection_never_revives_expired_discontinuous_or_future_evidence[future-observation]": {
+      "status": "PASSED",
+      "run": "repaired-regressions"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_current_projection_never_revives_expired_discontinuous_or_future_evidence[future-proof]": {
+      "status": "PASSED",
+      "run": "repaired-regressions"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_close_clipped_monotonic_exit_during_time_outage_uses_matching_domains[1.9-8.2]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_close_clipped_monotonic_exit_during_time_outage_uses_matching_domains[-1.9-11.9]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_retained_closed_wait_cannot_hide_dependent_integrity_incident": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_additive_repair_fields_preserve_original_v32_timing_payload_ids": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_old_v2_plan_without_expiry_uses_conservative_provider_bound": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_old_v32_plan_uses_original_provider_bracket_during_time_outage": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_close_expiry_boundary_exits_at_conservative_monotonic_expiry[1.9]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_close_expiry_boundary_exits_at_conservative_monotonic_expiry[-1.9]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_m3_review_repairs.py::test_final_send_cannot_outlive_monotonic_protection_expiry": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_outcomes_independent.py::test_quantity_only_proof_protects_but_never_unlocks_cash_entry": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_outcomes_independent.py::test_closed_market_missing_observation_and_manual_pause_do_not_delay_outcome": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_outcomes_independent.py::test_empty_fills_cannot_become_round_trip": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_outcomes_independent.py::test_outcome_cannot_invent_missing_presend_guardian_handoff": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_outcomes_independent.py::test_independent_cash_activity_restores_entry_while_costs_remain_pending": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_protection_authority.py::test_two_pass_quantity_mismatch_stays_unprotected[False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_protection_authority.py::test_two_pass_quantity_mismatch_stays_unprotected[True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_claim]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_claim]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_order_created]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_send]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[fill_import]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[before_outcome]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_fresh_process_restart_cut_never_reposts_or_duplicates[after_outcome]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_404_after_possible_post_stays_uncertain": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_partial_fill_is_protected_before_entry_terminal": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_cancel_ack_and_late_fill_keep_reservation_until_complete_watermark": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_multiple_entry_partials_each_get_owned_exit_and_conserve_money": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_restart_matrix.py::test_concurrent_stop_deadline_contenders_cannot_double_sell": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_fresh_process_stale_claim_recovery_allows_exactly_one_fresh_post[after_claim]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_fresh_process_stale_claim_recovery_allows_exactly_one_fresh_post[after_order_created]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender[RISK_APPROVED]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_stale_unsent_recovery_frees_fresh_claim_and_fences_delayed_sender[ORDER_CREATED]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_late_cost_revokes_both_cash_readers_and_prevents_fresh_post": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_conflicting_batch_only_quarantines_implicated_lot_and_rolls_back_neighbors": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_independent_cash_survives_fee_allocation_revision_and_allows_post": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_cash_guard_and_send_cas_exclude_concurrent_process_cost_import": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_review_repairs.py::test_cost_import_wins_during_last_acquisition_and_refuses_prepared_send": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[-2.0-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[2.0-True]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[-2.001-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_skew_boundary_controls_actual_entry[2.001-False]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_proof_expires_at_120_seconds_restart_and_discontinuity": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[frozen]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[identity]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[disagree]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[budget]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_two_samples_require_advancement_identity_consistency_budget_and_continuity[jump]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_delayed_final_fetch_invalidates_entry_and_releases_only_proven_unsent": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_wall_jump_and_stale_mark_do_not_extend_monotonic_owned_deadline": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_uncertain_interval_overlapping_close_waits_for_entry_and_is_due_for_exit": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_positive_provider_skew_never_extends_monotonic_horizon": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_timing.py::test_stop_freshness_uses_entire_provider_interval_not_receipt_wall": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_transient_recovery.py::test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[timeout]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_transient_recovery.py::test_acquisition_wait_does_not_latch_stop_and_fresh_proof_resumes[changing_marks]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_transient_recovery.py::test_valid_unowned_quantity_stays_quarantined_after_identical_snapshot": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_transient_recovery.py::test_backward_wall_jump_recovery_uses_new_generation_not_utc_order": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_transient_recovery.py::test_429_clock_fault_returns_scoped_wait_and_can_recover": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/fault/paper_core/test_transient_recovery.py::test_guardian_provider_outage_records_retry_without_disabling_outcome_poll": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_separate_guardian_process_exits_while_trader_activity_stalls": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_same_observation_cannot_reenter_after_immediate_completed_stop": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_export_joined_synthetic_evidence_from_fixture_store": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_forged_proof_provenance_or_duplicate_quantity_cannot_certify[baseline_id]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_forged_proof_provenance_or_duplicate_quantity_cannot_certify[order_ids]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    },
+    "tests/integration/paper_core/test_thin_loop.py::test_forged_proof_provenance_or_duplicate_quantity_cannot_certify[actual_quantities]": {
+      "status": "PASSED",
+      "run": "core-remainder"
+    }
+  },
+  "limitations": [
+    "Aggregate latest results across bounded runs, not one uninterrupted run.",
+    "Initial full run hit600s cap after263cases; remainder completed separately.",
+    "First-run isolated -I children could resolve old development source. Dedicated small interpreter with .pth to repair source used for remainder and explicit learning/capacity/inventory reruns.",
+    "One local real-market archive simulation skipped: its archive index is absent.",
+    "Synthetic test evidence is not forward broker PAPER performance or a deployed result.",
+    "Coverage percentage unavailable; coverage package not installed/configured."
+  ],
+  "fixture_corrections": [
+    "Migration expects current schema version rather than stale36; row/id preservation checks retained.",
+    "Partial in-memory adapter initializes added runtime fields; no network transport.",
+    "Synthetic fee document validity follows test session rather than October14 fixed date.",
+    "Fault clock wrapper accepts existing context keyword.",
+    "Learning fixture session dates match UTC open/close and learning origin.",
+    "Missing optional real-market archive configuration/index produces explicit skip."
+  ]
+}

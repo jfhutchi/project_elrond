@@ -1,0 +1,17 @@
+{
+  "read_only": true,
+  "unsettled_entry_links": 4004,
+  "durably_unsent_entries": 4004,
+  "remaining_protection_plan_count": 0,
+  "current_receipt_plan_count": 4004,
+  "current_receipt_payload_bytes": 536840,
+  "health_events": 9191,
+  "health_payload_bytes": 8415105,
+  "one_parse_seconds": [
+    0.15733259986154735,
+    0.11113560013473034,
+    0.1717485999688506
+  ],
+  "snapshot_read_seconds": 0.21163500007241964,
+  "limitation": "Read-only predicate and parse measurement; not a forward broker execution or full-cycle benchmark"
+}

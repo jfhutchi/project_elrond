@@ -1,0 +1,38 @@
+[
+  {
+    "bytes": 13400190976,
+    "potential_duplicate_bytes": 13400190976,
+    "sample_digest": "4d12371263ea99feca8b2ef9d6b0cf677abaf810ad388038b606f8f84b1b5f26",
+    "files": [
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\composite-v5-20261024-022128\\validated-copy.db.candidate",
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\current-capture-20261024-022054\\captured.db"
+    ]
+  },
+  {
+    "bytes": 13342396416,
+    "potential_duplicate_bytes": 13342396416,
+    "sample_digest": "27b69c4a0ce2c97238b8a8364f7eee8e42c8a490f9362490236ca212cac5dd4f",
+    "files": [
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\composite-v4-20261024-020353\\validated-copy.db",
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\current-capture-20261024-020318\\captured.db"
+    ]
+  },
+  {
+    "bytes": 13280432128,
+    "potential_duplicate_bytes": 13280432128,
+    "sample_digest": "bada92c82087b2220107441b0ea67cdfd4a9574e7568b6889853c8f655cea8da",
+    "files": [
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\composite-20261024-015113\\validated-copy.db",
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\current-capture-20261024-014627\\captured.db"
+    ]
+  },
+  {
+    "bytes": 12982079488,
+    "potential_duplicate_bytes": 12982079488,
+    "sample_digest": "5a1f56f2d0423dee6cd6b64c0b856c2ccc8f79881b2cf430d33c7264c1957dfb",
+    "files": [
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\rehearsal-004036\\current-copy.db",
+      "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\rehearsal-004925\\current-copy.db"
+    ]
+  }
+]

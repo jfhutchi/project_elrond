@@ -23,7 +23,9 @@ from quantbot.paper_core.store import CoreStore, table
 from quantbot.storage import Database, StateConflictError
 
 
-def commissioned(tmp_path, *, commit=True, isolated_repository=False, gross=False):
+def commissioned(
+    tmp_path, *, commit=True, isolated_repository=False, gross=False, learning_origin=None
+):
     from quantbot.domain import Account
     from quantbot.paper_core.simulation import SyntheticBroker
 
@@ -61,7 +63,7 @@ def commissioned(tmp_path, *, commit=True, isolated_repository=False, gross=Fals
         ),
         holdout_source=str(source),
         canonical_datasets=("us-equities-daily",),
-        learning_origin=datetime.now(UTC) - timedelta(days=1),
+        learning_origin=learning_origin or datetime.now(UTC) - timedelta(days=1),
         activation_policy="DAILY_BOUNDED_V3" if gross else "DAILY_BOUNDED_V2",
     )
     release = prepare_release(config)
@@ -320,7 +322,6 @@ def test_populated_v35_migration_preserves_all_prior_rows_and_typed_ids(tmp_path
             connection.exec_driver_sql("SELECT version FROM schema_version").scalar_one()
             == SCHEMA_VERSION
         )
-        assert SCHEMA_VERSION == 36
         for name, prior in fixture.items():
             if name in {"schema_version", "alembic_version"}:
                 continue
@@ -612,6 +613,11 @@ def paper_mock(store, release):
     broker.fixture_close = store.clocks.sample()[0] + timedelta(hours=6)
     broker.mark = synthetic.mark
     broker.fixture_fee_events = {}
+    synthetic._transport = None  # No transport or shared HTTP budget in this in-memory fixture.
+    broker.pending_progress = None
+    broker.inventory_diagnostic_trace = []
+    broker.entry_source_objections = ()
+    broker._discovery_state = broker._research_state = None
 
     async def get_clock():
         store.clocks.advance(0.01)
@@ -628,7 +634,7 @@ def paper_mock(store, release):
 
     async def owned_events(current):
         synthetic.now = current.clocks.sample()[0]
-        for supplied in fee_events(current, synthetic):
+        for supplied in fee_events(current, synthetic, effective_start=broker.fixture_open):
             broker.fixture_fee_events.setdefault(supplied.cost.fill_id, supplied)
         return tuple(
             e.model_copy(
@@ -1200,8 +1206,8 @@ async def test_fence_owned_exit_bad_resume_fresh_resume_new_claim_and_stale_send
             return None
 
         broker.submit_order, broker.get_order_by_client_id = lost_ack, unknown_lookup
-        await dispatch_entries(store, broker)
-        assert len(synthetic.posts) == 1
+        send_reasons = await dispatch_entries(store, broker)
+        assert len(synthetic.posts) == 1, send_reasons
         original_plan = store.links()[0]["protection_id"]
         fence = fence_entries(
             store, reason="APPROVED_RECOVERY", evidence_ids=("EXPLICIT_ENTRY_WRITER_FENCE",)

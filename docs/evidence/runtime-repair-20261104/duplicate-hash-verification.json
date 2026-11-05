@@ -1,0 +1,78 @@
+[
+  {
+    "identical": true,
+    "files": [
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\composite-v5-20261024-022128\\validated-copy.db.candidate",
+        "bytes": 13400190976,
+        "mtime_ns": 1792808481014368500,
+        "sha256": "4eadcbf56fdf70014d0b3216a05b6324d2323b6ab936037a672fb714604be0fb",
+        "unchanged_during_hash": true
+      },
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\current-capture-20261024-022054\\captured.db",
+        "bytes": 13400190976,
+        "mtime_ns": 1792808481014368500,
+        "sha256": "4eadcbf56fdf70014d0b3216a05b6324d2323b6ab936037a672fb714604be0fb",
+        "unchanged_during_hash": true
+      }
+    ]
+  },
+  {
+    "identical": true,
+    "files": [
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\composite-v4-20261024-020353\\validated-copy.db",
+        "bytes": 13342396416,
+        "mtime_ns": 1792807423937175300,
+        "sha256": "29369d7f10b35a7a05ac7f8768a528b5fc8d1a29768ee3e8d33eb9db95fc8d79",
+        "unchanged_during_hash": true
+      },
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\current-capture-20261024-020318\\captured.db",
+        "bytes": 13342396416,
+        "mtime_ns": 1792807423937175300,
+        "sha256": "29369d7f10b35a7a05ac7f8768a528b5fc8d1a29768ee3e8d33eb9db95fc8d79",
+        "unchanged_during_hash": true
+      }
+    ]
+  },
+  {
+    "identical": true,
+    "files": [
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\composite-20261024-015113\\validated-copy.db",
+        "bytes": 13280432128,
+        "mtime_ns": 1792806693547289500,
+        "sha256": "bfd516d36be3029060ee89e58bbd5de7b375412b2ce6c23b4d6f64c901728c6d",
+        "unchanged_during_hash": true
+      },
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\current-capture-20261024-014627\\captured.db",
+        "bytes": 13280432128,
+        "mtime_ns": 1792806414204059600,
+        "sha256": "bfd516d36be3029060ee89e58bbd5de7b375412b2ce6c23b4d6f64c901728c6d",
+        "unchanged_during_hash": true
+      }
+    ]
+  },
+  {
+    "identical": true,
+    "files": [
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\rehearsal-004036\\current-copy.db",
+        "bytes": 12982079488,
+        "mtime_ns": 1792802461524884900,
+        "sha256": "1a11392d7a632cb5abff9742a55d174152a9654e303c5fdfb2df3d35ff2cf73c",
+        "unchanged_during_hash": true
+      },
+      {
+        "path": "D:\\Elrond\\review\\paper-protection-audit-20261021\\backup-timing-20261023\\rehearsal-004925\\current-copy.db",
+        "bytes": 12982079488,
+        "mtime_ns": 1792802977425337200,
+        "sha256": "1a11392d7a632cb5abff9742a55d174152a9654e303c5fdfb2df3d35ff2cf73c",
+        "unchanged_during_hash": true
+      }
+    ]
+  }
+]

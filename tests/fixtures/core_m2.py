@@ -135,7 +135,7 @@ def events(store, broker):
     return tuple(result)
 
 
-def fee_events(store, broker, *, amount="0", revision=1, supersedes=None):
+def fee_events(store, broker, *, amount="0", revision=1, supersedes=None, effective_start=NOW):
     from quantbot.paper_core.contracts import BrokerEvent, CostItem
     from quantbot.research.manifest import content_id
 
@@ -147,8 +147,8 @@ def fee_events(store, broker, *, amount="0", revision=1, supersedes=None):
             amount=Decimal(amount),
             source="BROKER_REPORTED",
             document_id="synthetic-fee-activity",
-            effective_start=NOW,
-            effective_end=NOW + timedelta(days=1),
+            effective_start=effective_start,
+            effective_end=effective_start + timedelta(days=1),
             revision=revision,
             supersedes=(supersedes or {}).get(fill.fill_id),
         )

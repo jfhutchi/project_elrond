@@ -79,7 +79,7 @@ def test_target_procedure_pairs_refuse_silent_net_gross_reinterpretation():
 @pytest.mark.parametrize("gross", [False, True])
 def test_operational_daily_receipt_and_authority_keep_exact_commissioned_contract(tmp_path, gross):
     import asyncio
-    from datetime import timedelta
+    from datetime import UTC, datetime, time, timedelta
 
     from tests.integration.paper_core.test_final_repair import commissioned
 
@@ -88,7 +88,9 @@ def test_operational_daily_receipt_and_authority_keep_exact_commissioned_contrac
     from quantbot.paper_core.roles import daily_consideration
     from quantbot.strategy import XNYSSession, XNYSSessionSequence
 
-    db, store, release, commission, _ = commissioned(tmp_path, gross=gross)
+    db, store, release, commission, _ = commissioned(
+        tmp_path, gross=gross, learning_origin=datetime.now(UTC) - timedelta(days=3)
+    )
     store.clocks.execution_domain = "BROKER_PAPER:HOST_UTC_RUNTIME_V1"
     try:
         now = store.clocks.sample()[0]
@@ -103,10 +105,14 @@ def test_operational_daily_receipt_and_authority_keep_exact_commissioned_contrac
                         sessions=tuple(
                             XNYSSession(
                                 session_date=(now - timedelta(days=d)).date(),
-                                open_at=now - timedelta(days=d, hours=2),
-                                close_at=now - timedelta(days=d, minutes=1),
+                                open_at=datetime.combine(
+                                    (now - timedelta(days=d)).date(), time(14, 30), UTC
+                                ),
+                                close_at=datetime.combine(
+                                    (now - timedelta(days=d)).date(), time(21), UTC
+                                ),
                             )
-                            for d in (1, 0)
+                            for d in (2, 1)
                         ),
                     ),
                 )

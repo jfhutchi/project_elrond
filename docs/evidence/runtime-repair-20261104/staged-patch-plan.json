@@ -1,0 +1,39 @@
+{
+  "at": "2026-11-05T00:51:07.399574+00:00",
+  "source_commit": "92c75c6309f8aece8027bf89eb0f9ce3177a4896",
+  "old_release_id": "5cee6ebd4fcec939c1fce8d9e7c8b472038fe3f4db812a51d71e5c37dc1e424f",
+  "new_release_id": "2b53a23687b28c91dc2afe883f544adc27bf6462fcce447888bcfc2878a2c850",
+  "changes": [
+    {
+      "path": "src/quantbot/paper_core/guardian.py",
+      "old_sha256": "3eea4dc5b54d71eda74145ffb30d83c9b5156500926831b4f3c3d0f23fabd66d",
+      "new_sha256": "5c58a5998ab53501c0b4fd6b6d627411eee3f1f3d1a24276bcf1620ca1559ee6",
+      "bytes": 56488
+    },
+    {
+      "path": "src/quantbot/paper_core/health.py",
+      "old_sha256": "8854398230d784667d6195709a8e09a079daf5062b216b860bd1e7a78822bb7b",
+      "new_sha256": "b87d1819014ce96a4d955f068a8589d85c7c2a9c2b1b485b0472d552e79b82ee",
+      "bytes": 28819
+    },
+    {
+      "path": "src/quantbot/paper_core/trader.py",
+      "old_sha256": "255b1745fc89480791ef8c57b2f83056acf47e5c5608a862f604b03994018c92",
+      "new_sha256": "887c6995ed3925ef5ff8ae9d13fd09049b7318d7ccb834b16682a2ee72482645",
+      "bytes": 34884
+    }
+  ],
+  "config_unchanged": true,
+  "schema_unchanged": true,
+  "dependencies_unchanged": true,
+  "runtime_installed": false,
+  "old_release_verification": {
+    "release_id": "5cee6ebd4fcec939c1fce8d9e7c8b472038fe3f4db812a51d71e5c37dc1e424f",
+    "verified_at": "2026-11-05T00:51:07.304592+00:00",
+    "state": "PREPARED",
+    "objections": [],
+    "operational_commission": "NOT_PERFORMED",
+    "broker_state": "NOT_PROBED"
+  },
+  "remaining_authority": "Existing FENCE_ENTRY -> transition_release -> fresh open-session resume_entries; no closed-session bypass"
+}

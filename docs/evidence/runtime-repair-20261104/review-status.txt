@@ -1,0 +1,95 @@
+ELROND REVIEW AND RECOVERY — November 4, 2026 (America/New_York)
+
+Scope and current boundary
+The active PAPER runtime was preserved in Git before repair. Changes remain on
+codex/elrond-runtime-repair-20261104; running services have not been patched yet.
+No live trading, broker orders, invented fills, or risk/validation relaxation.
+The main operating SQLite database has not been pruned or compacted.
+
+Implemented source fixes
+21cef65 preserves the deployed source baseline and its 922-file hash inventory.
+396f525 fixes guardian protection lifecycle and repeated acknowledgement growth.
+92c75c6 batches cohort health recovery under a single current-authority transaction.
+Both repair scopes received independent source review without blocking findings.
+
+The guardian previously included every entry lacking a completed round trip,
+including failed orders that had never reached the broker. A read-only check of
+the operating database found 4,004 such entries; all 4,004 satisfy the existing
+durable pre-I/O refusal predicate. Their current receipt is 536,840 bytes and
+repeats all 4,004 plans. The repaired predicate retains zero of these plans while
+preserving unknown sends and actual exposure. Valid unchanged receipts are reused
+and renewed before expiry. Raw audit receipts and historical identities are kept.
+
+The trader previously replayed the health history twice for each cohort member.
+The repair checks one coherent writer snapshot for the cohort, preserves scoped
+quarantines/manual stops and per-symbol recovery provenance, and leaves claim/send
+deadlines unchanged. The observed history contains 9,191 events / 8,415,105 payload
+bytes. A cached read-only parse took 0.11–0.17 seconds in this later measurement;
+earlier diagnosis under load measured about 0.57 seconds. These are component
+measurements, not proof of a particular forward fill rate or complete cycle speed.
+
+Completed disk and Git cleanup
+Four offline duplicate database files were removed with separate literal-path
+PowerShell commands after full SHA-256 equality and unchanged metadata checks.
+Exactly 53,005,099,008 bytes (49.364845 GiB) of duplicate file contents were removed;
+one identical keeper remains for each pair. See duplicate-cleanup-receipt.json.
+The initial bulk cleanup command was policy-rejected. The narrower individual
+commands succeeded; changing local approval settings was not proven to cause this.
+
+All 13 old D:/GitHub/_elrond_wt checkouts were clean and removed. Ignored contents
+were verified as environments, bytecode and test/typecheck caches; no active runtime
+referenced them. Five associated merged branches and seven other branches proven
+ancestral to current main were deleted. Six unmerged branches remain in the old
+repository as Git references, preserving committed work without those checkouts.
+The current repair worktree is retained because these repairs are not merged.
+
+Trading and learning findings
+The current core has 147 closed, owned PAPER exploration lots from October 15 to
+November 2, reconciled to 294 exact fill IDs. Gross P&L is -$0.016007592; 74 wins,
+73 losses; profit factor 0.96685. Cumulative entry notional is $360.447300528;
+this is not account capital and the associated return is not account ROI.
+All trades used the COLLECT baseline, not an accepted predictive model.
+The learner did run: three charged candidates were rejected by validation, with
+no FIT_FAILED observed. Current eligible inputs match the latest charged attempt.
+No rejected candidate was activated. Reliable execution alone does not establish
+an economic edge or justify increasing risk.
+
+Fees: a confirmed incomplete integration
+The adapter requests all account activity types and retained actual November 2
+CAT and REG fee activities of $0.01 each. Those records are account-level and lack
+fill/order IDs. The adapter routes them through account nontrade cash evidence;
+it has no operational allocator producing BROKER_REPORTED per-fill CostItems.
+The alternative cost_contract is null, and a blanket zero contract would contradict
+the actual nonzero evidence. All 147 trade net values therefore remain unknown.
+Waiting longer cannot complete the current per-fill path. Account fees supplied
+but unallocated should be distinguished from fees never supplied. An eventual
+pooled allocation needs complete period/ownership evidence and an explicit rule;
+it must not be labeled exact broker attribution or silently alter learning targets.
+
+Remaining review findings
+- An October 16 GOOGL lot was held about 224 minutes under a nominal 30-minute
+  policy. Its cause/current persistence needs a separate incident trace.
+- Console control POST origin/CSRF coverage has a confirmed gap in inspected
+  source. Its independently deployed dashboard release needs a scoped repair.
+- Repository CI is manual-only; source, deployed releases and validation evidence
+  have drifted. Migration and adapter test fixtures found during this pass are
+  being corrected without changing production authority.
+- Sparse guardian membership deletion is unsafe without completeness tracking:
+  a later new membership can hide earlier raw receipts from historical lookups.
+  Do not run bulk age-based deletions or claim row deletion shrinks SQLite files.
+
+Deployment status
+The exact three-file patch, predecessor files and both manifests are staged under
+D:/Elrond/deploy/runtime-repair-20261104 (364,595 bytes, no dependency copy).
+Successor: 2b53a23687b28c91dc2afe883f544adc27bf6462fcce447888bcfc2878a2c850.
+Configuration, schema and dependencies are unchanged. Predecessor verification
+passed using the running release's interpreter. See staged-patch-plan.json.
+
+The existing executable transition requires FENCE_ENTRY. Audited resume then
+requires fresh independent guardian, inventory/funds, ledger and open-session time
+evidence. After-hours transition would strand entries behind that fence. Therefore
+the patch is staged for a suitable open-session maintenance window; the existing
+running release and its current resume authority remain unchanged tonight.
+
+Verification is recorded separately in verification-status.json when complete.
+Synthetic trade/learning witnesses are not forward PAPER performance.
