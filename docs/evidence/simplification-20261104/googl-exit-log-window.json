@@ -1,0 +1,122 @@
+{
+  "guardian": {
+    "events": 818,
+    "first_at": "2026-10-16T15:35:12.549697Z",
+    "last_at": "2026-10-16T18:59:47.974794Z",
+    "first_blockers": {
+      "NONE": 808,
+      "OWNED_PROTECTION_QUARANTINED:e68aadebd9d504d0d0ab5ae2ae691c3da16e670dadc9faf6a06b64a1532f1232": 6,
+      "TIME_SKEW_OUT_OF_BOUNDS": 1,
+      "TIME_ACQUISITION_RETRYABLE": 1,
+      "OWNED_PROTECTION_QUARANTINED:ef9b20f8573fb6c943c7907c2a794c0a925c1f5f811f10425518eb7165076b7a": 1,
+      "INVENTORY_MISMATCH": 1
+    },
+    "objections": {
+      "OWNED_PROTECTION_QUARANTINED:e68aadebd9d504d0d0ab5ae2ae691c3da16e670dadc9faf6a06b64a1532f1232": 6,
+      "TIME_SKEW_OUT_OF_BOUNDS": 1,
+      "TIME_ACQUISITION_RETRYABLE": 1,
+      "TIME_SAMPLES_INCOMPLETE": 1,
+      "OWNED_PROTECTION_QUARANTINED:ef9b20f8573fb6c943c7907c2a794c0a925c1f5f811f10425518eb7165076b7a": 1,
+      "INVENTORY_MISMATCH": 1
+    },
+    "keys": {
+      "role": 818,
+      "release_id": 818,
+      "config_id": 818,
+      "store_identity": 818,
+      "owner": 818,
+      "generation": 818,
+      "process_epoch": 818,
+      "pid": 818,
+      "recorded_at": 818,
+      "valid_until": 818,
+      "last_useful_progress": 818,
+      "objections": 818,
+      "evidence_ids": 818,
+      "proof_age_seconds": 818,
+      "guardian_receipt_id": 818,
+      "first_blocker": 818,
+      "time_proof_age_seconds": 818,
+      "cycle_seconds": 818
+    }
+  },
+  "trader": {
+    "events": 818,
+    "first_at": "2026-10-16T15:35:17.496338Z",
+    "last_at": "2026-10-16T18:59:47.413867Z",
+    "first_blockers": {
+      "CORE_ENTRY_SLOT_RESERVED:core-entry-c56f27aed20788181542a64066c562d8dab2f04ef2d8ae9c83a60c8e433bc8dc": 797,
+      "CORE_ENTRY_FENCED": 17,
+      "CORE_ENTRY_SLOT_RESERVED:core-entry-850e0307daaeb534f9faa2cc29f17b996ea85dbc6f30b6d3fc5b6f4af43f8b4e": 4
+    },
+    "objections": {
+      "CORE_ENTRY_SLOT_RESERVED:core-entry-c56f27aed20788181542a64066c562d8dab2f04ef2d8ae9c83a60c8e433bc8dc": 798,
+      "CORE_ENTRY_SLOT_RESERVED:core-entry-850e0307daaeb534f9faa2cc29f17b996ea85dbc6f30b6d3fc5b6f4af43f8b4e": 18,
+      "CORE_ENTRY_FENCED": 17,
+      "CORE_INDEPENDENT_GUARDIAN_NOT_READY": 10,
+      "NO_ELIGIBLE_COHORT_MEMBERS:(('AAPL', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('MSFT', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('AMZN', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('GOOGL', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('META', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('NVDA', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('JPM', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('JNJ', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('XOM', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('PG', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('F', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('T', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('PFE', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('VZ', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('HPQ', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('SOFI', 'FRESH_COMPLETE_BAR_UNAVAILABLE'), ('UBER', 'FRESH_COMPLETE_BAR_UNAVAILABLE'))": 1
+    },
+    "keys": {
+      "role": 818,
+      "release_id": 818,
+      "config_id": 818,
+      "store_identity": 818,
+      "owner": 818,
+      "generation": 818,
+      "process_epoch": 818,
+      "pid": 818,
+      "recorded_at": 818,
+      "valid_until": 818,
+      "last_useful_progress": 818,
+      "objections": 818,
+      "evidence_ids": 818,
+      "proof_age_seconds": 818,
+      "guardian_receipt_id": 818,
+      "first_blocker": 818,
+      "time_proof_age_seconds": 818,
+      "cycle_seconds": 818
+    }
+  },
+  "outcomes": {
+    "events": 818,
+    "first_at": "2026-10-16T15:35:12.035634Z",
+    "last_at": "2026-10-16T18:59:47.490154Z",
+    "first_blockers": {
+      "b78e942c8a11b20f3aa000790cc8eddfddaa1612dd6def3a7be3e7ca0f15bb65:NONEMPTY_OWNED_FLAT_UNAVAILABLE": 798,
+      "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:NONEMPTY_OWNED_FLAT_UNAVAILABLE": 15,
+      "NONE": 2,
+      "OUTCOME_PROVIDER_RETRY:BrokerTransportError": 1,
+      "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:ORDER_UNAVAILABLE": 1,
+      "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:TERMINAL_ACTIVITY_WATERMARK_UNAVAILABLE": 1
+    },
+    "objections": {
+      "b78e942c8a11b20f3aa000790cc8eddfddaa1612dd6def3a7be3e7ca0f15bb65:NONEMPTY_OWNED_FLAT_UNAVAILABLE": 798,
+      "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:NONEMPTY_OWNED_FLAT_UNAVAILABLE": 15,
+      "OUTCOME_PROVIDER_RETRY:BrokerTransportError": 1,
+      "CONSIDERED_SESSION:2026-10-15": 1,
+      "TEN_COMPLETED_SESSION_WARMUP": 1,
+      "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:ORDER_UNAVAILABLE": 1,
+      "b284330b79825df968aba5a327a3102bde24ca73b7cf8280d9dc0188c098ef98:TERMINAL_ACTIVITY_WATERMARK_UNAVAILABLE": 1
+    },
+    "keys": {
+      "role": 818,
+      "release_id": 818,
+      "config_id": 818,
+      "store_identity": 818,
+      "owner": 818,
+      "generation": 818,
+      "process_epoch": 818,
+      "pid": 818,
+      "recorded_at": 818,
+      "valid_until": 818,
+      "last_useful_progress": 818,
+      "objections": 818,
+      "evidence_ids": 818,
+      "proof_age_seconds": 818,
+      "guardian_receipt_id": 818,
+      "first_blocker": 818,
+      "time_proof_age_seconds": 818,
+      "cycle_seconds": 818
+    }
+  }
+}

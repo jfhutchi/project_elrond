@@ -1,0 +1,93 @@
+ELROND COMPREHENSIVE SIMPLIFICATION — active progress record
+
+Scope: user's November 4, 2026 comprehensive audit/refactoring directive.
+PAPER only. Preserve trades, authority, manual emergency stops, historical results,
+reproducibility and one authoritative entry writer. No forced trading or invented fees.
+Inspect -> baseline -> analyze -> plan -> incremental refactor -> test -> benchmark
+-> controlled deployment -> observed verification.
+
+Environment verified:
+- Host LEANNES-LAPTOP, HP OMEN 16-n0xxx; only C: and D: are mounted. E: unavailable.
+- Authoritative repository D:/Elrond/App, origin jfhutchi/project_elrond.
+- Existing repair worktree moved to D:/Elrond/worktrees/runtime-repair, preserving
+  all changes and Git history. Branch renamed hutch/elrond-simplification-20261104.
+- Old C: checkout directory is empty, held open by the desktop app. Git metadata
+  repaired and verified. Native attach_worktree rejects the relocated checkout as
+  unmanaged; commands therefore use the D: directory explicitly. No new C: files.
+- Seven scheduled services: core trader/guardian/outcomes, console, protection,
+  deadline, research. Active code paths still require inventory and ownership review.
+
+Prior completed work retained, not repeated:
+- 21cef65: deployed source baseline and 922-file SHA-256 manifest.
+- 396f525: guardian receipt growth fix; 92c75c6: batched cohort health recovery.
+- Four SHA-256-identical redundant DB copies removed: 53,005,099,008 bytes.
+- Thirteen obsolete clean worktrees removed, twelve proven-merged branches removed.
+- Core test latest results: 458 passed, one missing-local-archive skip across bounded
+  runs. Additional isolated-child verification: three passed in 38.88s. Fixture-only
+  corrections remain uncommitted; aggregate verification evidence to be finalized.
+- Three-file production patch staged, not deployed. Current release remains active.
+- Original operating SQLite database not pruned/compacted; historical completeness
+  of guardian membership projections must be proven before any such maintenance.
+- Trading/learning/fee findings are in runtime-repair-20261104/review-status.txt.
+
+Resource control:
+- Previous weekly account reading 11%, latest 17%; rounded account-wide, not task-only.
+- At most three agents concurrently, no nested agents or independent worktrees.
+- Inventory tasks: read-only, eight-minute / twenty-tool-call target caps; return
+  findings and stop. No broad test runs or production mutations by inventory agents.
+- Coordinator owns all integration, production measurements and deployment actions.
+
+Current phase: complete inventory and baseline. No new product changes until
+inventory identifies exact high-confidence targets and their runtime dependencies.
+Pending: static dependency/entrypoint inventory, host metrics, database measurements,
+dashboard/fee audit, trading/recovery audit, consolidated implementation plan.
+
+Checkpoint November 4 ~20:35 ET:
+- Independent inventory agents completed source/dependencies, actual dashboard and
+  runtime paths. Three read-only reports saved alongside this ledger. User again
+  explicitly requested bounded parallel subagents and profitable trading as the
+  research goal; no profitability claim is made from current negative gross results.
+- SQLite read-only EXPLAIN confirms active deadline signals/order-events queries
+  scanned and used temporary B-trees. Source root was unfiltered JSON history
+  replay on every 10-second cycle, partly inside a writer transaction.
+- f2d9639 preserved 16 active dashboard delta files and the deadline retry
+  source/test delta before refactoring. Later exact active execution_worker
+  diagnostic source was also preserved (pending integration commit).
+- Active component characterization: 338 passed, two failed after 98.93s.
+  Both were inherited fixture/source drift: coarse Windows 20ms assertion and
+  older worker generic startup diagnostic. Scoped repairs now made; final rerun
+  remains pending. Separate core aggregation remains 458pass/1archive skip.
+- Deadline agent implemented SQL filtering, acknowledgement anti-join and moved
+  handoff selection before audit insert; focused result 90 pass. Parent revised
+  order to select before insert in the same transaction, avoiding a stranded
+  audit row if selection fails; three relevant reruns pass. Production DB not
+  modified and no physical runtime improvement claimed yet.
+- Parent implemented bounded account-cost read with explicit incomplete refusal;
+  reporting suite 18 passed. Actual operating read-only cost report currently
+  returns 12 days in 0.074s under the new 4s/25k-row/32MB budget. Fee-status and
+  activity/source detail rendered from existing evidence; trade net still null.
+- Console agent has shared Origin/Host/local-peer guard for mutating POST routes;
+  its final tests/review pending. Wrapper agent separately auditing/extracting
+  duplicated PowerShell bootstrap, no overlapping files.
+- Confirmed unreferenced paper_core/maintenance.py removed (41 source lines),
+  after source/tests/scripts/deploy/dynamic-loader reference searches. It was a
+  closed-session eligibility helper, not an authorized resume API.
+- Account-wide weekly usage rounded 20% (11% before repair). Agents remain
+  bounded to one focused scope and no nested agents.
+
+Checkpoint after integration and user's additional acceptance requirements:
+- 9f155f3 committed deadline/storage optimization and active worker diagnostics.
+- 05b88b8 committed shared Windows bootstrap and installer/tests.
+- 39984dc committed console control guards, bounded cost reads and safe blocker views.
+- Combined console/accounting: 320 passed in86.61s. Deadline/storage:112 passed,
+  26 PostgreSQL-environment skips in43.48s. Wrapper scope18 passed in65.37s.
+  Latest blocker-prefix/catalog followup23 passed in11.61s; no live operations.
+- Source baseline corrected to preserved active union f2d9639:118614 maintained LOC.
+  Current118663 LOC,332physical lines added/293removed; zero services/dependencies
+  removed. These measurements exclude tests/docs. No net code reduction claimed.
+- Latest acceptance checkpoint records source/deployment separation, architecture,
+  measured limits, ownership hypothesis, cycle-reason gaps and honest economics.
+- All delegated scopes stopped. One entry trader registered; unregistered process
+  exclusion is not established by task registration alone. Additional every-cycle
+  observational outcomes remain required; heartbeat progress is not trade success.
+- No successor cutover, historical pruning or operating DB compaction performed.

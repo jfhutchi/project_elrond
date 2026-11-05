@@ -1,0 +1,305 @@
+ELROND DASHBOARD / ACCOUNTING INVENTORY — November 4, 2026 ET
+Read-only source inventory; no product, test, configuration or runtime changes.
+
+BOUNDARY
+Checkout: D:/Elrond/worktrees/runtime-repair (parent identifies HEAD 92c75c6).
+Active dashboard release supplied by parent:
+D:/Elrond/releases/dashboard-costs-8fda9bd-20261028
+Main operating database supplied by parent:
+D:/Elrond/state/quantbot-paper-fresh-20260908.db
+This audit did NOT open that database, call a broker/network service, read secrets,
+run tests, restart services, copy product files or evaluate browser behavior.
+Only this report was written. Current runtime quantities come from prior read-only
+reports/review-status, not new measurements. Task/listener/accessibility behavior
+has not been exercised. Relative source references below belong to the indicated
+checkout or deployed release.
+
+KEY RESULT
+The active dashboard already implements observed account fee visibility and a
+provisional daily cost overlay. The repair checkout does NOT contain that feature.
+A new implementation starting from the checkout would risk deleting working cost
+reporting and its tests. Preserve the deployed source before refactoring.
+Do not introduce a new economic allocation policy to solve a presentation problem.
+
+PRESERVE THIS EXACT DEPLOYED DELTA FIRST
+Compared SHA-256 of every .py/.html under deployed console/reporting and their unit
+test directories against the checkout, plus cli.py/pyproject.toml/uv.lock.
+Deployed-only files:
+- src/quantbot/reporting/paper_costs.py
+- src/quantbot/console/templates/_paper_costs.html
+- tests/unit/reporting/test_paper_costs.py
+- tests/unit/console/test_paper_cost_integration.py
+Changed files:
+- src/quantbot/console/app.py
+- src/quantbot/console/calendar.py
+- src/quantbot/console/performance_reader.py
+- src/quantbot/console/state.py
+- src/quantbot/console/templates/_overview.html
+- src/quantbot/console/templates/_performance_styles.html
+- src/quantbot/console/templates/base.html
+- src/quantbot/console/templates/calendar.html
+- src/quantbot/console/templates/history.html
+- src/quantbot/console/templates/learner.html
+- src/quantbot/console/templates/operations.html
+- src/quantbot/console/templates/reports.html
+cli.py, pyproject.toml and uv.lock are byte-identical. overview.py is also identical.
+Other .py/.html files within the compared directory sets were identical.
+This is the scoped preservation list, not a whole-release dependency manifest.
+The cost reader is standard-library code; no new dependency lock is needed for it.
+Preserving the release means recording provenance and the source delta, not
+overwriting repaired core code with an older full release.
+
+ACTUAL ROUTES / COMPONENTS / DATA
+app.py declares 16 navigation destinations:
+ / Operations (Paper desk), /calendar, /session, /risk, /research, /learner,
+ /experiments, /market-data, /capacity, /discovery, /config, /config/policy,
+ /reports, /runtime, /kill-switch, /glossary.
+Additional detail /experiments/{experiment_id}; APIs /api/state, /api/calendar,
+ /api/experiments, /api/experiments/{experiment_id}, /api/learner.
+history.html is INCLUDED by learner.html; it is not a dead standalone page.
+
+Deployed base.html already groups Research/System navigation, uses aria-current,
+has mobile navigation disclosure, main/nav landmarks and responsive desktop styles.
+Do not recreate the obsolete flat sidebar in the checkout. Source supports basic
+keyboard controls and focus styling. Actual contrast, zoom/reflow, screen-reader
+behavior and remote access were not tested. No verified remote-access URL is
+established by this audit. cli.py defaults 127.0.0.1:8787; docs/dashboard-access.md
+warns that the control surface is unauthenticated and historical remote access
+claims are not deployment proof.
+
+console/overview.py reads the latest account snapshot and exact current role
+heartbeat joins, validates commission/config/store/owner/generation/release,
+and classifies trader/guardian/outcomes as Reporting/Waiting/Stale/Unverified.
+It only maps four blocker codes to messages; all other codes become
+'A readiness check is waiting'. RoleStatus omits valid_until, last useful progress,
+all objections and recovery requirements. Template does not show recorded_at.
+Thus actual exact blockers cannot be recovered from the prominent UI.
+
+console/state.py read_console_state assembles many legacy panels every snapshot:
+risk/policy, strategy promotion, discovery, budgets, market feed, sessions,
+research runtime, incidents and account/protection state. _health at ~594 reads
+legacy kill-switch singleton, reconciliation_runs, all repository.list_runs(),
+latest session_observations, position_protection_cycles and aggregate historical
+position_protection_actions. Overview separately reads current core role evidence.
+The MANUAL STOP strip and protection card therefore derive from legacy state;
+they must not be presented as a complete core entry-authority/readiness verdict.
+
+console/cli.py wiring is actually src/quantbot/cli.py:425-491: Database, narrow
+readiness/reconcile/sync callables, learner directory, optional experiment store,
+market probe and daily performance reader. GET middleware refreshes informational
+broker market clock (at cache policy interval). A page read is not necessarily
+network-free, although the separate paper-cost reader is network-free.
+
+Daily account P&L: console/performance_reader.py reads configured
+QUANTBOT_DAILY_PERFORMANCE_DIRECTORY, else QUANTBOT_LEARNER_DIRECTORY/performance.
+It validates calendar.json, durable closes.db/paper_daily_closes_v1,
+optional baselines.db/paper_close_baselines_v1 and capture-status.json.
+console/calendar.py totals only validated FINAL net rows across all observed
+months; missing/invalid/pending days never become zero. Its profitable percentage
+is PROFITABLE DAYS / FINAL DAYS, not trade win rate. Calendar remains distinct
+from per-lot outcomes. Stale or invalid calendar coverage currently makes the
+whole reader unavailable, including prior valid close history; any change must
+preserve explicit historical coverage and as-of semantics.
+
+Deployed app.py:177-185 snapshot always calls read_paper_costs(database.path).
+Calendar overlays these daily cost records onto the legacy finalized-close grid.
+UI shows them on overview, reports and calendar while excluding provisional
+cost estimates from final calendar totals. The two data families use separate
+read transactions and are not one coherent financial snapshot despite the older
+read_console_state docstring saying 'one pass, one transaction'.
+
+DEPLOYED COST REPORT: EXISTING CAPABILITY AND LIMITS
+reporting/paper_costs.py build_report (44+):
+- Selects BROKER_PAPER closed trips by Eastern exit/source_end date.
+- Checks gross against exact entry/exit fill quantities and prices.
+- Validates provider document digests, account, PAPER endpoint and capture cutoff.
+- Deduplicates activity IDs and rejects conflicting payloads.
+- Separates fee activities (FEE/CFEE, executed, USD, created_at <= as_of).
+- Only shows gross + observed fee cash flow as provisional daily net when full
+  session activity coverage, exact account/owned fill match and intraday scope
+  are established. Mixed/unknown scope leaves that net null.
+- Always leaves all_in_verified_net null. Per-fill native net remains unknown
+  unless the native trip itself has attribution. Uses existing core_round_trips
+  CURRENT payloads; outcomes.py:792-805 updates these while retaining immutable
+  core_outcome_revisions, so this is not a stale-first-revision bug.
+- Labels an optional prior-session observed-debit scenario as modeled, denies
+  actual-cost and learning-label authority, and does not double-deduct spread.
+- fee_status already distinguishes POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION
+  and NO_FEE_ACTIVITY_OBSERVED_BY_CAPTURE. fee_activities contains immutable
+  source IDs, dates/component/signed cash flow.
+
+UI _paper_costs.html displays gross, observed fee cash, provisional net, modeled
+scenario, scope and capture lag. It does NOT render fee_status or source
+fee_activities. Its fee heading can more clearly say ACCOUNT fee cash flow.
+Calendar detail similarly lacks source-specific fee-status explanation.
+
+Small truthful improvement:
+Render existing fee_status in readable language ('Account fees observed;
+per-fill allocation unavailable', or 'No fee activity observed by this capture;
+completeness unknown'), keep native trade net and all-in net unknown, expose
+date/component/signed amount and expandable activity/document references.
+Do not suggest that waiting alone implements missing exact attribution.
+Do not call the observed Nov 2 CAT/REG cents exclusively owned by core.
+Do not add zero-fee fallback or alter V3 gross learning.
+No new allocation algorithm is required for this improvement.
+
+Narrow omission in current reporter: it loops only days with owned round trips
+(line 88). An account fee on a day with no core closed trip never appears in the
+report's days, even when the activity is retained. If account-wide fees are
+promised, add a separately scoped observed-account-fee ledger/list (or union
+fee dates while clearly separating scope), not fake core trades or zero gross.
+A missing fee date/invalid status must remain visibly unresolved.
+Only relevant source documents are selected by fee-event references plus current
+provider cursor; this is not proof of complete historical activity capture.
+Prior-session scenario and full-session match do not prove fee finality.
+
+Known fee facts from prior bounded diagnosis:
+actual Nov 2 CAT -0.01 and REG -0.01 broker activities lack fill/order references;
+adapter retains them as ACCOUNT_NONTRADE events. cost_contract is null.
+147 current closed lots have unknown actual fees/net. Adapter has no operational
+BROKER_REPORTED exact-fill fee allocator. These facts do not establish all-time
+fee totals, exclusive core ownership or a legitimate pooled allocation rule.
+
+HIGHEST-IMPACT VERIFIED FIXES, IN ORDER
+1. Shared local-origin protection for all console POST routes.
+   Active app.py only checks client loopback, URL hostname and exact Origin for
+   /learner/alerts/{source}/{code}/acknowledge (363-373).
+   Other POSTs at 498,514,543,568,716,742,764 do not make that check:
+   /kill-switch/engage, /kill-switch/clear, /operations/reconcile,
+   /operations/sync-data, /config/policy/preview, /config/policy/apply,
+   /config/policy/rollback.
+   read_form only parses forms; GET middleware does not protect these requests.
+   Readiness/proposal checks restrict effects but are not CSRF protection.
+   Reject missing/null/foreign origin, unapproved Host and remote peer BEFORE
+   form processing, callback, DB writes or network I/O. Share one expected-origin
+   policy rather than only copying checks to individual endpoints. Keep legitimate
+   local stop/resume and same-origin acknowledgements operational. Loopback
+   binding alone does not prevent a browser on a malicious origin issuing POST.
+   This finding is verified in BOTH checkout and deployed release.
+
+2. Bound cost-reader execution without truncating truth.
+   Active reporting/paper_costs.py:252+ uses read-only/query_only transaction and
+   sqlite timeout=2 (lock acquisition wait), but no progress handler/deadline.
+   It fetches ALL core_round_trips (266), ALL core_external_owner_events (281),
+   current provider pointers (289), each referenced document, and all session
+   openings/time evidence (301+). It repeats for every state snapshot/page;
+   some non-calendar page paths recompute performance/costs separately.
+   The external-event table has only id,payload (core_runtime_schema.py), so
+   WHERE json_extract(...) alone does NOT establish a bounded indexed read.
+   Smallest safe repair: monotonic SQLite VM progress deadline, bounded cumulative
+   rows/bytes and document parsing budget; abort as explicit unavailable on budget
+   exhaustion and close the read transaction. Do not LIMIT and silently publish
+   partial totals or lose late fee corrections. This bounds cost reads, not all
+   legacy ConsoleState reads; old list_runs and grouped action scans remain.
+   Then avoid duplicate per-request reads by passing one report to all components.
+   A later cache/materialized projection needs capture/as-of labels and complete
+   update/correction invalidation; never retain stale results as fresh.
+   A full period-indexed accounting exporter is a separate larger change.
+
+3. Show exact safe core blocker and evidence age.
+   overview.py RoleStatus/read_overview + templates/_overview.html:
+   add structured allowlisted code, safe reason, last-useful-progress age,
+   heartbeat age/expiry and static actionable next step. Never expose raw provider
+   exceptions/config secrets. A closed market may explain entry waiting but must
+   not hide stale guardian/outcomes, unknown sends or overdue lots.
+   Extend tests/unit/console/test_overview.py. Do not merge legacy health and core
+   authority into one green status.
+
+4. Surface existing fee state/source details as above.
+   Build on deployed reporter/tests; no new schema or economic policy needed.
+   Add fee-only dates to separate account evidence if claiming account fee history.
+
+5. Simplify navigation and expensive legacy snapshots only after usage/dependency
+   review. Source reachability alone cannot establish an unused feature.
+   Keep primary Operations/Performance/Activity/Learning/Settings concepts with
+   advanced records disclosed; preserve historical research/evidence deep links.
+   No route/data deletion is justified solely by this inventory.
+
+METRICS STILL NOT PROVIDED AS THE USER'S COMPLETE OPERATING VIEW
+- Per-trade current-core gross win rate and closed trade table are not the existing
+  calendar's profitable-day percentage. Cost report contains per_trade records
+  but the common template does not show their native fee status/drilldown.
+- Overview shows qty/avg entry/last mark/market value, but no explicit unrealized
+  P&L column or ownership breakdown. Recorded marks have a snapshot timestamp;
+  no streaming/freshness authority should be invented.
+- Historical account daily P&L exists under strict finalized-close evidence;
+  real-time core realized gross and account equity are different populations.
+- Historical backtest drawdown lives in learner/history; experiment-specific
+  account_drawdown_usd exists, but no general current-core/account drawdown
+  timeline is present in Paper desk/calendar. Missing closes cannot be bridged
+  as zero or claimed as continuous observed drawdown.
+- Exact known per-fill fees and true broker net remain accounting gaps.
+- Modeled fee scenarios are existing observational presentation; not approved
+  actual charges, exact attribution, model targets or total account performance.
+
+NOTIFICATIONS
+operations/alerts.py already has durable independent alerts.db + events outbox,
+escalation/reminders, acknowledgement and recovery separation; Condition includes
+code, subsystem, severity, category, owner, action.
+operations/monitor.py samples legacy learner worker/deployment receipts,
+position_protection_cycles, reconciliation_runs and ingestion_runs, plus optional
+experiment health and standby-entry checks. It does NOT read core role heartbeat
+tables. Source receipt labels external_delivery NOT_CONFIGURED.
+console/learner.py read_monitor_panel exposes that receipt. Ack is local/same
+origin and changes alert acknowledgement only, not underlying conditions.
+operations/alert_dispatch.py is a bounded durable GitHub-comment transport with
+repository jfhutchi/project_elrond and PR 255 hard-coded, canary/route-confirmation
+gate and sanitized catalog. A posted comment is explicitly not chat delivery.
+No actual external route activation/delivery is established by source inspection.
+The core work.py 'notifications' are database work invalidations, not user alerts.
+Most useful evolution is core-specific read-only monitoring of current matched
+roles/unknown sends/overdue protection/outcome backlog, safe actions and verified
+delivery status, reusing dedup/escalation/ack contracts. Do not automatically
+activate the old PR-comment sender or equate local outbox with received notice.
+
+DUPLICATION / DEAD-CODE CAUTION
+scripts/dashboard.py generates static reports/dashboard.html using broker reads;
+src/quantbot/research/dashboard.py supplies research projections; console FastAPI
+is the independently deployed interactive app. Old Pi/omen dashboard refresh
+service/timer definitions remain. These are duplicate presentation paths and
+deployment candidates for archival once scheduler/reference inventory proves
+inactivity, not proven safe deletions in this source-only scope.
+The historical/backtest learner, experiment, budget, discovery, runtime, report
+and market-feed routes are reachable advanced features. They compete with the
+core operational view and are candidates for lazy loading/disclosure, not
+demonstrably dead functionality.
+The active release already improved grouping and removed prominent experiments
+from above the main body. Preserve this instead of repeating that work.
+
+MEANINGFUL REGRESSION COVERAGE TO RUN AFTER AN AUTHORIZED IMPLEMENTATION
+No tests were run in this inventory.
+Existing deployed tests/unit/reporting/test_paper_costs.py covers posted vs
+unposted fees, overlap dedup, delayed posting, incomplete/mismatched scope,
+conflicting/tampered activity, later foreign fills, capture lag, signed refund,
+no duplicate spread/slippage subtraction, query-only repeatability, unchanged
+native outcomes, output alias safety and source digest validation.
+Existing deployed tests/unit/console/test_paper_cost_integration.py covers API,
+overview/reports/calendar, late-fee refresh, provisional/final separation,
+sanitized unavailable failures and absence not becoming zero.
+Preserve these files and their fixture helper dependency when importing baseline.
+
+Add:
+- All POST routes parametrized: foreign/missing/null Origin and disallowed
+  Host/client => 403, zero callback/writes; valid local origin retains intended
+  behavior; denied request cannot initialize policy defaults or alert stores.
+  Existing test_alert_acknowledgement.py already covers only its own route.
+  Update legitimate local-origin requests in test_kill_switch_page.py,
+  test_sync_data_action.py, test_policy_routes.py and console control route tests.
+- Deliberately expensive synthetic SQLite fixture triggers query deadline;
+  output unavailable/safe, no truncated totals, source bytes unchanged.
+  Large JSON document parsing hits explicit budget; late activity still refreshes.
+  Assert one cost read per rendered request where applicable.
+- CAT/REG aggregate-only fixtures render 'observed account fees, allocation
+  unavailable', source details and unknown net; no-fee-observed never says zero.
+  Fee on a no-core-trip day appears only in account scope; mixed ownership leaves
+  owned net null. Final close/calendar totals and V3 targets stay unchanged.
+- Overview unknown blocker renders sanitized code/action; heartbeat identity
+  mismatch or expiry cannot become ready; market closed cannot conceal guardian
+  or outcomes failure. Current role timestamps visible.
+- Browser keyboard/zoom/mobile check against deployed layout after changes.
+  Do not claim accessibility certification from source checks.
+
+STOP STATUS
+Inventory complete. No product edits, tests, DB reads/writes, sends, deployments,
+broker calls, deletion, or task changes were performed.
+

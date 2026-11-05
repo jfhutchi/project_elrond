@@ -1,0 +1,1169 @@
+{
+  "path": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+  "bytes": 131318099968,
+  "mode": "read-only",
+  "journal_mode": "wal",
+  "page_size": 4096,
+  "page_count": 32060083,
+  "freelist_count": 0,
+  "schema": [
+    {
+      "type": "table",
+      "name": "alembic_version",
+      "table": "alembic_version",
+      "sql": "CREATE TABLE alembic_version (\n\tversion_num VARCHAR(32) NOT NULL, \n\tCONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)\n)"
+    },
+    {
+      "type": "table",
+      "name": "strategy_deployments",
+      "table": "strategy_deployments",
+      "sql": "CREATE TABLE strategy_deployments (\n\tstrategy_id VARCHAR(128) NOT NULL, \n\tversion VARCHAR(64) NOT NULL, \n\tgit_commit VARCHAR(128) NOT NULL, \n\tconfiguration_hash VARCHAR(128) NOT NULL, \n\tdeployment_timestamp VARCHAR(40) NOT NULL, \n\tCONSTRAINT pk_strategy_deployments PRIMARY KEY (strategy_id, version)\n)"
+    },
+    {
+      "type": "table",
+      "name": "bars",
+      "table": "bars",
+      "sql": "CREATE TABLE bars (\n\tbar_id INTEGER NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\ttimestamp VARCHAR(40) NOT NULL, \n\tprovider VARCHAR(64) NOT NULL, \n\tadjustment_metadata_json TEXT NOT NULL, \n\topen TEXT NOT NULL, \n\thigh TEXT NOT NULL, \n\tlow TEXT NOT NULL, \n\tclose TEXT NOT NULL, \n\tvolume TEXT NOT NULL, \n\tadjustment TEXT NOT NULL, \n\tCONSTRAINT pk_bars PRIMARY KEY (bar_id), \n\tCONSTRAINT observation UNIQUE (symbol, timestamp, provider, adjustment_metadata_json)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_bars_symbol_timestamp",
+      "table": "bars",
+      "sql": "CREATE INDEX ix_bars_symbol_timestamp ON bars (symbol, timestamp)"
+    },
+    {
+      "type": "table",
+      "name": "order_intents",
+      "table": "order_intents",
+      "sql": "CREATE TABLE order_intents (\n\tintent_id VARCHAR(128) NOT NULL, \n\tclient_order_id VARCHAR(128) NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tsignal_date VARCHAR(10) NOT NULL, \n\tside VARCHAR(8) NOT NULL, \n\torder_type VARCHAR(16) NOT NULL, \n\ttime_in_force VARCHAR(8) NOT NULL, \n\tquantity TEXT NOT NULL, \n\tlimit_price TEXT, \n\tstop_price TEXT, \n\textended_hours BOOLEAN NOT NULL, \n\tstate VARCHAR(32) NOT NULL, \n\tcreated_at VARCHAR(40) NOT NULL, \n\tCONSTRAINT pk_order_intents PRIMARY KEY (intent_id), \n\tCONSTRAINT uq_order_intents_client_order_id UNIQUE (client_order_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_order_intents_state_created",
+      "table": "order_intents",
+      "sql": "CREATE INDEX ix_order_intents_state_created ON order_intents (state, created_at)"
+    },
+    {
+      "type": "table",
+      "name": "qualification_days",
+      "table": "qualification_days",
+      "sql": "CREATE TABLE qualification_days (\n\tstrategy_id VARCHAR(128) NOT NULL, \n\ttrading_date VARCHAR(10) NOT NULL, \n\tqualified BOOLEAN NOT NULL, \n\tdetail_json TEXT NOT NULL, \n\tCONSTRAINT pk_qualification_days PRIMARY KEY (strategy_id, trading_date)\n)"
+    },
+    {
+      "type": "table",
+      "name": "kill_switch_state",
+      "table": "kill_switch_state",
+      "sql": "CREATE TABLE kill_switch_state (\n\tid INTEGER NOT NULL, \n\tengaged BOOLEAN NOT NULL, \n\treason TEXT NOT NULL, \n\tupdated_at VARCHAR(40) NOT NULL, \n\tCONSTRAINT pk_kill_switch_state PRIMARY KEY (id), \n\tCONSTRAINT ck_kill_switch_state_singleton CHECK (id = 1)\n)"
+    },
+    {
+      "type": "table",
+      "name": "runs",
+      "table": "runs",
+      "sql": "CREATE TABLE runs (\n\trun_id VARCHAR(128) NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tstrategy_version VARCHAR(64) NOT NULL, \n\tstatus VARCHAR(32) NOT NULL, \n\tstarted_at VARCHAR(40) NOT NULL, \n\tfinished_at VARCHAR(40), \n\tdetail_json TEXT DEFAULT '{}' NOT NULL, \n\tCONSTRAINT pk_runs PRIMARY KEY (run_id), \n\tCONSTRAINT fk_runs_strategy_id_strategy_deployments FOREIGN KEY(strategy_id, strategy_version) REFERENCES strategy_deployments (strategy_id, version)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_runs_started_at",
+      "table": "runs",
+      "sql": "CREATE INDEX ix_runs_started_at ON runs (started_at)"
+    },
+    {
+      "type": "table",
+      "name": "broker_orders",
+      "table": "broker_orders",
+      "sql": "CREATE TABLE broker_orders (\n\tbroker_order_id VARCHAR(128) NOT NULL, \n\tclient_order_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tside VARCHAR(8) NOT NULL, \n\torder_type VARCHAR(16) NOT NULL, \n\ttime_in_force VARCHAR(8) NOT NULL, \n\tquantity TEXT NOT NULL, \n\tfilled_quantity TEXT NOT NULL, \n\tstatus VARCHAR(64) NOT NULL, \n\tsubmitted_at VARCHAR(40) NOT NULL, \n\tfilled_average_price TEXT, \n\tCONSTRAINT pk_broker_orders PRIMARY KEY (broker_order_id), \n\tCONSTRAINT uq_broker_orders_client_order_id UNIQUE (client_order_id), \n\tCONSTRAINT fk_broker_orders_client_order_id_order_intents FOREIGN KEY(client_order_id) REFERENCES order_intents (client_order_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_broker_orders_status",
+      "table": "broker_orders",
+      "sql": "CREATE INDEX ix_broker_orders_status ON broker_orders (status)"
+    },
+    {
+      "type": "table",
+      "name": "signals",
+      "table": "signals",
+      "sql": "CREATE TABLE signals (\n\tsignal_id VARCHAR(128) NOT NULL, \n\trun_id VARCHAR(128) NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\toccurred_at VARCHAR(40) NOT NULL, \n\tpayload_json TEXT NOT NULL, \n\tCONSTRAINT pk_signals PRIMARY KEY (signal_id), \n\tCONSTRAINT fk_signals_run_id_runs FOREIGN KEY(run_id) REFERENCES runs (run_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_signals_run_symbol",
+      "table": "signals",
+      "sql": "CREATE INDEX ix_signals_run_symbol ON signals (run_id, symbol)"
+    },
+    {
+      "type": "table",
+      "name": "account_snapshots",
+      "table": "account_snapshots",
+      "sql": "CREATE TABLE account_snapshots (\n\tsnapshot_id VARCHAR(128) NOT NULL, \n\trun_id VARCHAR(128), \n\taccount_id VARCHAR(128) NOT NULL, \n\tcaptured_at VARCHAR(40) NOT NULL, \n\tcash TEXT NOT NULL, \n\tbuying_power TEXT NOT NULL, \n\tequity TEXT NOT NULL, \n\tcurrency VARCHAR(16) NOT NULL, \n\tCONSTRAINT pk_account_snapshots PRIMARY KEY (snapshot_id), \n\tCONSTRAINT fk_account_snapshots_run_id_runs FOREIGN KEY(run_id) REFERENCES runs (run_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_account_snapshots_account_time",
+      "table": "account_snapshots",
+      "sql": "CREATE INDEX ix_account_snapshots_account_time ON account_snapshots (account_id, captured_at)"
+    },
+    {
+      "type": "table",
+      "name": "order_events",
+      "table": "order_events",
+      "sql": "CREATE TABLE order_events (\n\tevent_id VARCHAR(128) NOT NULL, \n\tintent_id VARCHAR(128), \n\tbroker_order_id VARCHAR(128), \n\tevent_type VARCHAR(64) NOT NULL, \n\toccurred_at VARCHAR(40) NOT NULL, \n\tdetail_json TEXT NOT NULL, \n\tCONSTRAINT pk_order_events PRIMARY KEY (event_id), \n\tCONSTRAINT fk_order_events_intent_id_order_intents FOREIGN KEY(intent_id) REFERENCES order_intents (intent_id), \n\tCONSTRAINT fk_order_events_broker_order_id_broker_orders FOREIGN KEY(broker_order_id) REFERENCES broker_orders (broker_order_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_order_events_intent_time",
+      "table": "order_events",
+      "sql": "CREATE INDEX ix_order_events_intent_time ON order_events (intent_id, occurred_at)"
+    },
+    {
+      "type": "table",
+      "name": "reconciliation_runs",
+      "table": "reconciliation_runs",
+      "sql": "CREATE TABLE reconciliation_runs (\n\treconciliation_id VARCHAR(128) NOT NULL, \n\trun_id VARCHAR(128), \n\tstatus VARCHAR(32) NOT NULL, \n\tstarted_at VARCHAR(40) NOT NULL, \n\tcompleted_at VARCHAR(40) NOT NULL, \n\tsummary_json TEXT NOT NULL, \n\tCONSTRAINT pk_reconciliation_runs PRIMARY KEY (reconciliation_id), \n\tCONSTRAINT fk_reconciliation_runs_run_id_runs FOREIGN KEY(run_id) REFERENCES runs (run_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_reconciliation_runs_completed",
+      "table": "reconciliation_runs",
+      "sql": "CREATE INDEX ix_reconciliation_runs_completed ON reconciliation_runs (completed_at)"
+    },
+    {
+      "type": "table",
+      "name": "incidents",
+      "table": "incidents",
+      "sql": "CREATE TABLE incidents (\n\tincident_id VARCHAR(128) NOT NULL, \n\trun_id VARCHAR(128), \n\tseverity VARCHAR(32) NOT NULL, \n\tkind VARCHAR(64) NOT NULL, \n\tmessage TEXT NOT NULL, \n\toccurred_at VARCHAR(40) NOT NULL, \n\tresolved_at VARCHAR(40), \n\tdetail_json TEXT NOT NULL, \n\tCONSTRAINT pk_incidents PRIMARY KEY (incident_id), \n\tCONSTRAINT fk_incidents_run_id_runs FOREIGN KEY(run_id) REFERENCES runs (run_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_incidents_occurred",
+      "table": "incidents",
+      "sql": "CREATE INDEX ix_incidents_occurred ON incidents (occurred_at)"
+    },
+    {
+      "type": "table",
+      "name": "equity_snapshots",
+      "table": "equity_snapshots",
+      "sql": "CREATE TABLE equity_snapshots (\n\tsnapshot_id VARCHAR(128) NOT NULL, \n\taccount_snapshot_id VARCHAR(128) NOT NULL, \n\taccount_id VARCHAR(128) NOT NULL, \n\tcaptured_at VARCHAR(40) NOT NULL, \n\tequity TEXT NOT NULL, \n\tcash TEXT NOT NULL, \n\tCONSTRAINT pk_equity_snapshots PRIMARY KEY (snapshot_id), \n\tCONSTRAINT uq_equity_snapshots_account_snapshot_id UNIQUE (account_snapshot_id), \n\tCONSTRAINT fk_equity_snapshots_account_snapshot_id_account_snapshots FOREIGN KEY(account_snapshot_id) REFERENCES account_snapshots (snapshot_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_equity_snapshots_account_time",
+      "table": "equity_snapshots",
+      "sql": "CREATE INDEX ix_equity_snapshots_account_time ON equity_snapshots (account_id, captured_at)"
+    },
+    {
+      "type": "table",
+      "name": "positions",
+      "table": "positions",
+      "sql": "CREATE TABLE positions (\n\tsnapshot_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tquantity TEXT NOT NULL, \n\tmarket_price TEXT NOT NULL, \n\tmarket_value TEXT NOT NULL, \n\taverage_entry_price TEXT NOT NULL, \n\tCONSTRAINT pk_positions PRIMARY KEY (snapshot_id, symbol), \n\tCONSTRAINT fk_positions_snapshot_id_account_snapshots FOREIGN KEY(snapshot_id) REFERENCES account_snapshots (snapshot_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "table",
+      "name": "reconciliation_diffs",
+      "table": "reconciliation_diffs",
+      "sql": "CREATE TABLE reconciliation_diffs (\n\tdiff_id VARCHAR(128) NOT NULL, \n\treconciliation_id VARCHAR(128) NOT NULL, \n\tcategory VARCHAR(64) NOT NULL, \n\trecord_key VARCHAR(256) NOT NULL, \n\texpected_json TEXT NOT NULL, \n\tactual_json TEXT NOT NULL, \n\tCONSTRAINT pk_reconciliation_diffs PRIMARY KEY (diff_id), \n\tCONSTRAINT fk_reconciliation_diffs_reconciliation_id_reconciliation_runs FOREIGN KEY(reconciliation_id) REFERENCES reconciliation_runs (reconciliation_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_reconciliation_diffs_run",
+      "table": "reconciliation_diffs",
+      "sql": "CREATE INDEX ix_reconciliation_diffs_run ON reconciliation_diffs (reconciliation_id)"
+    },
+    {
+      "type": "table",
+      "name": "power_assessments",
+      "table": "power_assessments",
+      "sql": "CREATE TABLE power_assessments (\n\tassessment_id INTEGER NOT NULL, \n\thypothesis_id VARCHAR(128) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tstage VARCHAR(16) NOT NULL, \n\tassessed_at VARCHAR(40) NOT NULL, \n\tverdict VARCHAR(32) NOT NULL, \n\testimand VARCHAR(32) NOT NULL, \n\tcumulative_trials INTEGER NOT NULL, \n\tluck_threshold_z TEXT NOT NULL, \n\tobservations_required INTEGER NOT NULL, \n\tobservations_available INTEGER NOT NULL, \n\tminimum_detectable_effect TEXT NOT NULL, \n\toverridden_by VARCHAR(128), \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_power_assessments PRIMARY KEY (assessment_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_power_assessments_hypothesis",
+      "table": "power_assessments",
+      "sql": "CREATE INDEX ix_power_assessments_hypothesis ON power_assessments (hypothesis_id, version)"
+    },
+    {
+      "type": "index",
+      "name": "ix_power_assessments_verdict",
+      "table": "power_assessments",
+      "sql": "CREATE INDEX ix_power_assessments_verdict ON power_assessments (verdict)"
+    },
+    {
+      "type": "table",
+      "name": "research_records",
+      "table": "research_records",
+      "sql": "CREATE TABLE research_records (\n\trecord_id VARCHAR(128) NOT NULL, \n\tkind VARCHAR(32) NOT NULL, \n\tverdict VARCHAR(32), \n\tsubject TEXT NOT NULL, \n\tstatement TEXT NOT NULL, \n\thypothesis_id VARCHAR(128), \n\thypothesis_version INTEGER, \n\tevidence_hash VARCHAR(64), \n\tsource TEXT NOT NULL, \n\tcurated BOOLEAN NOT NULL, \n\trecorded_at VARCHAR(40) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_research_records PRIMARY KEY (record_id), \n\tCONSTRAINT ck_research_records_hypothesis_reference_is_whole CHECK ((hypothesis_id IS NULL) = (hypothesis_version IS NULL))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_research_records_kind",
+      "table": "research_records",
+      "sql": "CREATE INDEX ix_research_records_kind ON research_records (kind, recorded_at)"
+    },
+    {
+      "type": "index",
+      "name": "ix_research_records_hypothesis_id",
+      "table": "research_records",
+      "sql": "CREATE INDEX ix_research_records_hypothesis_id ON research_records (hypothesis_id)"
+    },
+    {
+      "type": "table",
+      "name": "research_relationships",
+      "table": "research_relationships",
+      "sql": "CREATE TABLE research_relationships (\n\tsource_id VARCHAR(128) NOT NULL, \n\trelation VARCHAR(32) NOT NULL, \n\ttarget_id VARCHAR(128) NOT NULL, \n\trecorded_at VARCHAR(40) NOT NULL, \n\tnote TEXT DEFAULT '' NOT NULL, \n\tCONSTRAINT pk_research_relationships PRIMARY KEY (source_id, relation, target_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_research_relationships_target_id",
+      "table": "research_relationships",
+      "sql": "CREATE INDEX ix_research_relationships_target_id ON research_relationships (target_id)"
+    },
+    {
+      "type": "table",
+      "name": "budget_spend",
+      "table": "budget_spend",
+      "sql": "CREATE TABLE budget_spend (\n\tspend_id INTEGER NOT NULL, \n\tbudget_key VARCHAR(256) NOT NULL, \n\tcategory VARCHAR(32) NOT NULL, \n\tamount TEXT NOT NULL, \n\ttask TEXT NOT NULL, \n\trecorded_at VARCHAR(40) NOT NULL, \n\toverride_by VARCHAR(128), \n\tnote TEXT DEFAULT '' NOT NULL, \n\tCONSTRAINT pk_budget_spend PRIMARY KEY (spend_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_budget_spend_override_by",
+      "table": "budget_spend",
+      "sql": "CREATE INDEX ix_budget_spend_override_by ON budget_spend (override_by)"
+    },
+    {
+      "type": "index",
+      "name": "ix_budget_spend_budget_key",
+      "table": "budget_spend",
+      "sql": "CREATE INDEX ix_budget_spend_budget_key ON budget_spend (budget_key, category)"
+    },
+    {
+      "type": "table",
+      "name": "research_tasks",
+      "table": "research_tasks",
+      "sql": "CREATE TABLE research_tasks (\n\ttask_id VARCHAR(128) NOT NULL, \n\tstate VARCHAR(32) NOT NULL, \n\thypothesis_id VARCHAR(128), \n\thypothesis_version INTEGER, \n\tparent_task_id VARCHAR(128), \n\tcreated_at VARCHAR(40) NOT NULL, \n\tupdated_at VARCHAR(40) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_research_tasks PRIMARY KEY (task_id), \n\tCONSTRAINT ck_research_tasks_hypothesis_reference_is_whole CHECK ((hypothesis_id IS NULL) = (hypothesis_version IS NULL))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_research_tasks_state",
+      "table": "research_tasks",
+      "sql": "CREATE INDEX ix_research_tasks_state ON research_tasks (state, updated_at)"
+    },
+    {
+      "type": "table",
+      "name": "research_task_events",
+      "table": "research_task_events",
+      "sql": "CREATE TABLE research_task_events (\n\tevent_id INTEGER NOT NULL, \n\ttask_id VARCHAR(128) NOT NULL, \n\tfrom_state VARCHAR(32), \n\tto_state VARCHAR(32) NOT NULL, \n\tactor VARCHAR(128) NOT NULL, \n\treason TEXT NOT NULL, \n\toccurred_at VARCHAR(40) NOT NULL, \n\tdetail_json TEXT DEFAULT '{}' NOT NULL, \n\tCONSTRAINT pk_research_task_events PRIMARY KEY (event_id), \n\tCONSTRAINT fk_research_task_events_task_id_research_tasks FOREIGN KEY(task_id) REFERENCES research_tasks (task_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_research_task_events_task_id",
+      "table": "research_task_events",
+      "sql": "CREATE INDEX ix_research_task_events_task_id ON research_task_events (task_id)"
+    },
+    {
+      "type": "table",
+      "name": "hypotheses",
+      "table": "hypotheses",
+      "sql": "CREATE TABLE \"hypotheses\" (\n\thypothesis_id VARCHAR(128) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tfamily_id VARCHAR(128) NOT NULL, \n\tparent_hypothesis_id VARCHAR(128), \n\tparent_version INTEGER, \n\tregistered_at VARCHAR(40) NOT NULL, \n\tcontent_hash VARCHAR(64) NOT NULL, \n\tsearch_cardinality INTEGER NOT NULL, \n\tcumulative_trials INTEGER NOT NULL, \n\tluck_threshold_z TEXT NOT NULL, \n\testimand VARCHAR(32) NOT NULL, \n\texpected_effect TEXT NOT NULL, \n\tpower_verdict VARCHAR(32) NOT NULL, \n\trequired_observations INTEGER NOT NULL, \n\tavailable_observations INTEGER NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tsearch_origin VARCHAR(32) NOT NULL, \n\tsearch_attested_by VARCHAR(128), \n\tCONSTRAINT pk_hypotheses PRIMARY KEY (hypothesis_id, version), \n\tCONSTRAINT ck_hypotheses_version_positive CHECK (version >= 1), \n\tCONSTRAINT uq_hypotheses_content_hash UNIQUE (content_hash), \n\tCONSTRAINT fk_hypotheses_parent_hypothesis_id_hypotheses FOREIGN KEY(parent_hypothesis_id, parent_version) REFERENCES hypotheses (hypothesis_id, version), \n\tCONSTRAINT ck_hypotheses_parent_is_whole CHECK ((parent_hypothesis_id IS NULL) = (parent_version IS NULL)), \n\tCONSTRAINT ck_hypotheses_attestation_is_signed CHECK ((search_origin = 'OPERATOR_ATTESTED') = (search_attested_by IS NOT NULL)), \n\tCONSTRAINT ck_hypotheses_theory_searches_nothing CHECK (search_origin != 'NO_DATA_DEPENDENT_SEARCH' OR search_cardinality = 1)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_hypotheses_family_id",
+      "table": "hypotheses",
+      "sql": "CREATE INDEX ix_hypotheses_family_id ON hypotheses (family_id)"
+    },
+    {
+      "type": "table",
+      "name": "hypothesis_data_windows",
+      "table": "hypothesis_data_windows",
+      "sql": "CREATE TABLE \"hypothesis_data_windows\" (\n\thypothesis_id VARCHAR(128) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tdataset VARCHAR(128) NOT NULL, \n\trole VARCHAR(32) NOT NULL, \n\tstart_date VARCHAR(10) NOT NULL, \n\tend_date VARCHAR(10) NOT NULL, \n\tstate VARCHAR(16) NOT NULL, \n\treserved_until VARCHAR(10), \n\tconsumed_at VARCHAR(40), \n\tCONSTRAINT pk_hypothesis_data_windows PRIMARY KEY (hypothesis_id, version, dataset, role), \n\tCONSTRAINT ck_hypothesis_data_windows_range_ordered CHECK (end_date >= start_date), \n\tCONSTRAINT fk_hypothesis_data_windows_hypothesis_id_hypotheses FOREIGN KEY(hypothesis_id, version) REFERENCES hypotheses (hypothesis_id, version) ON DELETE CASCADE, \n\tCONSTRAINT ck_hypothesis_data_windows_consumption_is_dated CHECK ((state = 'CONSUMED') = (consumed_at IS NOT NULL))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_hypothesis_data_windows_dataset",
+      "table": "hypothesis_data_windows",
+      "sql": "CREATE INDEX ix_hypothesis_data_windows_dataset ON hypothesis_data_windows (dataset, start_date)"
+    },
+    {
+      "type": "table",
+      "name": "promotion_state",
+      "table": "promotion_state",
+      "sql": "CREATE TABLE promotion_state (\n\tstrategy_id VARCHAR(128) NOT NULL, \n\tstage VARCHAR(32) NOT NULL, \n\tstrategy_version VARCHAR(64) NOT NULL, \n\tconfiguration_hash VARCHAR(128) NOT NULL, \n\treason TEXT NOT NULL, \n\tactor VARCHAR(128) NOT NULL, \n\tupdated_at VARCHAR(40) NOT NULL, hypothesis_id VARCHAR(128), hypothesis_version INTEGER, objective_identity VARCHAR(128), evidence_identity VARCHAR(64), \n\tCONSTRAINT pk_promotion_state PRIMARY KEY (strategy_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "promotion_events",
+      "table": "promotion_events",
+      "sql": "CREATE TABLE promotion_events (\n\tevent_id INTEGER NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tfrom_stage VARCHAR(32), \n\tto_stage VARCHAR(32) NOT NULL, \n\tdirection VARCHAR(16) NOT NULL, \n\tstrategy_version VARCHAR(64) NOT NULL, \n\tconfiguration_hash VARCHAR(128) NOT NULL, \n\treason TEXT NOT NULL, \n\tactor VARCHAR(128) NOT NULL, \n\toccurred_at VARCHAR(40) NOT NULL, hypothesis_id VARCHAR(128), hypothesis_version INTEGER, objective_identity VARCHAR(128), evidence_identity VARCHAR(64), \n\tCONSTRAINT pk_promotion_events PRIMARY KEY (event_id), \n\tCONSTRAINT ck_promotion_events_direction_known CHECK (direction IN ('PROMOTION', 'DEMOTION'))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_promotion_events_strategy",
+      "table": "promotion_events",
+      "sql": "CREATE INDEX ix_promotion_events_strategy ON promotion_events (strategy_id, occurred_at)"
+    },
+    {
+      "type": "table",
+      "name": "search_runs",
+      "table": "search_runs",
+      "sql": "CREATE TABLE search_runs (\n\tsearch_id VARCHAR(128) NOT NULL, \n\tactor VARCHAR(128) NOT NULL, \n\tactor_version VARCHAR(64) NOT NULL, \n\tcandidates_evaluated INTEGER NOT NULL, \n\tdataset VARCHAR(128) NOT NULL, \n\tstart_date VARCHAR(10) NOT NULL, \n\tend_date VARCHAR(10) NOT NULL, \n\tdata_role VARCHAR(32) NOT NULL, \n\tstarted_at VARCHAR(40) NOT NULL, \n\tfinished_at VARCHAR(40) NOT NULL, \n\tconfiguration_hash VARCHAR(128) NOT NULL, \n\tdetail_json TEXT DEFAULT '{}' NOT NULL, \n\tCONSTRAINT pk_search_runs PRIMARY KEY (search_id), \n\tCONSTRAINT ck_search_runs_searched_something CHECK (candidates_evaluated >= 1), \n\tCONSTRAINT ck_search_runs_search_range_ordered CHECK (end_date >= start_date)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_search_runs_actor",
+      "table": "search_runs",
+      "sql": "CREATE INDEX ix_search_runs_actor ON search_runs (actor)"
+    },
+    {
+      "type": "index",
+      "name": "ix_search_runs_dataset",
+      "table": "search_runs",
+      "sql": "CREATE INDEX ix_search_runs_dataset ON search_runs (dataset, start_date)"
+    },
+    {
+      "type": "table",
+      "name": "literature_searches",
+      "table": "literature_searches",
+      "sql": "CREATE TABLE literature_searches (\n\tsearch_id VARCHAR(128) NOT NULL, \n\tconnector VARCHAR(64) NOT NULL, \n\t\"query\" TEXT NOT NULL, \n\toutcome VARCHAR(16) NOT NULL, \n\tattempted_at VARCHAR(40) NOT NULL, \n\ttotal_matched INTEGER NOT NULL, \n\tresults_json TEXT DEFAULT '[]' NOT NULL, \n\tdetail TEXT DEFAULT '' NOT NULL, \n\tCONSTRAINT pk_literature_searches PRIMARY KEY (search_id), \n\tCONSTRAINT ck_literature_searches_known_search_outcome CHECK (outcome IN ('RESULTS', 'NO_RESULTS', 'OUTAGE')), \n\tCONSTRAINT ck_literature_searches_matched_not_negative CHECK (total_matched >= 0), \n\tCONSTRAINT ck_literature_searches_an_outage_matched_nothing CHECK (outcome != 'OUTAGE' OR total_matched = 0)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_literature_searches_attempted",
+      "table": "literature_searches",
+      "sql": "CREATE INDEX ix_literature_searches_attempted ON literature_searches (attempted_at)"
+    },
+    {
+      "type": "index",
+      "name": "ix_literature_searches_connector",
+      "table": "literature_searches",
+      "sql": "CREATE INDEX ix_literature_searches_connector ON literature_searches (connector)"
+    },
+    {
+      "type": "table",
+      "name": "rejected_candidates",
+      "table": "rejected_candidates",
+      "sql": "CREATE TABLE rejected_candidates (\n\tobservation_id VARCHAR(128) NOT NULL, \n\tcandidate_id VARCHAR(128) NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tconfiguration_hash VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tdirection VARCHAR(8) NOT NULL, \n\tobserved_at VARCHAR(40) NOT NULL, \n\tsession_date VARCHAR(10) NOT NULL, \n\treference_price TEXT NOT NULL, \n\thypothesis_id VARCHAR(128), \n\tmarket_regime_snapshot_id VARCHAR(128), \n\tcatalyst_snapshot_id VARCHAR(128), \n\tanomaly_event_id VARCHAR(128), \n\tportfolio_snapshot_id VARCHAR(128), \n\tstate VARCHAR(32) NOT NULL, \n\tunavailable_reason TEXT NOT NULL, \n\tCONSTRAINT pk_rejected_candidates PRIMARY KEY (observation_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "rejection_reasons",
+      "table": "rejection_reasons",
+      "sql": "CREATE TABLE rejection_reasons (\n\tobservation_id VARCHAR(128) NOT NULL, \n\tgate_id VARCHAR(64) NOT NULL, \n\tgate_version INTEGER NOT NULL, \n\trule_parameters_hash VARCHAR(128) NOT NULL, \n\tdetail TEXT NOT NULL, evidence_kind VARCHAR(32), evidence_schema_version INTEGER, evidence_payload TEXT, evidence_identity VARCHAR(128), \n\tCONSTRAINT pk_rejection_reasons PRIMARY KEY (observation_id, gate_id), \n\tCONSTRAINT fk_rejection_reasons_observation_id_rejected_candidates FOREIGN KEY(observation_id) REFERENCES rejected_candidates (observation_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_rejection_reasons_gate_id",
+      "table": "rejection_reasons",
+      "sql": "CREATE INDEX ix_rejection_reasons_gate_id ON rejection_reasons (gate_id, rule_parameters_hash)"
+    },
+    {
+      "type": "index",
+      "name": "ix_rejection_reasons_evidence_identity",
+      "table": "rejection_reasons",
+      "sql": "CREATE INDEX ix_rejection_reasons_evidence_identity ON rejection_reasons (evidence_identity)"
+    },
+    {
+      "type": "table",
+      "name": "market_anomaly_events",
+      "table": "market_anomaly_events",
+      "sql": "CREATE TABLE market_anomaly_events (\n\tevent_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tsession_date VARCHAR(10) NOT NULL, \n\tsegment VARCHAR(24) NOT NULL, \n\tobserved_at VARCHAR(40) NOT NULL, \n\tdetector_identity VARCHAR(128) NOT NULL, \n\tfeed VARCHAR(24) NOT NULL, \n\tvolume_coverage VARCHAR(32) NOT NULL, \n\tcadence VARCHAR(24) NOT NULL, \n\tbaseline_first_session VARCHAR(10) NOT NULL, \n\tbaseline_last_session VARCHAR(10) NOT NULL, \n\tbaseline_session_count INTEGER NOT NULL, \n\tobserved_volume TEXT NOT NULL, \n\texpected_volume TEXT, \n\tvolume_robust_z TEXT, \n\tsession_return TEXT NOT NULL, \n\ttrailing_sigma TEXT, \n\ttriggers VARCHAR(128) NOT NULL, \n\tfamily_quality VARCHAR(255) NOT NULL, \n\tCONSTRAINT pk_market_anomaly_events PRIMARY KEY (event_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_market_anomaly_events_detector",
+      "table": "market_anomaly_events",
+      "sql": "CREATE INDEX ix_market_anomaly_events_detector ON market_anomaly_events (detector_identity)"
+    },
+    {
+      "type": "index",
+      "name": "ix_market_anomaly_events_session",
+      "table": "market_anomaly_events",
+      "sql": "CREATE INDEX ix_market_anomaly_events_session ON market_anomaly_events (session_date, symbol)"
+    },
+    {
+      "type": "table",
+      "name": "anomaly_dependence_contexts",
+      "table": "anomaly_dependence_contexts",
+      "sql": "CREATE TABLE anomaly_dependence_contexts (\n\tcontext_id VARCHAR(128) NOT NULL, \n\tanomaly_event_id VARCHAR(128) NOT NULL, \n\tdependence_snapshot_identity VARCHAR(128) NOT NULL, \n\tgroup_key VARCHAR(128), \n\tmethod_version INTEGER NOT NULL, \n\tCONSTRAINT pk_anomaly_dependence_contexts PRIMARY KEY (context_id), \n\tCONSTRAINT fk_anomaly_dependence_contexts_anomaly_event_id_market_anomaly_events FOREIGN KEY(anomaly_event_id) REFERENCES market_anomaly_events (event_id) ON DELETE CASCADE, \n\tCONSTRAINT one_context_per_event_and_snapshot UNIQUE (anomaly_event_id, dependence_snapshot_identity)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_anomaly_dependence_contexts_group",
+      "table": "anomaly_dependence_contexts",
+      "sql": "CREATE INDEX ix_anomaly_dependence_contexts_group ON anomaly_dependence_contexts (dependence_snapshot_identity, group_key)"
+    },
+    {
+      "type": "table",
+      "name": "capacity_assessments",
+      "table": "capacity_assessments",
+      "sql": "CREATE TABLE capacity_assessments (\n\tassessment_id VARCHAR(128) NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tas_of VARCHAR(10) NOT NULL, \n\tinputs_identity VARCHAR(128), \n\tobjective_identity VARCHAR(128) NOT NULL, \n\tcost_model_identity VARCHAR(128) NOT NULL, \n\tverdict VARCHAR(32) NOT NULL, \n\tbreakeven_usd TEXT, \n\tfirst_failing_rung_usd TEXT, \n\tbinding_symbol VARCHAR(32), \n\tbinding_constraint TEXT, \n\tmodelled_inputs TEXT NOT NULL, \n\tblocking TEXT NOT NULL, \n\trung_count INTEGER NOT NULL, \n\tCONSTRAINT pk_capacity_assessments PRIMARY KEY (assessment_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_capacity_assessments_strategy",
+      "table": "capacity_assessments",
+      "sql": "CREATE INDEX ix_capacity_assessments_strategy ON capacity_assessments (strategy_id, as_of)"
+    },
+    {
+      "type": "table",
+      "name": "market_regime_snapshots",
+      "table": "market_regime_snapshots",
+      "sql": "CREATE TABLE market_regime_snapshots (\n\tsnapshot_id VARCHAR(128) NOT NULL, \n\tas_of_session VARCHAR(10) NOT NULL, \n\tbenchmark_symbol VARCHAR(32) NOT NULL, \n\tsource VARCHAR(64) NOT NULL, \n\tmethod_version INTEGER NOT NULL, \n\ttrend VARCHAR(16) NOT NULL, \n\tvolatility VARCHAR(16) NOT NULL, \n\tbreadth VARCHAR(16) NOT NULL, \n\trealised_volatility TEXT, \n\tparticipation TEXT, \n\tunavailable TEXT NOT NULL, \n\tsource_snapshot_ids TEXT NOT NULL, \n\tCONSTRAINT pk_market_regime_snapshots PRIMARY KEY (snapshot_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_market_regime_snapshots_session",
+      "table": "market_regime_snapshots",
+      "sql": "CREATE INDEX ix_market_regime_snapshots_session ON market_regime_snapshots (as_of_session, method_version)"
+    },
+    {
+      "type": "table",
+      "name": "anomaly_regime_contexts",
+      "table": "anomaly_regime_contexts",
+      "sql": "CREATE TABLE anomaly_regime_contexts (\n\tanomaly_event_id VARCHAR(128) NOT NULL, \n\tmarket_regime_snapshot_id VARCHAR(128) NOT NULL, \n\tCONSTRAINT pk_anomaly_regime_contexts PRIMARY KEY (anomaly_event_id, market_regime_snapshot_id), \n\tCONSTRAINT fk_anomaly_regime_contexts_anomaly_event_id_market_anomaly_events FOREIGN KEY(anomaly_event_id) REFERENCES market_anomaly_events (event_id) ON DELETE CASCADE, \n\tCONSTRAINT fk_anomaly_regime_contexts_market_regime_snapshot_id_market_regime_snapshots FOREIGN KEY(market_regime_snapshot_id) REFERENCES market_regime_snapshots (snapshot_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "table",
+      "name": "counterfactual_outcomes",
+      "table": "counterfactual_outcomes",
+      "sql": "CREATE TABLE counterfactual_outcomes (\n\toutcome_id VARCHAR(128) NOT NULL, \n\tobservation_id VARCHAR(128) NOT NULL, \n\tpolicy_identity VARCHAR(128) NOT NULL, \n\tstate VARCHAR(40) NOT NULL, \n\thorizon_session VARCHAR(10), \n\tevaluated_at VARCHAR(40), \n\tnet_excess_bps TEXT, \n\tgross_return_bps TEXT, \n\tbenchmark_return_bps TEXT, \n\tunevaluable_reason VARCHAR(40), \n\tdetail TEXT NOT NULL, \n\tCONSTRAINT pk_counterfactual_outcomes PRIMARY KEY (outcome_id), \n\tCONSTRAINT fk_counterfactual_outcomes_observation_id_rejected_candidates FOREIGN KEY(observation_id) REFERENCES rejected_candidates (observation_id) ON DELETE CASCADE, \n\tCONSTRAINT one_outcome_per_refusal_and_policy UNIQUE (observation_id, policy_identity)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_counterfactual_outcomes_policy",
+      "table": "counterfactual_outcomes",
+      "sql": "CREATE INDEX ix_counterfactual_outcomes_policy ON counterfactual_outcomes (policy_identity, state)"
+    },
+    {
+      "type": "table",
+      "name": "instruments",
+      "table": "instruments",
+      "sql": "CREATE TABLE instruments (\n\tinstrument_id VARCHAR(64) NOT NULL, \n\tasset_class VARCHAR(16) NOT NULL, \n\tcurrent_symbol VARCHAR(32) NOT NULL, \n\tstatus VARCHAR(16) NOT NULL, \n\tfigi VARCHAR(32), \n\tcomposite_figi VARCHAR(32), \n\tshare_class_figi VARCHAR(32), \n\tsec_cik VARCHAR(16), \n\tsec_cik_source VARCHAR(64), \n\texchange_mic VARCHAR(8), \n\tambiguous_candidates TEXT NOT NULL, \n\tresolver VARCHAR(64), \n\tresolver_version VARCHAR(32), \n\tresolved_at VARCHAR(40), \n\tsource_refs TEXT NOT NULL, \n\tCONSTRAINT pk_instruments PRIMARY KEY (instrument_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_instruments_current_symbol",
+      "table": "instruments",
+      "sql": "CREATE INDEX ix_instruments_current_symbol ON instruments (current_symbol)"
+    },
+    {
+      "type": "table",
+      "name": "instrument_symbols",
+      "table": "instrument_symbols",
+      "sql": "CREATE TABLE instrument_symbols (\n\tinstrument_id VARCHAR(64) NOT NULL, \n\tprovider VARCHAR(64) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tvalid_from VARCHAR(10) NOT NULL, \n\tvalid_to VARCHAR(10), \n\tCONSTRAINT pk_instrument_symbols PRIMARY KEY (instrument_id, provider, symbol, valid_from), \n\tCONSTRAINT fk_instrument_symbols_instrument_id_instruments FOREIGN KEY(instrument_id) REFERENCES instruments (instrument_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_instrument_symbols_lookup",
+      "table": "instrument_symbols",
+      "sql": "CREATE INDEX ix_instrument_symbols_lookup ON instrument_symbols (provider, symbol, valid_from)"
+    },
+    {
+      "type": "table",
+      "name": "veto_policy_versions",
+      "table": "veto_policy_versions",
+      "sql": "CREATE TABLE veto_policy_versions (\n\tidentity VARCHAR(128) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tsupersedes VARCHAR(128), \n\tauthority VARCHAR(32) NOT NULL, \n\tapplied_by VARCHAR(128) NOT NULL, \n\tapplied_at VARCHAR(40) NOT NULL, \n\treason TEXT NOT NULL, \n\tbody TEXT NOT NULL, \n\tchanges TEXT NOT NULL, \n\tCONSTRAINT pk_veto_policy_versions PRIMARY KEY (identity), \n\tCONSTRAINT fk_veto_policy_versions_supersedes_veto_policy_versions FOREIGN KEY(supersedes) REFERENCES veto_policy_versions (identity) ON DELETE RESTRICT, \n\tCONSTRAINT one_row_per_version_ordinal UNIQUE (version), \n\tCONSTRAINT one_successor_per_version UNIQUE (supersedes), \n\tCONSTRAINT ck_veto_policy_versions_versions_start_at_one CHECK (version >= 1), \n\tCONSTRAINT ck_veto_policy_versions_only_the_first_has_no_predecessor CHECK ((version = 1) = (supersedes IS NULL))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_veto_policy_versions_applied_at",
+      "table": "veto_policy_versions",
+      "sql": "CREATE INDEX ix_veto_policy_versions_applied_at ON veto_policy_versions (applied_at)"
+    },
+    {
+      "type": "table",
+      "name": "catalyst_assessments",
+      "table": "catalyst_assessments",
+      "sql": "CREATE TABLE catalyst_assessments (\n\tassessment_id VARCHAR(128) NOT NULL, \n\tanomaly_event_id VARCHAR(128) NOT NULL, \n\tobserved_at VARCHAR(40) NOT NULL, \n\tlookback_seconds INTEGER NOT NULL, \n\toutcome VARCHAR(32) NOT NULL, \n\tsources_consulted TEXT NOT NULL, \n\tunhealthy_sources TEXT NOT NULL, \n\tcatalyst_ids TEXT NOT NULL, \n\tpublished_after_event INTEGER NOT NULL, \n\tunplaceable INTEGER NOT NULL, \n\tdetail TEXT NOT NULL, \n\tCONSTRAINT pk_catalyst_assessments PRIMARY KEY (assessment_id), \n\tCONSTRAINT fk_catalyst_assessments_anomaly_event_id_market_anomaly_events FOREIGN KEY(anomaly_event_id) REFERENCES market_anomaly_events (event_id) ON DELETE CASCADE, \n\tCONSTRAINT one_assessment_per_event_and_window UNIQUE (anomaly_event_id, lookback_seconds), \n\tCONSTRAINT ck_catalyst_assessments_a_window_has_width CHECK (lookback_seconds > 0), \n\tCONSTRAINT ck_catalyst_assessments_counts_are_not_negative CHECK (published_after_event >= 0), \n\tCONSTRAINT ck_catalyst_assessments_unplaceable_is_not_negative CHECK (unplaceable >= 0), \n\tCONSTRAINT ck_catalyst_assessments_an_outage_is_not_a_negative_finding CHECK (NOT (outcome = 'NO_PUBLIC_CATALYST_FOUND' AND unhealthy_sources <> '')), \n\tCONSTRAINT ck_catalyst_assessments_an_unplaceable_item_is_not_silence CHECK (NOT (outcome = 'NO_PUBLIC_CATALYST_FOUND' AND unplaceable > 0)), \n\tCONSTRAINT ck_catalyst_assessments_a_positive_finding_names_what_it_found CHECK ((outcome = 'CATALYST_FOUND') = (catalyst_ids <> ''))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_catalyst_assessments_event",
+      "table": "catalyst_assessments",
+      "sql": "CREATE INDEX ix_catalyst_assessments_event ON catalyst_assessments (anomaly_event_id)"
+    },
+    {
+      "type": "index",
+      "name": "ix_catalyst_assessments_outcome",
+      "table": "catalyst_assessments",
+      "sql": "CREATE INDEX ix_catalyst_assessments_outcome ON catalyst_assessments (outcome)"
+    },
+    {
+      "type": "table",
+      "name": "session_observations",
+      "table": "session_observations",
+      "sql": "CREATE TABLE session_observations (\n\tobservation_id VARCHAR(128) NOT NULL, \n\tobserved_at VARCHAR(40) NOT NULL, \n\tmarket_open INTEGER NOT NULL, \n\toutcome VARCHAR(32) NOT NULL, \n\treasons TEXT NOT NULL, \n\tmarket_data_age_seconds VARCHAR(40), \n\tdetail TEXT NOT NULL, \n\tCONSTRAINT pk_session_observations PRIMARY KEY (observation_id), \n\tCONSTRAINT ck_session_observations_an_outcome_is_one_of_three CHECK (outcome IN ('HEALTHY', 'DEGRADED', 'HALTED')), \n\tCONSTRAINT ck_session_observations_market_open_is_a_flag CHECK (market_open IN (0, 1)), \n\tCONSTRAINT ck_session_observations_health_and_reasons_agree CHECK ((outcome = 'HEALTHY') = (reasons = ''))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_session_observations_observed_at",
+      "table": "session_observations",
+      "sql": "CREATE INDEX ix_session_observations_observed_at ON session_observations (observed_at)"
+    },
+    {
+      "type": "index",
+      "name": "ix_session_observations_outcome",
+      "table": "session_observations",
+      "sql": "CREATE INDEX ix_session_observations_outcome ON session_observations (outcome)"
+    },
+    {
+      "type": "table",
+      "name": "position_protection_cycles",
+      "table": "position_protection_cycles",
+      "sql": "CREATE TABLE position_protection_cycles (\n\tcycle_id VARCHAR(128) NOT NULL, \n\tobserved_at VARCHAR(40) NOT NULL, \n\tcompleted_at VARCHAR(40) NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tstrategy_version VARCHAR(64) NOT NULL, \n\tconfiguration_hash VARCHAR(128) NOT NULL, \n\taccount_id VARCHAR(128), \n\tpolicy_version VARCHAR(64) NOT NULL, \n\tpolicy_hash VARCHAR(128) NOT NULL, \n\toutcome VARCHAR(32) NOT NULL, \n\treason VARCHAR(128) NOT NULL, \n\tposition_count INTEGER, \n\tevaluated_count INTEGER NOT NULL, \n\tunprotected_count INTEGER NOT NULL, \n\texit_required_count INTEGER NOT NULL, \n\tdetail TEXT NOT NULL, \n\tCONSTRAINT pk_position_protection_cycles PRIMARY KEY (cycle_id), \n\tCONSTRAINT fk_position_protection_cycles_strategy_id_strategy_deployments FOREIGN KEY(strategy_id, strategy_version) REFERENCES strategy_deployments (strategy_id, version), \n\tCONSTRAINT ck_position_protection_cycles_outcome_is_known CHECK (outcome IN ('HEALTHY', 'ACTION_REQUIRED', 'DEGRADED', 'INCIDENT')), \n\tCONSTRAINT ck_position_protection_cycles_healthy_cycle_has_no_reason CHECK ((outcome = 'HEALTHY') = (reason = '')), \n\tCONSTRAINT ck_position_protection_cycles_position_count_is_nonnegative CHECK (position_count IS NULL OR position_count >= 0), \n\tCONSTRAINT ck_position_protection_cycles_evaluated_count_is_nonnegative CHECK (evaluated_count >= 0), \n\tCONSTRAINT ck_position_protection_cycles_unprotected_count_is_nonnegative CHECK (unprotected_count >= 0), \n\tCONSTRAINT ck_position_protection_cycles_exit_required_count_is_nonnegative CHECK (exit_required_count >= 0), \n\tCONSTRAINT ck_position_protection_cycles_evaluations_do_not_exceed_positions CHECK (position_count IS NULL OR evaluated_count <= position_count), \n\tCONSTRAINT ck_position_protection_cycles_unprotected_does_not_exceed_evaluated CHECK (unprotected_count <= evaluated_count), \n\tCONSTRAINT ck_position_protection_cycles_exits_do_not_exceed_evaluated CHECK (exit_required_count <= evaluated_count)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_position_protection_cycles_observed_at",
+      "table": "position_protection_cycles",
+      "sql": "CREATE INDEX ix_position_protection_cycles_observed_at ON position_protection_cycles (observed_at)"
+    },
+    {
+      "type": "index",
+      "name": "ix_position_protection_cycles_outcome",
+      "table": "position_protection_cycles",
+      "sql": "CREATE INDEX ix_position_protection_cycles_outcome ON position_protection_cycles (outcome)"
+    },
+    {
+      "type": "table",
+      "name": "position_protection_evaluations",
+      "table": "position_protection_evaluations",
+      "sql": "CREATE TABLE position_protection_evaluations (\n\tevaluation_id VARCHAR(128) NOT NULL, \n\tcycle_id VARCHAR(128) NOT NULL, \n\taccount_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tquantity TEXT NOT NULL, \n\taverage_entry_price TEXT NOT NULL, \n\tprice TEXT, \n\tprice_as_of VARCHAR(40), \n\tprice_source VARCHAR(64) NOT NULL, \n\tstrategy_id VARCHAR(128) NOT NULL, \n\tstrategy_version VARCHAR(64) NOT NULL, \n\tconfiguration_hash VARCHAR(128) NOT NULL, \n\tpolicy_version VARCHAR(64) NOT NULL, \n\tpolicy_hash VARCHAR(128) NOT NULL, \n\treconciled INTEGER NOT NULL, \n\toutcome VARCHAR(32) NOT NULL, \n\trule VARCHAR(32) NOT NULL, \n\treason TEXT NOT NULL, \n\tmove_bps TEXT, \n\tprotected INTEGER NOT NULL, \n\tevaluated_at VARCHAR(40) NOT NULL, \n\tdetail TEXT NOT NULL, \n\tCONSTRAINT pk_position_protection_evaluations PRIMARY KEY (evaluation_id), \n\tCONSTRAINT fk_position_protection_evaluations_strategy_id_strategy_deployments FOREIGN KEY(strategy_id, strategy_version) REFERENCES strategy_deployments (strategy_id, version), \n\tCONSTRAINT one_evaluation_per_position UNIQUE (cycle_id, symbol), \n\tCONSTRAINT ck_position_protection_evaluations_reconciled_is_a_flag CHECK (reconciled IN (0, 1)), \n\tCONSTRAINT ck_position_protection_evaluations_protected_is_a_flag CHECK (protected IN (0, 1)), \n\tCONSTRAINT ck_position_protection_evaluations_outcome_is_known CHECK (outcome IN ('NO_ACTION', 'EXIT_REQUIRED', 'BLOCKED_STATE', 'INCIDENT')), \n\tCONSTRAINT ck_position_protection_evaluations_rule_is_known CHECK (rule IN ('HARD_STOP', 'ACCOUNT_DRAWDOWN', 'NONE')), \n\tCONSTRAINT fk_position_protection_evaluations_cycle_id_position_protection_cycles FOREIGN KEY(cycle_id) REFERENCES position_protection_cycles (cycle_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_position_protection_evaluations_cycle",
+      "table": "position_protection_evaluations",
+      "sql": "CREATE INDEX ix_position_protection_evaluations_cycle ON position_protection_evaluations (cycle_id)"
+    },
+    {
+      "type": "index",
+      "name": "ix_position_protection_evaluations_symbol_time",
+      "table": "position_protection_evaluations",
+      "sql": "CREATE INDEX ix_position_protection_evaluations_symbol_time ON position_protection_evaluations (symbol, evaluated_at)"
+    },
+    {
+      "type": "table",
+      "name": "position_protection_actions",
+      "table": "position_protection_actions",
+      "sql": "CREATE TABLE position_protection_actions (\n\taction_id VARCHAR(128) NOT NULL, \n\ttrigger_evaluation_id VARCHAR(128) NOT NULL, \n\taccount_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tside VARCHAR(8) NOT NULL, \n\tquantity TEXT NOT NULL, \n\tintent_id VARCHAR(128) NOT NULL, \n\tclient_order_id VARCHAR(128) NOT NULL, \n\tstatus VARCHAR(32) NOT NULL, \n\tcreated_at VARCHAR(40) NOT NULL, \n\tupdated_at VARCHAR(40) NOT NULL, \n\tcompleted_at VARCHAR(40), \n\tflat_confirmation_snapshot_id VARCHAR(128), \n\tflat_confirmed_at VARCHAR(40), \n\tlast_error TEXT NOT NULL, \n\tdetail TEXT NOT NULL, \n\tCONSTRAINT pk_position_protection_actions PRIMARY KEY (action_id), \n\tCONSTRAINT ck_position_protection_actions_side_is_known CHECK (side IN ('BUY', 'SELL')), \n\tCONSTRAINT ck_position_protection_actions_status_is_known CHECK (status IN ('PENDING', 'WORKING', 'UNCERTAIN', 'FILLED_UNVERIFIED', 'COMPLETED', 'FAILED')), \n\tCONSTRAINT ck_position_protection_actions_completion_time_matches_status CHECK ((status = 'COMPLETED') = (completed_at IS NOT NULL)), \n\tCONSTRAINT ck_position_protection_actions_flat_confirmation_fields_match CHECK ((flat_confirmation_snapshot_id IS NULL) = (flat_confirmed_at IS NULL)), \n\tCONSTRAINT ck_position_protection_actions_completion_has_flat_confirmation CHECK ((status = 'COMPLETED') = (flat_confirmation_snapshot_id IS NOT NULL)), \n\tCONSTRAINT uq_position_protection_actions_trigger_evaluation_id UNIQUE (trigger_evaluation_id), \n\tCONSTRAINT fk_position_protection_actions_trigger_evaluation_id_position_protection_evaluations FOREIGN KEY(trigger_evaluation_id) REFERENCES position_protection_evaluations (evaluation_id), \n\tCONSTRAINT uq_position_protection_actions_intent_id UNIQUE (intent_id), \n\tCONSTRAINT fk_position_protection_actions_intent_id_order_intents FOREIGN KEY(intent_id) REFERENCES order_intents (intent_id), \n\tCONSTRAINT uq_position_protection_actions_client_order_id UNIQUE (client_order_id), \n\tCONSTRAINT fk_position_protection_actions_flat_confirmation_snapshot_id_account_snapshots FOREIGN KEY(flat_confirmation_snapshot_id) REFERENCES account_snapshots (snapshot_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "uq_position_protection_actions_active_symbol",
+      "table": "position_protection_actions",
+      "sql": "CREATE UNIQUE INDEX uq_position_protection_actions_active_symbol ON position_protection_actions (account_id, symbol) WHERE status IN ('PENDING', 'WORKING', 'UNCERTAIN', 'FILLED_UNVERIFIED', 'FAILED')"
+    },
+    {
+      "type": "index",
+      "name": "ix_position_protection_actions_status_time",
+      "table": "position_protection_actions",
+      "sql": "CREATE INDEX ix_position_protection_actions_status_time ON position_protection_actions (status, updated_at)"
+    },
+    {
+      "type": "table",
+      "name": "position_protection_action_evaluations",
+      "table": "position_protection_action_evaluations",
+      "sql": "CREATE TABLE position_protection_action_evaluations (\n\taction_id VARCHAR(128) NOT NULL, \n\tevaluation_id VARCHAR(128) NOT NULL, \n\tlinked_at VARCHAR(40) NOT NULL, \n\tCONSTRAINT pk_position_protection_action_evaluations PRIMARY KEY (action_id, evaluation_id), \n\tCONSTRAINT fk_position_protection_action_evaluations_action_id_position_protection_actions FOREIGN KEY(action_id) REFERENCES position_protection_actions (action_id) ON DELETE CASCADE, \n\tCONSTRAINT fk_position_protection_action_evaluations_evaluation_id_position_protection_evaluations FOREIGN KEY(evaluation_id) REFERENCES position_protection_evaluations (evaluation_id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_position_protection_action_evaluations_evaluation",
+      "table": "position_protection_action_evaluations",
+      "sql": "CREATE INDEX ix_position_protection_action_evaluations_evaluation ON position_protection_action_evaluations (evaluation_id)"
+    },
+    {
+      "type": "table",
+      "name": "artifact_test_registrations",
+      "table": "artifact_test_registrations",
+      "sql": "CREATE TABLE artifact_test_registrations (\n\ttest_id VARCHAR(64) NOT NULL, \n\tcontent_hash VARCHAR(64) NOT NULL, \n\thypothesis_id VARCHAR(128) NOT NULL, \n\thypothesis_version INTEGER NOT NULL, \n\tregistration_hash VARCHAR(64) NOT NULL, \n\tgraph_hash VARCHAR(64) NOT NULL, \n\tartifact_kind VARCHAR(16) NOT NULL, \n\tartifact_content_id VARCHAR(64) NOT NULL, \n\ttrial_charge INTEGER NOT NULL, \n\tpower_verdict VARCHAR(32) NOT NULL, \n\tregistered_at VARCHAR(40) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_artifact_test_registrations PRIMARY KEY (test_id), \n\tCONSTRAINT fk_artifact_test_registrations_hypothesis_id_hypotheses FOREIGN KEY(hypothesis_id, hypothesis_version) REFERENCES hypotheses (hypothesis_id, version), \n\tCONSTRAINT ck_artifact_test_registrations_artifact_test_charges_one_trial CHECK (trial_charge = 1), \n\tCONSTRAINT uq_artifact_test_registrations_content_hash UNIQUE (content_hash)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_artifact_test_registrations_hypothesis",
+      "table": "artifact_test_registrations",
+      "sql": "CREATE INDEX ix_artifact_test_registrations_hypothesis ON artifact_test_registrations (hypothesis_id, hypothesis_version)"
+    },
+    {
+      "type": "index",
+      "name": "ix_artifact_test_registrations_artifact",
+      "table": "artifact_test_registrations",
+      "sql": "CREATE INDEX ix_artifact_test_registrations_artifact ON artifact_test_registrations (artifact_kind, artifact_content_id)"
+    },
+    {
+      "type": "table",
+      "name": "artifact_evidence",
+      "table": "artifact_evidence",
+      "sql": "CREATE TABLE artifact_evidence (\n\tevidence_id VARCHAR(64) NOT NULL, \n\tsource_record_id VARCHAR(128) NOT NULL, \n\ttest_id VARCHAR(64), \n\tartifact_kind VARCHAR(16) NOT NULL, \n\tartifact_content_id VARCHAR(64) NOT NULL, \n\tepistemic_status VARCHAR(32) NOT NULL, \n\tverdict VARCHAR(32), \n\thypothesis_id VARCHAR(128) NOT NULL, \n\thypothesis_version INTEGER NOT NULL, \n\tmanifest_hash VARCHAR(64) NOT NULL, \n\trecorded_at VARCHAR(40) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_artifact_evidence PRIMARY KEY (evidence_id), \n\tCONSTRAINT fk_artifact_evidence_hypothesis_id_hypotheses FOREIGN KEY(hypothesis_id, hypothesis_version) REFERENCES hypotheses (hypothesis_id, version), \n\tCONSTRAINT fk_artifact_evidence_source_record_id_research_records FOREIGN KEY(source_record_id) REFERENCES research_records (record_id), \n\tCONSTRAINT fk_artifact_evidence_test_id_artifact_test_registrations FOREIGN KEY(test_id) REFERENCES artifact_test_registrations (test_id), \n\tCONSTRAINT ck_artifact_evidence_direct_evidence_alone_has_verdict CHECK ((epistemic_status = 'DIRECTLY_MEASURED') = (verdict IS NOT NULL))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_artifact_evidence_artifact",
+      "table": "artifact_evidence",
+      "sql": "CREATE INDEX ix_artifact_evidence_artifact ON artifact_evidence (artifact_kind, artifact_content_id, recorded_at)"
+    },
+    {
+      "type": "index",
+      "name": "ix_artifact_evidence_manifest",
+      "table": "artifact_evidence",
+      "sql": "CREATE INDEX ix_artifact_evidence_manifest ON artifact_evidence (manifest_hash)"
+    },
+    {
+      "type": "table",
+      "name": "ingestion_sources",
+      "table": "ingestion_sources",
+      "sql": "CREATE TABLE ingestion_sources (\n\tsource_id VARCHAR(128) NOT NULL, \n\tprovider VARCHAR(128) NOT NULL, \n\tsource_kind VARCHAR(64) NOT NULL, \n\tconfiguration_hash VARCHAR(64) NOT NULL, \n\tenabled BOOLEAN NOT NULL, \n\tcreated_at VARCHAR(40) NOT NULL, \n\tupdated_at VARCHAR(40) NOT NULL, \n\tCONSTRAINT pk_ingestion_sources PRIMARY KEY (source_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_ingestion_sources_enabled",
+      "table": "ingestion_sources",
+      "sql": "CREATE INDEX ix_ingestion_sources_enabled ON ingestion_sources (enabled)"
+    },
+    {
+      "type": "table",
+      "name": "ingestion_cursors",
+      "table": "ingestion_cursors",
+      "sql": "CREATE TABLE ingestion_cursors (\n\tsource_id VARCHAR(128) NOT NULL, \n\tstream_key VARCHAR(128) NOT NULL, \n\tcursor_value TEXT, \n\tlast_observation_at VARCHAR(40), \n\tlast_success_at VARCHAR(40), \n\tupdated_at VARCHAR(40) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tCONSTRAINT pk_ingestion_cursors PRIMARY KEY (source_id, stream_key), \n\tCONSTRAINT ck_ingestion_cursors_cursor_versions_start_at_one CHECK (version >= 1), \n\tCONSTRAINT fk_ingestion_cursors_source_id_ingestion_sources FOREIGN KEY(source_id) REFERENCES ingestion_sources (source_id) ON DELETE RESTRICT\n)"
+    },
+    {
+      "type": "table",
+      "name": "ingestion_runs",
+      "table": "ingestion_runs",
+      "sql": "CREATE TABLE ingestion_runs (\n\tingestion_run_id VARCHAR(128) NOT NULL, \n\tsource_id VARCHAR(128) NOT NULL, \n\tmode VARCHAR(16) NOT NULL, \n\tstarted_at VARCHAR(40) NOT NULL, \n\tfinished_at VARCHAR(40), \n\tstatus VARCHAR(16) NOT NULL, \n\trequested_start TEXT, \n\trequested_end TEXT, \n\trecords_seen INTEGER NOT NULL, \n\trecords_inserted INTEGER NOT NULL, \n\trecords_duplicate INTEGER NOT NULL, \n\trecords_rejected INTEGER NOT NULL, \n\terror_code VARCHAR(64), \n\tdetail_json TEXT NOT NULL, \n\tCONSTRAINT pk_ingestion_runs PRIMARY KEY (ingestion_run_id), \n\tCONSTRAINT ck_ingestion_runs_run_mode_is_known CHECK (mode IN ('LIVE', 'BACKFILL')), \n\tCONSTRAINT ck_ingestion_runs_run_status_is_known CHECK (status IN ('RUNNING', 'SUCCEEDED', 'FAILED', 'ABANDONED')), \n\tCONSTRAINT ck_ingestion_runs_finished_runs_have_an_end CHECK ((status = 'RUNNING') = (finished_at IS NULL)), \n\tCONSTRAINT ck_ingestion_runs_only_unsuccessful_runs_carry_an_error CHECK (error_code IS NULL OR status IN ('FAILED', 'ABANDONED')), \n\tCONSTRAINT ck_ingestion_runs_record_counts_are_nonnegative CHECK (records_seen >= 0 AND records_inserted >= 0 AND records_duplicate >= 0 AND records_rejected >= 0), \n\tCONSTRAINT ck_ingestion_runs_record_outcomes_fit_inside_what_was_seen CHECK (records_inserted + records_duplicate + records_rejected <= records_seen), \n\tCONSTRAINT fk_ingestion_runs_source_id_ingestion_sources FOREIGN KEY(source_id) REFERENCES ingestion_sources (source_id) ON DELETE RESTRICT\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_ingestion_runs_status",
+      "table": "ingestion_runs",
+      "sql": "CREATE INDEX ix_ingestion_runs_status ON ingestion_runs (status, started_at)"
+    },
+    {
+      "type": "index",
+      "name": "ix_ingestion_runs_source_started",
+      "table": "ingestion_runs",
+      "sql": "CREATE INDEX ix_ingestion_runs_source_started ON ingestion_runs (source_id, started_at)"
+    },
+    {
+      "type": "table",
+      "name": "ingestion_events",
+      "table": "ingestion_events",
+      "sql": "CREATE TABLE ingestion_events (\n\tevent_id VARCHAR(128) NOT NULL, \n\tsource_id VARCHAR(128) NOT NULL, \n\tstream_key VARCHAR(128), \n\tevent_kind VARCHAR(32) NOT NULL, \n\tseverity VARCHAR(16) NOT NULL, \n\toccurred_at VARCHAR(40) NOT NULL, \n\tresolved_at VARCHAR(40), \n\tdetail_json TEXT NOT NULL, \n\tCONSTRAINT pk_ingestion_events PRIMARY KEY (event_id), \n\tCONSTRAINT ck_ingestion_events_event_severity_is_known CHECK (severity IN ('INFO', 'WARNING', 'CRITICAL')), \n\tCONSTRAINT ck_ingestion_events_events_resolve_after_they_open CHECK (resolved_at IS NULL OR resolved_at >= occurred_at), \n\tCONSTRAINT fk_ingestion_events_source_id_ingestion_sources FOREIGN KEY(source_id) REFERENCES ingestion_sources (source_id) ON DELETE RESTRICT\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_ingestion_events_open",
+      "table": "ingestion_events",
+      "sql": "CREATE INDEX ix_ingestion_events_open ON ingestion_events (source_id, event_kind, resolved_at)"
+    },
+    {
+      "type": "index",
+      "name": "ix_ingestion_events_occurred",
+      "table": "ingestion_events",
+      "sql": "CREATE INDEX ix_ingestion_events_occurred ON ingestion_events (occurred_at)"
+    },
+    {
+      "type": "table",
+      "name": "component_heartbeats",
+      "table": "component_heartbeats",
+      "sql": "CREATE TABLE component_heartbeats (\n\theartbeat_id VARCHAR(128) NOT NULL, \n\tcomponent_id VARCHAR(128) NOT NULL, \n\tinstance_id VARCHAR(128) NOT NULL, \n\tobserved_at VARCHAR(40) NOT NULL, \n\tstatus VARCHAR(16) NOT NULL, \n\tlast_success_at VARCHAR(40), \n\tdetail_json TEXT NOT NULL, \n\tCONSTRAINT pk_component_heartbeats PRIMARY KEY (heartbeat_id), \n\tCONSTRAINT ck_component_heartbeats_heartbeat_status_is_known CHECK (status IN ('STARTING', 'HEALTHY', 'DEGRADED', 'STOPPING'))\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_component_heartbeats_component",
+      "table": "component_heartbeats",
+      "sql": "CREATE INDEX ix_component_heartbeats_component ON component_heartbeats (component_id, observed_at)"
+    },
+    {
+      "type": "table",
+      "name": "schema_version",
+      "table": "schema_version",
+      "sql": "CREATE TABLE \"schema_version\" (\n\tid INTEGER NOT NULL, \n\tversion INTEGER NOT NULL, \n\tstore_identity VARCHAR(36) NOT NULL, \n\tCONSTRAINT pk_schema_version PRIMARY KEY (id), \n\tCONSTRAINT ck_schema_version_singleton CHECK (id = 1)\n)"
+    },
+    {
+      "type": "table",
+      "name": "runtime_deployments",
+      "table": "runtime_deployments",
+      "sql": "CREATE TABLE \"runtime_deployments\" (\n\tobservation_id VARCHAR(200) NOT NULL, \n\thost_id VARCHAR(128) NOT NULL, \n\tinstance_id VARCHAR(128) NOT NULL, \n\trole VARCHAR(32) NOT NULL, \n\tgit_commit VARCHAR(64) NOT NULL, \n\tpackage_version VARCHAR(64) NOT NULL, \n\tpython_version VARCHAR(32) NOT NULL, \n\thost_platform VARCHAR(160) NOT NULL, \n\ttrading_mode VARCHAR(16) NOT NULL, \n\tstore_identity VARCHAR(36) NOT NULL, \n\tschema_version INTEGER NOT NULL, \n\tstrategy_id VARCHAR(128), \n\tstrategy_version VARCHAR(64), \n\tconfiguration_hash VARCHAR(128), \n\tprocess_started_at VARCHAR(40) NOT NULL, \n\tobserved_at VARCHAR(40) NOT NULL, \n\tdetail_json TEXT DEFAULT '{}' NOT NULL, \n\tCONSTRAINT pk_runtime_deployments PRIMARY KEY (observation_id), \n\tCONSTRAINT ck_runtime_deployments_runtime_schema_version_is_positive CHECK (schema_version >= 1), \n\tCONSTRAINT ck_runtime_deployments_runtime_mode_is_known CHECK (trading_mode IN ('PAPER', 'LIVE')), \n\tCONSTRAINT ck_runtime_deployments_runtime_role_is_known CHECK (role IN ('COORDINATOR', 'WORKER', 'CONSOLE', 'TOOL')), \n\tCONSTRAINT ck_runtime_deployments_an_observation_follows_its_process_start CHECK (observed_at >= process_started_at)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_runtime_deployments_commit",
+      "table": "runtime_deployments",
+      "sql": "CREATE INDEX ix_runtime_deployments_commit ON runtime_deployments (git_commit)"
+    },
+    {
+      "type": "index",
+      "name": "ix_runtime_deployments_role_observed",
+      "table": "runtime_deployments",
+      "sql": "CREATE INDEX ix_runtime_deployments_role_observed ON runtime_deployments (role, observed_at)"
+    },
+    {
+      "type": "table",
+      "name": "research_proposals",
+      "table": "research_proposals",
+      "sql": "CREATE TABLE research_proposals (\n\tproposal_id VARCHAR(64) NOT NULL, \n\toutcome VARCHAR(16) NOT NULL, \n\ttask_id VARCHAR(128), \n\ttemplate_id VARCHAR(128), \n\ttemplate_version INTEGER, \n\tcatalogue_hash VARCHAR(64), \n\tdataset_identity VARCHAR(128), \n\tdataset_sequence INTEGER, \n\tproposer_version INTEGER NOT NULL, \n\tcode_commit VARCHAR(64) NOT NULL, \n\tattempted_at VARCHAR(40) NOT NULL, \n\tevidence_json TEXT NOT NULL, \n\tCONSTRAINT pk_research_proposals PRIMARY KEY (proposal_id), \n\tCONSTRAINT ck_research_proposals_proposal_outcome_is_known CHECK (outcome IN ('CREATED', 'NO_ELIGIBLE', 'REFUSED')), \n\tCONSTRAINT ck_research_proposals_only_a_created_proposal_names_a_task CHECK ((outcome = 'CREATED') = (task_id IS NOT NULL)), \n\tCONSTRAINT ck_research_proposals_a_dataset_sequence_belongs_to_a_task CHECK ((task_id IS NULL) = (dataset_sequence IS NULL)), \n\tCONSTRAINT ck_research_proposals_a_created_proposal_names_its_template_and_dataset CHECK (task_id IS NULL OR (template_id IS NOT NULL AND template_version IS NOT NULL AND catalogue_hash IS NOT NULL AND dataset_identity IS NOT NULL)), \n\tCONSTRAINT ck_research_proposals_dataset_sequence_is_positive CHECK (dataset_sequence IS NULL OR dataset_sequence >= 1), \n\tCONSTRAINT uq_research_proposals_task_id UNIQUE (task_id), \n\tCONSTRAINT uq_research_proposals_dataset_identity UNIQUE (dataset_identity, dataset_sequence), \n\tCONSTRAINT fk_research_proposals_task_id_research_tasks FOREIGN KEY(task_id) REFERENCES research_tasks (task_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_research_proposals_attempted_at",
+      "table": "research_proposals",
+      "sql": "CREATE INDEX ix_research_proposals_attempted_at ON research_proposals (attempted_at)"
+    },
+    {
+      "type": "table",
+      "name": "learner_datasets",
+      "table": "learner_datasets",
+      "sql": "CREATE TABLE learner_datasets (\n\tdataset_id VARCHAR(64) NOT NULL, \n\tdocument_hash VARCHAR(64) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_learner_datasets PRIMARY KEY (dataset_id), \n\tCONSTRAINT uq_learner_datasets_document_hash UNIQUE (document_hash)\n)"
+    },
+    {
+      "type": "table",
+      "name": "learner_model_versions",
+      "table": "learner_model_versions",
+      "sql": "CREATE TABLE learner_model_versions (\n\tmodel_id VARCHAR(64) NOT NULL, \n\tdataset_id VARCHAR(64) NOT NULL, \n\tfamily VARCHAR(64) NOT NULL, \n\tcreated_at VARCHAR(40) NOT NULL, \n\tartifact_hash VARCHAR(64) NOT NULL, \n\tdocument_hash VARCHAR(64) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_learner_model_versions PRIMARY KEY (model_id), \n\tCONSTRAINT fk_learner_model_versions_dataset_id_learner_datasets FOREIGN KEY(dataset_id) REFERENCES learner_datasets (dataset_id) ON DELETE RESTRICT, \n\tCONSTRAINT uq_learner_model_versions_document_hash UNIQUE (document_hash)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_learner_model_versions_family_created",
+      "table": "learner_model_versions",
+      "sql": "CREATE INDEX ix_learner_model_versions_family_created ON learner_model_versions (family, created_at)"
+    },
+    {
+      "type": "table",
+      "name": "learner_predictions",
+      "table": "learner_predictions",
+      "sql": "CREATE TABLE learner_predictions (\n\tprediction_id VARCHAR(64) NOT NULL, \n\tmodel_id VARCHAR(64) NOT NULL, \n\tevaluation_class VARCHAR(32) NOT NULL, \n\tcreated_at VARCHAR(40) NOT NULL, \n\trecorded_at VARCHAR(40) NOT NULL, \n\tcohort_id VARCHAR(128) NOT NULL, \n\tdocument_hash VARCHAR(64) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_learner_predictions PRIMARY KEY (prediction_id), \n\tCONSTRAINT ck_learner_predictions_evaluation_class_is_known CHECK (evaluation_class IN ('HISTORICAL_REPLAY', 'SHADOW', 'PROSPECTIVE_LOCAL')), \n\tCONSTRAINT fk_learner_predictions_model_id_learner_model_versions FOREIGN KEY(model_id) REFERENCES learner_model_versions (model_id) ON DELETE RESTRICT, \n\tCONSTRAINT uq_learner_predictions_document_hash UNIQUE (document_hash)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_learner_predictions_cohort",
+      "table": "learner_predictions",
+      "sql": "CREATE INDEX ix_learner_predictions_cohort ON learner_predictions (cohort_id, prediction_id)"
+    },
+    {
+      "type": "index",
+      "name": "ix_learner_predictions_model_created",
+      "table": "learner_predictions",
+      "sql": "CREATE INDEX ix_learner_predictions_model_created ON learner_predictions (model_id, created_at)"
+    },
+    {
+      "type": "table",
+      "name": "learner_outcomes",
+      "table": "learner_outcomes",
+      "sql": "CREATE TABLE learner_outcomes (\n\tprediction_id VARCHAR(64) NOT NULL, \n\tresolved_at VARCHAR(40) NOT NULL, \n\tsource_hash VARCHAR(64) NOT NULL, \n\tdocument_hash VARCHAR(64) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_learner_outcomes PRIMARY KEY (prediction_id), \n\tCONSTRAINT fk_learner_outcomes_prediction_id_learner_predictions FOREIGN KEY(prediction_id) REFERENCES learner_predictions (prediction_id) ON DELETE RESTRICT, \n\tCONSTRAINT uq_learner_outcomes_document_hash UNIQUE (document_hash)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_learner_outcomes_resolved_at",
+      "table": "learner_outcomes",
+      "sql": "CREATE INDEX ix_learner_outcomes_resolved_at ON learner_outcomes (resolved_at)"
+    },
+    {
+      "type": "table",
+      "name": "learner_evaluations",
+      "table": "learner_evaluations",
+      "sql": "CREATE TABLE learner_evaluations (\n\tevaluation_id VARCHAR(64) NOT NULL, \n\tmodel_id VARCHAR(64) NOT NULL, \n\tevaluation_class VARCHAR(32) NOT NULL, \n\tcreated_at VARCHAR(40) NOT NULL, \n\tdocument_hash VARCHAR(64) NOT NULL, \n\tdocument_json TEXT NOT NULL, \n\tCONSTRAINT pk_learner_evaluations PRIMARY KEY (evaluation_id), \n\tCONSTRAINT ck_learner_evaluations_evaluation_class_is_known CHECK (evaluation_class IN ('HISTORICAL_REPLAY', 'SHADOW', 'PROSPECTIVE_LOCAL')), \n\tCONSTRAINT fk_learner_evaluations_model_id_learner_model_versions FOREIGN KEY(model_id) REFERENCES learner_model_versions (model_id) ON DELETE RESTRICT, \n\tCONSTRAINT uq_learner_evaluations_document_hash UNIQUE (document_hash)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_learner_evaluations_model_created",
+      "table": "learner_evaluations",
+      "sql": "CREATE INDEX ix_learner_evaluations_model_created ON learner_evaluations (model_id, created_at)"
+    },
+    {
+      "type": "table",
+      "name": "core_identities",
+      "table": "core_identities",
+      "sql": "CREATE TABLE core_identities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_identities PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_observations",
+      "table": "core_observations",
+      "sql": "CREATE TABLE core_observations (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_observations PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_decisions",
+      "table": "core_decisions",
+      "sql": "CREATE TABLE core_decisions (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_decisions PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_protection_plans",
+      "table": "core_protection_plans",
+      "sql": "CREATE TABLE core_protection_plans (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_protection_plans PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_reconciliation_proofs",
+      "table": "core_reconciliation_proofs",
+      "sql": "CREATE TABLE core_reconciliation_proofs (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_reconciliation_proofs PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_guardian_receipts",
+      "table": "core_guardian_receipts",
+      "sql": "CREATE TABLE core_guardian_receipts (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_guardian_receipts PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_cycle_receipts",
+      "table": "core_cycle_receipts",
+      "sql": "CREATE TABLE core_cycle_receipts (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_cycle_receipts PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_round_trips",
+      "table": "core_round_trips",
+      "sql": "CREATE TABLE core_round_trips (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_round_trips PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_fixture_baselines",
+      "table": "core_fixture_baselines",
+      "sql": "CREATE TABLE core_fixture_baselines (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_fixture_baselines PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_intent_links",
+      "table": "core_intent_links",
+      "sql": "CREATE TABLE core_intent_links (\n\tintent_id VARCHAR(128) NOT NULL, \n\tdecision_id VARCHAR(64) NOT NULL, \n\tprotection_id VARCHAR(64) NOT NULL, \n\tobservation_id VARCHAR(64) NOT NULL, \n\trole VARCHAR(8) NOT NULL, \n\tlot_id VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_intent_links PRIMARY KEY (intent_id), \n\tCONSTRAINT fk_core_intent_links_intent_id_order_intents FOREIGN KEY(intent_id) REFERENCES order_intents (intent_id), \n\tCONSTRAINT fk_core_intent_links_decision_id_core_decisions FOREIGN KEY(decision_id) REFERENCES core_decisions (id), \n\tCONSTRAINT fk_core_intent_links_protection_id_core_protection_plans FOREIGN KEY(protection_id) REFERENCES core_protection_plans (id), \n\tCONSTRAINT fk_core_intent_links_observation_id_core_observations FOREIGN KEY(observation_id) REFERENCES core_observations (id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "uq_core_entry_observation",
+      "table": "core_intent_links",
+      "sql": "CREATE UNIQUE INDEX uq_core_entry_observation ON core_intent_links (observation_id) WHERE role = 'ENTRY'"
+    },
+    {
+      "type": "table",
+      "name": "core_inventory_certifications",
+      "table": "core_inventory_certifications",
+      "sql": "CREATE TABLE core_inventory_certifications (\n\tgeneration INTEGER NOT NULL, \n\tproof_id VARCHAR(64) NOT NULL, \n\tsnapshot_id VARCHAR(128) NOT NULL, \n\tCONSTRAINT pk_core_inventory_certifications PRIMARY KEY (generation), \n\tCONSTRAINT uq_core_inventory_certifications_proof_id UNIQUE (proof_id), \n\tCONSTRAINT fk_core_inventory_certifications_proof_id_core_reconciliation_proofs FOREIGN KEY(proof_id) REFERENCES core_reconciliation_proofs (id), \n\tCONSTRAINT fk_core_inventory_certifications_snapshot_id_account_snapshots FOREIGN KEY(snapshot_id) REFERENCES account_snapshots (snapshot_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "raw_account_snapshot_sources",
+      "table": "raw_account_snapshot_sources",
+      "sql": "CREATE TABLE raw_account_snapshot_sources (\n\tsnapshot_id VARCHAR(128) NOT NULL, \n\tsource VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_raw_account_snapshot_sources PRIMARY KEY (snapshot_id), \n\tCONSTRAINT fk_raw_account_snapshot_sources_snapshot_id_account_snapshots FOREIGN KEY(snapshot_id) REFERENCES account_snapshots (snapshot_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "fills",
+      "table": "fills",
+      "sql": "CREATE TABLE \"fills\" (\n\tfill_id VARCHAR(128) NOT NULL, \n\tbroker_order_id VARCHAR(128) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tside VARCHAR(8) NOT NULL, \n\tquantity TEXT NOT NULL, \n\tprice TEXT NOT NULL, \n\toccurred_at VARCHAR(40) NOT NULL, \n\tfee TEXT, \n\tfee_source VARCHAR(32) DEFAULT 'UNKNOWN' NOT NULL, \n\tfee_reference TEXT, \n\tCONSTRAINT pk_fills PRIMARY KEY (fill_id), \n\tCONSTRAINT fk_fills_broker_order_id_broker_orders FOREIGN KEY(broker_order_id) REFERENCES broker_orders (broker_order_id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_fills_broker_time",
+      "table": "fills",
+      "sql": "CREATE INDEX ix_fills_broker_time ON fills (broker_order_id, occurred_at)"
+    },
+    {
+      "type": "table",
+      "name": "core_broker_event_sources",
+      "table": "core_broker_event_sources",
+      "sql": "CREATE TABLE core_broker_event_sources (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_broker_event_sources PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_cost_items",
+      "table": "core_cost_items",
+      "sql": "CREATE TABLE core_cost_items (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_cost_items PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_outcome_revisions",
+      "table": "core_outcome_revisions",
+      "sql": "CREATE TABLE core_outcome_revisions (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_outcome_revisions PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_cash_activities",
+      "table": "core_cash_activities",
+      "sql": "CREATE TABLE core_cash_activities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_cash_activities PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_source_cursors",
+      "table": "core_source_cursors",
+      "sql": "CREATE TABLE core_source_cursors (\n\tsource_id VARCHAR(64) NOT NULL, \n\tavailable_at VARCHAR(40) NOT NULL, \n\tevent_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_source_cursors PRIMARY KEY (source_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_quantity_certifications",
+      "table": "core_quantity_certifications",
+      "sql": "CREATE TABLE core_quantity_certifications (\n\tgeneration INTEGER NOT NULL, \n\tproof_id VARCHAR(64) NOT NULL, \n\tsnapshot_id VARCHAR(128) NOT NULL, \n\tCONSTRAINT pk_core_quantity_certifications PRIMARY KEY (generation), \n\tCONSTRAINT uq_core_quantity_certifications_proof_id UNIQUE (proof_id), \n\tCONSTRAINT fk_core_quantity_certifications_proof_id_core_reconciliation_proofs FOREIGN KEY(proof_id) REFERENCES core_reconciliation_proofs (id), \n\tCONSTRAINT fk_core_quantity_certifications_snapshot_id_account_snapshots FOREIGN KEY(snapshot_id) REFERENCES account_snapshots (snapshot_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_cash_authority_revocations",
+      "table": "core_cash_authority_revocations",
+      "sql": "CREATE TABLE core_cash_authority_revocations (\n\tsnapshot_id VARCHAR(128) NOT NULL, \n\treason TEXT NOT NULL, \n\tCONSTRAINT pk_core_cash_authority_revocations PRIMARY KEY (snapshot_id), \n\tCONSTRAINT fk_core_cash_authority_revocations_snapshot_id_account_snapshots FOREIGN KEY(snapshot_id) REFERENCES account_snapshots (snapshot_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_outcome_index",
+      "table": "core_outcome_index",
+      "sql": "CREATE TABLE core_outcome_index (\n\tlot_id VARCHAR(64) NOT NULL, \n\toutcome_id VARCHAR(64) NOT NULL, \n\tavailable_at VARCHAR(40) NOT NULL, \n\tsource_start VARCHAR(40) NOT NULL, \n\tsource_end VARCHAR(40) NOT NULL, \n\tdataset VARCHAR(64) NOT NULL, \n\tpolicy_id VARCHAR(128) NOT NULL, \n\tevidence_lane VARCHAR(32) NOT NULL, \n\tstatus VARCHAR(32) NOT NULL, \n\tCONSTRAINT pk_core_outcome_index PRIMARY KEY (lot_id), \n\tCONSTRAINT fk_core_outcome_index_outcome_id_core_outcome_revisions FOREIGN KEY(outcome_id) REFERENCES core_outcome_revisions (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_health_events",
+      "table": "core_health_events",
+      "sql": "CREATE TABLE core_health_events (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_health_events PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_time_evidence",
+      "table": "core_time_evidence",
+      "sql": "CREATE TABLE core_time_evidence (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_time_evidence PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_models",
+      "table": "core_models",
+      "sql": "CREATE TABLE core_models (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_models PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_learning_runs",
+      "table": "core_learning_runs",
+      "sql": "CREATE TABLE core_learning_runs (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_learning_runs PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_learning_inputs",
+      "table": "core_learning_inputs",
+      "sql": "CREATE TABLE core_learning_inputs (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_learning_inputs PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_learning_attempts",
+      "table": "core_learning_attempts",
+      "sql": "CREATE TABLE core_learning_attempts (\n\tsession VARCHAR(10) NOT NULL, \n\trun_id VARCHAR(64) NOT NULL, \n\tsearch_id VARCHAR(128) NOT NULL, \n\tinput_id VARCHAR(64) NOT NULL, \n\tinput_revision_digest VARCHAR(64) NOT NULL, \n\treservation_payload TEXT NOT NULL, \n\tCONSTRAINT pk_core_learning_attempts PRIMARY KEY (session), \n\tCONSTRAINT uq_core_learning_attempts_run_id UNIQUE (run_id), \n\tFOREIGN KEY(search_id) REFERENCES search_runs (search_id), \n\tCONSTRAINT uq_core_learning_attempts_input_revision_digest UNIQUE (input_revision_digest)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_learning_considerations",
+      "table": "core_learning_considerations",
+      "sql": "CREATE TABLE core_learning_considerations (\n\trun_id VARCHAR(64) NOT NULL, \n\treceipt_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_learning_considerations PRIMARY KEY (run_id), \n\tFOREIGN KEY(receipt_id) REFERENCES core_learning_runs (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_activation_authorities",
+      "table": "core_activation_authorities",
+      "sql": "CREATE TABLE core_activation_authorities (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_activation_authorities PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_activations",
+      "table": "core_activations",
+      "sql": "CREATE TABLE core_activations (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_activations PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_active_model",
+      "table": "core_active_model",
+      "sql": "CREATE TABLE core_active_model (\n\tid INTEGER NOT NULL, \n\tactivation_id VARCHAR(64) NOT NULL, \n\tmodel_id VARCHAR(64) NOT NULL, \n\tgeneration INTEGER NOT NULL, \n\treceipt_id VARCHAR(64), \n\tCONSTRAINT pk_core_active_model PRIMARY KEY (id), \n\tCONSTRAINT ck_core_active_model_singleton CHECK (id = 1), \n\tCONSTRAINT ck_core_active_model_generation_positive CHECK (generation >= 1), \n\tCONSTRAINT fk_core_active_model_activation_id_core_activations FOREIGN KEY(activation_id) REFERENCES core_activations (id), \n\tCONSTRAINT fk_core_active_model_model_id_core_models FOREIGN KEY(model_id) REFERENCES core_models (id), \n\tCONSTRAINT fk_core_active_model_receipt_id_core_learning_runs FOREIGN KEY(receipt_id) REFERENCES core_learning_runs (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_runtime_commissions",
+      "table": "core_runtime_commissions",
+      "sql": "CREATE TABLE core_runtime_commissions (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_runtime_commissions PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_runtime_events",
+      "table": "core_runtime_events",
+      "sql": "CREATE TABLE core_runtime_events (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_runtime_events PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_role_heartbeats",
+      "table": "core_role_heartbeats",
+      "sql": "CREATE TABLE core_role_heartbeats (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_role_heartbeats PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_provider_acquisitions",
+      "table": "core_provider_acquisitions",
+      "sql": "CREATE TABLE core_provider_acquisitions (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_provider_acquisitions PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_external_owner_events",
+      "table": "core_external_owner_events",
+      "sql": "CREATE TABLE core_external_owner_events (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_external_owner_events PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_runtime_config_history",
+      "table": "core_runtime_config_history",
+      "sql": "CREATE TABLE core_runtime_config_history (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_runtime_config_history PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_canonical_sources",
+      "table": "core_canonical_sources",
+      "sql": "CREATE TABLE core_canonical_sources (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_canonical_sources PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_role_current",
+      "table": "core_role_current",
+      "sql": "CREATE TABLE core_role_current (\n\trole VARCHAR(16) NOT NULL, \n\theartbeat_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_role_current PRIMARY KEY (role), \n\tFOREIGN KEY(heartbeat_id) REFERENCES core_role_heartbeats (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_provider_progress",
+      "table": "core_provider_progress",
+      "sql": "CREATE TABLE core_provider_progress (\n\taccount_id VARCHAR(128) NOT NULL, \n\twatermark VARCHAR(40) NOT NULL, \n\tdocument_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_provider_progress PRIMARY KEY (account_id), \n\tFOREIGN KEY(document_id) REFERENCES core_provider_acquisitions (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_canonical_current",
+      "table": "core_canonical_current",
+      "sql": "CREATE TABLE core_canonical_current (\n\tid VARCHAR(16) NOT NULL, \n\tsource_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_canonical_current PRIMARY KEY (id), \n\tFOREIGN KEY(source_id) REFERENCES core_canonical_sources (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_outcome_work",
+      "table": "core_outcome_work",
+      "sql": "CREATE TABLE core_outcome_work (\n\tlot_id VARCHAR(64) NOT NULL, \n\tversion INTEGER NOT NULL, \n\tprocessed_version INTEGER NOT NULL, \n\tattempted_at VARCHAR(40) NOT NULL, \n\tCONSTRAINT pk_core_outcome_work PRIMARY KEY (lot_id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_guardian_memberships",
+      "table": "core_guardian_memberships",
+      "sql": "CREATE TABLE core_guardian_memberships (\n\tplan_id VARCHAR(64) NOT NULL, \n\treceipt_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_guardian_memberships PRIMARY KEY (plan_id, receipt_id), \n\tCONSTRAINT fk_core_guardian_memberships_receipt_id_core_guardian_receipts FOREIGN KEY(receipt_id) REFERENCES core_guardian_receipts (id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_guardian_current",
+      "table": "core_guardian_current",
+      "sql": "CREATE TABLE core_guardian_current (\n\tid VARCHAR(16) NOT NULL, \n\treceipt_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_guardian_current PRIMARY KEY (id), \n\tCONSTRAINT fk_core_guardian_current_receipt_id_core_guardian_receipts FOREIGN KEY(receipt_id) REFERENCES core_guardian_receipts (id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_runtime_current",
+      "table": "core_runtime_current",
+      "sql": "CREATE TABLE core_runtime_current (\n\tid VARCHAR(16) NOT NULL, \n\tdocument_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_runtime_current PRIMARY KEY (id), \n\tCONSTRAINT fk_core_runtime_current_document_id_core_runtime_config_history FOREIGN KEY(document_id) REFERENCES core_runtime_config_history (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_document_index",
+      "table": "core_document_index",
+      "sql": "CREATE TABLE core_document_index (\n\tkind VARCHAR(64) NOT NULL, \n\tid VARCHAR(64) NOT NULL, \n\treference VARCHAR(128) NOT NULL, \n\tavailable_at VARCHAR(40) NOT NULL, \n\tCONSTRAINT pk_core_document_index PRIMARY KEY (kind, id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_core_document_reference",
+      "table": "core_document_index",
+      "sql": "CREATE INDEX ix_core_document_reference ON core_document_index (kind, reference, available_at)"
+    },
+    {
+      "type": "table",
+      "name": "core_proof_fill_memberships",
+      "table": "core_proof_fill_memberships",
+      "sql": "CREATE TABLE core_proof_fill_memberships (\n\tproof_id VARCHAR(64) NOT NULL, \n\tfill_id VARCHAR(128) NOT NULL, \n\tCONSTRAINT pk_core_proof_fill_memberships PRIMARY KEY (proof_id, fill_id), \n\tCONSTRAINT fk_core_proof_fill_memberships_proof_id_core_reconciliation_proofs FOREIGN KEY(proof_id) REFERENCES core_reconciliation_proofs (id) ON DELETE CASCADE\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_core_proof_fill_reference",
+      "table": "core_proof_fill_memberships",
+      "sql": "CREATE INDEX ix_core_proof_fill_reference ON core_proof_fill_memberships (fill_id, proof_id)"
+    },
+    {
+      "type": "table",
+      "name": "core_session_openings",
+      "table": "core_session_openings",
+      "sql": "CREATE TABLE core_session_openings (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_session_openings PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_batches",
+      "table": "core_batches",
+      "sql": "CREATE TABLE core_batches (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_batches PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_entry_reservations",
+      "table": "core_entry_reservations",
+      "sql": "CREATE TABLE core_entry_reservations (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_entry_reservations PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_holding_deadlines",
+      "table": "core_holding_deadlines",
+      "sql": "CREATE TABLE core_holding_deadlines (\n\tid VARCHAR(64) NOT NULL, \n\tpayload TEXT NOT NULL, \n\tCONSTRAINT pk_core_holding_deadlines PRIMARY KEY (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_session_opening_index",
+      "table": "core_session_opening_index",
+      "sql": "CREATE TABLE core_session_opening_index (\n\taccount_id VARCHAR(128) NOT NULL, \n\tpolicy_id VARCHAR(128) NOT NULL, \n\tsession_date VARCHAR(10) NOT NULL, \n\tstore_identity VARCHAR(36) NOT NULL, \n\tdocument_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_session_opening_index PRIMARY KEY (account_id, policy_id, session_date), \n\tCONSTRAINT uq_core_session_opening_index_document_id UNIQUE (document_id), \n\tCONSTRAINT fk_core_session_opening_index_document_id_core_session_openings FOREIGN KEY(document_id) REFERENCES core_session_openings (id)\n)"
+    },
+    {
+      "type": "table",
+      "name": "core_batch_members",
+      "table": "core_batch_members",
+      "sql": "CREATE TABLE core_batch_members (\n\tbatch_id VARCHAR(64) NOT NULL, \n\tsymbol VARCHAR(32) NOT NULL, \n\tdecision_id VARCHAR(64) NOT NULL, \n\treservation_id VARCHAR(64) NOT NULL, \n\tsession_date VARCHAR(10) NOT NULL, \n\tCONSTRAINT pk_core_batch_members PRIMARY KEY (batch_id, symbol), \n\tCONSTRAINT fk_core_batch_members_batch_id_core_batches FOREIGN KEY(batch_id) REFERENCES core_batches (id), \n\tCONSTRAINT uq_core_batch_members_decision_id UNIQUE (decision_id), \n\tCONSTRAINT uq_core_batch_members_reservation_id UNIQUE (reservation_id), \n\tCONSTRAINT fk_core_batch_members_reservation_id_core_entry_reservations FOREIGN KEY(reservation_id) REFERENCES core_entry_reservations (id)\n)"
+    },
+    {
+      "type": "index",
+      "name": "ix_core_batch_session",
+      "table": "core_batch_members",
+      "sql": "CREATE INDEX ix_core_batch_session ON core_batch_members (session_date, decision_id)"
+    },
+    {
+      "type": "table",
+      "name": "core_holding_deadline_index",
+      "table": "core_holding_deadline_index",
+      "sql": "CREATE TABLE core_holding_deadline_index (\n\tlot_id VARCHAR(64) NOT NULL, \n\tdocument_id VARCHAR(64) NOT NULL, \n\tCONSTRAINT pk_core_holding_deadline_index PRIMARY KEY (lot_id), \n\tCONSTRAINT uq_core_holding_deadline_index_document_id UNIQUE (document_id), \n\tCONSTRAINT fk_core_holding_deadline_index_document_id_core_holding_deadlines FOREIGN KEY(document_id) REFERENCES core_holding_deadlines (id)\n)"
+    }
+  ],
+  "query_plans": {
+    "deadline_all_signals": [
+      [
+        3,
+        0,
+        216,
+        "SCAN signals"
+      ],
+      [
+        14,
+        0,
+        0,
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    ],
+    "deadline_all_events": [
+      [
+        3,
+        0,
+        216,
+        "SCAN order_events"
+      ],
+      [
+        14,
+        0,
+        0,
+        "USE TEMP B-TREE FOR ORDER BY"
+      ]
+    ]
+  },
+  "read_probe_ms": [
+    0.04100007936358452,
+    0.00519980676472187,
+    0.0034999102354049683,
+    0.003300141543149948,
+    0.0032999087125062943
+  ],
+  "limits": [
+    "Read-only indexed probe, not representative write latency or whole-database integrity validation.",
+    "No row scans, vacuum, checkpoint, transaction writes, or broker calls.",
+    "Database lock incident totals and transaction duration require separate bounded evidence."
+  ]
+}

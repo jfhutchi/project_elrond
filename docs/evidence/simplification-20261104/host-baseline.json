@@ -1,0 +1,512 @@
+{
+  "host": "LEANNES-LAPTOP",
+  "sampled_at": "2026-11-05T01:20:03.2134462+00:00",
+  "interval_seconds": 10.1963475,
+  "logical_cpus": 16,
+  "scheduled_tasks": [
+    {
+      "name": "Elrond Console",
+      "state": "Running",
+      "actions": [
+        {
+          "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+          "arguments": "\"D:\\Elrond\\logs\\dashboard-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\deploy\\omen\\start-service.ps1\" -Repository \"D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\" -EnvironmentFile \"C:\\Users\\leepa\\.config\\quantbot\\quantbot-console.env\" -Commit 8fda9bd165ae30efd5899e8d4bbfabccde73aa88 -Database \"D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db\" -Component console -ExperimentStore \"C:\\Users\\leepa\\Documents\\Codex\\2026-09-30\\task\\adaptive-paper-research-20261006\\experiment.db\""
+        }
+      ]
+    },
+    {
+      "name": "Elrond Paper Core Guardian",
+      "state": "Running",
+      "actions": [
+        {
+          "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+          "arguments": "\"D:\\Elrond\\logs\\paper-core-guardian-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role guardian -EntryDisabled"
+        }
+      ]
+    },
+    {
+      "name": "Elrond Paper Core Outcomes",
+      "state": "Running",
+      "actions": [
+        {
+          "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+          "arguments": "\"D:\\Elrond\\logs\\paper-core-outcomes-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role outcomes -EntryDisabled"
+        }
+      ]
+    },
+    {
+      "name": "Elrond Paper Core Trader",
+      "state": "Running",
+      "actions": [
+        {
+          "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+          "arguments": "\"D:\\Elrond\\logs\\paper-core-trader-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\start-paper-core.ps1\" -Repository \"D:\\Elrond\\releases\\paper-core-14352cc-20261015\" -Config \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json\" -Manifest \"D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json\" -Role trader"
+        }
+      ]
+    },
+    {
+      "name": "Elrond Paper Deadline",
+      "state": "Running",
+      "actions": [
+        {
+          "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+          "arguments": "\"D:\\Elrond\\logs\\upgraded-deadline-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\deadline-retry-20261103\\deploy\\omen\\start-learner.ps1\" -Repository \"D:\\Elrond\\releases\\deadline-retry-20261103\" -Directory \"D:\\Elrond\\learner\" -Database \"D:\\Elrond\\learner\\state\\learner.db\" -EnvironmentFile \"C:\\Users\\leepa\\.config\\quantbot\\quantbot.env\" -Commit 6c5eafe3176a40dabf577014350819c48d055916 -DeadlineSupervisor -OperationsDatabase \"D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db\""
+        }
+      ]
+    },
+    {
+      "name": "Elrond Protection",
+      "state": "Running",
+      "actions": [
+        {
+          "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+          "arguments": "\"D:\\Elrond\\logs\\upgraded-protection-launcher.log\" -NoProfile -NonInteractive -WindowStyle Hidden -File \"D:\\Elrond\\releases\\support-ownership-37dfaa4-20261016\\deploy\\omen\\start-service.ps1\" -Repository \"D:\\Elrond\\releases\\support-ownership-37dfaa4-20261016\" -EnvironmentFile \"C:\\Users\\leepa\\.config\\quantbot\\quantbot.env\" -Commit 964d17adf0d29e7c8a0e9b34eb0c064898e4832a -Database \"D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db\" -Component protection"
+        }
+      ]
+    },
+    {
+      "name": "Elrond Research",
+      "state": "Running",
+      "actions": [
+        {
+          "executable": "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe",
+          "arguments": "\"D:\\Elrond\\state\\launcher-logs\\market-research.log\" -NoProfile -NonInteractive -WindowStyle Hidden -ExecutionPolicy Bypass -File \"D:\\Elrond\\releases\\market-research-aad7b912accd-20261026\\start-research.ps1\""
+        }
+      ]
+    }
+  ],
+  "scheduled_task_count": 7,
+  "runtime_process_count": 35,
+  "machine_cpu_percent": 8.993339894506342,
+  "working_set_bytes": 878223360.0,
+  "interval_logical_read_bytes": 1205371646.0,
+  "interval_logical_write_bytes": 288375970.0,
+  "processes": [
+    {
+      "pid": 23644,
+      "parent_pid": 3640,
+      "name": "elrond-service-host.exe",
+      "executable": "D:\\Elrond\\state\\service-host\\1188bba2cb38de299aad0768\\elrond-service-host.exe",
+      "started_at": "2026-10-26T20:31:34.8250280Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 3239936,
+      "lifetime_peak_working_set_bytes": 21553152,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 664,
+      "parent_pid": 23644,
+      "name": "powershell.exe",
+      "executable": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "started_at": "2026-10-26T20:31:34.8549510Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 6348800,
+      "lifetime_peak_working_set_bytes": 65769472,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 14236,
+      "parent_pid": 664,
+      "name": "conhost.exe",
+      "executable": "C:\\WINDOWS\\system32\\conhost.exe",
+      "started_at": "2026-10-26T20:31:34.8682160Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1548288,
+      "lifetime_peak_working_set_bytes": 8155136,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 3004,
+      "parent_pid": 664,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+      "started_at": "2026-10-26T20:31:35.0227580Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 942080,
+      "lifetime_peak_working_set_bytes": 4505600,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 30972,
+      "parent_pid": 3004,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "started_at": "2026-10-26T20:31:35.0353280Z",
+      "machine_cpu_percent": 0.15324114836219538,
+      "working_set_bytes": 121962496,
+      "lifetime_peak_working_set_bytes": 223387648,
+      "interval_logical_read_bytes": 1779472,
+      "interval_logical_write_bytes": 508052
+    },
+    {
+      "pid": 29348,
+      "parent_pid": 3640,
+      "name": "elrond-service-host.exe",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "started_at": "2026-11-04T16:13:55.0904210Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 3072000,
+      "lifetime_peak_working_set_bytes": 21434368,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 17328,
+      "parent_pid": 29348,
+      "name": "powershell.exe",
+      "executable": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "started_at": "2026-11-04T16:13:55.1234930Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 2211840,
+      "lifetime_peak_working_set_bytes": 84459520,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 17016,
+      "parent_pid": 17328,
+      "name": "conhost.exe",
+      "executable": "C:\\WINDOWS\\system32\\conhost.exe",
+      "started_at": "2026-11-04T16:13:55.1366590Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1142784,
+      "lifetime_peak_working_set_bytes": 8179712,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 29528,
+      "parent_pid": 17328,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\releases\\dashboard-costs-8fda9bd-20261028\\.venv\\Scripts\\python.exe",
+      "started_at": "2026-11-04T16:13:55.7239870Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1007616,
+      "lifetime_peak_working_set_bytes": 4476928,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 31164,
+      "parent_pid": 29528,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "started_at": "2026-11-04T16:13:55.7386180Z",
+      "machine_cpu_percent": 0.019155143545274422,
+      "working_set_bytes": 2781184,
+      "lifetime_peak_working_set_bytes": 125775872,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 488,
+      "parent_pid": 3640,
+      "name": "elrond-service-host.exe",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "started_at": "2026-11-04T16:13:55.8532730Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 7761920,
+      "lifetime_peak_working_set_bytes": 25853952,
+      "interval_logical_read_bytes": 916,
+      "interval_logical_write_bytes": 945
+    },
+    {
+      "pid": 10856,
+      "parent_pid": 488,
+      "name": "powershell.exe",
+      "executable": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "started_at": "2026-11-04T16:13:55.8877000Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1990656,
+      "lifetime_peak_working_set_bytes": 80998400,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 27492,
+      "parent_pid": 10856,
+      "name": "conhost.exe",
+      "executable": "C:\\WINDOWS\\system32\\conhost.exe",
+      "started_at": "2026-11-04T16:13:55.9016960Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1126400,
+      "lifetime_peak_working_set_bytes": 8159232,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 29896,
+      "parent_pid": 10856,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+      "started_at": "2026-11-04T16:13:56.3110840Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1052672,
+      "lifetime_peak_working_set_bytes": 4509696,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 16160,
+      "parent_pid": 29896,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "started_at": "2026-11-04T16:13:56.3247990Z",
+      "machine_cpu_percent": 3.3713052639682983,
+      "working_set_bytes": 145555456,
+      "lifetime_peak_working_set_bytes": 181579776,
+      "interval_logical_read_bytes": 615286384,
+      "interval_logical_write_bytes": 99195756
+    },
+    {
+      "pid": 9432,
+      "parent_pid": 3640,
+      "name": "elrond-service-host.exe",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "started_at": "2026-11-04T16:13:56.6389600Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 8052736,
+      "lifetime_peak_working_set_bytes": 26951680,
+      "interval_logical_read_bytes": 655,
+      "interval_logical_write_bytes": 684
+    },
+    {
+      "pid": 29748,
+      "parent_pid": 9432,
+      "name": "powershell.exe",
+      "executable": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "started_at": "2026-11-04T16:13:56.6757400Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 2043904,
+      "lifetime_peak_working_set_bytes": 80936960,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 14212,
+      "parent_pid": 29748,
+      "name": "conhost.exe",
+      "executable": "C:\\WINDOWS\\system32\\conhost.exe",
+      "started_at": "2026-11-04T16:13:56.6894980Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1118208,
+      "lifetime_peak_working_set_bytes": 8155136,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 24016,
+      "parent_pid": 29748,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+      "started_at": "2026-11-04T16:13:57.1131210Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 995328,
+      "lifetime_peak_working_set_bytes": 4501504,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 8944,
+      "parent_pid": 24016,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "started_at": "2026-11-04T16:13:57.1232230Z",
+      "machine_cpu_percent": 0.8236711724468002,
+      "working_set_bytes": 134262784,
+      "lifetime_peak_working_set_bytes": 168792064,
+      "interval_logical_read_bytes": 239096208,
+      "interval_logical_write_bytes": 198255
+    },
+    {
+      "pid": 10192,
+      "parent_pid": 3640,
+      "name": "elrond-service-host.exe",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "started_at": "2026-11-04T16:13:57.4528400Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 7983104,
+      "lifetime_peak_working_set_bytes": 28413952,
+      "interval_logical_read_bytes": 888,
+      "interval_logical_write_bytes": 917
+    },
+    {
+      "pid": 1296,
+      "parent_pid": 10192,
+      "name": "powershell.exe",
+      "executable": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "started_at": "2026-11-04T16:13:57.4865900Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1462272,
+      "lifetime_peak_working_set_bytes": 81076224,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 31116,
+      "parent_pid": 1296,
+      "name": "conhost.exe",
+      "executable": "C:\\WINDOWS\\system32\\conhost.exe",
+      "started_at": "2026-11-04T16:13:57.5021280Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1118208,
+      "lifetime_peak_working_set_bytes": 8163328,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 29064,
+      "parent_pid": 1296,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\.venv\\Scripts\\python.exe",
+      "started_at": "2026-11-04T16:13:57.9449720Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1077248,
+      "lifetime_peak_working_set_bytes": 4530176,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 29244,
+      "parent_pid": 29064,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "started_at": "2026-11-04T16:13:57.9555460Z",
+      "machine_cpu_percent": 2.116643361752824,
+      "working_set_bytes": 162729984,
+      "lifetime_peak_working_set_bytes": 189423616,
+      "interval_logical_read_bytes": 72457246,
+      "interval_logical_write_bytes": 829796
+    },
+    {
+      "pid": 18056,
+      "parent_pid": 3640,
+      "name": "elrond-service-host.exe",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "started_at": "2026-11-04T16:13:58.2949560Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 2691072,
+      "lifetime_peak_working_set_bytes": 22151168,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 15308,
+      "parent_pid": 18056,
+      "name": "powershell.exe",
+      "executable": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "started_at": "2026-11-04T16:13:58.3322090Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1937408,
+      "lifetime_peak_working_set_bytes": 84848640,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 30416,
+      "parent_pid": 15308,
+      "name": "conhost.exe",
+      "executable": "C:\\WINDOWS\\system32\\conhost.exe",
+      "started_at": "2026-11-04T16:13:58.3477060Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1122304,
+      "lifetime_peak_working_set_bytes": 8167424,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 28860,
+      "parent_pid": 15308,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\releases\\deadline-retry-20261103\\.venv\\Scripts\\python.exe",
+      "started_at": "2026-11-04T16:13:58.8664800Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1052672,
+      "lifetime_peak_working_set_bytes": 4513792,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 3068,
+      "parent_pid": 28860,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "started_at": "2026-11-04T16:13:58.8826040Z",
+      "machine_cpu_percent": 2.5093238044309496,
+      "working_set_bytes": 235819008,
+      "lifetime_peak_working_set_bytes": 447111168,
+      "interval_logical_read_bytes": 276749877,
+      "interval_logical_write_bytes": 187641565
+    },
+    {
+      "pid": 23944,
+      "parent_pid": 3640,
+      "name": "elrond-service-host.exe",
+      "executable": "D:\\Elrond\\state\\service-host\\179e6da6c10668c86ca39c5a\\elrond-service-host.exe",
+      "started_at": "2026-11-04T20:46:45.4395550Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 3174400,
+      "lifetime_peak_working_set_bytes": 21319680,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 5324,
+      "parent_pid": 23944,
+      "name": "powershell.exe",
+      "executable": "C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "started_at": "2026-11-04T20:46:45.4700120Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 5828608,
+      "lifetime_peak_working_set_bytes": 83984384,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 416,
+      "parent_pid": 5324,
+      "name": "conhost.exe",
+      "executable": "C:\\WINDOWS\\system32\\conhost.exe",
+      "started_at": "2026-11-04T20:46:45.4858980Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1130496,
+      "lifetime_peak_working_set_bytes": 8192000,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 26892,
+      "parent_pid": 5324,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\releases\\support-ownership-37dfaa4-20261016\\.venv\\Scripts\\python.exe",
+      "started_at": "2026-11-04T20:46:46.2202920Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1155072,
+      "lifetime_peak_working_set_bytes": 4472832,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    },
+    {
+      "pid": 29808,
+      "parent_pid": 26892,
+      "name": "python.exe",
+      "executable": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "started_at": "2026-11-04T20:46:46.2312470Z",
+      "machine_cpu_percent": 0.0,
+      "working_set_bytes": 1724416,
+      "lifetime_peak_working_set_bytes": 383639552,
+      "interval_logical_read_bytes": 0,
+      "interval_logical_write_bytes": 0
+    }
+  ],
+  "limitations": [
+    "Ten-second after-hours sample; includes launcher and interpreter redirector processes.",
+    "Logical process I/O is not physical disk throughput.",
+    "Lifetime per-process peaks are not a simultaneous whole-system peak.",
+    "No service was restarted or broker order submitted for this measurement."
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "trader": {
+    "file_bytes": 87046993,
+    "sample_count": 284,
+    "first_at": "2026-11-05T00:20:32.645590Z",
+    "last_at": "2026-11-05T01:35:08.499968Z",
+    "cycle_seconds_median": 3.297000000020489,
+    "cycle_seconds_mean": 3.395570422530922,
+    "first_blockers": {
+      "INVENTORY_ACQUISITION_RETRYABLE": 284
+    }
+  },
+  "guardian": {
+    "file_bytes": 81388201,
+    "sample_count": 272,
+    "first_at": "2026-11-05T00:08:45.798386Z",
+    "last_at": "2026-11-05T01:35:02.798935Z",
+    "cycle_seconds_median": 16.76549999997951,
+    "cycle_seconds_mean": 17.42460661764113,
+    "first_blockers": {
+      "SESSION_OPENING_UNVERIFIED": 232,
+      "INVENTORY_ACQUISITION_RETRYABLE": 38,
+      "INVENTORY_PROTOCOL_INVALID": 2
+    }
+  },
+  "outcomes": {
+    "file_bytes": 70971083,
+    "sample_count": 377,
+    "first_at": "2026-11-04T23:59:42.431993Z",
+    "last_at": "2026-11-05T01:35:06.811470Z",
+    "cycle_seconds_median": 5.125,
+    "cycle_seconds_mean": 5.065580901851018,
+    "first_blockers": {
+      "NONE": 351,
+      "INVENTORY_ACQUISITION_RETRYABLE": 13,
+      "OUTCOME_PROVIDER_RETRY:OperationalError": 12,
+      "OUTCOME_PROVIDER_RETRY:TimeoutError": 1
+    }
+  }
+}

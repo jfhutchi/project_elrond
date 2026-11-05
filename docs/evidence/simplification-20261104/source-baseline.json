@@ -1,0 +1,2938 @@
+{
+  "commit": "92c75c6309f8aece8027bf89eb0f9ce3177a4896",
+  "worktree": "D:\\Elrond\\worktrees\\runtime-repair",
+  "definition": "Tracked source under src/scripts/deploy with py/ps1/sh/cs/html/css/js/sql suffixes. LOC excludes blank and full-line comment lines; includes docstrings and inline comments. Tests/docs/data/lockfiles are separate, not maintainable production LOC.",
+  "tracked_files": 2389,
+  "source_python_files": 381,
+  "maintainable_source_files": 486,
+  "maintainable_source_physical_lines": 137569,
+  "maintainable_source_loc": 118413,
+  "tests_python_files": 396,
+  "source_ast_parse_errors": [],
+  "production_direct_dependencies": [
+    "alembic>=1.16,<2",
+    "mako>=1.4.2,<2",
+    "fastapi>=0.115,<1",
+    "jinja2>=3.1,<4",
+    "uvicorn>=0.34,<1",
+    "httpx>=0.28,<1",
+    "pydantic>=2.12,<3",
+    "pydantic-settings>=2.11,<3",
+    "pyyaml>=6.0,<7",
+    "sqlalchemy>=2.0,<3",
+    "structlog>=26.1,<27",
+    "tzdata>=2025.1",
+    "websockets>=15,<18"
+  ],
+  "entrypoints": {
+    "quantbot": "quantbot.cli:main",
+    "quantbot-kronos": "quantbot.forecasting.cli:main"
+  },
+  "packages": {
+    "deploy/assets": {
+      "files": 26,
+      "physical_lines": 1890,
+      "nonblank_noncomment_lines": 1702
+    },
+    "quantbot": {
+      "files": 1,
+      "physical_lines": 3,
+      "nonblank_noncomment_lines": 2
+    },
+    "quantbot.anomaly": {
+      "files": 7,
+      "physical_lines": 1980,
+      "nonblank_noncomment_lines": 1564
+    },
+    "quantbot.backtest": {
+      "files": 6,
+      "physical_lines": 1490,
+      "nonblank_noncomment_lines": 1342
+    },
+    "quantbot.brokers": {
+      "files": 6,
+      "physical_lines": 1538,
+      "nonblank_noncomment_lines": 1317
+    },
+    "quantbot.cli": {
+      "files": 1,
+      "physical_lines": 1592,
+      "nonblank_noncomment_lines": 1256
+    },
+    "quantbot.config": {
+      "files": 1,
+      "physical_lines": 172,
+      "nonblank_noncomment_lines": 136
+    },
+    "quantbot.console": {
+      "files": 13,
+      "physical_lines": 4393,
+      "nonblank_noncomment_lines": 3744
+    },
+    "quantbot.domain": {
+      "files": 6,
+      "physical_lines": 447,
+      "nonblank_noncomment_lines": 371
+    },
+    "quantbot.execution": {
+      "files": 7,
+      "physical_lines": 2182,
+      "nonblank_noncomment_lines": 1949
+    },
+    "quantbot.forecasting": {
+      "files": 16,
+      "physical_lines": 3297,
+      "nonblank_noncomment_lines": 2856
+    },
+    "quantbot.ingestion": {
+      "files": 4,
+      "physical_lines": 1451,
+      "nonblank_noncomment_lines": 1234
+    },
+    "quantbot.learner": {
+      "files": 59,
+      "physical_lines": 19529,
+      "nonblank_noncomment_lines": 17888
+    },
+    "quantbot.logging": {
+      "files": 1,
+      "physical_lines": 105,
+      "nonblank_noncomment_lines": 89
+    },
+    "quantbot.market_data": {
+      "files": 14,
+      "physical_lines": 3114,
+      "nonblank_noncomment_lines": 2538
+    },
+    "quantbot.node": {
+      "files": 4,
+      "physical_lines": 1200,
+      "nonblank_noncomment_lines": 970
+    },
+    "quantbot.operations": {
+      "files": 33,
+      "physical_lines": 10121,
+      "nonblank_noncomment_lines": 8809
+    },
+    "quantbot.paper_core": {
+      "files": 46,
+      "physical_lines": 19782,
+      "nonblank_noncomment_lines": 18281
+    },
+    "quantbot.placement": {
+      "files": 1,
+      "physical_lines": 354,
+      "nonblank_noncomment_lines": 280
+    },
+    "quantbot.reporting": {
+      "files": 4,
+      "physical_lines": 887,
+      "nonblank_noncomment_lines": 767
+    },
+    "quantbot.research": {
+      "files": 61,
+      "physical_lines": 27130,
+      "nonblank_noncomment_lines": 21910
+    },
+    "quantbot.risk": {
+      "files": 18,
+      "physical_lines": 5117,
+      "nonblank_noncomment_lines": 4009
+    },
+    "quantbot.runtime": {
+      "files": 1,
+      "physical_lines": 995,
+      "nonblank_noncomment_lines": 832
+    },
+    "quantbot.sandbox": {
+      "files": 7,
+      "physical_lines": 2539,
+      "nonblank_noncomment_lines": 1967
+    },
+    "quantbot.storage": {
+      "files": 58,
+      "physical_lines": 11128,
+      "nonblank_noncomment_lines": 9458
+    },
+    "quantbot.strategy": {
+      "files": 6,
+      "physical_lines": 1268,
+      "nonblank_noncomment_lines": 1030
+    },
+    "scripts/assets": {
+      "files": 54,
+      "physical_lines": 11663,
+      "nonblank_noncomment_lines": 9985
+    },
+    "src/assets": {
+      "files": 25,
+      "physical_lines": 2202,
+      "nonblank_noncomment_lines": 2127
+    }
+  },
+  "static_import_edges": [
+    {
+      "from": "quantbot.anomaly",
+      "to": "__future__",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "collections",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "datetime",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "decimal",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "enum",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "hashlib",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "json",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "math",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "pydantic",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "quantbot.market_data",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "quantbot.risk",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "statistics",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.anomaly",
+      "to": "typing",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "__future__",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "collections",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "dataclasses",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "datetime",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "decimal",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "enum",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "pydantic",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "quantbot.domain",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "quantbot.research",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "quantbot.risk",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.backtest",
+      "to": "quantbot.strategy",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "__future__",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "asyncio",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "collections",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "dataclasses",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "datetime",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "decimal",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "enum",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "hashlib",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "httpx",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "json",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "pydantic",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "quantbot.domain",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "typing",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "urllib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.brokers",
+      "to": "websockets",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "__future__",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "argparse",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "asyncio",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "collections",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "dataclasses",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "datetime",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "json",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "os",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "pathlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "platform",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.brokers",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.config",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.console",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.domain",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.execution",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.ingestion",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.learner",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.logging",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.market_data",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.operations",
+      "import_statements": 9
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.placement",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.research",
+      "import_statements": 33
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.risk",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.runtime",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.sandbox",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.storage",
+      "import_statements": 12
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "quantbot.strategy",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "sqlalchemy",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "sys",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "tempfile",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "typing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.cli",
+      "to": "uvicorn",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.config",
+      "to": "pydantic",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.config",
+      "to": "pydantic_settings",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.config",
+      "to": "quantbot.domain",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.config",
+      "to": "typing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "__future__",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.console",
+      "to": "asyncio",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "calendar",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "collections",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.console",
+      "to": "contextlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "dataclasses",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "datetime",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.console",
+      "to": "decimal",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.console",
+      "to": "fastapi",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.console",
+      "to": "hashlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "httpx",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "json",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.console",
+      "to": "os",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "pathlib",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.console",
+      "to": "pydantic",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.anomaly",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.brokers",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.config",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.domain",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.learner",
+      "import_statements": 19
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.market_data",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.operations",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.paper_core",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.placement",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.research",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.risk",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.runtime",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.storage",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.console",
+      "to": "quantbot.strategy",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "re",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.console",
+      "to": "sqlalchemy",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.console",
+      "to": "sqlite3",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.console",
+      "to": "starlette",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.console",
+      "to": "typing",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.console",
+      "to": "urllib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.console",
+      "to": "zoneinfo",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "collections",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "datetime",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "decimal",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "enum",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "hashlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "json",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "pydantic",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "types",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.domain",
+      "to": "typing",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "__future__",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "asyncio",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "collections",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "dataclasses",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "datetime",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "decimal",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "hashlib",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "json",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "math",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "pydantic",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "quantbot.brokers",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "quantbot.config",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "quantbot.domain",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "quantbot.risk",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "quantbot.storage",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "sqlalchemy",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "time",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "types",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.execution",
+      "to": "typing",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "__future__",
+      "import_statements": 12
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "alembic",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "argparse",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "collections",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "contextlib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "ctypes",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "dataclasses",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "datetime",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "decimal",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "enum",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "hashlib",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "importlib",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "io",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "json",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "logging",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "os",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "pathlib",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "platform",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "pydantic",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "quantbot.domain",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "quantbot.market_data",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "quantbot.placement",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "quantbot.storage",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "random",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "resource",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "shutil",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "socket",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "sqlalchemy",
+      "import_statements": 13
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "sqlite3",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "statistics",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "subprocess",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "sys",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "tarfile",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "tempfile",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "time",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.forecasting",
+      "to": "typing",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "__future__",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "collections",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "datetime",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "enum",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "json",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "pydantic",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "quantbot.storage",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "sqlalchemy",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.ingestion",
+      "to": "typing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "__future__",
+      "import_statements": 57
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "argparse",
+      "import_statements": 9
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "asyncio",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "collections",
+      "import_statements": 44
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "contextlib",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "contextvars",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "dataclasses",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "datetime",
+      "import_statements": 59
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "decimal",
+      "import_statements": 15
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "enum",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "hashlib",
+      "import_statements": 18
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "itertools",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "json",
+      "import_statements": 24
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "math",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "multiprocessing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "os",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "pathlib",
+      "import_statements": 33
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "pydantic",
+      "import_statements": 34
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.anomaly",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.brokers",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.config",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.console",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.domain",
+      "import_statements": 23
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.execution",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.market_data",
+      "import_statements": 15
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.operations",
+      "import_statements": 26
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.research",
+      "import_statements": 65
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.risk",
+      "import_statements": 26
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.runtime",
+      "import_statements": 18
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.storage",
+      "import_statements": 43
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "quantbot.strategy",
+      "import_statements": 20
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "re",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "sqlalchemy",
+      "import_statements": 15
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "sqlite3",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "statistics",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "subprocess",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "tempfile",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "typing",
+      "import_statements": 53
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "urllib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "uuid",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "xml",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.learner",
+      "to": "zoneinfo",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.logging",
+      "to": "__future__",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.logging",
+      "to": "collections",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.logging",
+      "to": "structlog",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.logging",
+      "to": "typing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "__future__",
+      "import_statements": 13
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "asyncio",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "collections",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "csv",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "datetime",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "decimal",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "enum",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "hashlib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "httpx",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "json",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "pydantic",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "quantbot.domain",
+      "import_statements": 9
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "quantbot.storage",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "quantbot.strategy",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "typing",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "websockets",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.market_data",
+      "to": "zoneinfo",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "__future__",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.node",
+      "to": "ctypes",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "dataclasses",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.node",
+      "to": "datetime",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.node",
+      "to": "enum",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.node",
+      "to": "json",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "os",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.node",
+      "to": "pathlib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.node",
+      "to": "platform",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "quantbot.placement",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.node",
+      "to": "shutil",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "subprocess",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "sys",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.node",
+      "to": "typing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "uuid",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.node",
+      "to": "winreg",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "__future__",
+      "import_statements": 31
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "argparse",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "asyncio",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "collections",
+      "import_statements": 15
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "contextlib",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "dataclasses",
+      "import_statements": 14
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "datetime",
+      "import_statements": 23
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "decimal",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "enum",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "hashlib",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "hmac",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "itertools",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "json",
+      "import_statements": 18
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "math",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "os",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "pathlib",
+      "import_statements": 19
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "platform",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "pydantic",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.anomaly",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.brokers",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.config",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.console",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.domain",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.execution",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.ingestion",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.learner",
+      "import_statements": 16
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.market_data",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.paper_core",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.research",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.risk",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.runtime",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.storage",
+      "import_statements": 21
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "quantbot.strategy",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "re",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "shutil",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "sqlalchemy",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "sqlite3",
+      "import_statements": 9
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "subprocess",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "sys",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "time",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "typing",
+      "import_statements": 20
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "uuid",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.operations",
+      "to": "zoneinfo",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "__future__",
+      "import_statements": 23
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "argparse",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "asyncio",
+      "import_statements": 12
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "collections",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "contextlib",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "contextvars",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "dataclasses",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "datetime",
+      "import_statements": 41
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "decimal",
+      "import_statements": 24
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "dotenv",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "email",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "functools",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "hashlib",
+      "import_statements": 9
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "httpx",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "importlib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "io",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "json",
+      "import_statements": 25
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "math",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "os",
+      "import_statements": 9
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "pathlib",
+      "import_statements": 16
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "platform",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "pydantic",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.anomaly",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.brokers",
+      "import_statements": 26
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.config",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.console",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.domain",
+      "import_statements": 27
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.execution",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.learner",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.market_data",
+      "import_statements": 12
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.operations",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.research",
+      "import_statements": 41
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.risk",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.storage",
+      "import_statements": 43
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "quantbot.strategy",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "random",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "re",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "sqlalchemy",
+      "import_statements": 56
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "sqlite3",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "subprocess",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "sys",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "threading",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "time",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "typing",
+      "import_statements": 35
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "urllib",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "uuid",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.paper_core",
+      "to": "zoneinfo",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "__future__",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "ctypes",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "dataclasses",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "datetime",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "enum",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "os",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "platform",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "shutil",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "subprocess",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "sys",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "typing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.placement",
+      "to": "urllib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "__future__",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "datetime",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "decimal",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "pydantic",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "quantbot.backtest",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "quantbot.config",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "quantbot.domain",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "quantbot.storage",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.reporting",
+      "to": "typing",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "__future__",
+      "import_statements": 60
+    },
+    {
+      "from": "quantbot.research",
+      "to": "argparse",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "collections",
+      "import_statements": 46
+    },
+    {
+      "from": "quantbot.research",
+      "to": "dataclasses",
+      "import_statements": 21
+    },
+    {
+      "from": "quantbot.research",
+      "to": "datetime",
+      "import_statements": 46
+    },
+    {
+      "from": "quantbot.research",
+      "to": "decimal",
+      "import_statements": 28
+    },
+    {
+      "from": "quantbot.research",
+      "to": "enum",
+      "import_statements": 29
+    },
+    {
+      "from": "quantbot.research",
+      "to": "functools",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "hashlib",
+      "import_statements": 20
+    },
+    {
+      "from": "quantbot.research",
+      "to": "httpx",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.research",
+      "to": "importlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "json",
+      "import_statements": 23
+    },
+    {
+      "from": "quantbot.research",
+      "to": "math",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.research",
+      "to": "operator",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "os",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.research",
+      "to": "pathlib",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.research",
+      "to": "platform",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.research",
+      "to": "pydantic",
+      "import_statements": 34
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.backtest",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.domain",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.forecasting",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.market_data",
+      "import_statements": 8
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.placement",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.sandbox",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.storage",
+      "import_statements": 29
+    },
+    {
+      "from": "quantbot.research",
+      "to": "quantbot.strategy",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.research",
+      "to": "random",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "re",
+      "import_statements": 7
+    },
+    {
+      "from": "quantbot.research",
+      "to": "shutil",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "sqlalchemy",
+      "import_statements": 34
+    },
+    {
+      "from": "quantbot.research",
+      "to": "statistics",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.research",
+      "to": "subprocess",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.research",
+      "to": "sys",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.research",
+      "to": "time",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.research",
+      "to": "tracemalloc",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "types",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.research",
+      "to": "typing",
+      "import_statements": 33
+    },
+    {
+      "from": "quantbot.research",
+      "to": "xml",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.research",
+      "to": "yaml",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.research",
+      "to": "zoneinfo",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "__future__",
+      "import_statements": 13
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "collections",
+      "import_statements": 14
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "dataclasses",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "datetime",
+      "import_statements": 12
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "decimal",
+      "import_statements": 12
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "enum",
+      "import_statements": 12
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "hashlib",
+      "import_statements": 9
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "json",
+      "import_statements": 10
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "math",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "pathlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "pydantic",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "quantbot.anomaly",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "quantbot.config",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "quantbot.domain",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "quantbot.market_data",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "quantbot.storage",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "quantbot.strategy",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "statistics",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "typing",
+      "import_statements": 11
+    },
+    {
+      "from": "quantbot.risk",
+      "to": "yaml",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "__future__",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "argparse",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "asyncio",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "collections",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "dataclasses",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "datetime",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "decimal",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "os",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "pathlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "pydantic",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.anomaly",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.backtest",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.brokers",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.cli",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.config",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.domain",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.execution",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.market_data",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.operations",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.reporting",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.research",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.risk",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.storage",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "quantbot.strategy",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "signal",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "subprocess",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "threading",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.runtime",
+      "to": "types",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "__future__",
+      "import_statements": 6
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "ast",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "base64",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "collections",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "ctypes",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "dataclasses",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "hashlib",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "importlib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "io",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "json",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "os",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "pathlib",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "pydantic",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "re",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "resource",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "shlex",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "shutil",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "signal",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "subprocess",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "sys",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "sysconfig",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "tarfile",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "tempfile",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "time",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "types",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "typing",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.sandbox",
+      "to": "uuid",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "__future__",
+      "import_statements": 37
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "alembic",
+      "import_statements": 42
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "collections",
+      "import_statements": 36
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "contextlib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "dataclasses",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "datetime",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "decimal",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "enum",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "functools",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "hashlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "importlib",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "json",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "logging",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "msvcrt",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "os",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "pathlib",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "quantbot.domain",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "quantbot.execution",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "quantbot.learner",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "quantbot.research",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "sqlalchemy",
+      "import_statements": 66
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "sqlite3",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "sys",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "threading",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "time",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "types",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "typing",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "urllib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "uuid",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.storage",
+      "to": "weakref",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "__future__",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "collections",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "datetime",
+      "import_statements": 3
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "decimal",
+      "import_statements": 5
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "enum",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "hashlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "json",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "pathlib",
+      "import_statements": 1
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "pydantic",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "quantbot.domain",
+      "import_statements": 4
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "typing",
+      "import_statements": 2
+    },
+    {
+      "from": "quantbot.strategy",
+      "to": "yaml",
+      "import_statements": 1
+    }
+  ],
+  "dynamic_import_sites": [
+    {
+      "path": "src/quantbot/forecasting/kronos_worker.py",
+      "line": 492,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'pandas'"
+      ]
+    },
+    {
+      "path": "src/quantbot/forecasting/kronos_worker.py",
+      "line": 493,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'numpy'"
+      ]
+    },
+    {
+      "path": "src/quantbot/forecasting/kronos_worker.py",
+      "line": 494,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'torch'"
+      ]
+    },
+    {
+      "path": "src/quantbot/forecasting/kronos_worker.py",
+      "line": 495,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'huggingface_hub'"
+      ]
+    },
+    {
+      "path": "src/quantbot/forecasting/kronos_worker.py",
+      "line": 499,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'ssl'"
+      ]
+    },
+    {
+      "path": "src/quantbot/forecasting/kronos_worker.py",
+      "line": 503,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'model'"
+      ]
+    },
+    {
+      "path": "src/quantbot/paper_core/__main__.py",
+      "line": 294,
+      "function": "importlib.import_module",
+      "arguments": [
+        "module"
+      ]
+    },
+    {
+      "path": "src/quantbot/research/agent_debate_worker.py",
+      "line": 136,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'tradingagents.default_config'"
+      ]
+    },
+    {
+      "path": "src/quantbot/research/agent_debate_worker.py",
+      "line": 137,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'tradingagents.graph.trading_graph'"
+      ]
+    },
+    {
+      "path": "src/quantbot/storage/lock.py",
+      "line": 85,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'fcntl'"
+      ]
+    },
+    {
+      "path": "src/quantbot/storage/lock.py",
+      "line": 95,
+      "function": "importlib.import_module",
+      "arguments": [
+        "'fcntl'"
+      ]
+    },
+    {
+      "path": "src/quantbot/storage/migrations/versions/0003_power_gate.py",
+      "line": 106,
+      "function": "import_module",
+      "arguments": [
+        "'quantbot.storage.migrations.versions.0002_hypothesis_registry'"
+      ]
+    }
+  ],
+  "limitations": [
+    "Static edges are not measured runtime call frequency.",
+    "No-import modules are not classified dead by this script.",
+    "Coverage unavailable: coverage.py/pytest-cov are not configured in the preserved project."
+  ]
+}
