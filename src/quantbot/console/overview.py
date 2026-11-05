@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from quantbot.console.core_learning import CoreLearning, read_core_learning
 from quantbot.domain import Position
 from quantbot.paper_core.authority import RoleHeartbeat, RuntimeCommission, executable_in_session
 from quantbot.storage import StorageRepository
@@ -123,6 +124,7 @@ class OverviewPanel(BaseModel):
     positions: tuple[Position, ...] | None = None
     core_phase: str = "Not commissioned"
     roles: tuple[RoleStatus, ...] = ()
+    learning: CoreLearning = CoreLearning()
 
 
 def read_overview(session: Session, *, account_id: str | None, now: datetime) -> OverviewPanel:
@@ -238,4 +240,10 @@ def read_overview(session: Session, *, account_id: str | None, now: datetime) ->
                 else None,
             )
         )
-    return base.model_copy(update={"core_phase": "Commissioned", "roles": tuple(roles)})
+    return base.model_copy(
+        update={
+            "core_phase": "Commissioned",
+            "roles": tuple(roles),
+            "learning": read_core_learning(session, config_id=commission.config_id, now=now),
+        }
+    )

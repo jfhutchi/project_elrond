@@ -94,7 +94,23 @@
         {% for role in ['Trader','Guardian','Outcomes'] %}<div class="role-row"><span>{{ role }}</span><span class="quiet">No verified heartbeat</span></div>{% endfor %}
       {% endif %}</div>
       <p class="n">Role evidence is recorded state, not entry permission. Stale records do not establish current readiness.</p>
-      <p class="n">Learning baseline: ten completed sessions. Daily updates use all eligible history, with extra weight on the latest ten sessions.</p>
+      <section aria-label="Recorded core learning">
+        <h3>Recorded core learning</h3>
+        {% set learning = state.overview.learning %}
+        {% if learning.available %}
+        <p class="n">{{ learning.model_status }} · <code>{{ learning.model_id[:12] }}</code></p>
+        <div class="n">Recorded selection: {{ learning.activation_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}.</div>
+        <p class="n">Last consideration: {{ learning.consideration_at.strftime('%Y-%m-%d %H:%M:%S UTC') }} · {{ learning.consideration_reason }}</p>
+        <p class="n">Latest charged attempt: {% if learning.attempt_session %}{{ learning.attempt_session }} · {% endif %}{{ learning.attempt_verdict }}{% if learning.attempt_reason %} · {{ learning.attempt_reason }}{% endif %}</p>
+        {% if learning.attempt_at %}<div class="n">Attempt recorded {{ learning.attempt_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}.</div>{% endif %}
+        <div class="n">Initial training samples: {{ learning.training_samples if learning.training_samples is not none else 'Unavailable' }} · validation samples: {{ learning.validation_samples if learning.validation_samples is not none else 'Unavailable' }} · validation sessions: {{ learning.validation_sessions if learning.validation_sessions is not none else 'Unavailable' }}.</div>
+        {% if learning.metrics %}<div class="n">Recorded validation MSE:</div>{% for name,value in learning.metrics %}<div class="n">{{ name }}: {{ '%.6g'|format(value) }}</div>{% endfor %}{% endif %}
+        <div class="n">Target: {{ learning.target or 'Unavailable' }}.</div>
+        {% if learning.decision_at %}<p class="n">Latest recorded decision: {{ learning.decision_at.strftime('%Y-%m-%d %H:%M:%S UTC') }} · model <code>{{ learning.decision_model_id[:12] }}</code> · selection {{ learning.decision_selection or 'Unavailable' }}{% if learning.decision_prediction_bps is not none %} · prediction {{ '%.6g'|format(learning.decision_prediction_bps) }} bps{% endif %}.</p>{% else %}<p class="n">No recorded decision available.</p>{% endif %}
+        <p class="n">Recorded timestamps may be stale. They do not establish that a service currently runs or has entry permission.</p>
+        {% else %}<p class="n">Learning evidence unavailable.</p>{% endif %}
+        <p class="n">Prediction checks do not establish profitable trading. Gross targets exclude fees; net performance is unverified when fees are unknown.</p>
+      </section>
       <details class="hint"><summary>Legacy learner records</summary>
         <p><a href="/learner">{{ state.learner.status.replace('_', ' ').capitalize() }}</a>. {{ state.learner.reason }}</p>
         <p><a href="/learner">View forecasts and performance →</a></p>
