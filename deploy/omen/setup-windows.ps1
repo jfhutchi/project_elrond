@@ -21,6 +21,7 @@ $Python = Join-Path $Repository '.venv\Scripts\python.exe'
 $PowerShell = Join-Path $env:SystemRoot 'System32\WindowsPowerShell\v1.0\powershell.exe'
 $ServiceWrapper = Join-Path $PSScriptRoot 'start-service.ps1'
 $JobHelper = Join-Path $PSScriptRoot 'windows-job.ps1'
+$RuntimeHelper = Join-Path $PSScriptRoot 'runtime-bootstrap.ps1'
 $VenvConfig = Join-Path $Repository '.venv\pyvenv.cfg'
 
 function Refuse([string] $Code) {
@@ -43,7 +44,8 @@ if (-not (Test-Path -LiteralPath $Python -PathType Leaf) -or
     -not (Test-Path -LiteralPath $VenvConfig -PathType Leaf) -or
     -not (Test-Path -LiteralPath $PowerShell -PathType Leaf) -or
     -not (Test-Path -LiteralPath $ServiceWrapper -PathType Leaf) -or
-    -not (Test-Path -LiteralPath $JobHelper -PathType Leaf)) {
+    -not (Test-Path -LiteralPath $JobHelper -PathType Leaf) -or
+    -not (Test-Path -LiteralPath $RuntimeHelper -PathType Leaf)) {
     Refuse 'SERVICE_RUNTIME_NOT_FOUND'
 }
 $VenvHomes = @(

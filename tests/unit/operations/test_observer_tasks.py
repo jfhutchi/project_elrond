@@ -260,7 +260,8 @@ def test_monitor_wrapper_uses_owned_interpreter_and_check_arguments(tmp_path):
     repo = tmp_path / 'wrapper-repo'
     scripts = repo / 'deploy' / 'omen'
     scripts.mkdir(parents=True)
-    for filename in ('start-monitor.ps1', 'windows-job.ps1', 'process-job.cs'):
+    for filename in ('start-monitor.ps1', 'windows-job.ps1', 'process-job.cs',
+                     'runtime-bootstrap.ps1'):
         shutil.copy2(ROOT / 'deploy' / 'omen' / filename, scripts / filename)
     module = repo / 'src' / 'quantbot' / 'operations'
     module.mkdir(parents=True)
@@ -297,7 +298,8 @@ def test_deadline_wrapper_launches_exit_only_module_with_exact_store_and_owned_p
     repo = tmp_path / 'wrapper-repo'
     scripts = repo / 'deploy/omen'
     scripts.mkdir(parents=True)
-    for filename in ('start-learner.ps1', 'windows-job.ps1', 'process-job.cs'):
+    for filename in ('start-learner.ps1', 'windows-job.ps1', 'process-job.cs',
+                     'runtime-bootstrap.ps1'):
         shutil.copy2(ROOT / 'deploy/omen' / filename, scripts / filename)
     module = repo / 'src/quantbot' / ('learner' if mode == 'deadline' else 'operations')
     module.mkdir(parents=True)
@@ -341,7 +343,8 @@ def test_dispatch_wrapper_checks_both_readonly_sources_with_owned_python(tmp_pat
     repo = tmp_path / 'wrapper-repo'
     scripts = repo / 'deploy/omen'
     scripts.mkdir(parents=True)
-    for filename in ('start-alert-dispatch.ps1', 'windows-job.ps1', 'process-job.cs'):
+    for filename in ('start-alert-dispatch.ps1', 'windows-job.ps1', 'process-job.cs',
+                     'runtime-bootstrap.ps1'):
         shutil.copy2(ROOT / 'deploy/omen' / filename, scripts / filename)
     module = repo / 'src/quantbot/operations'
     module.mkdir(parents=True)

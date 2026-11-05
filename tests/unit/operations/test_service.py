@@ -498,14 +498,15 @@ def test_service_wrapper_terminates_its_python_process_tree(tmp_path: Path) -> N
     (repo / "deploy" / "omen").mkdir(parents=True)
     shutil.copy2(wrapper, repo / "deploy" / "omen" / wrapper.name)
     shutil.copy2(helper, repo / "deploy" / "omen" / helper.name)
-    shutil.copy2(helper.with_name("process-job.cs"), repo / "deploy/omen/process-job.cs")
+    for name in ("process-job.cs", "runtime-bootstrap.ps1"):
+        shutil.copy2(helper.with_name(name), repo / "deploy/omen" / name)
     subprocess.run(
         [
             "powershell",
             "-NoProfile",
             "-Command",
             f"New-Item -ItemType Junction -Path '{repo / '.venv'}' -Target "
-            f"'{source_root / '.venv'}' | Out-Null",
+            f"'{Path(sys.prefix).resolve()}' | Out-Null",
         ],
         check=True,
     )
@@ -597,7 +598,8 @@ def test_windows_installer_registers_bounded_tasks_through_scheduler_doubles(
     shutil.copy2(source_script, repo / "deploy" / "omen" / "setup-windows.ps1")
     shutil.copy2(source_wrapper, repo / "deploy" / "omen" / "start-service.ps1")
     shutil.copy2(source_helper, repo / "deploy" / "omen" / "windows-job.ps1")
-    for name in ("process-job.cs", "service-host.cs", "build-service-host.ps1"):
+    for name in ("process-job.cs", "service-host.cs", "build-service-host.ps1",
+                 "runtime-bootstrap.ps1"):
         shutil.copy2(source_root / "deploy/omen" / name, repo / "deploy/omen" / name)
     (repo / "config").mkdir()
     (repo / "config" / "strategy.yaml").write_text("version: test\n", encoding="utf-8")
@@ -610,7 +612,7 @@ def test_windows_installer_registers_bounded_tasks_through_scheduler_doubles(
             "-NoProfile",
             "-Command",
             f"New-Item -ItemType Junction -Path '{repo / '.venv'}' -Target "
-            f"'{source_root / '.venv'}' | Out-Null",
+            f"'{Path(sys.prefix).resolve()}' | Out-Null",
         ],
         check=True,
     )
