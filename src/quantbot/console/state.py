@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import UTC, date, datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -127,6 +128,9 @@ class HealthPanel(FrozenModel):
     #: Absent rather than zero when the account has never been snapshotted.
     account_equity: str | None
     open_positions: int
+    legacy_protection_positions: int | None = None
+    legacy_protection_covered: int | None = None
+    core_protection_unverified: int = 0
     trading_mode: str
     broker_environment: str
 
@@ -470,30 +474,45 @@ class ConsoleState(FrozenModel):
                 "service status"
             )
         protection_gap = self.health.minutes_since_last_protection
-        if self.health.open_positions and self.health.last_protection_at is None:
+        protection_positions = (
+            self.health.open_positions
+            if self.health.legacy_protection_positions is None
+            else self.health.legacy_protection_positions
+        )
+        legacy_protection_relevant = (
+            self.health.legacy_protection_positions is None or protection_positions > 0
+        )
+        if self.health.core_protection_unverified:
             items.append(
-                f"{self.health.open_positions} open position(s) have never received a durable "
+                f"{self.health.core_protection_unverified} core-owned position(s) lack current "
+                "verified Guardian protection"
+            )
+        if protection_positions and self.health.last_protection_at is None:
+            items.append(
+                f"{protection_positions} open position(s) have never received a durable "
                 "protection evaluation"
             )
-        elif self.health.open_positions and market.loop_overdue(
+        elif protection_positions and market.loop_overdue(
             self.health.last_protection_at, self.generated_at, STALE_PROTECTION_MINUTES
         ):
             items.append(
                 f"the position-protection loop last ran {protection_gap} minutes ago while "
-                f"{self.health.open_positions} position(s) remain open"
+                f"{protection_positions} position(s) remain open"
             )
         covered_positions = (self.health.protected_positions or 0) + (
             self.health.unprotected_positions or 0
         )
+        if self.health.legacy_protection_covered is not None:
+            covered_positions = self.health.legacy_protection_covered
         if (
             self.health.last_protection_at is not None
-            and self.health.open_positions > covered_positions
+            and protection_positions > covered_positions
         ):
             items.append(
-                f"{self.health.open_positions - covered_positions} open position(s) are absent "
+                f"{protection_positions - covered_positions} open position(s) are absent "
                 "from the latest protection cycle"
             )
-        if self.health.unprotected_positions:
+        if legacy_protection_relevant and self.health.unprotected_positions:
             items.append(
                 f"{self.health.unprotected_positions} position(s) are explicitly unprotected"
             )
@@ -517,7 +536,9 @@ class ConsoleState(FrozenModel):
             items.append(
                 f"{action_counts['PENDING']} protective exit action(s) are durably pending"
             )
-        required_actions = self.health.exit_required_positions or 0
+        required_actions = (
+            (self.health.exit_required_positions or 0) if legacy_protection_relevant else 0
+        )
         missing_actions = max(
             required_actions - self.health.latest_protection_action_count,
             0,
@@ -532,7 +553,7 @@ class ConsoleState(FrozenModel):
                 f"{missing_actions} of {required_actions} required protective exit(s) have no "
                 "durable exit action"
             )
-        if self.health.last_protection_outcome == "INCIDENT":
+        if legacy_protection_relevant and self.health.last_protection_outcome == "INCIDENT":
             items.append("the latest position-protection cycle ended in an incident")
         # Before reconciliation: a control plane this host cannot carry is not a degraded
         # system, it is one that should not be running here at all (#38).
@@ -638,6 +659,43 @@ def _health(
         ).one_or_none()
     )
     protected_at = None if protection is None else decode_utc(protection.observed_at)
+    legacy_positions = None
+    legacy_covered = None
+    core_unverified = 0
+    if account is not None:
+        from quantbot.paper_core.protection_bridge import core_position_protection
+
+        noncore = []
+        reserved_count = 0
+        for position in account.positions:
+            try:
+                reserved, verified, _ = core_position_protection(
+                    session, account_id=account.account.account_id, position=position, now=now
+                )
+            except (ValueError, TypeError, KeyError, ArithmeticError):
+                reserved, verified = False, False
+            if reserved:
+                reserved_count += 1
+                core_unverified += int(not verified)
+            else:
+                noncore.append(position)
+        if reserved_count:
+            legacy_positions = len(noncore)
+            # Aggregate historical core evaluations cannot stand in for current
+            # non-core exposure. Match its exact symbol and quantity instead.
+            evaluated = set()
+            if protection is not None and noncore:
+                for row in session.execute(
+                    select(position_protection_evaluations.c.symbol,
+                           position_protection_evaluations.c.quantity).where(
+                        position_protection_evaluations.c.cycle_id == str(protection.cycle_id)
+                    )
+                ):
+                    try:
+                        evaluated.add((str(row.symbol), Decimal(row.quantity)))
+                    except (ValueError, TypeError, ArithmeticError):
+                        pass  # Malformed history never supplies current exposure coverage.
+            legacy_covered = sum((p.symbol, p.quantity) in evaluated for p in noncore)
     action_counts = (
         {}
         if expected is None
@@ -710,6 +768,9 @@ def _health(
         latest_protection_action_count=latest_action_count,
         account_equity=None if account is None else str(account.account.equity),
         open_positions=0 if account is None else len(account.positions),
+        legacy_protection_positions=legacy_positions,
+        legacy_protection_covered=legacy_covered,
+        core_protection_unverified=core_unverified,
         trading_mode=str(settings_source["TRADING_MODE"].effective_value or "UNKNOWN"),
         broker_environment=str(settings_source["BROKER_ENVIRONMENT"].effective_value or "UNKNOWN"),
     )
