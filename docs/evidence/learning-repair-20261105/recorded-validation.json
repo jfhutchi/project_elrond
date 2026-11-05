@@ -1,0 +1,83 @@
+{
+  "scope": "Retained BROKER_PAPER receipts; no database read by summarizer; gross-return prediction error is not net profitability",
+  "attempts": [
+    {
+      "session": "2026-10-28",
+      "status": "CANDIDATE_REJECTED",
+      "reason": "VALIDATION_GATE_FAILED",
+      "target_contract": "owned-executed-paper-gross-return-v1",
+      "considered": 132,
+      "excluded": 0,
+      "training": 75,
+      "validation": 57,
+      "metrics": {
+        "incumbent_mse": 1361.925879485778,
+        "candidate_mse": 1465.8475204260783,
+        "constant_worst_session_mse": 2224.6936748319768,
+        "constant_mse": 1357.3546532899284,
+        "incumbent_worst_session_mse": 2327.6504599648306,
+        "candidate_worst_session_mse": 2116.1531043300406
+      },
+      "improvement_incumbent_pct": -7.630491681348905,
+      "improvement_constant_pct": -7.992963878171944,
+      "gates": {
+        "strictly_better_than_both": false,
+        "five_percent_incumbent": false,
+        "five_percent_constant": false,
+        "worst_session_no_worse": true
+      }
+    },
+    {
+      "session": "2026-10-30",
+      "status": "CANDIDATE_REJECTED",
+      "reason": "VALIDATION_GATE_FAILED",
+      "target_contract": "owned-executed-paper-gross-return-v1",
+      "considered": 140,
+      "excluded": 0,
+      "training": 108,
+      "validation": 32,
+      "metrics": {
+        "incumbent_mse": 1901.801049004632,
+        "candidate_mse": 2165.3849816467023,
+        "constant_worst_session_mse": 4212.018814591586,
+        "constant_mse": 1929.594096169737,
+        "incumbent_worst_session_mse": 4053.9116874829356,
+        "candidate_worst_session_mse": 4887.56069444104
+      },
+      "improvement_incumbent_pct": -13.859700665325914,
+      "improvement_constant_pct": -12.219714288357974,
+      "gates": {
+        "strictly_better_than_both": false,
+        "five_percent_incumbent": false,
+        "five_percent_constant": false,
+        "worst_session_no_worse": false
+      }
+    },
+    {
+      "session": "2026-11-02",
+      "status": "CANDIDATE_REJECTED",
+      "reason": "VALIDATION_GATE_FAILED",
+      "target_contract": "owned-executed-paper-gross-return-v1",
+      "considered": 147,
+      "excluded": 0,
+      "training": 119,
+      "validation": 28,
+      "metrics": {
+        "incumbent_mse": 2096.57586391715,
+        "candidate_mse": 2397.422961371653,
+        "constant_worst_session_mse": 3616.568515603793,
+        "constant_mse": 2153.637299684594,
+        "incumbent_worst_session_mse": 3455.4753927894794,
+        "candidate_worst_session_mse": 4160.518070151576
+      },
+      "improvement_incumbent_pct": -14.349449625562972,
+      "improvement_constant_pct": -11.319717657321515,
+      "gates": {
+        "strictly_better_than_both": false,
+        "five_percent_incumbent": false,
+        "five_percent_constant": false,
+        "worst_session_no_worse": false
+      }
+    }
+  ]
+}
