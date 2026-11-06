@@ -63,10 +63,11 @@ async def exercise_process_recovery(
         (folder / "allowed").write_text(content_id(json.loads(encoded)))
         ready, start = folder / "ready", folder / "start"
         child_code = """
-import sys,time
+import os,sys,time
 from pathlib import Path
 from quantbot.paper_core import learning
 source,result,ready,start,delayed=map(Path,sys.argv[1:])
+(source.parent / 'worker-pid').write_text(str(os.getpid()))
 if delayed.name == 'True':
     ready.write_text('pre-lock')
     while not start.exists(): time.sleep(.01)
@@ -142,7 +143,10 @@ with Database(path) as db:
             controller.wait(timeout=15)
             assert controller.returncode == 23
             wait_file(ready)
-            child_pid = int(pid_path.read_text())
+            # Windows venv python.exe can be a redirector waiting for a second
+            # interpreter. Kill/query the worker that actually holds the lock,
+            # identified by this disposable child's own readiness handshake.
+            child_pid = int((folder / "worker-pid").read_text())
             if not delayed:
                 busy = consider_learning(
                     restarted_store, policy, cutoff=cutoff, calendar=calendar, execution_clock=clock
