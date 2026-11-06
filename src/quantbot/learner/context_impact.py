@@ -42,7 +42,10 @@ from quantbot.research.intraday_accounting import (
 from quantbot.research.manifest import content_id
 
 if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
     from quantbot.learner.context_runtime_feedback import ContextOutcomeFeedback
+    from quantbot.paper_core.store import CoreStore
 
 
 class ContextImpactPlan(LearnerModel):
@@ -110,6 +113,9 @@ class ContextImpactComparison(LearnerModel):
     cost_basis: Literal["MODELED_NET", "ACTUAL_NET"]
     cost_evidence_ids: tuple[str, ...]
     trial_ids: tuple[str, str]
+    feedback_ids: tuple[str, ...] = ()
+    core_store_identity: str = ""
+    evidence_lane: Literal["SYNTHETIC_TEST", "LOCAL_SIM_REAL_DATA", "BROKER_PAPER"] = "BROKER_PAPER"
     grants_activation: Literal[False] = False
 
     @property
@@ -293,12 +299,19 @@ def load_retained_impact_comparison(
     experiment_id: str,
     comparison_id: str,
     at: datetime,
+    core_store: CoreStore | None = None,
+    session: Session | None = None,
 ) -> ContextImpactComparison:
     events = store.read_as_of(
         experiment_id,
         aware(at),
         maximum_records=4000,
-        kinds=("ContextImpactComparison", "ContextInvalidationRecord"),
+        kinds=(
+            "ContextImpactComparison",
+            "ContextInvalidationRecord",
+            "ContextOutcomeFeedback",
+            "ContextOutcomeEligibility",
+        ),
     )
     invalidated = {
         event.decode(ContextInvalidationRecord).invalidation.reference_id
@@ -318,6 +331,41 @@ def load_retained_impact_comparison(
                 *comparison.cost_evidence_ids,
             }:
                 raise ValueError("CONTEXT_IMPACT_COMPARISON_INVALIDATED")
+            if core_store is not None or comparison.evidence_lane != "SYNTHETIC_TEST":
+                from quantbot.learner.context_runtime_feedback import revalidate_retained_outcomes
+
+                if (
+                    core_store is None
+                    or not comparison.feedback_ids
+                    or comparison.core_store_identity != core_store.database.store_identity
+                ):
+                    raise ValueError("CURRENT_OUTCOME_REVALIDATION_REQUIRED")
+                if revalidate_retained_outcomes(
+                    core_store,
+                    store,
+                    experiment_id=experiment_id,
+                    feedback_ids=set(comparison.feedback_ids),
+                    as_of=at,
+                    session=session,
+                ):
+                    raise ValueError("CONTEXT_SELECTED_OUTCOMES_UNVERIFIED")
+            else:
+                from quantbot.learner.context_runtime_feedback import (
+                    ContextOutcomeFeedback,
+                    _eligibility_states,
+                )
+
+                states = _eligibility_states(events)
+                for item in events:
+                    if item.kind == "ContextOutcomeFeedback":
+                        row = item.decode(ContextOutcomeFeedback)
+                        state = states.get((row.core_store_id, row.lot_id))
+                        if (
+                            row.feedback_id in comparison.feedback_ids
+                            and state
+                            and state.objections
+                        ):
+                            raise ValueError("CONTEXT_SELECTED_OUTCOMES_UNVERIFIED")
             return comparison
     raise ValueError("RETAINED_IMPACT_COMPARISON_UNAVAILABLE")
 
@@ -331,11 +379,13 @@ def run_registered_downstream_comparison(
     registry_path: Path,
     declaration_path: Path,
     now: datetime | None = None,
+    core_store: CoreStore | None = None,
 ) -> ContextImpactEvaluation:
     """Only retained prospective candidate consumption and verified outcome joins reach fitting."""
     from quantbot.learner.context_runtime_feedback import (
         load_runtime_context_feedback,
         load_shadow_consumption,
+        revalidate_retained_outcomes,
         runtime_downstream_examples,
     )
 
@@ -364,8 +414,12 @@ def run_registered_downstream_comparison(
         plan, registry_path=registry_path, declaration_path=declaration_path, now=now
     )
     admission._guard()  # Canonical protection before loading source/training material.
-    feedback, _ = load_runtime_context_feedback(
-        store, research, experiment_id=experiment_id, as_of=now
+    feedback, feedback_exclusions = load_runtime_context_feedback(
+        store,
+        research,
+        experiment_id=experiment_id,
+        as_of=now,
+        include_suspended=True,
     )
     eligible: list[ContextOutcomeFeedback] = []
     for row in feedback:
@@ -374,10 +428,16 @@ def run_registered_downstream_comparison(
         shadow = load_shadow_consumption(research, observation_id=row.observation_id)
         if shadow is None or shadow.candidate_id != candidate_id:
             continue
-        if row.recorded_at > plan.evaluation_end:
-            raise ValueError("IMPACT_LABEL_CHANGED_AFTER_FROZEN_CUTOFF")
         eligible.append(row)
     eligible = list(select_impact_feedback(eligible, plan))
+    if any(row.recorded_at > plan.evaluation_end for row in eligible):
+        raise ValueError("IMPACT_LABEL_CHANGED_AFTER_FROZEN_CUTOFF")
+    if core_store is None and {row.feedback_id for row in eligible} & {
+        identity
+        for identity, reason in feedback_exclusions
+        if reason == "OUTCOME_ELIGIBILITY_SUSPENDED"
+    }:
+        raise ValueError("CONTEXT_SELECTED_OUTCOMES_UNVERIFIED")
     decision_ids = {row.decision_id for row in eligible}
     observations = []
     with closing(sqlite3.connect(registry_path.as_uri() + "?mode=ro", uri=True)) as connection:
@@ -388,6 +448,17 @@ def run_registered_downstream_comparison(
             ).fetchone()
             if found is not None:
                 observations.append(Observation.model_validate_json(found[0]))
+    if core_store is not None or any(row.evidence_lane != "SYNTHETIC_TEST" for row in observations):
+        if core_store is None or core_store.database.path.resolve() != registry_path.resolve():
+            raise ValueError("CURRENT_OUTCOME_REVALIDATION_REQUIRED")
+        if revalidate_retained_outcomes(
+            core_store,
+            store,
+            experiment_id=experiment_id,
+            feedback_ids={row.feedback_id for row in eligible},
+            as_of=now,
+        ):
+            raise ValueError("CONTEXT_SELECTED_OUTCOMES_UNVERIFIED")
     rows, _ = runtime_downstream_examples(
         store,
         research,
@@ -427,6 +498,7 @@ def run_registered_downstream_comparison(
                         experiment_id=experiment_id,
                         comparison_id=prior.comparison_id,
                         at=now,
+                        core_store=core_store,
                     )
                 return prior
     train = [
@@ -494,6 +566,13 @@ def run_registered_downstream_comparison(
                     )
                 ),
                 trial_ids=trial_ids,
+                feedback_ids=tuple(row.feedback_id for row in eligible),
+                core_store_identity=eligible[0].core_store_id,
+                evidence_lane="SYNTHETIC_TEST"
+                if all(o.evidence_lane == "SYNTHETIC_TEST" for o in observations)
+                else "BROKER_PAPER"
+                if any(o.evidence_lane == "BROKER_PAPER" for o in observations)
+                else "LOCAL_SIM_REAL_DATA",
             )
             store.append(retained, idempotency_key="context-impact-comparison:" + plan.plan_id)
         comparison = retained.comparison

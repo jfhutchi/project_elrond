@@ -280,6 +280,161 @@ def test_cost_revision_supersedes_old_feedback_without_rewriting_it(tmp_path):
     assert excluded[0][1] == "SOURCE_INVALIDATED"
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "CONTEXT_OUTCOME_CORRECTION_PENDING",
+        "CONTEXT_OUTCOME_QUARANTINED",
+        "CONTEXT_OUTCOME_NOT_CURRENT",
+    ],
+)
+def test_known_objection_suspends_retained_label_and_old_revision_cannot_release(tmp_path, reason):
+    from quantbot.learner.context_runtime_feedback import load_runtime_context_feedback
+
+    rows = evidence(tmp_path, complete=True)
+    assert run(rows).feedback_written == 1
+    later = rows[-1].available_at + timedelta(minutes=1)
+    revised = rows[-1].model_copy(
+        update={
+            "revision": 2,
+            "supersedes": rows[-1].id,
+            "available_at": later,
+            "recorded_at_utc": later,
+            "source_state_hash": "pending-correction",
+        }
+    )
+    run(rows, round_trips=(revised,), outcome_objections={revised.id: (reason,)}, as_of=later)
+    retained, excluded = load_runtime_context_feedback(
+        rows[1],
+        rows[0],
+        experiment_id="synthetic-context",
+        as_of=later,
+    )
+    assert not retained and any(value == "OUTCOME_ELIGIBILITY_SUSPENDED" for _, value in excluded)
+    run(rows, as_of=later + timedelta(seconds=1))
+    retained, _ = load_runtime_context_feedback(
+        rows[1],
+        rows[0],
+        experiment_id="synthetic-context",
+        as_of=later + timedelta(seconds=1),
+    )
+    assert not retained
+    run(
+        rows,
+        round_trips=(revised,),
+        outcome_objections={revised.id: ()},
+        as_of=later + timedelta(seconds=2),
+    )
+    retained, _ = load_runtime_context_feedback(
+        rows[1],
+        rows[0],
+        experiment_id="synthetic-context",
+        as_of=later + timedelta(seconds=2),
+    )
+    assert len(retained) == 1 and retained[0].outcome_id == revised.id
+
+
+@pytest.mark.asyncio
+async def test_selected_retained_label_rechecks_current_work_without_new_outcome_revision(tmp_path):
+    from sqlalchemy import update
+
+    from quantbot.learner.context_runtime_feedback import (
+        ContextOutcomeFeedback,
+        load_runtime_context_feedback,
+        revalidate_retained_outcomes,
+    )
+    from quantbot.paper_core.guardian import guardian_cycle
+    from quantbot.paper_core.outcomes import process_outcomes
+    from quantbot.paper_core.store import table
+    from quantbot.paper_core.trader import trader_cycle
+    from tests.fixtures.core_m2 import prepare
+
+    context_dir = tmp_path / "context"
+    context_dir.mkdir()
+    rows = evidence(context_dir, complete=True)
+    run(rows)
+    events = rows[1].read_as_of("synthetic-context", rows[-1].available_at)
+    source = next(
+        e.decode(ContextOutcomeFeedback) for e in events if e.kind == "ContextOutcomeFeedback"
+    )
+    core_dir = tmp_path / "core"
+    core_dir.mkdir()
+    db, store, broker, proof, observation, model = prepare(core_dir)
+    try:
+        decision = await trader_cycle(store, broker, observation, model, proof, now=broker.now)
+        broker.now += timedelta(minutes=30)
+        await guardian_cycle(store, broker, now=broker.now)
+        process_outcomes(store, cutoff=broker.now)
+        trip = RoundTrip.model_validate(store.documents("core_outcome_revisions")[0])
+        current = source.model_copy(
+            update={
+                "core_store_id": db.store_identity,
+                "decision_id": decision.id,
+                "lot_id": trip.lot_id,
+                "outcome_id": trip.id,
+                "outcome_revision": trip.revision,
+                "source_state_hash": trip.source_state_hash,
+            }
+        )
+        rows[1].append(current, idempotency_key="canonical-outcome-fixture")
+        at = rows[-1].available_at + timedelta(minutes=1)
+        kwargs = dict(
+            experiment_id="synthetic-context", feedback_ids={current.feedback_id}, as_of=at
+        )
+        assert not revalidate_retained_outcomes(store, rows[1], **kwargs)
+        with db.transaction() as session:
+            work = table("core_outcome_work")
+            session.execute(
+                update(work).where(work.c.lot_id == trip.lot_id).values(version=work.c.version + 1)
+            )
+        blocked = revalidate_retained_outcomes(store, rows[1], **kwargs)
+        assert blocked == ((current.feedback_id, ("CONTEXT_OUTCOME_CORRECTION_PENDING",)),)
+        retained, _ = load_runtime_context_feedback(
+            rows[1], rows[0], experiment_id="synthetic-context", as_of=at
+        )
+        assert current.feedback_id not in {row.feedback_id for row in retained}
+        with db.transaction() as session:
+            session.execute(
+                update(work)
+                .where(work.c.lot_id == trip.lot_id)
+                .values(processed_version=work.c.version)
+            )
+        assert not revalidate_retained_outcomes(
+            store, rows[1], **(kwargs | {"as_of": at + timedelta(seconds=1)})
+        )
+        retained, _ = load_runtime_context_feedback(
+            rows[1], rows[0], experiment_id="synthetic-context", as_of=at + timedelta(seconds=1)
+        )
+        assert current.feedback_id in {row.feedback_id for row in retained}
+        # Exercise 200 deep validations on the same real synthetic owned lot, under
+        # the existing send-style lock. This measures the full loop, not production scale.
+        from time import perf_counter
+
+        benchmark_ids = {current.feedback_id}
+        for index in range(199):
+            sample = current.model_copy(
+                update={"recorded_at": current.recorded_at + timedelta(microseconds=index + 1)}
+            )
+            rows[1].append(sample, idempotency_key=f"synthetic-validation-benchmark:{index}")
+            benchmark_ids.add(sample.feedback_id)
+        with db.transaction() as session:
+            from sqlalchemy import text
+
+            session.execute(text("BEGIN IMMEDIATE"))
+            started = perf_counter()
+            assert not revalidate_retained_outcomes(
+                store,
+                rows[1],
+                experiment_id="synthetic-context",
+                feedback_ids=benchmark_ids,
+                as_of=at + timedelta(seconds=2),
+                session=session,
+            )
+            print(f"SYNTHETIC_200_DEEP_OUTCOME_CHECKS_SECONDS={perf_counter() - started:.3f}")
+    finally:
+        db.close()
+
+
 @pytest.mark.parametrize("learned", [False, True])
 def test_prospective_shadow_consumption_can_pair_outcome_without_rewriting_observed_context(
     tmp_path,

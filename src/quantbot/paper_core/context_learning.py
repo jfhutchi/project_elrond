@@ -412,6 +412,7 @@ def consider_context_learning(
                 impact = run_registered_downstream_comparison(
                     experiments,
                     research,
+                    core_store=store,
                     experiment_id=binding.experiment_id,
                     candidate_id=version.candidate_id,
                     registry_path=binding.registry_path,

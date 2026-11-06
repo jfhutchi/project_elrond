@@ -8,15 +8,16 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
+from contextlib import nullcontext
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal, Self
+from typing import TYPE_CHECKING, Literal, Self
 
 from pydantic import Field, model_validator
 
 from quantbot.learner.context_feedback import DownstreamExample, ReadingReview, SourceInvalidation
 from quantbot.learner.context_integration import ContextInvalidationRecord, ContextSnapshotRecord
-from quantbot.learner.experiment_store import ExperimentStore
+from quantbot.learner.experiment_store import ExperimentStore, StoredEvent
 from quantbot.learner.five_minute import FEATURE_NAMES
 from quantbot.learner.models import LearnerModel
 from quantbot.paper_core.context_integration import (
@@ -35,12 +36,18 @@ from quantbot.paper_core.external_context import (
 )
 from quantbot.research.manifest import content_id
 
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
+
+    from quantbot.paper_core.store import CoreStore
+
 FEEDBACK_EVENT_KINDS = (
     "ContextSnapshotRecord",
     "ContextOutcomeFeedback",
     "ContextInvalidationRecord",
     "ReadingReview",
     "ContextModeledOutcomeLabel",
+    "ContextOutcomeEligibility",
 )
 
 
@@ -123,6 +130,70 @@ class ContextFeedbackReport(LearnerModel):
     grants_activation: Literal[False] = False
 
 
+class ContextOutcomeEligibility(LearnerModel):
+    experiment_id: str
+    recorded_at: datetime
+    core_store_id: str
+    lot_id: str
+    outcome_id: str
+    outcome_revision: int = Field(ge=1)
+    objections: tuple[str, ...]
+    grants_activation: Literal[False] = False
+
+
+def _eligibility_states(
+    events: Sequence[StoredEvent],
+) -> dict[tuple[str, str], ContextOutcomeEligibility]:
+    return {
+        (row.core_store_id, row.lot_id): row
+        for event in events
+        if event.kind == "ContextOutcomeEligibility"
+        for row in (event.decode(ContextOutcomeEligibility),)
+    }
+
+
+def _record_eligibility(
+    experiments: ExperimentStore,
+    states: dict[tuple[str, str], ContextOutcomeEligibility],
+    *,
+    experiment_id: str,
+    core_store_id: str,
+    lot_id: str,
+    outcome_id: str,
+    outcome_revision: int,
+    objections: tuple[str, ...],
+    as_of: datetime,
+) -> bool:
+    """An older or conflicting revision can never clear a newer suspension."""
+    key = (core_store_id, lot_id)
+    previous = states.get(key)
+    if previous is not None and (
+        outcome_revision < previous.outcome_revision
+        or (outcome_revision == previous.outcome_revision and outcome_id != previous.outcome_id)
+        or as_of < previous.recorded_at
+    ):
+        return False
+    if previous is None and not objections:
+        return True
+    record = ContextOutcomeEligibility(
+        experiment_id=experiment_id,
+        recorded_at=as_of,
+        core_store_id=core_store_id,
+        lot_id=lot_id,
+        outcome_id=outcome_id,
+        outcome_revision=outcome_revision,
+        objections=tuple(sorted(set(objections))),
+    )
+    if previous is None or previous.model_dump(exclude={"recorded_at"}) != record.model_dump(
+        exclude={"recorded_at"}
+    ):
+        experiments.append(
+            record, idempotency_key="context-outcome-eligibility:" + content_id(record)
+        )
+        states[key] = record
+    return not record.objections
+
+
 def _source_gate(
     research: DiscoveryStore,
     capture: ContextCapture,
@@ -158,6 +229,109 @@ def _source_gate(
     except (ValueError, KeyError):
         return "SOURCE_DOCUMENT_UNAVAILABLE"
     return None
+
+
+def revalidate_retained_outcomes(
+    store: CoreStore,
+    experiments: ExperimentStore,
+    *,
+    experiment_id: str,
+    feedback_ids: set[str],
+    as_of: datetime,
+    session: Session | None = None,
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    """Recheck only the declared sample against the current existing canonical ledger."""
+    from sqlalchemy import select, text
+
+    from quantbot.paper_core.outcomes import OutcomeIncomplete, _resolve, quarantined_lots
+    from quantbot.paper_core.store import table
+    from quantbot.storage import StateConflictError
+
+    as_of = aware(as_of)
+    if len(feedback_ids) > 200:
+        raise ValueError("BOUNDED_CURRENT_OUTCOME_SELECTION_REQUIRED")
+    events = experiments.read_as_of(
+        experiment_id,
+        as_of,
+        maximum_records=4000,
+        kinds=("ContextOutcomeFeedback", "ContextOutcomeEligibility"),
+    )
+    selected = {
+        row.feedback_id: row
+        for event in events
+        if event.kind == "ContextOutcomeFeedback"
+        for row in (event.decode(ContextOutcomeFeedback),)
+        if row.feedback_id in feedback_ids
+    }
+    if set(selected) != feedback_ids:
+        raise ValueError("EXACT_SELECTED_OUTCOME_FEEDBACK_REQUIRED")
+    if any(row.core_store_id != store.database.store_identity for row in selected.values()):
+        raise ValueError("CONTEXT_CANONICAL_OUTCOME_STORE_MISMATCH")
+    eligibility = _eligibility_states(events)
+    result = []
+    checks = []
+    owns_transaction = session is None
+    with nullcontext(session) if session is not None else store.database.transaction() as session:
+        if owns_transaction:
+            session.execute(text("BEGIN"))
+        quarantined = quarantined_lots(session)
+        pointer, work = table("core_outcome_index"), table("core_outcome_work")
+        for identity, row in selected.items():
+            reasons = []
+            current = (
+                session.execute(select(pointer).where(pointer.c.lot_id == row.lot_id))
+                .mappings()
+                .one_or_none()
+            )
+            pending = (
+                session.execute(select(work).where(work.c.lot_id == row.lot_id))
+                .mappings()
+                .one_or_none()
+            )
+            outcome_id, revision = row.outcome_id, row.outcome_revision
+            if (
+                current is None
+                or current["outcome_id"] != row.outcome_id
+                or current["status"] not in {"COMPLETE", "COSTS_PENDING"}
+            ):
+                reasons.append("CONTEXT_OUTCOME_NOT_CURRENT")
+                if current is not None:
+                    encoded = session.execute(
+                        select(table("core_outcome_revisions").c.payload).where(
+                            table("core_outcome_revisions").c.id == current["outcome_id"]
+                        )
+                    ).scalar_one_or_none()
+                    if encoded:
+                        newest = RoundTrip.model_validate_json(encoded)
+                        outcome_id, revision = newest.id, newest.revision
+            if pending is None or pending["version"] > pending["processed_version"]:
+                reasons.append("CONTEXT_OUTCOME_CORRECTION_PENDING")
+            if row.lot_id in quarantined:
+                reasons.append("CONTEXT_OUTCOME_QUARANTINED")
+            try:
+                resolved = _resolve(store, session, row.lot_id, as_of)
+                if resolved.id != row.outcome_id:
+                    reasons.append("CONTEXT_OUTCOME_SUPERSEDED")
+            except (ValueError, StateConflictError, OutcomeIncomplete):
+                reasons.append("CONTEXT_OUTCOME_UNVERIFIED")
+            checks.append((identity, row, outcome_id, revision, tuple(reasons)))
+    for identity, row, outcome_id, revision, checked_reasons in checks:
+        verified = _record_eligibility(
+            experiments,
+            eligibility,
+            experiment_id=experiment_id,
+            core_store_id=row.core_store_id,
+            lot_id=row.lot_id,
+            outcome_id=outcome_id,
+            outcome_revision=revision,
+            objections=checked_reasons,
+            as_of=as_of,
+        )
+        if not verified and not checked_reasons:
+            checked_reasons = ("OUTCOME_ELIGIBILITY_SUSPENDED",)
+        if checked_reasons:
+            result.append((identity, checked_reasons))
+    return tuple(result)
 
 
 def journal_runtime_context_feedback(
@@ -199,6 +373,30 @@ def journal_runtime_context_feedback(
         if e.kind == ContextOutcomeFeedback.__name__
     ]
     existing = {(r.core_store_id, r.outcome_id) for r in previous}
+    eligibility = _eligibility_states(events)
+    # Objections are durable even when a context/source join later fails.
+    for trip in round_trips:
+        objections = outcome_objections.get(trip.id, ("OUTCOME_ELIGIBILITY_UNVERIFIED",))
+        known = [
+            r for r in previous if r.core_store_id == core_store_id and r.lot_id == trip.lot_id
+        ]
+        if (
+            objections
+            and known
+            and trip.recorded_at_utc <= as_of
+            and trip.revision >= max(r.outcome_revision for r in known)
+        ):
+            _record_eligibility(
+                experiments,
+                eligibility,
+                experiment_id=experiment_id,
+                core_store_id=core_store_id,
+                lot_id=trip.lot_id,
+                outcome_id=trip.id,
+                outcome_revision=trip.revision,
+                objections=objections,
+                as_of=as_of,
+            )
     revoked = {
         e.decode(ContextInvalidationRecord).invalidation.reference_id
         for e in events
@@ -366,6 +564,19 @@ def journal_runtime_context_feedback(
             }:
                 exclude(trip.id, "OUTCOME_REVISION_LINEAGE_UNAVAILABLE")
                 continue
+            if not _record_eligibility(
+                experiments,
+                eligibility,
+                experiment_id=experiment_id,
+                core_store_id=core_store_id,
+                lot_id=trip.lot_id,
+                outcome_id=trip.id,
+                outcome_revision=trip.revision,
+                objections=(),
+                as_of=as_of,
+            ):
+                exclude(trip.id, "OUTCOME_ELIGIBILITY_SUSPENDED")
+                continue
             for old in previous:
                 if (
                     old.core_store_id != core_store_id
@@ -502,6 +713,7 @@ def load_runtime_context_feedback(
     *,
     experiment_id: str,
     as_of: datetime,
+    include_suspended: bool = False,
 ) -> tuple[tuple[ContextOutcomeFeedback, ...], tuple[tuple[str, str], ...]]:
     """Read immutable facts, excluding revoked sources and superseded outcomes today.
 
@@ -524,9 +736,13 @@ def load_runtime_context_feedback(
         and e.decode(ContextInvalidationRecord).invalidation.invalidated_at <= as_of
     }
     permissions = load_source_permissions(research)
+    eligibility = _eligibility_states(events)
     retained, excluded = [], []
     for row in rows:
         reason = "SOURCE_INVALIDATED" if set(row.lineage_refs) & revoked else None
+        state = eligibility.get((row.core_store_id, row.lot_id))
+        if reason is None and state is not None and state.objections:
+            reason = "OUTCOME_ELIGIBILITY_SUSPENDED"
         if reason is None and any(
             other.core_store_id == row.core_store_id
             and other.lot_id == row.lot_id
@@ -542,6 +758,8 @@ def load_runtime_context_feedback(
                 reason = "CONTEXT_CAPTURE_UNAVAILABLE"
         if reason:
             excluded.append((row.feedback_id, reason))
+            if include_suspended and reason == "OUTCOME_ELIGIBILITY_SUSPENDED":
+                retained.append(row)
         else:
             retained.append(row)
     return tuple(retained), tuple(excluded)

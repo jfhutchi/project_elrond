@@ -323,7 +323,7 @@ def test_crypto_stale_cohort_retains_scoped_stock_gap_without_private_suffixes()
         ("ACCOUNT_RISK_ANCHOR_UNVERIFIED", "AUTHORITY_ACQUISITION_UNAVAILABLE"),
         ("CONTINUOUS_ACTIVITY_CATCHUP_PENDING", "AUTHORITY_ACQUISITION_UNAVAILABLE"),
         ("CRYPTO_NON_MARGINABLE_BUYING_POWER", "RISK_OR_AUTHORITY_BLOCKED"),
-        ("CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED", "RISK_OR_AUTHORITY_BLOCKED"),
+        ("CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED", "NO_QUALIFYING_CANDIDATE"),
     ],
 )
 def test_reviewed_crypto_session_capital_codes_are_classified(code, outcome):
@@ -336,6 +336,27 @@ def test_reviewed_crypto_session_capital_codes_are_classified(code, outcome):
     assert outcome in result["outcomes"]
     assert "UNCLASSIFIED_REASON" not in result["reason_codes"]
     assert "PRIVATE_TOKEN_ABC123" not in str(result)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
+        "OPENING_SIGNAL_NOT_QUALIFIED",
+        "PREDICT_NET_RESERVE",
+    ],
+)
+def test_strategy_rejection_is_not_reported_as_operational_or_risk_failure(code):
+    from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics
+
+    observed = TraderCycleDiagnostics(evaluation_reasons=(code,), excluded=True)
+    for reasons in ((), (code,)):
+        result = observed.snapshot(
+            cycle_id="cycle", now=NOW, waiting=False, reasons=reasons, failure=False
+        )
+        assert "NO_QUALIFYING_CANDIDATE" in result["outcomes"]
+        assert "RISK_OR_AUTHORITY_BLOCKED" not in result["outcomes"]
+        assert "OPERATIONAL_FAILURE" not in result["outcomes"]
 
 
 def test_scoped_reason_sanitization_keeps_exact_allowlist_and_output_bound():

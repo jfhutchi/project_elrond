@@ -8,10 +8,12 @@ from typing import Any, Literal, TypeVar
 
 from pydantic import Field
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from quantbot.learner.context_admission import ContextEvaluationPlan
 from quantbot.learner.context_feedback import candidate_polarity
 from quantbot.learner.context_impact import (
+    ContextImpactComparison,
     ContextImpactEvaluation,
     ContextImpactPlan,
     load_retained_impact_comparison,
@@ -225,7 +227,9 @@ def _validated(
     version: ContextInterpreterVersion,
     *,
     now: datetime,
-) -> ExperimentStore:
+    core_store: CoreStore | None = None,
+    session: Session | None = None,
+) -> tuple[ExperimentStore, ContextImpactComparison | None]:
     if (
         version.binding_id != content_id(binding)
         or version.recorded_at > now
@@ -267,6 +271,7 @@ def _validated(
         or plans[0].source_policy_id != version.source_policy_id
     ):
         raise ValueError("CONTEXT_VERSION_LINEAGE_INVALID")
+    comparison = None
     if version.mode == "TRADING_FILTER":
         if version.impact_comparison_id is None:
             raise ValueError("CONTEXT_TRADING_ARTIFACT_INCOMPLETE")
@@ -275,13 +280,22 @@ def _validated(
             experiment_id=binding.experiment_id,
             comparison_id=version.impact_comparison_id,
             at=now,
+            core_store=core_store,
+            session=session,
         )
         if (
             comparison.candidate_id != version.candidate_id
             or comparison.plan_id != version.impact_plan_id
         ):
             raise ValueError("CONTEXT_TRADING_LINEAGE_INVALID")
-    return experiments
+        if core_store is not None and (
+            binding.core_store_identity != core_store.database.store_identity
+            or binding.registry_path.resolve() != core_store.database.path.resolve()
+            or core_store.config.evidence_lane == "BROKER_PAPER"
+            and comparison.evidence_lane != "BROKER_PAPER"
+        ):
+            raise ValueError("CONTEXT_CANONICAL_TRADING_STORE_MISMATCH")
+    return experiments, comparison
 
 
 def _binding_experiments(
@@ -344,7 +358,11 @@ def forecast_spec_id(observation: Observation) -> str:
 
 
 def attach_context_interpreter(
-    research: DiscoveryStore, observation: Observation, *, now: datetime
+    research: DiscoveryStore,
+    observation: Observation,
+    *,
+    now: datetime,
+    core_store: CoreStore | None = None,
 ) -> Observation:
     """Prepare genuine shadow inputs before decisions; preserve original observed snapshot."""
     try:
@@ -357,8 +375,17 @@ def attach_context_interpreter(
         if version is not None and version.mode == "DISABLED":
             return observation
         experiments = _binding_experiments(research, binding, now=now)
+        comparison = None
         if version is not None:
-            _validated(research, binding, version, now=now)
+            if (
+                version.mode == "TRADING_FILTER"
+                and observation.evidence_lane != "SYNTHETIC_TEST"
+                and core_store is None
+            ):
+                raise ValueError("CURRENT_OUTCOME_REVALIDATION_REQUIRED")
+            experiments, comparison = _validated(
+                research, binding, version, now=now, core_store=core_store
+            )
         if observation.context_snapshot_id is None:
             return observation
         capture = load_context_capture(research, observation.context_snapshot_id)
@@ -392,14 +419,8 @@ def attach_context_interpreter(
                 experiments, binding, version.candidate_id, shadow, now=now
             )
         if version is not None and version.mode == "TRADING_FILTER":
-            if experiments is None or values is None or version.impact_comparison_id is None:
+            if comparison is None or values is None or version.impact_comparison_id is None:
                 raise ValueError("CONTEXT_TRADING_ARTIFACT_INCOMPLETE")
-            comparison = load_retained_impact_comparison(
-                experiments,
-                experiment_id=binding.experiment_id,
-                comparison_id=version.impact_comparison_id,
-                at=now,
-            )
             inputs = dict(observation.features) | dict(
                 zip(CONTEXT_FEATURE_NAMES, values, strict=True)
             )
@@ -467,7 +488,12 @@ def attach_context_interpreter(
 
 
 def filter_objections(
-    research: DiscoveryStore | None, observation: Observation, *, now: datetime
+    research: DiscoveryStore | None,
+    observation: Observation,
+    *,
+    now: datetime,
+    core_store: CoreStore | None = None,
+    session: Session | None = None,
 ) -> tuple[str, ...]:
     overlay = observation.context_filter
     if research is None:
@@ -479,8 +505,12 @@ def filter_objections(
             return ("CONTEXT_FILTER_VERSION_CHANGED",) if overlay is not None else ()
         if binding is None:
             raise ValueError("CONTEXT_LEARNING_BINDING_MISSING")
-        experiments = _validated(research, binding, version, now=now)
-        if version.impact_comparison_id is None:
+        if observation.evidence_lane != "SYNTHETIC_TEST" and core_store is None:
+            raise ValueError("CURRENT_OUTCOME_REVALIDATION_REQUIRED")
+        experiments, comparison = _validated(
+            research, binding, version, now=now, core_store=core_store, session=session
+        )
+        if comparison is None or version.impact_comparison_id is None:
             raise ValueError("CONTEXT_TRADING_ARTIFACT_INCOMPLETE")
         if observation.context_snapshot_id is None:
             if overlay is not None:
@@ -520,12 +550,6 @@ def filter_objections(
             raise ValueError("CONTEXT_FILTER_FORECAST_INVALID_OR_STALE")
         values, predictions = _vectors(
             experiments, binding, version.candidate_id, receipt.shadow, now=now
-        )
-        comparison = load_retained_impact_comparison(
-            experiments,
-            experiment_id=binding.experiment_id,
-            comparison_id=version.impact_comparison_id,
-            at=now,
         )
         inputs = dict(observation.features) | dict(zip(CONTEXT_FEATURE_NAMES, values, strict=True))
         estimator = comparison.comparison.context_estimator
@@ -596,7 +620,9 @@ def change_interpreter_mode(
             price_activation_id=price_activation_id,
         )
         if mode == "TRADING_FILTER":
-            experiments = _validated(research, binding, current, now=now)
+            experiments, _ = _validated(
+                research, binding, current, now=now, core_store=store, session=session
+            )
             events = experiments.read_as_of(
                 binding.experiment_id, now, maximum_records=4000, kinds=("ContextImpactEvaluation",)
             )
@@ -623,6 +649,8 @@ def change_interpreter_mode(
                 experiment_id=binding.experiment_id,
                 comparison_id=evaluation.comparison_id,
                 at=now,
+                core_store=store,
+                session=session,
             )
             plans = experiments.read_as_of(
                 binding.experiment_id, now, maximum_records=4000, kinds=("ContextImpactPlan",)

@@ -332,6 +332,28 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
     assert retained.cost_basis == "MODELED_NET" and not retained.grants_activation
     assert run_registered_downstream_comparison(experiments, research, **args) == result
     assert len(calls) == 2 and admission.used_calls() == 2
+    suspended_at = plan.evaluation_end + timedelta(microseconds=1)
+    fixture.run(
+        (research, experiments, evidence[2], observation, decision, trip),
+        outcome_objections={trip.id: ("CONTEXT_OUTCOME_CORRECTION_PENDING",)},
+        as_of=suspended_at,
+    )
+    with pytest.raises(ValueError, match="SELECTED_OUTCOMES_UNVERIFIED"):
+        load_retained_impact_comparison(
+            experiments,
+            experiment_id=plan.experiment_id,
+            comparison_id=result.comparison_id,
+            at=suspended_at,
+        )
+    with pytest.raises(ValueError, match="SELECTED_OUTCOMES_UNVERIFIED"):
+        run_registered_downstream_comparison(
+            experiments, research, **(args | {"now": suspended_at})
+        )
+    assert len(calls) == 2 and admission.used_calls() == 2
+    fixture.run(
+        (research, experiments, evidence[2], observation, decision, trip),
+        as_of=suspended_at + timedelta(microseconds=1),
+    )
     from quantbot.learner.context_integration import load_retained_candidate
     from quantbot.learner.context_runtime_feedback import load_runtime_context_feedback
 

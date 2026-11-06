@@ -81,8 +81,14 @@ _CRYPTO_ENTRY_REASONS = frozenset(
         "CRYPTO_COHORT_SCOPE_INVALID",
         "CRYPTO_POLICY_NOT_COMMISSIONED",
         "CRYPTO_MODEL_PROCEDURE_NOT_VALIDATED",
-        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
         "CRYPTO_NON_MARGINABLE_BUYING_POWER",
+    }
+)
+_SIGNAL_REASONS = frozenset(
+    {
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
+        "OPENING_SIGNAL_NOT_QUALIFIED",
+        "PREDICT_NET_RESERVE",
     }
 )
 _KNOWN_REASONS = (
@@ -91,6 +97,7 @@ _KNOWN_REASONS = (
     | _ACQUISITION_REASONS
     | _SESSION_WAIT_REASONS
     | _CRYPTO_ENTRY_REASONS
+    | _SIGNAL_REASONS
     | frozenset(
         {
             "UNCLASSIFIED_REASON",
@@ -243,10 +250,13 @@ class TraderCycleDiagnostics:
             outcomes.append("DATA_UNAVAILABLE")
         if self.excluded:
             outcomes.append("CANDIDATES_EXCLUDED")
+        if not self.candidate_count and _SIGNAL_REASONS.intersection(codes):
+            outcomes.append("NO_QUALIFYING_CANDIDATE")
         if any("GUARDIAN" in code for code in codes):
             outcomes.append("AWAITING_GUARDIAN")
         if any(
-            code not in _DATA_REASONS | _ACQUISITION_REASONS | _SESSION_WAIT_REASONS
+            code
+            not in _DATA_REASONS | _ACQUISITION_REASONS | _SESSION_WAIT_REASONS | _SIGNAL_REASONS
             and code != "UNCLASSIFIED_REASON"
             for code in (reason.rsplit(":", 1)[-1] for reason in reason_codes(reasons))
         ) or any(

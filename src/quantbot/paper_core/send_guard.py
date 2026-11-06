@@ -282,7 +282,11 @@ def final_send_in_session(
         reasons.append("CONTEXT_OBSERVATION_UNAVAILABLE")
     else:
         original_observation = Observation.model_validate_json(observation_payload)
-        reasons.extend(filter_objections(context_research, original_observation, now=now))
+        reasons.extend(
+            filter_objections(
+                context_research, original_observation, now=now, core_store=store, session=session
+            )
+        )
         if context_research is not None:
             from quantbot.paper_core.activation import active_in_session
             from quantbot.paper_core.authority import commission_in_session

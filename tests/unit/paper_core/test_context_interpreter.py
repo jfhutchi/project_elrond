@@ -149,6 +149,39 @@ def test_auto_shadow_admission_uses_real_candidate_and_future_plan(tmp_path, mon
     assert receipt.candidate_feature_values[3] == pytest.approx(-0.25)
     assert dict(receipt.shadow.features)["polarity_mean"] == 1
     assert current_version(research) == version
+    # A pending canonical correction must revoke a retained trading artifact even
+    # when this observation has no eligible news. Reuse the caller's locked snapshot.
+    trading = version.model_copy(
+        update={"mode": "TRADING_FILTER", "impact_comparison_id": "c" * 64}
+    )
+    with store.database.transaction() as locked, monkeypatch.context() as patch:
+        from sqlalchemy import text
+
+        locked.execute(text("BEGIN IMMEDIATE"))
+        checks = []
+
+        def pending_comparison(*args, core_store=None, session=None, **kwargs):
+            assert core_store is store and session is locked
+            checks.append((core_store, session))
+            raise ValueError("CONTEXT_OUTCOME_CORRECTION_PENDING")
+
+        patch.setattr("quantbot.paper_core.context_interpreter.current_version", lambda _: trading)
+        patch.setattr(
+            "quantbot.paper_core.context_interpreter.load_retained_impact_comparison",
+            pending_comparison,
+        )
+        reasons = filter_objections(
+            research, observation(None), now=now, core_store=store, session=locked
+        )
+        assert reasons == ("CONTEXT_FILTER_UNVERIFIED:CONTEXT_OUTCOME_CORRECTION_PENDING",)
+        assert len(checks) == 1
+        operational = observation(None).model_copy(update={"evidence_lane": "BROKER_PAPER"})
+        assert filter_objections(research, operational, now=now) == (
+            "CONTEXT_FILTER_UNVERIFIED:CURRENT_OUTCOME_REVALIDATION_REQUIRED",
+        )
+        refused = attach_context_interpreter(research, operational, now=now)
+        assert "CURRENT_OUTCOME_REVALIDATION_REQUIRED" in refused.context_filter.objection
+        assert len(checks) == 1
     with pytest.raises(ValueError, match="CAS_CONFLICT"):
         _publish(research, version, None)
     # Mode changes use the canonical ledger writer lock and exact current runtime refs.
@@ -205,6 +238,26 @@ def test_auto_shadow_admission_uses_real_candidate_and_future_plan(tmp_path, mon
         change_interpreter_mode(
             store, research, mode="TRADING_FILTER", impact_evaluation_id=content_id(impact), **args
         )
+    apparently_eligible = impact.model_copy(update={"selected_heldout_count": 4})
+    experiments.append(apparently_eligible, idempotency_key="pending-promotion")
+    with monkeypatch.context() as patch:
+
+        def pending_promotion(*args, core_store=None, session=None, **kwargs):
+            assert core_store is store and session is not None and session.in_transaction()
+            raise ValueError("CONTEXT_OUTCOME_CORRECTION_PENDING")
+
+        patch.setattr(
+            "quantbot.paper_core.context_interpreter.load_retained_impact_comparison",
+            pending_promotion,
+        )
+        with pytest.raises(ValueError, match="CORRECTION_PENDING"):
+            change_interpreter_mode(
+                store,
+                research,
+                mode="TRADING_FILTER",
+                impact_evaluation_id=content_id(apparently_eligible),
+                **args,
+            )
     assert current_version(research) == version
     disabled = change_interpreter_mode(store, research, mode="DISABLED", **args)
     assert disabled.previous_version_id == version.version_id and disabled.mode == "DISABLED"

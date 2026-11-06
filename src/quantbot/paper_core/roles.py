@@ -57,6 +57,7 @@ def attach_observed_context(
     observation: Observation | ObservationCohort,
     *,
     at: datetime,
+    core_store: CoreStore | None = None,
 ) -> Observation | ObservationCohort:
     """Attach the existing research journal before selection, without changing signals."""
     from quantbot.paper_core.context_integration import (
@@ -72,12 +73,12 @@ def attach_observed_context(
             return observation.model_copy(
                 update={
                     "observations": tuple(
-                        attach_context_interpreter(state, item, now=at)
+                        attach_context_interpreter(state, item, now=at, core_store=core_store)
                         for item in observation.observations
                     )
                 }
             )
-        return attach_context_interpreter(state, observation, now=at)
+        return attach_context_interpreter(state, observation, now=at, core_store=core_store)
 
     def linked(item: Observation) -> Observation:
         snapshot = capture_research_context(
@@ -88,7 +89,7 @@ def attach_observed_context(
             if snapshot is None
             else item.model_copy(update={"context_snapshot_id": snapshot.snapshot_id})
         )
-        return attach_context_interpreter(state, linked_item, now=at)
+        return attach_context_interpreter(state, linked_item, now=at, core_store=core_store)
 
     if isinstance(observation, ObservationCohort):
         return observation.model_copy(
@@ -748,7 +749,10 @@ async def run_role(
                         ):
                             try:
                                 observation = attach_observed_context(
-                                    broker.research_state, observation, at=store.clocks.sample()[0]
+                                    broker.research_state,
+                                    observation,
+                                    at=store.clocks.sample()[0],
+                                    core_store=store,
                                 )
                             except (ValueError, OSError, sqlite3.Error) as error:
                                 # Context is observed-only until separately admitted. A failed
