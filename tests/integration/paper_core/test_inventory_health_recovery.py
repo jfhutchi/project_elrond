@@ -18,7 +18,15 @@ def active_ids(store):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("role", ["GUARDIAN", "TRADER"])
-async def test_guardian_recovers_inventory_without_observations(tmp_path, role):
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "INVENTORY_PROTOCOL_INVALID",
+        "OWNED_FILL_ACTIVITY_PENDING",
+        "RECONCILIATION_AUTHORITY_CHANGED",
+    ],
+)
+async def test_guardian_recovers_inventory_without_observations(tmp_path, role, reason):
     db, store, broker, _, clocks = await prepare(
         tmp_path, initial_wall=datetime(2026, 10, 14, 13, 29, tzinfo=UTC), warmup_seconds=0
     )
@@ -27,7 +35,7 @@ async def test_guardian_recovers_inventory_without_observations(tmp_path, role):
             store,
             role=role,
             state="PROTOCOL_FAILURE",
-            reasons=("INVENTORY_PROTOCOL_INVALID",),
+            reasons=(reason,),
             now=clocks.wall,
             scope="ACCOUNT",
             scope_id=store.config.account_id,
@@ -67,9 +75,28 @@ async def test_guardian_recovers_inventory_without_observations(tmp_path, role):
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     "obstacle",
-    ["same_generation", "stale", "forged_time", "manual", "integrity", "unrelated", "mixed"],
+    [
+        "same_generation",
+        "stale",
+        "forged_time",
+        "manual",
+        "integrity",
+        "unrelated",
+        "mixed",
+        "protection_blocked",
+    ],
 )
-async def test_inventory_recovery_cannot_clear_without_exact_current_authority(tmp_path, obstacle):
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "INVENTORY_ACQUISITION_RETRYABLE",
+        "OWNED_FILL_ACTIVITY_PENDING",
+        "RECONCILIATION_AUTHORITY_CHANGED",
+    ],
+)
+async def test_inventory_recovery_cannot_clear_without_exact_current_authority(
+    tmp_path, obstacle, reason
+):
     from quantbot.paper_core.health import recover_inventory_health
 
     db, store, broker, _, clocks = await prepare(tmp_path)
@@ -82,12 +109,13 @@ async def test_inventory_recovery_cannot_clear_without_exact_current_authority(t
             state="RETRYABLE_FAILURE",
             reasons=("OTHER_PROTOCOL_FAILURE",)
             if obstacle == "unrelated"
-            else ("INVENTORY_ACQUISITION_RETRYABLE", "TIME_ACQUISITION_RETRYABLE")
+            else (reason, "TIME_ACQUISITION_RETRYABLE")
             if obstacle == "mixed"
-            else ("INVENTORY_ACQUISITION_RETRYABLE",),
+            else (reason,),
             now=clocks.wall,
             scope="ACCOUNT",
             scope_id=store.config.account_id,
+            protection_blocked=obstacle == "protection_blocked",
         )
         timing = store.read("core_time_evidence", store.runtime_time_evidence_id, TimeEvidence)
         if obstacle != "same_generation":
@@ -114,5 +142,61 @@ async def test_inventory_recovery_cannot_clear_without_exact_current_authority(t
             )
         recover_inventory_health(store, proof, timing, now=clocks.wall)
         assert failure in active_ids(store)
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
+async def test_guardian_clears_pending_fill_only_after_canonical_activity_and_matching_proof(
+    tmp_path,
+):
+    from tests.integration.paper_core.test_daily_paper_loop import DailyProvider
+    from tests.integration.paper_core.test_paper_funds import enter
+
+    class DelayedFillProvider(DailyProvider):
+        def __init__(self, clocks):
+            super().__init__(clocks)
+            self.activity_lag_seconds = 60
+
+    db, store, broker, _, clocks = await prepare(tmp_path, provider_factory=DelayedFillProvider)
+    try:
+        decision, reasons = await enter(store, broker)
+        assert decision.action == "BUY" and not reasons
+        store.runtime_role = "guardian"
+        with pytest.raises(TimeoutError, match="OWNED_FILL_ACTIVITY_PENDING"):
+            await synchronize(store, broker, now=clocks.wall)
+        with db.transaction() as session:
+            pending = next(
+                event
+                for event in active_health(session)
+                if event.objections == ("OWNED_FILL_ACTIVITY_PENDING",)
+            )
+            assert not StorageRepository(session).list_fills()
+        await guardian_cycle(store, broker, now=clocks.wall)
+        assert pending.id in active_ids(store)
+        with db.transaction() as session:
+            assert not StorageRepository(session).list_fills()
+        observation_ids = {
+            document["recorded_at_utc"] for document in store.documents("core_observations")
+        }
+        clocks.advance(60)
+        receipt = await guardian_cycle(store, broker, now=clocks.wall)
+        proof = store.latest_proof()
+        assert receipt.proof_id == proof.id
+        assert proof.complete and proof.actual_quantities == proof.expected_quantities
+        with db.transaction() as session:
+            fills = StorageRepository(session).list_fills()
+            assert fills and set(proof.fill_ids) == {fill.fill_id for fill in fills}
+        assert pending.id not in active_ids(store)
+        assert {
+            document["recorded_at_utc"] for document in store.documents("core_observations")
+        } == observation_ids
+        recovery = next(
+            event
+            for event in store.documents("core_health_events")
+            if pending.id in event["recovered_from"]
+        )
+        assert recovery["new_proof_id"] == proof.id
+        assert store.runtime_time_evidence_id in recovery["evidence_ids"]
     finally:
         db.close()

@@ -307,6 +307,10 @@ def recover_inventory_health(
         "INVENTORY_ACQUISITION_RETRYABLE",
         "INVENTORY_ACQUISITION_UNSTABLE",
         "INVENTORY_PROTOCOL_INVALID",
+        # A newer certified inventory proves the original activity/race has settled.
+        # Its fresh source, generation, time, and pause/quarantine gates still apply.
+        "OWNED_FILL_ACTIVITY_PENDING",
+        "RECONCILIATION_AUTHORITY_CHANGED",
     }
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
