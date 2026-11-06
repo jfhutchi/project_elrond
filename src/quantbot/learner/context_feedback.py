@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from datetime import datetime
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from quantbot.learner.estimators import FittedEstimator, fit_estimator, predict
 from quantbot.learner.models import LearnerModel
@@ -30,7 +30,7 @@ class ReviewEvidence(LearnerModel):
     reference_id: str = Field(min_length=1)
     content_hash: Digest
     available_at: datetime
-    kind: Literal["HUMAN_ANNOTATION", "SOURCE_CORRECTION"]
+    kind: Literal["HUMAN_ANNOTATION", "SOURCE_CORRECTION", "MODEL_INFERENCE"]
 
 
 class ReadingReview(LearnerModel):
@@ -39,13 +39,24 @@ class ReadingReview(LearnerModel):
     reviewed_at: datetime
     recorded_at: datetime
     verdict: Literal["CONFIRMED", "CORRECTED", "INCONCLUSIVE"]
-    label_authority: Literal["HUMAN_REVIEW", "SOURCE_CORRECTION", "OUTCOME_ONLY"]
+    label_authority: Literal["HUMAN_REVIEW", "SOURCE_CORRECTION", "OUTCOME_ONLY", "MODEL_GENERATED"]
     evidence: tuple[ReviewEvidence, ...]
     corrected_polarity: Polarity | None = None
     outcome_net_bps: float | None = None
+    teacher_policy_id: Digest | None = None
+    confidence: float | None = Field(default=None, ge=0, le=1)
+    uncertain: bool | None = None
     category: Literal["SENTIMENT_READING", "ENTITY", "FACT", "PREDICTIVE", "EXECUTION"] = (
         "SENTIMENT_READING"
     )
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_review(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        for key in ("teacher_policy_id", "confidence", "uncertain"):
+            if key not in self.model_fields_set:
+                payload.pop(key, None)
+        return payload
 
     @model_validator(mode="after")
     def independent_available_label(self) -> Self:
@@ -54,13 +65,33 @@ class ReadingReview(LearnerModel):
         ):
             raise ValueError("review evidence must be available before review and recording")
         if self.verdict != "INCONCLUSIVE":
-            kind = {"HUMAN_REVIEW": "HUMAN_ANNOTATION", "SOURCE_CORRECTION": "SOURCE_CORRECTION"}
+            kind = {
+                "HUMAN_REVIEW": "HUMAN_ANNOTATION",
+                "SOURCE_CORRECTION": "SOURCE_CORRECTION",
+                "MODEL_GENERATED": "MODEL_INFERENCE",
+            }
             if (
                 not self.evidence
                 or self.label_authority not in kind
                 or any(row.kind != kind[self.label_authority] for row in self.evidence)
             ):
                 raise ValueError("reading labels require explicit independent label authority")
+        if self.label_authority == "MODEL_GENERATED":
+            if (
+                self.teacher_policy_id is None
+                or self.confidence is None
+                or self.uncertain is None
+                or self.outcome_net_bps is not None
+                or self.verdict == "CONFIRMED"
+                or self.category != "SENTIMENT_READING"
+            ):
+                raise ValueError("EXPLICIT_FALLIBLE_MODEL_TEACHER_PROVENANCE_REQUIRED")
+            if self.verdict != "INCONCLUSIVE" and (self.uncertain or self.confidence < 0.8):
+                raise ValueError("UNCERTAIN_MODEL_REVIEW_MUST_BE_INCONCLUSIVE")
+        elif any(
+            value is not None for value in (self.teacher_policy_id, self.confidence, self.uncertain)
+        ):
+            raise ValueError("MODEL_TEACHER_FIELDS_REQUIRE_MODEL_AUTHORITY")
         if (self.verdict == "CORRECTED") != (self.corrected_polarity is not None):
             raise ValueError("only corrected reviews supply a replacement polarity")
         return self
@@ -218,9 +249,10 @@ class InterpreterCandidate(LearnerModel):
     heldout_mse: float = Field(ge=0)
     baseline_heldout_mse: float = Field(ge=0)
     grants_activation: Literal[False] = False
-    evaluation: Literal["CHRONOLOGICAL_READING_HOLDOUT_NOT_PROFITABILITY"] = (
-        "CHRONOLOGICAL_READING_HOLDOUT_NOT_PROFITABILITY"
-    )
+    evaluation: Literal[
+        "CHRONOLOGICAL_READING_HOLDOUT_NOT_PROFITABILITY",
+        "MODEL_TEACHER_AGREEMENT_NOT_TRUTH_OR_PROFITABILITY",
+    ] = "CHRONOLOGICAL_READING_HOLDOUT_NOT_PROFITABILITY"
 
     @property
     def candidate_id(self) -> str:

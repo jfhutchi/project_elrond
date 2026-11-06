@@ -14,12 +14,16 @@
   <p>Binding recorded; waiting for the first scheduled status.</p>
   {% endif %}
   <p>Trading model inputs: {{ context.current_model_inputs.replace('_', ' ').lower() }}.
-    Interpreter mode: {{ context.interpreter_mode.replace('_', ' ').lower() }}.</p>
+    Interpreter mode: {{ context.interpreter_mode.replace('_', ' ').lower() }}.
+    Kind: {{ context.interpreter_kind.replace('_', ' ').lower() if context.interpreter_kind else 'Unknown' }}.</p>
+  <p>Semantic evaluation target: {{ context.semantic_target.replace('_', ' ').lower() if context.semantic_target else 'Not reported' }}.
+    Model-generated reviews are fallible teacher opinions, not independent truth.</p>
   <dl>
     {% for label, value in [('Observed context snapshots', context.observed_snapshots),
       ('Observed documents', context.observed_documents), ('Documents used for trading', context.used_documents),
       ('Shadow feature preparations', context.shadow_preparations), ('Linked outcome feedback', context.feedback),
-      ('Independent reading reviews', context.independent_reviews), ('Eligible reviewed examples', context.eligible_examples),
+      ('Independent human/source reviews', context.independent_reviews),
+      ('Model-generated reviews', context.model_generated_reviews), ('Eligible reviewed examples', context.eligible_examples),
       ('Fitted candidates', context.fitted_candidates), ('Charged fits', context.trial_fits)] %}
     <dt>{{ label }}</dt><dd>{{ value if value is not none else 'Unknown' }}</dd>
     {% endfor %}

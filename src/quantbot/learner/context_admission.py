@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -46,7 +48,9 @@ class ContextReadingScope(LearnerModel):
         "CRYPTO",
     )
     source_policy_id: Digest
-    target: Literal["INDEPENDENT_READING_POLARITY"] = "INDEPENDENT_READING_POLARITY"
+    target: Literal["INDEPENDENT_READING_POLARITY", "MODEL_TEACHER_AGREEMENT_V1"] = (
+        "INDEPENDENT_READING_POLARITY"
+    )
     grants_execution: Literal[False] = False
 
 
@@ -60,20 +64,29 @@ class ContextEvaluationPlan(LearnerModel):
     evaluation_end: datetime
     interpreter_version: Literal["news-lexical-negation-v1"] = "news-lexical-negation-v1"
     estimator: Literal["ridge-alpha1-seed0"] = "ridge-alpha1-seed0"
-    target: Literal["INDEPENDENT_READING_POLARITY"] = "INDEPENDENT_READING_POLARITY"
+    target: Literal["INDEPENDENT_READING_POLARITY", "MODEL_TEACHER_AGREEMENT_V1"] = (
+        "INDEPENDENT_READING_POLARITY"
+    )
     accounting_dataset: Literal["us-equities-daily"] = "us-equities-daily"
     grants_activation: Literal[False] = False
     reading_scope: ContextReadingScope | None = None
+    teacher_policy_id: Digest | None = None
 
     @model_serializer(mode="wrap")
     def preserve_legacy_plan(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         payload = dict(handler(self))
         if "reading_scope" not in self.model_fields_set:
             payload.pop("reading_scope", None)
+        if "teacher_policy_id" not in self.model_fields_set:
+            payload.pop("teacher_policy_id", None)
         return payload
 
     @model_validator(mode="after")
     def predeclared(self) -> Self:
+        if (self.target == "MODEL_TEACHER_AGREEMENT_V1") != (self.teacher_policy_id is not None):
+            raise ValueError("EXACT_TEACHER_POLICY_REQUIRED")
+        if self.reading_scope is not None and self.reading_scope.target != self.target:
+            raise ValueError("READING_SCOPE_AND_EVALUATION_TARGET_MUST_AGREE")
         for at in (
             self.recorded_at,
             self.source_start,
@@ -96,6 +109,132 @@ class ContextEvaluationPlan(LearnerModel):
     @property
     def plan_id(self) -> str:
         return content_id(self)
+
+
+class ContextPlanSupersession(LearnerModel):
+    experiment_id: str
+    recorded_at: datetime
+    previous_plan_id: Digest
+    successor_plan_id: Digest
+    manifest_hash: Digest
+    reason: Literal["PROSPECTIVE_TEACHER_POLICY_ADOPTION"] = "PROSPECTIVE_TEACHER_POLICY_ADOPTION"
+    grants_activation: Literal[False] = False
+
+
+def load_context_plan(
+    store: ExperimentStore, *, experiment_id: str, plan_id: str, at: datetime
+) -> ContextEvaluationPlan:
+    events = store.read_as_of(
+        experiment_id,
+        at,
+        maximum_records=4000,
+        kinds=("ContextEvaluationPlan", "ContextPlanSupersession"),
+    )
+    if any(
+        e.kind == "ContextPlanSupersession"
+        and e.decode(ContextPlanSupersession).previous_plan_id == plan_id
+        for e in events
+    ):
+        raise ValueError("CONTEXT_PLAN_SUPERSEDED")
+    all_plans = [
+        e.decode(ContextEvaluationPlan) for e in events if e.kind == "ContextEvaluationPlan"
+    ]
+    plans = [
+        e.decode(ContextEvaluationPlan)
+        for e in events
+        if e.kind == "ContextEvaluationPlan" and e.decode(ContextEvaluationPlan).plan_id == plan_id
+    ]
+    if len(plans) != 1 or plans[0].manifest_hash != store.state(experiment_id).manifest_hash:
+        raise ValueError("EXACT_REGISTERED_CONTEXT_PLAN_REQUIRED")
+    if len(all_plans) > 1 and not any(
+        e.kind == "ContextPlanSupersession"
+        and e.decode(ContextPlanSupersession).successor_plan_id == plan_id
+        for e in events
+    ):
+        raise ValueError("EXACT_CONTEXT_PLAN_ADOPTION_REQUIRED")
+    return plans[0]
+
+
+def adopt_context_plan(
+    store: ExperimentStore,
+    plan: ContextEvaluationPlan,
+    *,
+    supersedes_plan_id: str,
+    registry_path: Path,
+    declaration_path: Path,
+    now: datetime,
+) -> bool:
+    now = aware(now)
+    plan = ContextEvaluationPlan.model_validate(plan.model_dump())
+    if not plan.recorded_at <= now < plan.training_start:
+        raise ValueError("PLAN_ADOPTION_REQUIRES_FUTURE_TRAINING")
+    old = load_context_plan(
+        store, experiment_id=plan.experiment_id, plan_id=supersedes_plan_id, at=now
+    )
+    if (
+        not now < old.training_start
+        or plan.manifest_hash != old.manifest_hash
+        or (plan.source_start, plan.training_start, plan.split_at, plan.evaluation_end)
+        != (old.source_start, old.training_start, old.split_at, old.evaluation_end)
+    ):
+        raise ValueError("FUTURE_UNCHANGED_WINDOW_AND_PARENT_REQUIRED")
+    if plan.teacher_policy_id is None or plan.plan_id == old.plan_id:
+        raise ValueError("EXPLICIT_NEW_TEACHER_POLICY_REQUIRED")
+    events = store.read_as_of(
+        plan.experiment_id,
+        now,
+        maximum_records=4000,
+        kinds=("ContextEvaluation", "ContextFitReservation"),
+    )
+    if events:
+        raise ValueError("EVALUATED_CONTEXT_PLAN_CANNOT_BE_SUPERSEDED")
+    for path in {registry_path, declaration_path}:
+        with _session(path) as session:
+            guard_range(
+                session, "us-equities-daily", plan.source_start.date(), plan.evaluation_end.date()
+            )
+            if any(
+                identity.startswith("intraday:context-" + content_id(plan.experiment_id)[:16] + ":")
+                for identity in verified_intraday_attempt_ids(session)
+            ):
+                raise ValueError("CHARGED_CONTEXT_PLAN_CANNOT_BE_SUPERSEDED")
+    supersession = ContextPlanSupersession(
+        experiment_id=plan.experiment_id,
+        recorded_at=now,
+        previous_plan_id=old.plan_id,
+        successor_plan_id=plan.plan_id,
+        manifest_hash=plan.manifest_hash,
+    )
+    # Both records become visible atomically; no unattached successor can be selected.
+    with store._transaction() as db:
+        if db.execute(
+            "SELECT 1 FROM events WHERE experiment_id=? AND "
+            "(kind IN ('ContextEvaluation','ContextFitReservation') OR idempotency_key=?) LIMIT 1",
+            (plan.experiment_id, "context-plan-supersession:" + old.plan_id),
+        ).fetchone():
+            raise ValueError("CONTEXT_PLAN_ADOPTION_STATE_CHANGED")
+        for record, key in (
+            (plan, "context-evaluation-plan:" + plan.plan_id),
+            (supersession, "context-plan-supersession:" + old.plan_id),
+        ):
+            document = json.dumps(
+                record.model_dump(mode="json"),
+                sort_keys=True,
+                separators=(",", ":"),
+                allow_nan=False,
+            )
+            db.execute(
+                "INSERT INTO events VALUES(?,?,?,?,?,?)",
+                (
+                    plan.experiment_id,
+                    key,
+                    type(record).__name__,
+                    record.recorded_at.isoformat(timespec="microseconds"),
+                    document,
+                    hashlib.sha256(document.encode()).hexdigest(),
+                ),
+            )
+    return True
 
 
 def register_context_plan(
@@ -240,6 +379,7 @@ def run_registered_context_evaluation(
     registry_path: Path,
     declaration_path: Path,
     now: datetime | None = None,
+    plan_id: str | None = None,
 ) -> ContextEvaluation:
     """Operational learner API; no fake admission, creation, activation or network calls."""
     now = aware(now or datetime.now(UTC))
@@ -247,9 +387,11 @@ def run_registered_context_evaluation(
     plans = [
         e.decode(ContextEvaluationPlan) for e in events if e.kind == ContextEvaluationPlan.__name__
     ]
-    if len(plans) != 1:
+    if plan_id is None and len(plans) != 1:
         raise ValueError("ONE_PREDECLARED_CONTEXT_PLAN_REQUIRED")
-    plan = plans[0]
+    plan = load_context_plan(
+        store, experiment_id=experiment_id, plan_id=plan_id or plans[0].plan_id, at=now
+    )
     if plan.manifest_hash != store.state(experiment_id).manifest_hash:
         raise ValueError("EXACT_REGISTERED_EXPERIMENT_MANIFEST_REQUIRED")
     if now < plan.evaluation_end:
@@ -288,4 +430,5 @@ def run_registered_context_evaluation(
         evaluation_plan_id=plan.plan_id,
         training_start=plan.training_start,
         recorded_at=now,
+        teacher_policy_id=plan.teacher_policy_id,
     )

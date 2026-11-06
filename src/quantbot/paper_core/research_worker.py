@@ -17,6 +17,7 @@ from quantbot.market_data.alpaca import AlpacaMarketDataClient
 from quantbot.market_data.transports import HttpxMarketDataTransport
 from quantbot.operations.service import isolated_application_environment
 from quantbot.paper_core.account_control import BudgetedTransport
+from quantbot.paper_core.context_review_producer import run_review_producer
 from quantbot.paper_core.discovery import DiscoveryStore
 from quantbot.paper_core.discovery_research import run_research
 from quantbot.paper_core.release import PreparedRelease, verify_release
@@ -136,6 +137,7 @@ async def run(manifest: Path, seal_path: Path, settings_path: Path) -> None:
                         await asyncio.sleep(3600)
 
             task = asyncio.create_task(catalogs())
+            reviews = asyncio.create_task(run_review_producer(state))
             print(
                 json.dumps(
                     dict(
@@ -153,6 +155,11 @@ async def run(manifest: Path, seal_path: Path, settings_path: Path) -> None:
                 task.cancel()
                 try:
                     await task
+                except asyncio.CancelledError:
+                    pass
+                reviews.cancel()
+                try:
+                    await reviews
                 except asyncio.CancelledError:
                     pass
                 await transport.aclose()

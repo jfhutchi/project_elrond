@@ -11,9 +11,9 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 
 from quantbot.learner.context_feedback import DownstreamExample, ReadingReview, SourceInvalidation
 from quantbot.learner.context_integration import ContextInvalidationRecord, ContextSnapshotRecord
@@ -55,8 +55,22 @@ class ModeledCostContract(LearnerModel):
     recorded_at: datetime
     source_policy_refs: tuple[str, ...] = Field(min_length=1)
     stock_round_trip_bps: Literal[10] = 10
-    crypto_round_trip_bps: Literal[50] = 50
+    crypto_round_trip_bps: Literal[50, 60] = 50
+    cost_scope: Literal["ROUND_TRIP_FEES_PLUS_SLIPPAGE_V2"] | None = None
     interpretation: Literal["RESEARCH_ESTIMATE_NOT_ACTUAL_FEE"] = "RESEARCH_ESTIMATE_NOT_ACTUAL_FEE"
+
+    @model_serializer(mode="wrap")
+    def preserve_fee_only_contract(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if self.cost_scope is None:
+            payload.pop("cost_scope", None)
+        return payload
+
+    @model_validator(mode="after")
+    def explicit_total_cost(self) -> Self:
+        if (self.crypto_round_trip_bps == 60) != (self.cost_scope is not None):
+            raise ValueError("CRYPTO_TOTAL_COST_REQUIRES_EXPLICIT_60_BPS_V2_CONTRACT")
+        return self
 
     @property
     def contract_id(self) -> str:
@@ -826,12 +840,42 @@ class ContextShadowConsumption(LearnerModel):
     shadow: ContextSnapshot
     candidate_id: str | None = None
     candidate_feature_values: tuple[float, ...] | None = None
+    fixed_baseline_id: str | None = None
+    fixed_feature_values: tuple[float, ...] | None = None
     reading_predictions: tuple[tuple[str, float], ...] = ()
     scope: Literal["SHADOW_FEATURE_PREPARATION"] = "SHADOW_FEATURE_PREPARATION"
     grants_execution: Literal[False] = False
 
+    @model_serializer(mode="wrap")
+    def preserve_candidate_receipt(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if self.fixed_baseline_id is None:
+            payload.pop("fixed_baseline_id", None)
+            payload.pop("fixed_feature_values", None)
+        return payload
+
+    @property
+    def interpreter_id(self) -> str | None:
+        return self.fixed_baseline_id or self.candidate_id
+
+    @property
+    def consumed_feature_values(self) -> tuple[float, ...] | None:
+        return (
+            self.fixed_feature_values if self.fixed_baseline_id else self.candidate_feature_values
+        )
+
     @model_validator(mode="after")
     def prospective_shadow(self) -> Self:
+        if self.fixed_baseline_id is not None:
+            if (
+                self.candidate_id is not None
+                or self.candidate_feature_values is not None
+                or self.reading_predictions
+                or self.fixed_feature_values != tuple(v for _, v in self.shadow.features)
+            ):
+                raise ValueError("EXACT_UNTRAINED_FIXED_LEXICAL_FEATURES_REQUIRED")
+        elif self.fixed_feature_values is not None:
+            raise ValueError("FIXED_FEATURES_REQUIRE_BASELINE_ID")
         if self.consumed_at != self.recorded_at or self.shadow.at != self.consumed_at:
             raise ValueError("PROSPECTIVE_SHADOW_TIMESTAMPS_REQUIRED")
         if not self.shadow.used_document_ids:
@@ -875,6 +919,7 @@ def retain_shadow_consumption(
     *,
     now: datetime,
     candidate_validator: Callable[[ContextShadowConsumption], bool] | None = None,
+    baseline_validator: Callable[[ContextShadowConsumption], bool] | None = None,
 ) -> bool:
     """Called prospectively by the runtime before it produces a decision, never backfilled."""
     receipt = ContextShadowConsumption.model_validate(receipt.model_dump())
@@ -885,6 +930,10 @@ def retain_shadow_consumption(
         candidate_validator is None or not candidate_validator(receipt)
     ):
         raise ValueError("RECOMPUTED_VALIDATED_CANDIDATE_REQUIRED")
+    if receipt.fixed_baseline_id is not None and (
+        baseline_validator is None or not baseline_validator(receipt)
+    ):
+        raise ValueError("DECLARED_FIXED_BASELINE_REQUIRED")
     capture = load_context_capture(research, receipt.original_snapshot_id)
     if capture.snapshot.at > now or capture.snapshot.symbol != receipt.shadow.symbol:
         raise ValueError("SHADOW_ORIGINAL_CONTEXT_UNAVAILABLE")
@@ -995,7 +1044,7 @@ def runtime_downstream_examples(
         ):
             excluded.append((row.feedback_id, "PROSPECTIVE_SHADOW_CONSUMPTION_UNAVAILABLE"))
             continue
-        if {shadow.receipt_id, shadow.candidate_id} & revoked:
+        if {shadow.receipt_id, shadow.interpreter_id} & revoked:
             excluded.append((row.feedback_id, "SHADOW_INTERPRETER_INVALIDATED"))
             continue
         capture = load_context_capture(research, row.snapshot_id)
@@ -1044,8 +1093,8 @@ def runtime_downstream_examples(
                 net_return_bps=float(target),
                 cost_basis=cost_basis,
                 cost_evidence_id=cost_evidence_id,
-                consumed_context_features=shadow.candidate_feature_values,
-                interpreter_id=shadow.candidate_id,
+                consumed_context_features=shadow.consumed_feature_values,
+                interpreter_id=shadow.interpreter_id,
             )
         )
     return tuple(examples), tuple(excluded)

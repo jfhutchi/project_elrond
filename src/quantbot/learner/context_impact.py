@@ -8,9 +8,9 @@ from collections.abc import Mapping, Sequence
 from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Self
+from typing import TYPE_CHECKING, Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer, model_validator
 from sqlalchemy import text
 
 from quantbot.learner.context_admission import _session
@@ -34,7 +34,7 @@ from quantbot.paper_core.context_integration import (
 )
 from quantbot.paper_core.contracts import Observation
 from quantbot.paper_core.discovery import DiscoveryStore
-from quantbot.paper_core.external_context import ContextDocument, aware
+from quantbot.paper_core.external_context import INTERPRETER_VERSION, ContextDocument, aware
 from quantbot.research.intraday_accounting import (
     record_intraday_attempt,
     verified_intraday_attempt_ids,
@@ -48,11 +48,78 @@ if TYPE_CHECKING:
     from quantbot.paper_core.store import CoreStore
 
 
-class ContextImpactPlan(LearnerModel):
+class FixedLexicalBaseline(LearnerModel):
+    """A declared fixed measurement, never a trained or calibrated candidate."""
+
+    experiment_id: str
+    recorded_at: datetime
+    source_policy_id: Digest
+    contract: Literal["UNTRAINED_FIXED_LEXICAL_BASELINE"] = "UNTRAINED_FIXED_LEXICAL_BASELINE"
+    interpreter_version: str = INTERPRETER_VERSION
+    learned: Literal[False] = False
+    grants_activation: Literal[False] = False
+
+    @property
+    def baseline_id(self) -> str:
+        return content_id(self)
+
+
+def load_fixed_baseline(
+    store: ExperimentStore, *, experiment_id: str, baseline_id: str, at: datetime
+) -> FixedLexicalBaseline:
+    events = store.read_as_of(
+        experiment_id,
+        at,
+        maximum_records=4000,
+        kinds=("FixedLexicalBaseline", "ContextInvalidationRecord"),
+    )
+    revoked = {
+        e.decode(ContextInvalidationRecord).invalidation.reference_id
+        for e in events
+        if e.kind == "ContextInvalidationRecord"
+        and e.decode(ContextInvalidationRecord).invalidation.invalidated_at <= at
+    }
+    for event in events:
+        if event.kind == "FixedLexicalBaseline":
+            baseline = event.decode(FixedLexicalBaseline)
+            if baseline.baseline_id == baseline_id:
+                if (
+                    baseline.interpreter_version != INTERPRETER_VERSION
+                    or {baseline_id, baseline.source_policy_id} & revoked
+                ):
+                    raise ValueError("FIXED_LEXICAL_BASELINE_INVALIDATED")
+                return baseline
+    raise ValueError("FIXED_LEXICAL_BASELINE_UNAVAILABLE")
+
+
+class ImpactInterpreterIdentity(LearnerModel):
+    candidate_id: Digest | None = None
+    fixed_baseline_id: Digest | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_learned_identity(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if self.fixed_baseline_id is None:
+            payload.pop("fixed_baseline_id", None)
+        return payload
+
+    @model_validator(mode="after")
+    def one_interpreter(self) -> Self:
+        if (self.candidate_id is None) == (self.fixed_baseline_id is None):
+            raise ValueError("ONE_EXPLICIT_IMPACT_INTERPRETER_REQUIRED")
+        return self
+
+    @property
+    def interpreter_id(self) -> str:
+        identity = self.fixed_baseline_id or self.candidate_id
+        assert identity is not None
+        return identity
+
+
+class ContextImpactPlan(ImpactInterpreterIdentity):
     experiment_id: str
     recorded_at: datetime
     manifest_hash: Digest
-    candidate_id: Digest
     source_policy_id: Digest
     source_start: datetime
     training_start: datetime
@@ -69,7 +136,7 @@ class ContextImpactPlan(LearnerModel):
     cost_basis: Literal["MODELED_NET", "ACTUAL_NET"] = "MODELED_NET"
     modeled_cost_contract_id: Digest | None = None
     stock_round_trip_bps: Literal[10] = 10
-    crypto_round_trip_bps: Literal[50] = 50
+    crypto_round_trip_bps: Literal[50, 60] = 50
     cost_assumption_scope: Literal["RESEARCH_ESTIMATE_NOT_BROKER_FEES"] = (
         "RESEARCH_ESTIMATE_NOT_BROKER_FEES"
     )
@@ -77,6 +144,12 @@ class ContextImpactPlan(LearnerModel):
 
     @model_validator(mode="after")
     def predeclared(self) -> Self:
+        if (
+            self.fixed_baseline_id is not None
+            and self.cost_basis == "MODELED_NET"
+            and self.crypto_round_trip_bps != 60
+        ):
+            raise ValueError("BASELINE_REQUIRES_TOTAL_CRYPTO_COST_60_BPS")
         if self.cost_basis == "MODELED_NET" and self.modeled_cost_contract_id is None:
             raise ValueError("EXACT_PREDECLARED_MODELED_COST_CONTRACT_REQUIRED")
         if self.cost_basis == "ACTUAL_NET" and self.modeled_cost_contract_id is not None:
@@ -103,10 +176,9 @@ class ContextImpactPlan(LearnerModel):
         return content_id(self)
 
 
-class ContextImpactComparison(LearnerModel):
+class ContextImpactComparison(ImpactInterpreterIdentity):
     experiment_id: str
     recorded_at: datetime
-    candidate_id: Digest
     plan_id: Digest
     request_id: Digest
     comparison: DownstreamComparison
@@ -173,10 +245,9 @@ def purge_heldout_source_overlap(
     )
 
 
-class ContextImpactEvaluation(LearnerModel):
+class ContextImpactEvaluation(ImpactInterpreterIdentity):
     experiment_id: str
     recorded_at: datetime
-    candidate_id: Digest
     plan_id: Digest
     request_id: Digest
     cost_basis: Literal["MODELED_NET", "ACTUAL_NET"]
@@ -201,21 +272,35 @@ def register_context_impact_plan(
         raise ValueError("IMPACT_PLAN_MUST_PRECEDE_TRAINING")
     if store.state(plan.experiment_id).manifest_hash != plan.manifest_hash:
         raise ValueError("EXACT_PARENT_MANIFEST_REQUIRED")
-    candidate = load_retained_candidate(
-        store, experiment_id=plan.experiment_id, candidate_id=plan.candidate_id, at=plan.recorded_at
-    )
-    if candidate.heldout_mse >= candidate.baseline_heldout_mse:
-        raise ValueError("IMPACT_REQUIRES_BETTER_READING_CANDIDATE")
+    if plan.fixed_baseline_id is not None:
+        baseline = load_fixed_baseline(
+            store,
+            experiment_id=plan.experiment_id,
+            baseline_id=plan.fixed_baseline_id,
+            at=plan.recorded_at,
+        )
+        if baseline.source_policy_id != plan.source_policy_id:
+            raise ValueError("FIXED_BASELINE_SOURCE_POLICY_MISMATCH")
+    else:
+        assert plan.candidate_id is not None
+        candidate = load_retained_candidate(
+            store,
+            experiment_id=plan.experiment_id,
+            candidate_id=plan.candidate_id,
+            at=plan.recorded_at,
+        )
+        if candidate.heldout_mse >= candidate.baseline_heldout_mse:
+            raise ValueError("IMPACT_REQUIRES_BETTER_READING_CANDIDATE")
     events = store.read_as_of(
         plan.experiment_id, now, maximum_records=128, kinds=("ContextImpactPlan",)
     )
     for event in events:
         previous = event.decode(ContextImpactPlan)
-        if previous.candidate_id == plan.candidate_id:
+        if previous.interpreter_id == plan.interpreter_id:
             if previous == plan:
                 return False
             raise ValueError("IMPACT_PLAN_ALREADY_REGISTERED")
-    return store.append(plan, idempotency_key="context-impact-plan:" + plan.candidate_id)
+    return store.append(plan, idempotency_key="context-impact-plan:" + plan.interpreter_id)
 
 
 class CanonicalImpactAdmission:
@@ -327,6 +412,7 @@ def load_retained_impact_comparison(
             if invalidated & {
                 comparison_id,
                 comparison.candidate_id,
+                comparison.fixed_baseline_id,
                 comparison.plan_id,
                 *comparison.cost_evidence_ids,
             }:
@@ -375,7 +461,8 @@ def run_registered_downstream_comparison(
     research: DiscoveryStore,
     *,
     experiment_id: str,
-    candidate_id: str,
+    candidate_id: str | None = None,
+    fixed_baseline_id: str | None = None,
     registry_path: Path,
     declaration_path: Path,
     now: datetime | None = None,
@@ -390,6 +477,9 @@ def run_registered_downstream_comparison(
     )
 
     now = aware(now or datetime.now(UTC))
+    if (candidate_id is None) == (fixed_baseline_id is None):
+        raise ValueError("ONE_EXPLICIT_IMPACT_INTERPRETER_REQUIRED")
+    interpreter_id = fixed_baseline_id or candidate_id
     events = store.read_as_of(
         experiment_id,
         now,
@@ -400,14 +490,24 @@ def run_registered_downstream_comparison(
         e.decode(ContextImpactPlan)
         for e in events
         if e.kind == "ContextImpactPlan"
-        and e.decode(ContextImpactPlan).candidate_id == candidate_id
+        and e.decode(ContextImpactPlan).interpreter_id == interpreter_id
     ]
     if len(plans) != 1:
         raise ValueError("ONE_PREDECLARED_IMPACT_PLAN_REQUIRED")
     plan = plans[0]
     if store.state(experiment_id).manifest_hash != plan.manifest_hash:
         raise ValueError("EXACT_PARENT_MANIFEST_REQUIRED")
-    load_retained_candidate(store, experiment_id=experiment_id, candidate_id=candidate_id, at=now)
+    if fixed_baseline_id is not None:
+        baseline = load_fixed_baseline(
+            store, experiment_id=experiment_id, baseline_id=fixed_baseline_id, at=now
+        )
+        if baseline.source_policy_id != plan.source_policy_id:
+            raise ValueError("FIXED_BASELINE_SOURCE_POLICY_MISMATCH")
+    else:
+        assert candidate_id is not None
+        load_retained_candidate(
+            store, experiment_id=experiment_id, candidate_id=candidate_id, at=now
+        )
     if content_id(load_source_permissions(research)) != plan.source_policy_id:
         raise ValueError("IMPACT_SOURCE_PERMISSION_CHANGED")
     admission = CanonicalImpactAdmission(
@@ -426,7 +526,7 @@ def run_registered_downstream_comparison(
         if not plan.training_start <= row.decision_at <= plan.evaluation_end:
             continue
         shadow = load_shadow_consumption(research, observation_id=row.observation_id)
-        if shadow is None or shadow.candidate_id != candidate_id:
+        if shadow is None or shadow.interpreter_id != interpreter_id:
             continue
         eligible.append(row)
     eligible = list(select_impact_feedback(eligible, plan))
@@ -473,7 +573,7 @@ def run_registered_downstream_comparison(
         row
         for row in rows
         if row.decision_id in decision_ids
-        and row.interpreter_id == candidate_id
+        and row.interpreter_id == interpreter_id
         and row.consumed_context_features is not None
     )
     documents = {}
@@ -514,6 +614,8 @@ def run_registered_downstream_comparison(
         cost_basis=plan.cost_basis,
         eligible_examples=len(rows),
     )
+    if fixed_baseline_id is not None:
+        result["fixed_baseline_id"] = fixed_baseline_id
     if len(train) < 8 or len(heldout) < 4:
         evaluation = ContextImpactEvaluation(
             **result,

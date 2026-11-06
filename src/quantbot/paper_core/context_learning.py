@@ -15,6 +15,7 @@ from sqlalchemy import select, text
 
 from quantbot.learner.context_admission import (
     ContextEvaluationPlan,
+    load_context_plan,
     run_registered_context_evaluation,
 )
 from quantbot.learner.context_feedback import ReadingReview
@@ -49,7 +50,10 @@ class ContextLearningBinding(LearnerModel):
     outcome_rowid: int = Field(ge=0)
     grants_activation: Literal[False] = False
 
-    interpreter_admission: Literal["SHADOW_ONLY_ON_BETTER_READING_HOLDOUT_V1"] | None = None
+    interpreter_admission: (
+        Literal["SHADOW_ONLY_ON_BETTER_READING_HOLDOUT_V1", "FIXED_LEXICAL_OUTCOME_SHADOW_V1"]
+        | None
+    ) = None
     modeled_cost_contract_id: Digest | None = None
 
     @field_serializer("experiment_store_path", "registry_path", "declaration_path")
@@ -69,10 +73,13 @@ class ContextLearningStatus(LearnerModel):
     snapshots_journaled: int = 0
     feedback_journaled: int = 0
     independent_reviews: int = 0
+    model_generated_reviews: int = 0
+    semantic_target: str | None = None
     eligible_examples: int = 0
     candidate_id: str | None = None
     grants_activation: Literal[False] = False
     interpreter_mode: str | None = None
+    interpreter_kind: str | None = None
     interpreter_version_id: str | None = None
     impact_evaluation_end: datetime | None = None
     impact_status: str | None = None
@@ -286,23 +293,19 @@ def consider_context_learning(
             binding.experiment_id,
             now,
             maximum_records=4000,
-            kinds=("ContextEvaluationPlan", "ReadingReview"),
+            kinds=("ReadingReview",),
         )
-        plans = [
-            e.decode(ContextEvaluationPlan) for e in events if e.kind == "ContextEvaluationPlan"
-        ]
-        if (
-            len(plans) != 1
-            or plans[0].plan_id != binding.plan_id
-            or experiments.state(binding.experiment_id).manifest_hash != binding.manifest_hash
-        ):
+        if experiments.state(binding.experiment_id).manifest_hash != binding.manifest_hash:
             raise ValueError("EXACT_COMMISSIONED_CONTEXT_PLAN_REQUIRED")
-        plan = plans[0]
+        plan = load_context_plan(
+            experiments, experiment_id=binding.experiment_id, plan_id=binding.plan_id, at=now
+        )
         status = status.model_copy(
             update=dict(
                 training_start=plan.training_start,
                 split_at=plan.split_at,
                 evaluation_end=plan.evaluation_end,
+                semantic_target=plan.target,
             )
         )
         scope = getattr(plan, "reading_scope", None)
@@ -311,12 +314,22 @@ def consider_context_learning(
         reviews = sum(
             e.kind == "ReadingReview"
             and e.decode(ReadingReview).verdict != "INCONCLUSIVE"
-            and e.decode(ReadingReview).label_authority != "OUTCOME_ONLY"
+            and e.decode(ReadingReview).label_authority in {"HUMAN_REVIEW", "SOURCE_CORRECTION"}
             and e.decode(ReadingReview).category == "SENTIMENT_READING"
             for e in events
         )
-        if not reviews:
-            gates["INDEPENDENT_REVIEW_UNAVAILABLE"] += 1
+        generated_reviews = sum(
+            e.kind == "ReadingReview"
+            and str(e.decode(ReadingReview).label_authority) == "MODEL_GENERATED"
+            and e.decode(ReadingReview).verdict != "INCONCLUSIVE"
+            for e in events
+        )
+        if not reviews and not generated_reviews:
+            gates[
+                "OPTIONAL_SEMANTIC_REVIEW_UNAVAILABLE"
+                if binding.interpreter_admission == "FIXED_LEXICAL_OUTCOME_SHADOW_V1"
+                else "INDEPENDENT_REVIEW_UNAVAILABLE"
+            ] += 1
         with research.connection() as db:
             captures = db.execute(
                 "SELECT rowid,payload FROM receipts WHERE rowid>? ORDER BY rowid LIMIT ?",
@@ -378,6 +391,7 @@ def consider_context_learning(
                 experiment_id=binding.experiment_id,
                 registry_path=binding.registry_path,
                 declaration_path=binding.declaration_path,
+                plan_id=binding.plan_id,
                 now=now,
             )
             if evaluation.status != "EVALUATED":
@@ -388,13 +402,15 @@ def consider_context_learning(
             ContextImpactPlan,
             run_registered_downstream_comparison,
         )
-        from quantbot.paper_core.context_interpreter import current_version
+        from quantbot.paper_core.context_interpreter import admit_fixed_shadow, current_version
 
         version = (
             admit_shadow(research, experiments, binding, evaluation, now=now)
             if evaluation
             else current_version(research)
         )
+        if version is None and binding.interpreter_admission == "FIXED_LEXICAL_OUTCOME_SHADOW_V1":
+            version = admit_fixed_shadow(research, experiments, binding, plan, now=now)
         if version is not None:
             impact_plans = experiments.read_as_of(
                 binding.experiment_id, now, maximum_records=4000, kinds=("ContextImpactPlan",)
@@ -415,6 +431,7 @@ def consider_context_learning(
                     core_store=store,
                     experiment_id=binding.experiment_id,
                     candidate_id=version.candidate_id,
+                    fixed_baseline_id=version.fixed_baseline_id,
                     registry_path=binding.registry_path,
                     declaration_path=binding.declaration_path,
                     now=now,
@@ -424,6 +441,7 @@ def consider_context_learning(
             status = status.model_copy(
                 update=dict(
                     interpreter_mode=version.mode,
+                    interpreter_kind=version.interpreter_kind,
                     interpreter_version_id=version.version_id,
                     impact_evaluation_end=impact_plan.evaluation_end if impact_plan else None,
                     impact_status=impact.status if impact else "PROSPECTIVE_COLLECTION",
@@ -445,6 +463,7 @@ def consider_context_learning(
                 snapshots_journaled=progress["snapshots_total"],
                 feedback_journaled=progress["feedback_total"],
                 independent_reviews=reviews,
+                model_generated_reviews=generated_reviews,
                 eligible_examples=evaluation.eligible_examples if evaluation else 0,
                 candidate_id=evaluation.candidate_id if evaluation else None,
             )

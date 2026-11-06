@@ -150,3 +150,24 @@ def test_shadow_version_is_separate_from_trading_and_unknown_fit_counts(tmp_path
     assert panel.independent_reviews == 12 and panel.eligible_examples == 8
     assert panel.trial_fits is None and panel.fitted_candidates is None
     assert panel.used_documents is None and panel.impact_due == NOW + timedelta(days=8)
+
+
+def test_model_generated_reviews_are_not_reported_as_independent_truth(tmp_path):
+    path = research(
+        tmp_path,
+        status=status(
+            model_generated_reviews=3,
+            semantic_target="MODEL_TEACHER_AGREEMENT_V1",
+            interpreter_kind="UNTRAINED_FIXED_LEXICAL_BASELINE",
+        ),
+    )
+    with Database.create(tmp_path / "synthetic-console.db") as database:
+        with TestClient(create_app(database, research_store=path)) as client:
+            panel = client.get("/api/state").json()["context_learning"]
+            assert panel["model_generated_reviews"] == 3
+            assert panel["independent_reviews"] == 0
+            assert panel["semantic_target"] == "MODEL_TEACHER_AGREEMENT_V1"
+            assert panel["interpreter_kind"] == "UNTRAINED_FIXED_LEXICAL_BASELINE"
+            page = client.get("/learner").text
+            assert "Model-generated reviews" in page
+            assert "not independent truth" in page

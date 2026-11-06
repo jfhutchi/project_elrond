@@ -29,6 +29,7 @@ from quantbot.research.manifest import content_id
 CONTEXT_EVENT_KINDS = (
     "ExperimentManifest",
     "ContextEvaluationPlan",
+    "ContextPlanSupersession",
     "ContextSnapshotRecord",
     "ContextInvalidationRecord",
     "ContextPermissionRecord",
@@ -136,6 +137,7 @@ def evaluate_retained_context(
     evaluation_plan_id: str | None = None,
     training_start: datetime | None = None,
     recorded_at: datetime | None = None,
+    teacher_policy_id: str | None = None,
 ) -> ContextEvaluation:
     """Callable learner operation. No reviews, permission or fit admission are manufactured."""
     split_at, as_of = aware(split_at), aware(as_of)
@@ -154,6 +156,16 @@ def evaluate_retained_context(
         for e in events
         if e.kind == ReadingReview.__name__ and e.recorded_at <= as_of
     ]
+    reviews = [
+        review
+        for review in reviews
+        if (
+            review.label_authority == "MODEL_GENERATED"
+            and review.teacher_policy_id == teacher_policy_id
+            if teacher_policy_id is not None
+            else review.label_authority in {"HUMAN_REVIEW", "SOURCE_CORRECTION"}
+        )
+    ]
     reviewed_ids = {review.reading_id for review in reviews}
     training_permissions = {}
     for event in events:
@@ -167,9 +179,8 @@ def evaluate_retained_context(
             if capture.snapshot.at > record.recorded_at:
                 raise ValueError("CONTEXT_CAPTURE_RECORDED_BEFORE_AVAILABLE")
             if (
-                (training_start is None or aware(training_start) <= capture.snapshot.at <= as_of)
-                and any(reading.reading_id in reviewed_ids for reading in capture.snapshot.readings)
-            ):
+                training_start is None or aware(training_start) <= capture.snapshot.at <= as_of
+            ) and any(reading.reading_id in reviewed_ids for reading in capture.snapshot.readings):
                 captures.append(capture)
         elif event.kind == ContextInvalidationRecord.__name__:
             invalidations.append(event.decode(ContextInvalidationRecord).invalidation)
@@ -290,6 +301,9 @@ def evaluate_retained_context(
             candidate.model_dump()
             | {
                 "recorded_at": recorded_at,
+                "evaluation": "MODEL_TEACHER_AGREEMENT_NOT_TRUTH_OR_PROFITABILITY"
+                if teacher_policy_id is not None
+                else candidate.evaluation,
                 "lineage_refs": (*candidate.lineage_refs, evaluation_plan_id)
                 if evaluation_plan_id
                 else candidate.lineage_refs,
@@ -297,6 +311,8 @@ def evaluate_retained_context(
         )
         store.append(candidate, idempotency_key="context-candidate:" + candidate.candidate_id)
         status, reason = "EVALUATED", "HELDOUT_READING_EVALUATION_NOT_EXECUTION_AUTHORITY"
+        if teacher_policy_id is not None:
+            reason = "MODEL_TEACHER_AGREEMENT_NOT_TRUTH_OR_PROFITABILITY"
     result = ContextEvaluation(
         experiment_id=experiment_id,
         recorded_at=recorded_at,

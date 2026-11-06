@@ -6,16 +6,19 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Any, Literal, TypeVar
 
-from pydantic import Field
+from pydantic import Field, SerializerFunctionWrapHandler, model_serializer
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from quantbot.learner.context_admission import ContextEvaluationPlan
+from quantbot.learner.context_admission import ContextEvaluationPlan, load_context_plan
 from quantbot.learner.context_feedback import candidate_polarity
 from quantbot.learner.context_impact import (
     ContextImpactComparison,
     ContextImpactEvaluation,
     ContextImpactPlan,
+    FixedLexicalBaseline,
+    ImpactInterpreterIdentity,
+    load_fixed_baseline,
     load_retained_impact_comparison,
     register_context_impact_plan,
 )
@@ -55,13 +58,12 @@ POINTER_KEY = "context:interpreter-current"
 T = TypeVar("T", bound=LearnerModel)
 
 
-class ContextInterpreterVersion(LearnerModel):
+class ContextInterpreterVersion(ImpactInterpreterIdentity):
     contract: Literal["CONTEXT_INTERPRETER_VERSION_V1"] = "CONTEXT_INTERPRETER_VERSION_V1"
     binding_id: str
     recorded_at: datetime
     mode: Literal["SHADOW_ONLY", "TRADING_FILTER", "DISABLED"]
-    candidate_id: str
-    semantic_evaluation_id: str
+    semantic_evaluation_id: str | None = None
     impact_plan_id: str
     source_policy_id: str
     previous_version_id: str | None = None
@@ -76,14 +78,34 @@ class ContextInterpreterVersion(LearnerModel):
     def version_id(self) -> str:
         return content_id(self)
 
+    @property
+    def interpreter_kind(self) -> str:
+        return (
+            "UNTRAINED_FIXED_LEXICAL_BASELINE"
+            if self.fixed_baseline_id
+            else "REVIEW_CALIBRATED_CANDIDATE"
+        )
+
 
 class ContextForecast(LearnerModel):
     forecast_spec_id: str
     version_id: str
     recorded_at: datetime
     snapshot_id: str
-    candidate_values: tuple[float, ...]
+    candidate_values: tuple[float, ...] | None = None
+    fixed_values: tuple[float, ...] | None = None
     expected_net_bps: float = Field(allow_inf_nan=False)
+
+    @model_serializer(mode="wrap")
+    def preserve_candidate_forecast(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if self.fixed_values is None:
+            payload.pop("fixed_values", None)
+        return payload
+
+    @property
+    def context_values(self) -> tuple[float, ...] | None:
+        return self.fixed_values if self.fixed_values is not None else self.candidate_values
 
     @property
     def forecast_id(self) -> str:
@@ -159,10 +181,18 @@ def admit_shadow(
 ) -> ContextInterpreterVersion | None:
     """Initial commission permits one automatic shadow version, never trading promotion."""
     current = current_version(research)
-    if current is not None or binding.interpreter_admission is None:
+    replace_fixed = (
+        current is not None
+        and current.mode == "SHADOW_ONLY"
+        and current.fixed_baseline_id is not None
+        and binding.interpreter_admission == "FIXED_LEXICAL_OUTCOME_SHADOW_V1"
+    )
+    if binding.interpreter_admission is None or current is not None and not replace_fixed:
         return current
     if evaluation.status != "EVALUATED" or evaluation.candidate_id is None:
-        return None
+        return current
+    if evaluation.evaluation_plan_id != binding.plan_id:
+        raise ValueError("CONTEXT_EXACT_SEMANTIC_PLAN_REQUIRED")
     events = experiments.read_as_of(
         binding.experiment_id, now, maximum_records=4000, kinds=("ContextEvaluation",)
     )
@@ -175,7 +205,7 @@ def admit_shadow(
         at=now,
     )
     if candidate.heldout_mse >= candidate.baseline_heldout_mse:
-        return None
+        return current
     contract = modeled_contract(research, binding)
     if contract is None:
         raise ValueError("CONTEXT_MODELED_COST_CONTRACT_REQUIRED")
@@ -192,6 +222,7 @@ def admit_shadow(
         split_at=start + timedelta(days=7),
         evaluation_end=start + timedelta(days=14),
         modeled_cost_contract_id=contract.contract_id,
+        crypto_round_trip_bps=contract.crypto_round_trip_bps,
     )
     # A crash after registration must reuse the immutable registered plan.
     prior = experiments.read_as_of(
@@ -216,6 +247,93 @@ def admit_shadow(
         semantic_evaluation_id=content_id(evaluation),
         impact_plan_id=plan.plan_id,
         source_policy_id=policy_id,
+        previous_version_id=current.version_id if current else None,
+    )
+    _publish(research, version, current.version_id if current else None)
+    return version
+
+
+def admit_fixed_shadow(
+    research: DiscoveryStore,
+    experiments: ExperimentStore,
+    binding: ContextLearningBinding,
+    semantic_plan: ContextEvaluationPlan,
+    *,
+    now: datetime,
+) -> ContextInterpreterVersion | None:
+    """Register a fixed measurement prospectively; no reviews, fits or execution grant."""
+    current = current_version(research)
+    if current is not None or binding.interpreter_admission != "FIXED_LEXICAL_OUTCOME_SHADOW_V1":
+        return current
+    if (
+        semantic_plan.plan_id != binding.plan_id
+        or semantic_plan.manifest_hash != binding.manifest_hash
+    ):
+        raise ValueError("CONTEXT_EXACT_SEMANTIC_PLAN_REQUIRED")
+    contract = modeled_contract(research, binding)
+    if contract is None or contract.crypto_round_trip_bps != 60:
+        raise ValueError("FIXED_BASELINE_REQUIRES_DECLARED_TOTAL_COST_CONTRACT")
+    baseline = FixedLexicalBaseline(
+        experiment_id=binding.experiment_id,
+        recorded_at=now,
+        source_policy_id=content_id(load_source_permissions(research)),
+    )
+    retained = experiments.read_as_of(
+        binding.experiment_id, now, maximum_records=128, kinds=("FixedLexicalBaseline",)
+    )
+    previous = [
+        e.decode(FixedLexicalBaseline)
+        for e in retained
+        if e.decode(FixedLexicalBaseline).source_policy_id == baseline.source_policy_id
+    ]
+    if previous:
+        if len(previous) != 1:
+            raise ValueError("FIXED_BASELINE_AMBIGUOUS")
+        baseline = previous[0]
+    else:
+        experiments.append(
+            baseline, idempotency_key="fixed-lexical-baseline:" + baseline.source_policy_id
+        )
+    future = semantic_plan.training_start > now
+    start = (
+        semantic_plan.training_start
+        if future
+        else aware(now).replace(hour=0, minute=0, second=0, microsecond=0) + timedelta(days=1)
+    )
+    plan = ContextImpactPlan(
+        experiment_id=binding.experiment_id,
+        recorded_at=now,
+        manifest_hash=binding.manifest_hash,
+        fixed_baseline_id=baseline.baseline_id,
+        source_policy_id=baseline.source_policy_id,
+        source_start=start - timedelta(hours=48),
+        training_start=start,
+        split_at=semantic_plan.split_at if future else start + timedelta(days=7),
+        evaluation_end=semantic_plan.evaluation_end if future else start + timedelta(days=14),
+        modeled_cost_contract_id=contract.contract_id,
+        crypto_round_trip_bps=60,
+    )
+    prior = experiments.read_as_of(
+        binding.experiment_id, now, maximum_records=128, kinds=("ContextImpactPlan",)
+    )
+    plans = [
+        e.decode(ContextImpactPlan)
+        for e in prior
+        if e.decode(ContextImpactPlan).fixed_baseline_id == baseline.baseline_id
+    ]
+    if plans:
+        if len(plans) != 1:
+            raise ValueError("CONTEXT_IMPACT_PLAN_AMBIGUOUS")
+        plan = plans[0]
+    else:
+        register_context_impact_plan(experiments, plan, now=now)
+    version = ContextInterpreterVersion(
+        binding_id=content_id(binding),
+        recorded_at=now,
+        mode="SHADOW_ONLY",
+        fixed_baseline_id=baseline.baseline_id,
+        impact_plan_id=plan.plan_id,
+        source_policy_id=baseline.source_policy_id,
     )
     _publish(research, version, None)
     return version
@@ -240,9 +358,29 @@ def _validated(
     experiments = ExperimentStore(binding.experiment_store_path)
     if experiments.state(binding.experiment_id).manifest_hash != binding.manifest_hash:
         raise ValueError("CONTEXT_MANIFEST_BINDING_INVALID")
-    load_retained_candidate(
-        experiments, experiment_id=binding.experiment_id, candidate_id=version.candidate_id, at=now
+    load_context_plan(
+        experiments, experiment_id=binding.experiment_id, plan_id=binding.plan_id, at=now
     )
+    if version.fixed_baseline_id is not None:
+        baseline = load_fixed_baseline(
+            experiments,
+            experiment_id=binding.experiment_id,
+            baseline_id=version.fixed_baseline_id,
+            at=now,
+        )
+        if (
+            baseline.source_policy_id != version.source_policy_id
+            or version.semantic_evaluation_id is not None
+        ):
+            raise ValueError("FIXED_BASELINE_VERSION_LINEAGE_INVALID")
+    else:
+        assert version.candidate_id is not None
+        load_retained_candidate(
+            experiments,
+            experiment_id=binding.experiment_id,
+            candidate_id=version.candidate_id,
+            at=now,
+        )
     events = experiments.read_as_of(
         binding.experiment_id,
         now,
@@ -262,12 +400,15 @@ def _validated(
         and e.decode(ContextImpactPlan).plan_id == version.impact_plan_id
     ]
     if (
-        len(evaluations) != 1
-        or evaluations[0].candidate_id != version.candidate_id
-        or evaluations[0].evaluation_plan_id != binding.plan_id
-        or evaluations[0].status != "EVALUATED"
+        version.fixed_baseline_id is None
+        and (
+            len(evaluations) != 1
+            or evaluations[0].candidate_id != version.candidate_id
+            or evaluations[0].evaluation_plan_id != binding.plan_id
+            or evaluations[0].status != "EVALUATED"
+        )
         or len(plans) != 1
-        or plans[0].candidate_id != version.candidate_id
+        or plans[0].interpreter_id != version.interpreter_id
         or plans[0].source_policy_id != version.source_policy_id
     ):
         raise ValueError("CONTEXT_VERSION_LINEAGE_INVALID")
@@ -284,7 +425,7 @@ def _validated(
             session=session,
         )
         if (
-            comparison.candidate_id != version.candidate_id
+            comparison.interpreter_id != version.interpreter_id
             or comparison.plan_id != version.impact_plan_id
         ):
             raise ValueError("CONTEXT_TRADING_LINEAGE_INVALID")
@@ -306,15 +447,11 @@ def _binding_experiments(
     experiments = ExperimentStore(binding.experiment_store_path)
     if experiments.state(binding.experiment_id).manifest_hash != binding.manifest_hash:
         raise ValueError("CONTEXT_MANIFEST_BINDING_INVALID")
-    events = experiments.read_as_of(
-        binding.experiment_id, now, maximum_records=4000, kinds=("ContextEvaluationPlan",)
+    plan = load_context_plan(
+        experiments, experiment_id=binding.experiment_id, plan_id=binding.plan_id, at=now
     )
-    plans = [e.decode(ContextEvaluationPlan) for e in events]
-    if (
-        len(plans) != 1
-        or plans[0].plan_id != binding.plan_id
-        or plans[0].reading_scope is None
-        or plans[0].reading_scope.source_policy_id != content_id(load_source_permissions(research))
+    if plan.reading_scope is None or plan.reading_scope.source_policy_id != content_id(
+        load_source_permissions(research)
     ):
         raise ValueError("CONTEXT_COMMISSIONED_READING_SCOPE_INVALID")
     return experiments
@@ -415,9 +552,13 @@ def attach_context_interpreter(
         predictions: tuple[tuple[str, float], ...] = ()
         if version is not None:
             assert experiments is not None
-            values, predictions = _vectors(
-                experiments, binding, version.candidate_id, shadow, now=now
-            )
+            if version.fixed_baseline_id is not None:
+                values = tuple(v for _, v in shadow.features)
+            else:
+                assert version.candidate_id is not None
+                values, predictions = _vectors(
+                    experiments, binding, version.candidate_id, shadow, now=now
+                )
         if version is not None and version.mode == "TRADING_FILTER":
             if comparison is None or values is None or version.impact_comparison_id is None:
                 raise ValueError("CONTEXT_TRADING_ARTIFACT_INCOMPLETE")
@@ -431,7 +572,8 @@ def attach_context_interpreter(
                 version_id=version.version_id,
                 recorded_at=now,
                 snapshot_id=shadow.snapshot_id,
-                candidate_values=values,
+                candidate_values=values if version.fixed_baseline_id is None else None,
+                fixed_values=values if version.fixed_baseline_id else None,
                 expected_net_bps=prediction,
             )
             with research.connection() as db:
@@ -455,7 +597,11 @@ def attach_context_interpreter(
                 recorded_at=now,
                 shadow=shadow,
                 candidate_id=version.candidate_id if version else None,
-                candidate_feature_values=values,
+                candidate_feature_values=values
+                if version is None or version.fixed_baseline_id is None
+                else None,
+                fixed_baseline_id=version.fixed_baseline_id if version else None,
+                fixed_feature_values=values if version and version.fixed_baseline_id else None,
                 reading_predictions=predictions,
             )
 
@@ -471,6 +617,9 @@ def attach_context_interpreter(
                 receipt,
                 now=now,
                 candidate_validator=validate_candidate,
+                baseline_validator=lambda r: (
+                    version is not None and r.fixed_baseline_id == version.fixed_baseline_id
+                ),
             )
         return observation
     except (ValueError, KeyError, OSError, sqlite3.Error) as error:
@@ -545,17 +694,22 @@ def filter_objections(
             or not 0 <= (now - forecast.recorded_at).total_seconds() <= 120
             or receipt is None
             or receipt.shadow.snapshot_id != forecast.snapshot_id
-            or receipt.candidate_id != version.candidate_id
+            or receipt.interpreter_id != version.interpreter_id
         ):
             raise ValueError("CONTEXT_FILTER_FORECAST_INVALID_OR_STALE")
-        values, predictions = _vectors(
-            experiments, binding, version.candidate_id, receipt.shadow, now=now
-        )
+        predictions: tuple[tuple[str, float], ...]
+        if version.fixed_baseline_id is not None:
+            values, predictions = tuple(v for _, v in receipt.shadow.features), ()
+        else:
+            assert version.candidate_id is not None
+            values, predictions = _vectors(
+                experiments, binding, version.candidate_id, receipt.shadow, now=now
+            )
         inputs = dict(observation.features) | dict(zip(CONTEXT_FEATURE_NAMES, values, strict=True))
         estimator = comparison.comparison.context_estimator
         expected = predict(estimator, (tuple(inputs[n] for n in estimator.feature_names),))[0]
         if (
-            values != forecast.candidate_values
+            values != forecast.context_values
             or predictions != receipt.reading_predictions
             or expected != forecast.expected_net_bps
             or expected != overlay.expected_net_bps
@@ -571,14 +725,15 @@ def change_interpreter_mode(
     research: DiscoveryStore,
     *,
     expected_version_id: str,
-    candidate_id: str,
-    semantic_evaluation_id: str,
+    candidate_id: str | None,
+    semantic_evaluation_id: str | None,
     commission_id: str,
     price_activation_id: str,
     approval_ref: str,
     now: datetime,
     mode: Literal["TRADING_FILTER", "DISABLED"],
     impact_evaluation_id: str | None = None,
+    fixed_baseline_id: str | None = None,
 ) -> ContextInterpreterVersion:
     """Explicit operator API. Rollback disables the overlay; neither action clears the fence."""
     from quantbot.paper_core.activation import active_in_session
@@ -608,6 +763,7 @@ def change_interpreter_mode(
             current is None
             or current.version_id != expected_version_id
             or current.candidate_id != candidate_id
+            or current.fixed_baseline_id != fixed_baseline_id
             or current.semantic_evaluation_id != semantic_evaluation_id
         ):
             raise ValueError("CONTEXT_MODE_EXPECTED_VERSION_MISMATCH")
@@ -636,7 +792,7 @@ def change_interpreter_mode(
             evaluation = evaluations[0]
             if (
                 evaluation.status != "EVALUATED"
-                or evaluation.candidate_id != current.candidate_id
+                or evaluation.interpreter_id != current.interpreter_id
                 or evaluation.plan_id != current.impact_plan_id
                 or evaluation.selected_heldout_count < 4
                 or evaluation.selected_heldout_mean_net_bps is None
@@ -689,7 +845,7 @@ def change_interpreter_mode(
             ):
                 raise ValueError("CONTEXT_CANONICAL_IMPACT_AUTHORITY_REQUIRED")
             if (
-                comparison.candidate_id != current.candidate_id
+                comparison.interpreter_id != current.interpreter_id
                 or comparison.plan_id != current.impact_plan_id
                 or comparison.comparison.price_plus_context_mse
                 >= comparison.comparison.price_only_mse

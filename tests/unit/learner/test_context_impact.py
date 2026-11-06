@@ -144,10 +144,12 @@ def test_predeclared_purge_removes_overlapping_heldout_cluster_without_refill(tm
 
 
 @pytest.mark.parametrize("copies_per_day", [1, 20])
+@pytest.mark.parametrize("fixed_baseline", [False, True])
 def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
     tmp_path,
     monkeypatch,
     copies_per_day,
+    fixed_baseline,
 ):
     from quantbot.learner.context_admission import _session
     from quantbot.learner.context_feedback import (
@@ -158,6 +160,7 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
     from quantbot.learner.context_impact import (
         CanonicalImpactAdmission,
         ContextImpactPlan,
+        FixedLexicalBaseline,
         load_retained_impact_comparison,
         register_context_impact_plan,
         run_registered_downstream_comparison,
@@ -182,33 +185,51 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
     from tests.unit.paper_core.test_external_context import NOW, permissions
 
     research, experiments, registry, _ = setup_plan(tmp_path)
-    source = reading_rows()
-    examples, _ = build_examples(
-        tuple(s for _, s in source),
-        tuple(d for d, _ in source),
-        tuple(review(s.readings[0]) for _, s in source),
-        as_of=NOW + timedelta(days=20),
-    )
-    candidate = fit_interpreter_candidate(
-        examples, split_at=NOW + timedelta(days=10), as_of=NOW + timedelta(days=20)
-    )
-    experiments.append(candidate, idempotency_key="synthetic-prior-candidate")
+    candidate = None
+    if not fixed_baseline:
+        source = reading_rows()
+        examples, _ = build_examples(
+            tuple(s for _, s in source),
+            tuple(d for d, _ in source),
+            tuple(review(s.readings[0]) for _, s in source),
+            as_of=NOW + timedelta(days=20),
+        )
+        candidate = fit_interpreter_candidate(
+            examples, split_at=NOW + timedelta(days=10), as_of=NOW + timedelta(days=20)
+        )
+        experiments.append(candidate, idempotency_key="synthetic-prior-candidate")
     contract = ModeledCostContract(
-        recorded_at=NOW + timedelta(days=20), source_policy_refs=("synthetic-policy",)
+        recorded_at=NOW + timedelta(days=20),
+        source_policy_refs=("synthetic-policy",),
+        crypto_round_trip_bps=60 if fixed_baseline else 50,
+        cost_scope="ROUND_TRIP_FEES_PLUS_SLIPPAGE_V2" if fixed_baseline else None,
     )
     with research.connection() as db:
         research._set(db, "context:source-permissions", [permissions().model_dump(mode="json")])
+    baseline = (
+        FixedLexicalBaseline(
+            experiment_id="synthetic-context",
+            recorded_at=NOW + timedelta(days=20),
+            source_policy_id=content_id(load_source_permissions(research)),
+        )
+        if fixed_baseline
+        else None
+    )
+    if baseline is not None:
+        experiments.append(baseline, idempotency_key="explicit-fixed-baseline")
     plan = ContextImpactPlan(
         experiment_id="synthetic-context",
         recorded_at=NOW + timedelta(days=20),
         manifest_hash=experiments.state("synthetic-context").manifest_hash,
-        candidate_id=candidate.candidate_id,
+        candidate_id=candidate.candidate_id if candidate else None,
+        fixed_baseline_id=baseline.baseline_id if baseline else None,
         source_policy_id=content_id(load_source_permissions(research)),
         source_start=NOW + timedelta(days=21),
         training_start=NOW + timedelta(days=22),
         split_at=NOW + timedelta(days=38),
         evaluation_end=NOW + timedelta(days=46),
         modeled_cost_contract_id=contract.contract_id,
+        crypto_round_trip_bps=contract.crypto_round_trip_bps,
     )
     assert register_context_impact_plan(experiments, plan, now=plan.recorded_at)
     assert not register_context_impact_plan(experiments, plan, now=plan.recorded_at)
@@ -232,10 +253,14 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
             coverage=capture.snapshot.coverage,
             used_document_ids=capture.snapshot.eligible_document_ids,
         )
-        predictions = tuple(
-            (r.reading_id, candidate_polarity(candidate, r, at=at))
-            for r in shadow.readings
-            if r.document_id in shadow.used_document_ids
+        predictions = (
+            tuple(
+                (r.reading_id, candidate_polarity(candidate, r, at=at))
+                for r in shadow.readings
+                if r.document_id in shadow.used_document_ids
+            )
+            if candidate
+            else ()
         )
         values = [value for _, value in predictions]
         positive, negative = sum(v > 0 for v in values), sum(v < 0 for v in values)
@@ -245,7 +270,9 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
             consumed_at=at,
             recorded_at=at,
             shadow=shadow,
-            candidate_id=candidate.candidate_id,
+            candidate_id=candidate.candidate_id if candidate else None,
+            fixed_baseline_id=baseline.baseline_id if baseline else None,
+            fixed_feature_values=tuple(v for _, v in shadow.features) if baseline else None,
             reading_predictions=predictions,
             candidate_feature_values=(
                 float(len(values)),
@@ -254,7 +281,9 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
                 sum(values) / len(values),
                 float(bool(positive and negative)),
                 shadow.features[-1][1],
-            ),
+            )
+            if candidate
+            else None,
         )
         day_observations, day_decisions, day_trips = [], [], []
         with _session(registry, write=True) as session:
@@ -279,6 +308,9 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
                             for r in value.shadow.readings
                             if r.document_id in value.shadow.used_document_ids
                         )
+                    ),
+                    baseline_validator=lambda value: (
+                        baseline is not None and value.fixed_baseline_id == baseline.baseline_id
                     ),
                 )
                 put(session, "core_observations", observation.id, observation)
@@ -310,7 +342,8 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
     monkeypatch.setattr(implementation, "fit_estimator", charged_fit)
     args = dict(
         experiment_id=plan.experiment_id,
-        candidate_id=candidate.candidate_id,
+        candidate_id=candidate.candidate_id if candidate else None,
+        fixed_baseline_id=baseline.baseline_id if baseline else None,
         registry_path=registry,
         declaration_path=registry,
         now=plan.evaluation_end,
@@ -318,6 +351,14 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
     result = run_registered_downstream_comparison(experiments, research, **args)
     expected_train, expected_heldout = min(100, 8 * copies_per_day), min(100, 4 * copies_per_day)
     assert result.status == "EVALUATED"
+    if fixed_baseline:
+        assert result.candidate_id is None and result.fixed_baseline_id == baseline.baseline_id
+        assert not experiments.read_as_of(
+            plan.experiment_id,
+            plan.evaluation_end,
+            maximum_records=4000,
+            kinds=("ReadingReview", "InterpreterCandidate", "ContextEvaluation"),
+        )
     assert result.eligible_examples == expected_train + expected_heldout
     assert len(calls) == 2 and admission.used_calls() == 2
     assert result.selected_heldout_count == 0  # All genuine synthetic net outcomes lost.
@@ -382,7 +423,7 @@ def test_retained_prospective_candidate_outcomes_reach_two_charged_real_fits(
         modeled_cost_contract=contract,
     )
     assert correction.feedback_written == correction.modeled_labels_written == 1
-    assert (
+    assert candidate is None or (
         load_retained_candidate(
             experiments,
             experiment_id=plan.experiment_id,

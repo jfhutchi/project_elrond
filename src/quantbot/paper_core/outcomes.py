@@ -7,11 +7,13 @@ reads until a separately commissioned adapter supplies equivalent evidence.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import and_, func, literal, or_, select, text, update
+from sqlalchemy import Select, and_, func, literal, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from quantbot.brokers.base import BrokerProtocolError
@@ -450,9 +452,77 @@ def settled_zero_entry(
     return settled_zero_for_config(store.config, session, intent, cutoff=cutoff)
 
 
+def _historical_quantity_proof_allowed(
+    store: CoreStore, session: Session, proof: ReconciliationProof, lot_clients: set[str]
+) -> bool:
+    """Unrelated later spending does not retract a witnessed historical lot closure.
+
+    Cash freshness remains revoked. Unknown reasons, invalidated captures and this lot's
+    own changed sources still require another independently certified quantity proof.
+    """
+    encoded = session.execute(
+        select(table("core_cash_authority_revocations").c.reason).where(
+            table("core_cash_authority_revocations").c.snapshot_id == "core-certified-" + proof.id
+        )
+    ).scalar_one_or_none()
+    if encoded is None:
+        return True
+    try:
+        revocation = json.loads(encoded)
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(revocation, dict) or revocation.get("reason") != "CURRENT_LEDGER_CHANGED":
+        return False
+    identities = revocation.get("source_ids")
+    if (
+        not isinstance(identities, list)
+        or not identities
+        or not all(isinstance(i, str) for i in identities)
+    ):
+        return False
+    sources = table("core_broker_event_sources")
+    for identity in identities:
+        payload = session.execute(
+            select(sources.c.payload).where(sources.c.id == identity)
+        ).scalar_one_or_none()
+        if payload is None:
+            return False
+        event = BrokerEvent.model_validate_json(payload)
+        if (
+            _source_id(event) != identity
+            or event.account_id != store.config.account_id
+            or event.client_order_id in lot_clients
+        ):
+            return False
+    return True
+
+
+def _historical_proof_payloads(
+    session: Session, certified: Select[Any], preferred: str | None
+) -> Iterator[str]:
+    """Try the retained proof by primary key before indexed chronological fallback."""
+    documents = table("core_reconciliation_proofs")
+    if preferred is not None:
+        yield from session.execute(certified.where(documents.c.id == preferred)).scalars()
+        certified = certified.where(documents.c.id != preferred)
+    yield from session.execute(certified).scalars()
+
+
 def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -> RoundTrip:
     if lot_id in quarantined_lots(session):
         raise OutcomeIncomplete("SOURCE_EVIDENCE_QUARANTINED")
+    from quantbot.paper_core.work import indexed
+
+    revisions = [
+        RoundTrip.model_validate_json(p)
+        for p in session.execute(
+            indexed(session, "core_outcome_revisions", reference=lot_id).with_only_columns(
+                table("core_outcome_revisions").c.payload
+            )
+        ).scalars()
+    ]
+    revisions = [r for r in revisions if r.lot_id == lot_id]
+    previous = max(revisions, key=lambda r: r.revision, default=None)
     repo = StorageRepository(session)
     links = list(
         session.execute(
@@ -467,9 +537,11 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     sells: list[Fill] = []
     terminal_ids: list[str] = []
     source_ids: list[str] = []
+    lot_clients: set[str] = set()
     for link in sorted(links, key=lambda row: row["intent_id"]):
         intent = repo.get_order_intent(link["intent_id"])
         assert intent is not None
+        lot_clients.add(intent.client_order_id)
         if link["role"] == "EXIT":
             from quantbot.paper_core.send_guard import EXIT_REFUSAL, definitively_unsent
 
@@ -544,14 +616,14 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
             )
             .order_by(index.c.available_at, table(name).c.generation)
         )
-        if name == "core_inventory_certifications":
-            certified = certified.where(
-                table(name).c.snapshot_id.not_in(
-                    select(table("core_cash_authority_revocations").c.snapshot_id)
-                )
-            )
-        for payload in session.execute(certified).scalars():
+        for payload in _historical_proof_payloads(
+            session, certified, previous.reconciliation_id if previous else None
+        ):
             proof = ReconciliationProof.model_validate_json(payload)
+            if name == "core_inventory_certifications" and not _historical_quantity_proof_allowed(
+                store, session, proof, lot_clients
+            ):
+                continue
             quantity_authority = (
                 proof.complete and proof.actual_quantities == proof.expected_quantities
             )
@@ -575,7 +647,10 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
                 break
     if not proofs:
         raise OutcomeIncomplete("OWNED_FLAT_RECONCILIATION_UNAVAILABLE")
-    proof = min(proofs, key=lambda p: (p.recorded_at_utc, p.generation))
+    proof = next(
+        (p for p in proofs if previous and p.id == previous.reconciliation_id),
+        min(proofs, key=lambda p: (p.recorded_at_utc, p.generation)),
+    )
     decision = Decision.model_validate_json(
         session.execute(
             select(table("core_decisions").c.payload).where(
@@ -684,21 +759,8 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     state_hash = content_id(
         {"resolver": "owned-executed-net-return-v1", "sources": sources, "fills": ordered_fills}
     )
-    from quantbot.paper_core.work import indexed
-
-    revisions = [
-        RoundTrip.model_validate_json(p)
-        for p in session.execute(
-            indexed(session, "core_outcome_revisions", reference=lot_id).with_only_columns(
-                table("core_outcome_revisions").c.payload
-            )
-        ).scalars()
-    ]
-    revisions = [r for r in revisions if r.lot_id == lot_id]
-    identical = next((r for r in revisions if r.source_state_hash == state_hash), None)
-    if identical:
-        return identical
-    previous = max(revisions, key=lambda r: r.revision, default=None)
+    if previous is not None and previous.source_state_hash == state_hash:
+        return previous
     return RoundTrip(
         **crypto_economics,
         recorded_at_utc=as_of,

@@ -27,6 +27,9 @@ class ContextLearningPanel(BaseModel):
     used_documents: int | None = None
     feedback: int | None = None
     independent_reviews: int | None = None
+    model_generated_reviews: int | None = None
+    semantic_target: str | None = None
+    interpreter_kind: str | None = None
     eligible_examples: int | None = None
     fitted_candidates: int | None = None
     trial_fits: int | None = None
@@ -145,6 +148,15 @@ def read_context_learning(path: Path | None, *, now: datetime) -> ContextLearnin
                 used_documents=_count(status.get("used_documents")),
                 feedback=_count(status.get("feedback_journaled")),
                 independent_reviews=_count(status.get("independent_reviews")),
+                model_generated_reviews=_count(status.get("model_generated_reviews")),
+                semantic_target=status.get("semantic_target")
+                if status.get("semantic_target")
+                in {"INDEPENDENT_READING_POLARITY", "MODEL_TEACHER_AGREEMENT_V1"}
+                else None,
+                interpreter_kind=status.get("interpreter_kind")
+                if status.get("interpreter_kind")
+                in {"UNTRAINED_FIXED_LEXICAL_BASELINE", "REVIEW_CALIBRATED_CANDIDATE"}
+                else None,
                 eligible_examples=_count(status.get("eligible_examples")),
                 fitted_candidates=_count(status.get("fitted_candidates")),
                 trial_fits=_count(status.get("trial_fits")),
