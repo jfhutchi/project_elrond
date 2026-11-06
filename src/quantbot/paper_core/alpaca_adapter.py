@@ -68,6 +68,7 @@ class AlpacaCoreBroker:
         self.pending_progress: tuple[str, str, str | None, str | None] | None = None
         self.inventory_diagnostic_trace: list[tuple[str, float]] = []
         self.entry_source_objections: tuple[str, ...] = ()
+        self.closed_session_window: tuple[datetime, datetime] | None = None
         self._discovery_state: DiscoveryStore | None = None
         self._research_state: DiscoveryStore | None = None
 
@@ -178,6 +179,7 @@ class AlpacaCoreBroker:
             return await acquire_session_capital(self, self.store, proof)
 
     async def get_clock(self) -> BrokerTime:
+        self.closed_session_window = None
         clock = await self.adapter.get_market_clock()
         sessions = await self.calendar.get_sessions(
             clock.timestamp.date() - timedelta(days=7), clock.timestamp.date() + timedelta(days=7)
@@ -188,6 +190,9 @@ class AlpacaCoreBroker:
         if not matching:
             raise BrokerProtocolError("CLOCK_CALENDAR_SESSION_UNAVAILABLE")
         session = matching[0]
+        previous_closes = [s.close_at for s in sessions if s.close_at <= clock.timestamp]
+        if not clock.is_open and clock.timestamp < session.open_at and previous_closes:
+            self.closed_session_window = (max(previous_closes), session.open_at)
         return BrokerTime(
             timestamp=clock.timestamp,
             account_id=self.account_id,

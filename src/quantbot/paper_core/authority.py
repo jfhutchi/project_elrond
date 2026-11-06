@@ -325,7 +325,9 @@ def guardian_objections(
     return ()
 
 
-def publish_heartbeat(store: CoreStore, heartbeat: RoleHeartbeat) -> None:
+def publish_heartbeat(
+    store: CoreStore, heartbeat: RoleHeartbeat, *, replace_idle_id: str | None = None
+) -> None:
     with store.database.transaction() as session:
         session.execute(text("BEGIN IMMEDIATE"))
         put(session, "core_role_heartbeats", heartbeat.id, heartbeat)
@@ -338,6 +340,41 @@ def publish_heartbeat(store: CoreStore, heartbeat: RoleHeartbeat) -> None:
             )
         else:
             session.execute(pointer.insert().values(role=heartbeat.role, heartbeat_id=heartbeat.id))
+        if replace_idle_id is not None and replace_idle_id != heartbeat.id:
+            docs = table("core_role_heartbeats")
+            payload = session.execute(
+                select(docs.c.payload).where(docs.c.id == replace_idle_id)
+            ).scalar_one()
+            previous = RoleHeartbeat.model_validate_json(payload)
+            # Only process-owned intermediate idle observations are disposable.
+            # Such objections plus no receipt can never authorize entry/protection,
+            # recovery or daily close certification. First/last transitions remain.
+            keys = (
+                "role",
+                "release_id",
+                "config_id",
+                "store_identity",
+                "owner",
+                "generation",
+                "process_epoch",
+                "pid",
+                "objections",
+                "evidence_ids",
+            )
+            if (
+                not previous.objections
+                or previous.objections[0] != "CLOSED_SESSION_IDLE"
+                or previous.guardian_receipt_id is not None
+                or heartbeat.guardian_receipt_id is not None
+                or any(getattr(previous, k) != getattr(heartbeat, k) for k in keys)
+                or previous.recorded_at > heartbeat.recorded_at
+            ):
+                raise ValueError("ONLY_MATCHING_PROCESS_IDLE_HEARTBEATS_ARE_COMPACTABLE")
+            session.execute(
+                docs.delete().where(
+                    docs.c.id == replace_idle_id, docs.c.id.not_in(select(pointer.c.heartbeat_id))
+                )
+            )
 
 
 def fence_entries(store: CoreStore, *, reason: str, evidence_ids: tuple[str, ...]) -> str:

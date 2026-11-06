@@ -11,7 +11,7 @@ from contextlib import suppress
 from datetime import datetime, timedelta
 from typing import Any, Literal
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
 
 from quantbot.domain import IntentState
@@ -27,6 +27,7 @@ from quantbot.paper_core.contracts import (
     Decision,
     LearningPolicy,
     ProtectionPlan,
+    ReconciliationProof,
 )
 from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics, emit_cycle
 from quantbot.paper_core.guardian import acknowledge_handoffs, guardian_cycle, owned_deadline_wait
@@ -34,13 +35,175 @@ from quantbot.paper_core.outcomes import process_outcomes, recover_intents
 from quantbot.paper_core.release import RuntimeConfig
 from quantbot.paper_core.runtime import coordinator, require_runtime_broker
 from quantbot.paper_core.send_guard import definitively_unsent
-from quantbot.paper_core.store import CoreStore, table
+from quantbot.paper_core.store import CoreStore, latest_certification, table
 from quantbot.paper_core.trader import claim_batch, claim_entry, trader_batch_cycle, trader_cycle
 from quantbot.research.manifest import content_id
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
 
 Role = Literal["trader", "guardian", "outcomes"]
+
+CLOSED_SESSION_IDLE = "CLOSED_SESSION_IDLE"
+
+
+def _idle_signature(store: CoreStore, proof: ReconciliationProof | None = None) -> str | None:
+    """Local change detector, never spending or protection authority."""
+    from quantbot.paper_core.funds import entry_inventory_objections
+    from quantbot.paper_core.health import active_health
+    from quantbot.paper_core.settlement import definitively_unsent_many, settled_zero_for_config
+
+    with store.database.transaction() as session:
+        session.execute(text("BEGIN"))
+        if proof is not None and entry_inventory_objections(
+            store, session, proof, now=store.clocks.sample()[0]
+        ):
+            return None
+        repo = StorageRepository(session)
+        if repo.list_unresolved_order_intents():
+            return None
+        links = table("core_intent_links")
+        candidates = list(
+            session.execute(
+                select(links.c.intent_id).where(
+                    links.c.role == "ENTRY",
+                    links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
+                )
+            ).scalars()
+        )
+        unsent = definitively_unsent_many(repo, candidates)
+        for identity in candidates:
+            if unsent[identity]:
+                continue
+            intent = repo.get_order_intent(identity)
+            if (
+                intent is None
+                or settled_zero_for_config(
+                    store.config, session, intent, cutoff=store.clocks.sample()[0]
+                )
+                is None
+            ):
+                return None
+        health = active_health(session)
+        if any(
+            h.protection_blocked
+            or h.state in {"INTEGRITY_FAILURE", "PROTOCOL_FAILURE", "MANUAL_PAUSE"}
+            for h in health
+            if h.scope != "LEARNING"
+        ):
+            return None
+        stop = repo.get_kill_switch_state()
+        return content_id(
+            (
+                latest_certification(session),
+                store.ledger_state_id(session),
+                (stop.engaged, stop.reason, stop.updated_at),
+                tuple(h.id for h in health),
+                tuple(
+                    session.execute(
+                        select(table("core_cash_authority_revocations").c.snapshot_id).order_by(
+                            table("core_cash_authority_revocations").c.snapshot_id
+                        )
+                    ).scalars()
+                ),
+            )
+        )
+
+
+class ClosedSessionPoll:
+    """Process-local scheduling hint. Restart and all uncertainty restore full polling."""
+
+    def __init__(self) -> None:
+        self.anchor: tuple[datetime, float] | None = None
+        self.until = 0.0
+        self.signature: str | None = None
+
+    def waiting(self, store: CoreStore) -> bool:
+        if self.anchor is None:
+            return False
+        wall, mono = store.clocks.sample()
+        prior_wall, prior_mono = self.anchor
+        valid = (
+            prior_mono <= mono < self.until
+            and abs((wall - prior_wall).total_seconds() - (mono - prior_mono)) <= 0.05
+            and self.signature == _idle_signature(store)
+        )
+        if not valid:
+            self.anchor = None
+        return valid
+
+    def observe(self, store: CoreStore, broker: Any, receipt: Any) -> None:
+        from quantbot.paper_core.funds import PaperFundsEvidence
+        from quantbot.paper_core.time_evidence import (
+            TimeEvidence,
+            evidence_objections,
+            provider_interval,
+        )
+
+        self.anchor = None
+        if (
+            type(broker) is not AlpacaCoreBroker
+            or broker.closed_session_window is None
+            or receipt.proof_id is None
+            or set(receipt.reasons) - {"SESSION_OPENING_UNVERIFIED"}
+            or store.runtime_time_evidence_id is None
+        ):
+            return
+        timing = store.read("core_time_evidence", store.runtime_time_evidence_id, TimeEvidence)
+        if evidence_objections(timing, store.clocks):
+            return
+        lower, upper = provider_interval(timing, store.clocks)
+        closed_at, opens_at = broker.closed_session_window
+        if (
+            not closed_at + timedelta(minutes=10)
+            <= lower
+            <= upper
+            < opens_at - timedelta(seconds=120)
+        ):
+            return
+        proof = store.latest_proof()
+        if (
+            proof.id != receipt.proof_id
+            or proof.positions
+            or any(
+                quantity for _, quantity in (*proof.actual_quantities, *proof.expected_quantities)
+            )
+        ):
+            return
+        funds = store.read("core_provider_acquisitions", proof.acquisition_id, PaperFundsEvidence)
+        if (
+            funds.first_open_orders
+            or funds.second_open_orders
+            or funds.first_positions
+            or funds.second_positions
+        ):
+            return
+        signature = _idle_signature(store, proof)
+        if signature is not None:
+            self.anchor = store.clocks.sample()
+            self.until = self.anchor[1] + min(900, (opens_at - upper).total_seconds() - 120)
+            self.signature = signature
+
+
+def _guardian_closed_idle(store: CoreStore) -> bool:
+    """Defer redundant activity reads only while the current Guardian explicitly idles."""
+    with store.database.transaction() as session:
+        docs, current = table("core_role_heartbeats"), table("core_role_current")
+        raw = session.execute(
+            select(docs.c.payload)
+            .join(current, docs.c.id == current.c.heartbeat_id)
+            .where(current.c.role == "guardian")
+        ).scalar_one_or_none()
+    heartbeat = RoleHeartbeat.model_validate_json(raw) if raw else None
+    return bool(
+        heartbeat
+        and heartbeat.objections == (CLOSED_SESSION_IDLE,)
+        and heartbeat.guardian_receipt_id is None
+        and heartbeat.release_id == store.runtime_release_id
+        and heartbeat.config_id == store.config_id
+        and heartbeat.store_identity == store.database.store_identity
+        and heartbeat.recorded_at <= store.clocks.sample()[0] < heartbeat.valid_until
+        and _idle_signature(store) is not None
+    )
 
 
 def claim_objections(store: CoreStore, decision: Decision | None = None) -> tuple[str, ...]:
@@ -105,16 +268,20 @@ def owned_open_symbols(store: CoreStore) -> tuple[str, ...]:
         repo = StorageRepository(session)
         links = table("core_intent_links")
         symbols = set()
-        rows = list(session.execute(
-            select(links).where(
-                links.c.role == "ENTRY",
-                links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
-            )
-        ).mappings())
+        rows = list(
+            session.execute(
+                select(links).where(
+                    links.c.role == "ENTRY",
+                    links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
+                )
+            ).mappings()
+        )
         intents = repo.get_order_intents([link["intent_id"] for link in rows])
-        orders = iter(repo.get_broker_orders_by_client_order_ids(
-            [intent.client_order_id for intent in intents if intent is not None]
-        ))
+        orders = iter(
+            repo.get_broker_orders_by_client_order_ids(
+                [intent.client_order_id for intent in intents if intent is not None]
+            )
+        )
         for intent in intents:
             order = next(orders) if intent is not None else None
             if intent and order and repo.list_fills(broker_order_id=order.broker_order_id):
@@ -336,6 +503,9 @@ async def run_role(
     discovery_task = None
     close_capture = None
     observed = TraderCycleDiagnostics()
+    closed_poll = ClosedSessionPoll()
+    idle_anchor: str | None = None
+    idle_previous: RoleHeartbeat | None = None
     if role == "outcomes" and isinstance(broker, AlpacaCoreBroker):
         from pathlib import Path
 
@@ -374,7 +544,9 @@ async def run_role(
                 refresh = getattr(broker, "refresh_fixture", None)
                 if refresh:
                     refresh(store)
-                if role == "guardian":
+                if role == "guardian" and closed_poll.waiting(store):
+                    reasons = (CLOSED_SESSION_IDLE,)
+                elif role == "guardian":
                     if isinstance(broker, AlpacaCoreBroker):
                         deadline_wait = owned_deadline_wait(store)
                         if deadline_wait is not None and deadline_wait <= 0:
@@ -395,6 +567,8 @@ async def run_role(
                     receipt = await guardian_cycle(store, broker, now=store.clocks.sample()[0])
                     guardian_receipt = acknowledge_handoffs(store, now=store.clocks.sample()[0]).id
                     reasons, evidence_ids = receipt.reasons, (receipt.id,)
+                    with suppress(ValueError, AssertionError):
+                        closed_poll.observe(store, broker, receipt)
                 elif role == "outcomes":
                     # Durable outcomes run before provider recovery and before any fit work.
                     batch = process_outcomes(store, cutoff=store.clocks.sample()[0])
@@ -416,6 +590,8 @@ async def run_role(
                     )
                     if close_provider_lane:
                         reasons += ("PAPER_CLOSE_CAPTURE_PENDING",)
+                    elif _guardian_closed_idle(store):
+                        reasons = (CLOSED_SESSION_IDLE, *reasons)
                     else:
                         try:
                             async with asyncio.timeout(5):
@@ -454,7 +630,9 @@ async def run_role(
                         )
                         with suppress(Exception):
                             observed.evaluate(
-                                observation, (), evidence_ids=observation_ids,
+                                observation,
+                                (),
+                                evidence_ids=observation_ids,
                                 now=store.clocks.sample()[0],
                             )
                         model = activation.read_active_model(store)
@@ -498,7 +676,8 @@ async def run_role(
                     )
                 except (ValueError, AssertionError):
                     reasons += ("CURRENT_PROOF_UNAVAILABLE",)
-                last_progress = store.clocks.sample()[0]
+                if CLOSED_SESSION_IDLE not in reasons:
+                    last_progress = store.clocks.sample()[0]
                 failures = 0
             except Exception as error:
                 cycle_failed = True
@@ -537,12 +716,32 @@ async def run_role(
             )
             if role == "trader":
                 with suppress(Exception):
-                    emit_cycle(observed.snapshot(
-                        cycle_id=content_id((heartbeat.id, count)), now=now, waiting=waiting,
-                        reasons=reasons, failure=cycle_failed,
-                    ))
+                    emit_cycle(
+                        observed.snapshot(
+                            cycle_id=content_id((heartbeat.id, count)),
+                            now=now,
+                            waiting=waiting,
+                            reasons=reasons,
+                            failure=cycle_failed,
+                        )
+                    )
             try:
-                publish_heartbeat(store, heartbeat)
+                idle = CLOSED_SESSION_IDLE in reasons and guardian_receipt is None
+                same_idle = bool(
+                    idle
+                    and idle_previous
+                    and (
+                        heartbeat.objections == idle_previous.objections
+                        and heartbeat.evidence_ids == idle_previous.evidence_ids
+                    )
+                )
+                replace_idle_id = (
+                    idle_previous.id if same_idle and idle_previous.id != idle_anchor else None
+                )
+                publish_heartbeat(store, heartbeat, replace_idle_id=replace_idle_id)
+                if not same_idle:
+                    idle_anchor = heartbeat.id if idle else None
+                idle_previous = heartbeat if idle else None
             except OperationalError as error:
                 code = getattr(error.orig, "sqlite_errorcode", 0)
                 if not isinstance(error.orig, sqlite3.OperationalError) or code & 255 not in {

@@ -116,6 +116,9 @@ def test_retire_only_durably_unsent_entries(tmp_path, case, retained):
             repo.transition_order_intent(intent.intent_id, target, expected_current=current)
         receipt = acknowledge_handoffs(store, now=NOW + timedelta(seconds=1))
         assert (plan.id in receipt.protection_ids) is retained
+        from quantbot.paper_core.roles import _idle_signature
+
+        assert (_idle_signature(store) is None) is retained
         assert not store.documents("core_round_trips")
         assert len(store.documents("core_protection_plans")) == 1
     finally:
