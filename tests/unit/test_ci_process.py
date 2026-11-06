@@ -92,6 +92,15 @@ def test_nonzero_propagates(runner: ModuleType, tmp_path: Path) -> None:
         )
 
 
+def test_capture_contains_only_child_output(runner: ModuleType, tmp_path: Path) -> None:
+    capture = io.StringIO()
+    runner.run_command(
+        [sys.executable, "-I", "-S", "-c", "print('capture-sentinel')"],
+        tmp_path, os.environ, io.StringIO(), timeout=5, capture=capture,
+    )
+    assert capture.getvalue() == "capture-sentinel\n"
+
+
 def test_exited_parent_cannot_leave_stdout_open(runner: ModuleType, tmp_path: Path) -> None:
     pid_file = tmp_path / "child.pid"
     started = time.monotonic()
@@ -105,7 +114,7 @@ def test_exited_parent_cannot_leave_stdout_open(runner: ModuleType, tmp_path: Pa
 def test_timeout_stops_parent_and_descendant(runner: ModuleType, tmp_path: Path) -> None:
     pid_file = tmp_path / "child.pid"
     started = time.monotonic()
-    with pytest.raises(runner.CIProcessError, match="COMMAND_TIMEOUT"):
+    with pytest.raises(runner.CIProcessTimeout, match="COMMAND_TIMEOUT"):
         runner.run_command(
             command_with_child(pid_file, wait=True), tmp_path, os.environ, io.StringIO(), timeout=1,
         )

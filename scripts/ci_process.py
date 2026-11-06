@@ -19,6 +19,10 @@ class CIProcessError(RuntimeError):
     """A command failed, timed out, or could not be contained."""
 
 
+class CIProcessTimeout(CIProcessError):
+    """The contained command reached its deadline; cleanup runs before propagation."""
+
+
 class _Job(Protocol):
     def contain_and_resume(self, pid: int) -> None: ...
     def close(self) -> None: ...
@@ -151,7 +155,7 @@ def _create_job() -> _Job | None:
 
 def run_command(
     command: Sequence[str], cwd: Path, env: Mapping[str, str], log: TextIO,
-    *, timeout: float = 1800,
+    *, timeout: float = 1800, capture: TextIO | None = None,
 ) -> None:
     line = "+ " + " ".join(command)
     print(line, flush=True)
@@ -199,7 +203,7 @@ def run_command(
                 terminated = True
             remaining = deadline - time.monotonic()
             if remaining <= 0:
-                raise CIProcessError(f"COMMAND_TIMEOUT: {command[0]} after {timeout:g}s")
+                raise CIProcessTimeout(f"COMMAND_TIMEOUT: {command[0]} after {timeout:g}s")
             try:
                 item = output.get(timeout=min(0.05, remaining))
             except queue.Empty:
@@ -212,6 +216,9 @@ def run_command(
                 print(item, end="", flush=True)
                 log.write(item)
                 log.flush()
+                if capture is not None:
+                    capture.write(item)
+                    capture.flush()
         if process.returncode:
             raise CIProcessError(f"COMMAND_FAILED: {command[0]} exit {process.returncode}")
     except OSError as error:
