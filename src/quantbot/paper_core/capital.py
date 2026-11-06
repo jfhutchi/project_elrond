@@ -132,6 +132,10 @@ async def acquire_session_capital(
     broker: "AlpacaCoreBroker", store: CoreStore, proof: ReconciliationProof
 ) -> str | None:
     if store.runtime_time_evidence_id is None:
+        if store.entry_policy is not None and store.entry_policy.crypto is not None:
+            from quantbot.paper_core.continuous_capital import acquire_continuous_capital
+
+            return await acquire_continuous_capital(broker, store, proof)
         return None
     timing = store.read("core_time_evidence", store.runtime_time_evidence_id, TimeEvidence)
     # Reconciliation may outlast the clock captured before it. Only a new,
@@ -152,6 +156,10 @@ async def acquire_session_capital(
             store.record("core_time_evidence", timing)
             store.runtime_time_evidence_id = timing.id
     opening = opening_for_session(store, timing, preferred_proof=proof)
+    if store.entry_policy is not None and store.entry_policy.crypto is not None:
+        from quantbot.paper_core.continuous_capital import acquire_continuous_capital
+
+        return await acquire_continuous_capital(broker, store, proof)
     if opening is None:
         return None
     origin = store.read("core_reconciliation_proofs", opening.proof_id, ReconciliationProof)

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
@@ -16,11 +17,19 @@ from sqlalchemy.orm import Session
 
 from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter, _object_payload
 from quantbot.brokers.base import BrokerProtocolError
-from quantbot.domain import Bar, IntentState, OrderIntent, OrderSide
-from quantbot.learner.five_minute import FEATURE_NAMES, build_features, build_opening_features
+from quantbot.domain import Bar, IntentState, OrderIntent, OrderSide, Position, TimeInForce
+from quantbot.learner.five_minute import (
+    FEATURE_NAMES,
+    HORIZON,
+    _index,
+    _values,
+    build_features,
+    build_opening_features,
+)
 from quantbot.market_data.alpaca import AlpacaMarketDataClient
 from quantbot.market_data.base import AdjustmentMode, BarQuery, MarketDataError, MarketDataFeed
 from quantbot.market_data.calendar import AlpacaMarketCalendar, session_sequence
+from quantbot.market_data.crypto import ALPACA_CRYPTO_QUOTES_URL, AlpacaCryptoDataClient
 from quantbot.paper_core.contracts import (
     BrokerEvent,
     CostItem,
@@ -60,10 +69,12 @@ class AlpacaCoreBroker:
         clocks: Clocks,
         *,
         account_id: str,
+        crypto_market: AlpacaCryptoDataClient | None = None,
     ) -> None:
         if type(adapter) is not AlpacaPaperBrokerAdapter or adapter.base_url != self.endpoint:
             raise ValueError("exact existing retail PAPER adapter required")
         self.adapter, self.market, self.calendar = adapter, market, calendar
+        self.crypto_market = crypto_market
         self.config, self.clocks, self.account_id = config, clocks, account_id
         self._marks: dict[str, tuple[Decimal, datetime]] = {}
         self.store: CoreStore | None = None
@@ -75,6 +86,24 @@ class AlpacaCoreBroker:
         self._opening_daily_cache: dict[str, Bar] = {}
         self._discovery_state: DiscoveryStore | None = None
         self._research_state: DiscoveryStore | None = None
+        self._crypto_metadata_failures: dict[str, str] = {}
+        self._crypto_metadata_retry_at: dict[str, float] = {}
+
+    @property
+    def crypto_symbols(self) -> tuple[str, ...]:
+        policy = self.config.entry_policy
+        return policy.crypto.symbols if policy is not None and policy.crypto is not None else ()
+
+    @property
+    def crypto_metadata_objections(self) -> tuple[tuple[str, str], ...]:
+        return tuple(sorted(self._crypto_metadata_failures.items()))
+
+    async def get_positions(self) -> tuple[Position, ...]:
+        # Every role reads positions. Missing identity metadata retries here without
+        # making unrelated stock protection depend on crypto entry permission.
+        if self._crypto_metadata_failures:
+            await self.initialize_crypto_assets()
+        return tuple(await self.adapter.get_positions())
 
     @property
     def discovery_state(self) -> DiscoveryStore | None:
@@ -86,6 +115,17 @@ class AlpacaCoreBroker:
                 Path(self.config.store_path).with_suffix(".discovery.db")
             )
         return self._discovery_state
+
+    @property
+    def research_state(self) -> DiscoveryStore | None:
+        """Use the existing observational journal, including during crypto-only hours."""
+        if self._research_state is None:
+            path = Path(self.config.store_path).with_suffix(".research.db")
+            if path.is_file():
+                from quantbot.paper_core.discovery import DiscoveryStore
+
+                self._research_state = DiscoveryStore(path)
+        return self._research_state
 
     def __getattr__(self, name: str) -> Any:
         return getattr(self.adapter, name)
@@ -111,8 +151,13 @@ class AlpacaCoreBroker:
             policy.permits(symbol) if policy else symbol in self.store.entry_symbols
         ):
             raise ValueError("ENTRY_QUOTE_SCOPE_UNAVAILABLE")
+        crypto = symbol in self.crypto_symbols
+        if crypto and self.crypto_market is None:
+            raise ValueError("CRYPTO_MARKET_DATA_UNAVAILABLE")
         async with asyncio.timeout(5):
-            rows = await self.market.get_latest_quotes((symbol,))
+            market = self.crypto_market if crypto else self.market
+            assert market is not None
+            rows = await market.get_latest_quotes((symbol,))
             # Receipt ordering supplies a fresh provider-domain check while the
             # retained two-sample proof remains the release authority below.
             provider_at = (await self.adapter.get_market_clock()).timestamp
@@ -148,6 +193,7 @@ class AlpacaCoreBroker:
             bid=bid,
             source_at=at,
             raw_digest=content_id(raw),
+            **({"feed": "crypto", "endpoint": ALPACA_CRYPTO_QUOTES_URL} if crypto else {}),
         )
         self.store.record("core_provider_acquisitions", document)
         return document
@@ -155,6 +201,19 @@ class AlpacaCoreBroker:
     async def refresh_marks(self, symbols: tuple[str, ...]) -> None:
         if not symbols:
             return
+        crypto = tuple(s for s in symbols if s.endswith("/USD"))
+        equities = tuple(s for s in symbols if s not in crypto)
+        acquisitions = []
+        if crypto:
+            acquisitions.append(self._refresh_crypto_marks(crypto))
+        if equities:
+            acquisitions.append(self._refresh_equity_marks(equities))
+        results = await asyncio.gather(*acquisitions, return_exceptions=True)
+        for result in results:
+            if isinstance(result, BaseException):
+                raise result
+
+    async def _refresh_equity_marks(self, symbols: tuple[str, ...]) -> None:
         now = self.now
         end = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 5)
         async with asyncio.timeout(5):
@@ -179,6 +238,33 @@ class AlpacaCoreBroker:
                 continue  # A missing symbol never receives a fabricated fresh mark.
             last = max(bars, key=lambda b: b.timestamp)
             self._marks[symbol] = (last.close, last.timestamp + timedelta(minutes=5))
+
+    async def _refresh_crypto_marks(self, symbols: tuple[str, ...]) -> None:
+        if self.crypto_market is None:
+            raise ValueError("CRYPTO_MARKET_DATA_UNAVAILABLE")
+        async with asyncio.timeout(5):
+            quotes = await self.crypto_market.get_latest_quotes(symbols)
+        now = self.now
+        for symbol in symbols:
+            raw = quotes.get(symbol)
+            if raw is None:
+                continue
+            try:
+                bid, ask = Decimal(str(raw.get("bp"))), Decimal(str(raw.get("ap")))
+                at = datetime.fromisoformat(str(raw.get("t")).replace("Z", "+00:00"))
+                valid = (
+                    bid.is_finite()
+                    and ask.is_finite()
+                    and 0 < bid <= ask
+                    and at.tzinfo is not None
+                    and 0 <= (now - at).total_seconds() <= 5
+                )
+            except (ValueError, TypeError, ArithmeticError):
+                continue
+            if valid:
+                # Protective stops need a current executable bid throughout the
+                # five-minute research interval, not an increasingly stale bar.
+                self._marks[symbol] = (bid, at)
 
     async def refresh_session_capital(self, proof: ReconciliationProof) -> str | None:
         from quantbot.paper_core.capital import acquire_session_capital
@@ -228,6 +314,69 @@ class AlpacaCoreBroker:
         return captured.observations[0]
 
     async def observation_cohort(self) -> ObservationCohort:
+        if not self.crypto_symbols:
+            return await self._equity_observation_cohort()
+        from quantbot.paper_core.crypto_policy import account_risk_day_bounds
+
+        now = self.now
+        boundary = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 5)
+        equity, crypto = await asyncio.gather(
+            self._equity_observation_cohort(),
+            self.acquire_crypto_cohort(),
+            return_exceptions=True,
+        )
+        observations: list[Observation] = []
+        unavailable: list[tuple[str, str]] = []
+        gaps: list[str] = []
+        discovery = None
+        if isinstance(equity, BaseException):
+            if not isinstance(equity, Exception):
+                raise equity
+            gaps.append("EQUITY:" + self._market_failure_reason(equity))
+        else:
+            boundary = equity.source_end
+            observations.extend(equity.observations)
+            unavailable.extend(equity.unavailable)
+            discovery = equity.discovery
+        if isinstance(crypto, BaseException):
+            if not isinstance(crypto, Exception):
+                raise crypto
+            reason = self._market_failure_reason(crypto)
+            gaps.append("CRYPTO:" + reason)
+            unavailable.extend((symbol, reason) for symbol in self.crypto_symbols)
+        elif not isinstance(equity, BaseException) and crypto.source_end != boundary:
+            # Opening equity quotes retain their true receipt boundary. Do not shift
+            # completed crypto bars or mislabel their availability to force a match.
+            reason = "SOURCE_BOUNDARY_MISMATCH"
+            gaps.append("CRYPTO:" + reason)
+            unavailable.extend((symbol, reason) for symbol in self.crypto_symbols)
+        else:
+            if isinstance(equity, BaseException):
+                boundary = crypto.source_end
+            observations.extend(crypto.observations)
+            unavailable.extend(crypto.unavailable)
+        opening, closing = account_risk_day_bounds(boundary)
+        return ObservationCohort(
+            source_end=boundary,
+            session_open=opening,
+            session_close=closing,
+            observations=tuple(observations),
+            unavailable=tuple(unavailable),
+            discovery=discovery,
+            crypto_symbols=self.crypto_symbols,
+            market_gaps=tuple(gaps),
+        )
+
+    @staticmethod
+    def _market_failure_reason(error: Exception) -> str:
+        # Protocol reason tokens are safe and useful; never copy an arbitrary raw
+        # response or transport exception into a retained observation envelope.
+        reason = str(error)
+        if reason and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_" for c in reason):
+            return reason
+        return type(error).__name__
+
+    async def _equity_observation_cohort(self) -> ObservationCohort:
         if self.discovery_state is not None:
             evidence = self.discovery_state.select_candidates(
                 now=self.now, boundary=str(int(self.now.timestamp() // 300))
@@ -257,20 +406,205 @@ class AlpacaCoreBroker:
         payload = _object_payload(
             await self.adapter._request("GET", "/v2/assets/" + quote(symbol, safe=""))
         )
+        crypto = symbol in self.crypto_symbols
         if (
             payload.get("symbol") != symbol
-            or payload.get("class") != "us_equity"
+            or payload.get("class") != ("crypto" if crypto else "us_equity")
             or payload.get("status") != "active"
             or payload.get("tradable") is not True
             or type(payload.get("fractionable")) is not bool
         ):
             raise ValueError("ASSET_ELIGIBILITY_INVALID")
+        terms: dict[str, Any] = {}
+        digest: Any = payload
+        if crypto:
+            terms.update(self._crypto_asset_terms(payload))
+            account = _object_payload(await self.adapter._request("GET", "/v2/account"))
+            if (
+                account.get("id") != self.account_id
+                or account.get("status") != "ACTIVE"
+                or account.get("crypto_status") != "ACTIVE"
+                or any(
+                    account.get(name) is not False
+                    for name in ("trading_blocked", "account_blocked", "trade_suspended_by_user")
+                )
+            ):
+                raise ValueError("CRYPTO_ACCOUNT_INELIGIBLE")
+            terms.update(
+                asset_class="crypto", time_in_force=TimeInForce.GTC, crypto_status="ACTIVE"
+            )
+            digest = {
+                "asset": payload,
+                "account_eligibility": {
+                    key: account[key]
+                    for key in (
+                        "id",
+                        "status",
+                        "crypto_status",
+                        "trading_blocked",
+                        "account_blocked",
+                        "trade_suspended_by_user",
+                    )
+                },
+            }
+            self.adapter.register_crypto_asset(payload)
+            self._crypto_metadata_failures.pop(symbol, None)
+            self._crypto_metadata_retry_at.pop(symbol, None)
         return AssetEligibility(
             symbol=symbol,
             fractionable=payload["fractionable"],
             observed_at=self.now,
-            raw_digest=content_id(payload),
+            raw_digest=content_id(digest),
             entry_policy_id=policy.id,
+            **terms,
+        )
+
+    @staticmethod
+    def _crypto_asset_terms(payload: Mapping[str, object]) -> dict[str, Decimal]:
+        if payload.get("fractionable") is not True:
+            raise ValueError("ASSET_ELIGIBILITY_INVALID")
+        try:
+            terms = {
+                name: Decimal(str(payload[source]))
+                for name, source in (
+                    ("minimum_quantity", "min_order_size"),
+                    ("quantity_step", "min_trade_increment"),
+                    ("price_increment", "price_increment"),
+                )
+            }
+        except (KeyError, InvalidOperation, TypeError, ValueError) as error:
+            raise ValueError("ASSET_ELIGIBILITY_INVALID") from error
+        if any(not value.is_finite() or value <= 0 for value in terms.values()):
+            raise ValueError("ASSET_ELIGIBILITY_INVALID")
+        return terms
+
+    async def initialize_crypto_assets(self) -> tuple[tuple[str, str], ...]:
+        """Capture exact broker identity; per-symbol failures never abort role startup.
+
+        Concurrent requests are individually capped at one second. Failed symbols
+        wait thirty monotonic seconds before another read-side attempt. Cached
+        identity never replaces the fresh entry eligibility check.
+        """
+        monotonic = self.clocks.sample()[1]
+        aliases = self.adapter.crypto_symbol_aliases
+
+        async def capture(symbol: str) -> None:
+            self._crypto_metadata_retry_at[symbol] = monotonic + 30
+            try:
+                async with asyncio.timeout(1):
+                    payload = _object_payload(
+                        await self.adapter._request("GET", "/v2/assets/" + quote(symbol, safe=""))
+                    )
+                if payload.get("symbol") != symbol or payload.get("class") != "crypto":
+                    raise ValueError("CRYPTO_ASSET_IDENTITY_INVALID")
+                self.adapter.register_crypto_asset_identity(payload)
+            except (ValueError, OSError, TimeoutError, RuntimeError) as error:
+                self._crypto_metadata_failures[symbol] = (
+                    "CRYPTO_ASSET_METADATA_UNAVAILABLE:" + type(error).__name__
+                )
+            else:
+                self._crypto_metadata_failures.pop(symbol, None)
+                self._crypto_metadata_retry_at.pop(symbol, None)
+
+        await asyncio.gather(
+            *(
+                capture(symbol)
+                for symbol in self.crypto_symbols
+                if symbol not in aliases
+                and monotonic >= self._crypto_metadata_retry_at.get(symbol, monotonic)
+            )
+        )
+        return self.crypto_metadata_objections
+
+    async def acquire_crypto_cohort(
+        self, symbols: tuple[str, ...] | None = None
+    ) -> ObservationCohort:
+        """Acquire the bounded spot universe independently of equity exchange hours."""
+        from quantbot.paper_core.crypto_policy import CryptoMarketSession, crypto_session_bounds
+
+        symbols = self.crypto_symbols if symbols is None else symbols
+        if (
+            not symbols
+            or len(set(symbols)) != len(symbols)
+            or not set(symbols) <= set(self.crypto_symbols)
+        ):
+            raise ValueError("CRYPTO_COHORT_SCOPE_INVALID")
+        if self.crypto_market is None:
+            raise ValueError("CRYPTO_MARKET_DATA_UNAVAILABLE")
+        now = self.now
+        end = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 5)
+        opening, closing = crypto_session_bounds(end)
+        batch = await self.crypto_market.get_historical_bars(
+            BarQuery(
+                symbols=tuple(sorted({*symbols, "BTC/USD"})),
+                start=end - timedelta(minutes=35),
+                end=end - timedelta(microseconds=1),
+                timeframe="5Min",
+                feed=MarketDataFeed.CRYPTO,
+                adjustment=AdjustmentMode.RAW,
+                limit=max(100, 8 * (len(symbols) + 1)),
+            )
+        )
+        results = await asyncio.gather(*(self._policy_asset_result(s) for s in symbols))
+        received = self.now
+        indexed = _index(batch.bars)
+        stamps = tuple(end - timedelta(minutes=35 - i * 5) for i in range(7))
+        observations, unavailable = [], []
+        for symbol, (reason, asset) in zip(symbols, results, strict=True):
+            if reason or asset is None:
+                unavailable.append((symbol, reason or "ASSET_ELIGIBILITY_UNAVAILABLE"))
+                continue
+            if not 0 <= (received - end).total_seconds() <= 120:
+                unavailable.append((symbol, "CRYPTO_OBSERVATION_STALE"))
+                continue
+            if any((name, at) not in indexed for name in {symbol, "BTC/USD"} for at in stamps):
+                unavailable.append((symbol, "CRYPTO_CONTIGUOUS_HISTORY_UNAVAILABLE"))
+                continue
+            values = _values(
+                tuple(indexed[symbol, at] for at in stamps),
+                tuple(indexed["BTC/USD", at] for at in stamps),
+            )
+            last = indexed[symbol, stamps[-1]]
+            observation = Observation(
+                recorded_at_utc=received,
+                evidence_lane="BROKER_PAPER",
+                release_id=self.store.config.release_id
+                if self.store
+                else self.config.core.release_id,
+                symbol=symbol,
+                feed="alpaca-crypto",
+                source_start=stamps[0],
+                source_end=end,
+                available_at=received,
+                capture_received_at=received,
+                price=last.close,
+                raw_data_digest=content_id(batch),
+                feature_version="crypto-five-minute-price-alpha-v1",
+                feature_context="CRYPTO_CONTINUOUS_V1",
+                features=tuple(zip(FEATURE_NAMES, values, strict=True)),
+                dependencies=("BTC/USD",),
+                dependency_available_at=(received,),
+                sequence=int(end.timestamp() // 300),
+                session_open=opening,
+                session_close=closing,
+                asset_eligibility=asset,
+                crypto_session=CryptoMarketSession(
+                    symbol=symbol,
+                    benchmark="BTC/USD",
+                    session_open=opening,
+                    session_close=closing,
+                    observed_at=end,
+                    asset_eligibility_id=asset.id,
+                ),
+            )
+            observations.append(observation)
+            self._marks[symbol] = (last.close, end)
+        return ObservationCohort(
+            source_end=end,
+            session_open=opening,
+            session_close=closing,
+            observations=tuple(observations),
+            unavailable=tuple(unavailable),
         )
 
     async def _policy_asset_result(self, symbol: str) -> tuple[str | None, AssetEligibility | None]:
@@ -309,6 +643,17 @@ class AlpacaCoreBroker:
         )
         sequence = session_sequence(sessions)
         end = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 5)
+        session = next(s for s in sessions if s.open_at <= end < s.close_at)
+        if end + HORIZON > session.close_at:
+            return ObservationCohort(
+                source_end=end,
+                session_open=session.open_at,
+                session_close=session.close_at,
+                observations=(),
+                unavailable=tuple(
+                    (symbol, "STOCK_SIGNAL_HORIZON_EXCEEDS_SESSION") for symbol in symbols
+                ),
+            )
         query = BarQuery(
             symbols=tuple(sorted({*symbols, "SPY"})),
             start=end - timedelta(minutes=40),
@@ -320,9 +665,8 @@ class AlpacaCoreBroker:
         )
         batch = await self.market.get_historical_bars(query)
         received = self.now
-        session = next(s for s in sessions if s.open_at <= end < s.close_at)
         opening = end < session.open_at + timedelta(minutes=35)
-        restrictions = (
+        restrictions: list[str | None] = (
             await asyncio.gather(*(self._asset_objection(s) for s in symbols))
             if verify_assets and self.config.entry_policy is None
             else [None] * len(symbols)
@@ -585,6 +929,9 @@ class AlpacaCoreBroker:
 
     async def refresh_mark(self, symbol: str) -> None:
         # Stop observations have their own narrow acquisition; entry waits do not prevent it.
+        if symbol.endswith("/USD"):
+            await self._refresh_crypto_marks((symbol,))
+            return
         now = self.now
         end = now.replace(second=0, microsecond=0) - timedelta(minutes=now.minute % 5)
         batch = await self.market.get_historical_bars(
@@ -630,7 +977,9 @@ class AlpacaCoreBroker:
         async with asyncio.timeout(5):
             rows = await self.adapter.get_performance_activities(after=after, until=until)
             fills = tuple(
-                self.adapter._fill_from_payload(r) for r in rows if r.get("activity_type") == "FILL"
+                self.adapter._fill_from_payload(self.adapter.normalize_crypto_payload(r))
+                for r in rows
+                if r.get("activity_type") == "FILL"
             )
             # An order may be durably created/sent while activities are in flight.
             # Snapshot intent state after those activities, so every newly visible
@@ -817,6 +1166,12 @@ class AlpacaCoreBroker:
                             fill=fill,
                         )
                     )
+        from quantbot.paper_core.crypto_fee_allocation import (
+            acquire_order_fee_sources,
+            retain_order_fee_allocations,
+        )
+
+        fee_sources = await acquire_order_fee_sources(self, store, until, rows=tuple(rows))
         document = {
             "account_id": self.account_id,
             "endpoint": self.endpoint,
@@ -847,6 +1202,35 @@ class AlpacaCoreBroker:
             for raw in rows:
                 if raw.get("activity_type") == "FILL":
                     continue
+                if raw.get("activity_type") in {"FEE", "CFEE"}:
+                    from quantbot.paper_core.crypto_costs import (
+                        parse_fee_activity,
+                        retain_fee_activity,
+                    )
+
+                    fee = retain_fee_activity(
+                        session,
+                        parse_fee_activity(
+                            raw,
+                            symbol_aliases=self.adapter.crypto_symbol_aliases,
+                            source_document_id=document_id,
+                        ),
+                        account_id=self.account_id,
+                        received_at=self.now,
+                    )
+                    if fee.effective_at is not None and fee.effective_at > until:
+                        raise BrokerProtocolError("FEE_ACTIVITY_EFFECTIVE_TIME_AFTER_WATERMARK")
+                    if fee.activity_type == "CFEE":
+                        quantity_event = fee.external_quantity_event(
+                            account_id=self.account_id, baseline_at=commission.approved_at
+                        )
+                        if quantity_event is not None:
+                            self.record_external(session, quantity_event)
+                        # Date-only/unknown-symbol coin debits remain retained evidence,
+                        # never a guessed lot fee or fabricated cash movement. Exact
+                        # custody reconciliation still refuses an unexplained shortfall.
+                        if fee.net_cash == 0:
+                            continue
                 if "net_amount" not in raw or not raw.get("id"):
                     raise BrokerProtocolError("NONTRADE_CASH_ACTIVITY_SCHEMA_UNVERIFIED")
                 amount = Decimal(str(raw["net_amount"]))
@@ -893,6 +1277,9 @@ class AlpacaCoreBroker:
                             activity_type=str(raw["activity_type"]),
                         ),
                     )
+            retain_order_fee_allocations(
+                store, session, fee_sources, recorded_at=self.now, observed_rows=tuple(rows)
+            )
             for fill in fills:
                 if fill.occurred_at <= commission.approved_at:
                     continue
@@ -946,7 +1333,10 @@ class AlpacaCoreBroker:
                             "INHERITED_ORDER_OWNER_PROVENANCE_UNVERIFIED"
                         )
                     continue
-                if self.config.cost_contract is not None:
+                if (
+                    self.config.cost_contract is not None
+                    and fill.symbol not in self.adapter.crypto_symbol_aliases.values()
+                ):
                     item = self.config.cost_contract.fee(
                         fill,
                         account_id=self.account_id,
@@ -1109,12 +1499,9 @@ class AlpacaCoreBroker:
             .mappings()
             .one_or_none()
         )
-        observed_conflict = any(
-            r.get("activity_type") in {"FEE", "CFEE"}
-            and "net_amount" in r
-            and Decimal(str(r["net_amount"])) != 0
-            for r in document["rows"]
-        )
+        from quantbot.paper_core.crypto_costs import nonzero_fee_activity
+
+        observed_conflict = any(nonzero_fee_activity(r) for r in document["rows"])
         if not observed_conflict and latch is None:
             return False
         previous_doc = (
@@ -1211,13 +1598,16 @@ class AlpacaCoreBroker:
                 )
                 applicable = (
                     fill is not None
-                    and contract.fee(
-                        fill,
-                        account_id=self.account_id,
-                        at=first_seen,
-                        release_id=store.config.release_id,
+                    and (
+                        fill.symbol in self.adapter.crypto_symbol_aliases.values()
+                        or contract.fee(
+                            fill,
+                            account_id=self.account_id,
+                            at=first_seen,
+                            release_id=store.config.release_id,
+                        )
+                        is not None
                     )
-                    is not None
                     and owned_lot is not None
                 )
                 if applicable:
@@ -1302,13 +1692,16 @@ class AlpacaCoreBroker:
             if (
                 fill is None
                 or order is None
-                or contract.fee(
-                    fill,
-                    account_id=self.account_id,
-                    at=first_seen,
-                    release_id=store.config.release_id,
+                or (
+                    fill.symbol not in self.adapter.crypto_symbol_aliases.values()
+                    and contract.fee(
+                        fill,
+                        account_id=self.account_id,
+                        at=first_seen,
+                        release_id=store.config.release_id,
+                    )
+                    is None
                 )
-                is None
             ):
                 continue
             owned = session.execute(

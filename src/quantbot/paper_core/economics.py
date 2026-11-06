@@ -1,7 +1,10 @@
 """Closed, versioned economic contracts; these are not operator-adjustable risk knobs."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime
 from typing import TYPE_CHECKING
+
+from quantbot.paper_core.crypto_policy import in_sleep_window
 
 if TYPE_CHECKING:
     from quantbot.paper_core.contracts import CoreConfig
@@ -32,7 +35,30 @@ def parallel_policy(config: "CoreConfig", policy: "EntryPolicy | None") -> bool:
     )
 
 
-def limits(config: "CoreConfig", *, entry_policy: "EntryPolicy | None" = None) -> EconomicLimits:
+def limits(
+    config: "CoreConfig",
+    *,
+    entry_policy: "EntryPolicy | None" = None,
+    at: datetime | None = None,
+) -> EconomicLimits:
     if parallel_policy(config, entry_policy):
-        return EconomicLimits(None, 50, 9500, 500, 25, 100, 25, 200, 1800, None)
-    return EconomicLimits(1, 50, None, 500, 25, 100, None, None, 1800, 6)
+        bound = EconomicLimits(None, 50, 9500, 500, 25, 100, 25, 200, 1800, None)
+    else:
+        bound = EconomicLimits(1, 50, None, 500, 25, 100, None, None, 1800, 6)
+    if entry_policy is None or entry_policy.crypto is None:
+        return bound
+    if at is None:
+        raise ValueError("crypto entry limits require aware time")
+    if not in_sleep_window(at):
+        return bound
+    # The slot is concurrent held/reserved exposure, not an entry quota for the night.
+    # Never reset loss accounting, reserve, stop, holding period or cumulative trial limits.
+    return replace(
+        bound,
+        max_positions=1,
+        position_bps=25,
+        gross_bps=4750,
+        entry_risk_bps=12,
+        open_risk_bps=12,
+        daily_loss_bps=100,
+    )

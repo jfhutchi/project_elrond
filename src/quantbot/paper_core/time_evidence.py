@@ -251,10 +251,17 @@ def entry_time_objections(
     )
     if p.account_id != config.account_id:
         reasons.append("TIME_ACCOUNT_MISMATCH")
-    if lower < p.session_open or upper >= p.session_close - timedelta(seconds=120):
-        reasons.append("TIME_SESSION_BOUNDARY")
-    if p.session_close != observation.session_close:
-        reasons.append("TIME_CALENDAR_MISMATCH")
+    if observation.crypto_session is not None:
+        # Clock samples prove provider time, not crypto exchange hours. Crypto's
+        # UTC day is an accounting window; it has no daily closing auction.
+        market = observation.crypto_session
+        if not market.session_open <= observation.source_end < market.session_close:
+            reasons.append("TIME_CALENDAR_MISMATCH")
+    else:
+        if lower < p.session_open or upper >= p.session_close - timedelta(seconds=120):
+            reasons.append("TIME_SESSION_BOUNDARY")
+        if p.session_close != observation.session_close:
+            reasons.append("TIME_CALENDAR_MISMATCH")
     if observation.feature_context == "OPENING_QUOTE_GAP_V1":
         # source_end is a local receipt for quotes, not a provider bar boundary.
         # Compare provider time with retained provider quote timestamps, and

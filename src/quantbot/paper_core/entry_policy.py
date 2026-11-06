@@ -16,7 +16,8 @@ from pydantic import (
 )
 
 from quantbot.brokers.base import BrokerModel
-from quantbot.domain import Account
+from quantbot.domain import Account, TimeInForce
+from quantbot.paper_core.crypto_policy import CryptoPaperPolicy
 from quantbot.research.manifest import content_id
 from quantbot.storage import StateConflictError
 
@@ -36,9 +37,14 @@ class EntryPolicy(BrokerModel):
     universe: Literal["CONFIGURED_V1", "ALPACA_ASSETS_V1"] = "CONFIGURED_V1"
     minimum_whole_shares: Literal[1] = 1
     sizing_headroom_bps: Literal[100] = 100
+    crypto: CryptoPaperPolicy | None = None
 
     @model_validator(mode="after")
     def stock_universe(self) -> Self:
+        if self.crypto is not None and not (
+            self.dynamic and self.contract == "RESOURCE_BOUNDED_PAPER_V1"
+        ):
+            raise ValueError("crypto requires the explicit resource-bounded discovery amendment")
         if self.dynamic:
             if self.symbols or self.contract != "RESOURCE_BOUNDED_PAPER_V1":
                 raise ValueError("discovery requires resource-bounded PAPER without a whitelist")
@@ -56,6 +62,8 @@ class EntryPolicy(BrokerModel):
         result = dict(handler(self))
         if "universe" not in self.model_fields_set:
             result.pop("universe", None)
+        if "crypto" not in self.model_fields_set:
+            result.pop("crypto", None)
         return result
 
     @property
@@ -63,6 +71,8 @@ class EntryPolicy(BrokerModel):
         return self.universe == "ALPACA_ASSETS_V1"
 
     def permits(self, symbol: str) -> bool:
+        if self.crypto is not None and symbol in self.crypto.symbols:
+            return True
         return supported_symbol(symbol) if self.dynamic else symbol in self.symbols
 
     @property
@@ -74,13 +84,63 @@ class AssetEligibility(BrokerModel):
     source: Literal["ALPACA_PAPER_ASSET_V1"] = "ALPACA_PAPER_ASSET_V1"
     symbol: str
     endpoint: Literal["https://paper-api.alpaca.markets"] = "https://paper-api.alpaca.markets"
-    asset_class: Literal["us_equity"] = "us_equity"
+    asset_class: Literal["us_equity", "crypto"] = "us_equity"
     status: Literal["active"] = "active"
     entry_policy_id: str = Field(min_length=64, max_length=64)
     tradable: Literal[True] = True
     fractionable: StrictBool
     observed_at: datetime
     raw_digest: str = Field(min_length=64, max_length=64)
+    minimum_quantity: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
+    quantity_step: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
+    price_increment: Decimal | None = Field(default=None, gt=0, allow_inf_nan=False)
+    time_in_force: TimeInForce = TimeInForce.DAY
+    crypto_status: Literal["ACTIVE"] | None = None
+
+    @model_validator(mode="after")
+    def coherent_asset_terms(self) -> Self:
+        if self.asset_class == "crypto":
+            if (
+                re.fullmatch(r"[A-Z]{2,12}/USD", self.symbol) is None
+                or not self.fractionable
+                or self.minimum_quantity is None
+                or self.quantity_step is None
+                or self.price_increment is None
+                or self.time_in_force is not TimeInForce.GTC
+                or self.crypto_status != "ACTIVE"
+            ):
+                raise ValueError("crypto requires complete active broker spot terms")
+        elif self.time_in_force is not TimeInForce.DAY or any(
+            value is not None
+            for value in (
+                self.minimum_quantity,
+                self.quantity_step,
+                self.price_increment,
+                self.crypto_status,
+            )
+        ):
+            raise ValueError("equity eligibility cannot carry crypto terms")
+        return self
+
+    @model_serializer(mode="wrap")
+    def preserve_equity_payload(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        for name in {
+            "minimum_quantity",
+            "quantity_step",
+            "price_increment",
+            "time_in_force",
+            "crypto_status",
+        } - self.model_fields_set:
+            payload.pop(name, None)
+        return payload
+
+    def bound_quantity(self, quantity: Decimal) -> Decimal:
+        if self.asset_class != "crypto" or self.quantity_step is None:
+            raise ValueError("broker crypto quantity terms required")
+        bounded = (quantity / self.quantity_step).to_integral_value(rounding="ROUND_DOWN")
+        bounded *= self.quantity_step
+        return bounded if bounded >= (self.minimum_quantity or Decimal(0)) else Decimal(0)
 
     @property
     def id(self) -> str:
@@ -105,34 +165,62 @@ def entry_quantity(
     config: CoreConfig | None = None,
     available_notional: Decimal | None = None,
     capability: AssetCapability | None = None,
+    eligibility: AssetEligibility | None = None,
+    at: datetime | None = None,
 ) -> Decimal:
     from quantbot.paper_core.economics import limits, parallel_policy
 
+    crypto = eligibility is not None and eligibility.asset_class == "crypto"
+    if (
+        crypto
+        and eligibility is not None
+        and (policy is None or policy.crypto is None or not policy.permits(eligibility.symbol))
+    ):
+        return Decimal(0)
     if config is not None and parallel_policy(config, policy):
-        bound = limits(config, entry_policy=policy)
+        bound = limits(config, entry_policy=policy, at=at)
         available = max(
             Decimal(0),
             min(
                 account.cash - account.equity * bound.reserve_bps / 10000,
                 available_notional if available_notional is not None else account.cash,
+                (account.non_marginable_buying_power or Decimal(0)) if crypto else account.cash,
             ),
         )
         normal = entry_quantity(
-            account, price, policy=policy, fractionable=fractionable, capability=capability
+            account,
+            price,
+            policy=policy,
+            fractionable=fractionable,
+            capability=capability,
+            eligibility=eligibility,
+            at=at,
         )
         if fractionable is False:
             return normal if normal * price <= available else Decimal(0)
         available_quantity = (
-            capability.bound_quantity(available / price)
+            eligibility.bound_quantity(available / price)
+            if crypto and eligibility is not None
+            else capability.bound_quantity(available / price)
             if capability is not None
             else (available / price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN")
         )
         return min(normal, available_quantity)
-    target = account.equity * Decimal("0.005")
+    position_bps = 50
+    if policy is not None and policy.crypto is not None:
+        from quantbot.paper_core.crypto_policy import in_sleep_window
+
+        if at is None:
+            raise ValueError("crypto admission requires an aware evaluation time")
+        if in_sleep_window(at):
+            position_bps = 25
+    target = account.equity * position_bps / 10000
     if policy is not None:
         target *= Decimal(10000 - policy.sizing_headroom_bps) / 10000
     normal = (
-        capability.bound_quantity(target / price)
+        eligibility.bound_quantity(target / price)
+        if crypto and eligibility is not None
+        else capability.bound_quantity(target / price)
         if capability is not None
         else (target / price).quantize(Decimal("0.000001"), rounding="ROUND_DOWN")
     )
@@ -150,12 +238,32 @@ def entry_risk_allowed(
     config: CoreConfig | None = None,
     available_notional: Decimal | None = None,
     policy: EntryPolicy | None = None,
+    eligibility: AssetEligibility | None = None,
+    at: datetime | None = None,
 ) -> bool:
     from quantbot.paper_core.economics import limits, parallel_policy
 
     notional = quantity * price
+    if eligibility is not None and eligibility.asset_class == "crypto":
+        if (
+            policy is None
+            or policy.crypto is None
+            or not policy.permits(eligibility.symbol)
+            or at is None
+            or eligibility_objections(
+                eligibility,
+                symbol=eligibility.symbol,
+                now=at,
+                quantity=quantity,
+                policy_id=policy.id,
+            )
+            or account.non_marginable_buying_power is None
+            or notional > account.non_marginable_buying_power
+            or minimum_whole_share
+        ):
+            return False
     if config is not None and parallel_policy(config, policy):
-        bound = limits(config, entry_policy=policy)
+        bound = limits(config, entry_policy=policy, at=at)
         return (
             quantity > 0
             and (
@@ -214,6 +322,11 @@ def eligibility_objections(
         and quantity != quantity.to_integral_value()
     ):
         return ("ASSET_WHOLE_QUANTITY_REQUIRED",)
+    if quantity is not None and eligibility.asset_class == "crypto":
+        if quantity < (eligibility.minimum_quantity or Decimal(0)):
+            return ("ASSET_CRYPTO_MINIMUM_QUANTITY",)
+        if eligibility.quantity_step is None or quantity % eligibility.quantity_step:
+            return ("ASSET_CRYPTO_QUANTITY_INCREMENT",)
     return ()
 
 
@@ -265,11 +378,12 @@ def decision_entry_authority(
                 raise ValueError("discovery selection required")
             validate_cohort(store.config, decision.selection.cohort, entry_policy=policy)
             discovery = decision.selection.cohort.discovery
-            if discovery is None or decision.symbol not in discovery.symbols:
-                raise ValueError("discovery member required")
-            from quantbot.paper_core.discovery import require_fresh_discovery
+            if policy.crypto is None or decision.symbol not in policy.crypto.symbols:
+                if discovery is None or decision.symbol not in discovery.symbols:
+                    raise ValueError("discovery member required")
+                from quantbot.paper_core.discovery import require_fresh_discovery
 
-            require_fresh_discovery(discovery, now)
+                require_fresh_discovery(discovery, now)
         except (ValueError, TypeError):
             return ("DISCOVERY_AUTHORITY_MISSING_OR_INVALID",), False
     payload = session.execute(
@@ -281,6 +395,8 @@ def decision_entry_authority(
         return ("ASSET_ELIGIBILITY_UNVERIFIED",), False
     observation = Observation.model_validate_json(payload)
     original = observation.asset_eligibility
+    if (decision.market_calendar == "CRYPTO24") != (observation.crypto_session is not None):
+        return ("ASSET_MARKET_CONTEXT_MISMATCH",), False
     reasons = list(
         eligibility_objections(
             original,
@@ -304,7 +420,18 @@ def decision_entry_authority(
         if (
             original is not None
             and fresh is not None
-            and original.fractionable != fresh.fractionable
+            and any(
+                getattr(original, field) != getattr(fresh, field)
+                for field in (
+                    "asset_class",
+                    "fractionable",
+                    "minimum_quantity",
+                    "quantity_step",
+                    "price_increment",
+                    "time_in_force",
+                    "crypto_status",
+                )
+            )
         ):
             reasons.append("ASSET_CAPABILITY_CHANGED")
     return tuple(dict.fromkeys(reasons)), minimum_whole_share(policy, decision, observation)

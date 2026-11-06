@@ -452,11 +452,18 @@ def certify_inventory(
         expected, cash, fills = store.ledger(session)
         latest = latest_certification(session)
         last = latest[0] if latest else 0
+        scope_reasons: tuple[str, ...] = ()
+        if proof.quarantined_symbols:
+            from quantbot.paper_core.crypto_custody import scoped_quantity_objections
+
+            scope_reasons = scoped_quantity_objections(
+                store, session, proof, now=proof.recorded_at_utc, latest=False
+            )
         if (
-            not proof.complete
+            not proof.quantity_scope_shape_valid
+            or scope_reasons
             or proof.account.account_id != store.config.account_id
             or proof.expected_quantities != tuple(sorted(expected.items()))
-            or proof.actual_quantities != tuple(sorted(expected.items()))
             or proof.baseline_id
             != session.execute(select(table("core_fixture_baselines").c.id)).scalar_one()
             or proof.order_ids
@@ -527,8 +534,12 @@ def certify_inventory(
                 )
         if (
             len({p.symbol for p in proof.positions}) != len(proof.positions)
-            or {p.symbol: p.quantity for p in proof.positions} != expected
-            or any(p.average_entry_price != basis[p.symbol] for p in proof.positions)
+            or {p.symbol: p.quantity for p in proof.positions} != dict(proof.actual_quantities)
+            or any(
+                p.symbol not in proof.quarantined_symbols
+                and p.average_entry_price != basis[p.symbol]
+                for p in proof.positions
+            )
         ):
             session.commit()
             raise StateConflictError("INVENTORY_BASIS_MISMATCH")

@@ -2,6 +2,7 @@
 
 import json
 import sqlite3
+from contextlib import closing
 from copy import deepcopy
 from datetime import date
 from decimal import Decimal
@@ -69,7 +70,7 @@ def test_normal_api_dashboard_and_reports_refresh_after_late_fee(tmp_path, monke
                 status="executed",
             )
         )
-        with sqlite3.connect(cost_path) as c:
+        with closing(sqlite3.connect(cost_path)) as c, c:
             c.execute(
                 "INSERT INTO core_provider_acquisitions VALUES (?,?)",
                 (digest(later), json.dumps(later)),
@@ -165,6 +166,7 @@ def test_cash_comparison_does_not_present_matching_balance_as_final_net(tmp_path
             assert "Matches retained movements" in section
             assert "Full activity coverage is unverified" in section
             assert "does not verify final fees or net trade P&amp;L" in section
-        assert client.get("/api/state").json()["paper_costs"]["days"][-1][
-            "all_in_verified_net"
-        ] is None
+        assert (
+            client.get("/api/state").json()["paper_costs"]["days"][-1]["all_in_verified_net"]
+            is None
+        )

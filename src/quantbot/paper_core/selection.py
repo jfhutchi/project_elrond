@@ -64,17 +64,42 @@ def validate_cohort(
     quote_context = bool(cohort.observations) and all(
         o.feature_context == "OPENING_QUOTE_GAP_V1" for o in cohort.observations
     )
-    if entry_policy is not None and entry_policy.dynamic:
+    mixed = entry_policy is not None and entry_policy.crypto is not None
+    crypto_symbols = (
+        entry_policy.crypto.symbols
+        if entry_policy is not None and entry_policy.crypto is not None
+        else ()
+    )
+    stock_members = [s for s in members if s not in crypto_symbols]
+    if mixed:
+        from quantbot.paper_core.crypto_policy import account_risk_day_bounds
+
+        if (
+            cohort.crypto_symbols != crypto_symbols
+            or (cohort.session_open, cohort.session_close)
+            != account_risk_day_bounds(cohort.source_end)
+            or any(
+                (o.crypto_session is not None) != (o.symbol in crypto_symbols)
+                for o in cohort.observations
+            )
+        ):
+            raise ValueError(
+                "mixed cohort requires exact commissioned markets and account risk day"
+            )
+    elif cohort.crypto_symbols:
+        raise ValueError("crypto cohort requires an explicit policy amendment")
+    if entry_policy is not None and entry_policy.dynamic and (not mixed or stock_members):
         d = cohort.discovery
+        discovered_members = stock_members if mixed else members
         if (
             d is None
             or len(d.symbols) != len(set(d.symbols))
-            or set(d.symbols) != set(members)
-            or {s.symbol for s in d.samples} != set(members)
-            or len(d.samples) != len(members)
+            or set(d.symbols) != set(discovered_members)
+            or {s.symbol for s in d.samples} != set(discovered_members)
+            or len(d.samples) != len(discovered_members)
             or not d.scan_receipt_ids
             or any(s.scan_receipt_id not in d.scan_receipt_ids for s in d.samples)
-            or d.eligible_count < len(members)
+            or d.eligible_count < len(discovered_members)
             or not 0 <= (d.recorded_at - d.catalog_at).total_seconds() <= 3600
             or quote_context
             and not 0 <= (cohort.source_end - d.catalog_at).total_seconds() <= 3600
@@ -100,7 +125,8 @@ def validate_cohort(
             raise ValueError("discovery cohort requires exact fresh captured membership")
     if (
         len(members) != len(set(members))
-        or len({o.feature_context for o in cohort.observations}) > 1
+        or not mixed
+        and len({o.feature_context for o in cohort.observations}) > 1
         or set(members) != set(cohort_symbols(config, cohort, entry_policy))
         or any(not reason for _, reason in cohort.unavailable)
         or any(
@@ -111,8 +137,8 @@ def validate_cohort(
         and cohort.source_end.timestamp() % 300 != 0
         or any(
             o.source_end != cohort.source_end
-            or o.session_open != cohort.session_open
-            or o.session_close != cohort.session_close
+            or not mixed
+            and (o.session_open != cohort.session_open or o.session_close != cohort.session_close)
             for o in cohort.observations
         )
     ):
@@ -123,6 +149,8 @@ def cohort_symbols(
     config: CoreConfig, cohort: ObservationCohort, policy: EntryPolicy | None
 ) -> tuple[str, ...]:
     if policy is not None and policy.dynamic:
+        if policy.crypto is not None:
+            return (cohort.discovery.symbols if cohort.discovery else ()) + policy.crypto.symbols
         if cohort.discovery is None:
             raise ValueError("discovery cohort evidence required")
         return cohort.discovery.symbols
@@ -182,7 +210,14 @@ def reservation_state(
     for identity, _state, symbol, recorded_at, session_open, session_close, boundary in rows:
         if identity == exclude_intent or unsent_by_id[identity]:
             continue
-        if session_open is not None and session_close is not None:
+        if cohort.crypto_symbols:
+            stamp = datetime.fromisoformat(recorded_at)
+            if cohort.session_open <= stamp < cohort.session_close:
+                daily[symbol] += 1
+                boundaries.add(boundary)
+            elif stamp < cohort.session_open:
+                prior[symbol] += 1
+        elif session_open is not None and session_close is not None:
             opening, closing = (
                 datetime.fromisoformat(session_open),
                 datetime.fromisoformat(session_close),
@@ -227,7 +262,12 @@ def evaluate_cohort(
     exclusions: dict[str, tuple[str, ...]] = {s: (reason,) for s, reason in cohort.unavailable}
     for symbol, decision in members.items():
         reasons = tuple(dict.fromkeys((*decision.gates, *health.get(symbol, ()))))
-        if cohort.discovery is not None and entry_policy is not None and entry_policy.dynamic:
+        if (
+            cohort.discovery is not None
+            and entry_policy is not None
+            and entry_policy.dynamic
+            and symbol in cohort.discovery.symbols
+        ):
             sample = next(s for s in cohort.discovery.samples if s.symbol == symbol)
             if decision.quantity * decision.price > sample.dollar_volume / 10000:
                 reasons += ("DISCOVERY_LIQUIDITY_CAPACITY",)
@@ -268,7 +308,9 @@ def evaluate_cohort(
     gates = exclusions.get(chosen, ())
     from quantbot.paper_core.economics import limits
 
-    daily_limit = limits(config, entry_policy=entry_policy).daily_entry_limit
+    daily_limit = limits(
+        config, entry_policy=entry_policy, at=decision.recorded_at_utc
+    ).daily_entry_limit
     if daily_limit is not None and sum(daily.values()) >= daily_limit:
         gates = (*gates, "SESSION_RESERVATION_LIMIT")
     evidence = SelectionEvidence(

@@ -48,7 +48,13 @@ def same_spending_authority(first: Account, second: Account) -> bool:
     """Market equity can move without changing certified spending authority."""
     return all(
         getattr(first, field) == getattr(second, field)
-        for field in ("account_id", "currency", "cash", "buying_power")
+        for field in (
+            "account_id",
+            "currency",
+            "cash",
+            "buying_power",
+            "non_marginable_buying_power",
+        )
     )
 
 
@@ -188,20 +194,25 @@ def entry_inventory_objections(
         select(certs.c.generation).where(certs.c.proof_id == proof.id)
     ).scalar_one_or_none()
     quantities, cash, fills = store.ledger(session)
+    scope_reasons: tuple[str, ...] = ()
+    if proof.quarantined_symbols:
+        from quantbot.paper_core.crypto_custody import scoped_quantity_objections
+
+        scope_reasons = scoped_quantity_objections(store, session, proof, now=now, latest=latest)
     if (
         encoded is None
         or ReconciliationProof.model_validate_json(encoded) != proof
         or generation != proof.generation
         or latest
         and latest_certification(session) != (proof.generation, proof.id)
-        or not proof.complete
+        or not proof.quantity_scope_shape_valid
+        or scope_reasons
         or proof.account.account_id != store.config.account_id
         or proof.release_id != store.config.release_id
         or proof.evidence_lane != store.config.evidence_lane
         or proof.baseline_id
         != session.execute(select(table("core_fixture_baselines").c.id)).scalar_one()
         or proof.expected_quantities != tuple(sorted(quantities.items()))
-        or proof.actual_quantities != proof.expected_quantities
         or proof.fill_ids != fills
         or proof.order_ids
         != tuple(o.broker_order_id for o in StorageRepository(session).list_broker_orders())

@@ -110,6 +110,9 @@ def build_report(
         covered_ids = {d["id"] for d in coverage}
         owned_ids: set[str] = set()
         gross = Decimal(0)
+        cashflow = Decimal(0)
+        asset_fee_basis = Decimal(0)
+        has_crypto = False
         entry_notional = Decimal(0)
         exit_notional = Decimal(0)
         intraday = True
@@ -124,12 +127,31 @@ def build_report(
             owned_ids.update(ids)
             bought = sum((_money(f["quantity"]) * _money(f["price"]) for f in buys), Decimal(0))
             sold = sum((_money(f["quantity"]) * _money(f["price"]) for f in sells), Decimal(0))
-            if sold - bought != _money(trip["gross_pnl"]):
+            crypto = "/" in buys[0]["symbol"]
+            has_crypto |= crypto
+            fee_quantity = _money(trip.get("asset_fee_quantity", "0"))
+            fee_basis = _money(trip.get("asset_fee_cost_basis", "0"))
+            if trip.get("pnl_basis") is not None or fee_quantity or fee_basis:
+                bought_quantity = sum((_money(f["quantity"]) for f in buys), Decimal(0))
+                sold_quantity = sum((_money(f["quantity"]) for f in sells), Decimal(0))
+                if (
+                    not crypto
+                    or trip.get("pnl_basis") != "WEIGHTED_ENTRY_BASIS_WITH_ASSET_FEES_V1"
+                    or not 0 <= fee_quantity < bought_quantity
+                    or bought_quantity - sold_quantity != fee_quantity
+                    or fee_basis != fee_quantity * (bought / bought_quantity)
+                    or (fee_quantity > 0 and not trip.get("asset_fee_allocation_ids"))
+                    or _money(trip.get("cashflow_pnl")) != sold - bought
+                ):
+                    raise ValueError("ASSET_FEE_BASIS_MISMATCH")
+            if sold - bought + fee_basis != _money(trip["gross_pnl"]):
                 raise ValueError("GROSS_FILL_MISMATCH")
             intraday &= all(
                 _time(f["occurred_at"]).astimezone(NY).date().isoformat() == day for f in selected
             )
-            gross += sold - bought
+            gross += sold - bought + fee_basis
+            cashflow += sold - bought
+            asset_fee_basis += fee_basis
             entry_notional += bought
             exit_notional += sold
             per_trade.append(
@@ -137,7 +159,10 @@ def build_report(
                     lot_id=trip["lot_id"],
                     symbol=buys[0]["symbol"],
                     entry_notional=str(bought),
-                    gross_realized=str(sold - bought),
+                    gross_realized=str(sold - bought + fee_basis),
+                    cashflow_realized=str(sold - bought),
+                    asset_fee_quantity=str(fee_quantity),
+                    asset_fee_cost_basis=str(fee_basis),
                     actual_fees=trip.get("actual_fees"),
                     native_net=trip.get("net_pnl"),
                     exact_fee_allocation="UNAVAILABLE"
@@ -181,7 +206,8 @@ def build_report(
                     )
                 )
         fee_cash = sum((_money(f["cash_flow"]) for f in fees), Decimal(0)) if fees else None
-        usable = same and not invalid_fees
+        # XNYS session coverage and prior stock bills cannot establish crypto costs.
+        usable = same and not invalid_fees and not has_crypto
         observed_net = gross + fee_cash if usable and fee_cash is not None else None
         scenario = None
         prior = next(
@@ -214,12 +240,16 @@ def build_report(
                 session_date=day,
                 round_trips=len(owned),
                 gross_realized=str(gross) if owned else None,
+                cashflow_realized=str(cashflow) if owned else None,
+                asset_fee_cost_basis=str(asset_fee_basis) if owned else None,
                 entry_notional=str(entry_notional) if owned else None,
                 exit_notional=str(exit_notional) if owned else None,
                 opening_equity=session.get("equity") if session else None,
                 scope_verified=usable,
                 scope_reason="NO_COMPLETED_OWNED_ROUND_TRIPS"
                 if not owned
+                else "CRYPTO_COST_FINALITY_UNVERIFIED"
+                if has_crypto
                 else "EXACT_ACCOUNT_FILL_MATCH_FULL_SESSION"
                 if usable
                 else "INCOMPLETE_OR_MISMATCHED_ACTIVITY_SCOPE",

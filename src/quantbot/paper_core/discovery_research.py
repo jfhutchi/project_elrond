@@ -203,7 +203,8 @@ def research_context(
     refs: list[tuple[str, str]] = []
     gaps = ["RESEARCH_UNVALIDATED_CONTEXT", "ALPACA_NEWS_PARTIAL_PROVIDER_COVERAGE"]
     with state.connection() as c:
-        last = state._get(c, "research_last_page")
+        head = state._get(c, "research_news_head")
+        last = head or state._get(c, "research_last_page")
         entitlement = state._get(c, "news_cost_status")
         if entitlement:
             gaps.append(entitlement)
@@ -212,8 +213,11 @@ def research_context(
             or not 0 <= (now - datetime.fromisoformat(last["retrieved_at"])).total_seconds() <= 180
         ):
             gaps.append("NEWS_RESEARCH_STALE_OR_MISSING")
-        if last and last.get("next_page_token"):
+        job = state._get(c, "research_news_job")
+        if (job and job.get("token")) or (last and last.get("next_page_token")):
             gaps.append("NEWS_WINDOW_PAGINATION_INCOMPLETE")
+        if head and head.get("coverage_truncated"):
+            gaps.append("NEWS_HEAD_WINDOW_TRUNCATED")
         if last and now - datetime.fromisoformat(last["end"]) > timedelta(minutes=3):
             gaps.append("NEWS_QUERY_END_STALE")
         gaps.append(state._get(c, "filing_research_status", "SEC_CONTACT_NOT_CONFIGURED"))
@@ -273,8 +277,42 @@ def research_context(
     return tuple(refs), tuple(gaps)
 
 
+async def _fetch_news_page(
+    broker: AlpacaCoreBroker,
+    state: DiscoveryStore,
+    params: dict[str, str],
+    *,
+    seen: tuple[str | None, ...] = (),
+) -> dict[str, Any]:
+    response = await broker.market._request_page(params, endpoint=NEWS_URL)
+    if len(response.content) > 8_000_000:
+        raise ValueError("NEWS_RESPONSE_TOO_LARGE")
+    payload = json.loads(response.content)
+    token = payload.get("next_page_token") if isinstance(payload, dict) else None
+    if token and token in seen:
+        raise ValueError("NEWS_PAGINATION_NO_PROGRESS")
+    receipt = record_news_page(
+        state,
+        payload,
+        start=datetime.fromisoformat(params["start"]),
+        end=datetime.fromisoformat(params["end"]),
+        received=broker.now,
+    )
+    with state.connection() as c:
+        state._receipt(
+            c,
+            dict(
+                kind="NEWS_RAW_RESPONSE_V1",
+                page_receipt_id=receipt["id"],
+                raw_response_sha256=hashlib.sha256(response.content).hexdigest(),
+                retrieved_at=broker.now.isoformat(),
+            ),
+        )
+    return receipt
+
+
 async def research_once(broker: AlpacaCoreBroker, state: DiscoveryStore) -> None:
-    """One budgeted page per minute, durable pagination; no ticker filter or total cap."""
+    """At most one current page then one historical page per minute; no ticker filter."""
     now = broker.now
     with state.connection() as c:
         if os.environ.get("QUANTBOT_FREE_NEWS_CONFIRMED") != "1":
@@ -300,36 +338,66 @@ async def research_once(broker: AlpacaCoreBroker, state: DiscoveryStore) -> None
             seen=[],
         )
         state._set(c, "research_news_job", job)
+        last_head = state._get(c, "research_news_head")
+    # The current window is independent of the ascending historical cursor. A
+    # two-minute overlap catches late arrivals; backlog pagination stays intact.
+    head_start = (
+        max(
+            now - timedelta(minutes=5),
+            datetime.fromisoformat(last_head["end"]) - timedelta(minutes=2),
+        )
+        if last_head
+        else now - timedelta(minutes=5)
+    )
+    try:
+        head = await _fetch_news_page(
+            broker,
+            state,
+            dict(
+                start=head_start.isoformat(),
+                end=now.isoformat(),
+                limit="50",
+                sort="desc",
+                include_content="true",
+            ),
+        )
+        with state.connection() as c:
+            state._set(
+                c,
+                "research_news_head",
+                {
+                    "page_receipt_id": head["id"],
+                    "start": head["start"],
+                    "end": head["end"],
+                    "retrieved_at": head["retrieved_at"],
+                    "next_page_token": head["next_page_token"],
+                    "coverage_truncated": bool(head["next_page_token"]),
+                    "coverage": "CURRENT_WINDOW_FIRST_PAGE_ONLY",
+                },
+            )
+    except Exception as error:
+        with state.connection() as c:
+            state._receipt(
+                c,
+                dict(
+                    kind="NEWS_RESEARCH_FAILURE_V1",
+                    stage="CURRENT_HEAD",
+                    at=broker.now.isoformat(),
+                    error=type(error).__name__,
+                ),
+            )
     params = dict(
         start=job["start"], end=job["end"], limit="50", sort="asc", include_content="true"
     )
     if job["token"]:
         params["page_token"] = job["token"]
     try:
-        response = await broker.market._request_page(params, endpoint=NEWS_URL)
-        if len(response.content) > 8_000_000:
-            raise ValueError("NEWS_RESPONSE_TOO_LARGE")
-        payload = json.loads(response.content)
-        token = payload.get("next_page_token") if isinstance(payload, dict) else None
-        if token and token in [*job.get("seen", []), job["token"]]:
-            raise ValueError("NEWS_PAGINATION_NO_PROGRESS")
-        receipt = record_news_page(
+        receipt = await _fetch_news_page(
+            broker,
             state,
-            payload,
-            start=datetime.fromisoformat(job["start"]),
-            end=datetime.fromisoformat(job["end"]),
-            received=broker.now,
+            params,
+            seen=(*job.get("seen", []), job["token"]),
         )
-        with state.connection() as c:
-            state._receipt(
-                c,
-                dict(
-                    kind="NEWS_RAW_RESPONSE_V1",
-                    page_receipt_id=receipt["id"],
-                    raw_response_sha256=hashlib.sha256(response.content).hexdigest(),
-                    retrieved_at=broker.now.isoformat(),
-                ),
-            )
         token = receipt["next_page_token"]
         if token and token == job["token"]:
             raise ValueError("NEWS_PAGINATION_NO_PROGRESS")

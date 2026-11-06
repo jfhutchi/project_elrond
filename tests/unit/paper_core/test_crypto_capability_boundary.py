@@ -63,7 +63,7 @@ def test_commissioned_core_entry_contracts_do_not_claim_crypto_capability():
         symbols=(), contract="RESOURCE_BOUNDED_PAPER_V1", universe="ALPACA_ASSETS_V1"
     )
     assert not dynamic.permits("BTC/USD")
-    with pytest.raises(ValidationError, match="asset_class"):
+    with pytest.raises(ValidationError, match="crypto requires complete active broker spot terms"):
         AssetEligibility(
             symbol="BTC/USD",
             asset_class="crypto",

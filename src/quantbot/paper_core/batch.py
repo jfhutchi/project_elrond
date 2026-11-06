@@ -172,33 +172,55 @@ def evaluate_batch(
         return _prefix(store, session, cohort, model, proof, budget, authority=authority)
 
 
-_CLAIM_REFUSAL_STAGES = frozenset({
-    "CANDIDATE_NOT_BUY", "ENTRY_DISABLED", "DECISION_INTERVAL", "MODEL_AUTHORITY",
-    "RUNTIME_AUTHORITY", "GUARDIAN_READINESS", "GUARDIAN_RECEIPT", "CERTIFICATION_MISSING",
-    "CURRENT_BUDGET_OR_LEDGER", "TIME_EVIDENCE", "BATCH_CAPACITY", "BATCH_NOTIONAL",
-    "MEMBER_AUTHORITY",
-})
+_CLAIM_REFUSAL_STAGES = frozenset(
+    {
+        "CANDIDATE_NOT_BUY",
+        "ENTRY_DISABLED",
+        "DECISION_INTERVAL",
+        "MODEL_AUTHORITY",
+        "RUNTIME_AUTHORITY",
+        "GUARDIAN_READINESS",
+        "GUARDIAN_RECEIPT",
+        "CERTIFICATION_MISSING",
+        "CURRENT_BUDGET_OR_LEDGER",
+        "TIME_EVIDENCE",
+        "BATCH_CAPACITY",
+        "BATCH_NOTIONAL",
+        "MEMBER_AUTHORITY",
+    }
+)
 
 
 def _emit_claim_refusal(
-    store: CoreStore, decisions: tuple[Decision, ...], stage: str, *,
-    requested_at: datetime, elapsed_seconds: float,
+    store: CoreStore,
+    decisions: tuple[Decision, ...],
+    stage: str,
+    *,
+    requested_at: datetime,
+    elapsed_seconds: float,
 ) -> None:
     """Fixed-size negative diagnostic; never an execution or freshness attestation."""
     if stage not in _CLAIM_REFUSAL_STAGES or not decisions:
         return
     release = store.runtime_release_id
-    print(json.dumps({
-        "event": "PAPER_BATCH_CLAIM_REFUSED",
-        "stage": stage,
-        "first_decision_id": decisions[0].id,
-        "decision_count": len(decisions),
-        "executable_release_id": release if release and re.fullmatch(r"[0-9a-f]{64}", release)
-            else None,
-        "requested_at_utc": requested_at.isoformat(),
-        "emitted_after_transaction_at_utc": datetime.now(UTC).isoformat(),
-        "elapsed_seconds": max(0.0, elapsed_seconds),
-    }, separators=(",", ":")), flush=True)
+    print(
+        json.dumps(
+            {
+                "event": "PAPER_BATCH_CLAIM_REFUSED",
+                "stage": stage,
+                "first_decision_id": decisions[0].id,
+                "decision_count": len(decisions),
+                "executable_release_id": release
+                if release and re.fullmatch(r"[0-9a-f]{64}", release)
+                else None,
+                "requested_at_utc": requested_at.isoformat(),
+                "emitted_after_transaction_at_utc": datetime.now(UTC).isoformat(),
+                "elapsed_seconds": max(0.0, elapsed_seconds),
+            },
+            separators=(",", ":"),
+        ),
+        flush=True,
+    )
 
 
 def claim_batch(
@@ -212,8 +234,13 @@ def claim_batch(
     # guard refusal. Diagnostic failure cannot change the authority result.
     if refused:
         try:
-            _emit_claim_refusal(store, decisions, refused[0], requested_at=now,
-                                elapsed_seconds=monotonic() - started)
+            _emit_claim_refusal(
+                store,
+                decisions,
+                refused[0],
+                requested_at=now,
+                elapsed_seconds=monotonic() - started,
+            )
         except Exception:
             pass
     return result
@@ -359,6 +386,8 @@ def _claim_batch(
                     policy=entry_policy_in_session(store, session),
                     available_notional=current_budget.available_notional,
                     minimum_whole_share=minimum_share,
+                    eligibility=observation.asset_eligibility,
+                    at=store.clocks.sample()[0],
                 )
                 or dict(current.actual_quantities).get(d.symbol, Decimal(0)) != 0
                 or session.execute(
@@ -423,7 +452,9 @@ def _claim_batch(
                 symbol=d.symbol,
                 side=OrderSide.BUY,
                 order_type=OrderType.MARKET,
-                time_in_force=TimeInForce.DAY,
+                time_in_force=(
+                    TimeInForce.GTC if d.market_calendar == "CRYPTO24" else TimeInForce.DAY
+                ),
                 quantity=d.quantity,
                 created_at=d.recorded_at_utc,
             )
@@ -549,6 +580,8 @@ def member_objections(
         or intent.symbol != decision.symbol
         or intent.side is not OrderSide.BUY
         or intent.order_type is not OrderType.MARKET
+        or intent.time_in_force
+        != (TimeInForce.GTC if decision.market_calendar == "CRYPTO24" else TimeInForce.DAY)
         or reservation.reserved_notional != decision.quantity * decision.price
         or reservation.stop_risk != decision.quantity * (decision.price - plan.stop_price)
         or link["lot_id"] != decision.id
@@ -613,6 +646,7 @@ def compatible_batch_successor(
             policy=entry_policy_in_session(store, session),
             available_notional=budget.available_notional,
             minimum_whole_share=minimum_share,
+            at=now,
         )
         and intent.quantity
         * (decision.price - ProtectionPlan.for_decision(decision, store.config).stop_price)

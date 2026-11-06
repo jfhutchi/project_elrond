@@ -11,7 +11,7 @@ from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from quantbot.brokers.base import BrokerProtocolError, BrokerRequestError, BrokerTransportError
-from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType, TimeInForce
+from quantbot.domain import IntentState, OrderIntent, OrderSide, OrderType
 from quantbot.execution.coordinator import OrderSubmissionBlocked
 from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
 from quantbot.paper_core.contracts import (
@@ -554,6 +554,88 @@ async def synchronize(
             )
             if funds is not None:
                 proof = proof.model_copy(update={"funds_authority": funds.contract})
+                policy = store.entry_policy
+                expected, actual = dict(proof.expected_quantities), dict(proof.actual_quantities)
+                mismatches = tuple(
+                    sorted(
+                        symbol
+                        for symbol in expected.keys() | actual.keys()
+                        if expected.get(symbol, Decimal(0)) != actual.get(symbol, Decimal(0))
+                    )
+                )
+                if (
+                    policy is not None
+                    and policy.crypto is not None
+                    and mismatches
+                    and set(mismatches) <= set(policy.crypto.symbols)
+                    and not proof.cash_complete
+                    and activity_document_id is not None
+                    and all(
+                        Decimal(0) <= actual.get(s, Decimal(0)) < expected.get(s, Decimal(0))
+                        for s in mismatches
+                    )
+                ):
+                    from quantbot.paper_core.crypto_custody import (
+                        build_crypto_custody,
+                        read_crypto_lot_basis,
+                    )
+
+                    custody_ids = []
+                    for symbol in mismatches:
+                        links = table("core_intent_links")
+                        intents = table("order_intents")
+                        from quantbot.paper_core.settlement import definitively_unsent
+
+                        candidates = list(
+                            session.execute(
+                                select(links.c.lot_id, links.c.intent_id)
+                                .join(intents, intents.c.intent_id == links.c.intent_id)
+                                .where(
+                                    links.c.role == "ENTRY",
+                                    intents.c.symbol == symbol,
+                                    links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
+                                )
+                            ).all()
+                        )
+                        repository = StorageRepository(session)
+                        lots = [
+                            lot_id
+                            for lot_id, intent_id in candidates
+                            if not definitively_unsent(repository, intent_id)
+                        ]
+                        if len(lots) != 1:
+                            raise StateConflictError("CRYPTO_CUSTODY_EXCLUSIVE_ENTRY_UNAVAILABLE")
+                        basis = read_crypto_lot_basis(
+                            store,
+                            session,
+                            lots[0],
+                            now=now,
+                            capture_started=capture_started,
+                            activity_document_id=activity_document_id,
+                            ledger_generation=proof.generation,
+                        )
+                        custody = build_crypto_custody(
+                            basis=basis,
+                            funds_evidence_id=funds.id,
+                            first_account=funds.first_account,
+                            second_account=funds.second_account,
+                            first_positions=funds.first_positions,
+                            second_positions=funds.second_positions,
+                            first_open_orders=funds.first_open_orders,
+                            second_open_orders=funds.second_open_orders,
+                            capture_started=funds.capture_started,
+                            captured_at=funds.recorded_at_utc,
+                            elapsed_seconds=funds.elapsed_seconds,
+                        )
+                        put(session, "core_provider_acquisitions", custody.id, custody)
+                        custody_ids.append(custody.id)
+                    proof = proof.model_copy(
+                        update={
+                            "complete": False,
+                            "quarantined_symbols": mismatches,
+                            "custody_evidence_ids": tuple(custody_ids),
+                        }
+                    )
             _inventory_phase(broker, "CERTIFICATION_VALIDATE")
             certify_inventory(store, proof, session=session)
             _inventory_phase(broker, "CERTIFICATION_COMPLETE")
@@ -578,6 +660,7 @@ async def synchronize(
         raise
     if store.parallel_entries and isinstance(broker, AlpacaCoreBroker):
         _inventory_phase(broker, "SESSION_CAPITAL")
+        from quantbot.paper_core.continuous_capital import ContinuousCapitalEvidence
         from quantbot.paper_core.portfolio import SessionCapitalEvidence
 
         broker.entry_source_objections = ()
@@ -588,11 +671,23 @@ async def synchronize(
             if capital_id is None:
                 broker.entry_source_objections = ("SESSION_OPENING_UNVERIFIED",)
             else:
-                capital = store.read(
-                    "core_provider_acquisitions", capital_id, SessionCapitalEvidence
+                continuous = (
+                    store.entry_policy is not None and store.entry_policy.crypto is not None
+                )
+                capital: ContinuousCapitalEvidence | SessionCapitalEvidence
+                capital = (
+                    store.read("core_provider_acquisitions", capital_id, ContinuousCapitalEvidence)
+                    if continuous
+                    else store.read(
+                        "core_provider_acquisitions", capital_id, SessionCapitalEvidence
+                    )
                 )
                 if not capital.complete:
-                    broker.entry_source_objections = ("SESSION_CAPITAL_CONSERVATION_UNVERIFIED",)
+                    broker.entry_source_objections = (
+                        capital.reasons
+                        if isinstance(capital, ContinuousCapitalEvidence) and capital.reasons
+                        else ("SESSION_CAPITAL_CONSERVATION_UNVERIFIED",)
+                    )
                 if capital.external_flow_ids:
                     broker.entry_source_objections += ("SESSION_EXTERNAL_CAPITAL_FLOW",)
         except (
@@ -1073,6 +1168,45 @@ async def guardian_cycle(
         )
         if not due and not stop and not send_ahead:
             continue
+        custody = None
+        if store.config.evidence_lane == "BROKER_PAPER" and intent.symbol.endswith("/USD"):
+            from typing import cast
+
+            from quantbot.paper_core.crypto_custody import (
+                capture_crypto_custody,
+                crypto_custody_limit,
+                read_crypto_lot_basis,
+            )
+
+            try:
+                # Broker acquisition must finish before taking the exit-claim writer lock.
+                custody = await capture_crypto_custody(
+                    store, cast(AlpacaCoreBroker, broker), entry["lot_id"]
+                )
+            except (
+                StateConflictError,
+                TimeoutError,
+                OSError,
+                BrokerRequestError,
+                BrokerTransportError,
+                BrokerProtocolError,
+            ) as error:
+                reason = (
+                    str(error)
+                    if str(error).startswith("CRYPTO_CUSTODY_")
+                    else "CRYPTO_CUSTODY_CAPTURE_RETRY_PENDING"
+                )
+                reasons += (reason,)
+                report(
+                    store,
+                    role="GUARDIAN",
+                    state="RETRYABLE_FAILURE",
+                    reasons=(reason,),
+                    now=store.clocks.sample()[0],
+                    scope="LOT",
+                    scope_id=entry["lot_id"],
+                )
+                continue
         links = table("core_intent_links")
         with store.database.transaction() as session:
             session.execute(text("BEGIN IMMEDIATE"))
@@ -1121,6 +1255,26 @@ async def guardian_cycle(
                 ):
                     reserved += previous.quantity - filled
             remaining = owned - exited - reserved
+            if custody is not None:
+                try:
+                    current_basis = read_crypto_lot_basis(
+                        store,
+                        session,
+                        entry["lot_id"],
+                        now=store.clocks.sample()[0],
+                        capture_started=custody.capture_started,
+                        activity_document_id=custody.basis.activity_document_id,
+                    )
+                    remaining = crypto_custody_limit(
+                        custody, current_basis, now=store.clocks.sample()[0]
+                    )
+                except StateConflictError as error:
+                    reasons += (str(error),)
+                    continue
+                if prepared is None and remaining <= 0:
+                    # Residual gross ownership remains open, including sub-increment dust.
+                    reasons += (custody.exit_reason,)
+                    continue
             if prepared is not None:
                 exit_intent = prepared
             elif remaining <= 0:
@@ -1144,9 +1298,7 @@ async def guardian_cycle(
                     side=OrderSide.SELL,
                     quantity=remaining,
                     order_type=OrderType.MARKET,
-                    time_in_force=(
-                        intent.time_in_force if store.config.asset_capabilities else TimeInForce.DAY
-                    ),
+                    time_in_force=intent.time_in_force,
                     created_at=now,
                 )
                 StorageRepository(session).create_order_intent(exit_intent)
@@ -1214,6 +1366,7 @@ async def guardian_cycle(
             BrokerRequestError,
             BrokerTransportError,
             OrderSubmissionBlocked,
+            StateConflictError,
         ):
             if store.config.clock_profile != "PAPER_TIME_V2":
                 raise

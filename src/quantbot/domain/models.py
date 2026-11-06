@@ -8,8 +8,10 @@ from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
+    SerializerFunctionWrapHandler,
     StringConstraints,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -74,6 +76,14 @@ class Account(FrozenModel):
     buying_power: NonNegativeDecimal
     equity: NonNegativeDecimal
     currency: str
+    non_marginable_buying_power: NonNegativeDecimal | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        payload = dict(handler(self))
+        if "non_marginable_buying_power" not in self.model_fields_set:
+            payload.pop("non_marginable_buying_power", None)
+        return payload
 
     @field_validator("currency")
     @classmethod

@@ -11,6 +11,7 @@ declared profile as though it were measured would undo that in the one place an 
 
 from __future__ import annotations
 
+from contextlib import ExitStack
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -48,12 +49,12 @@ def panel(**overrides: object):
 
 @pytest.fixture
 def client(tmp_path: Path):
-    database = Database.create(tmp_path / "runtime.db")
+    with Database.create(tmp_path / "runtime.db") as database, ExitStack() as clients:
 
-    def build(runtime=None):
-        return TestClient(create_app(database, runtime=runtime))
+        def build(runtime=None):
+            return clients.enter_context(TestClient(create_app(database, runtime=runtime)))
 
-    return build
+        yield build
 
 
 # --- what the panel reports ---------------------------------------------------------------------

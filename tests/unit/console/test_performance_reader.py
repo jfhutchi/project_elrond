@@ -1,5 +1,6 @@
 import json
 import sqlite3
+from contextlib import closing
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -74,22 +75,34 @@ def test_retained_baseline_diagnostics_never_become_final_profit(tmp_path, state
         row = replace(row, same_account_epoch=False)
     elif state == "future":
         row = replace(row, captured_at=NOW.replace(minute=4))
-    with sqlite3.connect(tmp_path / "baselines.db") as db:
-        db.execute("CREATE TABLE paper_close_baselines_v1 "
-                   "(session_date TEXT,close_at TEXT,captured_at TEXT,equity TEXT,"
-                   "epoch TEXT,evidence_json TEXT)")
-        db.execute("INSERT INTO paper_close_baselines_v1 VALUES (?,?,?,?,?,?)", (
-            str(row.session_date), row.close_at.isoformat(), row.captured_at.isoformat(),
-            str(row.close_equity), "e" * 64, json.dumps(asdict(row), default=str)))
+    with closing(sqlite3.connect(tmp_path / "baselines.db")) as db, db:
+        db.execute(
+            "CREATE TABLE paper_close_baselines_v1 "
+            "(session_date TEXT,close_at TEXT,captured_at TEXT,equity TEXT,"
+            "epoch TEXT,evidence_json TEXT)"
+        )
+        db.execute(
+            "INSERT INTO paper_close_baselines_v1 VALUES (?,?,?,?,?,?)",
+            (
+                str(row.session_date),
+                row.close_at.isoformat(),
+                row.captured_at.isoformat(),
+                str(row.close_equity),
+                "e" * 64,
+                json.dumps(asdict(row), default=str),
+            ),
+        )
     before = {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
     data = read_performance(tmp_path, now=NOW)
     assert data.available
     day = next(day for day in data.rows if day.session_date == row.session_date)
     assert day.net_pnl is None and day.status != "FINAL"
-    expected = {"missing": "Previous close baseline is unavailable.",
-                "invalid": "Account continuity or prior-close mark is unverified.",
-                "unfinalized": "Reconciled close awaits durable finalization.",
-                "future": "Timely exchange close not captured."}
+    expected = {
+        "missing": "Previous close baseline is unavailable.",
+        "invalid": "Account continuity or prior-close mark is unverified.",
+        "unfinalized": "Reconciled close awaits durable finalization.",
+        "future": "Timely exchange close not captured.",
+    }
     assert day.reason == expected[state]
     assert before == {p.name: p.read_bytes() for p in tmp_path.iterdir() if p.is_file()}
 
@@ -147,7 +160,7 @@ def test_default_directory_and_current_missing_status(tmp_path):
     result = read_configured_performance({"QUANTBOT_LEARNER_DIRECTORY": str(tmp_path)}, now=NOW)
     assert result.available and len(result.rows) == 1
     CloseLedger(performance / "closes.db")
-    with sqlite3.connect(performance / "closes.db") as connection:
+    with closing(sqlite3.connect(performance / "closes.db")) as connection, connection:
         connection.execute("DELETE FROM paper_daily_closes_v1")
     status = performance / "capture-status.json"
     status.write_text(
@@ -166,7 +179,7 @@ def test_default_directory_and_current_missing_status(tmp_path):
 @pytest.mark.parametrize("change", ["wrong_previous", "string_bool", "extra_field", "date_key"])
 def test_invalid_receipt_rejected_without_arbitrary_text(tmp_path, change):
     bundle(tmp_path)
-    with sqlite3.connect(tmp_path / "closes.db") as connection:
+    with closing(sqlite3.connect(tmp_path / "closes.db")) as connection, connection:
         document = json.loads(
             connection.execute("SELECT evidence_json FROM paper_daily_closes_v1").fetchone()[0]
         )

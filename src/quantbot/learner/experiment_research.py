@@ -35,6 +35,14 @@ def _trial_prefix(experiment_id: str) -> str:
     return "intraday:adaptive-" + content_id(experiment_id)[:16] + ":"
 
 
+def experiment_trial_prefixes(experiment_id: str) -> tuple[str, str]:
+    """Context reading fits share the registered experiment's existing six-call budget."""
+    return (
+        _trial_prefix(experiment_id),
+        "intraday:context-" + content_id(experiment_id)[:16] + ":",
+    )
+
+
 class FitRequest(LearnerModel):
     experiment_id: Text
     recorded_at: datetime
@@ -85,7 +93,7 @@ class CanonicalTrialCharger:
             raise ValueError("EXACT_TRIAL_EXPERIMENT_REQUIRED")
         with _registry_session() as session:
             return sum(
-                identity.startswith(_trial_prefix(experiment_id))
+                identity.startswith(experiment_trial_prefixes(experiment_id))
                 for identity in verified_intraday_attempt_ids(session)
             )
 
@@ -108,7 +116,7 @@ class CanonicalTrialCharger:
                 raise CanonicalTrialAlreadyReserved("CANONICAL_TRIAL_ALREADY_RESERVED")
             if (
                 sum(
-                    identity.startswith(_trial_prefix(self.request.experiment_id))
+                    identity.startswith(experiment_trial_prefixes(self.request.experiment_id))
                     for identity in used
                 )
                 >= 6

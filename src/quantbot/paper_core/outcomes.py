@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import and_, func, literal, or_, select, text, update
 from sqlalchemy.orm import Session
@@ -497,6 +498,17 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     quantity = sum((f.quantity for f in buys), Decimal(0)) - sum(
         (f.quantity for f in sells), Decimal(0)
     )
+    asset_fee_quantity = Decimal(0)
+    asset_fee_ids: tuple[str, ...] = ()
+    crypto = bool(buys and buys[0].symbol.endswith("/USD"))
+    operational_crypto = crypto and store.config.evidence_lane == "BROKER_PAPER"
+    if crypto:
+        from quantbot.paper_core.crypto_fee_allocation import lot_asset_fees
+
+        asset_fees = lot_asset_fees(store, session, lot_id, as_of=as_of)
+        asset_fee_quantity, asset_fee_ids = asset_fees.quantity, asset_fees.allocation_ids
+        quantity -= asset_fee_quantity
+        source_ids.extend((*asset_fees.allocation_ids, *asset_fees.source_ids))
     if not buys or not sells or quantity != 0:
         raise OutcomeIncomplete("NONEMPTY_OWNED_FLAT_UNAVAILABLE")
     inventory = Decimal(0)
@@ -540,11 +552,24 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
             )
         for payload in session.execute(certified).scalars():
             proof = ReconciliationProof.model_validate_json(payload)
+            quantity_authority = (
+                proof.complete and proof.actual_quantities == proof.expected_quantities
+            )
+            if (
+                proof.quarantined_symbols
+                and buys[0].symbol not in proof.quarantined_symbols
+                and proof.quantity_scope_shape_valid
+                and proof.recorded_at_utc <= as_of
+            ):
+                from quantbot.paper_core.crypto_custody import scoped_quantity_objections
+
+                quantity_authority = not scoped_quantity_objections(
+                    store, session, proof, now=proof.recorded_at_utc, latest=False
+                )
             if (
                 proof.recorded_at_utc <= as_of
-                and proof.complete
+                and quantity_authority
                 and fill_ids <= set(proof.fill_ids)
-                and proof.actual_quantities == proof.expected_quantities
             ):
                 proofs.append(proof)
                 break
@@ -630,6 +655,26 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
     gross = sum((f.price * f.quantity for f in sells), Decimal(0)) - sum(
         (f.price * f.quantity for f in buys), Decimal(0)
     )
+    crypto_economics: dict[str, Any] = {}
+    cashflow = gross
+    if crypto:
+        # Weighted entry basis separates price performance on the units sold from
+        # the acquisition cost of units charged as fees. This is not a claimed
+        # broker USD fee valuation; cashflow already includes the lost fee coins.
+        entry_basis = sum((f.price * f.quantity for f in buys), Decimal(0)) / sum(
+            (f.quantity for f in buys), Decimal(0)
+        )
+        asset_fee_cost_basis = asset_fee_quantity * entry_basis
+        gross += asset_fee_cost_basis
+        if operational_crypto:
+            actual = None  # Positive CFEE evidence does not establish all-in USD fee finality.
+        crypto_economics = dict(
+            asset_fee_quantity=asset_fee_quantity,
+            asset_fee_cost_basis=asset_fee_cost_basis,
+            asset_fee_allocation_ids=asset_fee_ids,
+            cashflow_pnl=cashflow,
+            pnl_basis="WEIGHTED_ENTRY_BASIS_WITH_ASSET_FEES_V1",
+        )
     modeled = [i.amount for i in allocated if i.source == "MODELED"]
     modeled_costs = sum((m for m in modeled if m is not None), Decimal(0)) if modeled else None
     sources = tuple(
@@ -655,6 +700,7 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         return identical
     previous = max(revisions, key=lambda r: r.revision, default=None)
     return RoundTrip(
+        **crypto_economics,
         recorded_at_utc=as_of,
         evidence_lane=store.config.evidence_lane,
         release_id=store.config.release_id,
@@ -672,10 +718,16 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         net_pnl=None if actual is None else gross - actual,
         actual_fees=actual,
         status="COSTS_PENDING" if actual is None else "COMPLETE",
-        cost_reason="FEE_UNAVAILABLE" if actual is None else "PROVEN_ACTUAL_FEES",
+        cost_reason="CRYPTO_USD_COST_FINALITY_PENDING"
+        if crypto and actual is None
+        else "FEE_UNAVAILABLE"
+        if actual is None
+        else "PROVEN_ACTUAL_FEES",
         cost_item_ids=tuple(sorted(i.id for i in allocated)),
         modeled_costs=modeled_costs,
-        modeled_net_pnl=None if modeled_costs is None else gross - modeled_costs,
+        modeled_net_pnl=None
+        if modeled_costs is None or operational_crypto
+        else gross - modeled_costs,
         source_state_hash=state_hash,
         revision=1 if previous is None else previous.revision + 1,
         supersedes=None if previous is None else previous.id,

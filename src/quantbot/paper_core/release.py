@@ -278,8 +278,10 @@ def read_status(path: Path) -> dict[str, Any]:
             from quantbot.paper_core.economics import limits
 
             runtime = PreparedRelease.model_validate(status["executable_binding"]["release"]).config
+            admission_at = datetime.now(UTC)
             status["admission"] = dict(
-                asdict(limits(runtime.core, entry_policy=runtime.entry_policy)),
+                asdict(limits(runtime.core, entry_policy=runtime.entry_policy, at=admission_at)),
+                evaluated_at=admission_at.isoformat(),
                 entry_policy_id=runtime.entry_policy.id if runtime.entry_policy else None,
                 same_symbol_unfinished_lots=1,
             )

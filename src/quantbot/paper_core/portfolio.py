@@ -6,7 +6,7 @@ from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select, text
+from sqlalchemy import or_, select, text
 from sqlalchemy.exc import NoResultFound
 from sqlalchemy.orm import Session
 
@@ -51,10 +51,11 @@ class EntryQuoteEvidence(PortfolioEvidence):
     ask: Decimal
     bid: Decimal
     source_at: datetime
-    endpoint: Literal["https://data.alpaca.markets/v2/stocks/quotes/latest"] = (
-        "https://data.alpaca.markets/v2/stocks/quotes/latest"
-    )
-    feed: Literal["iex"] = "iex"
+    endpoint: Literal[
+        "https://data.alpaca.markets/v2/stocks/quotes/latest",
+        "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes",
+    ] = "https://data.alpaca.markets/v2/stocks/quotes/latest"
+    feed: Literal["iex", "crypto"] = "iex"
     raw_digest: str
 
 
@@ -65,7 +66,9 @@ class CurrentPortfolioSnapshot(PortfolioEvidence):
     entry_symbol: str | None = None
     entry_price: Decimal | None = None
     entry_price_asof: datetime | None = None
-    entry_price_source: Literal["IEX_ASK_V1", "EXPLICIT_OFFLINE_MARK"] | None = None
+    entry_price_source: (
+        Literal["IEX_ASK_V1", "ALPACA_CRYPTO_ASK_V1", "EXPLICIT_OFFLINE_MARK"] | None
+    ) = None
     entry_quote_id: str | None = None
 
 
@@ -128,7 +131,8 @@ def current_entry_price(
         <= upper
         <= mark.entry_price_asof + timedelta(seconds=5)
         or store.config.evidence_lane == "BROKER_PAPER"
-        and mark.entry_price_source != "IEX_ASK_V1"
+        and mark.entry_price_source
+        != ("ALPACA_CRYPTO_ASK_V1" if decision.market_calendar == "CRYPTO24" else "IEX_ASK_V1")
     ):
         return ("ENTRY_PRICE_UNAVAILABLE_OR_STALE",), decision.price
     if store.config.evidence_lane == "BROKER_PAPER":
@@ -146,6 +150,12 @@ def current_entry_price(
                 or quote.symbol != intent.symbol
                 or quote.ask != mark.entry_price
                 or quote.source_at != mark.entry_price_asof
+                or (quote.feed, quote.endpoint)
+                != (
+                    ("crypto", "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes")
+                    if decision.market_calendar == "CRYPTO24"
+                    else ("iex", "https://data.alpaca.markets/v2/stocks/quotes/latest")
+                )
                 or not 0 <= (now - quote.recorded_at_utc).total_seconds() <= 5
             ):
                 return ("ENTRY_QUOTE_SOURCE_UNVERIFIED",), decision.price
@@ -211,6 +221,96 @@ def record_session_capital(store: CoreStore, evidence: SessionCapitalEvidence) -
     return evidence.id
 
 
+def opening_balance_source_valid(
+    store: CoreStore, session: Session, proof: ReconciliationProof, *, current: bool
+) -> bool:
+    """Witness equity without turning a scoped quantity proof into reconciliation.
+
+    Admission checks today's entire authority. Historical opening checks preserve
+    the original balance source after later fills change the current ledger.
+    """
+    if proof.complete and proof.actual_quantities == proof.expected_quantities:
+        return True
+    policy = store.entry_policy
+    if (
+        policy is None
+        or policy.crypto is None
+        or not proof.quarantined_symbols
+        or not proof.quantity_scope_shape_valid
+        or not set(proof.quarantined_symbols) <= set(policy.crypto.symbols)
+    ):
+        return False
+    if current:
+        return not entry_inventory_objections(store, session, proof, now=proof.recorded_at_utc)
+
+    from quantbot.paper_core.crypto_custody import CryptoCustodyEvidence, _validate_capture
+    from quantbot.paper_core.funds import PaperFundsEvidence, stable_account_reads
+    from quantbot.storage.repositories import StateConflictError
+
+    documents = table("core_provider_acquisitions")
+    raw = session.execute(
+        select(documents.c.payload).where(documents.c.id == proof.acquisition_id)
+    ).scalar_one_or_none()
+    if raw is None:
+        return False
+    try:
+        funds = PaperFundsEvidence.model_validate_json(raw)
+        if (
+            funds.id != proof.acquisition_id
+            or funds.contract != proof.funds_authority
+            or funds.account_id != store.config.account_id
+            or funds.store_identity != store.database.store_identity
+            or funds.config_id != store.config_id
+            or funds.release_id != proof.release_id
+            or funds.evidence_lane != "BROKER_PAPER"
+            or funds.first_account.account != proof.account
+            or funds.first_positions != proof.positions
+            or funds.recorded_at_utc != proof.recorded_at_utc
+            or not stable_account_reads(funds.first_account, funds.second_account)
+        ):
+            return False
+        covered = set()
+        for identity in proof.custody_evidence_ids:
+            raw = session.execute(
+                select(documents.c.payload).where(documents.c.id == identity)
+            ).scalar_one_or_none()
+            if raw is None:
+                return False
+            custody = CryptoCustodyEvidence.model_validate_json(raw)
+            basis = custody.basis
+            if (
+                custody.id != identity
+                or basis.symbol in covered
+                or custody.funds_evidence_id != funds.id
+                or custody.capture_started != funds.capture_started
+                or custody.captured_at != funds.recorded_at_utc
+                or custody.elapsed_seconds != funds.elapsed_seconds
+                or custody.first_account != funds.first_account
+                or custody.second_account != funds.second_account
+                or custody.first_positions != funds.first_positions
+                or custody.second_positions != funds.second_positions
+                or custody.first_open_orders != funds.first_open_orders
+                or custody.second_open_orders != funds.second_open_orders
+                or basis.account_id != store.config.account_id
+                or basis.store_identity != store.database.store_identity
+                or basis.config_id != store.config_id
+                or basis.release_id != proof.release_id
+                or basis.ledger_state_id != proof.ledger_state_id
+                or basis.ledger_generation != proof.generation
+                or basis.baseline_id != proof.baseline_id
+                or basis.expected_account_quantity
+                != dict(proof.expected_quantities).get(basis.symbol)
+                or custody.custody_quantity
+                != dict(proof.actual_quantities).get(basis.symbol, Decimal(0))
+            ):
+                return False
+            _validate_capture(custody)
+            covered.add(basis.symbol)
+        return covered == set(proof.quarantined_symbols)
+    except (ValueError, StateConflictError):
+        return False
+
+
 def record_session_opening(store: CoreStore, evidence: SessionOpening) -> str:
     """A retained balance and advancing provider clock must witness the original opening."""
     with store.database.transaction() as session:
@@ -238,8 +338,7 @@ def record_session_opening(store: CoreStore, evidence: SessionOpening) -> str:
             or evidence.release_id != store.config.release_id
             or evidence.source_release_id != proof.release_id
             or proof.account.account_id != evidence.account_id
-            or not proof.complete
-            or proof.actual_quantities != proof.expected_quantities
+            or not opening_balance_source_valid(store, session, proof, current=True)
             or proof.recorded_at_utc != evidence.captured_at
             or proof.account.equity != evidence.equity
             or not 0 <= (evidence.captured_at - evidence.session_open).total_seconds() < 60
@@ -308,8 +407,9 @@ def portfolio_budget(
     assert driver is not None, "SQLITE_DRIVER_UNAVAILABLE"
     if not driver.in_transaction:
         connection.exec_driver_sql("BEGIN")
-    bound = limits(store.config, entry_policy=store.entry_policy)
-    reasons = list(entry_inventory_objections(store, session, proof, now=now, latest=latest))
+    bound = limits(store.config, entry_policy=store.entry_policy, at=now)
+    inventory_reasons = entry_inventory_objections(store, session, proof, now=now, latest=latest)
+    reasons = list(inventory_reasons)
     account = proof.account
     current_positions = proof.positions
     if market_snapshot is not None:
@@ -337,64 +437,82 @@ def portfolio_budget(
     if repo.get_kill_switch_state().engaged:
         reasons.append("MANUAL_ENTRY_STOP")
     day = now.astimezone(ZoneInfo("America/New_York")).date().isoformat()
-    index = table("core_session_opening_index")
-    opening_raw = session.execute(
-        select(table("core_session_openings").c.payload)
-        .join(index, index.c.document_id == table("core_session_openings").c.id)
-        .where(
-            index.c.account_id == store.config.account_id,
-            index.c.policy_id == store.config.policy_id,
-            index.c.session_date == day,
-            index.c.store_identity == store.database.store_identity,
+    from quantbot.paper_core.crypto_policy import account_risk_day_bounds
+
+    day_start, day_end = account_risk_day_bounds(now)
+    if store.entry_policy is not None and store.entry_policy.crypto is not None:
+        from quantbot.paper_core.continuous_capital import continuous_budget_authority
+
+        opening_id, continuous_reasons = continuous_budget_authority(
+            store,
+            session,
+            proof,
+            now=now,
+            account_equity=account.equity,
+            loss_bps=bound.daily_loss_bps or 0,
+            latest=latest,
         )
-    ).scalar_one_or_none()
-    opening = SessionOpening.model_validate_json(opening_raw) if opening_raw else None
-    if opening is None:
-        reasons.append("SESSION_OPENING_UNVERIFIED")
-    elif account.equity * 10000 <= opening.equity * (10000 - (bound.daily_loss_bps or 0)):
-        reasons.append("SESSION_DAILY_LOSS_HALT")
-    generic = table("core_document_index")
-    capital_rows = session.execute(
-        select(table("core_provider_acquisitions").c.payload)
-        .join(generic, generic.c.id == table("core_provider_acquisitions").c.id)
-        .where(generic.c.kind == "core_session_capital", generic.c.reference == proof.id)
-    ).scalars()
-    capital = [SessionCapitalEvidence.model_validate_json(r) for r in capital_rows]
-    valid = [
-        e
-        for e in capital
-        if e.complete
-        and e.account_id == store.config.account_id
-        and e.store_identity == store.database.store_identity
-        and e.config_id == store.config_id
-        and e.release_id == store.config.release_id
-        and e.evidence_lane == store.config.evidence_lane
-        and opening is not None
-        and e.session_open == opening.session_open
-        and e.activity_start <= e.session_open
-        and e.activity_watermark >= proof.recorded_at_utc
-        and 0 <= (now - e.recorded_at_utc).total_seconds() <= 120
-        and (
-            store.config.evidence_lane != "BROKER_PAPER"
-            or (
-                e.opening_id == opening.id
-                and e.source_document_id is not None
-                and e.cash_residual is not None
-                and e.cash_residual.is_finite()
-                and abs(e.cash_residual) <= Decimal(".01")
-                and e.quantities_match
-                and e.observed_cash == proof.account.cash
+        reasons.extend(continuous_reasons)
+    else:
+        index = table("core_session_opening_index")
+        opening_raw = session.execute(
+            select(table("core_session_openings").c.payload)
+            .join(index, index.c.document_id == table("core_session_openings").c.id)
+            .where(
+                index.c.account_id == store.config.account_id,
+                index.c.policy_id == store.config.policy_id,
+                index.c.session_date == day,
+                index.c.store_identity == store.database.store_identity,
             )
-        )
-    ]
-    if not valid:
-        reasons.append("SESSION_CAPITAL_UNVERIFIED")
-    if session.execute(
-        select(generic.c.id)
-        .where(generic.c.kind == "core_session_external_flow", generic.c.reference == day)
-        .limit(1)
-    ).first():
-        reasons.append("SESSION_EXTERNAL_CAPITAL_FLOW")
+        ).scalar_one_or_none()
+        opening = SessionOpening.model_validate_json(opening_raw) if opening_raw else None
+        if opening is None:
+            reasons.append("SESSION_OPENING_UNVERIFIED")
+        elif account.equity * 10000 <= opening.equity * (10000 - (bound.daily_loss_bps or 0)):
+            reasons.append("SESSION_DAILY_LOSS_HALT")
+        generic = table("core_document_index")
+        capital_rows = session.execute(
+            select(table("core_provider_acquisitions").c.payload)
+            .join(generic, generic.c.id == table("core_provider_acquisitions").c.id)
+            .where(generic.c.kind == "core_session_capital", generic.c.reference == proof.id)
+        ).scalars()
+        capital = [SessionCapitalEvidence.model_validate_json(r) for r in capital_rows]
+        valid = [
+            e
+            for e in capital
+            if e.complete
+            and e.account_id == store.config.account_id
+            and e.store_identity == store.database.store_identity
+            and e.config_id == store.config_id
+            and e.release_id == store.config.release_id
+            and e.evidence_lane == store.config.evidence_lane
+            and opening is not None
+            and e.session_open == opening.session_open
+            and e.activity_start <= e.session_open
+            and e.activity_watermark >= proof.recorded_at_utc
+            and 0 <= (now - e.recorded_at_utc).total_seconds() <= 120
+            and (
+                store.config.evidence_lane != "BROKER_PAPER"
+                or (
+                    e.opening_id == opening.id
+                    and e.source_document_id is not None
+                    and e.cash_residual is not None
+                    and e.cash_residual.is_finite()
+                    and abs(e.cash_residual) <= Decimal(".01")
+                    and e.quantities_match
+                    and e.observed_cash == proof.account.cash
+                )
+            )
+        ]
+        if not valid:
+            reasons.append("SESSION_CAPITAL_UNVERIFIED")
+        if session.execute(
+            select(generic.c.id)
+            .where(generic.c.kind == "core_session_external_flow", generic.c.reference == day)
+            .limit(1)
+        ).first():
+            reasons.append("SESSION_EXTERNAL_CAPITAL_FLOW")
+        opening_id = opening.id if opening else None
     positions = {p.symbol: p for p in current_positions}
     gross = sum(
         (max(abs(p.market_value), abs(p.quantity * p.market_price)) for p in current_positions),
@@ -403,6 +521,7 @@ def portfolio_budget(
     pending = ZERO
     risk = ZERO
     held: dict[str, Decimal] = {}
+    held_value: dict[str, Decimal] = {}
     reserved_symbols = set()
     count = 0
     links = table("core_intent_links")
@@ -416,7 +535,8 @@ def portfolio_budget(
             .where(
                 links.c.role == "ENTRY",
                 or_(
-                    func.substr(intents.c.created_at, 1, 10) == day,
+                    (intents.c.created_at >= encode_utc(day_start))
+                    & (intents.c.created_at < encode_utc(day_end)),
                     links.c.lot_id.not_in(select(table("core_round_trips").c.id)),
                 ),
             )
@@ -476,11 +596,23 @@ def portfolio_budget(
                     ZERO,
                 )
         owned = acquired - exited
+        if intent.symbol.endswith("/USD"):
+            from quantbot.paper_core.crypto_fee_allocation import lot_asset_fees
+
+            # Only an independently attributed coin debit releases this owned
+            # quantity. An unexplained custody shortfall remains fully reserved.
+            owned -= lot_asset_fees(store, session, link["lot_id"], as_of=now).quantity
         if owned < 0 or acquired > intent.quantity:
             reasons.append("PORTFOLIO_QUANTITY_CONTRADICTION")
         if owned > 0:
             held[intent.symbol] = held.get(intent.symbol, ZERO) + owned
             average = sum((f.quantity * f.price for f in fills), ZERO) / acquired
+            observed_mark = (
+                positions[intent.symbol].market_price if intent.symbol in positions else average
+            )
+            held_value[intent.symbol] = held_value.get(intent.symbol, ZERO) + owned * max(
+                average, observed_mark
+            )
             # The unchanged guardian stops at 99% of actual acquisition cost.
             # Original decision-price metadata is not the executed stop basis.
             risk += owned * average * Decimal(".01")
@@ -504,12 +636,38 @@ def portfolio_budget(
             pending += unfilled * price
             risk += unfilled * max(ZERO, price - protection.stop_price)
             reserved_symbols.add(intent.symbol)
-    if any(held.get(s, ZERO) != p.quantity for s, p in positions.items()):
+    # entry_inventory_objections already revalidates the persisted scope and source
+    # receipts in this transaction. Do not repeat its ownership hydration.
+    scoped = set(proof.quarantined_symbols) if not inventory_reasons else set()
+    expected = dict(proof.expected_quantities)
+    if any(
+        held.get(symbol, ZERO)
+        != (
+            expected.get(symbol, ZERO)
+            if symbol in scoped
+            else positions[symbol].quantity
+            if symbol in positions
+            else ZERO
+        )
+        for symbol in set(held) | set(positions)
+    ):
         reasons.append("PORTFOLIO_UNATTRIBUTED_POSITION")
+    # Unexplained custody loss is not a released position. Reserve the gross owned
+    # amount until independently resolved, even when the broker omits a zero balance.
+    # Keeping the reservation also for invalid scope is conservative while entry is blocked.
+    for symbol in proof.quarantined_symbols:
+        position = positions.get(symbol)
+        observed_value = (
+            max(abs(position.market_value), abs(position.quantity * position.market_price))
+            if position
+            else ZERO
+        )
+        gross += max(ZERO, held_value.get(symbol, ZERO) - observed_value)
+    occupied = set(positions) | set(held) | reserved_symbols
     cash = account.cash - account.equity * bound.reserve_bps / 10000 - pending
     gross_headroom = account.equity * (bound.gross_bps or 0) / 10000 - gross - pending
     risk_headroom = account.equity * (bound.open_risk_bps or 0) / 10000 - risk
-    slots = len(store.entry_symbols) - len(set(positions) | reserved_symbols)
+    slots = len(store.entry_symbols) - len(occupied)
     policy = store.entry_policy
     if policy is not None and policy.dynamic:
         # Candidate batch membership is bounded separately. Economic capacity replaces list size.
@@ -519,18 +677,20 @@ def portfolio_budget(
             if target > 0
             else 0
         )
+    if bound.max_positions is not None:
+        slots = min(slots, max(0, bound.max_positions - len(occupied)))
     if min(cash, gross_headroom, risk_headroom) < 0 or slots < 0:
         reasons.append("PORTFOLIO_EXPOSURE_LIMIT")
     if bound.daily_entry_limit is not None and count >= bound.daily_entry_limit:
         reasons.append("SESSION_RESERVATION_LIMIT")
     return PortfolioBudget(
         proof.id,
-        opening.id if opening else None,
+        opening_id,
         max(0, slots),
         max(ZERO, cash),
         max(ZERO, gross_headroom),
         max(ZERO, risk_headroom),
         count,
         tuple(dict.fromkeys(reasons)),
-        tuple(sorted(set(positions) | reserved_symbols)),
+        tuple(sorted(occupied)),
     )

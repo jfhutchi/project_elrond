@@ -1,5 +1,9 @@
 # Documentation map
 
+## November 6, 2026 — strategy research catalog
+
+The [48-candidate strategy catalog](research/strategy-catalog-2026-11-06/README.md) adds a source-qualified index, proposed 12-candidate first research batch, [evaluation protocol](research/strategy-catalog-2026-11-06/evaluation-plan.md), and [market/sleep roadmap](research/strategy-catalog-2026-11-06/market-and-sleep-roadmap.md). This is research documentation, with no strategy implementation, backtest result or activation claim. Crypto spot is the current implementation priority; international equities, FX and options are deferred. The dated October inventory and counts below are preserved as historical records, not updated totals.
+
 > **Submission repair, October 15:** the local Omen now runs the reviewed mark-stability and atomic pre-send refusal fixes. Guardian/outcomes readiness and inherited protection pass; entries are enabled, but current IEX bars are stale and no new core fill is verified. See the [submission evidence](evidence/paper-core/submission-2026-10-15/README.md).
 
 Reviewed October 15, 2026, America/New_York. Start with the [PAPER core overview](paper-core.md), [approved daily successor](superpowers/specs/2026-10-14-daily-paper-exploration-design.md), [direction](intraday-paper-direction.md), and [measured handover](evidence/paper-core/handover.md).

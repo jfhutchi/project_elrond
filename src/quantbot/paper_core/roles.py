@@ -9,7 +9,7 @@ import random
 import sqlite3
 from contextlib import suppress
 from datetime import datetime, timedelta
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import select, text
 from sqlalchemy.exc import OperationalError
@@ -27,6 +27,8 @@ from quantbot.paper_core.authority import (
 from quantbot.paper_core.contracts import (
     Decision,
     LearningPolicy,
+    Observation,
+    ObservationCohort,
     ProtectionPlan,
     ReconciliationProof,
 )
@@ -42,9 +44,48 @@ from quantbot.research.manifest import content_id
 from quantbot.risk import OrderPurpose
 from quantbot.storage import StorageRepository
 
+if TYPE_CHECKING:
+    from quantbot.paper_core.discovery import DiscoveryStore
+
 Role = Literal["trader", "guardian", "outcomes"]
 
 CLOSED_SESSION_IDLE = "CLOSED_SESSION_IDLE"
+
+
+def attach_observed_context(
+    state: DiscoveryStore,
+    observation: Observation | ObservationCohort,
+    *,
+    at: datetime,
+) -> Observation | ObservationCohort:
+    """Attach the existing research journal before selection, without changing signals."""
+    from quantbot.paper_core.context_integration import (
+        capture_research_context,
+        load_source_permissions,
+    )
+
+    permissions = load_source_permissions(state)
+    if not permissions:
+        return (
+            observation  # No empty snapshots or extra retention during unavailable-source cycles.
+        )
+
+    def linked(item: Observation) -> Observation:
+        snapshot = capture_research_context(
+            state, symbol=item.symbol, at=at, permissions=permissions, maximum_documents=20
+        )
+        return (
+            item
+            if snapshot is None
+            else item.model_copy(update={"context_snapshot_id": snapshot.snapshot_id})
+        )
+
+    if isinstance(observation, ObservationCohort):
+        return observation.model_copy(
+            update={"observations": tuple(map(linked, observation.observations))}
+        )
+    return linked(observation)
+
 
 _TRANSIENT_ENTRY_WAIT_GATES = frozenset(
     {
@@ -73,6 +114,21 @@ def _retry_transient_wait(
         and all(
             d.action == "WAIT" and d.gates and set(d.gates) <= _TRANSIENT_ENTRY_WAIT_GATES
             for d in decisions
+        )
+    )
+
+
+def _horizon_only_empty_cohort(observation: Observation | ObservationCohort) -> bool:
+    """Only a fully explained stock horizon exclusion consumes an empty boundary."""
+    return bool(
+        isinstance(observation, ObservationCohort)
+        and not observation.observations
+        and not observation.crypto_symbols
+        and not observation.market_gaps
+        and observation.unavailable
+        and all(
+            reason == "STOCK_SIGNAL_HORIZON_EXCEEDS_SESSION"
+            for _, reason in observation.unavailable
         )
     )
 
@@ -184,6 +240,7 @@ class ClosedSessionPoll:
         self.anchor = None
         if (
             type(broker) is not AlpacaCoreBroker
+            or bool(broker.crypto_symbols)
             or broker.closed_session_window is None
             or receipt.proof_id is None
             or set(receipt.reasons) - {"SESSION_OPENING_UNVERIFIED"}
@@ -666,8 +723,28 @@ async def run_role(
                                 if store.config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
                                 else await broker.observation()
                             )
-                        from quantbot.paper_core.contracts import ObservationCohort
                         from quantbot.paper_core.selection import cohort_document
+
+                        if (
+                            isinstance(broker, AlpacaCoreBroker)
+                            and broker.research_state is not None
+                        ):
+                            try:
+                                observation = attach_observed_context(
+                                    broker.research_state, observation, at=store.clocks.sample()[0]
+                                )
+                            except (ValueError, OSError, sqlite3.Error) as error:
+                                # Context is observed-only until separately admitted. A failed
+                                # research read does not alter an otherwise price-only strategy.
+                                print(
+                                    json.dumps(
+                                        {
+                                            "event": "CONTEXT_CAPTURE_UNAVAILABLE",
+                                            "reason": type(error).__name__,
+                                        }
+                                    ),
+                                    flush=True,
+                                )
 
                         observation_ids = (
                             (content_id(cohort_document(store, observation)),)
@@ -710,11 +787,12 @@ async def run_role(
                                 now=store.clocks.sample()[0],
                             )
                         # A provider can publish a boundary's bars a few seconds
-                        # late. Empty cohorts have made no decision or reservation;
-                        # retry them at the normal bounded role cadence.
+                        # late. Retry empty cohorts at the normal bounded cadence,
+                        # except a conclusive stock session-horizon exclusion.
                         if (
                             not isinstance(observation, ObservationCohort)
                             or observation.observations
+                            or _horizon_only_empty_cohort(observation)
                         ) and not _retry_transient_wait(
                             decisions,
                             source_end=observation.source_end,

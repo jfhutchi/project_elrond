@@ -626,6 +626,8 @@ def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
             )
         ).scalar_one_or_none()
         time_proof = TimeEvidence.model_validate_json(time_payload) if time_payload else None
+        entry_policy = store.entry_policy
+        continuous_market = entry_policy is not None and entry_policy.crypto is not None
         if (
             time_proof is None
             or time_proof.id not in heartbeat.evidence_ids
@@ -635,11 +637,14 @@ def resume_entries(store: CoreStore, approval: dict[str, Any]) -> str:
             or not 0 <= (now - time_proof.wall_anchor).total_seconds() <= 30
             or time_proof.samples[-1].provider.account_id != commission.account_id
             or time_proof.offset_upper - time_proof.offset_lower > 2
-            or now + timedelta(seconds=time_proof.offset_upper)
-            >= time_proof.samples[-1].provider.session_close
-            - timedelta(seconds=store.config.exit_buffer_seconds)
-            or now + timedelta(seconds=time_proof.offset_lower)
-            < time_proof.samples[-1].provider.session_open
+            or not continuous_market
+            and (
+                now + timedelta(seconds=time_proof.offset_upper)
+                >= time_proof.samples[-1].provider.session_close
+                - timedelta(seconds=store.config.exit_buffer_seconds)
+                or now + timedelta(seconds=time_proof.offset_lower)
+                < time_proof.samples[-1].provider.session_open
+            )
         ):
             raise StateConflictError("RESUME_FRESH_TIME_REQUIRED")
         from quantbot.paper_core.health import universe_health_objections

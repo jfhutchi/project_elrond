@@ -104,7 +104,7 @@ def evaluate_entry(
         if time_evidence is not None
         else observation.recorded_at_utc
     )
-    time_reasons = ()
+    time_reasons: tuple[str, ...] = ()
     quote_interval = None
     if config.clock_profile == "PAPER_TIME_V2":
         time_reasons = (
@@ -136,11 +136,19 @@ def evaluate_entry(
     if capability is not None and model.mode != "COLLECT":
         objections.append("OFFLINE_CAPABILITY_COLLECT_ONLY")
     objections.extend(time_reasons)
+    crypto = observation.crypto_session is not None
+    if crypto and (
+        entry_policy is None
+        or entry_policy.crypto is None
+        or observation.symbol not in entry_policy.crypto.symbols
+    ):
+        objections.append("CRYPTO_POLICY_NOT_COMMISSIONED")
     hybrid = config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
     if hybrid and not _cohort_member:
         objections.append("SELECTION_COHORT_REQUIRED")
     if (
         hybrid
+        and not crypto
         and time_evidence is not None
         and time_evidence.samples
         and (observation.session_open != time_evidence.samples[-1].provider.session_open)
@@ -158,7 +166,10 @@ def evaluate_entry(
             )
         )
         or model.feature_version != observation.feature_version
-        and not (observation.feature_context == "OPENING_QUOTE_GAP_V1" and model.mode == "COLLECT")
+        and not (
+            (observation.feature_context == "OPENING_QUOTE_GAP_V1" or crypto)
+            and model.mode == "COLLECT"
+        )
     ):
         objections.append("CONTRACT_MISMATCH")
     from quantbot.paper_core.activation import Activation
@@ -166,6 +177,24 @@ def evaluate_entry(
     selection = activation if isinstance(activation, Activation) else None
     if hybrid and selection is None:
         objections.append("CORE_MODEL_UNCOMMISSIONED")
+    if crypto and model.mode != "COLLECT":
+        objections.append("CRYPTO_MODEL_PROCEDURE_NOT_VALIDATED")
+    if crypto:
+        # A declared experimental momentum screen, not a prediction of profit.
+        # Price movement smaller than the modeled fees is not a reason to collect
+        # another small-target scalp. Actual fees remain independently unknown.
+        values = dict(observation.features)
+        cost_bps = (
+            Decimal(2 * entry_policy.crypto.estimated_taker_fee_bps + 10)
+            if entry_policy is not None and entry_policy.crypto is not None
+            else Decimal(60)
+        )
+        if (
+            values.get("return_5m", 0) <= 0
+            or values.get("return_15m", 0) * 10000 <= float(cost_bps)
+            or values.get("relative_strength_15m", 0) < 0
+        ):
+            objections.append("CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED")
     opening = observation.feature_context in {"OPENING_CONTIGUOUS_V1", "OPENING_QUOTE_GAP_V1"}
     if opening:
         if model.mode != "COLLECT":
@@ -206,11 +235,12 @@ def evaluate_entry(
                     objections.append("PREDICT_NET_RESERVE")
     if (
         inventory.account.account_id != config.account_id
-        or inventory.expected_quantities != inventory.actual_quantities
-        or not inventory.complete
+        or not inventory.quantity_scope_shape_valid
         or not structural_funds_allowed(config, inventory)
     ):
         objections.append("INVENTORY_UNCERTIFIED")
+    if observation.symbol in inventory.quarantined_symbols:
+        objections.append("SYMBOL_CUSTODY_QUARANTINED")
 
     if not 0 <= (evaluated_at - inventory.recorded_at_utc).total_seconds() <= 120:
         objections.append("INVENTORY_STALE")
@@ -231,7 +261,23 @@ def evaluate_entry(
         config=config,
         available_notional=available_notional,
         capability=capability,
+        eligibility=eligibility,
+        at=evaluated_at,
     )
+    if crypto and eligibility is not None:
+        objections.extend(
+            eligibility_objections(
+                eligibility,
+                symbol=observation.symbol,
+                now=evaluated_at,
+                quantity=quantity,
+                policy_id=entry_policy.id if entry_policy else None,
+            )
+        )
+        if inventory.account.non_marginable_buying_power is None or (
+            quantity * observation.price > inventory.account.non_marginable_buying_power
+        ):
+            objections.append("CRYPTO_NON_MARGINABLE_BUYING_POWER")
     if capability is not None:
         objections.extend(observation_capability_objections(config, observation, quantity=quantity))
     if quantity <= 0 or quantity * observation.price * Decimal(
@@ -243,9 +289,15 @@ def evaluate_entry(
         or quantity * observation.price > inventory.account.buying_power * Decimal("0.95")
     ):
         objections.append("BUYING_POWER_RESERVE")
-    if observation.recorded_at_utc >= observation.session_close - timedelta(seconds=120):
+    if not crypto and observation.recorded_at_utc >= observation.session_close - timedelta(
+        seconds=120
+    ):
         objections.append("SESSION_EXIT_BUFFER")
     timing: dict[str, Any] = {}
+    if crypto:
+        timing["market_calendar"] = "CRYPTO24"
+        timing["modeled_round_trip_cost_bps"] = cost_bps
+        timing["research_signal_contract"] = "CRYPTO_COST_SCREEN_V1"
     if entry_policy is not None:
         timing["entry_policy_id"] = entry_policy.id
     if selection is not None:
@@ -274,12 +326,16 @@ def evaluate_entry(
                         + timedelta(seconds=time_evidence.offset_lower)
                     )
                     + timedelta(minutes=config.horizon_minutes),
-                    observation.session_close - timedelta(seconds=120),
+                    evaluated_at + timedelta(minutes=config.horizon_minutes + 1)
+                    if crypto
+                    else observation.session_close - timedelta(seconds=120),
                 ),
             }
         )
         if time_projection is not None:
             timing["time_projection"] = time_projection
+    if observation.context_snapshot_id is not None:
+        timing["context_snapshot_id"] = observation.context_snapshot_id
     return Decision(
         **timing,
         recorded_at_utc=evaluated_at,
@@ -537,7 +593,13 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             symbol=decision.symbol,
             side=OrderSide.BUY,
             order_type=OrderType.MARKET,
-            time_in_force=(capability.time_in_force if capability is not None else TimeInForce.DAY),
+            time_in_force=(
+                capability.time_in_force
+                if capability is not None
+                else TimeInForce.GTC
+                if decision.market_calendar == "CRYPTO24"
+                else TimeInForce.DAY
+            ),
             quantity=decision.quantity,
             created_at=decision.recorded_at_utc,
         )

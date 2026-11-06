@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 from collections.abc import Mapping
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
@@ -36,6 +37,7 @@ from quantbot.market_data.base import (
 )
 
 ALPACA_CRYPTO_BARS_URL = "https://data.alpaca.markets/v1beta3/crypto/us/bars"
+ALPACA_CRYPTO_QUOTES_URL = "https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes"
 
 #: Crypto has no corporate actions, so bars are unadjusted by nature rather than by choice.
 CRYPTO_ADJUSTMENT = AdjustmentMode.RAW
@@ -158,13 +160,15 @@ class AlpacaCryptoDataClient:
             raise MarketDataProtocolError("Retry-After header is invalid")
         return delay
 
-    async def _request(self, params: Mapping[str, str]) -> TransportResponse:
+    async def _request(
+        self, params: Mapping[str, str], *, url: str | None = None
+    ) -> TransportResponse:
         attempt = 0
         while True:
             try:
                 response = await self._transport.request(
                     "GET",
-                    self._url,
+                    url or self._url,
                     headers=self._headers,
                     params=params,
                     timeout_seconds=self._timeout_seconds,
@@ -192,6 +196,30 @@ class AlpacaCryptoDataClient:
                     f"Alpaca crypto request failed with HTTP {response.status_code}"
                 )
             return response
+
+    async def get_latest_quotes(self, symbols: tuple[str, ...]) -> dict[str, Mapping[str, object]]:
+        """Retain native quote payloads; consumers prove freshness against provider time."""
+        if (
+            not symbols
+            or len(set(symbols)) != len(symbols)
+            or any(
+                re.fullmatch(r"[A-Z0-9]{2,12}/[A-Z0-9]{2,12}", symbol) is None for symbol in symbols
+            )
+        ):
+            raise ValueError("unique canonical crypto symbols required")
+        response = await self._request({"symbols": ",".join(symbols)}, url=ALPACA_CRYPTO_QUOTES_URL)
+        try:
+            payload = json.loads(response.content.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
+            raise MarketDataProtocolError("crypto quotes response is not valid JSON") from error
+        quotes = payload.get("quotes") if isinstance(payload, dict) else None
+        if not isinstance(quotes, dict) or any(
+            symbol not in symbols or not isinstance(raw, dict) for symbol, raw in quotes.items()
+        ):
+            raise MarketDataProtocolError(
+                "crypto quotes response has invalid symbol scope or shape"
+            )
+        return cast(dict[str, Mapping[str, object]], quotes)
 
     @staticmethod
     def _page(response: TransportResponse) -> tuple[Mapping[str, object], str | None]:

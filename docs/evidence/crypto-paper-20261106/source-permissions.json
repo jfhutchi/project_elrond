@@ -1,0 +1,16 @@
+[
+  {
+    "provider": "alpaca-news",
+    "access": "VERIFIED",
+    "metadata_retention": "VERIFIED",
+    "retention": "VERIFIED",
+    "processing": "VERIFIED",
+    "training": "VERIFIED",
+    "evidence_refs": [
+      "operator-confirmation:2026-11-06:news-included-at-no-extra-charge",
+      "https://docs.alpaca.markets/us/docs/historical-news-data",
+      "scope:private-local-sentiment-research-no-redistribution"
+    ],
+    "checked_at": "2026-11-06T21:05:42.532614+00:00"
+  }
+]

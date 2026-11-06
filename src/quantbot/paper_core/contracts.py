@@ -14,6 +14,7 @@ from quantbot.domain import Account, BrokerOrder, Fill, OrderIntent, Position
 from quantbot.learner.estimators import FittedEstimator
 from quantbot.learner.five_minute import FEATURE_NAMES
 from quantbot.paper_core.asset_capability import AssetCapability, AssetSession
+from quantbot.paper_core.crypto_policy import CryptoMarketSession
 from quantbot.paper_core.discovery import DiscoveryEvidence
 from quantbot.paper_core.entry_policy import AssetEligibility
 from quantbot.research.manifest import content_id
@@ -234,15 +235,21 @@ class Observation(Evidence):
             "asset_session",
             "feature_context",
             "opening_quote_sources",
+            "crypto_session",
+            "context_snapshot_id",
         }
     )
     asset_session: AssetSession | None = None
+    crypto_session: CryptoMarketSession | None = None
+    context_snapshot_id: str | None = None
     asset_eligibility: AssetEligibility | None = None
     capture_received_at: datetime | None = None
     time_evidence_id: str | None = None
     session_open: datetime | None = None
     symbol: str
-    feed: Literal["EXPLICIT_SYNTHETIC", "LOCAL_SIM_REAL_DATA", "alpaca"] = "EXPLICIT_SYNTHETIC"
+    feed: Literal["EXPLICIT_SYNTHETIC", "LOCAL_SIM_REAL_DATA", "alpaca", "alpaca-crypto"] = (
+        "EXPLICIT_SYNTHETIC"
+    )
     source_start: datetime
     source_end: datetime
     available_at: datetime
@@ -250,10 +257,16 @@ class Observation(Evidence):
     price: Positive
     features: tuple[tuple[str, float], ...]
     feature_version: Literal[
-        "synthetic-causal-v1", "five-minute-price-alpha-v1", "opening-quote-gap-v1"
+        "synthetic-causal-v1",
+        "five-minute-price-alpha-v1",
+        "opening-quote-gap-v1",
+        "crypto-five-minute-price-alpha-v1",
     ] = "synthetic-causal-v1"
     feature_context: Literal[
-        "REGULAR_SESSION_V1", "OPENING_CONTIGUOUS_V1", "OPENING_QUOTE_GAP_V1"
+        "REGULAR_SESSION_V1",
+        "OPENING_CONTIGUOUS_V1",
+        "OPENING_QUOTE_GAP_V1",
+        "CRYPTO_CONTINUOUS_V1",
     ] = "REGULAR_SESSION_V1"
     opening_quote_sources: tuple[OpeningQuoteSource, OpeningQuoteSource] | None = None
     dependencies: tuple[str, ...]
@@ -263,6 +276,31 @@ class Observation(Evidence):
 
     @model_validator(mode="after")
     def opening_context_bounds(self) -> Self:
+        if self.crypto_session is not None or self.feed == "alpaca-crypto":
+            market, asset = self.crypto_session, self.asset_eligibility
+            if (
+                market is None
+                or asset is None
+                or asset.asset_class != "crypto"
+                or self.evidence_lane != "BROKER_PAPER"
+                or self.feed != "alpaca-crypto"
+                or self.feature_version != "crypto-five-minute-price-alpha-v1"
+                or self.feature_context != "CRYPTO_CONTINUOUS_V1"
+                or market.symbol != self.symbol
+                or asset.symbol != self.symbol
+                or market.asset_eligibility_id != asset.id
+                or market.observed_at != self.source_end
+                or market.session_open != self.session_open
+                or market.session_close != self.session_close
+                or self.dependencies != (market.benchmark,)
+                or self.source_start != self.source_end - timedelta(minutes=35)
+                or self.source_end.timestamp() % 300 != 0
+            ):
+                raise ValueError("crypto observation requires exact operational market provenance")
+        elif self.feature_context == "CRYPTO_CONTINUOUS_V1" or (
+            self.feature_version == "crypto-five-minute-price-alpha-v1"
+        ):
+            raise ValueError("crypto features require their operational market receipt")
         if self.feature_context != "OPENING_CONTIGUOUS_V1":
             return self
         if (
@@ -362,7 +400,15 @@ class ModelArtifact(BrokerModel):
 
 
 class ReconciliationProof(Evidence):
-    legacy_optional_fields = frozenset({"cash_complete", "ledger_state_id", "funds_authority"})
+    legacy_optional_fields = frozenset(
+        {
+            "cash_complete",
+            "ledger_state_id",
+            "funds_authority",
+            "quarantined_symbols",
+            "custody_evidence_ids",
+        }
+    )
     funds_authority: Literal["BROKER_PAPER_BALANCE_V1"] | None = None
     ledger_state_id: str | None = None
     account: Account
@@ -377,6 +423,45 @@ class ReconciliationProof(Evidence):
     acquisition_id: str
     complete: bool
     order_ids: tuple[str, ...] = ()
+    quarantined_symbols: tuple[str, ...] = ()
+    custody_evidence_ids: tuple[str, ...] = ()
+
+    @property
+    def quantity_scope_shape_valid(self) -> bool:
+        """Structural scope only; claim/send must verify persisted custody evidence.
+
+        Partial proofs retain unequal quantities and complete=False. A declared
+        quarantine is never itself reconciliation or authority to spend/sell.
+        """
+        if not self.quarantined_symbols:
+            return (
+                self.complete
+                and not self.custody_evidence_ids
+                and self.expected_quantities == self.actual_quantities
+            )
+        expected, actual = dict(self.expected_quantities), dict(self.actual_quantities)
+        difference = {
+            s
+            for s in expected.keys() | actual.keys()
+            if expected.get(s, Decimal(0)) != actual.get(s, Decimal(0))
+        }
+        return (
+            not self.complete
+            and not self.cash_complete
+            and self.expected_cash is None
+            and self.evidence_lane == "BROKER_PAPER"
+            and self.funds_authority == "BROKER_PAPER_BALANCE_V1"
+            and len(expected) == len(self.expected_quantities)
+            and len(actual) == len(self.actual_quantities)
+            and len(self.quarantined_symbols) == len(set(self.quarantined_symbols))
+            and len(self.custody_evidence_ids) == len(self.quarantined_symbols)
+            and len(set(self.custody_evidence_ids)) == len(self.custody_evidence_ids)
+            and difference == set(self.quarantined_symbols)
+            and all(
+                Decimal(0) <= actual.get(s, Decimal(0)) < expected.get(s, Decimal(0))
+                for s in difference
+            )
+        )
 
 
 class TimeProjection(BrokerModel):
@@ -400,12 +485,14 @@ class ObservationCohort(BrokerModel):
     observations: tuple[Observation, ...]
     unavailable: tuple[tuple[str, str], ...] = ()
     discovery: DiscoveryEvidence | None = None
+    crypto_symbols: tuple[str, ...] = ()
+    market_gaps: tuple[str, ...] = ()
 
     @model_serializer(mode="wrap")
     def preserve_pre_discovery(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
         payload = dict(handler(self))
-        if "discovery" not in self.model_fields_set:
-            payload.pop("discovery", None)
+        for name in {"discovery", "crypto_symbols", "market_gaps"} - self.model_fields_set:
+            payload.pop(name, None)
         return payload
 
 
@@ -435,6 +522,10 @@ class Decision(Evidence):
             "model_mode",
             "selection",
             "entry_policy_id",
+            "market_calendar",
+            "modeled_round_trip_cost_bps",
+            "research_signal_contract",
+            "context_snapshot_id",
         }
     )
     time_evidence_id: str | None = None
@@ -449,6 +540,10 @@ class Decision(Evidence):
     model_mode: Literal["COLLECT", "PREDICT"] | None = None
     selection: SelectionEvidence | None = None
     entry_policy_id: str | None = None
+    market_calendar: Literal["CRYPTO24"] | None = None
+    modeled_round_trip_cost_bps: Money | None = None
+    research_signal_contract: Literal["CRYPTO_COST_SCREEN_V1"] | None = None
+    context_snapshot_id: str | None = None
     observation_id: str
     policy_id: str
     model_id: str
@@ -523,7 +618,9 @@ class ProtectionPlan(Evidence):
             deadline=decision.provider_deadline
             or min(
                 decision.recorded_at_utc + timedelta(minutes=30),
-                decision.session_close - timedelta(seconds=120),
+                decision.recorded_at_utc + timedelta(minutes=30)
+                if decision.market_calendar == "CRYPTO24"
+                else decision.session_close - timedelta(seconds=120),
             ),
         )
 
@@ -564,9 +661,19 @@ class RoundTrip(Evidence):
             "source_end",
             "available_at",
             "entry_policy_id",
+            "asset_fee_quantity",
+            "asset_fee_cost_basis",
+            "asset_fee_allocation_ids",
+            "cashflow_pnl",
+            "pnl_basis",
         }
     )
     lot_id: str
+    asset_fee_quantity: Money | None = None
+    asset_fee_cost_basis: Money | None = None
+    asset_fee_allocation_ids: tuple[str, ...] = ()
+    cashflow_pnl: Money | None = None
+    pnl_basis: Literal["WEIGHTED_ENTRY_BASIS_WITH_ASSET_FEES_V1"] | None = None
     entry_policy_id: str | None = None
     decision_id: str
     entry_fill_ids: tuple[str, ...]

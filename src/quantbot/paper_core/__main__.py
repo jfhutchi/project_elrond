@@ -172,6 +172,20 @@ async def _acquire(args: argparse.Namespace, release: PreparedRelease) -> None:
             SystemClocks(),
             account_id=settings.EXPECTED_ACCOUNT_ID,
         )
+        if (
+            release.config.entry_policy is not None
+            and release.config.entry_policy.crypto is not None
+        ):
+            from quantbot.market_data.crypto import AlpacaCryptoDataClient
+
+            broker.crypto_market = AlpacaCryptoDataClient(
+                api_key=key,
+                api_secret=secret,
+                transport=market_transport,
+                max_retries=0,
+                timeout_seconds=Decimal(2),
+            )
+            await broker.initialize_crypto_assets()
         document = await acquire_commission_document(release, broker, request)
         print(canonical_result_json(document))
     finally:
@@ -289,6 +303,29 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
                 adapter, market, calendar, config, clocks, account_id=account_id
             )
             broker.store = store
+            if config.entry_policy is not None and config.entry_policy.crypto is not None:
+                from quantbot.market_data.crypto import AlpacaCryptoDataClient
+
+                broker.crypto_market = AlpacaCryptoDataClient(
+                    api_key=key,
+                    api_secret=secret,
+                    transport=market_transport,
+                    max_retries=0,
+                    timeout_seconds=Decimal(5) if args.role == "trader" else Decimal(2),
+                )
+                unavailable = await broker.initialize_crypto_assets()
+                if unavailable:
+                    print(
+                        json.dumps(
+                            {
+                                "event": "PAPER_CRYPTO_METADATA_UNAVAILABLE",
+                                "role": args.role,
+                                "scope": "SYMBOL",
+                                "unavailable": unavailable,
+                            }
+                        ),
+                        flush=True,
+                    )
         else:
             module, name = args.fixture_driver.split(":", 1)
             broker = getattr(importlib.import_module(module), name)(store, config)

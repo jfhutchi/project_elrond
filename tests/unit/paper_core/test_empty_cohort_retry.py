@@ -54,7 +54,7 @@ class OpeningResourceProvider(ResourceProvider):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("first_poll", ["empty", "capital_wait", "opening_capital_wait"])
+@pytest.mark.parametrize("first_poll", ["empty", "capital_wait", "opening_capital_wait", "horizon"])
 async def test_empty_then_usable_cohort_retries_same_boundary_without_duplicate_orders(
     tmp_path, monkeypatch, first_poll
 ):
@@ -85,12 +85,17 @@ async def test_empty_then_usable_cohort_retries_same_boundary_without_duplicate_
             captured = await acquire()
             captured_cohorts.append(captured)
             assert captured.observations
-            if len(acquired_at) == 1 and first_poll == "empty":
+            if len(acquired_at) == 1 and first_poll in {"empty", "horizon"}:
                 return captured.model_copy(
                     update={
                         "observations": (),
                         "unavailable": tuple(
-                            (observation.symbol, "FRESH_COMPLETE_BAR_UNAVAILABLE")
+                            (
+                                observation.symbol,
+                                "STOCK_SIGNAL_HORIZON_EXCEEDS_SESSION"
+                                if first_poll == "horizon"
+                                else "FRESH_COMPLETE_BAR_UNAVAILABLE",
+                            )
                             for observation in captured.observations
                         ),
                     }
@@ -123,6 +128,11 @@ async def test_empty_then_usable_cohort_retries_same_boundary_without_duplicate_
         monkeypatch.setattr(roles.asyncio, "sleep", advance)
         config = broker.config.model_copy(update={"entry_poll_seconds": 15})
         await roles.run_role(store, broker, config, "trader", cycles=5)
+        if first_poll == "horizon":
+            assert len(acquired_at) == 1
+            assert not provider.orders
+            assert sleeps and all(1 <= seconds <= 15 for seconds in sleeps)
+            return
         if first_poll in {"capital_wait", "opening_capital_wait"}:
             assert any(
                 d["action"] == "WAIT" and d["gates"] == ["SESSION_CAPITAL_UNVERIFIED"]

@@ -118,6 +118,8 @@ async def test_portfolio_does_not_hydrate_loaded_intents_again_for_settlement(
         # One hydration validates the ledger; one computes the current portfolio.
         # Settlement must use the second set immediately in the same transaction.
         assert len(calls) == 2, calls
-        assert calls[0] == calls[1]
+        # SQL queries without ORDER BY may choose different indexes. The
+        # performance invariant is identical membership with no extra hydration.
+        assert set(calls[0]) == set(calls[1])
     finally:
         db.close()

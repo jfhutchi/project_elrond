@@ -380,9 +380,9 @@ class DiscoveryStore:
             ).fetchone()
             if prior:
                 evidence = DiscoveryEvidence.model_validate_json(prior[0])
+                # Retain the comparison's original 90-second receipt contract so
+                # late bars can retry; new selections below still use 30 seconds.
                 require_fresh_discovery(evidence, now)
-                if any(not _candidate_fresh(sample, now) for sample in evidence.samples):
-                    raise ValueError("DISCOVERY_RECEIPT_STALE")
                 return evidence
             catalog = self._get(c, "catalog")
             if catalog is None or not 0 <= _age(now, datetime.fromisoformat(catalog["at"])) <= 3600:

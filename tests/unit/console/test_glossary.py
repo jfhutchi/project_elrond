@@ -22,9 +22,10 @@ from quantbot.storage import Database
 
 
 @pytest.fixture
-def client(tmp_path: Path) -> TestClient:
-    database = Database.create(tmp_path / "glossary.db")
-    return TestClient(create_app(database))
+def client(tmp_path: Path):
+    with Database.create(tmp_path / "glossary.db") as database:
+        with TestClient(create_app(database)) as client:
+            yield client
 
 
 def test_the_page_defines_the_term_that_prompted_it(client: TestClient) -> None:
@@ -121,7 +122,7 @@ def test_the_glossary_does_not_give_advice(client: TestClient) -> None:
 
 
 def test_the_definitions_describe_this_system_rather_than_a_textbook() -> None:
-    """"Paper trading" has a general meaning and a particular one here.
+    """ "Paper trading" has a general meaning and a particular one here.
 
     The particular one -- orders reaching a real broker's simulated account, with real prices
     and real rejections -- is what an operator needs when reading this system's output.

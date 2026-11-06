@@ -15,6 +15,7 @@ from quantbot.domain import BrokerOrder, OrderIntent, Position
 from quantbot.execution import ExecutionCoordinator
 from quantbot.execution.coordinator import SubmissionPolicy, SubmissionResult
 from quantbot.paper_core.contracts import GuardianReceipt, ReconciliationProof
+from quantbot.paper_core.crypto_custody import CryptoCustodyEvidence
 from quantbot.paper_core.entry_policy import (
     AssetEligibility,
     decision_entry_authority,
@@ -88,13 +89,19 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
     def __init__(self, store: CoreStore, broker: BrokerAdapter, settings: Settings) -> None:
         self.store = store
         self._entry_asset: AssetEligibility | None = None
+        self._exit_custody: CryptoCustodyEvidence | None = None
         from quantbot.paper_core.portfolio import CurrentPortfolioSnapshot
 
         self._entry_snapshot: CurrentPortfolioSnapshot | None = None
         self._entry_acquired_at = store.clocks.sample()[0]
         self._entry_quote_id: str | None = None
         self._entry_quote: (
-            tuple[Decimal, datetime, Literal["IEX_ASK_V1", "EXPLICIT_OFFLINE_MARK"]] | None
+            tuple[
+                Decimal,
+                datetime,
+                Literal["IEX_ASK_V1", "ALPACA_CRYPTO_ASK_V1", "EXPLICIT_OFFLINE_MARK"],
+            ]
+            | None
         ) = None
         super().__init__(
             store.database,
@@ -107,6 +114,7 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                 clock=lambda: store.clocks.sample()[0],
                 asset_eligibility=lambda: self._entry_asset,
                 market_snapshot=lambda: self._entry_snapshot,
+                crypto_custody=lambda: self._exit_custody,
             ),
             transactional_send_refusal=self._record_send_refusal,
         )
@@ -126,7 +134,11 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
             source = getattr(self._broker, "entry_price_evidence", None)
             if source is not None:
                 quote = await source(intent.symbol)
-                self._entry_quote = (quote.ask, quote.source_at, "IEX_ASK_V1")
+                self._entry_quote = (
+                    quote.ask,
+                    quote.source_at,
+                    "ALPACA_CRYPTO_ASK_V1" if quote.feed == "crypto" else "IEX_ASK_V1",
+                )
                 self._entry_quote_id = quote.id
             elif self.store.config.evidence_lane != "BROKER_PAPER":
                 mark = cast(Any, self._broker).mark(intent.symbol)
@@ -234,6 +246,7 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
             raise
 
     async def _acquire_send_constraints(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
+        self._exit_custody = None
         reserve = getattr(self._broker, "reserve_submission", None)
         if reserve is not None:
             reserve(intent.client_order_id)
@@ -245,6 +258,27 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
         )
         if purpose is OrderPurpose.ENTRY and self.store.entry_policy is not None:
             self._entry_asset = await cast(Any, self._broker).entry_asset_eligibility(intent.symbol)
+        if (
+            purpose is OrderPurpose.STRATEGY_EXIT
+            and self.store.config.evidence_lane == "BROKER_PAPER"
+            and intent.symbol.endswith("/USD")
+        ):
+            from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
+            from quantbot.paper_core.crypto_custody import capture_crypto_custody
+
+            with self.store.database.transaction() as session:
+                links = table("core_intent_links")
+                lot_id = session.execute(
+                    select(links.c.lot_id).where(
+                        links.c.intent_id == intent.intent_id, links.c.role == "EXIT"
+                    )
+                ).scalar_one()
+            self._exit_custody = await capture_crypto_custody(
+                self.store,
+                cast(AlpacaCoreBroker, self._broker),
+                lot_id,
+                exclude_intent=intent.intent_id,
+            )
 
     async def _acquire_final_market_data(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
         if purpose is OrderPurpose.ENTRY and self.store.config.evidence_lane == "BROKER_PAPER":
@@ -259,6 +293,8 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
         if self._entry_asset is not None:
             put(session, "core_provider_acquisitions", self._entry_asset.id, self._entry_asset)
             evidence_ids = (self._entry_asset.id, self._entry_asset.entry_policy_id)
+        if self._exit_custody is not None:
+            evidence_ids += (self._exit_custody.id,)
         record_pre_send_refusal(
             session,
             intent,
@@ -428,6 +464,8 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                         config=self.store.config,
                         policy=self.store.entry_policy,
                         available_notional=available,
+                        eligibility=self._entry_asset,
+                        at=self.store.clocks.sample()[0],
                     ):
                         reasons.append("CORE_FIXED_RISK_ENVELOPE")
             elif purpose is OrderPurpose.STRATEGY_EXIT:
@@ -435,6 +473,26 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                     from quantbot.paper_core.send_guard import owned_exit_objections
 
                     reasons.extend(owned_exit_objections(self.store, session, intent))
+                    if self._exit_custody is not None:
+                        from quantbot.paper_core.funds import (
+                            stable_account_reads,
+                            stable_position_reads,
+                        )
+
+                        if (
+                            not stable_account_reads(
+                                self._exit_custody.second_account, account_snapshot
+                            )
+                            or not stable_position_reads(
+                                self._exit_custody.second_positions, positions
+                            )
+                            or sorted(open_orders, key=lambda order: order.broker_order_id)
+                            != sorted(
+                                self._exit_custody.second_open_orders,
+                                key=lambda order: order.broker_order_id,
+                            )
+                        ):
+                            reasons.append("CRYPTO_CUSTODY_BROKER_OBSERVATION_CHANGED")
                 reasons.extend(_risk_reducing_exit_reasons(intent, positions))
                 if any(
                     _competing_exit(p, intent) for p in repo.list_unresolved_order_intents()

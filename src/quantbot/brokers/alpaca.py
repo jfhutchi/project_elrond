@@ -173,6 +173,43 @@ class AlpacaPaperBrokerAdapter:
         self._timeout_seconds = timeout_seconds
         self._activity_page_size = activity_page_size
         self._order_page_size = order_page_size
+        self._crypto_aliases: dict[str, str] = {}
+
+    def register_crypto_asset(self, payload: Mapping[str, object]) -> None:
+        """Retain identity after a caller's fresh active/tradable acquisition."""
+        if payload.get("status") != "active" or payload.get("tradable") is not True:
+            raise BrokerProtocolError("CRYPTO_ASSET_ALIAS_METADATA_INVALID")
+        self.register_crypto_asset_identity(payload)
+
+    def register_crypto_asset_identity(self, payload: Mapping[str, object]) -> None:
+        """Retain broker-verified identity, independently of current entry eligibility.
+
+        An inactive asset can still identify an existing position or fill. Callers
+        must separately verify active/tradable status before any new entry.
+        """
+        import re
+
+        symbol = payload.get("symbol")
+        if (
+            payload.get("class") != "crypto"
+            or not isinstance(symbol, str)
+            or re.fullmatch(r"[A-Z]{2,12}/USD", symbol) is None
+        ):
+            raise BrokerProtocolError("CRYPTO_ASSET_ALIAS_METADATA_INVALID")
+        for alias in (symbol, symbol.replace("/", "")):
+            if alias in self._crypto_aliases and self._crypto_aliases[alias] != symbol:
+                raise BrokerProtocolError("CRYPTO_ASSET_ALIAS_CONFLICT")
+            self._crypto_aliases[alias] = symbol
+
+    @property
+    def crypto_symbol_aliases(self) -> dict[str, str]:
+        return dict(self._crypto_aliases)
+
+    def normalize_crypto_payload(self, payload: Mapping[str, object]) -> Mapping[str, object]:
+        symbol = payload.get("symbol")
+        if isinstance(symbol, str) and symbol in self._crypto_aliases:
+            return {**payload, "symbol": self._crypto_aliases[symbol]}
+        return payload
 
     def __repr__(self) -> str:
         return (
@@ -268,6 +305,15 @@ class AlpacaPaperBrokerAdapter:
                 buying_power=_decimal(payload, "buying_power"),
                 equity=_decimal(payload, "equity"),
                 currency=_text(payload, "currency"),
+                **(
+                    {
+                        "non_marginable_buying_power": _optional_decimal(
+                            payload, "non_marginable_buying_power"
+                        )
+                    }
+                    if "non_marginable_buying_power" in payload
+                    else {}
+                ),
             )
         except ValidationError as error:
             raise BrokerProtocolError("broker account failed domain validation") from error
@@ -410,7 +456,7 @@ class AlpacaPaperBrokerAdapter:
         for item in _array_payload(response):
             if not isinstance(item, dict):
                 raise BrokerProtocolError("broker position entry must be an object")
-            positions.append(self._position_from_payload(cast(Mapping[str, object], item)))
+            positions.append(self._position_from_payload(self.normalize_crypto_payload(item)))
         return tuple(sorted(positions, key=lambda position: position.symbol))
 
     @staticmethod
@@ -433,7 +479,7 @@ class AlpacaPaperBrokerAdapter:
         return symbol
 
     async def get_position(self, symbol: str) -> Position | None:
-        validated = self._validate_symbol(symbol)
+        validated = self._crypto_aliases.get(symbol) or self._validate_symbol(symbol)
         try:
             response = await self._request(
                 "GET",
@@ -444,7 +490,7 @@ class AlpacaPaperBrokerAdapter:
             raise
         if response.status_code == 404:
             return None
-        return self._position_from_payload(_object_payload(response))
+        return self._position_from_payload(self.normalize_crypto_payload(_object_payload(response)))
 
     @staticmethod
     def _broker_order_from_payload(payload: Mapping[str, object]) -> BrokerOrder:
@@ -494,7 +540,7 @@ class AlpacaPaperBrokerAdapter:
             for item in page:
                 if not isinstance(item, dict):
                     raise BrokerProtocolError("broker order entry must be an object")
-                order = self._broker_order_from_payload(cast(Mapping[str, object], item))
+                order = self._broker_order_from_payload(self.normalize_crypto_payload(item))
                 if order.broker_order_id in seen_ids:
                     raise BrokerProtocolError(
                         f"duplicate broker order across pages: {order.broker_order_id}"
@@ -517,7 +563,9 @@ class AlpacaPaperBrokerAdapter:
             "GET",
             f"/v2/orders/{quote(validated, safe='')}",
         )
-        return self._broker_order_from_payload(_object_payload(response))
+        return self._broker_order_from_payload(
+            self.normalize_crypto_payload(_object_payload(response))
+        )
 
     @staticmethod
     def _order_body(order: OrderIntent) -> dict[str, object]:
@@ -574,7 +622,7 @@ class AlpacaPaperBrokerAdapter:
         if response.status_code == 404:
             return None
         payload = _object_payload(response)
-        order = self._broker_order_from_payload(payload)
+        order = self._broker_order_from_payload(self.normalize_crypto_payload(payload))
         if expected is not None:
             self._assert_order_matches_intent(order, payload, expected)
         return order
@@ -597,7 +645,7 @@ class AlpacaPaperBrokerAdapter:
             return await self._recover_submission(order, error)
         try:
             payload = _object_payload(response)
-            accepted = self._broker_order_from_payload(payload)
+            accepted = self._broker_order_from_payload(self.normalize_crypto_payload(payload))
         except BrokerProtocolError as error:
             return await self._recover_submission(order, error)
         self._assert_order_matches_intent(accepted, payload, order)
@@ -706,7 +754,7 @@ class AlpacaPaperBrokerAdapter:
             for item in page:
                 if not isinstance(item, dict):
                     raise BrokerProtocolError("broker fill entry must be an object")
-                fill = self._fill_from_payload(cast(Mapping[str, object], item))
+                fill = self._fill_from_payload(self.normalize_crypto_payload(item))
                 if fill.fill_id in seen_fill_ids:
                     raise BrokerProtocolError(f"duplicate fill activity: {fill.fill_id}")
                 seen_fill_ids.add(fill.fill_id)

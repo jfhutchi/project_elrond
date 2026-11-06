@@ -14,6 +14,7 @@ from quantbot.paper_core.contracts import (
     ProtectionPlan,
     ReconciliationProof,
 )
+from quantbot.paper_core.crypto_custody import CryptoCustodyEvidence
 from quantbot.paper_core.entry_policy import (
     AssetEligibility,
     decision_entry_authority,
@@ -186,6 +187,7 @@ def final_send_in_session(
     clock: Callable[[], datetime],
     asset_eligibility: Callable[[], AssetEligibility | None] | None = None,
     market_snapshot: Callable[[], CurrentPortfolioSnapshot | None] | None = None,
+    crypto_custody: Callable[[], CryptoCustodyEvidence | None] | None = None,
 ) -> tuple[str, ...]:
     """Validate authority using the coordinator's locked send-state transaction."""
     from quantbot.paper_core.authority import guardian_objections, runtime_objections
@@ -204,6 +206,14 @@ def final_send_in_session(
     if purpose is not OrderPurpose.ENTRY:
         if store.config.evidence_lane == "BROKER_PAPER":
             runtime_reasons = (*runtime_reasons, *owned_exit_objections(store, session, intent))
+            if intent.symbol.endswith("/USD"):
+                runtime_reasons += crypto_exit_objections(
+                    store,
+                    session,
+                    intent,
+                    crypto_custody() if crypto_custody else None,
+                    now=clock(),
+                )
         return runtime_reasons
     from quantbot.paper_core.account_control import entry_lease_objections
 
@@ -292,9 +302,16 @@ def final_send_in_session(
                 reasons.append("TIME_OBSERVATION_BOUNDARY")
             if latest_time >= plan.deadline:
                 reasons.append("CORE_PROTECTION_DEADLINE_DUE")
-            if latest_time >= decision.session_close - timedelta(seconds=120):
+            if (
+                decision.market_calendar != "CRYPTO24"
+                and latest_time >= decision.session_close - timedelta(seconds=120)
+            ):
                 reasons.append("TIME_SESSION_BOUNDARY")
-            if evidence.samples and earliest < evidence.samples[-1].provider.session_open:
+            if (
+                decision.market_calendar != "CRYPTO24"
+                and evidence.samples
+                and earliest < evidence.samples[-1].provider.session_open
+            ):
                 reasons.append("TIME_SESSION_BOUNDARY")
     latest = latest_certification(session)
     proof = (
@@ -351,6 +368,8 @@ def final_send_in_session(
             policy=entry_policy_in_session(store, session),
             available_notional=budget.available_notional,
             minimum_whole_share=minimum_share,
+            eligibility=current_asset,
+            at=now,
         ):
             reasons.append("CORE_FIXED_RISK_ENVELOPE")
     elif proof is not None and (
@@ -387,7 +406,9 @@ def final_send_in_session(
         reasons.append("CORE_ENTRY_DECISION_EXPIRED")
     if not plan.recorded_at_utc <= now < plan.deadline:
         reasons.append("CORE_PROTECTION_DEADLINE_DUE")
-    if not now < decision.session_close - timedelta(seconds=plan.exit_buffer_seconds):
+    if decision.market_calendar != "CRYPTO24" and not (
+        now < decision.session_close - timedelta(seconds=plan.exit_buffer_seconds)
+    ):
         reasons.append("CORE_SESSION_EXIT_BUFFER_DUE")
     if receipt is None or not receipt.recorded_at_utc <= now < receipt.valid_until:
         reasons.append("CORE_GUARDIAN_RECEIPT_EXPIRED")
@@ -444,6 +465,89 @@ def final_send_in_session(
             },
         )
     return tuple(reasons)
+
+
+def crypto_exit_objections(
+    store: CoreStore,
+    session: Session,
+    intent: OrderIntent,
+    evidence: CryptoCustodyEvidence | None,
+    *,
+    now: datetime,
+) -> tuple[str, ...]:
+    """Consume a retained custody upper bound only at the locked new-send boundary."""
+    from sqlalchemy.exc import NoResultFound
+
+    from quantbot.paper_core.authority import commission_in_session
+    from quantbot.paper_core.crypto_custody import crypto_custody_limit, read_crypto_lot_basis
+    from quantbot.paper_core.funds import PaperFundsEvidence
+    from quantbot.storage import StateConflictError
+
+    if evidence is None:
+        return ("CRYPTO_CUSTODY_RECEIPT_MISSING",)
+    try:
+        acquisitions = table("core_provider_acquisitions")
+        raw = session.execute(
+            select(acquisitions.c.payload).where(acquisitions.c.id == evidence.id)
+        ).scalar_one_or_none()
+        if raw is None or CryptoCustodyEvidence.model_validate_json(raw) != evidence:
+            return ("CRYPTO_CUSTODY_RECEIPT_NOT_RETAINED",)
+        funds = PaperFundsEvidence.model_validate_json(
+            session.execute(
+                select(acquisitions.c.payload).where(
+                    acquisitions.c.id == evidence.funds_evidence_id
+                )
+            ).scalar_one()
+        )
+        if (
+            funds.id != evidence.funds_evidence_id
+            or funds.account_id != store.config.account_id
+            or funds.store_identity != store.database.store_identity
+            or funds.config_id != store.config_id
+            or funds.release_id != store.config.release_id
+            or funds.evidence_lane != "BROKER_PAPER"
+            or funds.commission_id != commission_in_session(store, session).id
+            or funds.capture_started != evidence.capture_started
+            or funds.recorded_at_utc != evidence.captured_at
+            or funds.elapsed_seconds != evidence.elapsed_seconds
+            or any(
+                getattr(funds, field) != getattr(evidence, field)
+                for field in (
+                    "first_account",
+                    "second_account",
+                    "first_positions",
+                    "second_positions",
+                    "first_open_orders",
+                    "second_open_orders",
+                )
+            )
+        ):
+            return ("CRYPTO_CUSTODY_FUNDS_SOURCE_BINDING",)
+        links = table("core_intent_links")
+        lot_id = session.execute(
+            select(links.c.lot_id).where(
+                links.c.intent_id == intent.intent_id, links.c.role == "EXIT"
+            )
+        ).scalar_one()
+        if evidence.basis.lot_id != lot_id or evidence.basis.symbol != intent.symbol:
+            return ("CRYPTO_CUSTODY_EXIT_BINDING",)
+        basis = read_crypto_lot_basis(
+            store,
+            session,
+            lot_id,
+            now=now,
+            capture_started=evidence.capture_started,
+            activity_document_id=evidence.basis.activity_document_id,
+            exclude_intent=intent.intent_id,
+        )
+        crypto_custody_limit(evidence, basis, now=now, requested_quantity=intent.quantity)
+    except (StateConflictError, ValueError, TypeError, NoResultFound) as error:
+        return (
+            str(error)
+            if str(error).startswith("CRYPTO_CUSTODY_")
+            else "CRYPTO_CUSTODY_EXIT_UNVERIFIED",
+        )
+    return ()
 
 
 def owned_exit_objections(
@@ -516,6 +620,8 @@ def _discovery_elapsed(decision: Decision, now: datetime) -> bool:
     """Only elapsed retained authority is permanent; future/invalid evidence is not reclassified."""
     from quantbot.paper_core.discovery import require_fresh_discovery
 
+    if decision.market_calendar == "CRYPTO24":
+        return False
     discovery = decision.selection.cohort.discovery if decision.selection else None
     if discovery is None:
         return False
@@ -544,7 +650,9 @@ def _retirement_reasons(decision: Decision, plan: ProtectionPlan, now: datetime)
         reasons.append("CORE_ENTRY_DECISION_EXPIRED")
     if now >= plan.deadline:
         reasons.append("CORE_PROTECTION_DEADLINE_DUE")
-    if now >= decision.session_close - timedelta(seconds=plan.exit_buffer_seconds):
+    if decision.market_calendar != "CRYPTO24" and (
+        now >= decision.session_close - timedelta(seconds=plan.exit_buffer_seconds)
+    ):
         reasons.append("CORE_SESSION_EXIT_BUFFER_DUE")
     if _discovery_elapsed(decision, now):
         reasons.append("DISCOVERY_AUTHORITY_EXPIRED")

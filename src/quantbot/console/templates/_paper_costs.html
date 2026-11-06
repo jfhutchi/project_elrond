@@ -25,11 +25,11 @@
   <p class="n">Report time {{ state.paper_costs.as_of }}.</p>
   {% if state.paper_costs.days %}
   <div class="scroll"><table>
-    <tr><th>Eastern session</th><th>Round trips</th><th>Gross realized</th><th>Observed account fee cash flow</th><th>Net after observed fees</th><th>Modeled fee scenario (not verified)</th><th>Source scope</th></tr>
+    <tr><th>Eastern date</th><th>Round trips</th><th>Gross realized</th><th>Observed account fee cash flow</th><th>Net after observed fees</th><th>Modeled fee scenario (not verified)</th><th>Source scope</th></tr>
     {% for day in state.paper_costs.days|reverse %}
     <tr>
       <td>{{ day.session_date }}</td><td>{{ day.round_trips }}</td>
-      <td>{{ '$' ~ day.gross_realized if day.gross_realized is not none else 'No completed owned round trips' }}</td>
+      <td>{{ '$' ~ day.gross_realized if day.gross_realized is not none else 'No completed owned round trips' }}{% if day.scope_reason == 'CRYPTO_COST_FINALITY_UNVERIFIED' %}<br><span class="n">Trade cash result ${{ day.cashflow_realized }}; coin-fee entry cost basis ${{ day.asset_fee_cost_basis }}. Cost basis is not the broker's USD fee valuation.</span>{% endif %}</td>
       <td>
         {{ '$' ~ day.observed_fee_cash_flow if day.observed_fee_cash_flow is not none else 'Not observed' }}
         <br><span class="n">{% if day.invalid_fee_activity_ids and day.fee_activities %}Posted account fees observed; additional fee activity has unverified status or details. Completeness and exact trade allocation remain unknown.{% elif day.invalid_fee_activity_ids %}Fee activity observed, but its status or details are unverified; no usable fee amount.{% elif day.fee_status == 'POSTED_DAILY_FEES_NO_EXACT_FILL_ALLOCATION' %}Account fees observed; exact trade allocation unavailable.{% else %}No fee activity observed by this capture; completeness unknown.{% endif %}</span>
@@ -42,7 +42,7 @@
       </td>
       <td>{{ '$' ~ day.net_after_observed_fees if day.net_after_observed_fees is not none else 'Unknown' }}</td>
       <td>{% if day.fee_scenario %}${{ day.fee_scenario.modeled_net }}<br><span class="n">Assumes ${{ day.fee_scenario.assumed_daily_fee }} daily fees from {{ day.fee_scenario.reference_session }}; additional modeled amount ${{ day.fee_scenario.modeled_additional_fee }}.</span>{% else %}None{% endif %}</td>
-      <td>{% if day.scope_reason == 'NO_COMPLETED_OWNED_ROUND_TRIPS' %}No completed owned round trips; account cash evidence only{% else %}{{ 'Matched full-session account fills' if day.scope_verified else 'Incomplete or mismatched' }}{% endif %}<br><span class="n">Activity capture {{ day.activity_capture_until or 'unavailable' }}{% if day.activity_capture_lag_seconds is not none %}; lag {{ day.activity_capture_lag_seconds }} seconds{% endif %}.</span></td>
+      <td>{% if day.scope_reason == 'NO_COMPLETED_OWNED_ROUND_TRIPS' %}No completed owned round trips; account cash evidence only{% elif day.scope_reason == 'CRYPTO_COST_FINALITY_UNVERIFIED' %}Crypto fee finality unverified; stock-session coverage does not establish 24-hour costs{% else %}{{ 'Matched full-session account fills' if day.scope_verified else 'Incomplete or mismatched' }}{% endif %}<br><span class="n">Activity capture {{ day.activity_capture_until or 'unavailable' }}{% if day.activity_capture_lag_seconds is not none %}; lag {{ day.activity_capture_lag_seconds }} seconds{% endif %}.</span></td>
     </tr>
     {% endfor %}
   </table></div>

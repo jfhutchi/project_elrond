@@ -618,6 +618,9 @@ def paper_mock(store, release):
     broker.inventory_diagnostic_trace = []
     broker.entry_source_objections = ()
     broker._discovery_state = broker._research_state = None
+    broker.crypto_market = None
+    broker._crypto_metadata_failures = {}
+    broker._crypto_metadata_retry_at = {}
 
     async def get_clock():
         store.clocks.advance(0.01)

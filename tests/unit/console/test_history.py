@@ -3,6 +3,7 @@
 import hashlib
 import json
 import sqlite3
+from contextlib import closing
 
 from fastapi.testclient import TestClient
 
@@ -86,7 +87,7 @@ def test_role_tampering_and_declared_dates_fail_closed(tmp_path):
 
 def test_rendered_learner_range_is_read_only_and_labels_simulation(tmp_path):
     root, dates, doc = bundle(tmp_path)
-    with sqlite3.connect(root / "state/learner.db") as c:
+    with closing(sqlite3.connect(root / "state/learner.db")) as c, c:
         old = json.loads(
             c.execute("select document_json from learner_model_versions").fetchone()[0]
         )
