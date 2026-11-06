@@ -422,11 +422,11 @@ def portfolio_budget(
             )
         ).mappings()
     )
-    current_intents = repo.get_order_intents([link["intent_id"] for link in entries])
-    from quantbot.paper_core.settlement import definitively_unsent_many
+    from quantbot.paper_core.settlement import _definitively_unsent_loaded
 
-    unsent_by_id = definitively_unsent_many(
-        repo, [intent.intent_id for intent in current_intents if intent is not None]
+    current_intents = repo.get_order_intents([link["intent_id"] for link in entries])
+    unsent_by_id = _definitively_unsent_loaded(
+        repo, [intent for intent in current_intents if intent is not None]
     )
     for link, intent in zip(entries, current_intents, strict=True):
         if intent is None:

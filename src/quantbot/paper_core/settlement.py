@@ -49,10 +49,24 @@ def definitively_unsent_many(
     """Same definitive refusal predicate, using fresh data from one caller-owned snapshot."""
     unique = list(dict.fromkeys(intent_ids))
     result = {identity: False for identity in unique}
+    current = repository.get_order_intents(unique)
+    result.update(_definitively_unsent_loaded(repository, [i for i in current if i is not None]))
+    return result
+
+
+def _definitively_unsent_loaded(
+    repository: StorageRepository, intents: Sequence[OrderIntent]
+) -> dict[str, bool]:
+    """Consume an immediate read in this same session, with no intervening await or mutation.
+
+    Only intent hydration is shared. Broker acknowledgements and refusal events are
+    still read here; neither input rows nor resulting authority may be cached.
+    """
+    result = {intent.intent_id: False for intent in intents}
     eligible = [
-        (identity, intent)
-        for identity, intent in zip(unique, repository.get_order_intents(unique), strict=True)
-        if intent is not None and intent.state in {IntentState.ERROR, IntentState.REJECTED}
+        (intent.intent_id, intent)
+        for intent in intents
+        if intent.state in {IntentState.ERROR, IntentState.REJECTED}
     ]
     orders = repository.get_broker_orders_by_client_order_ids(
         [intent.client_order_id for _, intent in eligible]
