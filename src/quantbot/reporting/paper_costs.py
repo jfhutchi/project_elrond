@@ -376,6 +376,16 @@ def read_report(
                         )
                     ):
                         sessions.append(dict(opening, session_close=provider["session_close"]))
+        if __package__:
+            from quantbot.reporting.paper_cash import read_cash_reconciliation
+        else:
+            # Direct-file execution places this sibling on sys.path.
+            from paper_cash import (  # type: ignore[import-not-found,no-redef]
+                read_cash_reconciliation,
+            )
+        cash_reconciliation = read_cash_reconciliation(
+            rows, account_id=identity["account_id"], as_of=as_of
+        )
     check_budget()
     report = build_report(
         trips=trips,
@@ -386,6 +396,7 @@ def read_report(
         as_of=as_of,
     )
     check_budget()
+    report["cash_reconciliation"] = cash_reconciliation
     return report
 
 

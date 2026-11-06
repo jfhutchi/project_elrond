@@ -1,3 +1,23 @@
+{% set cash = state.paper_costs.cash_reconciliation if state.paper_costs else none %}
+{% if cash %}
+<section class="card" aria-label="Recorded cash comparison">
+  <h2>Recorded cash comparison</h2>
+  {% if cash.available %}
+  <p>{{ 'Matches retained movements' if cash.status == 'MATCHED_RETAINED_MOVEMENTS' else 'Recorded cash differs from retained movements' }}.</p>
+  <p class="n">Broker snapshot {{ cash.snapshot_at }}. All amounts are USD.</p>
+  {% if cash.snapshot_stale %}<p>Snapshot is stale; this is not current cash status.</p>{% endif %}
+  <div class="scroll"><table>
+    <tr><th>Starting cash</th><th>Calculated cash</th><th>Recorded broker cash</th><th>Difference</th><th>Posted fee cash flow</th></tr>
+    <tr><td>${{ cash.baseline_cash }}</td><td>${{ cash.calculated_cash }}</td><td>${{ cash.observed_cash }}</td><td>${{ cash.residual }}</td><td>{{ '$' ~ cash.posted_fee_cash_flow if cash.posted_fee_cash_flow is not none else 'Not observed' }}</td></tr>
+  </table></div>
+  <p class="n">Uses retained trade movements, per-order cent rounding and separately posted account charges. {% if not cash.coverage_complete %}Full activity coverage is unverified. {% endif %}A matching balance does not establish fee finality.</p>
+  {% else %}
+  <p>Recorded cash comparison unavailable; retained evidence is missing, stale or inconsistent.</p>
+  {% endif %}
+  <p class="n">This comparison does not verify final fees or net trade P&amp;L. {% if cash.unknown_fee_fill_count is defined and cash.unknown_fee_fill_count is not none %}{{ cash.unknown_fee_fill_count }} fills lack attributed fees. {% endif %}{% if cash.unknown_inherited_net_cash_count is defined and cash.unknown_inherited_net_cash_count is not none %}{{ cash.unknown_inherited_net_cash_count }} inherited fills lack net cash evidence. {% endif %}Trade results and learning labels remain unchanged.</p>
+  {% if cash.reasons %}<details><summary>Accounting evidence gaps</summary>{{ cash.reasons|join(', ') }}</details>{% endif %}
+</section>
+{% endif %}
 <section class="card" aria-label="Executed PAPER daily costs">
   <h2>Executed PAPER daily costs</h2>
   {% if state.paper_costs and state.paper_costs.available %}

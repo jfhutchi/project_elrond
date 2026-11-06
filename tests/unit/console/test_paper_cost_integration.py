@@ -12,7 +12,7 @@ from quantbot.console import performance_reader
 from quantbot.console.app import create_app
 from quantbot.console.calendar import PerformanceData
 from quantbot.operations.daily_performance import DailyPerformance
-from quantbot.reporting.paper_costs import read_report
+from quantbot.reporting.paper_costs import build_report, read_report
 from quantbot.storage import Database
 from tests.unit.reporting.test_paper_costs import database_fixture, digest, fixture
 
@@ -126,3 +126,45 @@ def test_unconfigured_noncore_database_does_not_invent_zero_or_gross_net(tmp_pat
         assert panel["available"] is False
         assert panel["days"] == []
         assert client.get("/").status_code == 200
+
+
+def test_cash_comparison_does_not_present_matching_balance_as_final_net(tmp_path, monkeypatch):
+    data = fixture()
+    report = build_report(**data)
+    report["cash_reconciliation"] = dict(
+        available=True,
+        status="MATCHED_RETAINED_MOVEMENTS",
+        snapshot_at="2026-10-28T22:00:00+00:00",
+        baseline_cash="96.92",
+        observed_cash="490.34",
+        calculated_cash="490.34",
+        residual="0.00",
+        posted_fee_cash_flow="-0.24",
+        positions_match=True,
+        exact_cash_complete=False,
+        coverage_complete=False,
+        unknown_fee_fill_count=304,
+        unknown_inherited_net_cash_count=9,
+        fee_finality="UNKNOWN",
+        reasons=["FULL_ACTIVITY_COVERAGE_UNVERIFIED"],
+    )
+    monkeypatch.setattr(
+        performance_reader, "read_paper_cost_report", lambda *args, **kwargs: report
+    )
+    with Database.create(tmp_path / "console.db") as database:
+        client = TestClient(create_app(database))
+        for route in ("/", "/reports", "/calendar?month=2026-10"):
+            page = client.get(route)
+            assert page.status_code == 200
+            assert 'aria-label="Recorded cash comparison"' in page.text
+            section = page.text.split('aria-label="Recorded cash comparison"', 1)[1].split(
+                "</section>", 1
+            )[0]
+            assert "$490.34" in section and "$0.00" in section
+            assert "$-0.24" in section
+            assert "Matches retained movements" in section
+            assert "Full activity coverage is unverified" in section
+            assert "does not verify final fees or net trade P&amp;L" in section
+        assert client.get("/api/state").json()["paper_costs"]["days"][-1][
+            "all_in_verified_net"
+        ] is None
