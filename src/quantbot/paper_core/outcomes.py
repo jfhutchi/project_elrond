@@ -704,6 +704,17 @@ def reconcile_round_trip(store: CoreStore, lot_id: str, *, as_of: datetime) -> R
 def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
     outcomes, reasons = [], []
     links, work = table("core_intent_links"), table("core_outcome_work")
+    intents, orders, fills = (table(name) for name in ("order_intents", "broker_orders", "fills"))
+    # Fill presence only schedules economic work ahead of historical unsent claims.
+    # The resolver still validates all ownership, terminal, flatness and source authority.
+    has_fill = (
+        select(fills.c.fill_id)
+        .join(orders, orders.c.broker_order_id == fills.c.broker_order_id)
+        .join(intents, intents.c.client_order_id == orders.c.client_order_id)
+        .where(intents.c.intent_id == links.c.intent_id)
+        .correlate(links)
+        .exists()
+    )
     from quantbot.paper_core.work import NOTIFICATIONS
 
     notifications = table("core_document_index").alias("notifications")
@@ -726,7 +737,7 @@ def process_outcomes(store: CoreStore, *, cutoff: datetime) -> OutcomeBatch:
                         notifications.c.id.is_(None),
                     ),
                 )
-                .order_by(work.c.attempted_at, links.c.lot_id)
+                .order_by(has_fill.desc(), work.c.attempted_at, links.c.lot_id)
                 .limit(16)
             ).scalars()
         )
