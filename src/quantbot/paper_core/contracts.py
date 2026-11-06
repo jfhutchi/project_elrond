@@ -225,6 +225,16 @@ class OpeningQuoteSource(BrokerModel):
     ask: Positive
 
 
+class ObservationContextFilterInput(BrokerModel):
+    """A retained prospective forecast can only veto an otherwise eligible entry."""
+
+    forecast_spec_id: str
+    forecast_id: str
+    version_id: str
+    expected_net_bps: float | None = Field(default=None, allow_inf_nan=False)
+    objection: str | None = None
+
+
 class Observation(Evidence):
     legacy_optional_fields = frozenset(
         {
@@ -237,12 +247,14 @@ class Observation(Evidence):
             "opening_quote_sources",
             "crypto_session",
             "context_snapshot_id",
+            "context_filter",
             "price_basis",
         }
     )
     asset_session: AssetSession | None = None
     crypto_session: CryptoMarketSession | None = None
     context_snapshot_id: str | None = None
+    context_filter: ObservationContextFilterInput | None = None
     price_basis: Literal["ALPACA_CRYPTO_TRADE_OR_QUOTE_V1"] | None = None
     asset_eligibility: AssetEligibility | None = None
     capture_received_at: datetime | None = None
@@ -530,6 +542,7 @@ class Decision(Evidence):
             "modeled_round_trip_cost_bps",
             "research_signal_contract",
             "context_snapshot_id",
+            "context_forecast_id",
         }
     )
     time_evidence_id: str | None = None
@@ -548,6 +561,7 @@ class Decision(Evidence):
     modeled_round_trip_cost_bps: Money | None = None
     research_signal_contract: Literal["CRYPTO_COST_SCREEN_V1"] | None = None
     context_snapshot_id: str | None = None
+    context_forecast_id: str | None = None
     observation_id: str
     policy_id: str
     model_id: str

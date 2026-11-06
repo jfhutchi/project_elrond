@@ -35,11 +35,12 @@ def _trial_prefix(experiment_id: str) -> str:
     return "intraday:adaptive-" + content_id(experiment_id)[:16] + ":"
 
 
-def experiment_trial_prefixes(experiment_id: str) -> tuple[str, str]:
+def experiment_trial_prefixes(experiment_id: str) -> tuple[str, ...]:
     """Context reading fits share the registered experiment's existing six-call budget."""
     return (
         _trial_prefix(experiment_id),
         "intraday:context-" + content_id(experiment_id)[:16] + ":",
+        "intraday:context-impact-" + content_id(experiment_id)[:16] + ":",
     )
 
 

@@ -3,6 +3,38 @@
 {% block body %}
 {% set learner = state.learner %}
 <h1>Learner</h1>
+{% set context = state.context_learning %}
+<section class="card" aria-label="News context learning">
+  <h2>News context learning</h2>
+  <p><strong>{{ context.state.replace('_', ' ').capitalize() }}</strong> ·
+    Status changed (UTC): {{ context.status_changed_at or 'Not recorded' }}.</p>
+  {% if context.state == 'UNCOMMISSIONED' %}
+  <p>The scheduled context learner has no verified local binding.</p>
+  {% elif context.state == 'PENDING' %}
+  <p>Binding recorded; waiting for the first scheduled status.</p>
+  {% endif %}
+  <p>Trading model inputs: {{ context.current_model_inputs.replace('_', ' ').lower() }}.
+    Interpreter mode: {{ context.interpreter_mode.replace('_', ' ').lower() }}.</p>
+  <dl>
+    {% for label, value in [('Observed context snapshots', context.observed_snapshots),
+      ('Observed documents', context.observed_documents), ('Documents used for trading', context.used_documents),
+      ('Shadow feature preparations', context.shadow_preparations), ('Linked outcome feedback', context.feedback),
+      ('Independent reading reviews', context.independent_reviews), ('Eligible reviewed examples', context.eligible_examples),
+      ('Fitted candidates', context.fitted_candidates), ('Charged fits', context.trial_fits)] %}
+    <dt>{{ label }}</dt><dd>{{ value if value is not none else 'Unknown' }}</dd>
+    {% endfor %}
+  </dl>
+  {% if context.independent_reviews == 0 %}<p>No independent reading labels are retained yet.
+    Trade wins or losses do not establish whether a reading was correct.</p>{% endif %}
+  <p>Training starts: {{ context.training_start or 'Not reported' }} · Split:
+    {{ context.split_at or 'Not reported' }} · Evaluation cutoff: {{ context.evaluation_end or 'Not reported' }}.</p>
+  <p>Downstream comparison: {{ context.impact_status or 'Not reported' }} · Due:
+    {{ context.impact_due or 'Not reported' }}.</p>
+  {% if context.gates %}<ul>{% for code, count in context.gates %}<li>{{ code }} ({{ count }})</li>{% endfor %}</ul>{% endif %}
+  <p class="quiet">Observed context is separate from shadow feature preparation and approved trading use.
+    Status changes are not worker heartbeats; use runtime Outcomes health for worker freshness.
+    Unknown counts are not zero. This panel grants no training or trading authority.</p>
+</section>
 {% if request.query_params.get('alert_acknowledged') == '1' %}
 <p role="status">Acknowledgement saved. The condition remains active until measured recovery.
   Saved worker and monitor receipts refresh on their next completed check.</p>

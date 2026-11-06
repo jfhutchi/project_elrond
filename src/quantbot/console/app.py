@@ -144,6 +144,7 @@ def create_app(
     market_status: Callable[[], Awaitable[MarketStatus]] | None = None,
     daily_performance: Callable[[], PerformanceData] | None = None,
     experiment_store: Path | None = None,
+    research_store: Path | None = None,
 ) -> FastAPI:
     """Build the console over one already-open store.
 
@@ -200,7 +201,12 @@ def create_app(
             update={"monitor": read_monitor_panel(learner_directory)}
         )
         costs = read_paper_costs(database.path, now=datetime.now(UTC))
-        return state.model_copy(update={"learner": panel, "paper_costs": costs})
+        from quantbot.console.context_learning import read_context_learning
+
+        context = read_context_learning(research_store, now=datetime.now(UTC))
+        return state.model_copy(
+            update={"learner": panel, "paper_costs": costs, "context_learning": context}
+        )
 
     def performance_panel(
         month: str | None = None, costs: dict[str, Any] | None = None

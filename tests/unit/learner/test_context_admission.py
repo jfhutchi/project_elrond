@@ -30,6 +30,61 @@ def setup_plan(tmp_path):
     return research, experiments, registry, plan
 
 
+def test_context_registration_filters_large_unrelated_parent_history(tmp_path):
+    from quantbot.learner.context_admission import ContextEvaluationPlan, register_context_plan
+
+    _, experiments = stores(tmp_path)
+    with experiments._transaction() as connection:
+        connection.executemany(
+            "INSERT INTO events VALUES(?,?,?,?,?,?)",
+            [
+                (
+                    "synthetic-context",
+                    f"old-price:{i}",
+                    "HistoricalPriceEvidence",
+                    (NOW - timedelta(hours=2)).isoformat(),
+                    "{}",
+                    "0" * 64,
+                )
+                for i in range(4001)
+            ],
+        )
+    plan = ContextEvaluationPlan(
+        experiment_id="synthetic-context",
+        recorded_at=NOW - timedelta(hours=1),
+        manifest_hash=experiments.state("synthetic-context").manifest_hash,
+        source_start=NOW,
+        training_start=NOW,
+        split_at=NOW + timedelta(days=7),
+        evaluation_end=NOW + timedelta(days=14),
+    )
+    assert register_context_plan(experiments, plan, now=plan.recorded_at)
+    assert not register_context_plan(experiments, plan, now=plan.recorded_at)
+
+
+def test_broad_reading_extension_is_future_and_does_not_redefine_parent_price_target():
+    from quantbot.learner.context_admission import ContextEvaluationPlan, ContextReadingScope
+
+    scope = ContextReadingScope(source_policy_id="f" * 64)
+    plan = ContextEvaluationPlan(
+        experiment_id="existing-parent",
+        manifest_hash="a" * 64,
+        recorded_at=NOW,
+        source_start=NOW + timedelta(hours=1),
+        training_start=NOW + timedelta(hours=1),
+        split_at=NOW + timedelta(days=7),
+        evaluation_end=NOW + timedelta(days=14),
+        reading_scope=scope,
+    )
+    assert plan.reading_scope.asset_classes == ("EQUITY", "ETF", "CRYPTO")
+    assert not plan.grants_activation and not scope.grants_execution
+    assert plan.target == "INDEPENDENT_READING_POLARITY"
+    with pytest.raises(ValueError, match="48 hours"):
+        ContextEvaluationPlan.model_validate(
+            plan.model_dump() | {"source_start": plan.training_start - timedelta(hours=49)}
+        )
+
+
 def test_real_adapter_charges_before_fit_and_reuses_frozen_evaluation(tmp_path, monkeypatch):
     from quantbot.learner.context_admission import (
         CanonicalContextAdmission,

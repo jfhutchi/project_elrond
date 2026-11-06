@@ -25,6 +25,7 @@ protect anything.
 from __future__ import annotations
 
 import gc
+import os
 import shutil
 import stat
 import sys
@@ -38,6 +39,107 @@ import pytest
 #: repository.
 REDIRECTED = ("QUANTBOT_DB_PATH", "QUANTBOT_LOCK_PATH", "QUANTBOT_REPORTS_DIR")
 _TEMP_ROOT = pytest.StashKey[tuple[Path, tuple[int, int]]]()
+
+
+def _remove_owned_readonly_file(root, identity, function, path, exc_info):
+    """Retry only a Windows read-only regular file, using its verified open handle.
+
+    Handle-based attributes/deletion avoid following a replaced filename or junction.
+    ACL errors, locks, reparse points and multiply linked files remain failures.
+    """
+    error = exc_info[1]
+    if (
+        os.name != "nt"
+        or function not in (os.unlink, os.remove)
+        or not isinstance(error, PermissionError)
+    ):
+        raise error
+    target = Path(path)
+    try:
+        relative = target.relative_to(root)
+    except ValueError:
+        raise OSError("cleanup target outside owned scratch") from error
+    if not relative.parts:
+        raise error
+    ancestor = root
+    for part in (None, *relative.parts[:-1]):
+        if part is not None:
+            ancestor /= part
+        info = ancestor.lstat()
+        if (
+            not stat.S_ISDIR(info.st_mode)
+            or getattr(info, "st_file_attributes", 0) & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            or (ancestor == root and (info.st_dev, info.st_ino) != identity)
+        ):
+            raise OSError("cleanup ancestor identity changed") from error
+    before = target.lstat()
+    if (
+        not stat.S_ISREG(before.st_mode)
+        or before.st_nlink != 1
+        or before.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+        or not before.st_file_attributes & stat.FILE_ATTRIBUTE_READONLY
+    ):
+        raise error
+
+    import ctypes
+    import msvcrt
+    from ctypes import wintypes
+
+    class BasicInfo(ctypes.Structure):
+        _fields_ = [
+            (name, ctypes.c_longlong) for name in ("creation", "access", "write", "change")
+        ] + [("attributes", wintypes.DWORD)]
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel.CreateFileW.restype = wintypes.HANDLE
+    # DELETE | READ_ATTRIBUTES | WRITE_ATTRIBUTES; shared access; OPEN_EXISTING;
+    # OPEN_REPARSE_POINT deliberately opens the link itself, never its target.
+    handle = kernel.CreateFileW(
+        ctypes.c_wchar_p(str(target)), 0x10180, 7, None, 3, 0x00200000, None
+    )
+    if handle == wintypes.HANDLE(-1).value:
+        raise ctypes.WinError(ctypes.get_last_error())
+    descriptor = None
+    try:
+        descriptor = msvcrt.open_osfhandle(handle, os.O_RDONLY)
+        opened = os.fstat(descriptor)
+        basic = BasicInfo()
+        if not kernel.GetFileInformationByHandleEx(
+            wintypes.HANDLE(handle), 0, ctypes.byref(basic), ctypes.sizeof(basic)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        actual = ctypes.create_unicode_buffer(32768)
+        length = kernel.GetFinalPathNameByHandleW(wintypes.HANDLE(handle), actual, len(actual), 0)
+        root_now = root.lstat()
+        if (
+            not 0 < length < len(actual)
+            or Path(actual.value.removeprefix("\\\\?\\")) != target
+            or (opened.st_dev, opened.st_ino) != (before.st_dev, before.st_ino)
+            or opened.st_nlink != 1
+            or (root_now.st_dev, root_now.st_ino) != identity
+            or root_now.st_file_attributes & stat.FILE_ATTRIBUTE_REPARSE_POINT
+            or basic.attributes
+            & (stat.FILE_ATTRIBUTE_REPARSE_POINT | stat.FILE_ATTRIBUTE_DIRECTORY)
+            or not basic.attributes & stat.FILE_ATTRIBUTE_READONLY
+        ):
+            raise OSError("opened cleanup file is not the owned regular file")
+        basic.attributes &= ~stat.FILE_ATTRIBUTE_READONLY
+        if not basic.attributes:
+            basic.attributes = stat.FILE_ATTRIBUTE_NORMAL
+        if not kernel.SetFileInformationByHandle(
+            wintypes.HANDLE(handle), 0, ctypes.byref(basic), ctypes.sizeof(basic)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+        delete = ctypes.c_byte(1)
+        if not kernel.SetFileInformationByHandle(
+            wintypes.HANDLE(handle), 4, ctypes.byref(delete), ctypes.sizeof(delete)
+        ):
+            raise ctypes.WinError(ctypes.get_last_error())
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        else:
+            kernel.CloseHandle(wintypes.HANDLE(handle))
 
 
 @pytest.fixture(autouse=True)
@@ -91,7 +193,12 @@ def _cleanup_test_session(session: pytest.Session) -> None:
         ):
             raise OSError("temporary directory identity changed; refusing cleanup")
         # rmtree unlinks nested symlinks/Windows junctions without following them.
-        shutil.rmtree(root)
+        shutil.rmtree(
+            root,
+            onerror=lambda function, path, error: _remove_owned_readonly_file(
+                root, identity, function, path, error
+            ),
+        )
     except OSError as error:
         session.exitstatus = pytest.ExitCode.TESTS_FAILED
         message = f"Test scratch cleanup failed: {root}: {error}"

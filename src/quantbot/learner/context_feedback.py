@@ -69,7 +69,7 @@ class ReadingReview(LearnerModel):
 class SourceInvalidation(LearnerModel):
     reference_id: str
     invalidated_at: datetime
-    reason: Literal["DELETED", "REDACTED", "RIGHTS_REVOKED"]
+    reason: Literal["DELETED", "REDACTED", "RIGHTS_REVOKED", "EVIDENCE_SUPERSEDED"]
 
 
 class ReadingExample(LearnerModel):
@@ -332,9 +332,17 @@ class DownstreamExample(LearnerModel):
     net_return_bps: float
     cost_basis: Literal["MODELED_NET", "ACTUAL_NET"]
     cost_evidence_id: str = Field(min_length=1)
+    consumed_context_features: tuple[float, ...] | None = None
+    interpreter_id: str | None = None
 
     @model_validator(mode="after")
     def causal_prices_and_labels(self) -> Self:
+        if (self.consumed_context_features is None) != (self.interpreter_id is None):
+            raise ValueError("consumed candidate features require interpreter provenance")
+        if self.consumed_context_features is not None and len(
+            self.consumed_context_features
+        ) != len(CONTEXT_FEATURE_NAMES):
+            raise ValueError("versioned candidate context feature width required")
         if (
             self.context.at > self.decision_at
             or not self.price_available_at <= self.decision_at < self.label_available_at
@@ -417,7 +425,10 @@ def compare_context_to_price_only(
     price = fit_estimator([row.price_features for row in train], target, price_feature_names)
 
     def augmented(row: DownstreamExample) -> tuple[float, ...]:
-        return (*row.price_features, *(value for _, value in row.context.features))
+        context_values = row.consumed_context_features
+        if context_values is None:
+            context_values = tuple(value for _, value in row.context.features)
+        return (*row.price_features, *context_values)
 
     context = fit_estimator(
         [augmented(row) for row in train], target, (*price_feature_names, *CONTEXT_FEATURE_NAMES)

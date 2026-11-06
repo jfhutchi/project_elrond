@@ -33,6 +33,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from quantbot.config import Settings
+from quantbot.console.context_learning import ContextLearningPanel
 from quantbot.console.learner import LearnerPanel
 from quantbot.console.market_status import MarketStatus
 from quantbot.console.overview import OverviewPanel, read_overview
@@ -376,6 +377,7 @@ class ResearchRuntimePanel(FrozenModel):
 
 
 class ConsoleState(FrozenModel):
+    context_learning: ContextLearningPanel = ContextLearningPanel()
     paper_costs: dict[str, Any] | None = None
     overview: OverviewPanel = OverviewPanel()
     """Everything the read-only console renders, assembled in one pass."""

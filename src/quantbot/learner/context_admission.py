@@ -5,15 +5,16 @@ from __future__ import annotations
 import re
 from collections.abc import Iterator
 from contextlib import contextmanager
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
-from pydantic import model_validator
+from pydantic import SerializerFunctionWrapHandler, model_serializer, model_validator
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from quantbot.learner.context_integration import (
+    CONTEXT_EVENT_KINDS,
     ContextEvaluation,
     ContextInvalidationRecord,
     ContextPermissionRecord,
@@ -35,6 +36,20 @@ from quantbot.research.manifest import content_id
 from quantbot.research.registry import HypothesisRegistry
 
 
+class ContextReadingScope(LearnerModel):
+    """Explicit interpretation-only extension; the parent price manifest stays frozen."""
+
+    contract: Literal["BROAD_NEWS_READING_SCOPE_V1"] = "BROAD_NEWS_READING_SCOPE_V1"
+    asset_classes: tuple[Literal["EQUITY"], Literal["ETF"], Literal["CRYPTO"]] = (
+        "EQUITY",
+        "ETF",
+        "CRYPTO",
+    )
+    source_policy_id: Digest
+    target: Literal["INDEPENDENT_READING_POLARITY"] = "INDEPENDENT_READING_POLARITY"
+    grants_execution: Literal[False] = False
+
+
 class ContextEvaluationPlan(LearnerModel):
     experiment_id: str
     recorded_at: datetime
@@ -48,14 +63,34 @@ class ContextEvaluationPlan(LearnerModel):
     target: Literal["INDEPENDENT_READING_POLARITY"] = "INDEPENDENT_READING_POLARITY"
     accounting_dataset: Literal["us-equities-daily"] = "us-equities-daily"
     grants_activation: Literal[False] = False
+    reading_scope: ContextReadingScope | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy_plan(self, handler: SerializerFunctionWrapHandler) -> dict[str, Any]:
+        payload = dict(handler(self))
+        if "reading_scope" not in self.model_fields_set:
+            payload.pop("reading_scope", None)
+        return payload
 
     @model_validator(mode="after")
     def predeclared(self) -> Self:
+        for at in (
+            self.recorded_at,
+            self.source_start,
+            self.training_start,
+            self.split_at,
+            self.evaluation_end,
+        ):
+            aware(at)
         if not (
             self.recorded_at <= self.training_start < self.split_at < self.evaluation_end
             and self.source_start <= self.training_start
         ):
             raise ValueError("ordered predeclared context evaluation windows required")
+        if self.reading_scope is not None and self.source_start < self.training_start - timedelta(
+            hours=48
+        ):
+            raise ValueError("broad reading scope permits at most 48 hours of source lookback")
         return self
 
     @property
@@ -73,7 +108,12 @@ def register_context_plan(
     now = aware(now)
     if not plan.recorded_at <= now <= plan.training_start:
         raise ValueError("CONTEXT_PLAN_MUST_PRECEDE_TRAINING")
-    events = store.read_as_of(plan.experiment_id, now, maximum_records=4000)
+    events = store.read_as_of(
+        plan.experiment_id,
+        now,
+        maximum_records=4000,
+        kinds=("ExperimentManifest", "ContextEvaluationPlan"),
+    )
     manifests = [
         e.decode(ExperimentManifest) for e in events if e.kind == ExperimentManifest.__name__
     ]
@@ -203,7 +243,7 @@ def run_registered_context_evaluation(
 ) -> ContextEvaluation:
     """Operational learner API; no fake admission, creation, activation or network calls."""
     now = aware(now or datetime.now(UTC))
-    events = store.read_as_of(experiment_id, now, maximum_records=4000)
+    events = store.read_as_of(experiment_id, now, maximum_records=4000, kinds=CONTEXT_EVENT_KINDS)
     plans = [
         e.decode(ContextEvaluationPlan) for e in events if e.kind == ContextEvaluationPlan.__name__
     ]

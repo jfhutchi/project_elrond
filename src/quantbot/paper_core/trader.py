@@ -136,6 +136,12 @@ def evaluate_entry(
     if capability is not None and model.mode != "COLLECT":
         objections.append("OFFLINE_CAPABILITY_COLLECT_ONLY")
     objections.extend(time_reasons)
+    overlay = observation.context_filter
+    if overlay is not None:
+        if overlay.objection or overlay.expected_net_bps is None:
+            objections.append(overlay.objection or "CONTEXT_FILTER_UNVERIFIED")
+        elif overlay.expected_net_bps <= 0:
+            objections.append("CONTEXT_PREDICTED_NET_NONPOSITIVE")
     crypto = observation.crypto_session is not None
     if crypto and (
         entry_policy is None
@@ -336,6 +342,8 @@ def evaluate_entry(
             timing["time_projection"] = time_projection
     if observation.context_snapshot_id is not None:
         timing["context_snapshot_id"] = observation.context_snapshot_id
+    if overlay is not None:
+        timing["context_forecast_id"] = overlay.forecast_id
     return Decision(
         **timing,
         recorded_at_utc=evaluated_at,

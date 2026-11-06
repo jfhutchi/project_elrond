@@ -115,6 +115,7 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                 asset_eligibility=lambda: self._entry_asset,
                 market_snapshot=lambda: self._entry_snapshot,
                 crypto_custody=lambda: self._exit_custody,
+                context_research=getattr(broker, "research_state", None),
             ),
             transactional_send_refusal=self._record_send_refusal,
         )
@@ -593,5 +594,10 @@ def fixture_coordinator(store: CoreStore, broker: SyntheticBroker) -> ExecutionC
         cast(BrokerAdapter, broker),
         settings,
         submission_policy=SubmissionPolicy(max_not_found_retries=0),
-        transactional_send_check=partial(final_send_in_session, store, clock=lambda: broker.now),
+        transactional_send_check=partial(
+            final_send_in_session,
+            store,
+            clock=lambda: broker.now,
+            context_research=getattr(broker, "research_state", None),
+        ),
     )

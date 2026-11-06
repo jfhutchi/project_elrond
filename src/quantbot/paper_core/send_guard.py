@@ -3,6 +3,7 @@
 from collections.abc import Callable
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -36,7 +37,7 @@ from quantbot.paper_core.store import CoreStore, latest_certification, table
 from quantbot.paper_core.time_evidence import TimeEvidence, evidence_objections, provider_interval
 from quantbot.research.manifest import content_id
 from quantbot.risk import OrderPurpose
-from quantbot.storage import StorageRepository
+from quantbot.storage import StateConflictError, StorageRepository
 
 
 def record_pre_send_refusal(
@@ -188,6 +189,7 @@ def final_send_in_session(
     asset_eligibility: Callable[[], AssetEligibility | None] | None = None,
     market_snapshot: Callable[[], CurrentPortfolioSnapshot | None] | None = None,
     crypto_custody: Callable[[], CryptoCustodyEvidence | None] | None = None,
+    context_research: Any = None,
 ) -> tuple[str, ...]:
     """Validate authority using the coordinator's locked send-state transaction."""
     from quantbot.paper_core.authority import guardian_objections, runtime_objections
@@ -268,6 +270,45 @@ def final_send_in_session(
     # Sample after durable reads and writer-lock acquisition, never the caller's decision time.
     now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
     reasons: list[str] = list(runtime_reasons)
+    from quantbot.paper_core.context_interpreter import filter_objections
+    from quantbot.paper_core.contracts import Observation
+
+    observation_payload = session.execute(
+        select(table("core_observations").c.payload).where(
+            table("core_observations").c.id == decision.observation_id
+        )
+    ).scalar_one_or_none()
+    if observation_payload is None:
+        reasons.append("CONTEXT_OBSERVATION_UNAVAILABLE")
+    else:
+        original_observation = Observation.model_validate_json(observation_payload)
+        reasons.extend(filter_objections(context_research, original_observation, now=now))
+        if context_research is not None:
+            from quantbot.paper_core.activation import active_in_session
+            from quantbot.paper_core.authority import commission_in_session
+            from quantbot.paper_core.context_interpreter import current_version
+
+            try:
+                version = current_version(context_research)
+                active = active_in_session(store, session)
+                if (
+                    version is not None
+                    and version.mode == "TRADING_FILTER"
+                    and (
+                        active is None
+                        or version.commission_id != commission_in_session(store, session).id
+                        or version.price_activation_id != active[1].id
+                    )
+                ):
+                    reasons.append("CONTEXT_FILTER_RUNTIME_AUTHORITY_CHANGED")
+            except (ValueError, StateConflictError):
+                reasons.append("CONTEXT_FILTER_RUNTIME_AUTHORITY_UNAVAILABLE")
+        if decision.context_forecast_id != (
+            original_observation.context_filter.forecast_id
+            if original_observation.context_filter
+            else None
+        ):
+            reasons.append("CONTEXT_DECISION_FORECAST_MISMATCH")
     from quantbot.paper_core.selection import reservation_objections
 
     reasons.extend(reservation_objections(store, session, decision, intent_id=intent.intent_id))

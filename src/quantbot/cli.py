@@ -480,6 +480,7 @@ def _console(args: argparse.Namespace, stream: TextIO) -> int:
                 market_status=market_status,
                 daily_performance=read_configured_performance,
                 experiment_store=getattr(args, "experiment_store", None),
+                research_store=database.path.with_suffix(".research.db"),
             ),
             host=host,
             port=port,

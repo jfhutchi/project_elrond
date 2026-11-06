@@ -65,20 +65,30 @@ def attach_observed_context(
     )
 
     permissions = load_source_permissions(state)
+    from quantbot.paper_core.context_interpreter import attach_context_interpreter
+
     if not permissions:
-        return (
-            observation  # No empty snapshots or extra retention during unavailable-source cycles.
-        )
+        if isinstance(observation, ObservationCohort):
+            return observation.model_copy(
+                update={
+                    "observations": tuple(
+                        attach_context_interpreter(state, item, now=at)
+                        for item in observation.observations
+                    )
+                }
+            )
+        return attach_context_interpreter(state, observation, now=at)
 
     def linked(item: Observation) -> Observation:
         snapshot = capture_research_context(
             state, symbol=item.symbol, at=at, permissions=permissions, maximum_documents=20
         )
-        return (
+        linked_item = (
             item
             if snapshot is None
             else item.model_copy(update={"context_snapshot_id": snapshot.snapshot_id})
         )
+        return attach_context_interpreter(state, linked_item, now=at)
 
     if isinstance(observation, ObservationCohort):
         return observation.model_copy(
@@ -521,8 +531,10 @@ def retry_entry_candidate(store: CoreStore, candidate: Decision | None) -> Decis
 async def daily_consideration(
     store: CoreStore, broker: Any, config: RuntimeConfig
 ) -> tuple[str, ...]:
+    from quantbot.paper_core.context_learning import consider_context_learning
     from quantbot.paper_core.learning import consider_learning
 
+    await asyncio.to_thread(consider_context_learning, store, broker, now=store.clocks.sample()[0])
     calendar = await broker.learning_calendar()
     now = store.clocks.sample()[0]
     completed = [

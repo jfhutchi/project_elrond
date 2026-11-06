@@ -150,6 +150,7 @@ class ExperimentStore:
                     CREATE TABLE conflicts(experiment_id TEXT NOT NULL,
                       idempotency_key TEXT NOT NULL, original_digest TEXT NOT NULL,
                       rejected_digest TEXT NOT NULL);
+                    CREATE INDEX events_kind_time ON events(experiment_id,kind,recorded_at);
                 """)
                 db.execute("INSERT INTO metadata VALUES ('schema', ?)", (SCHEMA,))
 
@@ -261,16 +262,50 @@ class ExperimentStore:
             raise ValueError("CONFLICTING_IMMUTABLE_EVIDENCE")
         return True
 
+    def ensure_event_kind_index(self) -> None:
+        """Explicit additive commissioning for bounded context reads in an existing store."""
+        with self._transaction() as db:
+            db.execute(
+                "CREATE INDEX IF NOT EXISTS events_kind_time "
+                "ON events(experiment_id,kind,recorded_at)"
+            )
+
     def read_as_of(
-        self, experiment_id: str, now: datetime, *, maximum_records: int | None = None
+        self,
+        experiment_id: str,
+        now: datetime,
+        *,
+        maximum_records: int | None = None,
+        kinds: tuple[str, ...] | None = None,
     ) -> tuple[StoredEvent, ...]:
         if maximum_records is not None and not 1 <= maximum_records <= 10000:
             raise ValueError("bounded evidence read requires 1..10000 records")
         with self._transaction(write=False) as db:
+            source, restriction = "events", ""
+            parameters: list[object] = [experiment_id, _stamp(now)]
+            if kinds is not None:
+                if (
+                    maximum_records is None
+                    or not 1 <= len(kinds) <= 32
+                    or len(set(kinds)) != len(kinds)
+                    or any(not isinstance(k, str) or not k or len(k) > 128 for k in kinds)
+                ):
+                    raise ValueError("BOUNDED_EVENT_KIND_FILTER_REQUIRED")
+                if not db.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='index' AND name='events_kind_time'"
+                ).fetchone():
+                    raise ValueError("EXPERIMENT_EVENT_KIND_INDEX_NOT_COMMISSIONED")
+                source = "events INDEXED BY events_kind_time"
+                restriction = "AND kind IN (" + ",".join("?" for _ in kinds) + ") "
+                parameters.extend(kinds)
+            parameters.append(maximum_records + 1 if maximum_records else -1)
             rows = db.execute(
-                "SELECT * FROM events WHERE experiment_id=? AND recorded_at<=? "
-                "ORDER BY recorded_at, rowid LIMIT ?",
-                (experiment_id, _stamp(now), maximum_records + 1 if maximum_records else -1),
+                "SELECT * FROM "
+                + source
+                + " WHERE experiment_id=? AND recorded_at<=? "
+                + restriction
+                + "ORDER BY recorded_at, rowid LIMIT ?",
+                parameters,
             ).fetchall()
             if maximum_records is not None and len(rows) > maximum_records:
                 raise ValueError("EXPERIMENT_EVIDENCE_BOUND_EXCEEDED")

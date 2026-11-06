@@ -26,6 +26,18 @@ from quantbot.paper_core.discovery import DiscoveryStore
 from quantbot.paper_core.external_context import SourcePermissions, aware
 from quantbot.research.manifest import content_id
 
+CONTEXT_EVENT_KINDS = (
+    "ExperimentManifest",
+    "ContextEvaluationPlan",
+    "ContextSnapshotRecord",
+    "ContextInvalidationRecord",
+    "ContextPermissionRecord",
+    "ReadingReview",
+    "ContextEvaluation",
+    "ContextFitReservation",
+    "InterpreterCandidate",
+)
+
 
 class ContextSnapshotRecord(LearnerModel):
     experiment_id: str
@@ -80,7 +92,9 @@ def journal_context_snapshot(
     capture = load_context_capture(research, snapshot_id)
     if capture.snapshot.at > aware(recorded_at) or capture.snapshot.used_document_ids:
         raise ValueError("ONLY_AVAILABLE_OBSERVED_CONTEXT_CAN_BE_JOURNALED")
-    for event in store.read_as_of(experiment_id, recorded_at, maximum_records=4000):
+    for event in store.read_as_of(
+        experiment_id, recorded_at, maximum_records=4000, kinds=("ContextSnapshotRecord",)
+    ):
         if event.kind == ContextSnapshotRecord.__name__:
             if event.decode(ContextSnapshotRecord).snapshot_id == snapshot_id:
                 return False
@@ -98,7 +112,7 @@ def journal_invalidation(
     experiment_id: str,
     reference_id: str,
     at: datetime,
-    reason: Literal["DELETED", "REDACTED", "RIGHTS_REVOKED"],
+    reason: Literal["DELETED", "REDACTED", "RIGHTS_REVOKED", "EVIDENCE_SUPERSEDED"],
 ) -> bool:
     record = ContextInvalidationRecord(
         experiment_id=experiment_id,
@@ -131,21 +145,32 @@ def evaluate_retained_context(
     if not split_at < as_of:
         raise ValueError("CHRONOLOGICAL_CONTEXT_SPLIT_REQUIRED")
     state = store.state(experiment_id)
-    events = store.read_as_of(experiment_id, recorded_at, maximum_records=4000)
-    captures, reviews, invalidations = [], [], []
+    events = store.read_as_of(
+        experiment_id, recorded_at, maximum_records=4000, kinds=CONTEXT_EVENT_KINDS
+    )
+    captures, invalidations = [], []
+    reviews = [
+        e.decode(ReadingReview)
+        for e in events
+        if e.kind == ReadingReview.__name__ and e.recorded_at <= as_of
+    ]
+    reviewed_ids = {review.reading_id for review in reviews}
     training_permissions = {}
     for event in events:
         if event.recorded_at > as_of:
             continue
         if event.kind == ContextSnapshotRecord.__name__:
+            if not reviewed_ids:
+                continue
             record = event.decode(ContextSnapshotRecord)
             capture = load_context_capture(research, record.snapshot_id)
             if capture.snapshot.at > record.recorded_at:
                 raise ValueError("CONTEXT_CAPTURE_RECORDED_BEFORE_AVAILABLE")
-            if training_start is None or aware(training_start) <= capture.snapshot.at <= as_of:
+            if (
+                (training_start is None or aware(training_start) <= capture.snapshot.at <= as_of)
+                and any(reading.reading_id in reviewed_ids for reading in capture.snapshot.readings)
+            ):
                 captures.append(capture)
-        elif event.kind == ReadingReview.__name__:
-            reviews.append(event.decode(ReadingReview))
         elif event.kind == ContextInvalidationRecord.__name__:
             invalidations.append(event.decode(ContextInvalidationRecord).invalidation)
         elif event.kind == ContextPermissionRecord.__name__:
@@ -295,7 +320,12 @@ def load_retained_candidate(
     candidate_id: str,
     at: datetime,
 ) -> InterpreterCandidate:
-    events = store.read_as_of(experiment_id, at, maximum_records=4000)
+    events = store.read_as_of(
+        experiment_id,
+        at,
+        maximum_records=4000,
+        kinds=("InterpreterCandidate", "ContextInvalidationRecord"),
+    )
     invalidations = tuple(
         e.decode(ContextInvalidationRecord).invalidation
         for e in events
