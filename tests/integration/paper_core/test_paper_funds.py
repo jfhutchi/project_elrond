@@ -553,6 +553,7 @@ async def test_actual_coordinator_rechecks_funds_and_locked_source_before_post(
 ):
     from sqlalchemy import delete
 
+    from quantbot.domain import IntentState
     from quantbot.paper_core.contracts import ProtectionPlan
     from quantbot.paper_core.runtime import CoreExecutionCoordinator
     from quantbot.paper_core.trader import claim_entry
@@ -595,8 +596,6 @@ async def test_actual_coordinator_rechecks_funds_and_locked_source_before_post(
                     occurred_at=clocks.wall,
                 )
         elif fault == "unknown_send":
-            from quantbot.domain import IntentState
-
             with db.transaction() as session:
                 repo = StorageRepository(session)
                 other = entry.intent.model_copy(
@@ -617,8 +616,8 @@ async def test_actual_coordinator_rechecks_funds_and_locked_source_before_post(
 
             def changed_after_gate(self, *args, **kwargs):
                 result = gate(self, *args, **kwargs)
-                observed.append(result.allowed)
-                if len(observed) == 2:
+                if args[2].state is IntentState.ORDER_CREATED:
+                    observed.append(result.allowed)
                     assert result.allowed
                     with db.transaction() as session:
                         if fault == "source_race":
@@ -651,7 +650,7 @@ async def test_actual_coordinator_rechecks_funds_and_locked_source_before_post(
         assert reasons
         assert len(provider.orders) == 2
         if fault in {"source_race", "ledger_race"}:
-            assert observed == [True, True]
+            assert observed == [True]
             assert "CORE_CASH_AUTHORITY_UNAVAILABLE" in reasons
     finally:
         db.close()

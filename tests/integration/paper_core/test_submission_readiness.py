@@ -41,13 +41,14 @@ async def test_pre_send_refusal_rolls_back_with_failed_state_transition(tmp_path
         entry = claim_entry(store, decision, ProtectionPlan.for_decision(decision, store.config))
         ready(store)
         request = provider.request
-        accounts = 0
 
         async def changed(method, url, **kwargs):
-            nonlocal accounts
             if url.endswith("/account"):
-                accounts += 1
-                if accounts == 2:
+                with db.transaction() as session:
+                    state = (
+                        StorageRepository(session).get_order_intent(entry.intent.intent_id).state
+                    )
+                if state is IntentState.ORDER_CREATED:
                     provider.cash -= 1
             return await request(method, url, **kwargs)
 
@@ -131,13 +132,14 @@ async def test_final_cash_change_is_atomically_recorded_as_unsent_and_releases_s
         assert entry is not None
         ready(store)
         request = provider.request
-        accounts = 0
 
         async def changed(method, url, **kwargs):
-            nonlocal accounts
             if url.endswith("/account"):
-                accounts += 1
-                if accounts == 2:
+                with db.transaction() as session:
+                    state = (
+                        StorageRepository(session).get_order_intent(entry.intent.intent_id).state
+                    )
+                if state is IntentState.ORDER_CREATED:
                     provider.cash -= Decimal(1)
             return await request(method, url, **kwargs)
 

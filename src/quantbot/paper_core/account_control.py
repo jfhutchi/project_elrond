@@ -365,12 +365,14 @@ class RequestBudget:
         assert isinstance(result, sqlite3.Row)
         return result
 
-    def _counts(self, c: sqlite3.Connection, now: float) -> dict[str, int]:
+    def _counts(
+        self, c: sqlite3.Connection, now: float, *, exclude_identity: int | None = None
+    ) -> dict[str, int]:
         return dict(
             c.execute(
-                "SELECT role,count(*) FROM charges WHERE scope=? AND epoch=? AND at>? "
+                "SELECT role,count(*) FROM charges WHERE scope=? AND epoch=? AND at>? AND id!=? "
                 "GROUP BY role",
-                (self.scope, self.epoch, now - WINDOW),
+                (self.scope, self.epoch, now - WINDOW, exclude_identity or -1),
             ).fetchall()
         )
 
@@ -381,19 +383,35 @@ class RequestBudget:
         )
 
     def reserve(
-        self, role: str, *, purpose: str, now_monotonic: float, consumed: bool = False
+        self,
+        role: str,
+        *,
+        purpose: str,
+        now_monotonic: float,
+        consumed: bool = False,
+        reuse_identity: int | None = None,
     ) -> int | None:
         if role not in ROLE_LIMITS or not purpose:
             raise ValueError("explicit known role and purpose required")
         with self._transaction() as c:
             row = self._state(c, now_monotonic)
-            counts = self._counts(c, now_monotonic)
+            if reuse_identity is not None:
+                original = c.execute(
+                    "SELECT purpose FROM charges WHERE id=? AND scope=? AND epoch=? AND role=? "
+                    "AND consumed=0",
+                    (reuse_identity, self.scope, self.epoch, role),
+                ).fetchone()
+                if original is None or consumed:
+                    return None
+                # A retry retains its original request priority and prepaid identity.
+                purpose = original["purpose"]
+            counts = self._counts(c, now_monotonic, exclude_identity=reuse_identity)
             ceiling = row["observed_limit"] if now_monotonic < row["limit_until"] else TOTAL_LIMIT
             noncritical = c.execute(
                 "SELECT count(*) FROM charges WHERE scope=? AND epoch=? AND "
                 "role='guardian' AND at>? AND purpose NOT LIKE 'OWNED_EXIT%' AND purpose "
-                "NOT LIKE 'CLOCK%'",
-                (self.scope, self.epoch, now_monotonic - WINDOW),
+                "NOT LIKE 'CLOCK%' AND id!=?",
+                (self.scope, self.epoch, now_monotonic - WINDOW, reuse_identity or -1),
             ).fetchone()[0]
             reason = (
                 "HOST_EPOCH_COOLDOWN"
@@ -416,6 +434,9 @@ class RequestBudget:
                     (self.scope, self.epoch, role, purpose, now_monotonic, reason),
                 )
                 return None
+            if reuse_identity is not None:
+                c.execute("UPDATE charges SET at=? WHERE id=?", (now_monotonic, reuse_identity))
+                return reuse_identity
             cursor = c.execute(
                 "INSERT INTO charges(scope,epoch,role,purpose,at,consumed) VALUES(?,?,?,?,?,?)",
                 (self.scope, self.epoch, role, purpose, now_monotonic, int(consumed)),
@@ -546,6 +567,7 @@ class BudgetedTransport:
             self.role,
             purpose=_priority.get() + " POST_RESERVATION " + client_order_id,
             now_monotonic=self.clocks.sample()[1],
+            reuse_identity=self._send_permits.get(client_order_id),
         )
         if identity is None:
             raise LocalRequestBudgetRefusal("POST_RESERVATION", client_order_id)
@@ -563,11 +585,12 @@ class BudgetedTransport:
         ]
         if method == "POST":
             client = str(kwargs.get("json_body", {}).get("client_order_id", ""))
-            identity = self._send_permits.pop(client, None)
+            identity = self._send_permits.get(client)
             if identity is None or not budget.consume(
                 identity, self.role, now_monotonic=self.clocks.sample()[1]
             ):
                 raise LocalRequestBudgetRefusal("POST", client)
+            self._send_permits.pop(client)
         elif not budget.acquire(
             self.role,
             purpose=("CLOCK" if parsed.path in {"/v2/clock", "/v2/calendar"} else _priority.get())

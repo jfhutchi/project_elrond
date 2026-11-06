@@ -142,9 +142,8 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
         # Possibly-sent recovery never gains a new identity or a second POST here.
         from quantbot.domain import IntentState
 
-        with self.store.database.transaction() as session:
-            current = StorageRepository(session).get_order_intent(intent.intent_id)
-        if current is not None and current.state in {
+        current = self._stored_intent(intent)
+        if current.state in {
             IntentState.RISK_APPROVED,
             IntentState.ORDER_CREATED,
         }:
@@ -176,7 +175,17 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                             environment_label=self._settings.BROKER_ENVIRONMENT.value,
                         )
                     )
-            await self._begin_entry_acquisition(intent, purpose)
+            if purpose is OrderPurpose.ENTRY and self.store.config.evidence_lane == "BROKER_PAPER":
+                # PAPER claims already retain their risk decision and Guardian handoff.
+                # ORDER_CREATED remains unsent: the parent acquires every volatile
+                # constraint once, runs _gate, then checks authority and claims
+                # SUBMITTING under the same writer fence before any POST.
+                if current.state is IntentState.RISK_APPROVED:
+                    intent = self._transition(
+                        current.intent_id, IntentState.ORDER_CREATED, IntentState.RISK_APPROVED
+                    )
+            else:
+                await self._begin_entry_acquisition(intent, purpose)
         from quantbot.paper_core.account_control import LocalRequestBudgetRefusal, request_priority
 
         try:

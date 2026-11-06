@@ -16,6 +16,7 @@ from sqlalchemy.exc import OperationalError
 
 from quantbot.domain import IntentState
 from quantbot.paper_core import activation
+from quantbot.paper_core.account_control import LocalRequestBudgetRefusal
 from quantbot.paper_core.alpaca_adapter import AlpacaCoreBroker
 from quantbot.paper_core.authority import (
     RoleHeartbeat,
@@ -407,6 +408,10 @@ async def dispatch_entries(
             if store.parallel_entries and str(error):
                 fallback += (str(error),)
             reasons.extend(getattr(gate, "reasons", fallback))
+            if isinstance(error, LocalRequestBudgetRefusal):
+                # The shared role budget cannot serve another original intent this cycle.
+                reasons.append("LOCAL_BROKER_REQUEST_BUDGET")
+                break
         else:
             if observed is not None:
                 with suppress(Exception):
