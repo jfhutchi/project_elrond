@@ -59,6 +59,40 @@ async def test_closed_idle_admission_uses_real_fresh_proof(tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_historical_inventory_failure_needs_new_certification_before_idle(tmp_path):
+    from quantbot.paper_core.guardian import guardian_cycle
+    from quantbot.paper_core.health import active_health, report
+
+    db, store, broker, _, clocks = await fixture(tmp_path, datetime(2026, 10, 14, 22, tzinfo=UTC))
+    try:
+        store.runtime_role = "guardian"
+        report(
+            store,
+            role="GUARDIAN",
+            state="PROTOCOL_FAILURE",
+            reasons=("INVENTORY_PROTOCOL_INVALID",),
+            now=clocks.wall,
+        )
+        assert roles._idle_signature(store) is None
+        receipt = await guardian_cycle(store, broker, now=clocks.wall)
+        poll = roles.ClosedSessionPoll()
+        poll.observe(store, broker, receipt)
+        assert poll.waiting(store), "A new verified reconciliation permits reduced polling only"
+        with db.transaction() as session:
+            assert any(h.state == "PROTOCOL_FAILURE" for h in active_health(session))
+        report(
+            store,
+            role="GUARDIAN",
+            state="PROTOCOL_FAILURE",
+            reasons=("INVENTORY_PROTOCOL_INVALID",),
+            now=clocks.wall,
+        )
+        assert not poll.waiting(store), "A current failure must resume rapid recovery"
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
 async def test_closed_settled_polling_is_bounded_and_restart_reconciles(tmp_path, monkeypatch):
     db, store, broker, provider, clocks = await fixture(
         tmp_path, datetime(2026, 10, 14, 22, tzinfo=UTC)

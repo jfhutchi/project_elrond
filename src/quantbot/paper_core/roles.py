@@ -84,17 +84,28 @@ def _idle_signature(store: CoreStore, proof: ReconciliationProof | None = None) 
             ):
                 return None
         health = active_health(session)
+        certification = latest_certification(session)
         if any(
             h.protection_blocked
-            or h.state in {"INTEGRITY_FAILURE", "PROTOCOL_FAILURE", "MANUAL_PAUSE"}
+            or h.state in {"INTEGRITY_FAILURE", "MANUAL_PAUSE"}
+            or h.state == "PROTOCOL_FAILURE"
+            and not (
+                h.role == "GUARDIAN"
+                and h.objections == ("INVENTORY_PROTOCOL_INVALID",)
+                and certification is not None
+                and certification[0] > h.failed_generation
+            )
             for h in health
             if h.scope != "LEARNING"
         ):
             return None
+        # A newer successful inventory capture permits slower *polling* after a
+        # transient malformed response. Retain the health record and all entry
+        # blockers; idle heartbeats grant no authority to clear or trade through it.
         stop = repo.get_kill_switch_state()
         return content_id(
             (
-                latest_certification(session),
+                certification,
                 store.ledger_state_id(session),
                 (stop.engaged, stop.reason, stop.updated_at),
                 tuple(h.id for h in health),
