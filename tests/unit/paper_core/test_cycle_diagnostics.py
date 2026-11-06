@@ -288,3 +288,64 @@ def test_expected_session_timing_is_not_no_opportunity_or_operational_failure(co
     )
     assert "NO_QUALIFYING_CANDIDATE" not in result["outcomes"]
     assert "OPERATIONAL_FAILURE" not in result["outcomes"]
+
+
+def test_crypto_stale_cohort_retains_scoped_stock_gap_without_private_suffixes():
+    from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics
+
+    observed = TraderCycleDiagnostics()
+    captured = SimpleNamespace(
+        unavailable=tuple(
+            (s, "CRYPTO_OBSERVATION_STALE") for s in ("BTC/USD", "ETH/USD", "SOL/USD")
+        ),
+        market_gaps=("EQUITY:DISCOVERY_NO_FRESH_ELIGIBLE:PRIVATE_TOKEN_ABC123",),
+        session_open=NOW - timedelta(hours=1),
+        session_close=NOW + timedelta(hours=8),
+    )
+    observed.evaluate(captured, (), evidence_ids=("actual-cohort",), now=NOW)
+    result = observed.snapshot(cycle_id="cycle", now=NOW, waiting=False, reasons=(), failure=False)
+    assert result["reason_codes"] == (
+        "CRYPTO_OBSERVATION_STALE",
+        "EQUITY:DISCOVERY_NO_FRESH_ELIGIBLE",
+    )
+    assert result["outcomes"] == ["DATA_UNAVAILABLE"]
+    assert "PRIVATE_TOKEN_ABC123" not in str(result)
+
+
+@pytest.mark.parametrize(
+    "code,outcome",
+    [
+        ("CRYPTO_CONTIGUOUS_HISTORY_UNAVAILABLE", "DATA_UNAVAILABLE"),
+        ("CRYPTO_MARKET_DATA_UNAVAILABLE", "DATA_UNAVAILABLE"),
+        ("CRYPTO:SOURCE_BOUNDARY_MISMATCH", "DATA_UNAVAILABLE"),
+        ("STOCK_SIGNAL_HORIZON_EXCEEDS_SESSION", "AWAITING_SESSION_BOUNDARY"),
+        ("CONTINUOUS_CAPITAL_UNVERIFIED", "AUTHORITY_ACQUISITION_UNAVAILABLE"),
+        ("ACCOUNT_RISK_ANCHOR_UNVERIFIED", "AUTHORITY_ACQUISITION_UNAVAILABLE"),
+        ("CONTINUOUS_ACTIVITY_CATCHUP_PENDING", "AUTHORITY_ACQUISITION_UNAVAILABLE"),
+        ("CRYPTO_NON_MARGINABLE_BUYING_POWER", "RISK_OR_AUTHORITY_BLOCKED"),
+        ("CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED", "RISK_OR_AUTHORITY_BLOCKED"),
+    ],
+)
+def test_reviewed_crypto_session_capital_codes_are_classified(code, outcome):
+    from quantbot.paper_core.cycle_diagnostics import TraderCycleDiagnostics, reason_codes
+
+    assert reason_codes((code + ":PRIVATE_TOKEN_ABC123",)) == (code,)
+    result = TraderCycleDiagnostics().snapshot(
+        cycle_id="cycle", now=NOW, waiting=False, reasons=(code,), failure=False
+    )
+    assert outcome in result["outcomes"]
+    assert "UNCLASSIFIED_REASON" not in result["reason_codes"]
+    assert "PRIVATE_TOKEN_ABC123" not in str(result)
+
+
+def test_scoped_reason_sanitization_keeps_exact_allowlist_and_output_bound():
+    from quantbot.paper_core.cycle_diagnostics import _KNOWN_REASONS, reason_codes
+
+    for private in (
+        "CRYPTO:PRIVATE_TOKEN_ABC123",
+        "EQUITY:ValueError:private text",
+        "CRYPTO_PRIVATE_TOKEN_ABC123",
+        "CRYPTO:EQUITY:MARKET_CLOSED",
+    ):
+        assert reason_codes((private,)) == ("UNCLASSIFIED_REASON",)
+    assert len(reason_codes(tuple(sorted(_KNOWN_REASONS)))) == 32

@@ -38,6 +38,7 @@ class Provider:
             "price_increment": "0.01",
         }
         self.missing = None
+        self.zero_volume = set()
         self.quote_age = 0
         self.fail_crypto_bars = False
         self.fail_crypto_quotes = False
@@ -106,7 +107,7 @@ class Provider:
                             h=100 + i,
                             l=100 + i,
                             c=100 + i,
-                            v=100,
+                            v=0 if (symbol, i) in self.zero_volume else 100,
                         )
                         for i in range(7)
                         if (symbol, i) != self.missing
@@ -172,7 +173,7 @@ def broker_fixture(now=None):
         config,
         clocks,
         account_id="paper",
-        crypto_market=AlpacaCryptoDataClient(**kwargs),
+        crypto_market=AlpacaCryptoDataClient(**kwargs, quote_price_bars=True),
     )
     return broker, provider
 

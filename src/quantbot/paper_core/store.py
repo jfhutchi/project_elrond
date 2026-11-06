@@ -129,8 +129,10 @@ class CoreStore:
             ).scalar_one()
         return kind.model_validate_json(payload)
 
-    def latest_proof(self) -> ReconciliationProof:
-        with self.database.transaction() as session:
+    def latest_proof(self, *, session: Session | None = None) -> ReconciliationProof:
+        with (
+            nullcontext(session) if session is not None else self.database.transaction()
+        ) as session:
             latest = latest_certification(session)
             assert latest is not None
             identity = latest[1]

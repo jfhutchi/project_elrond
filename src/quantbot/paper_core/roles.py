@@ -93,6 +93,8 @@ _TRANSIENT_ENTRY_WAIT_GATES = frozenset(
         "CORE_INDEPENDENT_GUARDIAN_NOT_READY",
         "SESSION_OPENING_UNVERIFIED",
         "SESSION_CAPITAL_UNVERIFIED",
+        "CONTINUOUS_CAPITAL_UNVERIFIED",
+        "CONTINUOUS_ACTIVITY_CATCHUP_PENDING",
         "PORTFOLIO_INVENTORY_STALE",
         "INVENTORY_STALE",
         "INVENTORY_UNCERTIFIED",
@@ -328,7 +330,10 @@ def claim_objections(store: CoreStore, decision: Decision | None = None) -> tupl
 
             reasons.extend(
                 portfolio_budget(
-                    store, session, store.latest_proof(), now=store.clocks.sample()[0]
+                    store,
+                    session,
+                    store.latest_proof(session=session),
+                    now=store.clocks.sample()[0],
                 ).objections
             )
         for link in () if throughput else store.links():

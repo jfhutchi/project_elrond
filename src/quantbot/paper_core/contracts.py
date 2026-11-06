@@ -237,11 +237,13 @@ class Observation(Evidence):
             "opening_quote_sources",
             "crypto_session",
             "context_snapshot_id",
+            "price_basis",
         }
     )
     asset_session: AssetSession | None = None
     crypto_session: CryptoMarketSession | None = None
     context_snapshot_id: str | None = None
+    price_basis: Literal["ALPACA_CRYPTO_TRADE_OR_QUOTE_V1"] | None = None
     asset_eligibility: AssetEligibility | None = None
     capture_received_at: datetime | None = None
     time_evidence_id: str | None = None
@@ -276,6 +278,8 @@ class Observation(Evidence):
 
     @model_validator(mode="after")
     def opening_context_bounds(self) -> Self:
+        if self.price_basis is not None and self.feed != "alpaca-crypto":
+            raise ValueError("crypto price basis requires operational crypto provenance")
         if self.crypto_session is not None or self.feed == "alpaca-crypto":
             market, asset = self.crypto_session, self.asset_eligibility
             if (

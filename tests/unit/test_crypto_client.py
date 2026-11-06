@@ -84,8 +84,13 @@ class ExplodingTransport:
         self.attempts = 0
 
     async def request(
-        self, method: str, url: str, *, headers: Mapping[str, str],
-        params: Mapping[str, str], timeout_seconds: Decimal,
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str],
+        params: Mapping[str, str],
+        timeout_seconds: Decimal,
     ) -> TransportResponse:
         self.attempts += 1
         if self.attempts <= self.failures:
@@ -126,10 +131,8 @@ async def test_bars_parse_and_the_batch_names_crypto_honestly() -> None:
 
 
 async def test_untraded_sessions_are_omitted_and_counted() -> None:
-    """Observed live on SOL/USD: a zero-volume bar's OHLC is carried forward, not observed."""
-    transport = ScriptedTransport(
-        [{"bars": {"BTC/USD": [_row(1), _row(2, volume="0"), _row(3)]}}]
-    )
+    """The legacy daily research path intentionally retains only traded sessions."""
+    transport = ScriptedTransport([{"bars": {"BTC/USD": [_row(1), _row(2, volume="0"), _row(3)]}}])
     client = _client(transport)
 
     batch = await client.get_historical_bars(QUERY)
@@ -139,11 +142,13 @@ async def test_untraded_sessions_are_omitted_and_counted() -> None:
 
 
 async def test_pagination_is_followed_to_exhaustion() -> None:
-    transport = ScriptedTransport([
-        {"bars": {"BTC/USD": [_row(1)]}, "next_page_token": "a"},
-        {"bars": {"BTC/USD": [_row(2)]}, "next_page_token": "b"},
-        {"bars": {"ETH/USD": [_row(3)]}},
-    ])
+    transport = ScriptedTransport(
+        [
+            {"bars": {"BTC/USD": [_row(1)]}, "next_page_token": "a"},
+            {"bars": {"BTC/USD": [_row(2)]}, "next_page_token": "b"},
+            {"bars": {"ETH/USD": [_row(3)]}},
+        ]
+    )
 
     batch = await _client(transport).get_historical_bars(QUERY)
 
@@ -159,10 +164,12 @@ async def test_a_repeated_page_token_is_a_protocol_error_not_an_infinite_loop() 
     Both guards prevent the same runaway loop, and duplicate bars are the earlier of the two.
     Isolating the token check needs a provider that advances its data but not its cursor.
     """
-    transport = ScriptedTransport([
-        {"bars": {"BTC/USD": [_row(1)]}, "next_page_token": "same"},
-        {"bars": {"BTC/USD": [_row(2)]}, "next_page_token": "same"},
-    ])
+    transport = ScriptedTransport(
+        [
+            {"bars": {"BTC/USD": [_row(1)]}, "next_page_token": "same"},
+            {"bars": {"BTC/USD": [_row(2)]}, "next_page_token": "same"},
+        ]
+    )
 
     with pytest.raises(MarketDataProtocolError, match="token cycle"):
         await _client(transport).get_historical_bars(QUERY)
@@ -196,13 +203,16 @@ async def test_an_unrequested_symbol_is_rejected() -> None:
 async def test_malformed_payloads_fail_closed(payload: Any, match: str) -> None:
     class Raw:
         async def request(
-            self, method: str, url: str, *, headers: Mapping[str, str],
-            params: Mapping[str, str], timeout_seconds: Decimal,
+            self,
+            method: str,
+            url: str,
+            *,
+            headers: Mapping[str, str],
+            params: Mapping[str, str],
+            timeout_seconds: Decimal,
         ) -> TransportResponse:
             body = payload if isinstance(payload, str) else json.dumps(payload)
-            return TransportResponse(
-                status_code=200, headers={}, content=body.encode("utf-8")
-            )
+            return TransportResponse(status_code=200, headers={}, content=body.encode("utf-8"))
 
     with pytest.raises(MarketDataProtocolError, match=match):
         await _client(Raw()).get_historical_bars(QUERY)
@@ -248,8 +258,10 @@ def test_credentials_and_limits_are_validated() -> None:
         )
     with pytest.raises(ValueError, match="max_retries"):
         AlpacaCryptoDataClient(
-            api_key=SecretStr("k"), api_secret=SecretStr("s"),
-            transport=transport, max_retries=-1,
+            api_key=SecretStr("k"),
+            api_secret=SecretStr("s"),
+            transport=transport,
+            max_retries=-1,
         )
 
 

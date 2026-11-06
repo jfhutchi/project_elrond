@@ -17,6 +17,13 @@ _DATA_REASONS = frozenset(
         "INVALID_FEATURES",
         "OBSERVATION_STALE",
         "NONCAUSAL_OBSERVATION",
+        "CRYPTO_OBSERVATION_STALE",
+        "CRYPTO_CONTIGUOUS_HISTORY_UNAVAILABLE",
+        "CRYPTO_MARKET_DATA_UNAVAILABLE",
+        "SOURCE_BOUNDARY_MISMATCH",
+        "DISCOVERY_NO_FRESH_ELIGIBLE",
+        "DISCOVERY_CATALOG_STALE",
+        "DISCOVERY_RECEIPT_STALE",
     }
 )
 _TIME_REASONS = frozenset(
@@ -45,18 +52,45 @@ _SESSION_WAIT_REASONS = frozenset(
         "MARKET_CLOSED",
         "TIME_SESSION_BOUNDARY",
         "TIME_OBSERVATION_BOUNDARY",
+        "STOCK_SIGNAL_HORIZON_EXCEEDS_SESSION",
     }
 )
 _ACQUISITION_REASONS = (_TIME_REASONS - _SESSION_WAIT_REASONS) | frozenset(
     {
         "INVENTORY_ACQUISITION_RETRYABLE",
         "INVENTORY_PROTOCOL_INVALID",
+        "ASSET_ELIGIBILITY_UNAVAILABLE",
+        "CRYPTO_ASSET_METADATA_UNAVAILABLE",
+        "CONTINUOUS_CAPITAL_UNVERIFIED",
+        "ACCOUNT_RISK_ANCHOR_UNVERIFIED",
+        "CONTINUOUS_ACTIVITY_CATCHUP_PENDING",
+        "CONTINUOUS_ACTIVITY_PROTOCOL_INVALID",
+        "CONTINUOUS_ACTIVITY_AUTHORITY_CHANGED",
+        "CONTINUOUS_ACTIVITY_LINEAGE_INVALID",
+        "CONTINUOUS_ANCHOR_POLICY_CHANGED",
+        "CONTINUOUS_DOCUMENT_IDENTITY_INVALID",
+        "CONTINUOUS_FUNDS_UNVERIFIED",
+        "CONTINUOUS_POLICY_OR_ADAPTER_UNAVAILABLE",
+        "CONTINUOUS_POLICY_UNAVAILABLE",
+    }
+)
+_CRYPTO_ENTRY_REASONS = frozenset(
+    {
+        "CRYPTO_ACCOUNT_INELIGIBLE",
+        "CRYPTO_ASSET_IDENTITY_INVALID",
+        "CRYPTO_COHORT_SCOPE_INVALID",
+        "CRYPTO_POLICY_NOT_COMMISSIONED",
+        "CRYPTO_MODEL_PROCEDURE_NOT_VALIDATED",
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
+        "CRYPTO_NON_MARGINABLE_BUYING_POWER",
     }
 )
 _KNOWN_REASONS = (
     _DATA_REASONS
     | _TIME_REASONS
     | _ACQUISITION_REASONS
+    | _SESSION_WAIT_REASONS
+    | _CRYPTO_ENTRY_REASONS
     | frozenset(
         {
             "UNCLASSIFIED_REASON",
@@ -118,15 +152,16 @@ _KNOWN_REASONS = (
 )
 
 
+def _safe_reason(reason: str) -> str:
+    parts = reason.split(":", 2)
+    if parts[0] in {"EQUITY", "CRYPTO"} and len(parts) > 1:
+        return ":".join(parts[:2]) if parts[1] in _KNOWN_REASONS else "UNCLASSIFIED_REASON"
+    return parts[0] if parts[0] in _KNOWN_REASONS else "UNCLASSIFIED_REASON"
+
+
 def reason_codes(reasons: tuple[str, ...]) -> tuple[str, ...]:
     """Drop free text and private suffixes; keep bounded machine-readable codes."""
-    return tuple(
-        dict.fromkeys(
-            code if code in _KNOWN_REASONS else "UNCLASSIFIED_REASON"
-            for reason in reasons
-            for code in (reason.split(":", 1)[0],)
-        )
-    )[:32]
+    return tuple(dict.fromkeys(_safe_reason(reason) for reason in reasons))[:32]
 
 
 @dataclass
@@ -161,6 +196,7 @@ class TraderCycleDiagnostics:
     ) -> None:
         self.evaluation_evidence_ids = evidence_ids[:64]
         unavailable = tuple(reason for _, reason in getattr(observation, "unavailable", ()))
+        market_gaps = tuple(getattr(observation, "market_gaps", ()))
         gates = tuple(reason for decision in decisions for reason in decision.gates)
         exclusions = tuple(
             reason
@@ -169,10 +205,10 @@ class TraderCycleDiagnostics:
             for _, reasons in decision.selection.exclusions
             for reason in reasons
         )
-        self.evaluation_reasons = reason_codes((*unavailable, *gates, *exclusions))
-        self.excluded = any(reason not in _DATA_REASONS for reason in unavailable) or bool(
-            exclusions
-        )
+        self.evaluation_reasons = reason_codes((*unavailable, *market_gaps, *gates, *exclusions))
+        self.excluded = any(
+            reason.rsplit(":", 1)[-1] not in _DATA_REASONS for reason in reason_codes(unavailable)
+        ) or bool(exclusions)
         self.session_open, self.session_close = observation.session_open, observation.session_close
         self.candidate_count = sum(decision.action == "BUY" for decision in decisions)
         self.last_evaluated_at = now
@@ -188,7 +224,8 @@ class TraderCycleDiagnostics:
         reasons: tuple[str, ...],
         failure: bool,
     ) -> dict[str, Any]:
-        codes = reason_codes((*self.evaluation_reasons, *reasons))
+        reported_codes = reason_codes((*self.evaluation_reasons, *reasons))
+        codes = tuple(code.rsplit(":", 1)[-1] for code in reported_codes)
         outcomes = []
         if waiting:
             outcomes.append("AWAITING_EVALUATION_BOUNDARY")
@@ -211,10 +248,11 @@ class TraderCycleDiagnostics:
         if any(
             code not in _DATA_REASONS | _ACQUISITION_REASONS | _SESSION_WAIT_REASONS
             and code != "UNCLASSIFIED_REASON"
-            for code in reason_codes(reasons)
+            for code in (reason.rsplit(":", 1)[-1] for reason in reason_codes(reasons))
         ) or any(
             code
-            in {
+            in _CRYPTO_ENTRY_REASONS
+            | {
                 "ENTRY_RISK_LIMIT",
                 "BUYING_POWER_RESERVE",
                 "INVENTORY_UNCERTIFIED",
@@ -241,7 +279,7 @@ class TraderCycleDiagnostics:
             "cycle_id": cycle_id,
             "recorded_at": now.isoformat(),
             "outcomes": outcomes,
-            "reason_codes": codes,
+            "reason_codes": reported_codes,
             "evaluation_evidence_ids": self.evaluation_evidence_ids,
             "last_evaluated_at": self.last_evaluated_at.isoformat()
             if self.last_evaluated_at

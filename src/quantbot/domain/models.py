@@ -1,5 +1,6 @@
 """Frozen and validated trading domain models."""
 
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Annotated, Literal, Self
@@ -58,11 +59,28 @@ class Bar(SymbolModel):
     high: PositiveDecimal
     low: PositiveDecimal
     close: PositiveDecimal
-    volume: PositiveDecimal
+    volume: NonNegativeDecimal
     adjustment: PositiveDecimal
+    price_basis: Literal["ALPACA_CRYPTO_TRADE_OR_QUOTE_V1"] | None = None
+
+    @model_serializer(mode="wrap")
+    def preserve_legacy(self, handler: SerializerFunctionWrapHandler) -> dict[str, object]:
+        payload = dict(handler(self))
+        if "price_basis" not in self.model_fields_set:
+            payload.pop("price_basis", None)
+        return payload
 
     @model_validator(mode="after")
     def validate_ohlc(self) -> Self:
+        if (
+            self.price_basis is not None
+            and re.fullmatch(r"[A-Z0-9]{2,12}/USD", self.symbol) is None
+        ):
+            raise ValueError("provider crypto price basis requires a canonical USD crypto pair")
+        if self.volume == 0 and self.price_basis is None:
+            raise ValueError(
+                "volume must be positive unless explicit crypto price basis is supplied"
+            )
         if self.high < max(self.open, self.low, self.close):
             raise ValueError("high must be greater than or equal to open, low, and close")
         if self.low > min(self.open, self.high, self.close):

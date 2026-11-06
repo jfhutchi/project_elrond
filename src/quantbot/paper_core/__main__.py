@@ -184,6 +184,7 @@ async def _acquire(args: argparse.Namespace, release: PreparedRelease) -> None:
                 transport=market_transport,
                 max_retries=0,
                 timeout_seconds=Decimal(2),
+                quote_price_bars=True,
             )
             await broker.initialize_crypto_assets()
         document = await acquire_commission_document(release, broker, request)
@@ -312,6 +313,7 @@ async def _run(args: argparse.Namespace, release: PreparedRelease) -> None:
                     transport=market_transport,
                     max_retries=0,
                     timeout_seconds=Decimal(5) if args.role == "trader" else Decimal(2),
+                    quote_price_bars=True,
                 )
                 unavailable = await broker.initialize_crypto_assets()
                 if unavailable:

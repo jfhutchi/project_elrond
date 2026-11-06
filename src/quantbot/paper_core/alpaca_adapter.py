@@ -579,6 +579,7 @@ class AlpacaCoreBroker:
                 capture_received_at=received,
                 price=last.close,
                 raw_data_digest=content_id(batch),
+                **({"price_basis": last.price_basis} if last.price_basis is not None else {}),
                 feature_version="crypto-five-minute-price-alpha-v1",
                 feature_context="CRYPTO_CONTINUOUS_V1",
                 features=tuple(zip(FEATURE_NAMES, values, strict=True)),

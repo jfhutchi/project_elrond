@@ -75,17 +75,19 @@ def _timestamp(payload: Mapping[str, object], symbol: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _bar(symbol: str, payload: Mapping[str, object]) -> Bar | None:
-    """Build a bar, or None for a session that recorded no trading.
+def _bar(
+    symbol: str, payload: Mapping[str, object], *, quote_price_bars: bool = False
+) -> Bar | None:
+    """Preserve provider prices, optionally including explicitly labeled quote-derived bars.
 
-    Observed live: SOL/USD carries zero-volume days. Such a bar's OHLC is carried forward
-    rather than observed, so it is not a usable measurement. Returning None omits it, which
-    validate_bar_batch then reports as a gap and marks the symbol ineligible — the same
-    treatment a missing equity bar receives. Failing the whole fetch would make one dead day
-    across years of history unusable; coercing the volume would fabricate an observation.
+    Alpaca crypto OHLC includes quote midpoints when no trades occur. The legacy daily
+    research path remains trade-only; the opted-in price-feature path retains zero volume.
+    See https://docs.alpaca.markets/us/docs/historical-crypto-data-1.
     """
     volume = _decimal(payload, "v", symbol)
-    if volume <= 0:
+    if volume < 0:
+        raise MarketDataProtocolError(f"crypto bar {symbol} volume must be nonnegative")
+    if volume == 0 and not quote_price_bars:
         return None
     try:
         return Bar(
@@ -97,6 +99,7 @@ def _bar(symbol: str, payload: Mapping[str, object]) -> Bar | None:
             close=_decimal(payload, "c", symbol),
             volume=volume,
             adjustment=Decimal("1"),
+            **({"price_basis": "ALPACA_CRYPTO_TRADE_OR_QUOTE_V1"} if quote_price_bars else {}),
         )
     except ValidationError as error:
         raise MarketDataProtocolError(f"crypto bar {symbol} failed domain validation") from error
@@ -117,6 +120,7 @@ class AlpacaCryptoDataClient:
         sleeper: Sleeper | None = None,
         max_retries: int = 2,
         timeout_seconds: Decimal = Decimal("30"),
+        quote_price_bars: bool = False,
     ) -> None:
         if not api_key.get_secret_value() or not api_secret.get_secret_value():
             raise ValueError("Alpaca credentials must not be empty")
@@ -131,6 +135,7 @@ class AlpacaCryptoDataClient:
         self._sleeper = sleeper or _default_sleeper
         self._max_retries = max_retries
         self._timeout_seconds = timeout_seconds
+        self.quote_price_bars = quote_price_bars
         #: Count of sessions omitted for recording no trading, so the omission is visible
         #: rather than silent. Downstream validation reports these as gaps.
         self.skipped_untraded_sessions = 0
@@ -275,7 +280,11 @@ class AlpacaCryptoDataClient:
                 for row in cast(list[object], rows):
                     if not isinstance(row, dict):
                         raise MarketDataProtocolError(f"crypto bar for {symbol} must be an object")
-                    bar = _bar(symbol, cast(Mapping[str, object], row))
+                    bar = _bar(
+                        symbol,
+                        cast(Mapping[str, object], row),
+                        quote_price_bars=self.quote_price_bars,
+                    )
                     if bar is None:
                         self.skipped_untraded_sessions += 1
                         continue
