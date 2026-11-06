@@ -1,8 +1,11 @@
 """Append-only scoped health, independent of the historical kill-switch ledger."""
 
 import json
+from collections import OrderedDict
 from contextlib import nullcontext
 from datetime import datetime, timedelta
+from hashlib import sha256
+from threading import Lock
 from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from sqlalchemy import func, select, text
@@ -10,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from quantbot.paper_core.contracts import CashActivity, Evidence, Health, ReconciliationProof
 from quantbot.paper_core.store import CoreStore, latest_certification, put, table
-from quantbot.storage import StorageRepository
+from quantbot.storage import StateConflictError, StorageRepository
 
 RecoveryEvidence = TypeVar("RecoveryEvidence", bound=Evidence)
 
@@ -18,14 +21,80 @@ if TYPE_CHECKING:
     from quantbot.paper_core.time_evidence import TimeEvidence
 
 
+_HEALTH_VALIDATION_CACHE_SIZE = 16384
+_health_validation_cache: OrderedDict[bytes, str] = OrderedDict()
+_health_validation_lock = Lock()
+
+
+def _unique_health_fields(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    document: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in document:
+            raise StateConflictError("HEALTH_EVENT_DUPLICATE_FIELD")
+        document[key] = value
+    return document
+
+
+def _health_payload_identity(payload: str) -> str:
+    """Memoize content validation only; no row membership or health authority is cached."""
+    digest = sha256(payload.encode("utf-8")).digest()
+    with _health_validation_lock:
+        identity = _health_validation_cache.get(digest)
+        if identity is not None:
+            _health_validation_cache.move_to_end(digest)
+            return identity
+    # SQLite and Pydantic disagree on first/last duplicate fields. Reject ambiguous
+    # JSON once per exact payload before SQL can use its state or recovery references.
+    json.loads(payload, object_pairs_hook=_unique_health_fields)
+    identity = Health.model_validate_json(payload).id
+    with _health_validation_lock:
+        _health_validation_cache[digest] = identity
+        _health_validation_cache.move_to_end(digest)
+        while len(_health_validation_cache) > _HEALTH_VALIDATION_CACHE_SIZE:
+            _health_validation_cache.popitem(last=False)
+    return identity
+
+
 def active_health(session: Session) -> tuple[Health, ...]:
-    events = sorted(
-        (
-            Health.model_validate_json(p)
-            for p in session.execute(select(table("core_health_events").c.payload)).scalars()
-        ),
-        key=lambda h: h.sequence,
+    connection = session.connection()
+    driver = connection.connection.driver_connection
+    assert driver is not None, "SQLITE_DRIVER_UNAVAILABLE"
+    if not driver.in_transaction:
+        connection.exec_driver_sql("BEGIN")
+    # Validate every current row before recovery can exclude it. Exact current bytes
+    # are always read, including after writes/rollback; only their validation is memoized.
+    documents = table("core_health_events")
+    for identity, payload in session.execute(select(documents.c.id, documents.c.payload)):
+        if _health_payload_identity(payload) != identity:
+            raise StateConflictError("HEALTH_EVENT_IDENTITY_MISMATCH")
+    # Validation and projection share the caller's real SQLite snapshot.
+    # Retain every recovery source for validation, even when it was itself recovered;
+    # malformed recovery evidence must never suppress an otherwise active blocker.
+    rows = session.execute(
+        text("""
+            WITH recovered AS (
+                SELECT reference.value
+                FROM core_health_events AS source,
+                     json_each(source.payload, '$.recovered_from') AS reference
+            )
+            SELECT event.id, event.payload
+            FROM core_health_events AS event
+            WHERE (
+                json_extract(event.payload, '$.state') IS NOT 'READY'
+                AND event.id NOT IN (SELECT value FROM recovered)
+            )
+            OR coalesce(json_type(event.payload, '$.recovered_from'), 'array') != 'array'
+            OR json_array_length(event.payload, '$.recovered_from') > 0
+            ORDER BY event.rowid
+        """)
     )
+    events = []
+    for identity, payload in rows:
+        event = Health.model_validate_json(payload)
+        if event.id != identity:
+            raise StateConflictError("HEALTH_EVENT_IDENTITY_MISMATCH")
+        events.append(event)
+    events.sort(key=lambda h: h.sequence)
     resolved = {identity for h in events for identity in h.recovered_from}
     return tuple(h for h in events if h.state != "READY" and h.id not in resolved)
 
