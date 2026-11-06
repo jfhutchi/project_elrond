@@ -206,10 +206,10 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
             if error.method == "POST" and error.client_order_id == intent.client_order_id:
                 with self.store.database.transaction() as session:
                     repo = StorageRepository(session)
-                    current = repo.get_order_intent(intent.intent_id)
+                    stored = repo.get_order_intent(intent.intent_id)
                     if (
-                        current is not None
-                        and current.state is IntentState.REJECTED
+                        stored is not None
+                        and stored.state is IntentState.REJECTED
                         and (
                             repo.get_broker_order_by_client_order_id(intent.client_order_id) is None
                         )

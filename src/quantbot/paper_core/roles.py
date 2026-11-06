@@ -700,11 +700,12 @@ async def run_role(
                                 now=store.clocks.sample()[0],
                             )
                             evidence_ids = (decision.id,)
+                            decisions = (decision,)
                             pending_candidate = decision if decision.action == "BUY" else None
                         with suppress(Exception):
                             observed.evaluate(
                                 observation,
-                                decisions if store.parallel_entries else (decision,),
+                                decisions,
                                 evidence_ids=(*observation_ids, *evidence_ids),
                                 now=store.clocks.sample()[0],
                             )
@@ -715,7 +716,7 @@ async def run_role(
                             not isinstance(observation, ObservationCohort)
                             or observation.observations
                         ) and not _retry_transient_wait(
-                            decisions if store.parallel_entries else (decision,),
+                            decisions,
                             source_end=observation.source_end,
                             now=store.clocks.sample()[0],
                         ):
@@ -793,7 +794,9 @@ async def run_role(
                     )
                 )
                 replace_idle_id = (
-                    idle_previous.id if same_idle and idle_previous.id != idle_anchor else None
+                    idle_previous.id
+                    if same_idle and idle_previous is not None and idle_previous.id != idle_anchor
+                    else None
                 )
                 publish_heartbeat(store, heartbeat, replace_idle_id=replace_idle_id)
                 if not same_idle:
