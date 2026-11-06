@@ -46,6 +46,7 @@ from quantbot.storage.schema import (
     position_protection_actions,
     position_protection_cycles,
     position_protection_evaluations,
+    runs,
     session_observations,
 )
 
@@ -633,7 +634,9 @@ def _health(
     # lookup key. The console still never renders it.
     expected = Settings().EXPECTED_ACCOUNT_ID
     account = repository.get_latest_account_snapshot(expected) if expected else None
-    runs = repository.list_runs()
+    # Liveness needs one indexed timestamp, not decoding the complete run history.
+    latest_run = session.scalar(select(func.max(runs.c.started_at)))
+    last_run_at = decode_utc(latest_run) if latest_run is not None else None
     observation = session.execute(
         select(
             session_observations.c.observed_at,
@@ -743,8 +746,8 @@ def _health(
         kill_switch_updated_at=None if kill is None else kill.updated_at,
         reconciliation_clean=(None if reconciliation is None else not reconciliation.diffs),
         reconciliation_diffs=0 if reconciliation is None else len(reconciliation.diffs),
-        last_run_at=runs[-1].started_at if runs else None,
-        days_since_last_run=(None if not runs else max((now - runs[-1].started_at).days, 0)),
+        last_run_at=last_run_at,
+        days_since_last_run=(None if last_run_at is None else max((now - last_run_at).days, 0)),
         last_observation_at=observed_at,
         minutes_since_last_observation=(
             None if observed_at is None else max(int((now - observed_at).total_seconds() // 60), 0)

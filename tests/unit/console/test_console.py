@@ -378,6 +378,38 @@ def test_a_recent_cycle_raises_nothing(database) -> None:
     assert not [item for item in state.attention if "days ago" in item]
 
 
+def test_health_reads_latest_timestamp_without_decoding_historical_run_details(database) -> None:
+    from datetime import timedelta
+
+    from sqlalchemy import select, update
+
+    from quantbot.console.state import read_console_state
+    from quantbot.storage.schema import runs
+
+    latest = datetime(2026, 8, 29, 20, 5, tzinfo=UTC)
+    with database.transaction() as session:
+        repository = StorageRepository(session)
+        # Insertion order differs from timestamp order.
+        repository.create_run("latest", strategy_identity(), started_at=latest)
+        repository.create_run(
+            "historical", strategy_identity(), started_at=latest - timedelta(days=10)
+        )
+        expected = repository.list_runs()[-1].started_at
+        session.execute(
+            update(runs).where(runs.c.run_id == "historical").values(detail_json="not-json")
+        )
+    with database.transaction() as session:
+        state = read_console_state(session, now=latest + timedelta(days=2))
+        assert state.health.last_run_at == expected == latest
+        assert state.health.days_since_last_run == 2
+        assert (
+            session.execute(
+                select(runs.c.detail_json).where(runs.c.run_id == "historical")
+            ).scalar_one()
+            == "not-json"
+        )
+
+
 def test_a_system_that_never_ran_is_distinguished_from_a_stale_one(database) -> None:
     """Never-run and stopped are different facts, and only one of them is a fault."""
     from datetime import UTC, datetime
