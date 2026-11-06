@@ -88,13 +88,12 @@ def compatible_successor(
     now: datetime,
 ) -> bool:
     """Accept a certified refresh, never a different economic ledger or risk envelope."""
-    if entry_inventory_objections(store, session, current, now=now):
-        return False
-
     if store.parallel_entries:
         from quantbot.paper_core.batch import compatible_batch_successor
 
         return compatible_batch_successor(store, session, decision, current, intent, now=now)
+    if entry_inventory_objections(store, session, current, now=now):
+        return False
     if any(
         intent is None or pending.intent_id != intent.intent_id
         for pending in StorageRepository(session).list_unresolved_order_intents()
@@ -311,7 +310,6 @@ def final_send_in_session(
     )
     if (
         proof is None
-        or entry_inventory_objections(store, session, proof, now=now)
         or not compatible_successor(store, session, decision, proof, intent, now=now)
         or session.execute(
             select(table("core_cash_authority_revocations").c.snapshot_id).where(
@@ -322,6 +320,7 @@ def final_send_in_session(
     ):
         reasons.append("CORE_CASH_AUTHORITY_UNAVAILABLE")
 
+    mark = None
     if proof is not None and store.parallel_entries:
         from quantbot.paper_core.portfolio import portfolio_budget
         from quantbot.paper_core.store import put
@@ -338,6 +337,7 @@ def final_send_in_session(
         from quantbot.paper_core.entry_policy import entry_policy_in_session
         from quantbot.paper_core.portfolio import current_entry_price
 
+        now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
         quote_reasons, risk_price = current_entry_price(store, mark, intent, decision, now=now)
         reasons.extend(quote_reasons)
         risk_account = mark.account if mark is not None else proof.account
@@ -373,6 +373,16 @@ def final_send_in_session(
         or plan.generation != store.config.generation
     ):
         reasons.append("CORE_ENTRY_AUTHORITY_MISMATCH")
+    # Validation can consume part of the short acquisition window. Recheck actual
+    # age immediately before authorization; the original snapshot start never moves.
+    now = store.clocks.sample()[0] if store.config.clock_profile == "PAPER_TIME_V2" else clock()
+    if mark is not None and not 0 <= (now - mark.recorded_at_utc).total_seconds() <= 5:
+        if "PORTFOLIO_MARKS_STALE_OR_MISMATCHED" not in reasons:
+            reasons.append("PORTFOLIO_MARKS_STALE_OR_MISMATCHED")
+    if proof is not None and store.parallel_entries:
+        if not 0 <= (now - proof.recorded_at_utc).total_seconds() <= 120:
+            if "PORTFOLIO_INVENTORY_STALE" not in reasons:
+                reasons.append("PORTFOLIO_INVENTORY_STALE")
     if not decision.recorded_at_utc <= now < decision.valid_until:
         reasons.append("CORE_ENTRY_DECISION_EXPIRED")
     if not plan.recorded_at_utc <= now < plan.deadline:

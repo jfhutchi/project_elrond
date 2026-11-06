@@ -553,6 +553,9 @@ class ExecutionCoordinator:
     async def _acquire_send_constraints(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
         """Optional provider constraints acquired before the final account/position reads."""
 
+    async def _acquire_final_market_data(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
+        """Optional volatile market evidence acquired after inventory, before all final gates."""
+
     async def _submit_order_created(
         self,
         intent: OrderIntent,
@@ -570,6 +573,8 @@ class ExecutionCoordinator:
         await self._acquire_send_constraints(intent, purpose)
         fresh_account = await self._broker.get_account()
         fresh_positions = tuple(await self._broker.get_positions())
+        fresh_open_orders = await self._open_exit_orders(purpose)
+        await self._acquire_final_market_data(intent, purpose)
         fresh_gate = self._gate(
             fresh_account,
             fresh_positions,
@@ -579,7 +584,7 @@ class ExecutionCoordinator:
             drawdown,
             risk_approved,
             vetoes,
-            await self._open_exit_orders(purpose),
+            fresh_open_orders,
         )
         # Lifetime/ownership authority is consumed after the last awaited acquisition.
         # Recovery of a possibly sent intent bypasses this prepared-send path entirely.

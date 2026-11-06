@@ -111,12 +111,17 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
             transactional_send_refusal=self._record_send_refusal,
         )
 
-    async def _begin_entry_acquisition(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
-
+    async def _begin_entry_acquisition(
+        self, intent: OrderIntent, purpose: OrderPurpose, *, defer_quote: bool = False
+    ) -> None:
         self._entry_acquired_at = self.store.clocks.sample()[0]
         self._entry_snapshot = None
         self._entry_quote = None
         self._entry_quote_id = None
+        if not defer_quote:
+            await self._acquire_entry_quote(intent, purpose)
+
+    async def _acquire_entry_quote(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
         if purpose is OrderPurpose.ENTRY and self.store.parallel_entries:
             source = getattr(self._broker, "entry_price_evidence", None)
             if source is not None:
@@ -232,9 +237,20 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
         reserve = getattr(self._broker, "reserve_submission", None)
         if reserve is not None:
             reserve(intent.client_order_id)
-        await self._begin_entry_acquisition(intent, purpose)
+        await self._begin_entry_acquisition(
+            intent,
+            purpose,
+            defer_quote=purpose is OrderPurpose.ENTRY
+            and self.store.config.evidence_lane == "BROKER_PAPER",
+        )
         if purpose is OrderPurpose.ENTRY and self.store.entry_policy is not None:
             self._entry_asset = await cast(Any, self._broker).entry_asset_eligibility(intent.symbol)
+
+    async def _acquire_final_market_data(self, intent: OrderIntent, purpose: OrderPurpose) -> None:
+        if purpose is OrderPurpose.ENTRY and self.store.config.evidence_lane == "BROKER_PAPER":
+            # The quote is newest, but account/position age still starts before
+            # every inventory read. A fresh quote cannot refresh stale account authority.
+            await self._acquire_entry_quote(intent, purpose)
 
     def _record_send_refusal(
         self, session: Session, intent: OrderIntent, purpose: OrderPurpose, reasons: tuple[str, ...]
