@@ -53,7 +53,7 @@ async def test_empty_cohort_reasons_and_evidence_survive_intervening_poll(
         ]
         assert len(cycles) == 2
         assert "DATA_UNAVAILABLE" in cycles[0]["outcomes"]
-        assert "AWAITING_EVALUATION_BOUNDARY" in cycles[1]["outcomes"]
+        assert "AWAITING_EVALUATION_BOUNDARY" not in cycles[1]["outcomes"]
         assert "DATA_UNAVAILABLE" in cycles[1]["outcomes"]
         assert cycles[0]["evaluation_evidence_ids"] == cycles[1]["evaluation_evidence_ids"]
         assert cycles[0]["evaluation_evidence_ids"]

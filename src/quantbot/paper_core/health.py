@@ -3,7 +3,7 @@
 import json
 from contextlib import nullcontext
 from datetime import datetime, timedelta
-from typing import Any, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, Literal, TypeVar
 
 from sqlalchemy import func, select, text
 from sqlalchemy.orm import Session
@@ -13,6 +13,9 @@ from quantbot.paper_core.store import CoreStore, latest_certification, put, tabl
 from quantbot.storage import StorageRepository
 
 RecoveryEvidence = TypeVar("RecoveryEvidence", bound=Evidence)
+
+if TYPE_CHECKING:
+    from quantbot.paper_core.time_evidence import TimeEvidence
 
 
 def active_health(session: Session) -> tuple[Health, ...]:
@@ -210,6 +213,103 @@ def recover_health(
     store: CoreStore, proof: ReconciliationProof, *, now: datetime, symbol: str | None = None
 ) -> None:
     recover_health_many(store, proof, now=now, symbols=(symbol or store.config.symbol,))
+
+
+def recover_inventory_health(
+    store: CoreStore, proof: ReconciliationProof, timing: "TimeEvidence", *, now: datetime
+) -> None:
+    """Recover inventory-only acquisition faults from independent Guardian evidence."""
+    from quantbot.paper_core.funds import entry_inventory_objections
+    from quantbot.paper_core.time_evidence import TimeEvidence, evidence_objections
+
+    if (
+        store.runtime_role != "guardian"
+        or store.config.evidence_lane != "BROKER_PAPER"
+        or store.config.clock_profile != "PAPER_TIME_V2"
+        or timing.id != store.runtime_time_evidence_id
+        or timing.release_id != store.config.release_id
+        or timing.evidence_lane != store.config.evidence_lane
+        or len(timing.samples) != 2
+        or any(s.provider.account_id != store.config.account_id for s in timing.samples)
+        or evidence_objections(timing, store.clocks)
+    ):
+        return
+    inventory_errors = {
+        "INVENTORY_ACQUISITION_RETRYABLE",
+        "INVENTORY_ACQUISITION_UNSTABLE",
+        "INVENTORY_PROTOCOL_INVALID",
+    }
+    with store.database.transaction() as session:
+        session.execute(text("BEGIN IMMEDIATE"))
+        now = max(now, store.clocks.sample()[0])
+        retained = session.execute(
+            select(table("core_time_evidence").c.payload).where(
+                table("core_time_evidence").c.id == timing.id
+            )
+        ).scalar_one_or_none()
+        if (
+            retained is None
+            or TimeEvidence.model_validate_json(retained) != timing
+            or evidence_objections(timing, store.clocks)
+            or not 0 <= (now - proof.recorded_at_utc).total_seconds() <= 120
+            or entry_inventory_objections(store, session, proof, now=now)
+        ):
+            return
+        repo = StorageRepository(session)
+        events = active_health(session)
+        if (
+            repo.get_kill_switch_state().engaged
+            or any(
+                h.scope != "LEARNING" and h.state in {"INTEGRITY_FAILURE", "MANUAL_PAUSE"}
+                for h in events
+            )
+            or any(
+                i.kind == "CORE_EVIDENCE_CONFLICT"
+                for i in repo.list_incidents(unresolved_only=True)
+            )
+        ):
+            return
+        failures = tuple(
+            h
+            for h in events
+            if (
+                h.role in {"GUARDIAN", "TRADER"}
+                and h.state in {"RETRYABLE_FAILURE", "PROTOCOL_FAILURE"}
+                and not h.protection_blocked
+                and h.objections
+                and set(h.objections) <= inventory_errors
+                and proof.generation > h.failed_generation
+                and proof.id not in h.evidence_ids
+                and (
+                    h.scope == "ACCOUNT"
+                    and h.scope_id == store.config.account_id
+                    or h.scope == "SYMBOL"
+                    and h.scope_id == store.config.symbol
+                )
+            )
+        )
+        if failures:
+            record_health(
+                store,
+                Health(
+                    recorded_at_utc=now,
+                    evidence_lane=store.config.evidence_lane,
+                    release_id=store.config.release_id,
+                    role="GUARDIAN",
+                    scope="ACCOUNT",
+                    scope_id=store.config.account_id,
+                    state="READY",
+                    objections=(),
+                    first_blocker=None,
+                    first_seen=now,
+                    last_seen=now,
+                    last_useful_progress=now,
+                    new_proof_id=proof.id,
+                    evidence_ids=(proof.id, timing.id),
+                    recovered_from=tuple(h.id for h in failures),
+                ),
+                session=session,
+            )
 
 
 def recover_health_many(

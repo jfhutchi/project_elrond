@@ -808,9 +808,11 @@ def _owned_exit_candidates(
         )
         repo = StorageRepository(session)
         intents = repo.get_order_intents([row["intent_id"] for row in rows])
-        orders = iter(repo.get_broker_orders_by_client_order_ids(
-            [intent.client_order_id for intent in intents if intent is not None]
-        ))
+        orders = iter(
+            repo.get_broker_orders_by_client_order_ids(
+                [intent.client_order_id for intent in intents if intent is not None]
+            )
+        )
         for row, intent in zip(rows, intents, strict=True):
             if intent is None:
                 continue
@@ -954,7 +956,8 @@ async def guardian_cycle(
         retained_plans: dict[str, str] = {}
         for offset in range(0, len(plan_ids), 500):
             retained_plans.update(
-                (row[0], row[1]) for row in session.execute(
+                (row[0], row[1])
+                for row in session.execute(
                     select(plans.c.id, plans.c.payload).where(
                         plans.c.id.in_(plan_ids[offset : offset + 500])
                     )
@@ -967,7 +970,8 @@ async def guardian_cycle(
         # per-entry point; mutable intent/order/fill ownership remains freshly read.
         payload = retained_plans.get(entry["protection_id"])
         plan = (
-            ProtectionPlan.model_validate_json(payload) if payload is not None
+            ProtectionPlan.model_validate_json(payload)
+            if payload is not None
             else store.read("core_protection_plans", entry["protection_id"], ProtectionPlan)
         )
         with store.database.transaction() as session:
@@ -1269,6 +1273,19 @@ async def guardian_cycle(
     if store.config.clock_profile == "PAPER_TIME_V2":
         now = broker.now
     process_outcomes(store, cutoff=now)
+    if (
+        proof_id is not None
+        and store.runtime_time_evidence_id is not None
+        and not set(reasons) - {"SESSION_OPENING_UNVERIFIED"}
+    ):
+        from quantbot.paper_core.health import recover_inventory_health
+
+        recover_inventory_health(
+            store,
+            store.read("core_reconciliation_proofs", proof_id, ReconciliationProof),
+            store.read("core_time_evidence", store.runtime_time_evidence_id, TimeEvidence),
+            now=now,
+        )
     receipt = CycleReceipt(
         recorded_at_utc=now,
         evidence_lane=store.config.evidence_lane,

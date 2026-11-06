@@ -97,23 +97,45 @@ def evaluate_entry(
     entry_policy: EntryPolicy | None = None,
     available_notional: Decimal | None = None,
 ) -> Decision:
-    objections = list(
-        observation_objections(
-            observation, dependency_freshness=config.clock_profile == "PAPER_TIME_V2"
-        )
+    evaluated_at = (
+        time_projection.wall_at
+        if time_projection is not None
+        else time_evidence.wall_anchor
+        if time_evidence is not None
+        else observation.recorded_at_utc
     )
-    objections.extend(observation_capability_objections(config, observation))
-    capability = capability_for(config, observation.symbol)
-    if capability is not None and model.mode != "COLLECT":
-        objections.append("OFFLINE_CAPABILITY_COLLECT_ONLY")
+    time_reasons = ()
+    quote_interval = None
     if config.clock_profile == "PAPER_TIME_V2":
-        objections.extend(
+        time_reasons = (
             ("TIME_EVIDENCE_MISSING",)
             if time_evidence is None
             else entry_time_objections(
                 observation, time_evidence, config, projection=time_projection
             )
         )
+        if not time_reasons and time_evidence is not None:
+            quote_interval = (
+                (time_projection.provider_earliest, time_projection.provider_latest)
+                if time_projection
+                else (
+                    evaluated_at + timedelta(seconds=time_evidence.offset_lower),
+                    evaluated_at + timedelta(seconds=time_evidence.offset_upper),
+                )
+            )
+    objections = list(
+        observation_objections(
+            observation,
+            dependency_freshness=config.clock_profile == "PAPER_TIME_V2",
+            evaluation_at=evaluated_at,
+            provider_interval=quote_interval,
+        )
+    )
+    objections.extend(observation_capability_objections(config, observation))
+    capability = capability_for(config, observation.symbol)
+    if capability is not None and model.mode != "COLLECT":
+        objections.append("OFFLINE_CAPABILITY_COLLECT_ONLY")
+    objections.extend(time_reasons)
     hybrid = config.selection_policy == "SIGNAL_OR_EXPLORE_V1"
     if hybrid and not _cohort_member:
         objections.append("SELECTION_COHORT_REQUIRED")
@@ -136,6 +158,7 @@ def evaluate_entry(
             )
         )
         or model.feature_version != observation.feature_version
+        and not (observation.feature_context == "OPENING_QUOTE_GAP_V1" and model.mode == "COLLECT")
     ):
         objections.append("CONTRACT_MISMATCH")
     from quantbot.paper_core.activation import Activation
@@ -143,8 +166,28 @@ def evaluate_entry(
     selection = activation if isinstance(activation, Activation) else None
     if hybrid and selection is None:
         objections.append("CORE_MODEL_UNCOMMISSIONED")
+    opening = observation.feature_context in {"OPENING_CONTIGUOUS_V1", "OPENING_QUOTE_GAP_V1"}
+    if opening:
+        if model.mode != "COLLECT":
+            objections.append("OPENING_CONTEXT_MODEL_UNSUPPORTED")
+        values = dict(observation.features)
+        # Explicit experimental opening screen, not a learned profit forecast.
+        # Do not buy merely because an opening observation exists.
+        qualified = (
+            values.get("return_5m", 0) > 0
+            and values.get("return_15m", 0) > 0.001
+            and values.get("relative_strength_15m", 0) > 0
+        )
+        if observation.feature_context == "OPENING_QUOTE_GAP_V1":
+            qualified = (
+                values.get("gap_return", 0) > 0.001
+                and values.get("relative_gap", 0) > 0
+                and 0 <= values.get("spread_bps", float("inf")) <= 10
+            )
+        if not qualified:
+            objections.append("OPENING_SIGNAL_NOT_QUALIFIED")
     prediction = None
-    if model.mode != "COLLECT":
+    if model.mode != "COLLECT" and not opening:
         if (
             selection is None
             or selection.model_id != model.id
@@ -168,13 +211,7 @@ def evaluate_entry(
         or not structural_funds_allowed(config, inventory)
     ):
         objections.append("INVENTORY_UNCERTIFIED")
-    evaluated_at = (
-        time_projection.wall_at
-        if time_projection is not None
-        else time_evidence.wall_anchor
-        if time_evidence is not None
-        else observation.recorded_at_utc
-    )
+
     if not 0 <= (evaluated_at - inventory.recorded_at_utc).total_seconds() <= 120:
         objections.append("INVENTORY_STALE")
     if dict(inventory.actual_quantities).get(observation.symbol, Decimal(0)) != 0:
@@ -500,11 +537,7 @@ def claim_entry(store: CoreStore, decision: Decision, plan: ProtectionPlan) -> E
             symbol=decision.symbol,
             side=OrderSide.BUY,
             order_type=OrderType.MARKET,
-            time_in_force=(
-                capability.time_in_force
-                if capability is not None
-                else TimeInForce.DAY
-            ),
+            time_in_force=(capability.time_in_force if capability is not None else TimeInForce.DAY),
             quantity=decision.quantity,
             created_at=decision.recorded_at_utc,
         )
@@ -626,7 +659,15 @@ async def _acquire_entry_authority(
             not entry_time_objections(
                 observation, time_evidence, store.config, projection=time_projection
             )
-            and not observation_objections(observation, dependency_freshness=True)
+            and not observation_objections(
+                observation,
+                dependency_freshness=True,
+                evaluation_at=time_projection.wall_at,
+                provider_interval=(
+                    time_projection.provider_earliest,
+                    time_projection.provider_latest,
+                ),
+            )
         ):
             from quantbot.paper_core.guardian import acknowledge_handoffs
 
@@ -643,7 +684,15 @@ async def _acquire_entry_authority(
                 if not entry_time_objections(
                     member, time_evidence, store.config, projection=time_projection
                 )
-                and not observation_objections(member, dependency_freshness=True)
+                and not observation_objections(
+                    member,
+                    dependency_freshness=True,
+                    evaluation_at=time_projection.wall_at,
+                    provider_interval=(
+                        time_projection.provider_earliest,
+                        time_projection.provider_latest,
+                    ),
+                )
             )
             recover_health_many(
                 store, inventory, now=store.clocks.sample()[0], symbols=fresh_symbols

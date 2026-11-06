@@ -4,21 +4,22 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.parse import quote
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import func, select, text, update
 from sqlalchemy.orm import Session
 
 from quantbot.brokers.alpaca import AlpacaPaperBrokerAdapter, _object_payload
 from quantbot.brokers.base import BrokerProtocolError
-from quantbot.domain import IntentState, OrderIntent, OrderSide
-from quantbot.learner.five_minute import FEATURE_NAMES, build_features
+from quantbot.domain import Bar, IntentState, OrderIntent, OrderSide
+from quantbot.learner.five_minute import FEATURE_NAMES, build_features, build_opening_features
 from quantbot.market_data.alpaca import AlpacaMarketDataClient
-from quantbot.market_data.base import AdjustmentMode, BarQuery, MarketDataFeed
+from quantbot.market_data.base import AdjustmentMode, BarQuery, MarketDataError, MarketDataFeed
 from quantbot.market_data.calendar import AlpacaMarketCalendar, session_sequence
 from quantbot.paper_core.contracts import (
     BrokerEvent,
@@ -26,6 +27,7 @@ from quantbot.paper_core.contracts import (
     LearningCalendar,
     Observation,
     ObservationCohort,
+    OpeningQuoteSource,
     ReconciliationProof,
     RoundTrip,
 )
@@ -69,6 +71,8 @@ class AlpacaCoreBroker:
         self.inventory_diagnostic_trace: list[tuple[str, float]] = []
         self.entry_source_objections: tuple[str, ...] = ()
         self.closed_session_window: tuple[datetime, datetime] | None = None
+        self._opening_daily_session: str | None = None
+        self._opening_daily_cache: dict[str, Bar] = {}
         self._discovery_state: DiscoveryStore | None = None
         self._research_state: DiscoveryStore | None = None
 
@@ -100,7 +104,7 @@ class AlpacaCoreBroker:
             self.adapter._transport.reserve_send(client_order_id)
 
     async def entry_price_evidence(self, symbol: str) -> EntryQuoteEvidence:
-        from quantbot.paper_core.portfolio import EntryQuoteEvidence
+        from quantbot.paper_core.portfolio import EntryQuoteEvidence, entry_quote_time_bounds
 
         policy = self.config.entry_policy
         if self.store is None or not (
@@ -109,18 +113,24 @@ class AlpacaCoreBroker:
             raise ValueError("ENTRY_QUOTE_SCOPE_UNAVAILABLE")
         async with asyncio.timeout(5):
             rows = await self.market.get_latest_quotes((symbol,))
+            # Receipt ordering supplies a fresh provider-domain check while the
+            # retained two-sample proof remains the release authority below.
+            provider_at = (await self.adapter.get_market_clock()).timestamp
         raw = rows.get(symbol)
         if raw is None:
             raise ValueError("ENTRY_PRICE_UNAVAILABLE_OR_STALE")
         ask, bid = Decimal(str(raw.get("ap"))), Decimal(str(raw.get("bp")))
         at = datetime.fromisoformat(str(raw.get("t")).replace("Z", "+00:00"))
+        lower, upper = entry_quote_time_bounds(self.store, now=self.now)
         if (
             not ask.is_finite()
             or not bid.is_finite()
             or min(ask, bid) <= 0
             or ask < bid
             or at.tzinfo is None
-            or not 0 <= (self.now - at).total_seconds() <= 5
+            or provider_at.tzinfo is None
+            or not 0 <= (provider_at - at).total_seconds() <= 5
+            or not at <= lower <= upper <= at + timedelta(seconds=5)
         ):
             raise ValueError("ENTRY_PRICE_UNAVAILABLE_OR_STALE")
         if policy is not None and policy.dynamic and (ask - bid) / bid * 10000 > 10:
@@ -311,6 +321,7 @@ class AlpacaCoreBroker:
         batch = await self.market.get_historical_bars(query)
         received = self.now
         session = next(s for s in sessions if s.open_at <= end < s.close_at)
+        opening = end < session.open_at + timedelta(minutes=35)
         restrictions = (
             await asyncio.gather(*(self._asset_objection(s) for s in symbols))
             if verify_assets and self.config.entry_policy is None
@@ -333,7 +344,8 @@ class AlpacaCoreBroker:
                 unavailable.append((symbol, restriction))
                 continue
             try:
-                rows = build_features(
+                build = build_opening_features if opening else build_features
+                rows = build(
                     tuple(b for b in batch.bars if b.symbol in {symbol, "SPY"}),
                     sequence,
                     decision_at=received,
@@ -343,7 +355,12 @@ class AlpacaCoreBroker:
                 )
                 matching = [r for r in rows if r.feature_at == end]
                 if not matching:
-                    unavailable.append((symbol, "FRESH_COMPLETE_BAR_UNAVAILABLE"))
+                    reason = (
+                        "OPENING_HISTORY_UNAVAILABLE"
+                        if opening
+                        else "FRESH_COMPLETE_BAR_UNAVAILABLE"
+                    )
+                    unavailable.append((symbol, reason))
                     continue
                 row = matching[-1]
                 latest = max(
@@ -370,6 +387,7 @@ class AlpacaCoreBroker:
                     price=latest.close,
                     raw_data_digest=content_id(batch),
                     feature_version="five-minute-price-alpha-v1",
+                    **({"feature_context": "OPENING_CONTIGUOUS_V1"} if opening else {}),
                     features=tuple(zip(FEATURE_NAMES, row.values, strict=True)),
                     dependencies=("SPY",),
                     dependency_available_at=(received,),
@@ -383,8 +401,182 @@ class AlpacaCoreBroker:
                     ),
                 )
             )
+        if (
+            opening
+            and not observations
+            and any(reason == "OPENING_HISTORY_UNAVAILABLE" for _, reason in unavailable)
+        ):
+            return await self._opening_quote_cohort(
+                symbols, sessions, session, restrictions, asset_receipts
+            )
         return ObservationCohort(
             source_end=end,
+            session_open=session.open_at,
+            session_close=session.close_at,
+            observations=tuple(observations),
+            unavailable=tuple(unavailable),
+        )
+
+    async def _opening_quote_cohort(
+        self,
+        symbols: tuple[str, ...],
+        sessions: Any,
+        session: Any,
+        restrictions: list[str | None],
+        asset_receipts: dict[str, AssetEligibility],
+    ) -> ObservationCohort:
+        """Independent opening rule inputs: previous completed day and current quotes."""
+        previous = max(
+            (s for s in sessions if s.close_at < session.open_at),
+            key=lambda s: s.close_at,
+            default=None,
+        )
+        required = tuple(sorted({*symbols, "SPY"}))
+        if previous is not None:
+            previous_key = previous.session_date.isoformat()
+            if previous_key != self._opening_daily_session:
+                self._opening_daily_cache.clear()
+                self._opening_daily_session = previous_key
+            missing = tuple(s for s in required if s not in self._opening_daily_cache)
+            if missing:
+                start = datetime.combine(
+                    previous.session_date, datetime.min.time(), tzinfo=ZoneInfo("America/New_York")
+                ).astimezone(UTC)
+                daily = await self.market.get_historical_bars(
+                    BarQuery(
+                        symbols=missing,
+                        start=start,
+                        end=previous.close_at,
+                        timeframe="1Day",
+                        feed=MarketDataFeed.IEX,
+                        adjustment=AdjustmentMode.ALL,
+                        limit=max(100, len(missing)),
+                    )
+                )
+                for symbol in missing:
+                    matches = [
+                        bar
+                        for bar in daily.bars
+                        if bar.symbol == symbol
+                        and bar.timestamp.astimezone(ZoneInfo("America/New_York")).date()
+                        == previous.session_date
+                        and bar.timestamp < previous.close_at
+                    ]
+                    if len(matches) == 1 and matches[0].close > 0:
+                        self._opening_daily_cache[symbol] = matches[0]
+                while len(self._opening_daily_cache) > 512:
+                    self._opening_daily_cache.pop(next(iter(self._opening_daily_cache)))
+        quotes = {}
+        if "SPY" in self._opening_daily_cache and any(
+            symbol in self._opening_daily_cache for symbol in symbols
+        ):
+            try:
+                quotes = await self.market.get_latest_quotes(required)
+            except MarketDataError:
+                # Failure is recorded per symbol below; it never authorizes an entry.
+                pass
+        captured = self.now
+        # This provider receipt only screens acquisition. The independent two-sample
+        # PAPER_TIME_V2 proof still authorizes evaluation, claim and send.
+        provider_at = (await self.adapter.get_market_clock()).timestamp if quotes else captured
+        observations: list[Observation] = []
+        unavailable: list[tuple[str, str]] = []
+        for symbol, restriction in zip(symbols, restrictions, strict=True):
+            if restriction:
+                unavailable.append((symbol, restriction))
+                continue
+            if not session.open_at <= captured < session.open_at + timedelta(minutes=35):
+                unavailable.append((symbol, "OPENING_WINDOW_ENDED"))
+                continue
+            if previous is None or any(s not in self._opening_daily_cache for s in (symbol, "SPY")):
+                unavailable.append((symbol, "OPENING_HISTORY_UNAVAILABLE"))
+                continue
+            sources = []
+            try:
+                for name in (symbol, "SPY"):
+                    raw = quotes[name]
+                    at = datetime.fromisoformat(str(raw["t"]).replace("Z", "+00:00"))
+                    bid, ask = Decimal(str(raw["bp"])), Decimal(str(raw["ap"]))
+                    if (
+                        at.tzinfo is None
+                        or at < session.open_at
+                        or provider_at.tzinfo is None
+                        or not 0 <= (provider_at - at).total_seconds() <= 5
+                        or not bid.is_finite()
+                        or not ask.is_finite()
+                        or not 0 < bid <= ask
+                    ):
+                        raise ValueError("invalid current quote")
+                    bar = self._opening_daily_cache[name]
+                    sources.append(
+                        OpeningQuoteSource(
+                            symbol=name,
+                            previous_session_open=previous.open_at,
+                            previous_session_close=previous.close_at,
+                            previous_bar_timestamp=bar.timestamp,
+                            previous_close=bar.close,
+                            quote_at=at,
+                            bid=bid,
+                            ask=ask,
+                        )
+                    )
+            except (KeyError, ValueError, TypeError, ArithmeticError):
+                unavailable.append((symbol, "OPENING_QUOTES_UNAVAILABLE"))
+                continue
+            asset, market = sources
+            gap = (asset.bid + asset.ask) / 2 / asset.previous_close - 1
+            market_gap = (market.bid + market.ask) / 2 / market.previous_close - 1
+            spread = (asset.ask - asset.bid) / asset.bid * 10000
+            self._marks[symbol] = (asset.bid, asset.quote_at)
+            observations.append(
+                Observation(
+                    recorded_at_utc=captured,
+                    evidence_lane="BROKER_PAPER",
+                    release_id=self.store.config.release_id
+                    if self.store
+                    else self.config.core.release_id,
+                    symbol=symbol,
+                    feed="alpaca",
+                    source_start=previous.close_at,
+                    source_end=captured,
+                    available_at=captured,
+                    capture_received_at=captured,
+                    price=asset.ask,
+                    raw_data_digest=content_id(
+                        dict(
+                            sources=sources,
+                            quotes={name: quotes[name] for name in (symbol, "SPY")},
+                            feed="iex",
+                            adjustment="all",
+                        )
+                    ),
+                    feature_version="opening-quote-gap-v1",
+                    feature_context="OPENING_QUOTE_GAP_V1",
+                    opening_quote_sources=(asset, market),
+                    features=(
+                        ("gap_return", float(gap)),
+                        ("market_gap_return", float(market_gap)),
+                        ("relative_gap", float(gap - market_gap)),
+                        ("spread_bps", float(spread)),
+                    ),
+                    dependencies=("SPY",),
+                    dependency_available_at=(market.quote_at,),
+                    sequence=int(captured.timestamp() // 300),
+                    session_open=session.open_at,
+                    session_close=session.close_at,
+                    **(
+                        {"asset_eligibility": asset_receipts[symbol]}
+                        if symbol in asset_receipts
+                        else {}
+                    ),
+                )
+            )
+        return ObservationCohort(
+            # With no observed quotes this is only a failed boundary acquisition.
+            # Preserve its per-symbol reasons without inventing a quote timestamp.
+            source_end=captured
+            if observations
+            else captured.replace(minute=captured.minute // 5 * 5, second=0, microsecond=0),
             session_open=session.open_at,
             session_close=session.close_at,
             observations=tuple(observations),

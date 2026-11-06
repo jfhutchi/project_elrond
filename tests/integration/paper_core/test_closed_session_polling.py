@@ -79,7 +79,8 @@ async def test_historical_inventory_failure_needs_new_certification_before_idle(
         poll.observe(store, broker, receipt)
         assert poll.waiting(store), "A new verified reconciliation permits reduced polling only"
         with db.transaction() as session:
-            assert any(h.state == "PROTOCOL_FAILURE" for h in active_health(session))
+            assert not any(h.state == "PROTOCOL_FAILURE" for h in active_health(session))
+        assert any(h.get("recovered_from") for h in store.documents("core_health_events"))
         report(
             store,
             role="GUARDIAN",

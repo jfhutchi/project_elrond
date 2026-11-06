@@ -211,11 +211,29 @@ class HoldingDeadline(PortfolioEvidence):
         return self
 
 
+class OpeningQuoteSource(BrokerModel):
+    """Retained observed prices, not invented bars or a prediction."""
+
+    symbol: str
+    previous_session_open: datetime
+    previous_session_close: datetime
+    previous_bar_timestamp: datetime
+    previous_close: Positive
+    quote_at: datetime
+    bid: Positive
+    ask: Positive
+
+
 class Observation(Evidence):
     legacy_optional_fields = frozenset(
         {
-            "time_evidence_id", "session_open", "capture_received_at",
-            "asset_eligibility", "asset_session",
+            "time_evidence_id",
+            "session_open",
+            "capture_received_at",
+            "asset_eligibility",
+            "asset_session",
+            "feature_context",
+            "opening_quote_sources",
         }
     )
     asset_session: AssetSession | None = None
@@ -231,13 +249,43 @@ class Observation(Evidence):
     raw_data_digest: str = Field(min_length=1)
     price: Positive
     features: tuple[tuple[str, float], ...]
-    feature_version: Literal["synthetic-causal-v1", "five-minute-price-alpha-v1"] = (
-        "synthetic-causal-v1"
-    )
+    feature_version: Literal[
+        "synthetic-causal-v1", "five-minute-price-alpha-v1", "opening-quote-gap-v1"
+    ] = "synthetic-causal-v1"
+    feature_context: Literal[
+        "REGULAR_SESSION_V1", "OPENING_CONTIGUOUS_V1", "OPENING_QUOTE_GAP_V1"
+    ] = "REGULAR_SESSION_V1"
+    opening_quote_sources: tuple[OpeningQuoteSource, OpeningQuoteSource] | None = None
     dependencies: tuple[str, ...]
     dependency_available_at: tuple[datetime | None, ...]
     sequence: int = Field(ge=1)
     session_close: datetime
+
+    @model_validator(mode="after")
+    def opening_context_bounds(self) -> Self:
+        if self.feature_context != "OPENING_CONTIGUOUS_V1":
+            return self
+        if (
+            self.feature_version != "five-minute-price-alpha-v1"
+            or self.session_open is None
+            or any(
+                t.tzinfo is None
+                for t in (
+                    self.session_open,
+                    self.source_start,
+                    self.source_end,
+                    self.recorded_at_utc,
+                )
+            )
+            or self.source_start != self.source_end - timedelta(minutes=35)
+            or not self.session_open <= self.source_end < self.session_open + timedelta(minutes=35)
+            or self.source_end.timestamp() % 300 != 0
+            or not (
+                self.source_end <= self.recorded_at_utc < self.session_open + timedelta(minutes=35)
+            )
+        ):
+            raise ValueError("opening context requires exact completed current-boundary history")
+        return self
 
 
 class ModelArtifact(BrokerModel):

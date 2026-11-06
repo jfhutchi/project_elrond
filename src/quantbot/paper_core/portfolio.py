@@ -1,7 +1,7 @@
 """Locked portfolio budgets and independently sourced daily-loss authority."""
 
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -22,7 +22,7 @@ from quantbot.paper_core.economics import limits
 from quantbot.paper_core.funds import entry_inventory_objections, same_spending_authority
 from quantbot.paper_core.health import universe_health_objections
 from quantbot.paper_core.store import CoreStore, put, table
-from quantbot.paper_core.time_evidence import TimeEvidence
+from quantbot.paper_core.time_evidence import TimeEvidence, project_time_evidence
 from quantbot.storage import StorageRepository
 from quantbot.storage.database import encode_utc
 
@@ -69,6 +69,34 @@ class CurrentPortfolioSnapshot(PortfolioEvidence):
     entry_quote_id: str | None = None
 
 
+def entry_quote_time_bounds(store: CoreStore, *, now: datetime) -> tuple[datetime, datetime]:
+    """Use the existing verified clock proof; an invalid retained proof is never a fallback."""
+    identity = store.runtime_time_evidence_id
+    if identity is None:
+        return now, now
+    try:
+        timing = store.read("core_time_evidence", identity, TimeEvidence)
+        projection = project_time_evidence(timing, store.clocks)
+    except (ValueError, NoResultFound) as error:
+        raise ValueError("ENTRY_QUOTE_TIME_UNVERIFIED") from error
+    if (
+        store.config.clock_profile != "PAPER_TIME_V2"
+        or timing.id != identity
+        or timing.contract != "PAPER_TIME_V2"
+        or timing.release_id != store.config.release_id
+        or timing.evidence_lane != store.config.evidence_lane
+        or store.config_id not in timing.source_refs
+        or len(timing.samples) != 2
+        or any(
+            s.provider.account_id != store.config.account_id or s.provider.provider != "alpaca"
+            for s in timing.samples
+        )
+        or projection.objections
+    ):
+        raise ValueError("ENTRY_QUOTE_TIME_UNVERIFIED")
+    return projection.provider_earliest, projection.provider_latest
+
+
 def current_entry_price(
     store: CoreStore,
     mark: CurrentPortfolioSnapshot | None,
@@ -80,6 +108,14 @@ def current_entry_price(
     """Conservative price authority; a lower quote never increases the original quantity."""
     if mark is None and store.config.evidence_lane != "BROKER_PAPER":
         return (), decision.price
+    try:
+        lower, upper = (
+            entry_quote_time_bounds(store, now=now)
+            if (store.config.evidence_lane == "BROKER_PAPER")
+            else (now, now)
+        )
+    except ValueError:
+        return ("ENTRY_QUOTE_TIME_UNVERIFIED",), decision.price
     if (
         mark is None
         or mark.entry_symbol != intent.symbol
@@ -87,7 +123,10 @@ def current_entry_price(
         or mark.entry_price <= 0
         or mark.entry_price_asof is None
         or mark.entry_price_source is None
-        or not 0 <= (now - mark.entry_price_asof).total_seconds() <= 5
+        or not mark.entry_price_asof
+        <= lower
+        <= upper
+        <= mark.entry_price_asof + timedelta(seconds=5)
         or store.config.evidence_lane == "BROKER_PAPER"
         and mark.entry_price_source != "IEX_ASK_V1"
     ):

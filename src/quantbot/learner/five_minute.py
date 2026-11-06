@@ -130,6 +130,7 @@ def _build_features(
     source_snapshot_hash: str,
     receipt_at: datetime,
     evaluation_class: EvidenceClass,
+    opening_context: bool = False,
 ) -> tuple[FiveMinuteFeatureRow, ...]:
     decision_at, receipt_at = _aware(decision_at), _aware(receipt_at)
     if evaluation_class == "PROSPECTIVE_LOCAL" and receipt_at > decision_at:
@@ -144,20 +145,25 @@ def _build_features(
     session = next((s for s in calendar.sessions if s.open_at <= decision_at < s.close_at), None)
     if session is None:
         return ()
+    if opening_context and decision_at >= session.open_at + HORIZON + INTERVAL:
+        return ()
     required = (*sorted(symbols), "SPY")
+    start = session.open_at - HORIZON - INTERVAL if opening_context else session.open_at
     eligible = [
         stamp
         for symbol, stamp in indexed
-        if symbol in required and session.open_at <= stamp and stamp + INTERVAL <= decision_at
+        if symbol in required and start <= stamp and stamp + INTERVAL <= decision_at
     ]
     if not eligible:
         return ()
     last = max(eligible)
     cutoff = last + INTERVAL
+    if opening_context and cutoff < session.open_at:
+        return ()
     if decision_at - cutoff > timedelta(minutes=2) or cutoff + HORIZON > session.close_at:
         return ()
     first = last - HORIZON
-    if first < session.open_at:
+    if first < start:
         return ()
     stamps = tuple(first + i * INTERVAL for i in range(7))
     if any((s, t) not in indexed for s in required for t in stamps):
@@ -197,6 +203,33 @@ def build_features(
         source_snapshot_hash=source_snapshot_hash,
         receipt_at=receipt_at,
         evaluation_class="PROSPECTIVE_LOCAL",
+    )
+
+
+def build_opening_features(
+    bars: Sequence[Bar],
+    calendar: XNYSSessionSequence,
+    *,
+    decision_at: datetime,
+    symbols: tuple[str, ...],
+    source_snapshot_hash: str,
+    receipt_at: datetime,
+) -> tuple[FiveMinuteFeatureRow, ...]:
+    """Same mathematics, explicitly separate opening sampling context.
+
+    Only actual contiguous completed bars may precede today's regular open.
+    This does not authorize existing fitted models or their training pipeline;
+    callers must retain OPENING_CONTIGUOUS_V1 on the resulting observation.
+    """
+    return _build_features(
+        bars,
+        calendar,
+        decision_at=decision_at,
+        symbols=symbols,
+        source_snapshot_hash=source_snapshot_hash,
+        receipt_at=receipt_at,
+        evaluation_class="PROSPECTIVE_LOCAL",
+        opening_context=True,
     )
 
 

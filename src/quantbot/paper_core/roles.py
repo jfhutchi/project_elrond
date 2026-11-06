@@ -45,6 +45,36 @@ Role = Literal["trader", "guardian", "outcomes"]
 
 CLOSED_SESSION_IDLE = "CLOSED_SESSION_IDLE"
 
+_TRANSIENT_ENTRY_WAIT_GATES = frozenset(
+    {
+        "CORE_ENTRY_FENCED",
+        "CORE_INDEPENDENT_GUARDIAN_NOT_READY",
+        "SESSION_OPENING_UNVERIFIED",
+        "SESSION_CAPITAL_UNVERIFIED",
+        "PORTFOLIO_INVENTORY_STALE",
+        "INVENTORY_STALE",
+        "INVENTORY_UNCERTIFIED",
+        "INVENTORY_ACQUISITION_RETRYABLE",
+        "CORE_CASH_AUTHORITY_UNAVAILABLE",
+        "CORE_INVENTORY_AUTHORITY_UNAVAILABLE",
+        "CORE_PAPER_FUNDS_SOURCE_INVALID",
+    }
+)
+
+
+def _retry_transient_wait(
+    decisions: tuple[Decision, ...], *, source_end: datetime, now: datetime
+) -> bool:
+    """Reevaluate unclaimed waits while the original boundary is still fresh."""
+    return bool(
+        decisions
+        and 0 <= (now - source_end).total_seconds() <= 120
+        and all(
+            d.action == "WAIT" and d.gates and set(d.gates) <= _TRANSIENT_ENTRY_WAIT_GATES
+            for d in decisions
+        )
+    )
+
 
 def _idle_signature(store: CoreStore, proof: ReconciliationProof | None = None) -> str | None:
     """Local change detector, never spending or protection authority."""
@@ -673,7 +703,18 @@ async def run_role(
                                 evidence_ids=(*observation_ids, *evidence_ids),
                                 now=store.clocks.sample()[0],
                             )
-                        last_boundary = boundary
+                        # A provider can publish a boundary's bars a few seconds
+                        # late. Empty cohorts have made no decision or reservation;
+                        # retry them at the normal bounded role cadence.
+                        if (
+                            not isinstance(observation, ObservationCohort)
+                            or observation.observations
+                        ) and not _retry_transient_wait(
+                            decisions if store.parallel_entries else (decision,),
+                            source_end=observation.source_end,
+                            now=store.clocks.sample()[0],
+                        ):
+                            last_boundary = boundary
                     pending_batch = retry_batch_candidates(store, pending_batch)
                     pending_candidate = retry_entry_candidate(store, pending_candidate)
                     send_reasons = await dispatch_entries(store, broker, observed=observed)

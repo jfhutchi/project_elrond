@@ -255,7 +255,35 @@ def entry_time_objections(
         reasons.append("TIME_SESSION_BOUNDARY")
     if p.session_close != observation.session_close:
         reasons.append("TIME_CALENDAR_MISMATCH")
-    if lower < observation.source_end or upper > observation.source_end + timedelta(seconds=120):
+    if observation.feature_context == "OPENING_QUOTE_GAP_V1":
+        # source_end is a local receipt for quotes, not a provider bar boundary.
+        # Compare provider time with retained provider quote timestamps, and
+        # separately prove that the local capture preceded this evaluation.
+        wall = projection.wall_at if projection else evidence.wall_anchor
+        sources = observation.opening_quote_sources
+        try:
+            valid_quotes = bool(
+                observation.feature_version == "opening-quote-gap-v1"
+                and sources is not None
+                and len(sources) == 2
+                and tuple(s.symbol for s in sources) == (observation.symbol, "SPY")
+                and observation.capture_received_at
+                == observation.source_end
+                == observation.available_at
+                == observation.recorded_at_utc
+                and 0 <= (wall - observation.source_end).total_seconds() <= 5
+                and all(
+                    s.quote_at.tzinfo is not None
+                    and p.session_open <= s.quote_at <= lower
+                    and upper <= s.quote_at + timedelta(seconds=5)
+                    for s in sources
+                )
+            )
+        except (AttributeError, TypeError, ValueError):
+            valid_quotes = False
+        if not valid_quotes:
+            reasons.append("TIME_OBSERVATION_BOUNDARY")
+    elif lower < observation.source_end or upper > observation.source_end + timedelta(seconds=120):
         reasons.append("TIME_OBSERVATION_BOUNDARY")
     return tuple(dict.fromkeys(reasons))
 

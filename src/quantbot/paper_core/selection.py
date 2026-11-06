@@ -24,13 +24,18 @@ SIGNAL_OR_EXPLORE_SESSION_LIMIT = 6
 
 
 def boundary_id(config: CoreConfig, cohort: ObservationCohort) -> str:
+    cutoff = cohort.source_end
+    if any(o.feature_context == "OPENING_QUOTE_GAP_V1" for o in cohort.observations):
+        # Live quote captures vary within a boundary; they must not create new
+        # reservations after a restart or a later quote in the same five minutes.
+        cutoff = cutoff.replace(minute=cutoff.minute // 5 * 5, second=0, microsecond=0)
     return content_id(
         {
             "account": config.account_id,
             "owner": config.owner,
             "session_open": cohort.session_open,
             "session_close": cohort.session_close,
-            "source_end": cohort.source_end,
+            "source_end": cutoff,
         }
     )
 
@@ -56,6 +61,9 @@ def validate_cohort(
     config: CoreConfig, cohort: ObservationCohort, *, entry_policy: EntryPolicy | None = None
 ) -> None:
     members = [o.symbol for o in cohort.observations] + [s for s, _ in cohort.unavailable]
+    quote_context = bool(cohort.observations) and all(
+        o.feature_context == "OPENING_QUOTE_GAP_V1" for o in cohort.observations
+    )
     if entry_policy is not None and entry_policy.dynamic:
         d = cohort.discovery
         if (
@@ -68,11 +76,22 @@ def validate_cohort(
             or any(s.scan_receipt_id not in d.scan_receipt_ids for s in d.samples)
             or d.eligible_count < len(members)
             or not 0 <= (d.recorded_at - d.catalog_at).total_seconds() <= 3600
-            or not 0 <= (d.recorded_at - cohort.source_end).total_seconds() <= 120
+            or quote_context
+            and not 0 <= (cohort.source_end - d.catalog_at).total_seconds() <= 3600
+            or not (
+                0 <= (cohort.source_end - d.recorded_at).total_seconds() <= 120
+                if quote_context
+                else 0 <= (d.recorded_at - cohort.source_end).total_seconds() <= 120
+            )
             or any(not entry_policy.permits(s) for s in members)
             or any(
                 not 0 <= (d.recorded_at - s.source_at).total_seconds() <= 90
                 or not 0 <= (d.recorded_at - s.received_at).total_seconds() <= 90
+                or quote_context
+                and (
+                    not 0 <= (cohort.source_end - s.source_at).total_seconds() <= 90
+                    or not 0 <= (cohort.source_end - s.received_at).total_seconds() <= 90
+                )
                 or s.dollar_volume <= 0
                 or not 0 <= s.spread_bps <= 10
                 for s in d.samples
@@ -81,13 +100,15 @@ def validate_cohort(
             raise ValueError("discovery cohort requires exact fresh captured membership")
     if (
         len(members) != len(set(members))
+        or len({o.feature_context for o in cohort.observations}) > 1
         or set(members) != set(cohort_symbols(config, cohort, entry_policy))
         or any(not reason for _, reason in cohort.unavailable)
         or any(
             t.tzinfo is None for t in (cohort.source_end, cohort.session_open, cohort.session_close)
         )
         or not cohort.session_open <= cohort.source_end < cohort.session_close
-        or cohort.source_end.timestamp() % 300 != 0
+        or not quote_context
+        and cohort.source_end.timestamp() % 300 != 0
         or any(
             o.source_end != cohort.source_end
             or o.session_open != cohort.session_open

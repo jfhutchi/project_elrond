@@ -157,6 +157,9 @@ def _metadata(session: Session) -> list[dict[str, Any]]:
             select(
                 index,
                 observations.c.id.label("observation_id"),
+                func.json_extract(observations.c.payload, "$.feature_context").label(
+                    "feature_context"
+                ),
                 func.json_extract(observations.c.payload, "$.feature_version").label(
                     "feature_version"
                 ),
@@ -198,6 +201,9 @@ def _revision_metadata(session: Session, cutoff: datetime) -> list[dict[str, Any
                 revisions.c.id.label("outcome_id"),
                 *columns,
                 observations.c.id.label("observation_id"),
+                func.json_extract(observations.c.payload, "$.feature_context").label(
+                    "feature_context"
+                ),
                 func.json_extract(observations.c.payload, "$.feature_version").label(
                     "feature_version"
                 ),
@@ -277,6 +283,8 @@ def _select(
             reason = "LOT_EVIDENCE_QUARANTINED"
         elif row["lot_id"] in pending:
             reason = "OUTCOME_RECONCILIATION_PENDING"
+        elif row.get("feature_context") not in (None, "REGULAR_SESSION_V1"):
+            reason = "OPENING_CONTEXT_REQUIRES_SEPARATE_VALIDATION"
         elif (
             row["dataset"] != policy.dataset
             or row["policy_id"] != policy.policy_id
@@ -437,7 +445,8 @@ def _historical_comparator(
             or ack.policy.evidence_lane != decision.evidence_lane
             or ack.evidence_lane != decision.evidence_lane
             or ack.release_id != decision.release_id
-            or ack.policy.procedure_version != (
+            or ack.policy.procedure_version
+            != (
                 "daily-paper-exploration-walk-forward-v3"
                 if target_contract == "owned-executed-paper-gross-return-v1"
                 else "daily-all-history-walk-forward-v2"
