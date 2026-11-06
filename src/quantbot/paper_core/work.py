@@ -12,6 +12,7 @@ from sqlalchemy.sql import Select
 
 from quantbot.paper_core.contracts import CashActivity, GuardianReceipt
 from quantbot.paper_core.store import table
+from quantbot.research.manifest import content_id
 from quantbot.storage.database import decode_utc, encode_utc
 
 NOTIFICATIONS = "core_outcome_notifications"
@@ -43,9 +44,36 @@ def index_document(session: Session, name: str, identity: str, data: dict[str, A
     else:
         session.execute(index.insert().values(kind=name, id=identity, **values))
         if name == "core_reconciliation_proofs" and data["fill_ids"]:
+            # A polling proof stays independent and immutable. Only its lookup
+            # projection shares an exact fill set; it grants no certification.
+            fills = sorted(set(data["fill_ids"]))
+            set_id = content_id(fills)
+            anchor = session.execute(
+                select(index.c.reference).where(
+                    index.c.kind == "core_fill_set", index.c.id == set_id
+                )
+            ).scalar_one_or_none()
+            if anchor is None:
+                anchor = identity
+                session.execute(
+                    table("core_proof_fill_memberships").insert(),
+                    [{"proof_id": identity, "fill_id": fill} for fill in fills],
+                )
+                session.execute(
+                    index.insert().values(
+                        kind="core_fill_set",
+                        id=set_id,
+                        reference=anchor,
+                        available_at=data["recorded_at_utc"],
+                    )
+                )
             session.execute(
-                table("core_proof_fill_memberships").insert(),
-                [{"proof_id": identity, "fill_id": f} for f in sorted(set(data["fill_ids"]))],
+                index.insert().values(
+                    kind="core_proof_fill_set",
+                    id=identity,
+                    reference=anchor,
+                    available_at=data["recorded_at_utc"],
+                )
             )
         if name == "core_broker_event_sources" and data.get("cash_activity"):
             activity = CashActivity.model_validate(data["cash_activity"])

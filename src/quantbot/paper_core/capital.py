@@ -71,6 +71,10 @@ def opening_for_session(
     if not timing.samples or timing.objections:
         return None
     session_open = timing.samples[-1].provider.session_open
+    if timing.samples[-1].provider.timestamp < session_open:
+        # Closed-market clocks point at the next session. Scanning every old
+        # proof/time receipt cannot supply an opening that has not happened.
+        return None
     existing = _retained_opening(store, session_open)
     if existing is not None:
         return existing

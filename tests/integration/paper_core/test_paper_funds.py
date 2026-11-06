@@ -151,9 +151,17 @@ class FundsProvider(ProviderFixture):
         )
 
 
-async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider):
+async def prepare(
+    tmp_path,
+    *,
+    hybrid=True,
+    provider_factory=FundsProvider,
+    entry_policy=None,
+    initial_wall=None,
+    warmup_seconds=300,
+):
     clocks = Clocks()
-    clocks.wall = datetime(2026, 10, 14, 14, 0, 3, tzinfo=UTC)
+    clocks.wall = initial_wall or datetime(2026, 10, 14, 14, 0, 3, tzinfo=UTC)
     provider = provider_factory(clocks)
     source = tmp_path / "canonical.db"
     Database.create(source).close()
@@ -177,6 +185,8 @@ async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider):
         learning_origin=clocks.wall - timedelta(days=1),
         activation_policy="DAILY_BOUNDED_V3" if hybrid else "DAILY_BOUNDED_V2",
     )
+    if entry_policy is not None:
+        config = config.model_copy(update={"entry_policy": entry_policy})
     release = prepare_release(config)
 
     class Market:
@@ -227,7 +237,7 @@ async def prepare(tmp_path, *, hybrid=True, provider_factory=FundsProvider):
         StorageRepository(session).set_kill_switch(
             False, reason="OFFLINE_PROVIDER_PROTOCOL_FIXTURE", updated_at=clocks.wall
         )
-    clocks.advance(300)
+    clocks.advance(warmup_seconds)
     await synchronize(store, broker, now=clocks.wall)
     ready(store)
     return db, store, broker, provider, clocks

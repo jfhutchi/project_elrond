@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from decimal import Decimal
 
-from sqlalchemy import and_, literal, or_, select, text, update
+from sqlalchemy import and_, func, literal, or_, select, text, update
 from sqlalchemy.orm import Session
 
 from quantbot.brokers.base import BrokerProtocolError
@@ -513,11 +513,18 @@ def _resolve(store: CoreStore, session: Session, lot_id: str, as_of: datetime) -
         documents = table("core_reconciliation_proofs")
         index = table("core_document_index")
         memberships = table("core_proof_fill_memberships")
+        shared = index.alias("proof_fill_set")
         certified = (
             select(documents.c.payload)
             .join(table(name), documents.c.id == table(name).c.proof_id)
             .join(index, documents.c.id == index.c.id)
-            .join(memberships, documents.c.id == memberships.c.proof_id)
+            .outerjoin(
+                shared, (shared.c.id == documents.c.id) & (shared.c.kind == "core_proof_fill_set")
+            )
+            .join(
+                memberships,
+                func.coalesce(shared.c.reference, documents.c.id) == memberships.c.proof_id,
+            )
             .where(
                 index.c.kind == "core_reconciliation_proofs",
                 index.c.reference == store.config.account_id,
