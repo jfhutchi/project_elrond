@@ -1,0 +1,19 @@
+{
+  "before": {
+    "source_files": 385,
+    "maintainable_lines": 107203,
+    "production_dependencies": 13
+  },
+  "after": {
+    "source_files": 400,
+    "maintainable_lines": 115877,
+    "production_dependencies": 13
+  },
+  "source_lines_added": 9670,
+  "source_lines_removed": 338,
+  "services_before": 5,
+  "services_after": 5,
+  "dependencies_added": 0,
+  "production_database_test_copies": 0,
+  "method": "Tracked src/**/*.py; nonblank non-comment lines, including docstrings. Not net code reduction."
+}

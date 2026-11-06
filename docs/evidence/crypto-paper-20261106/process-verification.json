@@ -1,0 +1,73 @@
+{
+  "trading_engines": 1,
+  "python_launchers": 5,
+  "processes": [
+    {
+      "ProcessId": 15892,
+      "ParentProcessId": 34340,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -u -m quantbot.paper_core.research_worker --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --seal D:\\Elrond\\releases\\market-research-aad7b912accd-20261026\\research-seal.json --settings D:\\Elrond\\config\\market-research-aad7b912accd.json",
+      "WorkingSetSize": 106532864
+    },
+    {
+      "ProcessId": 32744,
+      "ParentProcessId": 34608,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role outcomes --entry-disabled",
+      "WorkingSetSize": 144150528
+    },
+    {
+      "ProcessId": 15680,
+      "ParentProcessId": 31912,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role guardian --entry-disabled",
+      "WorkingSetSize": 154484736
+    },
+    {
+      "ProcessId": 32124,
+      "ParentProcessId": 27468,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -m quantbot.operations.service --env-file D:\\Elrond\\config\\console-20261105.env --commit 836a4e09d2c8e99d1f24d5f8308062cbc03d2605 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component console --experiment-store D:\\Elrond\\learner\\adaptive-paper-research-20261006\\experiment.db",
+      "WorkingSetSize": 207532032
+    },
+    {
+      "ProcessId": 5452,
+      "ParentProcessId": 27428,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role trader",
+      "WorkingSetSize": 163131392
+    }
+  ],
+  "application_processes": 5,
+  "tasks": [
+    {
+      "TaskName": "Elrond Console",
+      "State": 4
+    },
+    {
+      "TaskName": "Elrond Paper Core Guardian",
+      "State": 4
+    },
+    {
+      "TaskName": "Elrond Paper Core Outcomes",
+      "State": 4
+    },
+    {
+      "TaskName": "Elrond Paper Core Trader",
+      "State": 4
+    },
+    {
+      "TaskName": "Elrond Paper Deadline",
+      "State": 1
+    },
+    {
+      "TaskName": "Elrond Protection",
+      "State": 1
+    },
+    {
+      "TaskName": "Elrond Research",
+      "State": 4
+    }
+  ],
+  "at": "2026-11-06T23:12:38.4087036+00:00"
+}

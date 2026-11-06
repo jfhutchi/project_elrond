@@ -1,0 +1,330 @@
+{
+  "at": "2026-11-06T23:11:54.169408+00:00",
+  "host": "Leannes-Laptop",
+  "source_commit": "d6278971c704bdc69d0bc167fe687c21fa3a5126",
+  "console_commit": "6453a770921f122bdb0c4dce8bf7c014d2a5b499",
+  "runtime_release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
+  "pins_verified": 402,
+  "roles": {
+    "trader": {
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "cycle_seconds": 2.125,
+      "evidence_ids": [
+        "a14de303de78df664895621860859b1441de3f593dfd3da08ec9f82faa431f32"
+      ],
+      "first_blocker": null,
+      "generation": 1,
+      "guardian_receipt_id": null,
+      "last_useful_progress": "2026-11-06T23:10:46.766358+00:00",
+      "objections": [],
+      "owner": "paper-core",
+      "pid": 5452,
+      "process_epoch": "ac5abd8e-4c61-42da-9046-c5e27fc1d791",
+      "proof_age_seconds": 3.712526,
+      "recorded_at": "2026-11-06T23:10:46.766358+00:00",
+      "release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
+      "role": "trader",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "time_proof_age_seconds": 15.812000000150874,
+      "valid_until": "2026-11-06T23:11:16.766358+00:00"
+    },
+    "guardian": {
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "cycle_seconds": 8.172000000020489,
+      "evidence_ids": [
+        "1641d9f7843973210eaf06b6579d84f0ac176085c40cb2f684823c1ea75ff7db",
+        "82d8f3c5d11f6c3ae72362929522e763396bdcd83c0836fee234e1514be3946c"
+      ],
+      "first_blocker": null,
+      "generation": 1,
+      "guardian_receipt_id": "db07002f020e6f7837a1ec41dca86f901ff73081a32dceef251dea0068da144d",
+      "last_useful_progress": "2026-11-06T23:10:48.698735+00:00",
+      "objections": [],
+      "owner": "paper-core",
+      "pid": 15680,
+      "process_epoch": "ad0d516d-2311-415a-af7a-764346f86b4a",
+      "proof_age_seconds": 5.644903,
+      "recorded_at": "2026-11-06T23:10:48.698735+00:00",
+      "release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
+      "role": "guardian",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "time_proof_age_seconds": 6.890000000130385,
+      "valid_until": "2026-11-06T23:11:18.698735+00:00"
+    },
+    "outcomes": {
+      "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
+      "cycle_seconds": 1.3900000001303852,
+      "evidence_ids": [],
+      "first_blocker": "CONSIDERED_SESSION:2026-11-06",
+      "generation": 1,
+      "guardian_receipt_id": null,
+      "last_useful_progress": "2026-11-06T23:10:54.693630+00:00",
+      "objections": [
+        "CONSIDERED_SESSION:2026-11-06",
+        "VALIDATION_GATE_FAILED"
+      ],
+      "owner": "paper-core",
+      "pid": 32744,
+      "process_epoch": "8952a429-df13-4bfc-8c29-d523b612639a",
+      "proof_age_seconds": 11.639798,
+      "recorded_at": "2026-11-06T23:10:54.693630+00:00",
+      "release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
+      "role": "outcomes",
+      "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "time_proof_age_seconds": null,
+      "valid_until": "2026-11-06T23:11:24.693630+00:00"
+    }
+  },
+  "account_lease_generation": 38,
+  "counts": {
+    "core_round_trips": 154,
+    "fills": 336,
+    "crypto_intents": 1,
+    "crypto_fills": 0,
+    "crypto_broker_orders": 0
+  },
+  "recent_decisions": [
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
+      ],
+      "recorded_at_utc": "2026-11-06T23:10:35.864729+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "bc5711df622cf5a48e73219a2006e84ca6a93435845b94ac37bfc3e0fcb02355",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    },
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
+      ],
+      "recorded_at_utc": "2026-11-06T23:00:23.147327+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "bc5711df622cf5a48e73219a2006e84ca6a93435845b94ac37bfc3e0fcb02355",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    },
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
+        "INVENTORY_ACQUISITION_RETRYABLE",
+        "CONTINUOUS_CAPITAL_UNVERIFIED"
+      ],
+      "recorded_at_utc": "2026-11-06T22:55:16.828563+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "8208778ae79772af05406f8c202ce18bd431be91168a697aef6e12fe140c658f",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    },
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
+      ],
+      "recorded_at_utc": "2026-11-06T22:50:13.382433+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "27a35a6befe86f32f69e5e5d343d5219f409d67f9eabc6884d265b8e2d7db073",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    },
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
+      ],
+      "recorded_at_utc": "2026-11-06T22:45:13.262941+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "5ec6bdce6f43cf99aea8380fef6ceef764d064ff8ae04636981e18217f506b0c",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    },
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
+      ],
+      "recorded_at_utc": "2026-11-06T22:40:15.080519+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "e7f9d5a69bf64cb630f6d5e68ef11a0d0c5bc01adcde7616bb8310b215931a5f",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    }
+  ],
+  "context": {
+    "context:learning-binding": {
+      "capture_rowid": 60942,
+      "contract": "SCHEDULED_CONTEXT_LEARNING_V1",
+      "core_store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
+      "decision_rowid": 6673,
+      "declaration_path": "D:\\Elrond\\learner\\state\\learner.db",
+      "experiment_id": "adaptive-sector-raw-20261006-v1",
+      "experiment_store_path": "D:\\Elrond\\learner\\adaptive-paper-research-20261006\\experiment.db",
+      "grants_activation": false,
+      "interpreter_admission": "SHADOW_ONLY_ON_BETTER_READING_HOLDOUT_V1",
+      "manifest_hash": "5e03b7dc3cc6b5c7ad9345dfd1bc6202114e4c924520655ad82bdd9ef8245060",
+      "modeled_cost_contract_id": "1ca77ab70d0b9858840bba940e96cbf1553cee6c73e81b5bb85d0515b45d6306",
+      "outcome_rowid": 195,
+      "plan_id": "fb5b627b3469daeec57a87414c205268b07bf6b9c494d9435a47c7f5fe149815",
+      "recorded_at": "2026-11-06T23:02:44.528979+00:00",
+      "registry_path": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db"
+    },
+    "context:learning-progress": {
+      "attempted_at": "2026-11-06T23:08:25.825658+00:00",
+      "binding_id": "52db71da3c8376c67a0d03959c4ebfc0867e21e027dbc4aa145bfd51f2b43d24",
+      "captures": 60954,
+      "decisions": 6673,
+      "feedback_total": 0,
+      "outcomes": 195,
+      "pending": false,
+      "pending_lots": [],
+      "snapshots_total": 0
+    },
+    "context:learning-status": {
+      "binding_id": "52db71da3c8376c67a0d03959c4ebfc0867e21e027dbc4aa145bfd51f2b43d24",
+      "candidate_id": null,
+      "contract": "SCHEDULED_CONTEXT_LEARNING_STATUS_V1",
+      "eligible_examples": 0,
+      "evaluation_end": "2026-11-21T06:00:00+00:00",
+      "experiment_id": "adaptive-sector-raw-20261006-v1",
+      "feedback_journaled": 0,
+      "gate_counts": [
+        [
+          "INDEPENDENT_REVIEW_UNAVAILABLE",
+          1
+        ],
+        [
+          "PREDECLARED_EVALUATION_CUTOFF_NOT_REACHED",
+          1
+        ]
+      ],
+      "grants_activation": false,
+      "impact_evaluation_end": null,
+      "impact_status": null,
+      "independent_reviews": 0,
+      "interpreter_mode": null,
+      "interpreter_version_id": null,
+      "recorded_at": "2026-11-06T23:08:25.825658+00:00",
+      "snapshots_journaled": 0,
+      "split_at": "2026-11-14T06:00:00+00:00",
+      "state": "COLLECTING",
+      "training_start": "2026-11-07T06:00:00+00:00"
+    }
+  },
+  "news_documents": 6557,
+  "http": [
+    {
+      "route": "/",
+      "status": 200,
+      "seconds": 9.5,
+      "bytes": 50863
+    },
+    {
+      "route": "/calendar",
+      "status": 200,
+      "seconds": 10.063,
+      "bytes": 42252
+    },
+    {
+      "route": "/learner",
+      "status": 200,
+      "seconds": 9.344,
+      "bytes": 36380
+    },
+    {
+      "route": "/runtime",
+      "status": 200,
+      "seconds": 9.281,
+      "bytes": 19674
+    },
+    {
+      "route": "/session",
+      "status": 200,
+      "seconds": 8.609,
+      "bytes": 30033
+    },
+    {
+      "route": "/api/state",
+      "status": 200,
+      "seconds": 4.688,
+      "bytes": 161076
+    }
+  ],
+  "ledger_bytes": 56720564224,
+  "historical_records_deleted": false,
+  "operating_database_test_copies": 0,
+  "research_document_counts": {
+    "NEWS_RESEARCH_V1": 6557,
+    "SEC_COMPANY_RESEARCH_V1": 58393
+  },
+  "news_head": {
+    "coverage": "CURRENT_WINDOW_FIRST_PAGE_ONLY",
+    "coverage_truncated": false,
+    "end": "2026-11-06T23:13:07.221677+00:00",
+    "next_page_token": null,
+    "page_receipt_id": "305676607ea11b17ae2d80abf1d2cab9e76591e1bc21df96b3451db9690204e7",
+    "retrieved_at": "2026-11-06T23:13:07.332430+00:00",
+    "start": "2026-11-06T23:10:05.494019+00:00"
+  },
+  "news_measured_at": "2026-11-06T23:14:05.756093+00:00",
+  "canonical_fit_calls_used": 2,
+  "canonical_fit_calls_limit": 6,
+  "initial_console_commit": "836a4e09d2c8e99d1f24d5f8308062cbc03d2605",
+  "console_source_commit": "d773baa555c96e8d1d6570f4caaed62c6838965e",
+  "console_health_verification": {
+    "at": "2026-11-06T23:26:58.183968+00:00",
+    "console_commit": "6453a770921f122bdb0c4dce8bf7c014d2a5b499",
+    "source_commit": "d773baa555c96e8d1d6570f4caaed62c6838965e",
+    "routes": [
+      {
+        "route": "/api/state",
+        "status": 200,
+        "seconds": 1.172000000020489,
+        "bytes": 161090
+      },
+      {
+        "route": "/",
+        "status": 200,
+        "seconds": 3.2340000001713634,
+        "bytes": 50602
+      }
+    ],
+    "health_query_plan": [
+      [
+        3,
+        0,
+        210,
+        "SEARCH runs USING COVERING INDEX ix_runs_started_at"
+      ]
+    ],
+    "retained_runs": 187961,
+    "core_restarted": false,
+    "entry_lease_changed": false
+  }
+}

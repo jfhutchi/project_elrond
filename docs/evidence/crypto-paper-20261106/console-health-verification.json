@@ -1,0 +1,30 @@
+{
+  "at": "2026-11-06T23:26:58.183968+00:00",
+  "console_commit": "6453a770921f122bdb0c4dce8bf7c014d2a5b499",
+  "source_commit": "d773baa555c96e8d1d6570f4caaed62c6838965e",
+  "routes": [
+    {
+      "route": "/api/state",
+      "status": 200,
+      "seconds": 1.172000000020489,
+      "bytes": 161090
+    },
+    {
+      "route": "/",
+      "status": 200,
+      "seconds": 3.2340000001713634,
+      "bytes": 50602
+    }
+  ],
+  "health_query_plan": [
+    [
+      3,
+      0,
+      210,
+      "SEARCH runs USING COVERING INDEX ix_runs_started_at"
+    ]
+  ],
+  "retained_runs": 187961,
+  "core_restarted": false,
+  "entry_lease_changed": false
+}

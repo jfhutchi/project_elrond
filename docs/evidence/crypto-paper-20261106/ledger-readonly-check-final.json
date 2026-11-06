@@ -1,0 +1,13 @@
+{
+  "at": "2026-11-06T23:00:33.986436+00:00",
+  "path": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db",
+  "read_only": true,
+  "check": "quick_check(1)",
+  "limit_seconds": 1200,
+  "result": [
+    [
+      "ok"
+    ]
+  ],
+  "seconds": 445.7960000000894
+}
