@@ -1,0 +1,23 @@
+{
+  "at": "2026-11-07T00:37:27.183587+00:00",
+  "release": "d8519ab91155b0e3af388a5f0d7034a7d730f88ba73542322c2d88d6b519c353",
+  "pins_verified": 403,
+  "roles": {
+    "trader": {
+      "pid": 34352,
+      "recorded_at": "2026-11-07T00:37:18.443215+00:00",
+      "first_blocker": "CONTINUOUS_CAPITAL_UNVERIFIED"
+    },
+    "guardian": {
+      "pid": 12308,
+      "recorded_at": "2026-11-07T00:37:21.562728+00:00",
+      "first_blocker": null
+    },
+    "outcomes": {
+      "pid": 33608,
+      "recorded_at": "2026-11-07T00:37:19.572442+00:00",
+      "first_blocker": "CONSIDERED_SESSION:2026-11-06"
+    }
+  },
+  "http": 200
+}
