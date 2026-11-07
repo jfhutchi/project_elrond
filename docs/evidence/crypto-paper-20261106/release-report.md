@@ -1,172 +1,112 @@
-# Verified PAPER execution and scheduled news-learning release
+# Project Elrond — verified PAPER repair and autonomous news-learning release
 
-Verified 2026-11-06T23:11:54.169408+00:00 on Leannes-Laptop. This replaces the earlier generation37 status.
-Core source **d6278971c704bdc69d0bc167fe687c21fa3a5126**; runtime **c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3**;
-402 executable pins verified. Console **6453a770921f122bdb0c4dce8bf7c014d2a5b499** (health optimization source d773baa). Account lease **38**.
+Verified through **2026-11-07T00:02:32.005342+00:00** on **Leannes-Laptop**. This is the current generation39 report, replacing generation38.
 
-## Current running result
+## A. Executive result
 
-One authoritative Trader PID5452, Guardian15680, Outcomes32744, Research15892 and Console32124.
-The five existing tasks run; old Protection/Deadline tasks remain disabled. Python venv launchers
-and their base-interpreter children are one process tree per component, not duplicate engines.
-The existing authoritative PAPER ledger remains D:/Elrond/state/quantbot-paper-fresh-20260908.db.
+Deployed component source **becd2f2f88968fd5613aaec9304978df0133c8ed**, runtime **e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5**, with **403 executable pins verified**. Console deployed commit **183b6fe43c541ea83b4f4b6b3333eda4a79fa8dd**. Account lease **39**.
 
-The new 23:10 UTC evaluation contains BTC/USD, ETH/USD and SOL/USD, with quote/trade provenance.
-Its retained decision is WAIT: CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED. The cycle now reports
-NO_QUALIFYING_CANDIDATE instead of mislabeling that strategy rejection as a risk failure.
-The running engine has fresh heartbeats and no current authority blocker. Six dashboard routes
-returned HTTP200, including the new learning panel and matching /api/state metadata.
+One Trader34672, Guardian25308, Outcomes16044, Research23448 and Console18752 use the established deployment. Five existing application tasks run; old Deadline/Protection tasks stay disabled. Venv launchers and base Python children are one process tree each. No new persistent service, production dependency, operating database, model download or paid API was added.
 
-Retained ledger:154 completed round trips,336 fills. Crypto:1 intent,0 broker orders,0 fills.
-That ETH intent at22:05 UTC was definitively unsent: its independently sourced quote expired
-before final authorization. The five-second quote/account freshness requirements remain enforced.
-No order was forced to demonstrate activity. No live endpoint/order authority was enabled.
+The ledger retains **154 completed round trips,336 fills and195 outcome revisions**. Crypto has **1 intent,0 broker orders,0 fills**. That ETH intent was definitively unsent at22:05UTC because its independent quote became stale before final authorization. No demonstration trade was forced.
 
-## News is scheduled; improved decisions are not demonstrated
+The new **00:00UTC Nov7** evaluation actually contains BTC/USD,ETH/USD,SOL/USD. Its retained WAIT reason is **CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED**; the Trader then reports no authority blocker. Stock discovery gaps remain separately scoped. Profitability is unproven; no profitable-day claim is made.
 
-At 2026-11-06T23:14:05.756093+00:00: 6557 NEWS_RESEARCH_V1 documents retained.
-Research also retains SEC company evidence; those documents are not counted as news articles.
-Current-head collection is bounded and separate from historical backfill. Alpaca's existing
-no-additional-charge entitlement was confirmed by the operator. X/Reddit remain unavailable;
-no paid access or scraping was added.
+## B. Architecture comparison
 
-The scheduled Outcomes worker actually wrote state **COLLECTING** at 2026-11-06T23:08:25.825658+00:00.
-Binding **52db71da3c8376c67a0d03959c4ebfc0867e21e027dbc4aa145bfd51f2b43d24**. Plan **fb5b627b3469daeec57a87414c205268b07bf6b9c494d9435a47c7f5fe149815**.
-The existing experiment journal was moved intact to D:/Elrond/learner/adaptive-paper-research-20261006/experiment.db;
-its old C file was not retained as a duplicate. Canonical fit charges remain **2 of6**, in the
-existing MAIN ledger; commissioning did not reset or spend the budget.
+Before: single PAPER execution core with independent Guardian/Outcomes; Research had an older source; context fitting APIs were not scheduled and semantic reviews had no producer.
 
-Observed scheduled counts: snapshots journaled into this prospective plan0; linked outcome feedback0;
-independent reviews0; eligible reviewed examples0; candidate_id null; interpreter_version_id null.
-There is no authentic fitted news candidate and no active context trading filter. Current price
-model inputs remain price-only; price model mode COLLECT is a nonpredictive baseline, not a fitted edge.
-Earlier observed news snapshots and lexical interpretations are evidence, not proof of learned behavior.
+After: the same five persistent components. Research shares the sealed core source and also schedules one bounded local teacher task. Outcomes schedules context evidence, semantic evaluation and paired price-vs-context studies. A local model is started on demand in an owned Windows process job, then terminated/unloaded; there is no persistent model listener. Source/news, semantic calibration, outcome evaluation and trading authority remain distinct.
 
-Exact current gates: **INDEPENDENT_REVIEW_UNAVAILABLE** and
-**PREDECLARED_EVALUATION_CUTOFF_NOT_REACHED**. Training starts2026-11-07T06:00:00Z;
-chronological split2026-11-14T06:00:00Z; evaluation cutoff2026-11-21T06:00:00Z.
-Independent reviews must reference the exact retained reading/document, provide an independent
-semantic correctness label with provenance, and be recorded at their actual import time.
-Wins/losses cannot be substituted for reading correctness or backdated into the training window.
-The semantic review importer exists, but no automatic independent semantic-review producer is scheduled.
-Its authentic inputs currently require an independent human/source-correction review with provenance;
-there is no authorized paid review API or commissioned reviewer. Existing local Ollama/Qwen
-artifacts have now been found; bounded local capability verification/producer implementation is in
-progress without new downloads, charges or a persistent model service. This still blocks deployed
-semantic calibration until that separate change passes tests and commissioning.
-An explicit untrained lexical baseline for autonomous outcome-based impact learning is now being
-implemented separately, so outcome learning need not depend on inventing semantic review labels.
-Source permissions, first-seen times, protected history, sufficient eligible chronological examples
-and the canonical six-fit limit remain enforced. Cutoff arrival alone does not grant fitting.
+Execution path: dynamic market discovery/data -> price signals -> portfolio/risk -> one paper order coordinator/ledger -> outcomes/learning -> read-only dashboard. Research supplies immutable observed news, prospective shadow features and separately tagged teacher opinions. No news/model output can submit an order directly.
 
-The production path journals fresh eligible captures and verified completed outcomes, performs
-registered semantic evaluation after cutoff when evidence qualifies, permits only a better
-reading holdout to enter SHADOW_ONLY, preregisters prospective paired cost-aware impact evaluation,
-and requires explicit fenced approval plus held-out evidence before any TRADING_FILTER use.
-No automatic trading promotion is enabled. A filter can veto an existing price BUY; it cannot
-create a trade, override price WAIT, or bypass execution/risk controls. Pending, quarantined or
-superseded outcomes suspend labels; selected outcomes are revalidated in the current canonical
-transaction at promotion/final send. The same declared sample cannot be refilled around a bad label.
-This path is implemented, scheduled and genuinely data/review-gated. Profitability is unproven.
+## C. Removal and consolidation report
 
-## Tests and database integrity
+**No entire module or production dependency was deleted without usage proof.** Source diff versus eed788b: **365 lines removed**, **10928 added**. Removed lines are not all dead code. Services eliminated in this release: **0**; production dependencies remain13.
 
-Final combined core/context/critical integration gate: **528 passed**,255.68s.
-Non-context learner suite: **852 passed**,233.98s. Console/operations:396 passed; two native
-Windows service tests initially rejected a development-only interpreter, then **2 passed** under
-the actual stable host interpreter,51.53s. Test cleanup regressions: **16 passed**,10.50s.
-All successful final synthetic scratch was removed. No operating database test copies were made.
-Ruff passed; mypy found no issues in all19 changed Python source files; git diff --check passed.
+Consolidations removed duplicate quantity hydration and inconsistent cached-discovery/readiness behavior. Research now executes the authoritative sealed source instead of its older source copy. The existing experiment journal was relocated intact from C to D, not cloned; its manifest/history and canonical trial burden were preserved. Health now reads one indexed run timestamp rather than decoding about188,000 complete records.
 
-Example commands (PYTHONPATH=D:/Elrond/App/src, plugin autoload disabled, TEMP/TMP on D:/Elrond/scratch):
+The broad source-reduction/dead-code-purge objective is **not complete**. This repair adds required crypto/learning/provenance code; it is not a net code reduction.
 
-```powershell
-python -B -m pytest -q -p pytest_asyncio.plugin -p no:cacheprovider tests/unit/paper_core <all tests/unit/learner/test_context*.py> tests/unit/learner/test_experiment_store.py <crypto_paper_protocol, continuous_capital, crypto_resume, crypto_review_regressions, offline_asset_capabilities, final_repair, costed_loop integration files> --basetemp=D:/Elrond/scratch/context-final-release-gate-20261106
-python -B -m pytest -q -p pytest_asyncio.plugin -p no:cacheprovider <non-context tests/unit/learner/test*.py> --basetemp=D:/Elrond/scratch/context-learner-noncontext-final-20261106
-```
+## D. Implemented refactoring and learning behavior
 
-The angle-bracket lists above describe the actual expanded file sets, not literal shell syntax.
-Exact logs remain D:/Elrond/review/context-final-release-gate-20261106.log,
-context-learner-noncontext-final-20261106.log, context-console-final-20261106.log,
-context-host-runtime-clean-final-20261106.log and context-cleanup-root-final-20261106.log.
-These are broad targeted suites, not a claim that every repository test/coverage measurement ran.
-The full read-only ledger quick_check(1) returned **ok** in445.796s. Two shorter bounded attempts
-expired first; no corruption result was suppressed. This full scan was manual release validation,
-not recurring trading-loop work. Schema remains37; no migration or historical trade deletion occurred.
+- Native crypto terms, paper-only eligibility, custody/coin-fee handling and non-marginable buying power; stock paths remain isolated. Quote-derived zero-volume crypto prices retain explicit provider provenance rather than being rejected as fabricated carry-forward.
+- Readiness reads its evidence in one transaction. Short capital-publication gaps retry only within the original signal window. Current quote/account freshness, emergency stop, ownership, duplicate prevention, exposure, time and paper-isolation checks remain enforced.
+- Current news is collected before historical backfill. Unchanged context captures are reused; observed, shadow-used and trading-used evidence are separate.
+- An explicitly **UNTRAINED_FIXED_LEXICAL_BASELINE** now enters **SHADOW_ONLY** prospectively. There is **1 authentic fixed-shadow preparation receipt**, not a learned candidate or proof of decision improvement.
+- Outcome-based paired evaluation no longer requires semantic-review labels. Only current, owned, reconciled outcomes enter studies; pending/quarantined/corrected sources suspend old labels and comparisons. Original chronological sampling cannot be refilled around an inconvenient label.
+- Semantic calibration has an actual scheduled producer using the existing hash-pinned **qwen2.5:3b** and Ollama0.33.3. Inputs are retained permitted text/excerpts and the target symbol, without price, outcome or baseline-polarity inputs. Records retain prompt/source/model/response hashes, exact quote, confidence, uncertainty and excerpt coverage. Labels explicitly say **MODEL_GENERATED** and evaluate **MODEL_TEACHER_AGREEMENT_V1**, not human truth.
+- Local reviewer bounds: one attempt/hour, one pending task, two CPU threads,2048 context,128 response tokens,60-second maximum, loopback/no-cloud, credential-free child environment, D-only profile/temp and keep-alive0. Owned crash leftovers recover under a lock; unknown artifacts/junctions remain untouched. There is no model listener running now.
+- A better held-out semantic candidate may automatically replace the fixed shadow baseline. Semantic evaluation has priority before spending baseline paired-fit calls. Trading-filter promotion still needs explicit fenced approval, valid held-out cost-aware evidence and current canonical outcomes. A filter can veto a price BUY; it cannot create a BUY or override risk checks.
 
-## Architecture and measurable changes
+## E. Measurements
 
-Before: existing single PAPER execution core and independent safety/accounting workers;
-Research used an older source; context candidate APIs lacked production scheduling.
-After: the same five components and ledgers; Research shares sealed authoritative source;
-Outcomes also schedules bounded context feedback/evaluation. No new framework/service/database
-or production dependency was added. Duplicate quantity hydration and inconsistent readiness/
-cached-discovery paths were consolidated. No confirmed module/dependency deletion is claimed.
-
-|Metric|Before eed788b|Current core release|Result|
+|Metric|Before|After|Interpretation|
 |---|---:|---:|---|
-|Tracked Python source files|385|400|+15|
-|Maintainable source lines|107203|115877|+8674; not a reduction|
+|Tracked source Python files|385|401|+16|
+|Maintainable source lines|107203|117022|+9819; not a reduction|
 |Production dependencies|13|13|unchanged|
-|Application processes|5|5|unchanged; one Trader|
-|Source diff lines removed|—|338|not all dead code|
-|Source diff lines added|—|9670|new execution/learning/safety functionality|
-|Operating DB test copies|—|0|synthetic fixtures only|
-|Comparable startup, CPU, peak memory, cycle/query/API volume, recovery benchmarks|unavailable|unavailable|no invented improvement|
-|Critical test coverage percentage|unavailable|unavailable|no coverage tool measurement|
+|Persistent application processes|5|5|one Trader|
+|API state smoke probe|4.688s|1.172s|75% less elapsed time in these individual probes|
+|Homepage smoke probe|9.500s|3.234s|66% less elapsed time in these individual probes|
+|Twelve-trade synthetic outcome revisions|78|12|84.6% fewer, same12 economic trades|
+|Operating ledger test copies|—|0|synthetic fixtures only|
+|Startup/CPU/peak memory/average cycle/recovery/query/API volume benchmarks|unavailable|unavailable|no controlled comparison|
+|Test coverage percentage|unavailable|unavailable|not measured|
 |Database lock incident rate|unavailable|unavailable|no comparable monitoring interval|
 
-Nonblank non-comment tracked src/**/*.py lines are counted, including docstrings.
-The main ledger remains approximately56.7GB with no freelist pages. This release did not compact it
-or demonstrate that all historical proof/event retention is necessary. The broad source-reduction
-objective is not complete. Additional historical dead-code/storage work requires usage evidence.
-Working-set point samples were585,773,056 then751,996,928 bytes across five processes; these are
-not comparable peak-memory measurements (the later Console was serving the smoke-test pages).
-Observed single Trader heartbeat cycle2.125s is not an average-latency improvement claim.
+Source counts use tracked src/**/*.py, nonblank/non-comment lines including docstrings. Smoke timings are individual local requests, not average-latency benchmarks. EXPLAIN confirms the existing ix_runs_started_at covering index. All187,961 run records remain stored. Historical working-set samples were not comparable peak-memory measurements; no memory percentage improvement is claimed.
 
-Dashboard smoke timings were8.609–10.063s for HTML and4.688s for /api/state. Separate bounded
-profiling found health decoding about188,000 full run records merely for a latest timestamp;
-the Console-only indexed health fix is now deployed (340 Console tests passed, root26-test
-verification passed). Post-deployment smoke probes: /api/state1.172s, homepage3.234s, bothHTTP200.
-EXPLAIN QUERY PLAN confirms ix_runs_started_at. All187,961 run records remain stored; health
-no longer materializes them merely to obtain one timestamp. These are individual smoke probes,
-not controlled average-latency or peak-memory benchmarks. Core PID5452 and lease38 stayed unchanged.
+The primary ledger is still about56.7GB. No further primary-file compaction or source-wide disk reduction is claimed. Changes stop unnecessary future work/revisions; they do not erase historical trade/evidence records.
 
-## Reliability, accounting and cutover
+## F. Reliability root causes and corrections
 
-Changes include native crypto terms/custody/non-marginable buying power, explicit cost screening,
-quote-derived zero-volume crypto bar provenance, scoped stock/crypto capital checks, causal
-retained discovery comparisons, bounded current-news polling, versioned prospective consumption,
-immutable modeled-vs-actual labels and outcome correction invalidation. Data integrity, cash,
-ownership, duplicate prevention, paper isolation, emergency stop, time and current-quote checks remain.
-Actual fees remain unknown where the broker evidence cannot allocate/finalize them. Estimated
-cost scenarios remain labeled estimates. The prior verified daily report showed7 Nov6 round trips,
-gross0.065072990USD, unknown all-in actual net; matching retained cash495.29USD is not profit proof.
+The full scheduled synthetic protocol exposed provenance-only revision churn: ordinary later spending revoked a current cash snapshot, and the historical outcome resolver incorrectly treated that as retracting an earlier witnessed lot closure. Proof IDs/timestamps changed despite identical economic fills/costs. Historical proof selection now retains validated preferred evidence for unrelated accepted source changes; unknown revocations, same-lot corrections and quarantine remain fail-closed. Current spending revocation is untouched. Twelve closed lots stay at12 revisions; a seeded legacy rev2 stays current (13 total), never rolling backwards. Genuine fee corrections still advance revisions. Production currently has154 trades/195 revisions; the synthetic78-to12 result is not presented as a measured production incident-rate reduction.
 
-Cutover fenced entries, disabled/stopped all five old process trees, installed checked exact
-patches, verified402 pins, transitioned the same economic identity, commissioned the prospective
-plan, then restarted safety/research/dashboard workers. First lease binding required a newer flat
-proof; first resume refused an outdated Guardian snapshot. Fresh ordinary approvals succeeded;
-no check was bypassed. One Trader then restarted and produced the new real evaluation.
+Other corrections cover partial crypto fee custody, unsent-claim retirement, scoped stock capital, current quote/trade provenance, precise session/data/risk reasons and resource cleanup. Strategy rejection now reports NO_QUALIFYING_CANDIDATE rather than a risk failure. Transient Guardian acquisition failures observed after restart recovered automatically; checks were not suppressed.
 
-Rollback source archives, config/manifest, task XML and instructions remain
-D:/Elrond/deploy/crypto-paper-20261106/news-learning/ROLLBACK.md. Rollback uses a new forward lease
-generation and fresh guarded cutover, preserving all ledgers/fit charges; restoring an old ledger
-is not a code rollback. No destructive restore was rehearsed against the operating ledger.
+Actual fees/all-in net remain unknown where provider evidence is not finalized/allocatable. Posted daily fees and modeled scenarios are separate. The last verified daily report showed7 Nov6 stock/fund round trips and gross0.065072990USD; that is not verified net profit. New research contracts declare stock10bps and crypto60bps round-trip estimates (50 fee estimate+10 slippage for crypto), explicitly not actual fees. Legacy50-bps contract IDs remain intact.
 
-## Remaining limits and blocked cleanup
+## G. Tests and integrity
 
-Profitability, fee-finalized net returns, a fitted news edge and broad code-size reduction are
-not demonstrated. Independent semantic reviews and prospective held-out evidence remain required;
-X/Reddit are unavailable. Desktop-to-laptop remote dashboard access was not independently tested;
-HTTP verification was on the authoritative laptop.
+Final broad core/context/critical integration gate: **545 passed**,287.07s. Final Console suite: **341 passed**,108.51s. Last owned-review lifecycle patch: **10 passed**,2.45s, including actual Windows junction refusal, lock ownership and crash recovery. Prior non-context learner suite: **852 passed**,233.98s. Native service wrapper/installer tests: **2 passed** under the actual stable host interpreter. Cleanup regressions: **16 passed**. Earlier development-interpreter service refusals were reproduced and correctly preserved; host tests passed without weakening the path guard.
 
-Automatic approval review rejected exact deletion commands with “blocked by policy” for
-D:/Elrond/backups/pre-completion-20261105.zip, D:/Elrond/scratch/crypto-noncore-final-20261106,
-and D:/Elrond/scratch/signal-diagnostics-red-20261106. These were not deleted through alternate means.
-The newer current-ledger-20261105.db backup remains readable (same store identity/schema37,
-147 retained round trips). Thus redundant backup cleanup is not fully complete; no new ledger
-backup/copy was created by this release.
+Ruff passed; mypy passed all12 Python sources changed in the final stage (the preceding19-source stage also passed). Successful final synthetic scratch was removed; no operating DB was copied for tests. These are broad targeted suites, not a claim that every archive/platform test or coverage analysis ran.
 
-Evidence: [running verification](running-verification.json), [one-engine/task proof](process-verification.json),
-[ledger integrity](ledger-readonly-check-final.json), [source metrics](measurements.json).
+Actual commands used Python-B, pytest-q, pytest_asyncio.plugin, disabled plugin autoload/cache, explicit D:/Elrond/scratch basetemp. Exact expanded command construction is in [test-commands.md](test-commands.md). The core command expands tests/unit/paper_core, all learner/test_context*.py, experiment_store and crypto/continuous-capital/resume/review/offline-capability/final-repair/costed-loop integration files. Full logs:
+
+- D:/Elrond/review/autonomous-news-final-release-20261106.log
+- D:/Elrond/review/autonomous-news-console-final-20261106.log
+- D:/Elrond/review/autonomous-review-lifecycle-final-20261106.log
+- D:/Elrond/review/context-learner-noncontext-final-20261106.log
+- D:/Elrond/review/context-host-runtime-clean-final-20261106.log
+
+Full read-only primary-ledger quick_check(1) returned **ok** in445.796s after two shorter attempts expired. This was manual release validation, not recurring work. The research journal also returned **ok** after commissioning. No schema migration occurred; schema remains37.
+
+Actual local model smoke: initial prompt without numeric sign convention produced a confident wrong sign. With the final explicit convention, positive/negative examples returned correct directions and exact quotes in11.797/12.469s; listeners closed. This proves local capacity/direction/lifecycle on those synthetic examples, not broad semantic quality or calibrated confidence.
+
+## H. Deployment and rollback
+
+Controlled cutover fenced new entries, stopped/disabled all five old task trees, verified quiescence, applied checked exact component patches, sealed403 pins and transitioned the same economic identity. Guardian/Outcomes/Research/Console started first; fresh proof/time/readiness then bound lease39 and accepted resume; one Trader started. A stale Guardian approval was refused before a fresh ordinary attempt succeeded. No manual stop was cleared or guard bypassed.
+
+Core source becd2f2f88968fd5613aaec9304978df0133c8ed is a tested component delta into the established flat deployment D:/Elrond/releases/paper-core-14352cc-20261015 (not a separate Git checkout). Console is pinned to183b6fe43c541ea83b4f4b6b3333eda4a79fa8dd. Research shares the core interpreter/source/seal. Six current dashboard routes returnedHTTP200 with matching learner metadata. No older engine remains active.
+
+Prospective teacher policy **e7157471e027df8fbc4e23e3939ef21cb40e90b5561e5ca9d894d5c3ac56454b**; current binding **543903c9a7116593f34563755144b263a0de5c212e9370f5febed8b77fbb5dcd**; plan **9f93e6894e8bf871448b5a4e26ed9ed9fd85ea338f344c71a7ce965fa3df8b49**. The old human-review plan was superseded before training, with unchanged windows/parent and no prior context fit. The old plan/history remain. Canonical charges remain **2 of6**; commissioning spent0 and promoted no trading model. New cost contract is versioned; old contracts were not rewritten.
+
+Exact source/config/manifest/task rollback artifacts remain D:/Elrond/deploy/crypto-paper-20261106/autonomous-news. See ROLLBACK.md there: the older source cannot parse new context metadata. While the current interpreter is SHADOW_ONLY, archive its operational metadata into the same research journal and suspend optional context pointers before restoring older code; preserve all plans/labels/fit charges. Never use that suspension procedure for an approved TRADING_FILTER. Code rollback must fence/stop the same tasks and use forward lease generation40, fresh sealed source and Guardian evidence; do not restore an old lease or ledger and discard subsequent paper history. Restore the Console predecessor pin6453a77 only through its stopped task. No destructive restore was rehearsed against the operating ledger.
+
+## I. Exact current gates and remaining risks
+
+At 2026-11-07T00:02:32.005342+00:00: **8919 actual news documents**, independent human/source reviews0, model-generated real reviews0, eligible semantic examples0, fitted news candidates0, paired studies0, actual news trading-filter promotions0. The current price model is COLLECT, a nonpredictive baseline; its latest daily evaluation reports VALIDATION_GATE_FAILED. One real fixed shadow receipt is preparation evidence, not training or trading influence.
+
+The scheduled producer actually reports **DECLARED_TRAINING_WINDOW_NOT_STARTED**. Training starts **2026-11-07T06:00:00Z** (Nov7,1am Eastern); split **2026-11-14T06:00:00Z**; semantic/fixed-baseline evaluation cutoff **2026-11-21T06:00:00Z**. Producer and learner are installed, commissioned and scheduled. No human review/input or new paid service is needed for their automatic path. Eligible permitted sources, sufficient chronological teacher examples and actual completed outcomes still must accumulate. Cutoff arrival alone grants neither fitting nor promotion. Better semantic models get a separate future prospective impact window before trading approval.
+
+OPTIONAL_SEMANTIC_REVIEW_UNAVAILABLE means fixed-baseline outcome research does not depend on semantic labels; semantic calibration itself now has an automatic producer. Teacher agreement is not truth or profitability. Profitability, fee-finalized net performance and improved decisions are unproven. X/Reddit remain unavailable; no paid access was added. Remote Alienware dashboard access was not separately exercised; HTTP checks ran on the laptop. Broad dead-code elimination, net code reduction and controlled CPU/memory/storage benchmarks remain incomplete.
+
+Automatic approval review rejected deletion with “blocked by policy” for D:/Elrond/backups/pre-completion-20261105.zip, D:/Elrond/scratch/crypto-noncore-final-20261106 and D:/Elrond/scratch/signal-diagnostics-red-20261106. These were not deleted through alternate means. The newer current-ledger-20261105.db backup remains readable with schema37/same store/147 trades. Redundant backup cleanup therefore remains incomplete; this release created no new ledger backup/copy.
+
+## J. Evidence-based next optimizations
+
+The separate profiler measured experiment-panel loading around3.4s on HTML routes; avoid constructing it where it is not rendered while retaining verified history on relevant pages. Profile the still-large historical proof/event storage and reference closure before any additional pruning. Measure comparable CPU, peak memory, startup and provider volume before claiming further gains. Evaluate future model versions on the declared held-out/cost-aware data rather than win-rate targets or extra trade quotas.
+
+[Running evidence](running-verification.json) · [process/task proof](process-verification.json) · [source metrics](measurements.json) · [primary integrity](ledger-readonly-check-final.json) · [local teacher smoke](local-teacher-smoke.json) · [health optimization](console-health-verification.json)

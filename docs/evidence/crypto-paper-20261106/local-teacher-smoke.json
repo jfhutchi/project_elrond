@@ -1,0 +1,38 @@
+{
+  "scope": "SYNTHETIC_LOCAL_CAPABILITY_AND_DIRECTION_SMOKE_ONLY",
+  "operating_review_writes": 0,
+  "model": "qwen2.5:3b",
+  "model_manifest_sha256": "357c53fb659c5076de1d65ccb0b397446227b71a42be9d1603d46168015c9e4b",
+  "binary_sha256": "e4fe6bd835fe146659f5c969dccaff2e25a9de63d90ee204ca5d11b9034b0ca5",
+  "artifact_verification": "Manifest, config and all referenced blobs verified by size and SHA256",
+  "initial_spike": {
+    "seconds": 13.844,
+    "prompt_limit": "Numeric sign convention omitted",
+    "positive_text_result": {"polarity": -1, "confidence": 0.8, "uncertain": false},
+    "assessment": "Confident semantic direction error; not quality evidence"
+  },
+  "final_prompt_smokes": [
+    {
+      "case": "positive",
+      "article": "Apple reports stronger quarterly revenue and profit than its previous guidance. Management raises its revenue outlook.",
+      "seconds": 11.797,
+      "response": {"polarity": 1.0, "confidence": 0.9, "uncertain": false, "quote": "Management raises its revenue outlook."},
+      "done_reason": "stop",
+      "tokens": 38,
+      "listener_closed": true
+    },
+    {
+      "case": "negative_with_recovery_caveat",
+      "article": "Apple reports a sharp decline in revenue and profit. Management cuts its full-year outlook, although one analyst expects a possible recovery next year.",
+      "seconds": 12.469,
+      "response": {"polarity": -1.0, "confidence": 0.9, "uncertain": false, "quote": "Management cuts its full-year outlook, although one analyst expects a possible recovery next year."},
+      "done_reason": "stop",
+      "tokens": 49,
+      "listener_closed": true
+    }
+  ],
+  "limits": "Two direction checks do not establish semantic accuracy, truth, confidence calibration, profitability or trading permission.",
+  "runtime_files": "D:/Elrond/models/ollama/teacher-runtime/profile; owned temporary attempts removed after process job exit",
+  "persistent_service_created": false,
+  "download_performed": false
+}

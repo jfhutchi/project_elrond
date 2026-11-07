@@ -5,15 +5,17 @@
     "production_dependencies": 13
   },
   "after": {
-    "source_files": 400,
-    "maintainable_lines": 115877,
+    "source_files": 401,
+    "maintainable_lines": 117022,
     "production_dependencies": 13
   },
-  "source_lines_added": 9670,
-  "source_lines_removed": 338,
+  "source_commit": "becd2f2f88968fd5613aaec9304978df0133c8ed",
+  "source_lines_added": 10928,
+  "source_lines_removed": 365,
   "services_before": 5,
   "services_after": 5,
+  "services_eliminated": 0,
   "dependencies_added": 0,
-  "production_database_test_copies": 0,
-  "method": "Tracked src/**/*.py; nonblank non-comment lines, including docstrings. Not net code reduction."
+  "operating_database_test_copies": 0,
+  "method": "Tracked src/**/*.py; nonblank non-comment lines, including docstrings; source grew to implement required safety/learning. Not a net reduction."
 }

@@ -1,81 +1,81 @@
 {
-  "at": "2026-11-06T23:11:54.169408+00:00",
+  "at": "2026-11-06T23:59:09.384160+00:00",
   "host": "Leannes-Laptop",
-  "source_commit": "d6278971c704bdc69d0bc167fe687c21fa3a5126",
-  "console_commit": "6453a770921f122bdb0c4dce8bf7c014d2a5b499",
-  "runtime_release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
-  "pins_verified": 402,
+  "source_commit": "becd2f2f88968fd5613aaec9304978df0133c8ed",
+  "console_commit": "183b6fe43c541ea83b4f4b6b3333eda4a79fa8dd",
+  "runtime_release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
+  "pins_verified": 403,
   "roles": {
     "trader": {
       "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
-      "cycle_seconds": 2.125,
+      "cycle_seconds": 1.968000000109896,
       "evidence_ids": [
-        "a14de303de78df664895621860859b1441de3f593dfd3da08ec9f82faa431f32"
+        "7ced1246e20dad76e6bc68980b835111c11061a68d70ea5c74e8a0d186b7fb91"
       ],
       "first_blocker": null,
       "generation": 1,
       "guardian_receipt_id": null,
-      "last_useful_progress": "2026-11-06T23:10:46.766358+00:00",
+      "last_useful_progress": "2026-11-07T00:02:25.587399+00:00",
       "objections": [],
       "owner": "paper-core",
-      "pid": 5452,
-      "process_epoch": "ac5abd8e-4c61-42da-9046-c5e27fc1d791",
-      "proof_age_seconds": 3.712526,
-      "recorded_at": "2026-11-06T23:10:46.766358+00:00",
-      "release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
+      "pid": 34672,
+      "process_epoch": "45d3f1f6-f194-42cb-8c25-d0ae348468b5",
+      "proof_age_seconds": 9.132865,
+      "recorded_at": "2026-11-07T00:02:25.587399+00:00",
+      "release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
       "role": "trader",
       "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
-      "time_proof_age_seconds": 15.812000000150874,
-      "valid_until": "2026-11-06T23:11:16.766358+00:00"
+      "time_proof_age_seconds": 135.81200000015087,
+      "valid_until": "2026-11-07T00:02:55.587399+00:00"
     },
     "guardian": {
       "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
-      "cycle_seconds": 8.172000000020489,
+      "cycle_seconds": 7.172000000020489,
       "evidence_ids": [
-        "1641d9f7843973210eaf06b6579d84f0ac176085c40cb2f684823c1ea75ff7db",
-        "82d8f3c5d11f6c3ae72362929522e763396bdcd83c0836fee234e1514be3946c"
+        "de40fcd10283da0afb55d47f78ee44ce05746b076fa0156ba1f58ac60420779a",
+        "9225591446718b4d37be6b95c3d8395551e23414542269162c5e514c5937eeaf"
       ],
       "first_blocker": null,
       "generation": 1,
-      "guardian_receipt_id": "db07002f020e6f7837a1ec41dca86f901ff73081a32dceef251dea0068da144d",
-      "last_useful_progress": "2026-11-06T23:10:48.698735+00:00",
+      "guardian_receipt_id": "8ebb57dab24db216aef8b896f4615f815f098f024c76e18fb10a735b4151cabb",
+      "last_useful_progress": "2026-11-07T00:02:21.414253+00:00",
       "objections": [],
       "owner": "paper-core",
-      "pid": 15680,
-      "process_epoch": "ad0d516d-2311-415a-af7a-764346f86b4a",
-      "proof_age_seconds": 5.644903,
-      "recorded_at": "2026-11-06T23:10:48.698735+00:00",
-      "release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
+      "pid": 25308,
+      "process_epoch": "572166dd-c2fc-4db0-90ed-25d626814898",
+      "proof_age_seconds": 4.959719,
+      "recorded_at": "2026-11-07T00:02:21.414253+00:00",
+      "release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
       "role": "guardian",
       "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
-      "time_proof_age_seconds": 6.890000000130385,
-      "valid_until": "2026-11-06T23:11:18.698735+00:00"
+      "time_proof_age_seconds": 6.203999999910593,
+      "valid_until": "2026-11-07T00:02:51.414253+00:00"
     },
     "outcomes": {
       "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
-      "cycle_seconds": 1.3900000001303852,
+      "cycle_seconds": 1.9059999999590218,
       "evidence_ids": [],
       "first_blocker": "CONSIDERED_SESSION:2026-11-06",
       "generation": 1,
       "guardian_receipt_id": null,
-      "last_useful_progress": "2026-11-06T23:10:54.693630+00:00",
+      "last_useful_progress": "2026-11-07T00:02:25.917668+00:00",
       "objections": [
         "CONSIDERED_SESSION:2026-11-06",
         "VALIDATION_GATE_FAILED"
       ],
       "owner": "paper-core",
-      "pid": 32744,
-      "process_epoch": "8952a429-df13-4bfc-8c29-d523b612639a",
-      "proof_age_seconds": 11.639798,
-      "recorded_at": "2026-11-06T23:10:54.693630+00:00",
-      "release_id": "c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3",
+      "pid": 16044,
+      "process_epoch": "57463ab6-28a1-479e-98a5-c4115d17d837",
+      "proof_age_seconds": 9.463134,
+      "recorded_at": "2026-11-07T00:02:25.917668+00:00",
+      "release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
       "role": "outcomes",
       "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
       "time_proof_age_seconds": null,
-      "valid_until": "2026-11-06T23:11:24.693630+00:00"
+      "valid_until": "2026-11-07T00:02:55.917668+00:00"
     }
   },
-  "account_lease_generation": 38,
+  "account_lease_generation": 39,
   "counts": {
     "core_round_trips": 154,
     "fills": 336,
@@ -89,10 +89,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T23:10:35.864729+00:00",
+      "recorded_at_utc": "2026-11-07T00:00:14.376940+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "bc5711df622cf5a48e73219a2006e84ca6a93435845b94ac37bfc3e0fcb02355",
+      "context_snapshot_id": "6671ff8c13c680d665ea83aad74ddb087e364357ed9c65e12421ba2bde6a0bac",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -104,27 +104,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T23:00:23.147327+00:00",
+      "recorded_at_utc": "2026-11-06T23:50:06.427063+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "bc5711df622cf5a48e73219a2006e84ca6a93435845b94ac37bfc3e0fcb02355",
-      "cohort_symbols": [
-        "BTC/USD",
-        "ETH/USD",
-        "SOL/USD"
-      ]
-    },
-    {
-      "action": "WAIT",
-      "gates": [
-        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
-        "INVENTORY_ACQUISITION_RETRYABLE",
-        "CONTINUOUS_CAPITAL_UNVERIFIED"
-      ],
-      "recorded_at_utc": "2026-11-06T22:55:16.828563+00:00",
-      "symbol": "BTC/USD",
-      "model_mode": "COLLECT",
-      "context_snapshot_id": "8208778ae79772af05406f8c202ce18bd431be91168a697aef6e12fe140c658f",
+      "context_snapshot_id": "17949bfff4d26ba87f9849853852e0593786295c160cee6ba62cdde23370c6fd",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -136,10 +119,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T22:50:13.382433+00:00",
+      "recorded_at_utc": "2026-11-06T23:45:07.603186+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "27a35a6befe86f32f69e5e5d343d5219f409d67f9eabc6884d265b8e2d7db073",
+      "context_snapshot_id": "2a18441af71ce1b24e3bbbc3cd12a4bc43790a242a1c013a433d719477c61fdb",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -151,10 +134,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T22:45:13.262941+00:00",
+      "recorded_at_utc": "2026-11-06T23:40:06.463512+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "5ec6bdce6f43cf99aea8380fef6ceef764d064ff8ae04636981e18217f506b0c",
+      "context_snapshot_id": "5cdce371c9d195b62276ced3702d932c8aa757423fc33aff7da55ba8840c0182",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -166,10 +149,25 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T22:40:15.080519+00:00",
+      "recorded_at_utc": "2026-11-06T23:35:05.286887+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "e7f9d5a69bf64cb630f6d5e68ef11a0d0c5bc01adcde7616bb8310b215931a5f",
+      "context_snapshot_id": "5cdce371c9d195b62276ced3702d932c8aa757423fc33aff7da55ba8840c0182",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    },
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
+      ],
+      "recorded_at_utc": "2026-11-06T23:30:07.184941+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "5cdce371c9d195b62276ced3702d932c8aa757423fc33aff7da55ba8840c0182",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -178,28 +176,29 @@
     }
   ],
   "context": {
+    "context:interpreter-current": "75248657323f48592dacb5cb200cc8c0646191f7bd3ee12880ef42babfb7fe3f",
     "context:learning-binding": {
-      "capture_rowid": 60942,
+      "capture_rowid": 61325,
       "contract": "SCHEDULED_CONTEXT_LEARNING_V1",
       "core_store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
-      "decision_rowid": 6673,
+      "decision_rowid": 6682,
       "declaration_path": "D:\\Elrond\\learner\\state\\learner.db",
       "experiment_id": "adaptive-sector-raw-20261006-v1",
       "experiment_store_path": "D:\\Elrond\\learner\\adaptive-paper-research-20261006\\experiment.db",
       "grants_activation": false,
-      "interpreter_admission": "SHADOW_ONLY_ON_BETTER_READING_HOLDOUT_V1",
+      "interpreter_admission": "FIXED_LEXICAL_OUTCOME_SHADOW_V1",
       "manifest_hash": "5e03b7dc3cc6b5c7ad9345dfd1bc6202114e4c924520655ad82bdd9ef8245060",
-      "modeled_cost_contract_id": "1ca77ab70d0b9858840bba940e96cbf1553cee6c73e81b5bb85d0515b45d6306",
+      "modeled_cost_contract_id": "b51c70cee3647cdffd3548f30615b1b83e7d89832f0422629ae6ab9e0c3ba07c",
       "outcome_rowid": 195,
-      "plan_id": "fb5b627b3469daeec57a87414c205268b07bf6b9c494d9435a47c7f5fe149815",
-      "recorded_at": "2026-11-06T23:02:44.528979+00:00",
+      "plan_id": "9f93e6894e8bf871448b5a4e26ed9ed9fd85ea338f344c71a7ce965fa3df8b49",
+      "recorded_at": "2026-11-06T23:55:15.946803+00:00",
       "registry_path": "D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db"
     },
     "context:learning-progress": {
-      "attempted_at": "2026-11-06T23:08:25.825658+00:00",
-      "binding_id": "52db71da3c8376c67a0d03959c4ebfc0867e21e027dbc4aa145bfd51f2b43d24",
-      "captures": 60954,
-      "decisions": 6673,
+      "attempted_at": "2026-11-06T23:55:56.262157+00:00",
+      "binding_id": "543903c9a7116593f34563755144b263a0de5c212e9370f5febed8b77fbb5dcd",
+      "captures": 61332,
+      "decisions": 6682,
       "feedback_total": 0,
       "outcomes": 195,
       "pending": false,
@@ -207,7 +206,7 @@
       "snapshots_total": 0
     },
     "context:learning-status": {
-      "binding_id": "52db71da3c8376c67a0d03959c4ebfc0867e21e027dbc4aa145bfd51f2b43d24",
+      "binding_id": "543903c9a7116593f34563755144b263a0de5c212e9370f5febed8b77fbb5dcd",
       "candidate_id": null,
       "contract": "SCHEDULED_CONTEXT_LEARNING_STATUS_V1",
       "eligible_examples": 0,
@@ -216,7 +215,7 @@
       "feedback_journaled": 0,
       "gate_counts": [
         [
-          "INDEPENDENT_REVIEW_UNAVAILABLE",
+          "OPTIONAL_SEMANTIC_REVIEW_UNAVAILABLE",
           1
         ],
         [
@@ -225,106 +224,116 @@
         ]
       ],
       "grants_activation": false,
-      "impact_evaluation_end": null,
-      "impact_status": null,
+      "impact_evaluation_end": "2026-11-21T06:00:00+00:00",
+      "impact_status": "PROSPECTIVE_COLLECTION",
       "independent_reviews": 0,
-      "interpreter_mode": null,
-      "interpreter_version_id": null,
-      "recorded_at": "2026-11-06T23:08:25.825658+00:00",
+      "interpreter_kind": "UNTRAINED_FIXED_LEXICAL_BASELINE",
+      "interpreter_mode": "SHADOW_ONLY",
+      "interpreter_version_id": "75248657323f48592dacb5cb200cc8c0646191f7bd3ee12880ef42babfb7fe3f",
+      "model_generated_reviews": 0,
+      "recorded_at": "2026-11-06T23:55:56.262157+00:00",
+      "semantic_target": "MODEL_TEACHER_AGREEMENT_V1",
       "snapshots_journaled": 0,
       "split_at": "2026-11-14T06:00:00+00:00",
       "state": "COLLECTING",
       "training_start": "2026-11-07T06:00:00+00:00"
+    },
+    "context:review-producer-status": {
+      "at": "2026-11-06T23:55:48.846768+00:00",
+      "grants_execution": false,
+      "policy_id": "e7157471e027df8fbc4e23e3939ef21cb40e90b5561e5ca9d894d5c3ac56454b",
+      "reason": "DECLARED_TRAINING_WINDOW_NOT_STARTED"
+    },
+    "context:review-producer-policy": {
+      "binary_path": "D:/Elrond/tools/ollama-v0.33.3/ollama.exe",
+      "binary_sha256": "e4fe6bd835fe146659f5c969dccaff2e25a9de63d90ee204ca5d11b9034b0ca5",
+      "context_tokens": 2048,
+      "contract": "LOCAL_FALLIBLE_TEACHER_V1",
+      "excerpt_policy": "FIRST_2400_CHARACTERS_EXCERPT_ONLY_V1",
+      "experiment_id": "adaptive-sector-raw-20261006-v1",
+      "grants_execution": false,
+      "interpretation": "MODEL_TEACHER_AGREEMENT_NOT_TRUTH_OR_PROFITABILITY",
+      "job_support_sha256": "b4c12af838fa2900cb50ca7ae86e0d5b1e0b55aebbf24a4cd8dc1c33cf355cf5",
+      "job_wrapper": "D:\\Elrond\\releases\\paper-core-14352cc-20261015\\deploy\\omen\\windows-job.ps1",
+      "manifest_sha256": "357c53fb659c5076de1d65ccb0b397446227b71a42be9d1603d46168015c9e4b",
+      "maximum_seconds": 60,
+      "minimum_confidence": 0.8,
+      "minimum_interval_seconds": 3600,
+      "model": "qwen2.5:3b",
+      "model_store": "D:/Elrond/models/ollama",
+      "num_threads": 2,
+      "prompt_sha256": "00f7b18d0d4fcfbd8d350b3ff364063003cd436a3aac2639f1e502633f51ff5e",
+      "recorded_at": "2026-11-06T23:55:14.747301+00:00",
+      "response_tokens": 128,
+      "source_policy_id": "ed9a1b0b3281917697ba644af3ae224122b147f544d50587e6d32ea1fd6a2d11",
+      "source_selection": "FIRST_ELIGIBLE_SOURCE_PER_CAPTURE_ONCE_V1",
+      "wrapper_sha256": "f2a264d7327b9bdda16b5631749541d0e22a41028f18a1770bddbd052785f0c2"
     }
   },
-  "news_documents": 6557,
+  "news_documents": 8919,
   "http": [
     {
       "route": "/",
       "status": 200,
-      "seconds": 9.5,
-      "bytes": 50863
+      "seconds": 3.141,
+      "bytes": 50841
     },
     {
       "route": "/calendar",
       "status": 200,
-      "seconds": 10.063,
+      "seconds": 2.953,
       "bytes": 42252
     },
     {
       "route": "/learner",
       "status": 200,
-      "seconds": 9.344,
-      "bytes": 36380
+      "seconds": 3.391,
+      "bytes": 36648
     },
     {
       "route": "/runtime",
       "status": 200,
-      "seconds": 9.281,
+      "seconds": 3.468,
       "bytes": 19674
     },
     {
       "route": "/session",
       "status": 200,
-      "seconds": 8.609,
+      "seconds": 3.032,
       "bytes": 30033
     },
     {
       "route": "/api/state",
       "status": 200,
-      "seconds": 4.688,
-      "bytes": 161076
+      "seconds": 0.968,
+      "bytes": 161309
     }
   ],
-  "ledger_bytes": 56720564224,
+  "ledger_bytes": 56736346112,
   "historical_records_deleted": false,
   "operating_database_test_copies": 0,
+  "outcome_revisions": 195,
   "research_document_counts": {
-    "NEWS_RESEARCH_V1": 6557,
-    "SEC_COMPANY_RESEARCH_V1": 58393
+    "NEWS_RESEARCH_V1": 8919,
+    "SEC_COMPANY_RESEARCH_V1": 58573
   },
   "news_head": {
     "coverage": "CURRENT_WINDOW_FIRST_PAGE_ONLY",
     "coverage_truncated": false,
-    "end": "2026-11-06T23:13:07.221677+00:00",
+    "end": "2026-11-07T00:01:50.863305+00:00",
     "next_page_token": null,
-    "page_receipt_id": "305676607ea11b17ae2d80abf1d2cab9e76591e1bc21df96b3451db9690204e7",
-    "retrieved_at": "2026-11-06T23:13:07.332430+00:00",
-    "start": "2026-11-06T23:10:05.494019+00:00"
+    "page_receipt_id": "f1df6c46d844e0371b3c57a73c7149f7dc5d880c6352f788ff51e2513ddab236",
+    "retrieved_at": "2026-11-07T00:01:51.032187+00:00",
+    "start": "2026-11-06T23:58:50.705921+00:00"
   },
-  "news_measured_at": "2026-11-06T23:14:05.756093+00:00",
+  "authentic_fixed_shadow_receipts": 1,
+  "research_quick_check": [
+    [
+      "ok"
+    ]
+  ],
   "canonical_fit_calls_used": 2,
   "canonical_fit_calls_limit": 6,
-  "initial_console_commit": "836a4e09d2c8e99d1f24d5f8308062cbc03d2605",
-  "console_source_commit": "d773baa555c96e8d1d6570f4caaed62c6838965e",
-  "console_health_verification": {
-    "at": "2026-11-06T23:26:58.183968+00:00",
-    "console_commit": "6453a770921f122bdb0c4dce8bf7c014d2a5b499",
-    "source_commit": "d773baa555c96e8d1d6570f4caaed62c6838965e",
-    "routes": [
-      {
-        "route": "/api/state",
-        "status": 200,
-        "seconds": 1.172000000020489,
-        "bytes": 161090
-      },
-      {
-        "route": "/",
-        "status": 200,
-        "seconds": 3.2340000001713634,
-        "bytes": 50602
-      }
-    ],
-    "health_query_plan": [
-      [
-        3,
-        0,
-        210,
-        "SEARCH runs USING COVERING INDEX ix_runs_started_at"
-      ]
-    ],
-    "retained_runs": 187961,
-    "core_restarted": false,
-    "entry_lease_changed": false
-  }
+  "post_evaluation_at": "2026-11-07T00:02:32.005342+00:00",
+  "model_review_smoke_only": true
 }

@@ -1,12 +1,13 @@
-# Verified PAPER trading and scheduled context learning
+# Verified PAPER execution and automatic news-feedback release
 
-Core source d627897; runtime c0966c23a13141146b14e1560ee443173b83ba0a88eb29d6fc638fb5b4a194b3; account lease38 on LEANNES-LAPTOP.
-One Trader verified. Six dashboard routes returnedHTTP200. Full ledger quick_check returnedok.
+Core source becd2f2; runtime e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5; lease39 on LEANNES-LAPTOP.
+One Trader,403 executable pins, sixHTTP200 routes, primary/research integrity ok.
 
-[Current release report](release-report.md) distinguishes actual crypto evaluations, broker orders/fills,
-news ingestion, scheduled learning gates and absent model improvement. [Running evidence](running-verification.json)
-and [process/task proof](process-verification.json) retain actual release/host/lease/PID details.
+[Current report](release-report.md) separates authentic crypto evaluation (0 broker crypto orders/fills),
+news ingestion, real fixed-shadow preparation, scheduled local model reviews and absent learned improvement.
+[Runtime evidence](running-verification.json) and [process proof](process-verification.json) retain actual pins/host/PIDs/lease.
 
-News learning is wired and scheduled, but no independently reviewed news candidate is fitted or active.
-Profitability is unproven. Broad source/database-size reduction remains incomplete; measured changes
-and policy-blocked cleanup are stated explicitly in the report. Dashboard profiling is separate work.
+The local reviewer is commissioned and scheduled; its declared training starts Nov7 06:00UTC.
+Current reviews/candidates/promotions are0. Semantic calibration uses fallible model-teacher agreement,
+not human truth. Profitability is unproven. Source grew; broad code/storage reduction and policy-blocked
+cleanup remain explicitly reported. No new paid API, persistent service or operating DB test copy.

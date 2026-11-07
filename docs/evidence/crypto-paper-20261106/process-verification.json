@@ -1,44 +1,44 @@
 {
-  "trading_engines": 1,
-  "python_launchers": 5,
+  "application_processes": 5,
+  "model_listener_running": false,
+  "at": "2026-11-07T00:03:32.9917223+00:00",
   "processes": [
     {
-      "ProcessId": 15892,
-      "ParentProcessId": 34340,
+      "ProcessId": 23448,
+      "ParentProcessId": 12520,
       "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
       "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -u -m quantbot.paper_core.research_worker --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --seal D:\\Elrond\\releases\\market-research-aad7b912accd-20261026\\research-seal.json --settings D:\\Elrond\\config\\market-research-aad7b912accd.json",
-      "WorkingSetSize": 106532864
+      "WorkingSetSize": 108879872
     },
     {
-      "ProcessId": 32744,
-      "ParentProcessId": 34608,
-      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
-      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role outcomes --entry-disabled",
-      "WorkingSetSize": 144150528
-    },
-    {
-      "ProcessId": 15680,
-      "ParentProcessId": 31912,
+      "ProcessId": 25308,
+      "ParentProcessId": 16804,
       "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
       "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role guardian --entry-disabled",
-      "WorkingSetSize": 154484736
+      "WorkingSetSize": 140660736
     },
     {
-      "ProcessId": 32124,
-      "ParentProcessId": 27468,
+      "ProcessId": 16044,
+      "ParentProcessId": 34556,
       "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
-      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -m quantbot.operations.service --env-file D:\\Elrond\\config\\console-20261105.env --commit 836a4e09d2c8e99d1f24d5f8308062cbc03d2605 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component console --experiment-store D:\\Elrond\\learner\\adaptive-paper-research-20261006\\experiment.db",
-      "WorkingSetSize": 207532032
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role outcomes --entry-disabled",
+      "WorkingSetSize": 142565376
     },
     {
-      "ProcessId": 5452,
-      "ParentProcessId": 27428,
+      "ProcessId": 18752,
+      "ParentProcessId": 16176,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -m quantbot.operations.service --env-file D:\\Elrond\\config\\console-20261105.env --commit 183b6fe43c541ea83b4f4b6b3333eda4a79fa8dd --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component console --experiment-store D:\\Elrond\\learner\\adaptive-paper-research-20261006\\experiment.db",
+      "WorkingSetSize": 42803200
+    },
+    {
+      "ProcessId": 34672,
+      "ParentProcessId": 22400,
       "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
       "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role trader",
-      "WorkingSetSize": 163131392
+      "WorkingSetSize": 135831552
     }
   ],
-  "application_processes": 5,
   "tasks": [
     {
       "TaskName": "Elrond Console",
@@ -69,5 +69,6 @@
       "State": 4
     }
   ],
-  "at": "2026-11-06T23:12:38.4087036+00:00"
+  "python_launchers": 5,
+  "trading_engines": 1
 }
