@@ -1,6 +1,6 @@
 # Verified PAPER execution and automatic news-feedback release
 
-Core source becd2f2; runtime e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5; lease39 on LEANNES-LAPTOP.
+Core source becd2f2; dependency patch b2f577c; runtime d8519ab91155b0e3af388a5f0d7034a7d730f88ba73542322c2d88d6b519c353; lease40 on LEANNES-LAPTOP.
 One Trader,403 executable pins, sixHTTP200 routes, primary/research integrity ok.
 
 [Current report](release-report.md) separates authentic crypto evaluation (0 broker crypto orders/fills),
@@ -11,3 +11,5 @@ The local reviewer is commissioned and scheduled; its declared training starts N
 Current reviews/candidates/promotions are0. Semantic calibration uses fallible model-teacher agreement,
 not human truth. Profitability is unproven. Source grew; broad code/storage reduction and policy-blocked
 cleanup remain explicitly reported. No new paid API, persistent service or operating DB test copy.
+
+Both deployed environments use certifi2026.10.19 and opentelemetry-api1.45.1; [installed dependency proof](installed-verification.json). The final dependency regression run passed78 tests.

@@ -17,5 +17,6 @@
   "services_eliminated": 0,
   "dependencies_added": 0,
   "operating_database_test_copies": 0,
-  "method": "Tracked src/**/*.py; nonblank non-comment lines, including docstrings; source grew to implement required safety/learning. Not a net reduction."
+  "method": "Tracked src/**/*.py; nonblank non-comment lines, including docstrings; source grew to implement required safety/learning. Not a net reduction.",
+  "dependency_patch_commit": "b2f577c000d6507b5efdd4a7cbf84750e7504456"
 }

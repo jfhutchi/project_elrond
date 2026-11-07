@@ -1,0 +1,19 @@
+{
+  "core": {
+    "certifi": "2026.10.19",
+    "opentelemetry_api": "1.45.1",
+    "compromised_emsign_ecc_g3_absent": true
+  },
+  "console": {
+    "certifi": "2026.10.19",
+    "opentelemetry_api": "1.45.1",
+    "compromised_emsign_ecc_g3_absent": true
+  },
+  "at": "2026-11-07T00:30:06.833435+00:00",
+  "source_commit": "b2f577c000d6507b5efdd4a7cbf84750e7504456",
+  "additional_tests_passed": 78,
+  "alerts": [
+    "https://github.com/advisories/GHSA-6q48-6c7w-9gw2",
+    "https://github.com/advisories/GHSA-xcq7-p3pf-p88h"
+  ]
+}

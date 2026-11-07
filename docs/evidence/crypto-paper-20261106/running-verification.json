@@ -1,81 +1,84 @@
 {
-  "at": "2026-11-06T23:59:09.384160+00:00",
+  "at": "2026-11-07T00:35:33.701238+00:00",
   "host": "Leannes-Laptop",
-  "source_commit": "becd2f2f88968fd5613aaec9304978df0133c8ed",
-  "console_commit": "183b6fe43c541ea83b4f4b6b3333eda4a79fa8dd",
-  "runtime_release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
+  "source_commit": "b2f577c000d6507b5efdd4a7cbf84750e7504456",
+  "console_commit": "a4e397186fd5e9b71385d08b5a00cb4446c9ac87",
+  "runtime_release_id": "d8519ab91155b0e3af388a5f0d7034a7d730f88ba73542322c2d88d6b519c353",
   "pins_verified": 403,
   "roles": {
     "trader": {
       "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
-      "cycle_seconds": 1.968000000109896,
+      "cycle_seconds": 9.672000000020489,
       "evidence_ids": [
-        "7ced1246e20dad76e6bc68980b835111c11061a68d70ea5c74e8a0d186b7fb91"
+        "624ff9442a49d61972916c96b8d57dc387e665474bad5f4d5b48e6a96a6c90bf",
+        "2e494bdb1948bb268262f10f2306e39599eabc8f088c43bb6ded262f5c29f105"
       ],
-      "first_blocker": null,
+      "first_blocker": "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
       "generation": 1,
       "guardian_receipt_id": null,
-      "last_useful_progress": "2026-11-07T00:02:25.587399+00:00",
-      "objections": [],
+      "last_useful_progress": "2026-11-07T00:35:11.018781+00:00",
+      "objections": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
+      ],
       "owner": "paper-core",
-      "pid": 34672,
-      "process_epoch": "45d3f1f6-f194-42cb-8c25-d0ae348468b5",
-      "proof_age_seconds": 9.132865,
-      "recorded_at": "2026-11-07T00:02:25.587399+00:00",
-      "release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
+      "pid": 34352,
+      "process_epoch": "9aab54b6-c785-4f03-89c3-a8b1cdf6f070",
+      "proof_age_seconds": 6.344788,
+      "recorded_at": "2026-11-07T00:35:11.018781+00:00",
+      "release_id": "d8519ab91155b0e3af388a5f0d7034a7d730f88ba73542322c2d88d6b519c353",
       "role": "trader",
       "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
-      "time_proof_age_seconds": 135.81200000015087,
-      "valid_until": "2026-11-07T00:02:55.587399+00:00"
+      "time_proof_age_seconds": 8.905999999959022,
+      "valid_until": "2026-11-07T00:35:41.018781+00:00"
     },
     "guardian": {
       "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
-      "cycle_seconds": 7.172000000020489,
+      "cycle_seconds": 7.859999999869615,
       "evidence_ids": [
-        "de40fcd10283da0afb55d47f78ee44ce05746b076fa0156ba1f58ac60420779a",
-        "9225591446718b4d37be6b95c3d8395551e23414542269162c5e514c5937eeaf"
+        "d7cf49ff74ed1b2c6329c15ec8f876789e8c1186457652e0c3fbc5f23a736782",
+        "db3018600faf6de19bb80d6ebed5de1b233ee25d8fab5d43b21b92818c47844b"
       ],
       "first_blocker": null,
       "generation": 1,
-      "guardian_receipt_id": "8ebb57dab24db216aef8b896f4615f815f098f024c76e18fb10a735b4151cabb",
-      "last_useful_progress": "2026-11-07T00:02:21.414253+00:00",
+      "guardian_receipt_id": "e6c039a7c975d5a221d62e86a6b1b2079317b58ea355bbfd2bf11b15ade43b92",
+      "last_useful_progress": "2026-11-07T00:35:04.021852+00:00",
       "objections": [],
       "owner": "paper-core",
-      "pid": 25308,
-      "process_epoch": "572166dd-c2fc-4db0-90ed-25d626814898",
-      "proof_age_seconds": 4.959719,
-      "recorded_at": "2026-11-07T00:02:21.414253+00:00",
-      "release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
+      "pid": 12308,
+      "process_epoch": "352e7eba-73de-475e-a585-94f8359b1559",
+      "proof_age_seconds": 5.604165,
+      "recorded_at": "2026-11-07T00:35:04.021852+00:00",
+      "release_id": "d8519ab91155b0e3af388a5f0d7034a7d730f88ba73542322c2d88d6b519c353",
       "role": "guardian",
       "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
-      "time_proof_age_seconds": 6.203999999910593,
-      "valid_until": "2026-11-07T00:02:51.414253+00:00"
+      "time_proof_age_seconds": 6.905999999959022,
+      "valid_until": "2026-11-07T00:35:34.021852+00:00"
     },
     "outcomes": {
       "config_id": "d17b148b8e6cf215ff9cde280da818c90a1146f118f45f96d40f4f9b0dd8c926",
-      "cycle_seconds": 1.9059999999590218,
+      "cycle_seconds": 3.5159999998286366,
       "evidence_ids": [],
       "first_blocker": "CONSIDERED_SESSION:2026-11-06",
       "generation": 1,
       "guardian_receipt_id": null,
-      "last_useful_progress": "2026-11-07T00:02:25.917668+00:00",
+      "last_useful_progress": "2026-11-07T00:35:05.976669+00:00",
       "objections": [
         "CONSIDERED_SESSION:2026-11-06",
         "VALIDATION_GATE_FAILED"
       ],
       "owner": "paper-core",
-      "pid": 16044,
-      "process_epoch": "57463ab6-28a1-479e-98a5-c4115d17d837",
-      "proof_age_seconds": 9.463134,
-      "recorded_at": "2026-11-07T00:02:25.917668+00:00",
-      "release_id": "e676162fb6c4e81111be7f2ae910e2a460993df19351332b0e01574e22b136d5",
+      "pid": 33608,
+      "process_epoch": "21123576-7894-47ab-9635-b0b8a12e3501",
+      "proof_age_seconds": 1.302676,
+      "recorded_at": "2026-11-07T00:35:05.976669+00:00",
+      "release_id": "d8519ab91155b0e3af388a5f0d7034a7d730f88ba73542322c2d88d6b519c353",
       "role": "outcomes",
       "store_identity": "cd2a5911-853a-484e-bbc8-d0c27b5d27aa",
       "time_proof_age_seconds": null,
-      "valid_until": "2026-11-07T00:02:55.917668+00:00"
+      "valid_until": "2026-11-07T00:35:35.976669+00:00"
     }
   },
-  "account_lease_generation": 39,
+  "account_lease_generation": 40,
   "counts": {
     "core_round_trips": 154,
     "fills": 336,
@@ -89,10 +92,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-07T00:00:14.376940+00:00",
+      "recorded_at_utc": "2026-11-07T00:35:07.639543+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "6671ff8c13c680d665ea83aad74ddb087e364357ed9c65e12421ba2bde6a0bac",
+      "context_snapshot_id": "603b439dc43b71616b1a7265da9ed002318397c6a73048e8d81d07da7abdb8b3",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -104,10 +107,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T23:50:06.427063+00:00",
+      "recorded_at_utc": "2026-11-07T00:30:06.495883+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "17949bfff4d26ba87f9849853852e0593786295c160cee6ba62cdde23370c6fd",
+      "context_snapshot_id": "2b89c4a82712dc5a6dc5ca90d9ed63c72d9ec4f53a2ebc95f82c8ee5e962f050",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -119,10 +122,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T23:45:07.603186+00:00",
+      "recorded_at_utc": "2026-11-07T00:26:37.290562+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "2a18441af71ce1b24e3bbbc3cd12a4bc43790a242a1c013a433d719477c61fdb",
+      "context_snapshot_id": "b79e97dc5e22d856d05b954361ff410f32765b6195465c01dfad2e1f6c80290a",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -134,10 +137,26 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T23:40:06.463512+00:00",
+      "recorded_at_utc": "2026-11-07T00:20:14.960483+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "5cdce371c9d195b62276ced3702d932c8aa757423fc33aff7da55ba8840c0182",
+      "context_snapshot_id": "515b691ca124ae0d442450f10edd21835c2983aa9eee753bb2784265d3dfd54e",
+      "cohort_symbols": [
+        "BTC/USD",
+        "ETH/USD",
+        "SOL/USD"
+      ]
+    },
+    {
+      "action": "WAIT",
+      "gates": [
+        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED",
+        "CONTINUOUS_CAPITAL_UNVERIFIED"
+      ],
+      "recorded_at_utc": "2026-11-07T00:15:16.208179+00:00",
+      "symbol": "BTC/USD",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "515b691ca124ae0d442450f10edd21835c2983aa9eee753bb2784265d3dfd54e",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -149,25 +168,10 @@
       "gates": [
         "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
       ],
-      "recorded_at_utc": "2026-11-06T23:35:05.286887+00:00",
+      "recorded_at_utc": "2026-11-07T00:10:15.779031+00:00",
       "symbol": "BTC/USD",
       "model_mode": "COLLECT",
-      "context_snapshot_id": "5cdce371c9d195b62276ced3702d932c8aa757423fc33aff7da55ba8840c0182",
-      "cohort_symbols": [
-        "BTC/USD",
-        "ETH/USD",
-        "SOL/USD"
-      ]
-    },
-    {
-      "action": "WAIT",
-      "gates": [
-        "CRYPTO_COST_AWARE_SIGNAL_NOT_QUALIFIED"
-      ],
-      "recorded_at_utc": "2026-11-06T23:30:07.184941+00:00",
-      "symbol": "BTC/USD",
-      "model_mode": "COLLECT",
-      "context_snapshot_id": "5cdce371c9d195b62276ced3702d932c8aa757423fc33aff7da55ba8840c0182",
+      "context_snapshot_id": "f178e971152e80e0ee6ffe00db4b944c82d3772143b780a7a7f108ab85b3491b",
       "cohort_symbols": [
         "BTC/USD",
         "ETH/USD",
@@ -270,70 +274,46 @@
       "wrapper_sha256": "f2a264d7327b9bdda16b5631749541d0e22a41028f18a1770bddbd052785f0c2"
     }
   },
-  "news_documents": 8919,
+  "news_documents": 10482,
   "http": [
     {
       "route": "/",
       "status": 200,
-      "seconds": 3.141,
-      "bytes": 50841
+      "seconds": 3.343,
+      "bytes": 50591
     },
     {
       "route": "/calendar",
       "status": 200,
-      "seconds": 2.953,
+      "seconds": 2.297,
       "bytes": 42252
     },
     {
       "route": "/learner",
       "status": 200,
-      "seconds": 3.391,
+      "seconds": 2.297,
       "bytes": 36648
     },
     {
       "route": "/runtime",
       "status": 200,
-      "seconds": 3.468,
+      "seconds": 3.047,
       "bytes": 19674
     },
     {
       "route": "/session",
       "status": 200,
-      "seconds": 3.032,
+      "seconds": 3.328,
       "bytes": 30033
     },
     {
       "route": "/api/state",
       "status": 200,
-      "seconds": 0.968,
-      "bytes": 161309
+      "seconds": 1.063,
+      "bytes": 161298
     }
   ],
-  "ledger_bytes": 56736346112,
+  "ledger_bytes": 56748716032,
   "historical_records_deleted": false,
-  "operating_database_test_copies": 0,
-  "outcome_revisions": 195,
-  "research_document_counts": {
-    "NEWS_RESEARCH_V1": 8919,
-    "SEC_COMPANY_RESEARCH_V1": 58573
-  },
-  "news_head": {
-    "coverage": "CURRENT_WINDOW_FIRST_PAGE_ONLY",
-    "coverage_truncated": false,
-    "end": "2026-11-07T00:01:50.863305+00:00",
-    "next_page_token": null,
-    "page_receipt_id": "f1df6c46d844e0371b3c57a73c7149f7dc5d880c6352f788ff51e2513ddab236",
-    "retrieved_at": "2026-11-07T00:01:51.032187+00:00",
-    "start": "2026-11-06T23:58:50.705921+00:00"
-  },
-  "authentic_fixed_shadow_receipts": 1,
-  "research_quick_check": [
-    [
-      "ok"
-    ]
-  ],
-  "canonical_fit_calls_used": 2,
-  "canonical_fit_calls_limit": 6,
-  "post_evaluation_at": "2026-11-07T00:02:32.005342+00:00",
-  "model_review_smoke_only": true
+  "operating_database_test_copies": 0
 }
