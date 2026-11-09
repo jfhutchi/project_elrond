@@ -1,0 +1,23 @@
+{
+  "at_eastern": "2026-11-09T11:12:49.389563-05:00",
+  "paper_only": true,
+  "methods": [
+    "GET"
+  ],
+  "expected_account_verified": true,
+  "orders_returned": 334,
+  "orders_below_page_limit": true,
+  "crypto_orders_returned": 0,
+  "crypto_orders_below_page_limit": true,
+  "crypto_orders_in_unfiltered_result": 0,
+  "crypto_open_positions": 0,
+  "recent_fill_activities": 14,
+  "fills_below_page_limit": true,
+  "crypto_fill_activities": 0,
+  "account_flags": {
+    "status": "ACTIVE",
+    "crypto_status": "ACTIVE",
+    "trading_blocked": false,
+    "account_blocked": false
+  }
+}

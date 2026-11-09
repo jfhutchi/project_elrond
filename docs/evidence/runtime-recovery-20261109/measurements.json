@@ -1,0 +1,22 @@
+{
+  "baseline": "6f806aeb39169539f72b8d3fe2cfe5b7fdf26d3d",
+  "source_commit": "553c51f0e4a8175c547bde818af75bb435d524c7",
+  "source_lines_added": 249,
+  "source_lines_removed": 17,
+  "source_files_changed": 8,
+  "source_files_deleted": 0,
+  "production_dependencies_added": 0,
+  "services_eliminated": 0,
+  "operating_ledger_test_copies": 0,
+  "quote_ledger_validations_before": 7,
+  "quote_ledger_validations_after": 3,
+  "guardian_configured_noncritical_requests_before_per_minute": 40,
+  "guardian_scheduled_full_capture_requests_after_per_minute": 20,
+  "guardian_noncritical_reserve_limit": 36,
+  "unavailable_metrics": [
+    "Controlled whole-loop before/after latency",
+    "CPU/peak memory",
+    "Live entry/fill latency while entries fenced",
+    "Full repository-suite pass"
+  ]
+}

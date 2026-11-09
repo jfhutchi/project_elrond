@@ -1,5 +1,7 @@
 # Verified PAPER execution and automatic news-feedback release
 
+November 9 update: superseded by the [repair and blocked-handoff report](../runtime-recovery-20261109/README.md). Trading is now intentionally fenced; the observations below are historical.
+
 Core source becd2f2; dependency patch b2f577c; runtime d8519ab91155b0e3af388a5f0d7034a7d730f88ba73542322c2d88d6b519c353; lease40 on LEANNES-LAPTOP.
 One Trader,403 executable pins, sixHTTP200 routes, primary/research integrity ok.
 

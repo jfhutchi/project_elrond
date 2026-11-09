@@ -1,0 +1,196 @@
+{
+  "captured_at_utc": "2026-11-09T14:43:27.640700+00:00",
+  "read_only": true,
+  "source": "paper-account-control.db",
+  "guardian_noncritical_limit": 36,
+  "guardian_protection_reserve": 84,
+  "window_seconds": 60,
+  "normal_capture_requests": 10,
+  "configured_guardian_period_seconds": 15,
+  "normal_capture_requests_per_minute": 40,
+  "latest_refusals": [
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159696.515,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/positions",
+      "at": 2159665.953,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account/activities",
+      "at": 2159639.187,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/positions",
+      "at": 2159604.796,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159531.234,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159470.375,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159409.328,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159349.171,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159288.109,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159242.609,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159180.453,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account/activities",
+      "at": 2159118.343,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159104.609,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2159043.218,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2158981.531,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2158966.421,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2158905.062,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2158844.843,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2158783.515,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "at": 2158722.218,
+      "reason": "OWNED_PROTECTION_REQUEST_RESERVE"
+    }
+  ],
+  "latest_refusal_previous_60_seconds": [
+    {
+      "role": "guardian",
+      "purpose": "CLOCK GET /v2/calendar",
+      "count": 8
+    },
+    {
+      "role": "guardian",
+      "purpose": "CLOCK GET /v2/clock",
+      "count": 8
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account",
+      "count": 8
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/account/activities",
+      "count": 6
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/orders",
+      "count": 15
+    },
+    {
+      "role": "guardian",
+      "purpose": "RECOVERY GET /v2/positions",
+      "count": 7
+    },
+    {
+      "role": "outcomes",
+      "purpose": "CLOCK GET /v2/calendar",
+      "count": 4
+    },
+    {
+      "role": "outcomes",
+      "purpose": "RECOVERY GET /v2/account/activities",
+      "count": 4
+    },
+    {
+      "role": "outcomes",
+      "purpose": "RECOVERY GET /v2/orders",
+      "count": 8
+    },
+    {
+      "role": "trader",
+      "purpose": "CLOCK GET /v2/clock",
+      "count": 4
+    },
+    {
+      "role": "trader",
+      "purpose": "RECOVERY GET /v1beta1/news",
+      "count": 2
+    },
+    {
+      "role": "trader",
+      "purpose": "RECOVERY GET /v2/stocks/snapshots",
+      "count": 4
+    }
+  ],
+  "interpretation": "Recurring local protection reserve refusal, not external provider outage. No budget or reserve changes authorized by this evidence."
+}

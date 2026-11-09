@@ -1,0 +1,41 @@
+{
+  "at_eastern": "2026-11-09T11:01:33.579457-05:00",
+  "read_only": true,
+  "fit_performed": false,
+  "promotion_performed": false,
+  "eligible_examples_pure_join": 3,
+  "exclusions": {
+    "READING_UNVERIFIED_OR_AMBIGUOUS": 372,
+    "INDEPENDENT_REVIEW_UNAVAILABLE": 47
+  },
+  "event_counts": {
+    "ContextEvaluationPlan": 2,
+    "ContextImpactPlan": 1,
+    "ContextPlanSupersession": 1,
+    "ContextSnapshotRecord": 62,
+    "ReadingReview": 3
+  },
+  "retained_reviews": [
+    {
+      "recorded_at": "2026-11-07T18:12:10.907180Z",
+      "verdict": "CORRECTED",
+      "label_authority": "MODEL_GENERATED",
+      "confidence": 0.8,
+      "uncertain": false
+    },
+    {
+      "recorded_at": "2026-11-07T19:20:24.984448Z",
+      "verdict": "CORRECTED",
+      "label_authority": "MODEL_GENERATED",
+      "confidence": 0.8,
+      "uncertain": false
+    },
+    {
+      "recorded_at": "2026-11-09T15:00:57.504461Z",
+      "verdict": "CORRECTED",
+      "label_authority": "MODEL_GENERATED",
+      "confidence": 0.85,
+      "uncertain": false
+    }
+  ]
+}

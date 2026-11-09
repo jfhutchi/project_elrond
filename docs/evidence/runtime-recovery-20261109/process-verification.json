@@ -1,0 +1,62 @@
+{
+  "at_eastern": "2026-11-09T11:12:50.9646862-05:00",
+  "active_traders": 0,
+  "entry_trader_intentionally_disabled": true,
+  "application_roles_running": 4,
+  "processes": [
+    {
+      "ProcessId": 36468,
+      "ParentProcessId": 22448,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -u -m quantbot.paper_core.research_worker --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --seal D:\\Elrond\\releases\\market-research-aad7b912accd-20261026\\research-seal.json --settings D:\\Elrond\\config\\market-research-aad7b912accd.json"
+    },
+    {
+      "ProcessId": 18856,
+      "ParentProcessId": 1820,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role guardian --entry-disabled"
+    },
+    {
+      "ProcessId": 29084,
+      "ParentProcessId": 29188,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -B -m quantbot.paper_core --config D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-config.json --manifest D:\\Elrond\\config\\paper-core-14352cc-20261015\\runtime-manifest.json --role outcomes --entry-disabled"
+    },
+    {
+      "ProcessId": 10648,
+      "ParentProcessId": 23728,
+      "ExecutablePath": "D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe",
+      "CommandLine": "\"D:\\Elrond\\tools\\python\\cpython-3.11.16-windows-x86_64-none\\python.exe\" -m quantbot.operations.service --env-file D:\\Elrond\\config\\console-20261105.env --commit a4e397186fd5e9b71385d08b5a00cb4446c9ac87 --database D:\\Elrond\\state\\quantbot-paper-fresh-20260908.db --component console --experiment-store D:\\Elrond\\learner\\adaptive-paper-research-20261006\\experiment.db"
+    }
+  ],
+  "tasks": [
+    {
+      "TaskName": "Elrond Console",
+      "State": 4
+    },
+    {
+      "TaskName": "Elrond Paper Core Guardian",
+      "State": 4
+    },
+    {
+      "TaskName": "Elrond Paper Core Outcomes",
+      "State": 4
+    },
+    {
+      "TaskName": "Elrond Paper Core Trader",
+      "State": 1
+    },
+    {
+      "TaskName": "Elrond Paper Deadline",
+      "State": 1
+    },
+    {
+      "TaskName": "Elrond Protection",
+      "State": 1
+    },
+    {
+      "TaskName": "Elrond Research",
+      "State": 4
+    }
+  ]
+}

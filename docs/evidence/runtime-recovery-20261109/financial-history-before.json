@@ -1,0 +1,25 @@
+{
+  "at": "2026-11-09T15:53:28.358694+00:00",
+  "tables": {
+    "order_intents": {
+      "count": 4922,
+      "sha256": "530d7f7ed9ca764a2426588250f099ef2cd64f11a383a00a9d375c5efb358be7"
+    },
+    "broker_orders": {
+      "count": 334,
+      "sha256": "e4d401e66954377ce7e77d2ad99dba40af064870f7c1ab14034b2837bb543f90"
+    },
+    "fills": {
+      "count": 336,
+      "sha256": "fc41f673958a3d95ca2d6776f4568e163aa20c531d8a8281c89c9ab179a2e77c"
+    },
+    "core_round_trips": {
+      "count": 154,
+      "sha256": "8d9585a11a5af6e5afd10014eed314c4b29d8b6494854d4bcf7e7d8d98694d37"
+    },
+    "core_outcome_revisions": {
+      "count": 195,
+      "sha256": "5e809ed1d1b4d2aa8dd506a304ee0d033d9ebf24cd0411bd76fa1f6ef023fa5a"
+    }
+  }
+}

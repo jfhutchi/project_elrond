@@ -1,0 +1,58 @@
+{
+  "reason": "Automatic approval review: blocked by policy",
+  "deleted": false,
+  "quote_paths": [
+    "D:/Elrond/scratch/quote-repair-20261109-baseline",
+    "D:/Elrond/scratch/quote-repair-20261109-continuous-red",
+    "D:/Elrond/scratch/quote-repair-20261109-green",
+    "D:/Elrond/scratch/quote-repair-20261109-red",
+    "D:/Elrond/scratch/quote-repair-20261109-trace",
+    "D:/Elrond/scratch/quote-repair-20261109-trace2"
+  ],
+  "other_owned_paths": [
+    {
+      "path": "D:\\Elrond\\scratch\\runtime-recovery-full-20261109",
+      "bytes": 536332771,
+      "files": 430,
+      "reparse_entries": []
+    },
+    {
+      "path": "D:\\Elrond\\scratch\\runtime-recovery-final-full-20261109",
+      "bytes": 808959032,
+      "files": 1660,
+      "reparse_entries": []
+    },
+    {
+      "path": "D:\\Elrond\\scratch\\runtime-recovery-release-gate-20261109",
+      "bytes": 744723401,
+      "files": 1722,
+      "reparse_entries": []
+    },
+    {
+      "path": "D:\\Elrond\\scratch\\learning-ack-red-20261109",
+      "bytes": 2924544,
+      "files": 4,
+      "reparse_entries": []
+    },
+    {
+      "path": "D:\\Elrond\\scratch\\learning-ack-red-20261109-2",
+      "bytes": 2924546,
+      "files": 6,
+      "reparse_entries": []
+    },
+    {
+      "path": "D:\\Elrond\\scratch\\learning-race-red-20261109",
+      "bytes": 5816324,
+      "files": 12,
+      "reparse_entries": []
+    },
+    {
+      "path": "D:\\Elrond\\scratch\\teacher-isolation-diagnosis-20261109",
+      "bytes": 1609728,
+      "files": 5,
+      "reparse_entries": []
+    }
+  ],
+  "other_owned_bytes": 2103290346,
+  "prior_Nov7_backup_and_two_scratch_deletions": "Resolved previously; not current blockers"
+}

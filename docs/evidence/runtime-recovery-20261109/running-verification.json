@@ -1,0 +1,275 @@
+{
+  "captured_eastern": "2026-11-09T11:13:14.975993-05:00",
+  "source_commit": "553c51f0e4a8175c547bde818af75bb435d524c7",
+  "release_id": "7327ff3ccffd2f702f6dbdeae51398fb19bf7bd9c23e1957230637676e094dfc",
+  "pins_verified": 403,
+  "schema": 37,
+  "lease_generation": 40,
+  "deployment_state": "CODE_ONLY_FENCED_RECOVERY",
+  "trader_enabled": false,
+  "trading_verified": false,
+  "roles": {
+    "guardian": {
+      "pid": 18856,
+      "recorded_at": "2026-11-09T16:13:10.915093+00:00",
+      "valid_until": "2026-11-09T16:13:40.915093+00:00",
+      "first_blocker": null,
+      "objections": [],
+      "release_id": "7327ff3ccffd2f702f6dbdeae51398fb19bf7bd9c23e1957230637676e094dfc",
+      "cycle_seconds": 11.109000000171363
+    },
+    "outcomes": {
+      "pid": 29084,
+      "recorded_at": "2026-11-09T16:13:00.755544+00:00",
+      "valid_until": "2026-11-09T16:13:30.755544+00:00",
+      "first_blocker": "CONSIDERED_SESSION:2026-11-06",
+      "objections": [
+        "CONSIDERED_SESSION:2026-11-06",
+        "SESSION_BUDGET_OR_INPUT_REUSED",
+        "ACKNOWLEDGEMENT_DEFERRED:ACTIVATION_UNRESOLVED_CLAIM"
+      ],
+      "release_id": "7327ff3ccffd2f702f6dbdeae51398fb19bf7bd9c23e1957230637676e094dfc",
+      "cycle_seconds": 1.8909999998286366
+    }
+  },
+  "manual_stop_engaged": false,
+  "counts": {
+    "core_round_trips": 154,
+    "core_outcome_revisions": 195,
+    "fills": 336
+  },
+  "crypto": {
+    "order_intents": [
+      {
+        "symbol": "BTC/USD",
+        "count": 1
+      },
+      {
+        "symbol": "ETH/USD",
+        "count": 7
+      },
+      {
+        "symbol": "SOL/USD",
+        "count": 11
+      }
+    ],
+    "broker_orders": [],
+    "fills": []
+  },
+  "decisions": [
+    {
+      "symbol": "PYPL",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "b5429c6ddb9f5c267d2845259e9e91689aaa9eb3380b02ca071287952155cfc5",
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QUAL",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": null,
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "PVAL",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": null,
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QQQI",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": null,
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QQQM",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": null,
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QQQ",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "0467b58e6c954201e759b9689e31c6b8d7ba66d5bebeef6fdf606bcc6981da23",
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "PK",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": null,
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QBTS",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "2cfd7e924f3243ec9f38344a8d3e0ee336a62475875125dc756ab3ca4af1ec4e",
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QID",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": null,
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QLD",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": null,
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "QXO",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:20:09.483855+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "2dee93308fd6522877ce9a269109f201f3d27b078db836cd879141a9e3253ce2",
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    },
+    {
+      "symbol": "AAPL",
+      "action": "BUY",
+      "gates": [],
+      "recorded_at_utc": "2026-11-09T15:15:11.302836+00:00",
+      "model_mode": "COLLECT",
+      "context_snapshot_id": "ec18242640e09e16d51eb2cbe41874823d76903bcc19282804bffb281f449386",
+      "learning_receipt_id": "ac49ddbe047ed7bf0f0dc8f78a746b908315d22de13e2986b1a36cdaca50759d"
+    }
+  ],
+  "post_cutover_heartbeat_reason_counts": {
+    "guardian": {
+      "INVENTORY_REFRESH_PENDING": 38
+    },
+    "outcomes": {
+      "CONSIDERED_SESSION:2026-11-06": 75,
+      "SESSION_BUDGET_OR_INPUT_REUSED": 75,
+      "ACKNOWLEDGEMENT_DEFERRED:ACTIVATION_UNRESOLVED_CLAIM": 75
+    }
+  },
+  "post_cutover_inventory_receipts": 37,
+  "post_cutover_unique_inventory_proofs": 37,
+  "context": {
+    "context:interpreter-current": "75248657323f48592dacb5cb200cc8c0646191f7bd3ee12880ef42babfb7fe3f",
+    "context:learning-progress": {
+      "attempted_at": "2026-11-09T16:11:45.857370+00:00",
+      "binding_id": "543903c9a7116593f34563755144b263a0de5c212e9370f5febed8b77fbb5dcd",
+      "captures": 91681,
+      "decisions": 7482,
+      "feedback_total": 0,
+      "outcomes": 195,
+      "pending": true,
+      "pending_lots": [],
+      "snapshots_total": 73
+    },
+    "context:learning-status": {
+      "binding_id": "543903c9a7116593f34563755144b263a0de5c212e9370f5febed8b77fbb5dcd",
+      "candidate_id": null,
+      "contract": "SCHEDULED_CONTEXT_LEARNING_STATUS_V1",
+      "eligible_examples": 0,
+      "evaluation_end": "2026-11-21T06:00:00+00:00",
+      "experiment_id": "adaptive-sector-raw-20261006-v1",
+      "feedback_journaled": 0,
+      "gate_counts": [
+        [
+          "COMPLETED_OUTCOME_UNAVAILABLE",
+          9
+        ],
+        [
+          "PREDECLARED_EVALUATION_CUTOFF_NOT_REACHED",
+          1
+        ]
+      ],
+      "grants_activation": false,
+      "impact_evaluation_end": "2026-11-21T06:00:00+00:00",
+      "impact_status": "PROSPECTIVE_COLLECTION",
+      "independent_reviews": 0,
+      "interpreter_kind": "UNTRAINED_FIXED_LEXICAL_BASELINE",
+      "interpreter_mode": "SHADOW_ONLY",
+      "interpreter_version_id": "75248657323f48592dacb5cb200cc8c0646191f7bd3ee12880ef42babfb7fe3f",
+      "model_generated_reviews": 3,
+      "recorded_at": "2026-11-09T16:11:45.857370+00:00",
+      "semantic_target": "MODEL_TEACHER_AGREEMENT_V1",
+      "snapshots_journaled": 73,
+      "split_at": "2026-11-14T06:00:00+00:00",
+      "state": "COLLECTING",
+      "training_start": "2026-11-07T06:00:00+00:00"
+    },
+    "context:review-producer-attempt": {
+      "at": "2026-11-09T16:00:52.583261+00:00",
+      "policy_id": "e7157471e027df8fbc4e23e3939ef21cb40e90b5561e5ca9d894d5c3ac56454b"
+    },
+    "context:review-producer-status": {
+      "at": "2026-11-09T16:02:11.220307+00:00",
+      "grants_execution": false,
+      "policy_id": "e7157471e027df8fbc4e23e3939ef21cb40e90b5561e5ca9d894d5c3ac56454b",
+      "reason": "HOURLY_TEACHER_LIMIT"
+    }
+  },
+  "news_documents": 14042,
+  "last_news_receipt": "2026-11-09T16:12:06.255739+00:00",
+  "actual_local_inference_receipts": 4,
+  "active_price_model": {
+    "description": "nonpredictive baseline; no fitted model",
+    "feature_version": "five-minute-price-alpha-v1",
+    "learning_receipt_id": "M1_NO_LEARNING",
+    "mode": "COLLECT"
+  },
+  "http": [
+    {
+      "route": "/",
+      "status": 200
+    },
+    {
+      "route": "/calendar",
+      "status": 200
+    },
+    {
+      "route": "/learner",
+      "status": 200
+    },
+    {
+      "route": "/runtime",
+      "status": 200
+    },
+    {
+      "route": "/session",
+      "status": 200
+    },
+    {
+      "route": "/api/state",
+      "status": 200
+    }
+  ],
+  "ledger_bytes": 58022232064,
+  "operating_ledger_test_copies": 0
+}
