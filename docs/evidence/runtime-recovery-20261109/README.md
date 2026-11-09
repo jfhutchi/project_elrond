@@ -1,5 +1,7 @@
 # November 9 repair — code deployed; entries remain safely fenced
 
+**Follow-up:** [11:38–11:43 verification and recovered HTTP403 diagnostic](follow-up-verification.md). The new evidence narrows the original request investigation but does not resolve it. [Prepared support request](alpaca-support-request.md), not sent.
+
 Verified 2026-11-09T11:13:14.975993-05:00 on Leannes-Laptop. **Trading has not resumed.** Four existing application roles run; the Trader task is intentionally disabled. No duplicate engine was started. This is a blocked handoff, not a claim of complete trading recovery or profitability.
 
 ## Implemented and deployed

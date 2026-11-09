@@ -1,0 +1,28 @@
+{
+  "captured_utc": "2026-11-09T16:43:34.339192+00:00",
+  "release_id": "7327ff3ccffd2f702f6dbdeae51398fb19bf7bd9c23e1957230637676e094dfc",
+  "pins_verified": 403,
+  "roles": {
+    "guardian": {
+      "pid": 18856,
+      "recorded_at": "2026-11-09T16:43:14.687793+00:00",
+      "valid_until": "2026-11-09T16:43:44.687793+00:00",
+      "objections": [
+        "INVENTORY_REFRESH_PENDING"
+      ],
+      "release_id": "7327ff3ccffd2f702f6dbdeae51398fb19bf7bd9c23e1957230637676e094dfc"
+    },
+    "outcomes": {
+      "pid": 29084,
+      "recorded_at": "2026-11-09T16:43:15.995536+00:00",
+      "valid_until": "2026-11-09T16:43:45.995536+00:00",
+      "objections": [
+        "CONSIDERED_SESSION:2026-11-06",
+        "SESSION_BUDGET_OR_INPUT_REUSED",
+        "ACKNOWLEDGEMENT_DEFERRED:ACTIVATION_UNRESOLVED_CLAIM"
+      ],
+      "release_id": "7327ff3ccffd2f702f6dbdeae51398fb19bf7bd9c23e1957230637676e094dfc"
+    }
+  },
+  "trading_verified": false
+}
