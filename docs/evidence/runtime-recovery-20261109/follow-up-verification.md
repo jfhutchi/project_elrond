@@ -1,5 +1,7 @@
 # Follow-up verification — November 9, 11:38–11:43 EST
 
+**Subsequent status:** contact approval was granted, and the request was submitted and acknowledged as [Alpaca case392277](support-case-392277.md) at12:01EST. Its original disposition remains pending. The pending-permission wording below describes the earlier11:43 observation.
+
 The deployed repairs remain intact. Trading is **not resumed or verified**: the Trader task remains disabled and there are zero Trader processes. Guardian, Outcomes, Research and Console are running. No engine, lease, configuration, schema or safety rule was changed during this follow-up.
 
 At 11:38:27 EST, the existing read-only verifier confirmed runtime `7327ff3ccffd2f702f6dbdeae51398fb19bf7bd9c23e1957230637676e094dfc`, all403 executable pins, schema37, the preserved entry fence and predecessor account binding. Both core role heartbeats were fresh and all six dashboard routes returned HTTP200. Across the post-cutover sample there were86 distinct inventory proofs, no Guardian acquisition-retry errors and no recurring learner StateConflictError. Scheduled INVENTORY_REFRESH_PENDING and explicit ACKNOWLEDGEMENT_DEFERRED:ACTIVATION_UNRESOLVED_CLAIM remain visible. Those outcomes do not grant entry readiness.

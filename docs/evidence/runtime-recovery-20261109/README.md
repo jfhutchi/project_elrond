@@ -1,6 +1,8 @@
 # November 9 repair — code deployed; entries remain safely fenced
 
-**Follow-up:** [11:38–11:43 verification and recovered HTTP403 diagnostic](follow-up-verification.md). The new evidence narrows the original request investigation but does not resolve it. [Prepared support request](alpaca-support-request.md), not sent.
+**Latest status12:05EST:** [Alpaca case392277 submitted and acknowledged; original disposition pending](support-case-392277.md). The operator authorized the request and conditional guarded recovery. A fourth genuine news review was generated automatically at12:01EST. Trading remains fenced; no disposition was invented.
+
+Earlier: [11:38–11:43 verification and recovered HTTP403 diagnostic](follow-up-verification.md). The cycle-level403 narrows the original request investigation but does not resolve it. [Reviewed support request](alpaca-support-request.md).
 
 Verified 2026-11-09T11:13:14.975993-05:00 on Leannes-Laptop. **Trading has not resumed.** Four existing application roles run; the Trader task is intentionally disabled. No duplicate engine was started. This is a blocked handoff, not a claim of complete trading recovery or profitability.
 

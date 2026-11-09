@@ -1,4 +1,6 @@
-# Prepared Alpaca support request — not sent
+# Reviewed Alpaca support request — case392277 submitted
+
+**Status update:** the operator subsequently approved this request. It was submitted once and acknowledged as **Alpaca case392277** on November9 at12:01PM EST. [Submission evidence and current pending state](support-case-392277.md). The original draft below is preserved for review history; it is no longer awaiting contact permission.
 
 Official channel: https://alpaca.markets/support/request
 
