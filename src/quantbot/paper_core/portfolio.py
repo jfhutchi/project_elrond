@@ -441,16 +441,18 @@ def portfolio_budget(
 
     day_start, day_end = account_risk_day_bounds(now)
     if store.entry_policy is not None and store.entry_policy.crypto is not None:
-        from quantbot.paper_core.continuous_capital import continuous_budget_authority
+        from quantbot.paper_core.continuous_capital import _continuous_budget_authority
 
-        opening_id, continuous_reasons = continuous_budget_authority(
+        # This synchronous continuation uses the inventory result just checked
+        # above. It cannot survive an await, another transaction, or a later call.
+        opening_id, continuous_reasons = _continuous_budget_authority(
             store,
             session,
             proof,
             now=now,
             account_equity=account.equity,
             loss_bps=bound.daily_loss_bps or 0,
-            latest=latest,
+            inventory_reasons=inventory_reasons,
         )
         reasons.extend(continuous_reasons)
     else:

@@ -548,8 +548,30 @@ def continuous_budget_authority(
     loss_bps: int,
     latest: bool = True,
 ) -> tuple[str | None, tuple[str, ...]]:
+    return _continuous_budget_authority(
+        store,
+        session,
+        proof,
+        now=now,
+        account_equity=account_equity,
+        loss_bps=loss_bps,
+        inventory_reasons=entry_inventory_objections(store, session, proof, now=now, latest=latest),
+    )
+
+
+def _continuous_budget_authority(
+    store: CoreStore,
+    session: Session,
+    proof: ReconciliationProof,
+    *,
+    now: datetime,
+    account_equity: Decimal,
+    loss_bps: int,
+    inventory_reasons: tuple[str, ...],
+) -> tuple[str | None, tuple[str, ...]]:
+    """Continue an immediate inventory check in the caller's same read transaction."""
     policy = store.entry_policy
-    reasons = list(entry_inventory_objections(store, session, proof, now=now, latest=latest))
+    reasons = list(inventory_reasons)
     if policy is None or policy.crypto is None:
         return None, ("CONTINUOUS_POLICY_UNAVAILABLE",)
     if _known_flows(store, session):

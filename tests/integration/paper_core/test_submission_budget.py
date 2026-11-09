@@ -27,6 +27,67 @@ from quantbot.storage import StorageRepository
 
 
 @pytest.mark.asyncio
+async def test_final_send_does_not_replay_inventory_validation_before_writer_fence(
+    tmp_path, monkeypatch
+):
+    db, store, broker, provider, clocks = await prepare(
+        tmp_path,
+        provider_factory=ResourceProvider,
+        entry_policy=EntryPolicy(contract="RESOURCE_BOUNDED_PAPER_V1", symbols=("AAPL", "MSFT")),
+        initial_wall=datetime(2026, 10, 14, 13, 30, 3, tzinfo=UTC),
+        warmup_seconds=0,
+    )
+    try:
+        store.runtime_role = "guardian"
+        assert not (await guardian_cycle(store, broker, now=clocks.wall)).reasons
+        clocks.advance(2100)
+        ready(store)
+        await trader_batch_cycle(
+            store,
+            broker,
+            await broker.observation_cohort(),
+            broker.config.initial_model,
+            now=clocks.wall,
+        )
+        ready(store)
+        with db.transaction() as session:
+            intent = StorageRepository(session).get_order_intent(store.links()[0]["intent_id"])
+        assert intent is not None
+        request = provider.request
+
+        async def aged_quote(method, url, **kwargs):
+            response = await request(method, url, **kwargs)
+            if url.endswith("/quotes/latest"):
+                payload = json.loads(response.content)
+                for quote in payload["quotes"].values():
+                    quote["t"] = (clocks.wall - timedelta(seconds=2)).isoformat()
+                response = response.model_copy(update={"content": json.dumps(payload).encode()})
+            return response
+
+        provider.request = aged_quote
+        ledger = store.ledger
+
+        def slow_ledger(session):
+            result = ledger(session)
+            # Model measured local hydration cost, retaining the real ledger checks.
+            clocks.advance(0.7)
+            return result
+
+        monkeypatch.setattr(store, "ledger", slow_ledger)
+        result = await coordinator(store, broker).submit_durable(
+            intent,
+            purpose=OrderPurpose.ENTRY,
+            market_eligible=True,
+            drawdown=None,
+            risk_approved=None,
+        )
+        assert result.intent.state is IntentState.FILLED
+        assert len(provider.orders) == 1
+    finally:
+        db.close()
+
+
+@pytest.mark.asyncio
 async def test_prepared_entry_sends_with_remaining_final_acquisition_budget(tmp_path, monkeypatch):
     db, store, broker, provider, clocks = await prepare(
         tmp_path,

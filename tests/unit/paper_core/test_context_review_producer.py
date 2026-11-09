@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 from tests.unit.paper_core.test_external_context import NOW
@@ -127,6 +127,15 @@ def test_retained_source_producer_teacher_isolation_and_single_attempt(tmp_path,
         }
 
     monkeypatch.setattr(producer, "local_inference", infer)
+
+    # Production uses actual completion time. This synthetic November 6 case
+    # must not depend on the wall date when the suite happens to execute.
+    class CompletionClock(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            return NOW + timedelta(seconds=10)
+
+    monkeypatch.setattr(producer, "datetime", CompletionClock)
     assert producer.consider_review(research, now=NOW) == "MODEL_GENERATED_REVIEW_RETAINED"
     monkeypatch.setattr(
         experiments,
@@ -142,6 +151,7 @@ def test_retained_source_producer_teacher_isolation_and_single_attempt(tmp_path,
     )
     label = events[0].decode(ReadingReview)
     assert len(calls) == 1 and label.label_authority == "MODEL_GENERATED"
+    assert label.recorded_at == NOW + timedelta(seconds=10)
     result = evaluate_retained_context(
         experiments,
         research,

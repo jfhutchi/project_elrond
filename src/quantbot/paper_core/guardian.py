@@ -6,6 +6,7 @@ import asyncio
 from contextlib import nullcontext
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -994,7 +995,11 @@ def _known_exit_due(
 
 
 async def guardian_cycle(
-    store: CoreStore, broker: SyntheticBroker | AlpacaCoreBroker, *, now: datetime
+    store: CoreStore,
+    broker: SyntheticBroker | AlpacaCoreBroker,
+    *,
+    now: datetime,
+    inventory_poll: Any | None = None,
 ) -> CycleReceipt:
     require_runtime_broker(store, broker)
     acknowledge_handoffs(store, now=now)
@@ -1013,7 +1018,16 @@ async def guardian_cycle(
     )
     if not prioritize_owned:
         try:
-            proof_id = await synchronize(store, broker, now=now)
+            # Revalidate after awaited time reads; a concurrent entry invalidates
+            # the flat scheduling hint before any proof can be reused.
+            proof_id = inventory_poll.current(store) if inventory_poll is not None else None
+            if proof_id is None:
+                if inventory_poll is not None and not inventory_poll.begin(store, broker):
+                    # A paced unresolved capture grants no inventory or readiness.
+                    # Owned due exits bypass this branch and reconcile below.
+                    reasons += ("INVENTORY_REFRESH_PENDING",)
+                else:
+                    proof_id = await synchronize(store, broker, now=now)
         except StateConflictError:
             reasons = (*reasons, "INVENTORY_MISMATCH")
             if store.config.clock_profile != "PAPER_TIME_V2":

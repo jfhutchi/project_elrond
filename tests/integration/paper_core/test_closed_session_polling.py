@@ -192,7 +192,7 @@ async def test_preopen_wake_uses_monotonic_deadline_without_extending_evidence(t
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("hour,minute", [(20, 1), (13, 29), (14, 0)])
-async def test_close_capture_preopen_and_open_keep_normal_cadence(
+async def test_close_preopen_and_open_keep_protection_cadence_with_bounded_inventory(
     tmp_path, monkeypatch, hour, minute
 ):
     db, store, broker, _, clocks = await fixture(
@@ -205,8 +205,10 @@ async def test_close_capture_preopen_and_open_keep_normal_cadence(
     monkeypatch.setattr(roles.asyncio, "sleep", advance)
     try:
         proofs = count(db, "core_reconciliation_proofs")
+        timing = count(db, "core_time_evidence")
         await roles.run_role(store, broker, broker.config, "guardian", cycles=3)
-        assert count(db, "core_reconciliation_proofs") == proofs + 3
+        assert count(db, "core_reconciliation_proofs") == proofs + 2
+        assert count(db, "core_time_evidence") == timing + 3
     finally:
         db.close()
 

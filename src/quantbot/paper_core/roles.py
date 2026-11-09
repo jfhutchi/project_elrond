@@ -42,7 +42,7 @@ from quantbot.paper_core.store import CoreStore, latest_certification, table
 from quantbot.paper_core.trader import claim_batch, claim_entry, trader_batch_cycle, trader_cycle
 from quantbot.research.manifest import content_id
 from quantbot.risk import OrderPurpose
-from quantbot.storage import StorageRepository
+from quantbot.storage import StateConflictError, StorageRepository
 
 if TYPE_CHECKING:
     from quantbot.paper_core.discovery import DiscoveryStore
@@ -294,6 +294,80 @@ class ClosedSessionPoll:
             self.anchor = store.clocks.sample()
             self.until = self.anchor[1] + min(900, (opens_at - upper).total_seconds() - 120)
             self.signature = signature
+
+
+class FlatInventoryPoll(ClosedSessionPoll):
+    """Bound redundant flat captures, while every Guardian protection cycle still runs."""
+
+    proof_id: str | None = None
+    last_attempt: tuple[datetime, float] | None = None
+
+    def begin(self, store: CoreStore, broker: Any) -> bool:
+        """Pace complete discretionary captures, including unresolved recovery work."""
+        if (
+            type(broker) is not AlpacaCoreBroker
+            or store.runtime_role != "guardian"
+            or store.entry_policy is None
+            or store.entry_policy.contract != "RESOURCE_BOUNDED_PAPER_V1"
+        ):
+            return True
+        wall, mono = store.clocks.sample()
+        if self.last_attempt is not None:
+            previous_wall, previous_mono = self.last_attempt
+            elapsed = mono - previous_mono
+            if (
+                0 <= elapsed < 30 - 1e-6
+                and abs((wall - previous_wall).total_seconds() - elapsed) <= 0.05
+            ):
+                return False
+        self.last_attempt = wall, mono
+        return True
+
+    def current(self, store: CoreStore) -> str | None:
+        if not self.waiting(store) or self.proof_id is None:
+            return None
+        proof = store.read("core_reconciliation_proofs", self.proof_id, ReconciliationProof)
+        return self.proof_id if self.signature == _idle_signature(store, proof) else None
+
+    def observe(self, store: CoreStore, broker: Any, receipt: Any) -> None:
+        from quantbot.paper_core.funds import PaperFundsEvidence
+
+        # Reuse never moves the original successful capture's deadline forward.
+        if receipt.proof_id == self.proof_id:
+            return
+        self.anchor = None
+        if (
+            type(broker) is not AlpacaCoreBroker
+            or store.runtime_role != "guardian"
+            or store.entry_policy is None
+            or store.entry_policy.contract != "RESOURCE_BOUNDED_PAPER_V1"
+            or receipt.proof_id is None
+            or receipt.reasons
+        ):
+            return
+        proof = store.read("core_reconciliation_proofs", receipt.proof_id, ReconciliationProof)
+        if proof.positions or any(
+            q for _, q in (*proof.actual_quantities, *proof.expected_quantities)
+        ):
+            return
+        funds = store.read("core_provider_acquisitions", proof.acquisition_id, PaperFundsEvidence)
+        if (
+            funds.first_positions
+            or funds.second_positions
+            or funds.first_open_orders
+            or funds.second_open_orders
+        ):
+            return
+        signature = _idle_signature(store, proof)
+        if signature is not None:
+            self.anchor = store.clocks.sample()
+            # Acquisition age, not publication time, bounds the scheduling hint.
+            # Leave the next 15-second protection poll room to refresh by 30s.
+            self.until = self.anchor[1] + max(
+                0, 15 - (self.anchor[0] - proof.recorded_at_utc).total_seconds()
+            )
+            self.signature = signature
+            self.proof_id = proof.id
 
 
 def _guardian_closed_idle(store: CoreStore) -> bool:
@@ -585,6 +659,11 @@ async def daily_consideration(
                     receipt.reason,
                 )
             try:
+                # A rejected/unknown request can legitimately defer acknowledgement.
+                # Check before minting another short-lived authority on every poll;
+                # activate_model independently repeats this boundary under its lock.
+                with store.database.transaction() as session:
+                    activation._boundary(session, cutoff=store.clocks.sample()[0])
                 authority = activation.commission_operational_candidate(
                     store, receipt, expected_activation_id=current.id, at=store.clocks.sample()[0]
                 )
@@ -594,6 +673,17 @@ async def daily_consideration(
                     candidate_id=receipt.resulting_model_id,
                     authority=authority,
                     at=store.clocks.sample()[0],
+                )
+            except StateConflictError as error:
+                if str(error) not in {
+                    "ACTIVATION_UNRESOLVED_CLAIM",
+                    "ACTIVATION_UNRESOLVED_SUBMISSION",
+                }:
+                    raise
+                return (
+                    "CONSIDERED_SESSION:" + completed[-1].session_date.isoformat(),
+                    receipt.reason,
+                    "ACKNOWLEDGEMENT_DEFERRED:" + str(error),
                 )
             except ValueError as error:
                 return (str(error),)
@@ -625,6 +715,7 @@ async def run_role(
     close_capture = None
     observed = TraderCycleDiagnostics()
     closed_poll = ClosedSessionPoll()
+    inventory_poll = FlatInventoryPoll()
     idle_anchor: str | None = None
     idle_previous: RoleHeartbeat | None = None
     if role == "outcomes" and isinstance(broker, AlpacaCoreBroker):
@@ -685,7 +776,10 @@ async def run_role(
                                         await broker.refresh_mark(symbol)
                                 except Exception:
                                     pass
-                    receipt = await guardian_cycle(store, broker, now=store.clocks.sample()[0])
+                    receipt = await guardian_cycle(
+                        store, broker, now=store.clocks.sample()[0], inventory_poll=inventory_poll
+                    )
+                    inventory_poll.observe(store, broker, receipt)
                     guardian_receipt = acknowledge_handoffs(store, now=store.clocks.sample()[0]).id
                     reasons, evidence_ids = receipt.reasons, (receipt.id,)
                     with suppress(ValueError, AssertionError):

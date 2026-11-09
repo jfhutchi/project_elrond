@@ -369,10 +369,14 @@ class CoreExecutionCoordinator(ExecutionCoordinator):
                 # match certification; the current equity risk limits are checked below.
                 current_account = account_snapshot.account
                 certified_account = proof.account
-                if not same_spending_authority(
-                    certified_account, current_account
-                ) or entry_inventory_objections(
-                    self.store, session, proof, now=self.store.clocks.sample()[0]
+                # Parallel admission validates current inventory inside portfolio_budget
+                # below, in this same transaction. Replaying its ledger hydration here
+                # needlessly consumes the source quote's five-second lifetime.
+                if not same_spending_authority(certified_account, current_account) or (
+                    not self.store.parallel_entries
+                    and entry_inventory_objections(
+                        self.store, session, proof, now=self.store.clocks.sample()[0]
+                    )
                 ):
                     reasons.append("CORE_CURRENT_CASH_OR_ACCOUNT_UNCERTIFIED")
                 if paper_balance_policy(self.store.config):

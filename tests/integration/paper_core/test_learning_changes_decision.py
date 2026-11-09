@@ -81,8 +81,10 @@ async def test_v2_time_and_model_binding_reaches_claim_and_locked_send(tmp_path,
     locked_sends = []
     original_check = runtime.final_send_in_session
 
-    def capture_locked_send(bound_store, session, intent, purpose, *, clock):
-        objections = original_check(bound_store, session, intent, purpose, clock=clock)
+    def capture_locked_send(bound_store, session, intent, purpose, *, clock, context_research=None):
+        objections = original_check(
+            bound_store, session, intent, purpose, clock=clock, context_research=context_research
+        )
         locked_sends.append(
             {"intent_id": intent.intent_id, "purpose": purpose.value, "objections": objections}
         )

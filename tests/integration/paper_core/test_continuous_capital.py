@@ -1,8 +1,9 @@
 """Continuous risk authority using isolated PAPER protocol fixtures only."""
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from tests.integration.paper_core.test_paper_funds import prepare
@@ -36,6 +37,112 @@ async def fixture(tmp_path, *, opening=True, initial_wall=None):
         source = opening_for_session(store, timing, preferred_proof=store.latest_proof())
         assert source is not None
     return values
+
+
+async def test_continuous_portfolio_validation_preserves_the_quote_window(tmp_path, monkeypatch):
+    from quantbot.paper_core.continuous_capital import (
+        acquire_continuous_capital,
+        continuous_budget_authority,
+    )
+    from quantbot.paper_core.funds import PaperFundsEvidence
+    from quantbot.paper_core.portfolio import (
+        CurrentPortfolioSnapshot,
+        EntryQuoteEvidence,
+        current_entry_price,
+        portfolio_budget,
+    )
+
+    db, store, broker, _, clocks = await fixture(tmp_path)
+    try:
+        proof = store.latest_proof()
+        assert await acquire_continuous_capital(broker, store, proof)
+        quote = EntryQuoteEvidence(
+            recorded_at_utc=clocks.wall,
+            evidence_lane="BROKER_PAPER",
+            release_id=store.config.release_id,
+            account_id=store.config.account_id,
+            store_identity=store.database.store_identity,
+            config_id=store.config_id,
+            policy_id=store.config.policy_id,
+            symbol="BTC/USD",
+            ask=Decimal(100),
+            bid=Decimal("99.99"),
+            source_at=clocks.wall - timedelta(seconds=3.5),
+            endpoint="https://data.alpaca.markets/v1beta3/crypto/us/latest/quotes",
+            feed="crypto",
+            raw_digest="fixture",
+        )
+        store.record("core_provider_acquisitions", quote)
+        mark = CurrentPortfolioSnapshot(
+            **{
+                name: getattr(quote, name)
+                for name in (
+                    "recorded_at_utc",
+                    "evidence_lane",
+                    "release_id",
+                    "account_id",
+                    "store_identity",
+                    "config_id",
+                    "policy_id",
+                )
+            },
+            proof_id=proof.id,
+            account=proof.account,
+            positions=proof.positions,
+            entry_symbol="BTC/USD",
+            entry_price=quote.ask,
+            entry_price_asof=quote.source_at,
+            entry_price_source="ALPACA_CRYPTO_ASK_V1",
+            entry_quote_id=quote.id,
+        )
+        ledger = store.ledger
+
+        def slow_ledger(session):
+            result = ledger(session)
+            clocks.advance(1)
+            return result
+
+        monkeypatch.setattr(store, "ledger", slow_ledger)
+        with db.transaction() as session:
+            budget = portfolio_budget(store, session, proof, now=clocks.wall, market_snapshot=mark)
+        assert not budget.objections, budget.objections
+        reasons, price = current_entry_price(
+            store,
+            mark,
+            SimpleNamespace(symbol="BTC/USD"),
+            SimpleNamespace(price=Decimal(100), market_calendar="CRYPTO24"),
+            now=clocks.wall,
+        )
+        assert not reasons, reasons
+        assert price == Decimal(100)
+        # No result survives an await/new transaction or a changed source receipt.
+        await asyncio.sleep(0)
+        funds = store.read("core_provider_acquisitions", proof.acquisition_id, PaperFundsEvidence)
+        changed = funds.model_copy(
+            update={"capture_started": funds.recorded_at_utc - timedelta(seconds=6)}
+        )
+        from quantbot.paper_core.store import table
+
+        with db.transaction() as session:
+            docs = table("core_provider_acquisitions")
+            session.execute(
+                docs.update().where(docs.c.id == funds.id).values(payload=changed.model_dump_json())
+            )
+        with db.transaction() as session:
+            rejected = portfolio_budget(store, session, proof, now=clocks.wall)
+        assert "CORE_PAPER_FUNDS_SOURCE_INVALID" in rejected.objections
+        with db.transaction() as session:
+            _, reasons = continuous_budget_authority(
+                store,
+                session,
+                proof,
+                now=clocks.wall,
+                account_equity=proof.account.equity,
+                loss_bps=200,
+            )
+        assert "CORE_PAPER_FUNDS_SOURCE_INVALID" in reasons
+    finally:
+        db.close()
 
 
 async def test_balance_alone_cannot_bootstrap_a_continuous_loss_floor(tmp_path):
