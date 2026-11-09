@@ -18,6 +18,7 @@ from quantbot.brokers.base import (
     BrokerHealth,
     BrokerProtocolError,
     BrokerRequestError,
+    BrokerResponseProvenance,
     BrokerSleeper,
     BrokerTransport,
     BrokerTransportError,
@@ -276,9 +277,49 @@ class AlpacaPaperBrokerAdapter:
                 attempt += 1
                 continue
             if response.status_code not in expected_statuses:
+                provider_error_code = None
+                # Never retain provider free text, headers, credentials or account IDs.
+                # Parse only small JSON bodies and whitelist Alpaca's numeric code.
+                if len(response.content) <= 65_536:
+                    try:
+                        diagnostic = json.loads(response.content)
+                    except (ValueError, UnicodeDecodeError, RecursionError):
+                        pass
+                    else:
+                        code = diagnostic.get("code") if isinstance(diagnostic, dict) else None
+                        if (
+                            isinstance(code, (str, int))
+                            and not isinstance(code, bool)
+                            and 1 <= len(str(code)) <= 16
+                            and str(code).isascii()
+                            and str(code).isdigit()
+                        ):
+                            provider_error_code = str(code)
                 raise BrokerRequestError(
                     f"Alpaca Paper request failed with HTTP {response.status_code}",
                     status_code=response.status_code,
+                    response_provenance=BrokerResponseProvenance(
+                        provider="alpaca",
+                        method=method,
+                        path=path,
+                        status_code=response.status_code,
+                        provider_error_code=provider_error_code,
+                        response_sha256=hashlib.sha256(response.content).hexdigest(),
+                        request_sha256=(
+                            hashlib.sha256(
+                                json.dumps(
+                                    dict(json_body), sort_keys=True, separators=(",", ":")
+                                ).encode("utf-8")
+                            ).hexdigest()
+                            if json_body is not None
+                            else None
+                        ),
+                        client_order_id=(
+                            str(json_body["client_order_id"])
+                            if json_body is not None and "client_order_id" in json_body
+                            else None
+                        ),
+                    ),
                 )
             return response
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
+from datetime import UTC, datetime
 
 from pydantic import Field
 from sqlalchemy import text
@@ -632,7 +633,40 @@ class ExecutionCoordinator:
                 order = await self._broker.submit_order(broker_intent)
             except BrokerRequestError as error:
                 if retries == 0 and error.status_code is not None and error.status_code < 500:
-                    self._transition(intent.intent_id, IntentState.REJECTED, IntentState.SUBMITTING)
+                    provenance = error.response_provenance
+                    with self._database.transaction() as session:
+                        repo = StorageRepository(session)
+                        repo.transition_order_intent(
+                            intent.intent_id,
+                            IntentState.REJECTED,
+                            expected_current=IntentState.SUBMITTING,
+                        )
+                        if (
+                            provenance is not None
+                            and 400 <= error.status_code < 500
+                            and provenance.status_code == error.status_code
+                            and provenance.method == "POST"
+                            and provenance.path == "/v2/orders"
+                            and provenance.client_order_id == intent.client_order_id
+                            and provenance.request_sha256 is not None
+                        ):
+                            # Diagnostics accompany the state CAS atomically. They grant
+                            # neither no-send evidence nor terminal settlement authority.
+                            identity = hashlib.sha256(
+                                (intent.intent_id + provenance.model_dump_json()).encode("utf-8")
+                            ).hexdigest()
+                            repo.record_order_event(
+                                "broker-rejection-" + identity,
+                                event_type="BROKER_SUBMISSION_REJECTED",
+                                occurred_at=datetime.now(UTC),
+                                intent_id=intent.intent_id,
+                                detail={
+                                    "contract": "BROKER_REJECTION_DIAGNOSTIC_V1",
+                                    "intent_id": intent.intent_id,
+                                    "client_order_id": intent.client_order_id,
+                                    "response_provenance": provenance.model_dump(mode="json"),
+                                },
+                            )
                     raise
                 submitting = self._transition(
                     intent.intent_id,

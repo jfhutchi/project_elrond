@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable, Mapping, Sequence
 from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Protocol
+from typing import Literal, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -16,11 +16,32 @@ class BrokerError(RuntimeError):
     """Base error for fail-closed broker operations."""
 
 
+class BrokerResponseProvenance(BaseModel):
+    """Bounded HTTP diagnostics; never proof of no-send or settlement."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+    provider: Literal["alpaca"]
+    method: str = Field(min_length=1, max_length=16)
+    path: str = Field(min_length=1, max_length=256)
+    status_code: int = Field(ge=100, le=599)
+    provider_error_code: str | None = Field(default=None, pattern=r"^[0-9]{1,16}$")
+    response_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    request_sha256: str | None = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+    client_order_id: str | None = Field(default=None, max_length=128)
+
+
 class BrokerRequestError(BrokerError):
     """Raised when an authoritative broker request fails."""
 
-    def __init__(self, message: str, *, status_code: int | None = None) -> None:
+    def __init__(
+        self,
+        message: str,
+        *,
+        status_code: int | None = None,
+        response_provenance: BrokerResponseProvenance | None = None,
+    ) -> None:
         self.status_code = status_code
+        self.response_provenance = response_provenance
         super().__init__(message)
 
 
@@ -62,11 +83,11 @@ class PaperPerformanceAccount(BrokerModel):
     created_at: datetime
     previous_close_equity: Decimal
 
-    @field_validator('previous_close_equity')
+    @field_validator("previous_close_equity")
     @classmethod
     def finite_equity(cls, value: Decimal) -> Decimal:
         if not value.is_finite():
-            raise ValueError('non-finite close equity')
+            raise ValueError("non-finite close equity")
         return value
 
 
