@@ -1,5 +1,7 @@
 # November 9 repair — code deployed; entries remain safely fenced
 
+**Fresh assessment18:59EST:** [Broker records, canonical claim and supported reconciliation paths rechecked](reconciliation-assessment-1859.md). Six authenticated GETs show334 orders,16 relevant activities and no crypto order/position; original client lookup still404. Case392277 still has only automatic acknowledgements. No safe existing no-order settlement route applies; active case monitoring continues in this task.
+
 **Latest status12:05EST:** [Alpaca case392277 submitted and acknowledged; original disposition pending](support-case-392277.md). The operator authorized the request and conditional guarded recovery. A fourth genuine news review was generated automatically at12:01EST. Trading remains fenced; no disposition was invented.
 
 Earlier: [11:38–11:43 verification and recovered HTTP403 diagnostic](follow-up-verification.md). The cycle-level403 narrows the original request investigation but does not resolve it. [Reviewed support request](alpaca-support-request.md).
