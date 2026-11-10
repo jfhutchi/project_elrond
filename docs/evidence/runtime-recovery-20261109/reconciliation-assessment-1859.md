@@ -6,7 +6,7 @@ The case-specific mailbox search at18:56EST covered all matching conversations, 
 
 ## Independent authenticated broker capture
 
-Six finite GETs at18:57:28–18:57:29EST verified the expected PAPER account. Full response bytes were hashed and captured privately with method/path/query, actual receipt times and available X-Request-ID; credentials were not retained. The capture did not call a submission/cancellation endpoint or write to any ledger.
+Six finite GETs at18:57:28–18:57:29EST verified the expected PAPER account. Raw response bytes were hashed, and complete parsed responses were captured privately with method/path/query, actual receipt times and available X-Request-ID; credentials were not retained. The capture did not call a submission/cancellation endpoint or write to any ledger.
 
 | Observation | Actual result |
 | --- | --- |
